@@ -865,7 +865,7 @@
   }
   .leaflet-control-zoom-in  { border-radius: 6px 6px 0 0 !important; margin-bottom: 1px; }
   .leaflet-control-zoom-out { border-radius: 0 0 6px 6px !important; }
-  .leaflet-control-zoom { margin-bottom: 48px !important; margin-right: 14px !important; }
+  .leaflet-control-zoom { margin-bottom: 128px !important; margin-right: 14px !important; }
 
 
     background: rgba(0,0,0,0.55) !important;
@@ -2546,8 +2546,43 @@
     section.querySelectorAll('.wp-row').forEach(row => wpObserver.observe(row));
   }
 
+  // ── Road-snapped route cache ────────────────────────────────
+  const routeCache = {};
+
+  async function fetchRoute(day) {
+    if (routeCache[day]) return routeCache[day];
+    const waypoints = ROUTE_SEGMENTS[day];
+    if (!waypoints || waypoints.length < 2) {
+      routeCache[day] = ll(waypoints || []);
+      return routeCache[day];
+    }
+    const coordStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(';');
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}` +
+        `?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`
+      );
+      const json = await res.json();
+      if (json.routes?.[0]?.geometry?.coordinates) {
+        routeCache[day] = json.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+        return routeCache[day];
+      }
+    } catch(e) {}
+    // Fallback to straight lines
+    routeCache[day] = ll(waypoints);
+    return routeCache[day];
+  }
+
+  // Preload all routes and rebuild ghost polyline with real road geometry
+  async function preloadAllRoutes() {
+    const days = Object.keys(ROUTE_SEGMENTS);
+    await Promise.all(days.map(d => fetchRoute(d)));
+    const allRoad = days.flatMap(d => routeCache[d] || []);
+    routeLayers.ghost.setLatLngs(allRoad);
+  }
+
   // ── Main render — guarded: heavy work only runs when day changes ─
-  function renderMap(day, animate) {
+  async function renderMap(day, animate) {
     if (!mapReady) return;
     const activeDay = parseInt(day);
     const segCoords = ROUTE_SEGMENTS[day];
@@ -2556,15 +2591,18 @@
     const dayChanged = day !== currentDay;
     currentDay = day;
 
-    // Route layers — update every call so traveled line is always current
-    const traveledPts = Object.entries(ROUTE_SEGMENTS)
-      .filter(([d]) => parseInt(d) < activeDay)
-      .flatMap(([, c]) => ll(c));
-    routeLayers.traveled.setLatLngs(traveledPts);
+    // Fetch road-snapped geometry (cached after first fetch)
+    const roadPts = await fetchRoute(day);
 
-    const activePts = ll(segCoords);
-    routeLayers.active.setLatLngs(activePts);
-    routeLayers.glow.setLatLngs(activePts);
+    // Traveled route: concatenate all prior days' road routes
+    const traveledPts = [];
+    for (const [d] of Object.entries(ROUTE_SEGMENTS).filter(([d]) => parseInt(d) < activeDay)) {
+      const pts = routeCache[d] || ll(ROUTE_SEGMENTS[d]);
+      traveledPts.push(...pts);
+    }
+    routeLayers.traveled.setLatLngs(traveledPts);
+    routeLayers.active.setLatLngs(roadPts);
+    routeLayers.glow.setLatLngs(roadPts);
 
     // Overnight stop marker states
     OVERNIGHT_STOPS.forEach(stop => {
@@ -2586,7 +2624,7 @@
       renderPOIs(day);
 
       const poiCoords = (DAY_POIS[day] || []).map(p => [p.coords[1], p.coords[0]]);
-      const allBoundsCoords = [...activePts, ...poiCoords];
+      const allBoundsCoords = [...roadPts, ...poiCoords];
       const bounds = L.latLngBounds(allBoundsCoords);
       const opts = { ...detailPadding(), maxZoom: 9 };
       if (animate) {
@@ -2605,6 +2643,7 @@
     mapReady = true;
     renderMap('1', false);
     setActiveCard('1');
+    preloadAllRoutes();  // fetch road geometry for all days in background
   }, 150);
 
   // ═══════════════════════════════════════════════════════════
@@ -2699,8 +2738,8 @@
       const match = h.dataset.day === String(day);
       if (match) {
         h.style.setProperty('background', 'rgb(28,58,32)', 'important');
-        const r = h.querySelector('.dd-route'); if (r) r.style.color = '#ffffff';
-        const s = h.querySelector('.dd-stats');  if (s) s.style.color = '#ffffff';
+        const r = h.querySelector('.dd-route'); if (r) r.style.color = '#ECEAE4';
+        const s = h.querySelector('.dd-stats');  if (s) s.style.color = '#ECEAE4';
       } else {
         h.style.removeProperty('background');
         const r = h.querySelector('.dd-route'); if (r) r.style.color = '';
