@@ -1,0 +1,2836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1133">
+<title>OVERLANDER_01 — Tactical Expedition Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/>
+<script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-base:       #0a0b0c;
+    --bg-panel:      #111214;
+    --bg-card:       #161819;
+    --bg-topbar:     #1e2a1e;
+    --bg-nav-btn:    #1b2c3e;
+    --bg-tab-active: #59472e;
+    --bg-tab-idle:   #1b2c3e;
+    --bg-day-active: rgb(28,58,32);
+    --bg-detail:     rgba(65,65,65,0.80);
+    --bg-map:        #1e2a1e;
+    --border-subtle: rgba(255,255,255,0.07);
+    --border-mid:    rgba(255,255,255,0.14);
+    --amber:         #c8a96e;
+    --amber-dark:    #c77429;
+    --amber-light:   #e8c98e;
+    --text-primary:  #eceae4;
+    --text-muted:    #888888;
+    --text-dim:      #888888;
+    --nav-border:    #46586a;
+    --ff-mono:  'Space Mono', monospace;
+    --ff-sans:  'Barlow', sans-serif;
+  }
+
+  html, body {
+    background: var(--bg-base);
+    width: 1133px;
+    height: 900px;
+    overflow: hidden;
+    font-family: var(--ff-sans);
+    color: var(--text-primary);
+  }
+
+  .dashboard {
+    position: relative;
+    width: 1133px;
+    height: 900px;
+    background: var(--bg-base);
+    overflow: hidden;
+  }
+
+  /* ── TOP NAV BAR ─────────────────────────────────────────── */
+  .topbar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1133px; height: 60px;
+    background: var(--bg-topbar);
+    z-index: 20;
+  }
+
+  .topbar-hamburger {
+    position: absolute;
+    top: 0; left: 0;
+    width: 65px; height: 60px;
+    background: var(--bg-nav-btn);
+    border-right: 1px solid var(--nav-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .topbar-hamburger:hover { filter: brightness(1.15); }
+
+  /* ── hamburger ≡ / close ✕ icon swap ──────────────────── */
+  .hamburger-lines { display: flex; flex-direction: column; gap: 5px; }
+  .hamburger-lines span {
+    display: block; width: 22px; height: 2px;
+    background: var(--text-primary);
+    border-radius: 1px;
+  }
+
+  .hamburger-x {
+    display: none;         /* hidden while sidebar is closed */
+    position: relative;
+    width: 20px; height: 20px;
+    align-items: center; justify-content: center;
+  }
+  .hamburger-x::before,
+  .hamburger-x::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 2px;
+    background: var(--text-primary);
+    border-radius: 1px;
+  }
+  .hamburger-x::before { transform: rotate(45deg); }
+  .hamburger-x::after  { transform: rotate(-45deg); }
+
+  /* when sidebar is visible: show X, hide lines */
+  .dashboard:not(.sidebar-hidden) .hamburger-lines { display: none; }
+  .dashboard:not(.sidebar-hidden) .hamburger-x     { display: flex; }
+
+  .topbar-title {
+    position: absolute;
+    left: 76px; top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--ff-sans);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+  }
+
+  /* ── SIDEBAR ─────────────────────────────────────────────── */
+  .sidebar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 196px; height: 100%;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-subtle);
+    z-index: 10;
+  }
+
+  /* Sits below topbar — top: 60px within sidebar = y:120 on screen */
+  .sidebar-header {
+    position: absolute;
+    top: 60px; left: 0;
+    width: 196px; height: 64px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .sidebar-logo {
+    position: absolute;
+    top: 14px; left: 14px;
+    font-family: var(--ff-mono);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--amber);
+    white-space: nowrap;
+  }
+
+  .sidebar-coords {
+    position: absolute;
+    top: 36px; left: 14px;
+    font-family: var(--ff-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    white-space: pre;
+    letter-spacing: 0.5px;
+  }
+
+  .sidebar-phases-label {
+    position: absolute;
+    top: 144px; left: 16px;
+    font-family: var(--ff-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    user-select: none;
+  }
+
+  .phase-item {
+    position: absolute;
+    left: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .phase-dot {
+    width: 6px; height: 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .phase-label {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    white-space: nowrap;
+  }
+
+  .phase-item-border {
+    position: absolute;
+    left: 16px;
+    width: 164px; height: 1px;
+    background: var(--border-subtle);
+  }
+
+  .btn-new-route {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    width: 164px; height: 44px;
+    background: var(--border-mid);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-radius: 4px;
+  }
+  .btn-new-route:hover { background: rgba(255,255,255,0.22); }
+  .btn-new-route span {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 2.5px;
+  }
+
+  /* ── DAY COLUMN ──────────────────────────────────────────── */
+  .day-column {
+    position: absolute;
+    top: 0; left: 196px;
+    width: 216px; height: 100%;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border-subtle);
+    z-index: 9;
+    overflow-y: auto;   /* FIX: was 'hidden' — now scrollable */
+    overflow-x: hidden;
+    box-shadow: 4px 0 12px rgba(0,0,0,0.5);
+  }
+
+  /* custom scrollbar inside day column */
+  .day-column::-webkit-scrollbar { width: 3px; }
+  .day-column::-webkit-scrollbar-track { background: transparent; }
+  .day-column::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  /* tab row */
+  .tab-row {
+    position: sticky;
+    top: 60px; left: 0;
+    width: 216px;
+    z-index: 2;
+  }
+
+  .tab {
+    width: 215px; height: 60px;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 36px;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    transition: filter 0.15s;
+  }
+  .tab:hover { filter: brightness(1.12); }
+
+  .tab-overview  { }   /* bg handled by switching rules above */
+  .tab-itinerary { }   /* bg handled by switching rules above */
+
+  .tab-label {
+    font-family: var(--ff-sans);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-primary);
+  }
+
+  .tab-chevron {
+    position: absolute;
+    right: 14px; top: 50%;
+    transform: translateY(-50%) rotate(0deg);
+    width: 10px; height: 6px;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s ease;
+  }
+
+  /* itinerary tab chevron points up by default (active/expanded) */
+  .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(180deg); }
+  /* when overview is active, itinerary chevron points down */
+  .day-column.overview-active .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(0deg); }
+  /* overview tab chevron points up when overview is active */
+  .day-column.overview-active .tab-overview .tab-chevron  { transform: translateY(-50%) rotate(180deg); }
+
+  .chevron-svg { fill: none; stroke: var(--text-muted); stroke-width: 2; }
+
+  /* phase headers in day column */
+  .phase-header {
+    width: 215px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .phase-header-inner {
+    padding: 14px;
+    display: flex; gap: 0;
+    align-items: center;
+    height: 88px;
+  }
+
+  .ph-num-block { width: 64px; }
+  .ph-num-label {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 16px; color: var(--text-primary);
+    line-height: 1;
+  }
+  .ph-num {
+    font-family: var(--ff-sans); font-weight: 600;
+    font-size: 28px; color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .ph-divider {
+    width: 1px; background: var(--border-mid);
+    margin: 0 12px 0 2px;
+    align-self: stretch;
+  }
+
+  .ph-info { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+  .ph-info span {
+    font-family: var(--ff-sans); font-size: 14px; color: var(--text-primary);
+    line-height: 1.4;
+  }
+
+  /* day cards — now in normal flow (not absolute) */
+  .day-card {
+    width: 215px;
+    height: 112px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .day-card:hover { background: #1c1f21; }
+  .day-card.active {
+    background: rgb(28,58,32);
+    border-bottom: 1px solid var(--amber-dark);
+  }
+
+  .dc-meta {
+    position: absolute;
+    top: 8px; left: 20px;
+    font-family: var(--ff-sans); font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1;
+  }
+  .dc-meta.active { color: var(--text-primary); }
+
+  .dc-day-num {
+    position: absolute;
+    top: 8px; right: 20px;
+    font-family: var(--ff-sans); font-size: 14px;
+    color: var(--text-muted);
+  }
+  .dc-day-num.active { color: var(--text-primary); }
+
+  .dc-date {
+    position: absolute;
+    top: 28px; left: 20px;
+    font-family: var(--ff-sans); font-size: 30px;
+    color: var(--text-muted);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .dc-date.active { color: var(--amber-light); }
+
+  .dc-route {
+    position: absolute;
+    left: 20px;
+    font-family: var(--ff-sans); font-size: 14px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .dc-route.active { color: var(--text-primary); }
+
+  /* ── ITINERARY HEADER BAR ────────────────────────────────── */
+  .itin-header {
+    position: absolute;
+    top: 60px; left: 412px;
+    width: 479px; height: 96px;
+    z-index: 12;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .itin-title-bar {
+    padding: 14px 16px 12px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    background: #000;
+  }
+
+  .itin-phase-left { display: flex; flex-direction: column; gap: 4px; }
+
+  .itin-phase-eyebrow {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 15px; color: var(--text-primary); letter-spacing: 0.8px;
+  }
+
+  .itin-phase-route { display: flex; align-items: baseline; gap: 7px; }
+
+  .itin-phase-city {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 24px; color: var(--text-primary); letter-spacing: -0.2px;
+  }
+
+  .itin-phase-arrow { font-family: var(--ff-mono); font-size: 11px; color: #444; }
+
+  .itin-title {
+    font-family: var(--ff-sans); font-size: 12px; color: var(--text-muted);
+  }
+
+  .itin-phase-right { display: flex; align-items: flex-start; gap: 10px; }
+
+  .itin-phase-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+
+  .itin-dates {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 18px; color: var(--amber); letter-spacing: 0.3px;
+  }
+
+  .itin-phase-mi {
+    font-family: var(--ff-sans); font-weight: 600;
+    font-size: 15px; color: var(--text-muted);
+  }
+
+  .itin-phase-bar { display: none; }
+
+  .itin-amber-bar { background: var(--amber-dark); height: 2px; }
+
+  .itin-phase-label { display: none; }
+
+  /* ── DAY DETAIL PANEL — single infinite scroll ───────────── */
+  .day-detail {
+    position: absolute;
+    top: 156px; left: 412px;
+    bottom: 0;
+    width: 478px;
+    background: var(--bg-detail);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 11;
+  }
+  .day-detail::-webkit-scrollbar { width: 3px; }
+  .day-detail::-webkit-scrollbar-track { background: transparent; }
+  .day-detail::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  /* ── DAY SECTION — one per day, stacked vertically ──────── */
+  .day-section { }
+
+  /* sticky day header — locks at top as you scroll through each day */
+  .dd-header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: rgba(28, 28, 28, 0.97);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 22px 20px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* highlight active day header — green bg */
+  .dd-header.is-active {
+    background: rgba(28,58,32,0.97) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .dd-header.is-active .dd-route { color: rgba(160,220,140,0.7); }
+  .dd-header.is-active .dd-stats { color: #6ad88a; }
+
+  .dd-date {
+    font-family: var(--ff-sans); font-size: 24px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+
+  .dd-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 3px;
+  }
+
+  .dd-route {
+    font-family: var(--ff-sans); font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .dd-stats {
+    font-family: var(--ff-mono); font-size: 10px;
+    color: var(--amber);
+    letter-spacing: 0.5px;
+  }
+
+  /* day body — 5px inset padding on left, right, top */
+  .dd-body { padding: 5px 5px 0; }
+
+  /* day divider between days */
+  .day-divider {
+    height: 6px;
+    background: rgba(0,0,0,0.5);
+    border-top: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  /* ── PHOTO CARD ──────────────────────────────────────────── */
+  .photo-card {
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+    background: #111;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .photo-card img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0.88;
+  }
+  .photo-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+  }
+  .photo-card-label {
+    position: absolute;
+    bottom: 10px; left: 14px;
+    font-family: var(--ff-mono); font-size: 8px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 1.5px;
+    z-index: 1;
+  }
+  .photo-card-tag {
+    position: absolute;
+    bottom: 10px; right: 14px;
+    font-family: var(--ff-mono); font-size: 8px;
+    color: var(--amber); letter-spacing: 1px;
+    z-index: 1;
+  }
+
+  /* ── SECTION LABEL ───────────────────────────────────────── */
+  .dd-section-label {
+    padding: 14px 18px 7px;
+    font-family: var(--ff-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+  }
+
+  /* ── WAYPOINT ROWS ───────────────────────────────────────── */
+  .wp-row {
+    display: flex;
+    flex-wrap: wrap;          /* allows expand panel to drop to new row */
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 18px;
+    border-top: 1px solid var(--border-subtle);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .wp-row:hover { background: rgba(255,255,255,0.02); }
+  .wp-row:last-child { border-bottom: 1px solid var(--border-subtle); }
+
+  /* vertical connector line — uses ::before so ::after is free for has-thumb */
+  .wp-row:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 29px; top: 36px;
+    width: 1px; height: calc(100% - 10px);
+    background: rgba(255,255,255,0.08);
+    pointer-events: none;
+  }
+
+  .wp-badge {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #1f3852;
+    border: 1px solid rgba(74,111,165,0.5);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .wp-badge.fuel  { background: #3b2010; border-color: rgba(199,116,41,0.5); }
+  .wp-badge.food  { background: #1a2e1a; border-color: rgba(76,175,106,0.5); }
+  .wp-badge.camp  { background: #1a2e2e; border-color: rgba(76,175,175,0.4); }
+  .wp-badge.event { background: #2a1a3e; border-color: rgba(139,92,246,0.5); }
+
+  .wp-badge-letter {
+    font-family: var(--ff-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .wp-content { flex: 1; }
+
+  .wp-time-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+  }
+
+  .wp-time {
+    font-family: var(--ff-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.8px;
+  }
+
+  .wp-type-tag {
+    font-family: var(--ff-mono);
+    font-size: 7px;
+    letter-spacing: 1.5px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid;
+  }
+  .wp-type-tag.fuel  { color: var(--amber-dark); border-color: rgba(199,116,41,0.4); }
+  .wp-type-tag.food  { color: #4caf6a;            border-color: rgba(76,175,106,0.4); }
+  .wp-type-tag.camp  { color: #6ecece;             border-color: rgba(110,206,206,0.35); }
+  .wp-type-tag.event { color: #a78bfa;             border-color: rgba(167,139,250,0.4); }
+  .wp-type-tag.drive { color: var(--text-muted);   border-color: rgba(255,255,255,0.12); }
+
+  .wp-name {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 14px; color: var(--text-primary);
+    line-height: 1.3;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px;
+  }
+
+  /* expand chevron inside wp-name */
+  .wp-expand-chevron {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.3;
+    transition: opacity 0.2s, transform 0.25s ease;
+  }
+  .wp-expand-chevron svg { fill: none; stroke: var(--text-primary); stroke-width: 2; }
+  .wp-row:hover .wp-expand-chevron { opacity: 0.6; }
+  .wp-row.expanded .wp-expand-chevron { opacity: 1; transform: rotate(180deg); }
+
+  .wp-detail {
+    font-family: var(--ff-sans); font-size: 12px;
+    color: var(--text-muted); line-height: 1.5;
+    margin-top: 3px;
+  }
+  .wp-note {
+    font-family: var(--ff-mono); font-size: 9px;
+    color: var(--amber); letter-spacing: 0.3px;
+    margin-top: 4px;
+  }
+
+  /* expanded row — highlight without shifting layout */
+  .wp-row.expanded {
+    background: rgba(255,255,255,0.025);
+    box-shadow: inset 2px 0 0 var(--amber-dark);
+  }
+
+  /* expand panel — full row width, sits below the flex items */
+  .wp-expand-panel {
+    flex-basis: 100%;         /* forces it to wrap to its own row */
+    width: 100%;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.38s ease, opacity 0.25s 0.1s ease;
+    padding: 0;
+  }
+  .wp-row.expanded .wp-expand-panel {
+    max-height: 320px;
+    opacity: 1;
+  }
+  .wp-expand-hero {
+    width: 100%; height: 130px;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+    margin-top: 10px;
+    opacity: 0.88;
+  }
+  .wp-expand-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 7px;
+    padding-bottom: 2px;
+  }
+  .wp-expand-coords {
+    font-family: var(--ff-mono); font-size: 8px;
+    color: var(--text-dim); letter-spacing: 1px;
+  }
+  .wp-expand-map-link {
+    font-family: var(--ff-mono); font-size: 7px;
+    color: var(--amber); letter-spacing: 1.5px;
+    padding: 3px 8px;
+    border: 1px solid rgba(200,169,110,0.25);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .wp-expand-map-link:hover { background: rgba(200,169,110,0.1); }
+
+  /* ── WAYPOINT THUMBNAIL ──────────────────────────────────── */
+  .wp-thumb {
+    width: 72px; height: 60px;
+    border-radius: 6px; overflow: hidden;
+    flex-shrink: 0; background: #111;
+    position: relative; margin-top: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: opacity 0.2s;
+  }
+  .wp-row.expanded .wp-thumb { opacity: 0.4; }  /* dim small thumb when expanded */
+  .wp-thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block; opacity: 0.82;
+    transition: opacity 0.2s;
+  }
+  .wp-thumb:hover img { opacity: 1; }
+  /* connector line adjustment when thumb present */
+  .wp-row.has-thumb:not(:last-child)::after {
+    left: 29px; top: 36px;
+  }
+
+
+  .dd-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 18px 14px;
+  }
+
+  .dd-info-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .dd-info-card-label {
+    font-family: var(--ff-mono); font-size: 7px;
+    color: var(--text-dim);
+    letter-spacing: 2.5px;
+    margin-bottom: 6px;
+  }
+
+  .dd-info-card-value {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 16px; color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .dd-info-card-sub {
+    font-family: var(--ff-sans); font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ── CAMP BLOCK ──────────────────────────────────────────── */
+  .dd-camp-block {
+    margin: 0 18px 14px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(110,206,206,0.15);
+    border-radius: 8px;
+    padding: 13px 14px;
+  }
+
+  .dd-camp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .dd-camp-label {
+    font-family: var(--ff-mono); font-size: 7px;
+    color: #6ecece; letter-spacing: 2.5px;
+  }
+
+  .dd-camp-badge {
+    font-family: var(--ff-mono); font-size: 7px;
+    color: #6ecece;
+    border: 1px solid rgba(110,206,206,0.35);
+    border-radius: 999px;
+    padding: 2px 7px;
+    letter-spacing: 1px;
+  }
+
+  .dd-camp-name {
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 14px; color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+
+  .dd-camp-detail {
+    font-family: var(--ff-sans); font-size: 12px;
+    color: var(--text-muted); line-height: 1.5;
+  }
+
+  /* ── FUEL WARNING ────────────────────────────────────────── */
+  .dd-fuel-warn {
+    margin: 0 18px 14px;
+    background: rgba(199,116,41,0.08);
+    border: 1px solid rgba(199,116,41,0.3);
+    border-radius: 8px;
+    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .dd-fuel-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .dd-fuel-text {
+    font-family: var(--ff-sans); font-size: 12px;
+    color: var(--amber); line-height: 1.5;
+  }
+
+  .dd-fuel-text strong {
+    font-weight: 700;
+    display: block;
+    font-size: 14px;
+  }
+
+  /* ── MAP AREA ────────────────────────────────────────────── */
+  .map-bg-screenshot {
+    position: absolute;
+    top: 60px; left: 412px;
+    right: 0; bottom: 0;
+    z-index: 5;
+    overflow: hidden;
+    background: #0d1117;
+  }
+
+  /* Leaflet container fills parent */
+  #mapbox-map { width: 100%; height: 100%; }
+  .leaflet-container { background: #0d1117; }
+  .leaflet-tile-pane { filter: brightness(0.92); }
+  .leaflet-control-zoom {
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .leaflet-control-zoom a {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    font-size: 16px !important;
+    font-weight: 400 !important;
+    background: rgba(16,18,20,0.88) !important;
+    color: rgba(200,169,110,0.85) !important;
+    border: 1px solid rgba(200,169,110,0.2) !important;
+    backdrop-filter: blur(6px);
+    transition: background 0.15s, color 0.15s !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: rgba(199,116,41,0.85) !important;
+    color: #fff !important;
+    border-color: rgba(199,116,41,0.6) !important;
+  }
+  .leaflet-control-zoom-in  { border-radius: 6px 6px 0 0 !important; margin-bottom: 1px; }
+  .leaflet-control-zoom-out { border-radius: 0 0 6px 6px !important; }
+  .leaflet-control-zoom { margin-bottom: 48px !important; margin-right: 14px !important; }
+
+
+    background: rgba(0,0,0,0.55) !important;
+    color: rgba(255,255,255,0.3) !important;
+    font-size: 9px !important;
+  }
+  .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
+
+
+  /* ── MAP POI MARKERS ─────────────────────────────────────── */
+  .map-poi-marker {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(16,18,20,0.9);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 8px; font-weight: 700;
+    color: rgba(255,255,255,0.55);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(4px);
+  }
+  .map-poi-marker.type-food  { border-color: rgba(76,175,106,0.6);  color: #4caf6a; background: rgba(10,30,15,0.9);  }
+  .map-poi-marker.type-fuel  { border-color: rgba(199,116,41,0.6);  color: #c77429; background: rgba(30,18,8,0.9);   }
+  .map-poi-marker.type-camp  { border-color: rgba(110,206,206,0.6); color: #6ecece; background: rgba(8,22,25,0.9);   }
+  .map-poi-marker.type-event { border-color: rgba(139,92,246,0.6);  color: #a78bfa; background: rgba(18,10,35,0.9);  }
+  .map-poi-marker.type-drive { border-color: rgba(200,169,110,0.35);color: rgba(200,169,110,0.6); }
+
+  /* active/highlighted POI — 25% larger (22→28 base → 35px active) */
+  .map-poi-marker.poi-active {
+    width: 35px; height: 35px;
+    font-size: 11px;
+    border-width: 2px;
+    z-index: 999;
+  }
+  .map-poi-marker.type-food.poi-active  {
+    background: rgba(10,30,15,0.95); border-color: #4caf6a; color: #4caf6a;
+    box-shadow: 0 0 0 5px rgba(76,175,106,0.2), 0 0 0 10px rgba(76,175,106,0.08);
+  }
+  .map-poi-marker.type-fuel.poi-active  {
+    background: rgba(30,18,8,0.95);  border-color: #c77429; color: #e8c98e;
+    box-shadow: 0 0 0 5px rgba(199,116,41,0.25), 0 0 0 10px rgba(199,116,41,0.1);
+  }
+  .map-poi-marker.type-camp.poi-active  {
+    background: rgba(8,22,25,0.95);  border-color: #6ecece; color: #6ecece;
+    box-shadow: 0 0 0 5px rgba(110,206,206,0.2), 0 0 0 10px rgba(110,206,206,0.08);
+  }
+  .map-poi-marker.type-event.poi-active {
+    background: rgba(18,10,35,0.95); border-color: #a78bfa; color: #a78bfa;
+    box-shadow: 0 0 0 5px rgba(139,92,246,0.2), 0 0 0 10px rgba(139,92,246,0.08);
+  }
+  .map-poi-marker.type-drive.poi-active {
+    background: rgba(20,18,10,0.95); border-color: #c8a96e; color: #c8a96e;
+    box-shadow: 0 0 0 5px rgba(200,169,110,0.2), 0 0 0 10px rgba(200,169,110,0.08);
+  }
+
+  /* ── MAP POI LABEL ───────────────────────────────────────── */
+  .map-poi-label {
+    position: absolute;
+    left: 24px;       /* offset right of the marker center */
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(12,14,16,0.94);
+    border: 1px solid rgba(200,169,110,0.28);
+    border-radius: 7px;
+    padding: 6px 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    min-width: 140px;
+  }
+  .map-poi-label-name {
+    font-family: 'Barlow', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    color: #eceae4;
+    line-height: 1.3;
+  }
+  .map-poi-label-time {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: rgba(200,169,110,0.65);
+    letter-spacing: 0.6px;
+    margin-top: 3px;
+  }
+
+  /* ── MAP STOP MARKERS ────────────────────────────────────── */
+  .map-stop-marker {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: rgba(16,18,20,0.88);
+    border: 1.5px solid rgba(200,169,110,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    color: rgba(200,169,110,0.35);
+    cursor: pointer;
+    transition: all 0.35s ease;
+    backdrop-filter: blur(4px);
+  }
+  .map-stop-marker.start {
+    border-color: rgba(76,175,106,0.7);
+    color: rgba(76,175,106,0.9);
+  }
+  .map-stop-marker.visited {
+    border-color: rgba(200,169,110,0.6);
+    color: rgba(200,169,110,0.85);
+    background: rgba(16,18,20,0.9);
+  }
+  .map-stop-marker.active-dest {
+    width: 38px; height: 38px;
+    background: rgba(199,116,41,0.92);
+    border: 2px solid #e8c98e;
+    color: #fff;
+    font-size: 10px;
+    box-shadow: 0 0 0 5px rgba(199,116,41,0.25), 0 0 0 10px rgba(199,116,41,0.1);
+    animation: markerPop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    z-index: 10;
+  }
+  .map-stop-marker.future { opacity: 0.25; }
+
+  @keyframes markerPop {
+    0%   { transform: scale(0.7); }
+    70%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  /* sector header bar over map */
+  .sector-header {
+    position: absolute;
+    top: 60px; left: 412px;
+    right: 0; height: 64px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 8;
+    display: flex; align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 20px;
+  }
+
+  .sh-title {
+    font-family: var(--ff-sans); font-weight: 600;
+    font-size: 15px; color: var(--text-primary);
+    letter-spacing: 0.5px;
+  }
+
+  .sh-gps {
+    font-family: var(--ff-mono); font-size: 10px;
+    color: var(--text-dim); letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .weather-pill {
+    position: absolute;
+    right: 20px; top: 50%;
+    transform: translateY(-50%);
+    background: #161819;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 15px;
+    padding: 7px 14px;
+    white-space: nowrap;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    color: var(--amber);
+    letter-spacing: 1.2px;
+  }
+
+  /* map grid overlay */
+  .map-grid {
+    position: absolute;
+    top: 124px; left: 412px;
+    width: 721px; height: 776px;
+    z-index: 6;
+    pointer-events: none;
+  }
+
+  .grid-line-v, .grid-line-h {
+    position: absolute;
+    background: rgba(255,255,255,0.04);
+  }
+  .grid-line-v { width: 1px; height: 100%; }
+  .grid-line-h { height: 1px; width: 100%; }
+
+  /* scale bar */
+  .scale-bar {
+    position: absolute;
+    bottom: 30px; left: 440px;
+    z-index: 9;
+  }
+
+  .sb-line {
+    width: 80px; height: 2px;
+    background: rgba(236,234,228,0.3);
+    margin-bottom: 2px;
+  }
+
+  .sb-label {
+    font-family: var(--ff-mono); font-size: 8px;
+    color: var(--text-muted); letter-spacing: 1px;
+  }
+
+  .osm-credit {
+    position: absolute;
+    bottom: 10px; right: 20px;
+    font-family: var(--ff-mono); font-size: 8px;
+    color: var(--text-dim); letter-spacing: 0.8px;
+    z-index: 9;
+  }
+
+  /* ── OVERVIEW / ITINERARY TAB SWITCHING ─────────────────── */
+
+  /* Itinerary tab is active by default */
+  .tab-overview  { background: var(--bg-tab-idle); border-top: 1px solid #444; }
+  .tab-itinerary { background: var(--bg-tab-idle); border-top: 1px solid #444; }
+
+  /* show/hide content panels */
+  .overview-panel    { display: none; }
+  .itinerary-content { display: block; }
+
+  .day-column.overview-active .overview-panel    { display: block; }
+  .day-column.overview-active .itinerary-content { display: none; }
+
+  /* chevron flip */
+  .day-column.overview-active .tab-overview .tab-chevron  { transform: translateY(-50%) rotate(180deg); }
+  .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(180deg); }
+  .day-column.overview-active .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(0deg); }
+
+  /* ── OVERVIEW PANEL CONTENT ──────────────────────────────── */
+  .overview-panel {
+    padding: 0;
+  }
+
+  .ov-trip-hero {
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .ov-trip-label {
+    font-family: var(--ff-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+  }
+
+  .ov-trip-title {
+    font-family: var(--ff-sans);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .ov-trip-sub {
+    font-family: var(--ff-mono);
+    font-size: 9px;
+    color: var(--amber);
+    letter-spacing: 1px;
+    margin-top: 5px;
+  }
+
+  /* stat grid */
+  .ov-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .ov-stat {
+    padding: 13px 16px;
+    border-right: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .ov-stat:nth-child(even) { border-right: none; }
+  .ov-stat:nth-child(3),
+  .ov-stat:nth-child(4)    { border-bottom: none; }
+
+  .ov-stat-label {
+    font-family: var(--ff-mono);
+    font-size: 7px;
+    color: var(--text-dim);
+    letter-spacing: 2.5px;
+    margin-bottom: 5px;
+  }
+
+  .ov-stat-value {
+    font-family: var(--ff-sans);
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .ov-stat-unit {
+    font-family: var(--ff-sans);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+
+  /* phase summary list */
+  .ov-phases-label {
+    padding: 14px 16px 8px;
+    font-family: var(--ff-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+  }
+
+  .ov-phase-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .ov-phase-row:hover { background: rgba(255,255,255,0.03); }
+
+  .ov-phase-num {
+    font-family: var(--ff-sans);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--text-muted);
+    width: 28px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .ov-phase-num.active { color: var(--amber); }
+
+  .ov-phase-divider {
+    width: 1px; height: 32px;
+    background: var(--border-mid);
+    flex-shrink: 0;
+  }
+
+  .ov-phase-info { flex: 1; }
+
+  .ov-phase-name {
+    font-family: var(--ff-mono);
+    font-size: 9px;
+    color: var(--text-primary);
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+  }
+
+  .ov-phase-meta {
+    font-family: var(--ff-sans);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .ov-phase-dot {
+    width: 6px; height: 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* progress bar */
+  .ov-progress-wrap {
+    padding: 14px 16px 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .ov-progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--ff-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    margin-bottom: 7px;
+  }
+
+  .ov-progress-track {
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .ov-progress-fill {
+    height: 100%;
+    width: 5%;   /* Day 01 of 80 */
+    background: var(--amber-dark);
+    border-radius: 2px;
+  }
+
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  /* ── ITINERARY CLOSE BUTTON ──────────────────────────────── */
+  .itin-close {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .itin-close:hover { background: rgba(255,255,255,0.1); }
+  .itin-close-icon {
+    position: relative; width: 14px; height: 14px;
+  }
+  .itin-close-icon::before,
+  .itin-close-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    background: rgba(236,234,228,0.75);
+    border-radius: 1px;
+  }
+  .itin-close-icon::before { transform: translateY(-50%) rotate(45deg); }
+  .itin-close-icon::after  { transform: translateY(-50%) rotate(-45deg); }
+
+  /* ── DETAIL-COLLAPSED STATE ──────────────────────────────── */
+  .dashboard.detail-collapsed .day-detail {
+    transform: translateY(calc(100% + 10px));
+  }
+  .dashboard.detail-collapsed .itin-header {
+    transform: translateY(-100%);
+  }
+
+
+
+  /* sector-header text transitions */
+  .sh-title, .sh-gps, .weather-pill { transition: opacity 0.2s ease; }
+  .sh-fading { opacity: 0; }
+
+  /* ── TRANSITIONS ─────────────────────────────────────────── */
+  .sidebar,
+  .day-column,
+  .itin-header,
+  .day-detail,
+  .sector-header,
+  .map-bg-screenshot,
+  .map-grid,
+  .scale-bar {
+    transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .itin-phase-bar { transition: opacity 0.2s ease; }
+
+  /* ── SIDEBAR-HIDDEN STATE ────────────────────────────────── */
+  .dashboard.sidebar-hidden .sidebar {
+    transform: translateX(-196px);
+  }
+
+  .dashboard.sidebar-hidden .day-column      { left: 0; }
+  .dashboard.sidebar-hidden .itin-header     { left: 216px; }
+  .dashboard.sidebar-hidden .day-detail      { left: 216px; }
+  .dashboard.sidebar-hidden .sector-header   { left: 216px; }
+  .dashboard.sidebar-hidden .map-bg-screenshot { left: 216px; }
+</style>
+</head>
+<body>
+<div class="dashboard sidebar-hidden">
+
+  <!-- ══ MAP BACKGROUND — Mapbox GL JS ══════════════════════ -->
+  <div class="map-bg-screenshot">
+    <div id="mapbox-map"></div>
+  </div>
+
+
+    <!-- ══ SECTOR HEADER ═══════════════════════════════════════ -->
+  <div class="sector-header">
+    <span class="sh-title" id="sh-title">Los Angeles, CA → Willard Bay, UT</span>
+    <span class="sh-gps"   id="sh-gps">GPS: 41.3872° N, 112.1023° W</span>
+    <div class="weather-pill" id="sh-weather">☀️&nbsp;&nbsp;84° / 64°F</div>
+  </div>
+
+  <!-- ══ TOP NAV BAR ═════════════════════════════════════════ -->
+  <div class="topbar">
+    <div class="topbar-hamburger" id="topbar-hamburger">
+      <div class="hamburger-lines">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="hamburger-x"></div>
+    </div>
+    <span class="topbar-title">TRIP PLAN</span>
+  </div>
+
+  <!-- ══ SIDEBAR ═════════════════════════════════════════════ -->
+  <div class="sidebar">
+
+    <!-- Header — visible below topbar (top:60 within sidebar = y:120 on screen) -->
+    <div class="sidebar-header">
+      <span class="sidebar-logo">OVERLANDER</span>
+      <!-- FIX: corrected to LA coords -->
+      <span class="sidebar-coords">34.0522° N  118.2437° W</span>
+    </div>
+
+    <span class="sidebar-phases-label">PHASES</span>
+
+    <!-- Phase items — inline top values only, no conflicting classes -->
+    <div class="phase-item" style="top:182px;">
+      <div class="phase-dot" style="background:var(--text-dim);"></div>
+      <span class="phase-label" style="color:var(--text-muted);">01 — LA › GLACIER</span>
+    </div>
+    <div class="phase-item-border" style="top:211px;"></div>
+
+    <div class="phase-item" style="top:226px;">
+      <div class="phase-dot" style="background:var(--amber);"></div>
+      <span class="phase-label" style="color:var(--amber);">02 — BC › ALASKA HWY</span>
+    </div>
+    <div class="phase-item-border" style="top:255px;"></div>
+
+    <div class="phase-item" style="top:270px;">
+      <div class="phase-dot" style="background:var(--text-dim);"></div>
+      <span class="phase-label" style="color:var(--text-muted);">03 — ALASKA HWY › AK</span>
+    </div>
+    <div class="phase-item-border" style="top:299px;"></div>
+
+    <div class="btn-new-route">
+      <span>+ NEW ROUTE</span>
+    </div>
+  </div>
+
+  <!-- ══ DAY COLUMN — now scrollable ════════════════════════ -->
+  <div class="day-column">
+
+    <!-- Spacer: pushes tabs below the 60px topbar -->
+    <div style="height:60px; flex-shrink:0;"></div>
+
+    <!-- Tab row: sticky at top while scrolling -->
+    <div class="tab-row">
+      <div class="tab tab-overview" id="tab-overview">
+        <span class="tab-label">Overview</span>
+        <svg class="tab-chevron" viewBox="0 0 10 6" width="10" height="6">
+          <polyline class="chevron-svg" points="1,1 5,5 9,1"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── OVERVIEW PANEL ──────────────────────────────────── -->
+    <div class="overview-panel">
+
+      <!-- Trip hero -->
+      <div class="ov-trip-hero">
+        <div class="ov-trip-label">ACTIVE ROUTE</div>
+        <div class="ov-trip-title">Los Angeles, CA<br>→ Deadhorse, AK</div>
+        <div class="ov-trip-sub">DEPART WED MAY 29, 2026</div>
+      </div>
+
+      <!-- 4-stat grid -->
+      <div class="ov-stats">
+        <div class="ov-stat">
+          <div class="ov-stat-label">DAYS</div>
+          <div class="ov-stat-value">80</div>
+          <div class="ov-stat-unit">total</div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">DISTANCE</div>
+          <div class="ov-stat-value">8,400</div>
+          <div class="ov-stat-unit">miles</div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">PHASES</div>
+          <div class="ov-stat-value">3</div>
+          <div class="ov-stat-unit">segments</div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">VEHICLE</div>
+          <div class="ov-stat-value" style="font-size:14px; padding-top:4px;">GX470</div>
+          <div class="ov-stat-unit">'04 Lexus</div>
+        </div>
+      </div>
+
+      <!-- Phase list -->
+      <div class="ov-phases-label">PHASES</div>
+
+      <div class="ov-phase-row">
+        <div class="ov-phase-num">01</div>
+        <div class="ov-phase-divider"></div>
+        <div class="ov-phase-info">
+          <div class="ov-phase-name">LA › GLACIER</div>
+          <div class="ov-phase-meta">Days 01–02 · 2,150 mi</div>
+        </div>
+        <div class="ov-phase-dot" style="background:var(--text-dim);"></div>
+      </div>
+
+      <div class="ov-phase-row">
+        <div class="ov-phase-num active">02</div>
+        <div class="ov-phase-divider"></div>
+        <div class="ov-phase-info">
+          <div class="ov-phase-name">BC › ALASKA HWY</div>
+          <div class="ov-phase-meta">Days 03–08 · 1,820 mi</div>
+        </div>
+        <div class="ov-phase-dot" style="background:var(--amber);"></div>
+      </div>
+
+      <div class="ov-phase-row">
+        <div class="ov-phase-num">03</div>
+        <div class="ov-phase-divider"></div>
+        <div class="ov-phase-info">
+          <div class="ov-phase-name">ALASKA HWY › AK</div>
+          <div class="ov-phase-meta">Days 09–80 · 4,430 mi</div>
+        </div>
+        <div class="ov-phase-dot" style="background:var(--text-dim);"></div>
+      </div>
+
+      <!-- Trip progress -->
+      <div class="ov-progress-wrap">
+        <div class="ov-progress-label">
+          <span>PROGRESS</span>
+          <span>DAY 01 OF 80</span>
+        </div>
+        <div class="ov-progress-track">
+          <div class="ov-progress-fill"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── ITINERARY TAB ─────────────────────────────────────── -->
+    <div class="tab-row">
+      <div class="tab tab-itinerary" id="tab-itinerary">
+        <span class="tab-label">Itinerary</span>
+        <svg class="tab-chevron" viewBox="0 0 10 6" width="10" height="6">
+          <polyline class="chevron-svg" points="1,1 5,5 9,1"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── ITINERARY CONTENT (phase headers + day cards) ───── -->
+    <div class="itinerary-content">
+    <div class="phase-header">
+      <div class="phase-header-inner">
+        <div class="ph-num-block">
+          <div class="ph-num-label">PHASE</div>
+          <div class="ph-num">01</div>
+        </div>
+        <div class="ph-divider"></div>
+        <div class="ph-info">
+          <span>LA › GLACIER</span>
+          <span>Days 01–02</span>
+          <span>2,150 mi</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day Card 01 — ACTIVE -->
+    <div class="day-card active" data-day="1">
+      <span class="dc-meta active">750 mi | 10.5 hrs</span>
+      <span class="dc-day-num active">Day 01</span>
+      <span class="dc-date active">Wed 5/29</span>
+      <span class="dc-route active" style="top:66px;">Los Angeles, CA —</span>
+      <span class="dc-route active" style="top:84px;">Willard Bay, UT</span>
+    </div>
+
+    <!-- Day Card 02 -->
+    <div class="day-card" data-day="2">
+      <span class="dc-meta">710 mi | 10.0 hrs</span>
+      <span class="dc-day-num">Day 02</span>
+      <span class="dc-date">Thu 5/30</span>
+      <span class="dc-route" style="top:66px;">Willard Bay, UT —</span>
+      <span class="dc-route" style="top:84px;">Whitefish, MT</span>
+    </div>
+
+    <!-- PHASE 02 Header -->
+    <div class="phase-header">
+      <div class="phase-header-inner">
+        <div class="ph-num-block">
+          <div class="ph-num-label">PHASE</div>
+          <div class="ph-num">02</div>
+        </div>
+        <div class="ph-divider"></div>
+        <div class="ph-info">
+          <span>BC › ALASKA HWY</span>
+          <span>Days 03–08</span>
+          <span>1,820 mi</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day Card 03 -->
+    <div class="day-card" data-day="3">
+      <span class="dc-meta">290 mi | 4.5 hrs</span>
+      <span class="dc-day-num">Day 03</span>
+      <span class="dc-date">Fri 5/31</span>
+      <span class="dc-route" style="top:66px;">Whitefish, MT —</span>
+      <span class="dc-route" style="top:84px;">Cranbrook, BC</span>
+    </div>
+
+    <!-- Day Card 04 -->
+    <div class="day-card" data-day="4">
+      <span class="dc-meta">380 mi | 5.5 hrs</span>
+      <span class="dc-day-num">Day 04</span>
+      <span class="dc-date">Sat 6/01</span>
+      <span class="dc-route" style="top:66px;">Cranbrook, BC —</span>
+      <span class="dc-route" style="top:84px;">Jasper, AB</span>
+    </div>
+
+    <!-- Day Card 05 -->
+    <div class="day-card" data-day="5">
+      <span class="dc-meta">350 mi | 5.0 hrs</span>
+      <span class="dc-day-num">Day 05</span>
+      <span class="dc-date">Sun 6/02</span>
+      <span class="dc-route" style="top:66px;">Jasper, AB —</span>
+      <span class="dc-route" style="top:84px;">Dawson Creek, BC</span>
+    </div>
+
+    <!-- Day Card 06 -->
+    <div class="day-card" data-day="6">
+      <span class="dc-meta">300 mi | 4.5 hrs</span>
+      <span class="dc-day-num">Day 06</span>
+      <span class="dc-date">Mon 6/03</span>
+      <span class="dc-route" style="top:66px;">Dawson Creek, BC —</span>
+      <span class="dc-route" style="top:84px;">Fort Nelson, BC</span>
+    </div>
+
+    <!-- Day Card 07 -->
+    <div class="day-card" data-day="7">
+      <span class="dc-meta">330 mi | 5.5 hrs</span>
+      <span class="dc-day-num">Day 07</span>
+      <span class="dc-date">Tue 6/04</span>
+      <span class="dc-route" style="top:66px;">Fort Nelson, BC —</span>
+      <span class="dc-route" style="top:84px;">Watson Lake, YT</span>
+    </div>
+
+    <!-- Day Card 08 -->
+    <div class="day-card" data-day="8">
+      <span class="dc-meta">270 mi | 4.0 hrs</span>
+      <span class="dc-day-num">Day 08</span>
+      <span class="dc-date">Wed 6/05</span>
+      <span class="dc-route" style="top:66px;">Watson Lake, YT —</span>
+      <span class="dc-route" style="top:84px;">Whitehorse, YT</span>
+    </div>
+
+    </div><!-- end .itinerary-content -->
+
+  </div> ════════════════════════════════════ -->
+  <div class="itin-header">
+    <div class="itin-title-bar">
+      <div class="itin-phase-left">
+        <span class="itin-phase-eyebrow" id="itin-phase-label">PHASE 01</span>
+        <div class="itin-phase-route">
+          <span class="itin-phase-city" id="itin-phase-from">LA</span>
+          <span class="itin-phase-arrow">›</span>
+          <span class="itin-phase-city" id="itin-phase-to">GLACIER</span>
+        </div>
+        <span class="itin-title" id="itin-phase-sub">Los Angeles, CA — Glacier National Park, MT</span>
+      </div>
+      <div class="itin-phase-right">
+        <div class="itin-phase-stats">
+          <span class="itin-dates" id="itin-phase-days">DAYS 01–02</span>
+          <span class="itin-phase-mi" id="itin-phase-mi">2,150 MI</span>
+        </div>
+        <div class="itin-close" id="itin-close">
+          <div class="itin-close-icon"></div>
+        </div>
+      </div>
+    </div>
+    <div class="itin-amber-bar"></div>
+  </div>
+
+  <!-- ══ DAY DETAIL — infinite scroll ══════════════════════════ -->
+  <div class="day-detail" id="day-detail-scroll">
+
+    <!-- ─── DAY 01 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="1" data-phase="01">
+      <div class="dd-header" id="day-header-1" data-day="1">
+        <span class="dd-date">Wednesday, May 29th</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Los Angeles, CA — Willard Bay, UT</span>
+          <span class="dd-stats">Day 01 · 750 mi · 10.5 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card">
+          <img src="https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=960&h=440&q=80" alt="Mojave Desert highway">
+          <span class="photo-card-label">MOJAVE DESERT · I-15 N · DAY 01</span>
+          <span class="photo-card-tag">↑ NORTHBOUND</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">7:00 AM</div><div class="dd-info-card-sub">Los Angeles, CA</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~6:30 PM</div><div class="dd-info-card-sub">Willard Bay, UT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">10.5 hrs</div><div class="dd-info-card-sub">with stops ~12 hrs</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ELEVATION GAIN</div><div class="dd-info-card-value">4,800 ft</div><div class="dd-info-card-sub">peak ~4,200 ft</div></div>
+        </div>
+        <div class="dd-fuel-warn">
+          <span class="dd-fuel-icon">⛽</span>
+          <div class="dd-fuel-text"><strong>Fill up in Baker, CA (mi ~110)</strong> Last cheap fuel before Nevada. Next reliable stop: Las Vegas (~160 mi).</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">7:00 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Los Angeles, CA</div><div class="wp-detail">Fill tank before leaving. Head east on I-10 then north on I-15.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=144&h=120&q=75" alt="Mexican enchiladas"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 60</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Mitla Cafe — San Bernardino</div><div class="wp-detail">Oldest Mexican restaurant in SoCal, open since 1937. Red or green enchiladas.</div><div class="wp-note">↳ ORDER: red chile enchiladas, horchata</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Desert gas station"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">9:45 AM · mi 110</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Baker, CA — Arco / Chevron</div><div class="wp-detail">Fill to the brim. Last cheap California fuel. Mad Greek diner right here for a snack.</div><div class="wp-note">↳ ~$0.30/gal cheaper than NV stations ahead</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=144&h=120&q=75" alt="Mojave desert highway"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:00 AM · mi 160</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Mojave Desert Stretch</div><div class="wp-detail">I-15 opens into wide basin. Kelso Dunes visible east. Pull-out at Cima Rd for Joshua tree photos.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=144&h=120&q=75" alt="Burger"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">12:30 PM · mi 270</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">In-N-Out — Las Vegas, NV (Flamingo)</div><div class="wp-detail">Ritual stop. Last In-N-Out until the return leg. Eat and move — Vegas traffic adds 20 min if you linger.</div><div class="wp-note">↳ ORDER: Double-Double animal style</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618047-3c8c76ca7e8c?auto=format&fit=crop&w=144&h=120&q=75" alt="Red rock canyon"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">F</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">2:00 PM · mi 330</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Virgin River Gorge, UT</div><div class="wp-detail">One of the most dramatic freeway sections in the US — I-15 squeezes through sheer canyon walls at the NV–AZ–UT tri-state corner.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=144&h=120&q=75" alt="Utah fuel stop"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">G</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">5:00 PM · mi 540</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Fillmore, UT — Sinclair</div><div class="wp-detail">Top off before the final push north. Clean station, good rest stop.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Lake campground"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~6:30 PM · mi 750</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Willard Bay State Park</div><div class="wp-detail">North Marina campground — full hookups, flush toilets. Shore access for a morning walk.</div><div class="wp-note">↳ Book ahead on weekends. Quiet by 10PM.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Willard Bay lakeside camp"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">CAMPGROUND</span><span class="dd-camp-badge">DISPERSED OK NEARBY</span></div>
+          <div class="dd-camp-name">Willard Bay State Park — North Marina</div>
+          <div class="dd-camp-detail">Electric hookup sites · Flush toilets · Hot showers · Boat ramp<br>Fee: ~$35/night · Phone: 435-734-9494 · willardbaystatepark.com</div>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 02 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="2" data-phase="01">
+      <div class="dd-header" id="day-header-2" data-day="2">
+        <span class="dd-date">Thursday, May 30th</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Willard Bay, UT — Whitefish, MT</span>
+          <span class="dd-stats">Day 02 · 710 mi · 10.0 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card">
+          <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=960&h=440&q=80" alt="Idaho mountains">
+          <span class="photo-card-label">SNAKE RIVER PLAIN · I-84 N · DAY 02</span>
+          <span class="photo-card-tag">↑ IDAHO BOUND</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">7:00 AM</div><div class="dd-info-card-sub">Willard Bay, UT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~6:00 PM</div><div class="dd-info-card-sub">Whitefish, MT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">10.0 hrs</div><div class="dd-info-card-sub">with stops ~11.5 hrs</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">BORDER</div><div class="dd-info-card-value">None</div><div class="dd-info-card-sub">US domestic only</div></div>
+        </div>
+        <div class="dd-fuel-warn">
+          <span class="dd-fuel-icon">⚠️</span>
+          <div class="dd-fuel-text"><strong>Long gap: Missoula → Whitefish (~130 mi, sparse services)</strong> Fill in Missoula before the final push north on US-93.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">7:00 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Willard Bay, UT</div><div class="wp-detail">Break camp early. North on I-15 through Cache Valley — Wasatch Front fills the western skyline in good morning light.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=144&h=120&q=75" alt="Local coffee shop"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 80</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Café Ibis — Logan, UT</div><div class="wp-detail">Excellent local roaster. Strong espresso, fresh pastries. Good stretch before the Idaho push.</div><div class="wp-note">↳ ORDER: single-origin pour-over, almond croissant</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=144&h=120&q=75" alt="Snake River canyon"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:00 AM · mi 150</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Twin Falls — Perrine Bridge</div><div class="wp-detail">486 ft above the Snake River Canyon. Takes 3 minutes. One of the most surprising viewpoints in the American West.</div><div class="wp-note">↳ BASE JUMPERS launch from this bridge regularly</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Gas station fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:30 AM · mi 230</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Mountain Home, ID — Flying J</div><div class="wp-detail">Good mid-day stop before Boise. Clean bathrooms, decent food.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=144&h=120&q=75" alt="Drive-in burger"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">12:30 PM · mi 280</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Westside Drive-In — Boise, ID</div><div class="wp-detail">Boise institution since 1957. Idaho-style burgers, hand-cut fries, milkshakes.</div><div class="wp-note">↳ ORDER: double cheeseburger, huckleberry shake</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=144&h=120&q=75" alt="River valley road"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">F</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">2:30 PM · mi 390</span><span class="wp-type-tag drive">DRIVE</span></div><div class="wp-name">US-95 N — Payette, ID</div><div class="wp-detail">Freeway to two-lane. US-95 runs alongside the Payette River through rolling hills and ranch country.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=144&h=120&q=75" alt="Mountain forest pass"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">G</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">3:30 PM · mi 450</span><span class="wp-type-tag event">POI</span></div><div class="wp-name">Lolo Pass — ID / MT Border</div><div class="wp-detail">Lewis and Clark passed here in 1805. Small visitor center at 5,233 ft. Views excellent in both directions.</div><div class="wp-note">↳ PHOTO OP: both-states sign at the summit</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=144&h=120&q=75" alt="Missoula fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">H</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">4:45 PM · mi 530</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Missoula, MT — Costco / Cenex</div><div class="wp-detail">Critical fill-up. Last reliable fuel before Whitefish. Fill completely.</div><div class="wp-note">↳ ~130 mi to Whitefish, sparse stations on US-93 N</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=144&h=120&q=75" alt="Wood-fired pizza"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">I</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">5:00 PM · mi 530</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Biga Pizza — Missoula, MT</div><div class="wp-detail">Wood-fired, locally sourced, beloved. Open from 5PM. Order ahead — fills fast on weeknights.</div><div class="wp-note">↳ ORDER: roasted garlic + prosciutto pizza, local draft</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Whitefish lake camp"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~7:30 PM · mi 710</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Whitefish Lake State Park</div><div class="wp-detail">Sits right on the water — excellent sunset if you time it. Flat sites, good GX470 access. Town is walkable from camp.</div><div class="wp-note">↳ Reserve ahead May–Sept. Fills mid-week in summer.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Whitefish lake camp"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">STATE PARK CAMPGROUND</span><span class="dd-camp-badge">LAKEFRONT</span></div>
+          <div class="dd-camp-name">Whitefish Lake State Park</div>
+          <div class="dd-camp-detail">25 sites · Flush toilets · No hookups · Water available<br>Fee: ~$28/night · Phone: 406-862-3991 · reserveamerica.com</div>
+        </div>
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Cranbrook, BC</div><div class="dd-info-card-sub">Day 03 · 290 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">BORDER CROSSING</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Roosville, MT</div><div class="dd-info-card-sub">US → Canada · ~9AM ideal</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 03 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="3" data-phase="02">
+      <div class="dd-header" id="day-header-3" data-day="3">
+        <span class="dd-date">Friday, May 31st</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Whitefish, MT — Cranbrook, BC</span>
+          <span class="dd-stats">Day 03 · 290 mi · 4.5 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+
+        <div class="photo-card">
+          <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=960&h=440&q=80" alt="Canadian Rockies">
+          <span class="photo-card-label">FLATHEAD VALLEY · US-93 N · DAY 03</span>
+          <span class="photo-card-tag">↑ CANADA BOUND</span>
+        </div>
+
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">8:30 AM</div><div class="dd-info-card-sub">Whitefish, MT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~2:00 PM</div><div class="dd-info-card-sub">Cranbrook, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">4.5 hrs</div><div class="dd-info-card-sub">with border ~5.5 hrs</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">BORDER</div><div class="dd-info-card-value" style="font-size:15px;padding-top:3px;">Roosville</div><div class="dd-info-card-sub">MT → BC · expect 20–45 min</div></div>
+        </div>
+
+        <div class="dd-fuel-warn" style="border-color:rgba(139,92,246,0.35); background:rgba(139,92,246,0.07);">
+          <span class="dd-fuel-icon">🛂</span>
+          <div class="dd-fuel-text" style="color:#a78bfa;">
+            <strong style="color:#c4b5fd;">Roosville Border Crossing — plan for 20–45 min wait</strong>
+            Have passport ready. Declare all food, alcohol, and firearms. Cross 9–11AM for shortest lines. Avoid Friday 3–6PM — commuter rush. No handguns allowed into Canada.
+          </div>
+        </div>
+
+        <div class="dd-section-label">WAYPOINTS</div>
+
+        <!-- A: Loula's Café -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge food"><span class="wp-badge-letter">A</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">8:30 AM</span><span class="wp-type-tag food">FOOD</span></div>
+            <div class="wp-name">Loula's Café — Whitefish, MT</div>
+            <div class="wp-detail">Best breakfast in the Flathead Valley. Egg scrambles, thick french toast, good coffee. Get here early — line forms by 9AM on weekends.</div>
+            <div class="wp-note">↳ ORDER: Eggs Benedict, house-roasted coffee</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=144&h=120&q=75" alt="Breakfast café">
+          </div>
+        </div>
+
+        <!-- B: Fuel in Whitefish -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge fuel"><span class="wp-badge-letter">B</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">9:30 AM · mi 10</span><span class="wp-type-tag fuel">FUEL</span></div>
+            <div class="wp-name">Whitefish, MT — Fill before crossing</div>
+            <div class="wp-detail">Top off here. Canadian fuel runs 15–25% more expensive. This is your last US fuel for several days.</div>
+            <div class="wp-note">↳ Fill completely — sparse stations in BC ahead</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Fuel station">
+          </div>
+        </div>
+
+        <!-- C: Flathead Valley drive -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge"><span class="wp-badge-letter">C</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">9:45 AM · mi 18</span><span class="wp-type-tag drive">SCENIC</span></div>
+            <div class="wp-name">Flathead Valley Corridor — US-93 N</div>
+            <div class="wp-detail">Wide-open ranchland with the Mission Mountains to the east. Great morning light for photography before the border.</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=144&h=120&q=75" alt="Mountain valley">
+          </div>
+        </div>
+
+        <!-- D: Roosville Border -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge event"><span class="wp-badge-letter">D</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">10:30 AM · mi 55</span><span class="wp-type-tag event">BORDER</span></div>
+            <div class="wp-name">Roosville Border Crossing — US / Canada</div>
+            <div class="wp-detail">Small crossing, typical wait 15–30 min midweek. Declare all food, alcohol, and bear spray. GX470 with camping gear is routine here.</div>
+            <div class="wp-note">↳ DECLARE everything — don't guess</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1605106250963-ffda6d4f3f3c?auto=format&fit=crop&w=144&h=120&q=75" alt="Border crossing sign">
+          </div>
+        </div>
+
+        <!-- E: BC-3 / Fernie corridor -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge"><span class="wp-badge-letter">E</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">11:15 AM · mi 60</span><span class="wp-type-tag drive">DRIVE</span></div>
+            <div class="wp-name">BC-3 E — Elk River Valley, BC</div>
+            <div class="wp-detail">Dramatic limestone peaks of the Rockies close in from the north. Road is excellent two-lane. Speed limits now in km/h.</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=144&h=120&q=75" alt="Mountain highway">
+          </div>
+        </div>
+
+        <!-- F: Fernie optional -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge"><span class="wp-badge-letter">F</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">11:45 AM · mi 90</span><span class="wp-type-tag drive">SCENIC</span></div>
+            <div class="wp-name">Fernie, BC — Optional Stop</div>
+            <div class="wp-detail">Mountain town with serious alpine character. The Lizard Range looms directly above town — outstanding photography with the right light.</div>
+            <div class="wp-note">↳ Skip if pushing for afternoon camp setup time</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=144&h=120&q=75" alt="Alpine mountain town">
+          </div>
+        </div>
+
+        <!-- G: The Heid Out -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge food"><span class="wp-badge-letter">G</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">1:00 PM · mi 180</span><span class="wp-type-tag food">FOOD</span></div>
+            <div class="wp-name">The Heid Out — Cranbrook, BC</div>
+            <div class="wp-detail">Local pub, solid lunch. Burgers, wings, cold Canadian beer. Good parking for the GX470. Use this stop to resupply water and snacks.</div>
+            <div class="wp-note">↳ ORDER: BC burger, Kokanee draft</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&w=144&h=120&q=75" alt="Pub burger and beer">
+          </div>
+        </div>
+
+        <!-- H: Cranbrook fuel -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge fuel"><span class="wp-badge-letter">H</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">1:45 PM · mi 195</span><span class="wp-type-tag fuel">FUEL</span></div>
+            <div class="wp-name">Cranbrook, BC — Esso / Petro-Canada</div>
+            <div class="wp-detail">Top up in town. Stock groceries here — next major town is Radium Hot Springs (~120 km north).</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=144&h=120&q=75" alt="Gas station canopy">
+          </div>
+        </div>
+
+        <!-- Z: Jimsmith Lake camp -->
+        <div class="wp-row has-thumb">
+          <div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div>
+          <div class="wp-content">
+            <div class="wp-time-label"><span class="wp-time">~2:30 PM · mi 290</span><span class="wp-type-tag camp">CAMP</span></div>
+            <div class="wp-name">Jimsmith Lake Provincial Park</div>
+            <div class="wp-detail">5 km south of Cranbrook. Quiet lake campground in the pines. 30 sites — arrive early on Fridays. Good wildlife watching in the evening.</div>
+            <div class="wp-note">↳ Arrives early afternoon — plenty of time to set up</div>
+          </div>
+          <div class="wp-thumb">
+            <img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Lake campground pines">
+          </div>
+        </div>
+
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">PROVINCIAL PARK</span><span class="dd-camp-badge">LAKESIDE · NO HOOKUPS</span></div>
+          <div class="dd-camp-name">Jimsmith Lake Provincial Park — Cranbrook, BC</div>
+          <div class="dd-camp-detail">
+            30 sites · Pit toilets · Hand-pump water · No showers<br>
+            Fee: ~$20 CAD/night · Reserve: discovercamping.ca<br>
+            Note: BC Parks charges in CAD — have card or cash
+          </div>
+        </div>
+
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Jasper, AB</div><div class="dd-info-card-sub">Day 04 · 380 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">HIGHLIGHT</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Icefields Pkwy</div><div class="dd-info-card-sub">One of the world's great drives</div></div>
+        </div>
+
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 04 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="4" data-phase="02">
+      <div class="dd-header" id="day-header-4" data-day="4">
+        <span class="dd-date">Saturday, June 1st</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Cranbrook, BC — Jasper, AB</span>
+          <span class="dd-stats">Day 04 · 380 mi · 5.5 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card" style="background: linear-gradient(160deg, #0a1a0f 0%, #1a3a2a 15%, #2a5a40 35%, #4a8a60 52%, #a0c8a0 65%, #d0e8d0 75%, #8ab0a0 88%, #3a6050 100%);">
+          <img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=960&h=440&q=80" alt="Icefields Parkway">
+          <span class="photo-card-label">KOOTENAY NP · HWY 93 N · DAY 04</span>
+          <span class="photo-card-tag">↑ ICEFIELDS PKWY</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">8:00 AM</div><div class="dd-info-card-sub">Cranbrook, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~3:30 PM</div><div class="dd-info-card-sub">Jasper, AB</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">5.5 hrs</div><div class="dd-info-card-sub">with stops ~7 hrs</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">PARKS PASS</div><div class="dd-info-card-value">Required</div><div class="dd-info-card-sub">Kootenay + Banff</div></div>
+        </div>
+        <div class="dd-fuel-warn">
+          <span class="dd-fuel-icon">🏔️</span>
+          <div class="dd-fuel-text"><strong>Parks Canada Discovery Pass — buy before entering Kootenay NP</strong>Annual pass (~$75 CAD) covers all national parks. Day pass is ~$22 CAD. Buy at the park gate or online at pc.gc.ca. Icefields Pkwy passes through Banff and Jasper NP — same pass covers both.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:00 AM</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Cranbrook — Tim Hortons or local café</div><div class="wp-detail">Quick breakfast before the mountain stretch. Grab road snacks here — there are no services for long stretches once you enter Kootenay NP.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Cranbrook fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 15</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Cranbrook — Last fuel before Radium</div><div class="wp-detail">Top off completely. Next reliable station is Radium Hot Springs (~100 km). Gap is manageable but fill anyway — you're heading into national park country where fuel is expensive and sparse.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=144&h=120&q=75" alt="Kootenay forest road"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:00 AM · mi 75</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Radium Hot Springs — Hwy 93 N into Kootenay NP</div><div class="wp-detail">The turn onto Hwy 93 north is where the mountains get serious. Kootenay National Park opens immediately — the valley narrows, limestone walls rise on both sides. Stop at Marble Canyon (~30 km in) for a 20-minute walk through a dramatic slot canyon.</div><div class="wp-note">↳ STOP: Marble Canyon trail — 15 min, worth it</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=144&h=120&q=75" alt="Banff mountain river"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:30 AM · mi 130</span><span class="wp-type-tag event">POI</span></div><div class="wp-name">Castle Junction → Banff, AB</div><div class="wp-detail">Cross into Banff National Park at Castle Junction. If time permits, drop into Banff townsite for a quick walk — Bow River, Banff Ave. Photography is exceptional. Don't let it eat too much time — Icefields Pkwy lies ahead and it's the real prize today.</div><div class="wp-note">↳ PHOTO: Bow Falls viewpoint — 5 min walk</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=144&h=120&q=75" alt="Icefields Parkway glacier"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">1:00 PM · mi 185</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Icefields Parkway (Hwy 93 N) — Lake Louise → Jasper</div><div class="wp-detail">This 230 km stretch is one of the great drives on earth. Glaciers hang above the road. Bow Summit (~2,088 m) is the highest point — stop at Peyto Lake overlook for the famous turquoise view. The Columbia Icefield is about 120 km north of Lake Louise. Slow down, pull over freely.</div><div class="wp-note">↳ MUST STOP: Peyto Lake overlook, Columbia Icefield viewpoint</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=144&h=120&q=75" alt="Mountain café stop"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">F</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">2:30 PM · mi 280</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Sunwapta Falls / Columbia Icefield Café</div><div class="wp-detail">The Glacier View Lodge café has basic food — sandwiches, soup, hot drinks. Overpriced but strategically located. Alternatively pack a lunch and eat at Sunwapta Falls picnic area 5 km south of Jasper — one of the best roadside lunch spots in Canada.</div><div class="wp-note">↳ Pack lunch from Cranbrook if possible</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Jasper campground"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~3:30 PM · mi 380</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Jasper, AB — Whistlers Campground</div><div class="wp-detail">Jasper's main campground, 3 km south of town. Well-run, good facilities, mountain views. Arrive early on Saturdays — fills completely. Walk or ride into Jasper townsite for dinner — excellent restaurants within 10 min of camp.</div><div class="wp-note">↳ Book ahead: reservation.pc.gc.ca</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Jasper mountain campground"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">NATIONAL PARK CAMPGROUND</span><span class="dd-camp-badge">PARKS PASS REQUIRED</span></div>
+          <div class="dd-camp-name">Whistlers Campground — Jasper, AB</div>
+          <div class="dd-camp-detail">781 sites · Flush toilets · Showers · Electric hookups available<br>Fee: ~$28–38 CAD/night · Reserve: reservation.pc.gc.ca<br>Jasper townsite 3 km · Good bear activity in area</div>
+        </div>
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Dawson Creek, BC</div><div class="dd-info-card-sub">Day 05 · 350 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">MILESTONE</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Mile Zero</div><div class="dd-info-card-sub">Alaska Highway begins</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 05 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="5" data-phase="02">
+      <div class="dd-header" id="day-header-5" data-day="5">
+        <span class="dd-date">Sunday, June 2nd</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Jasper, AB — Dawson Creek, BC</span>
+          <span class="dd-stats">Day 05 · 350 mi · 5.0 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card" style="background: linear-gradient(160deg, #0a0e0a 0%, #1a2a1a 18%, #3a5a3a 40%, #6a9a6a 58%, #c8d8b0 72%, #a8b890 85%, #5a6a5a 100%);">
+          <img src="https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=960&h=440&q=80" alt="Northern Alberta wilderness">
+          <span class="photo-card-label">GRANDE PRAIRIE CORRIDOR · HWY 2 N · DAY 05</span>
+          <span class="photo-card-tag">↑ ALASKA HWY BOUND</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">7:30 AM</div><div class="dd-info-card-sub">Jasper, AB</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~1:30 PM</div><div class="dd-info-card-sub">Dawson Creek, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">5.0 hrs</div><div class="dd-info-card-sub">transition day — arrive early</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">MILESTONE</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Mile Zero</div><div class="dd-info-card-sub">Alaska Highway starts here</div></div>
+        </div>
+        <div class="dd-fuel-warn" style="border-color:rgba(76,175,106,0.4); background:rgba(76,175,106,0.07);">
+          <span class="dd-fuel-icon">🏁</span>
+          <div class="dd-fuel-text" style="color:#4CAF6A;"><strong style="color:#6ad88a;">Dawson Creek, BC — Mile Zero of the Alaska Highway</strong>The original Alaska Highway (built 1942, 8 months) starts here. The Mile Zero post in downtown Dawson Creek is a mandatory photo stop. This is where the expedition officially begins its northbound push.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">7:30 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Jasper, AB</div><div class="wp-detail">Leave Jasper via Hwy 16 east (Yellowhead Highway). The mountains gradually give way to foothills then boreal flatlands. A big tonal shift from yesterday's alpine drama — this is where the north starts feeling real.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=144&h=120&q=75" alt="Hinton café"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 45</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Hinton, AB — Café stop</div><div class="wp-detail">Last town before Grande Prairie. Hit a café or bakery in Hinton — it's a solid working town with good basic food. Stock up on any groceries here before the long Alberta prairie stretch.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Grande Prairie fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:30 AM · mi 170</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Grande Prairie, AB — Costco / Shell</div><div class="wp-detail">Major resupply point. Fill fuel, hit Costco if you have a card — best grocery prices before entering BC's north. Stock the fridge properly here. Grande Prairie is the last real city for several hundred miles.</div><div class="wp-note">↳ Major resupply — groceries, fuel, any gear needs</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=144&h=120&q=75" alt="Quirky café interior"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:00 AM · mi 175</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Maddhatters Tea House — Grande Prairie</div><div class="wp-detail">Quirky local café with excellent sandwiches and pastries. A surprisingly good stop in an otherwise utilitarian city. Grab lunch here before the final stretch to Dawson Creek.</div><div class="wp-note">↳ ORDER: grilled sandwich, house chai</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1605106250963-ffda6d4f3f3c?auto=format&fit=crop&w=144&h=120&q=75" alt="Mile Zero post"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">1:30 PM · mi 350</span><span class="wp-type-tag event">MILESTONE</span></div><div class="wp-name">Dawson Creek, BC — Mile Zero Post</div><div class="wp-detail">The iconic white post at 10th St and 102nd Ave marks Mile Zero of the Alaska Highway. Every northbound expedition stops here. The Alaska Highway House museum is 5 min walk — worth 20 minutes to understand the insane construction story (8,000 US soldiers, 8 months, 1,422 miles of wilderness).</div><div class="wp-note">↳ PHOTO: Mile Zero post — mandatory expedition photo</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Dawson Creek campground"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~2:00 PM · mi 350</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Dawson Creek — Northern Lights RV Park</div><div class="wp-detail">Afternoon arrival gives you time to prep the GX470 for the Alaska Highway ahead. Check tire pressure, check all fluids, re-strap anything loose. The Alcan shakes vehicles hard on rough sections. Dawson Creek has good parts stores if anything needs attention.</div><div class="wp-note">↳ Use afternoon for vehicle inspection + prep</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Dawson Creek RV campground"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">RV PARK / CAMPGROUND</span><span class="dd-camp-badge">FULL HOOKUPS</span></div>
+          <div class="dd-camp-name">Northern Lights RV Park — Dawson Creek, BC</div>
+          <div class="dd-camp-detail">Full hookup sites · Showers · Laundry · WiFi<br>Fee: ~$40 CAD/night · Phone: 250-782-9433<br>Good base for vehicle check before the Alcan</div>
+        </div>
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Fort Nelson, BC</div><div class="dd-info-card-sub">Day 06 · 300 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ROAD</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alcan Hwy</div><div class="dd-info-card-sub">Alaska Hwy · Mile 0–300</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 06 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="6" data-phase="02">
+      <div class="dd-header" id="day-header-6" data-day="6">
+        <span class="dd-date">Monday, June 3rd</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Dawson Creek, BC — Fort Nelson, BC</span>
+          <span class="dd-stats">Day 06 · 300 mi · 4.5 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card" style="background: linear-gradient(160deg, #0a1205 0%, #1a2a0a 20%, #2a4a1a 40%, #5a7a3a 58%, #90a870 70%, #c8c8a0 80%, #7a8a60 100%);">
+          <img src="https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=960&h=440&q=80" alt="Alaska Highway boreal forest">
+          <span class="photo-card-label">ALASKA HWY · MILE 0–300 · DAY 06</span>
+          <span class="photo-card-tag">↑ ALCAN</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">7:30 AM</div><div class="dd-info-card-sub">Dawson Creek, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~1:00 PM</div><div class="dd-info-card-sub">Fort Nelson, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ROAD</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alaska Hwy</div><div class="dd-info-card-sub">Mile 0–300</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">SERVICES</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Sparse</div><div class="dd-info-card-sub">fill every opportunity</div></div>
+        </div>
+        <div class="dd-fuel-warn">
+          <span class="dd-fuel-icon">⛽</span>
+          <div class="dd-fuel-text"><strong>Alaska Highway fuel strategy — fill at every town</strong>Fort St. John (Mile 47) is the last city. After that: Pink Mountain (Mile 143), Toad River (Mile 422). Never pass a fuel station with less than half a tank on the Alcan. The GX470's ~400 mi range is comfortable but don't test it.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">7:30 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Dawson Creek — Alaska Highway, Mile 0</div><div class="wp-detail">You're on the Alcan now. The road north of Dawson Creek is good paved highway for the first 50 miles — two lanes, modest traffic. The landscape quickly transitions to boreal forest and rolling terrain. First wildlife sightings common here: black bears, deer, the occasional moose.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Fort St John fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 47</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Fort St. John, BC — Last city fuel</div><div class="wp-detail">Top off here without fail. Fort St. John is a real city with Costco, supermarkets, and cheap fuel. After this, services become sparse and expensive. Stock up on any last groceries, snacks, or supplies you need for the next few days.</div><div class="wp-note">↳ Last Costco fuel for a long stretch north</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=144&h=120&q=75" alt="Pink Mountain wilderness"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:00 AM · mi 143</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Pink Mountain, BC — Mile 143</div><div class="wp-detail">Small community with a roadside lodge and fuel. Stop to fuel up and take a walk — the open meadows here offer good views of the northern Rockies to the west. Stone sheep are regularly spotted on the road shoulders near here.</div><div class="wp-note">↳ Watch for Stone sheep on road shoulders</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=144&h=120&q=75" alt="Sikanni river canyon"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:00 AM · mi 175</span><span class="wp-type-tag event">POI</span></div><div class="wp-name">Suicide Hill / Sikanni Chief River</div><div class="wp-detail">The Sikanni Chief River canyon is one of the dramatic early Alaska Highway sections. The bridge here replaced the original WWII military structure. Good pull-out for photos. Wildlife corridor — bison and bears frequent this area in June.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&w=144&h=120&q=75" alt="Fort Nelson pub food"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">1:00 PM · mi 300</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Fort Nelson, BC — Dan's Neighbourhood Pub</div><div class="wp-detail">Fort Nelson is the last real town before the Yukon. Good pub food, cold beer, honest portions. The town has a great Alaska Highway museum worth an hour. Stock up groceries and do any vehicle checks — next real service center is Watson Lake (530 mi).</div><div class="wp-note">↳ MUSEUM: Fort Nelson Heritage Museum — free, excellent</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Fort Nelson campground"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~2:00 PM · mi 300</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Fort Nelson, BC — Westend Campground</div><div class="wp-detail">Municipal campground, simple but functional. Afternoon arrival gives time to prep for the long push through the Northern Rockies tomorrow — the most remote and dramatic section of the entire Alaska Highway.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Fort Nelson campground"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">MUNICIPAL CAMPGROUND</span><span class="dd-camp-badge">LAST SERVICES 530 MI</span></div>
+          <div class="dd-camp-name">Westend Campground — Fort Nelson, BC</div>
+          <div class="dd-camp-detail">Serviced + unserviced sites · Flush toilets · Showers<br>Fee: ~$25 CAD/night · Phone: 250-774-2340<br>Last full-service stop before Watson Lake, YT</div>
+        </div>
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Watson Lake, YT</div><div class="dd-info-card-sub">Day 07 · 330 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">HIGHLIGHT</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Muncho Lake</div><div class="dd-info-card-sub">Liard Hot Springs too</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 07 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="7" data-phase="02">
+      <div class="dd-header" id="day-header-7" data-day="7">
+        <span class="dd-date">Tuesday, June 4th</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Fort Nelson, BC — Watson Lake, YT</span>
+          <span class="dd-stats">Day 07 · 330 mi · 5.5 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card" style="background: linear-gradient(160deg, #050f1a 0%, #0a2030 18%, #1a4050 38%, #3a7080 55%, #50a0b0 68%, #90c8d8 78%, #5088a0 100%);">
+          <img src="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=960&h=440&q=80" alt="Northern Rockies boreal">
+          <span class="photo-card-label">NORTHERN ROCKIES · MILE 300–635 · DAY 07</span>
+          <span class="photo-card-tag">↑ YUKON BOUND</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">7:00 AM</div><div class="dd-info-card-sub">Fort Nelson, BC</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~1:30 PM</div><div class="dd-info-card-sub">Watson Lake, YT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ROAD</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alaska Hwy</div><div class="dd-info-card-sub">Mile 300–635</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">YT BORDER</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Mile 588</div><div class="dd-info-card-sub">BC → Yukon Territory</div></div>
+        </div>
+        <div class="dd-fuel-warn">
+          <span class="dd-fuel-icon">🌡️</span>
+          <div class="dd-fuel-text"><strong>Northern Rockies — most remote section of the Alcan</strong>Muncho Lake to Liard Hot Springs has no services for ~100 km. Fill at every stop. June brings long daylight (18+ hrs this far north) but also fresh snowfall at elevation. Road can have frost heaves and wildlife in road — moose, bison, bears. Speed accordingly.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">7:00 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Fort Nelson, BC — Northern Rockies entry</div><div class="wp-detail">North of Fort Nelson, the Alaska Highway enters the Northern Rockies Mountains Provincial Park. The terrain becomes dramatically more rugged — the road follows river valleys hemmed in by serrated peaks. Stone Mountain Provincial Park begins at Mile 373.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=144&h=120&q=75" alt="Toad River remote lodge"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:30 AM · mi 80</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Toad River Lodge — Mile 422</div><div class="wp-detail">Small roadside lodge with fuel, basic food, and a famous hat collection (covering the ceiling). Fill up without question — this is one of only two fuel stops in 530 miles. The lodge is a genuine Alaska Highway institution.</div><div class="wp-note">↳ Fill completely — next fuel: Muncho Lake ~50 mi</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=144&h=120&q=75" alt="Muncho Lake jade water"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:00 AM · mi 150</span><span class="wp-type-tag event">POI</span></div><div class="wp-name">Muncho Lake Provincial Park — Mile 456</div><div class="wp-detail">The jade-green color of Muncho Lake comes from copper oxide leaching from surrounding rock. The highway hugs the eastern shore for several kilometers — one of the iconic Alaska Highway photographs. Stone sheep on the cliff faces above the road. The lake is ~11 km long and strikingly beautiful.</div><div class="wp-note">↳ PHOTO: Pull-out at the north end of lake — best angle</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1519824145371-296894a0daa9?auto=format&fit=crop&w=144&h=120&q=75" alt="Liard hot springs"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">11:00 AM · mi 195</span><span class="wp-type-tag event">POI</span></div><div class="wp-name">Liard Hot Springs Provincial Park — Mile 497</div><div class="wp-detail">Do not skip this. The Alpha Pool is a natural hot spring at 42°C surrounded by a boreal jungle — orchids and tropical-feeling vegetation heated by the geothermal water. A 500m boardwalk leads to the pool. Bears are commonly seen here. One of the great unexpected wonders of the Alaska Highway.</div><div class="wp-note">↳ Budget 1.5 hrs — worth every minute. Watch for bears on boardwalk.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1605106250963-ffda6d4f3f3c?auto=format&fit=crop&w=144&h=120&q=75" alt="BC Yukon border sign"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge event"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">12:30 PM · mi 255</span><span class="wp-type-tag event">BORDER</span></div><div class="wp-name">BC / Yukon Territory Border — Mile 588</div><div class="wp-detail">No formal border crossing — just a sign. Entering the Yukon Territory. Speed limits change (in km/h). The landscape opens dramatically — wide river valleys, massive boreal plateaus, and the sense of genuine remoteness that defines the Yukon. Welcome to real north.</div><div class="wp-note">↳ PHOTO: BC/YT sign — expedition milestone</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=144&h=120&q=75" alt="Watson Lake sign forest"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~1:30 PM · mi 330</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Watson Lake, YT — Watson Lake Campground</div><div class="wp-detail">Watson Lake is famous for the Sign Post Forest — started in 1942 by a homesick soldier who posted a sign pointing to his hometown. Now has 100,000+ signs. Add your own. Town has fuel, a grocery store, and a good diner. Afternoon arrival means time to walk the forest and explore.</div><div class="wp-note">↳ BRING A SIGN: print your hometown/street name before leaving</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=144&h=120&q=75" alt="Watson Lake sign post forest"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">TERRITORIAL CAMPGROUND</span><span class="dd-camp-badge">SIGN POST FOREST</span></div>
+          <div class="dd-camp-name">Watson Lake Campground — Watson Lake, YT</div>
+          <div class="dd-camp-detail">60 sites · Pit toilets · Water · No hookups<br>Fee: ~$12 CAD/night · First come first served<br>Walk to Sign Post Forest: 5 min</div>
+        </div>
+        <div class="dd-section-label">TOMORROW</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Whitehorse, YT</div><div class="dd-info-card-sub">Day 08 · 270 mi</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">REST DAY</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Whitehorse</div><div class="dd-info-card-sub">Major resupply + rest</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+    <div class="day-divider"></div>
+
+    <!-- ─── DAY 08 ─────────────────────────────────────────── -->
+    <div class="day-section" data-day="8" data-phase="02">
+      <div class="dd-header" id="day-header-8" data-day="8">
+        <span class="dd-date">Wednesday, June 5th</span>
+        <div class="dd-meta-row">
+          <span class="dd-route">Watson Lake, YT — Whitehorse, YT</span>
+          <span class="dd-stats">Day 08 · 270 mi · 4.0 hrs</span>
+        </div>
+      </div>
+      <div class="dd-body">
+        <div class="photo-card" style="background: linear-gradient(160deg, #050a14 0%, #0a1a2a 18%, #1a3050 38%, #2a5080 55%, #4a80b0 70%, #80b0d8 80%, #405878 100%);">
+          <img src="https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=960&h=440&q=80" alt="Yukon boreal highway">
+          <span class="photo-card-label">YUKON TERRITORY · ALASKA HWY · DAY 08</span>
+          <span class="photo-card-tag">↑ WHITEHORSE</span>
+        </div>
+        <div class="dd-section-label">DAY STATS</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">DEPART</div><div class="dd-info-card-value">8:00 AM</div><div class="dd-info-card-sub">Watson Lake, YT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">ARRIVE</div><div class="dd-info-card-value">~12:30 PM</div><div class="dd-info-card-sub">Whitehorse, YT</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">DRIVE TIME</div><div class="dd-info-card-value">4.0 hrs</div><div class="dd-info-card-sub">short day — rest day in YXY</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">PHASE END</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Phase 02</div><div class="dd-info-card-sub">BC → Alaska Hwy complete</div></div>
+        </div>
+        <div class="dd-fuel-warn" style="border-color:rgba(76,175,106,0.4); background:rgba(76,175,106,0.07);">
+          <span class="dd-fuel-icon">🏙️</span>
+          <div class="dd-fuel-text" style="color:#4CAF6A;"><strong style="color:#6ad88a;">Whitehorse — Yukon capital and major resupply hub</strong>Whitehorse is the largest city between Edmonton and Anchorage. Use the afternoon well — full vehicle service, laundry, quality restaurant meal, resupply everything. This is the last real city before the Alcan enters Alaska.</div>
+        </div>
+        <div class="dd-section-label">WAYPOINTS</div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">A</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">8:00 AM</span><span class="wp-type-tag drive">DEPART</span></div><div class="wp-name">Watson Lake, YT</div><div class="wp-detail">North on the Alaska Highway through boreal Yukon. The road is excellent — smooth, wide, good sight lines. Wildlife sightings increase: caribou, moose, wolves. The scale of the landscape becomes almost abstract — rolling tundra and boreal forest to every horizon.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=144&h=120&q=75" alt="Teslin Lake"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">B</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">9:30 AM · mi 90</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Teslin, YT — Nisutlin Trading Post</div><div class="wp-detail">Teslin is a small First Nations community on Teslin Lake — one of the longest lakes in the Yukon. Good quick stop for coffee and a bite. The George Johnston Museum here covers Tlingit history and Alaska Highway construction from a First Nations perspective. Worth 30 minutes.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=144&h=120&q=75" alt="Carcross desert dunes"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge"><span class="wp-badge-letter">C</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">10:30 AM · mi 155</span><span class="wp-type-tag drive">SCENIC</span></div><div class="wp-name">Jake's Corner — Tagish Road junction</div><div class="wp-detail">If time permits and weather is good, the detour south to Carcross on the Tagish Road (~45 min) passes through some of the most stunning lake-and-mountain scenery in the Yukon. Carcross Desert is the world's smallest desert — a sand dune system between two lakes. Otherwise continue straight to Whitehorse.</div><div class="wp-note">↳ Optional: Carcross detour adds ~1 hr but is exceptional</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=144&h=120&q=75" alt="Whitehorse café"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge food"><span class="wp-badge-letter">D</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">12:30 PM · mi 270</span><span class="wp-type-tag food">FOOD</span></div><div class="wp-name">Whitehorse — Burnt Toast Café</div><div class="wp-detail">One of Whitehorse's best lunch spots — generous sandwiches, excellent soups, good coffee. Whitehorse's food scene is surprisingly strong for a city of 28,000. Other great options: Antoinette's (Caribbean), The Wheelhouse (pub), Sanchez Cantina (Mexican).</div><div class="wp-note">↳ ORDER: club sandwich, house soup, yukon gold coffee</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=144&h=120&q=75" alt="Whitehorse Costco fuel"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge fuel"><span class="wp-badge-letter">E</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">1:30 PM · mi 270</span><span class="wp-type-tag fuel">FUEL</span></div><div class="wp-name">Whitehorse — Costco fuel</div><div class="wp-detail">Whitehorse has a Costco — the cheapest fuel in the Yukon. Fill completely. Next leg takes you toward the Alaska border where fuel is priced at a premium. Whitehorse is also where you should service the vehicle if anything has felt off in the first 8 days.</div><div class="wp-note">↳ Last Costco pricing until Fairbanks, AK</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Hi Country RV park"></div></div>
+        <div class="wp-row has-thumb"><div class="wp-badge camp"><span class="wp-badge-letter">Z</span></div><div class="wp-content"><div class="wp-time-label"><span class="wp-time">~2:00 PM · mi 270</span><span class="wp-type-tag camp">CAMP</span></div><div class="wp-name">Whitehorse — Hi Country RV Park</div><div class="wp-detail">Well-run RV park close to the Yukon River. Full hookups, hot showers, laundry. Use the evening to walk the Whitehorse riverfront trail — the SS Klondike sternwheeler is a National Historic Site worth seeing. Good energy in town in June with the long daylight.</div></div><div class="wp-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=144&h=120&q=75" alt="Whitehorse Hi Country RV park"></div></div>
+        <div class="dd-section-label">OVERNIGHT</div>
+        <div class="dd-camp-block">
+          <div class="dd-camp-header"><span class="dd-camp-label">RV PARK — FULL SERVICE</span><span class="dd-camp-badge">REST + RESUPPLY DAY</span></div>
+          <div class="dd-camp-name">Hi Country RV Park — Whitehorse, YT</div>
+          <div class="dd-camp-detail">Full hookups · Showers · Laundry · Walking distance to town<br>Fee: ~$45 CAD/night · Phone: 867-667-7445<br>hicountryrvpark.com</div>
+        </div>
+        <div class="dd-section-label">PHASE 02 COMPLETE</div>
+        <div class="dd-info-grid">
+          <div class="dd-info-card"><div class="dd-info-card-label">PHASE 03 NEXT</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alaska Hwy → AK</div><div class="dd-info-card-sub">Days 09+ · Haines Junction</div></div>
+          <div class="dd-info-card"><div class="dd-info-card-label">REMAINING</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">~72 days</div><div class="dd-info-card-sub">to Deadhorse, AK</div></div>
+        </div>
+        <div style="height:24px;"></div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+
+  // ═══════════════════════════════════════════════════════════
+  // DAY DATA — sector header, weather, GPS per day
+  // ═══════════════════════════════════════════════════════════
+  const DAY_DATA = {
+    '1': {
+      sector:  'Los Angeles, CA → Willard Bay, UT',
+      gps:     '41.3872° N, 112.1023° W',
+      weather: '☀️  84° / 64°F',
+    },
+    '2': {
+      sector:  'Willard Bay, UT → Whitefish, MT',
+      gps:     '48.4111° N, 114.3376° W',
+      weather: '⛅  78° / 55°F',
+    },
+    '3': {
+      sector:  'Whitefish, MT → Cranbrook, BC',
+      gps:     '49.5099° N, 115.7677° W',
+      weather: '🌤  68° / 48°F',
+    },
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // ROUTE DATA — real lat/lng per day segment + overnight stops
+  // ═══════════════════════════════════════════════════════════
+  const ROUTE_SEGMENTS = {
+    '1': [
+      [-118.2437, 34.0522],  // Los Angeles, CA
+      [-117.2898, 34.1083],  // San Bernardino, CA
+      [-116.0753, 35.2586],  // Baker, CA
+      [-115.1391, 36.1716],  // Las Vegas, NV
+      [-114.0580, 37.2071],  // Mesquite, NV
+      [-113.5841, 37.1041],  // St. George, UT
+      [-111.8910, 40.7608],  // Salt Lake City, UT
+      [-112.1023, 41.3872],  // Willard Bay, UT
+    ],
+    '2': [
+      [-112.1023, 41.3872],  // Willard Bay, UT
+      [-111.7948, 41.7370],  // Logan, UT
+      [-112.0391, 43.4917],  // Pocatello, ID
+      [-114.4609, 42.5630],  // Twin Falls, ID
+      [-116.2023, 43.6150],  // Boise, ID
+      [-116.9324, 44.0682],  // Payette, ID
+      [-117.0147, 46.4165],  // Lewiston, ID
+      [-115.5588, 46.7474],  // Lolo Pass, ID/MT
+      [-113.9940, 46.8721],  // Missoula, MT
+      [-114.3376, 48.4111],  // Whitefish, MT
+    ],
+    '3': [
+      [-114.3376, 48.4111],  // Whitefish, MT
+      [-115.0491, 48.9910],  // Roosville border, MT/BC
+      [-115.0654, 49.5053],  // Fernie, BC
+      [-115.7677, 49.5099],  // Cranbrook, BC
+    ],
+    '4': [
+      [-115.7677, 49.5099],  // Cranbrook, BC
+      [-116.0736, 50.6237],  // Radium Hot Springs, BC
+      [-115.9936, 51.2406],  // Castle Junction, AB
+      [-115.5708, 51.1784],  // Banff, AB
+      [-116.1773, 51.4254],  // Lake Louise, AB
+      [-117.2236, 52.1956],  // Columbia Icefield, AB
+      [-118.0814, 52.8737],  // Jasper, AB
+    ],
+    '5': [
+      [-118.0814, 52.8737],  // Jasper, AB
+      [-117.5667, 53.4075],  // Hinton, AB
+      [-118.7931, 55.1707],  // Grande Prairie, AB
+      [-120.2368, 55.7596],  // Dawson Creek, BC
+    ],
+    '6': [
+      [-120.2368, 55.7596],  // Dawson Creek, BC (Mile 0)
+      [-120.8462, 56.2519],  // Fort St. John, BC (Mile 47)
+      [-122.4936, 57.0478],  // Pink Mountain, BC (Mile 143)
+      [-122.6972, 58.8053],  // Fort Nelson, BC (Mile 300)
+    ],
+    '7': [
+      [-122.6972, 58.8053],  // Fort Nelson, BC
+      [-124.8936, 58.8436],  // Toad River, BC (Mile 422)
+      [-125.7597, 58.9644],  // Muncho Lake, BC (Mile 456)
+      [-126.0978, 59.4269],  // Liard Hot Springs, BC (Mile 497)
+      [-128.7021, 60.0631],  // Watson Lake, YT (Mile 635)
+    ],
+    '8': [
+      [-128.7021, 60.0631],  // Watson Lake, YT
+      [-132.7194, 60.1633],  // Teslin, YT
+      [-134.9833, 60.1386],  // Jake's Corner, YT
+      [-135.0568, 60.7212],  // Whitehorse, YT
+    ],
+  };
+
+  const OVERNIGHT_STOPS = [
+    { day: 'S',  coords: [-118.2437, 34.0522], label: 'LOS ANGELES',     cls: 'start'  },
+    { day: '01', coords: [-112.1023, 41.3872], label: 'WILLARD BAY, UT', cls: 'future' },
+    { day: '02', coords: [-114.3376, 48.4111], label: 'WHITEFISH, MT',   cls: 'future' },
+    { day: '03', coords: [-115.7677, 49.5099], label: 'CRANBROOK, BC',   cls: 'future' },
+    { day: '04', coords: [-118.0814, 52.8737], label: 'JASPER, AB',      cls: 'future' },
+    { day: '05', coords: [-120.2368, 55.7596], label: 'DAWSON CREEK, BC',cls: 'future' },
+    { day: '06', coords: [-122.6972, 58.8053], label: 'FORT NELSON, BC', cls: 'future' },
+    { day: '07', coords: [-128.7021, 60.0631], label: 'WATSON LAKE, YT', cls: 'future' },
+    { day: '08', coords: [-135.0568, 60.7212], label: 'WHITEHORSE, YT',  cls: 'future' },
+  ];
+
+  // ── POI coordinates per day [lng, lat] ─────────────────────
+  const DAY_POIS = {
+    '1': [
+      { letter:'A', type:'drive', label:'Los Angeles',          coords:[-118.2437, 34.0522] },
+      { letter:'B', type:'food',  label:'Mitla Cafe',            coords:[-117.2898, 34.1083] },
+      { letter:'C', type:'fuel',  label:'Baker, CA',             coords:[-116.0753, 35.2586] },
+      { letter:'D', type:'drive', label:'Mojave Desert',         coords:[-115.5200, 35.5500] },
+      { letter:'E', type:'food',  label:'In-N-Out LV',           coords:[-115.1769, 36.1108] },
+      { letter:'F', type:'drive', label:'Virgin River Gorge',    coords:[-113.9436, 37.1786] },
+      { letter:'G', type:'fuel',  label:'Fillmore, UT',          coords:[-112.3236, 38.9686] },
+      { letter:'Z', type:'camp',  label:'Willard Bay',           coords:[-112.1023, 41.3872] },
+    ],
+    '2': [
+      { letter:'A', type:'drive', label:'Willard Bay Depart',    coords:[-112.1023, 41.3872] },
+      { letter:'B', type:'food',  label:'Café Ibis, Logan',      coords:[-111.8338, 41.7355] },
+      { letter:'C', type:'drive', label:'Perrine Bridge',        coords:[-114.4772, 42.5609] },
+      { letter:'D', type:'fuel',  label:'Mountain Home, ID',     coords:[-115.7175, 43.1327] },
+      { letter:'E', type:'food',  label:'Westside Drive-In',     coords:[-116.1957, 43.5888] },
+      { letter:'F', type:'drive', label:'US-95 N Payette',       coords:[-116.9324, 44.0682] },
+      { letter:'G', type:'event', label:'Lolo Pass',             coords:[-115.5588, 46.7474] },
+      { letter:'H', type:'fuel',  label:'Missoula Fuel',         coords:[-113.9940, 46.8721] },
+      { letter:'I', type:'food',  label:'Biga Pizza',            coords:[-114.0004, 46.8626] },
+      { letter:'Z', type:'camp',  label:'Whitefish Lake SP',     coords:[-114.3376, 48.4111] },
+    ],
+    '3': [
+      { letter:'A', type:'food',  label:"Loula's Café",          coords:[-114.3376, 48.4111] },
+      { letter:'B', type:'fuel',  label:'Whitefish Fuel',        coords:[-114.3300, 48.4050] },
+      { letter:'C', type:'drive', label:'Flathead Valley',       coords:[-114.1800, 48.6000] },
+      { letter:'D', type:'event', label:'Roosville Border',      coords:[-115.0491, 48.9910] },
+      { letter:'E', type:'drive', label:'Elk River Valley BC',   coords:[-115.0654, 49.2000] },
+      { letter:'F', type:'drive', label:'Fernie, BC',            coords:[-115.0654, 49.5053] },
+      { letter:'G', type:'food',  label:'The Heid Out',          coords:[-115.7677, 49.5099] },
+      { letter:'H', type:'fuel',  label:'Cranbrook Fuel',        coords:[-115.7600, 49.5000] },
+      { letter:'Z', type:'camp',  label:'Jimsmith Lake PP',      coords:[-115.7900, 49.4800] },
+    ],
+    '4': [
+      { letter:'A', type:'food',  label:'Tim Hortons Cranbrook', coords:[-115.7677, 49.5099] },
+      { letter:'B', type:'fuel',  label:'Cranbrook Fuel',        coords:[-115.7500, 49.5050] },
+      { letter:'C', type:'drive', label:'Kootenay NP / Radium',  coords:[-116.0736, 50.6237] },
+      { letter:'D', type:'event', label:'Banff, AB',             coords:[-115.5708, 51.1784] },
+      { letter:'E', type:'drive', label:'Icefields Pkwy',        coords:[-116.5275, 51.7238] },
+      { letter:'F', type:'food',  label:'Columbia Icefield Café',coords:[-117.2236, 52.1956] },
+      { letter:'Z', type:'camp',  label:'Whistlers Campground',  coords:[-118.0814, 52.8737] },
+    ],
+    '5': [
+      { letter:'A', type:'drive', label:'Jasper Depart',         coords:[-118.0814, 52.8737] },
+      { letter:'B', type:'food',  label:'Hinton Café',           coords:[-117.5667, 53.4075] },
+      { letter:'C', type:'fuel',  label:'Grande Prairie Costco', coords:[-118.7931, 55.1707] },
+      { letter:'D', type:'food',  label:'Maddhatters GP',        coords:[-118.8000, 55.1800] },
+      { letter:'E', type:'event', label:'Mile Zero Dawson Creek',coords:[-120.2368, 55.7596] },
+      { letter:'Z', type:'camp',  label:'Northern Lights RV',    coords:[-120.2400, 55.7700] },
+    ],
+    '6': [
+      { letter:'A', type:'drive', label:'Alaska Hwy Mile 0',     coords:[-120.2368, 55.7596] },
+      { letter:'B', type:'fuel',  label:'Fort St. John',         coords:[-120.8462, 56.2519] },
+      { letter:'C', type:'drive', label:'Pink Mountain',         coords:[-122.4936, 57.0478] },
+      { letter:'D', type:'event', label:'Sikanni Chief River',   coords:[-122.7000, 57.3000] },
+      { letter:'E', type:'food',  label:"Dan's Pub Fort Nelson", coords:[-122.6972, 58.8053] },
+      { letter:'Z', type:'camp',  label:'Westend Campground',    coords:[-122.7000, 58.8100] },
+    ],
+    '7': [
+      { letter:'A', type:'drive', label:'Northern Rockies Entry',coords:[-122.6972, 58.8053] },
+      { letter:'B', type:'fuel',  label:'Toad River Lodge',      coords:[-124.8936, 58.8436] },
+      { letter:'C', type:'event', label:'Muncho Lake',           coords:[-125.7597, 58.9644] },
+      { letter:'D', type:'event', label:'Liard Hot Springs',     coords:[-126.0978, 59.4269] },
+      { letter:'E', type:'event', label:'BC / YT Border',        coords:[-127.6000, 59.8000] },
+      { letter:'Z', type:'camp',  label:'Watson Lake Camp',      coords:[-128.7021, 60.0631] },
+    ],
+    '8': [
+      { letter:'A', type:'drive', label:'Watson Lake Depart',    coords:[-128.7021, 60.0631] },
+      { letter:'B', type:'food',  label:'Teslin Stop',           coords:[-132.7194, 60.1633] },
+      { letter:'C', type:'drive', label:"Jake's Corner",         coords:[-134.9833, 60.1386] },
+      { letter:'D', type:'food',  label:'Burnt Toast Café',      coords:[-135.0568, 60.7212] },
+      { letter:'E', type:'fuel',  label:'Whitehorse Costco',     coords:[-135.0700, 60.7100] },
+      { letter:'Z', type:'camp',  label:'Hi Country RV Park',    coords:[-135.0600, 60.7200] },
+    ],
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // LEAFLET MAP — works from file:// (no Web Worker requirement)
+  // ═══════════════════════════════════════════════════════════
+  const MAPBOX_TOKEN = 'pk.eyJ1IjoiaG9ua2luZ3NpY2tsZSIsImEiOiJjbW16cXpicm8wY2doMnBwd2VtbWtrZjMyIn0.u-AfjTfDK-P5RZuhiHrtvA';
+
+  const map = L.map('mapbox-map', {
+    zoomControl: true,
+    attributionControl: true,
+    scrollWheelZoom: false,
+    center: [43.5, -111.0],
+    zoom: 5,
+  });
+
+  // Position zoom control in the visible right strip (not behind the detail panel)
+  map.zoomControl.setPosition('bottomright');
+
+  L.tileLayer(
+    'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=' + MAPBOX_TOKEN,
+    { tileSize: 512, zoomOffset: -1, attribution: '© <a href="https://mapbox.com">Mapbox</a>' }
+  ).addTo(map);
+
+  // ── Route polyline layers ───────────────────────────────────
+  const ll = coords => coords.map(([lng, lat]) => [lat, lng]);
+  const allCoords = ll(Object.values(ROUTE_SEGMENTS).flat());
+
+  const routeLayers = {
+    ghost:    L.polyline(allCoords, { color: 'rgba(255,255,255,0.08)', weight: 1.5, dashArray: '4 7' }).addTo(map),
+    traveled: L.polyline([],        { color: 'rgba(200,169,110,0.55)', weight: 2.5 }).addTo(map),
+    glow:     L.polyline([],        { color: 'rgba(199,116,41,0.28)',  weight: 14,  opacity: 0.8 }).addTo(map),
+    active:   L.polyline([],        { color: '#c77429',               weight: 3.5 }).addTo(map),
+  };
+
+  // ── Overnight stop markers ──────────────────────────────────
+  const markerEls = {};
+  OVERNIGHT_STOPS.forEach(stop => {
+    const safeId = 'mk-' + stop.day.replace(/[^a-zA-Z0-9]/g, '');
+    const icon = L.divIcon({
+      className: '',
+      html: `<div id="${safeId}" class="map-stop-marker ${stop.cls}">${stop.day}</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    });
+    L.marker([stop.coords[1], stop.coords[0]], { icon }).addTo(map);
+    markerEls[stop.day] = safeId;
+  });
+
+  let mapReady = false;
+  let currentDay = null;
+  let poiMarkerRefs = [];
+  let poiLabelMarker = null;   // floating label for active POI
+  let wpObserver = null;
+  let panTimeout = null;
+
+  function detailPadding() {
+    const collapsed = document.querySelector('.dashboard').classList.contains('detail-collapsed');
+    return collapsed
+      ? { paddingTopLeft: [40, 70],  paddingBottomRight: [40, 40] }
+      : { paddingTopLeft: [490, 70], paddingBottomRight: [40, 40] };
+  }
+
+  // ── Option 1: clear + render POI markers for the active day ─
+  function clearPOIMarkers() {
+    poiMarkerRefs.forEach(({ marker }) => marker.remove());
+    poiMarkerRefs = [];
+    hidePOILabel();
+  }
+
+  function hidePOILabel() {
+    if (poiLabelMarker) { poiLabelMarker.remove(); poiLabelMarker = null; }
+  }
+
+  function showPOILabel(day, letter) {
+    hidePOILabel();
+    const poi = (DAY_POIS[day] || []).find(p => p.letter === letter);
+    if (!poi) return;
+
+    // Extract full name and time from the DOM
+    const section = document.querySelector(`.day-section[data-day="${day}"]`);
+    let fullName = poi.label, timeText = '';
+    section?.querySelectorAll('.wp-row').forEach(row => {
+      if (row.querySelector('.wp-badge-letter')?.textContent?.trim() === letter) {
+        // Get text without chevron span
+        const nameEl = row.querySelector('.wp-name');
+        if (nameEl) {
+          const clone = nameEl.cloneNode(true);
+          clone.querySelector('.wp-expand-chevron')?.remove();
+          fullName = clone.textContent.trim();
+        }
+        timeText = row.querySelector('.wp-time')?.textContent?.trim() || '';
+      }
+    });
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;">
+        <div class="map-poi-label">
+          <div class="map-poi-label-name">${fullName}</div>
+          ${timeText ? `<div class="map-poi-label-time">${timeText}</div>` : ''}
+        </div>
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [-20, 18],   // offset: label appears to the right of and level with the marker
+    });
+
+    poiLabelMarker = L.marker([poi.coords[1], poi.coords[0]], {
+      icon, interactive: false, zIndexOffset: 998,
+    }).addTo(map);
+  }
+
+  function renderPOIs(day) {
+    clearPOIMarkers();
+    const pois = DAY_POIS[day];
+    if (!pois) return;
+
+    pois.forEach(poi => {
+      const id = `poi-d${day}-${poi.letter}`;
+      const icon = L.divIcon({
+        className: '',
+        html: `<div id="${id}" class="map-poi-marker type-${poi.type}" title="${poi.label}">${poi.letter}</div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const marker = L.marker([poi.coords[1], poi.coords[0]], { icon }).addTo(map);
+      poiMarkerRefs.push({ marker, letter: poi.letter, type: poi.type, id });
+    });
+  }
+
+  // ── Option 2: highlight one POI, dim others, show label ─────
+  function highlightPOI(day, letter) {
+    poiMarkerRefs.forEach(({ id, letter: l }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('poi-active', l === letter);
+    });
+    showPOILabel(day, letter);
+  }
+
+  // ── Option 2: soft pan to a POI — offset-corrected for panel ─
+  function panToPOI(day, letter) {
+    const poi = (DAY_POIS[day] || []).find(p => p.letter === letter);
+    if (!poi || !mapReady) return;
+    const collapsed = document.querySelector('.dashboard').classList.contains('detail-collapsed');
+    if (collapsed) return;
+    if (map._flying) return;  // don't interrupt a flyToBounds in progress
+
+    // The panel covers the left 490px of the map container.
+    // Visible center X = 490 + (containerW - 490) / 2
+    // Container center X = containerW / 2
+    // Required left shift in px = leftPad / 2 = 245px (constant regardless of container width)
+    const zoom  = Math.max(map.getZoom(), 9);  // zoom in at least to 9
+    const poiPx = map.project(L.latLng(poi.coords[1], poi.coords[0]), zoom);
+    const shiftedCenter = map.unproject(
+      L.point(poiPx.x - 245, poiPx.y), zoom
+    );
+    map.flyTo(shiftedCenter, zoom, {
+      animate: true, duration: 0.45, easeLinearity: 0.5,
+    });
+  }
+
+  // ── Option 2: observe .wp-row elements in the active day section ─
+  function setupWaypointObserver(day) {
+    if (wpObserver) { wpObserver.disconnect(); wpObserver = null; }
+    clearTimeout(panTimeout);
+
+    const section = document.querySelector(`.day-section[data-day="${day}"]`);
+    if (!section) return;
+
+    let lastLetter = null;
+
+    wpObserver = new IntersectionObserver((entries) => {
+      let best = null, bestRatio = 0;
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+          bestRatio = entry.intersectionRatio;
+          best = entry.target;
+        }
+      });
+      if (!best) return;
+
+      const letterEl = best.querySelector('.wp-badge-letter');
+      if (!letterEl) return;
+      const letter = letterEl.textContent.trim();
+      if (letter === lastLetter) return;
+      lastLetter = letter;
+
+      highlightPOI(day, letter);
+
+      clearTimeout(panTimeout);
+      panTimeout = setTimeout(() => panToPOI(day, letter), 350);
+    }, {
+      root: detailScroll,
+      threshold: 0.55,
+    });
+
+    section.querySelectorAll('.wp-row').forEach(row => wpObserver.observe(row));
+  }
+
+  // ── Main render — guarded: heavy work only runs when day changes ─
+  function renderMap(day, animate) {
+    if (!mapReady) return;
+    const activeDay = parseInt(day);
+    const segCoords = ROUTE_SEGMENTS[day];
+    if (!segCoords) return;
+
+    const dayChanged = day !== currentDay;
+    currentDay = day;
+
+    // Route layers — update every call so traveled line is always current
+    const traveledPts = Object.entries(ROUTE_SEGMENTS)
+      .filter(([d]) => parseInt(d) < activeDay)
+      .flatMap(([, c]) => ll(c));
+    routeLayers.traveled.setLatLngs(traveledPts);
+
+    const activePts = ll(segCoords);
+    routeLayers.active.setLatLngs(activePts);
+    routeLayers.glow.setLatLngs(activePts);
+
+    // Overnight stop marker states
+    OVERNIGHT_STOPS.forEach(stop => {
+      const el = document.getElementById(markerEls[stop.day]);
+      if (!el) return;
+      el.className = 'map-stop-marker';
+      if (stop.cls === 'start') {
+        el.classList.add('start');
+      } else {
+        const n = parseInt(stop.day);
+        if      (n < activeDay)  el.classList.add('visited');
+        else if (n === activeDay) el.classList.add('active-dest');
+        else                     el.classList.add('future');
+      }
+    });
+
+    // POI markers + camera + observer: only rebuild when day actually changes
+    if (dayChanged) {
+      renderPOIs(day);
+
+      const poiCoords = (DAY_POIS[day] || []).map(p => [p.coords[1], p.coords[0]]);
+      const allBoundsCoords = [...activePts, ...poiCoords];
+      const bounds = L.latLngBounds(allBoundsCoords);
+      const opts = { ...detailPadding(), maxZoom: 9 };
+      if (animate) {
+        map.flyToBounds(bounds, { ...opts, duration: 1.1 });
+      } else {
+        map.fitBounds(bounds, opts);
+      }
+
+      setupWaypointObserver(day);
+    }
+  }
+
+  // Boot: wait for paint so Leaflet can measure container dimensions
+  setTimeout(() => {
+    map.invalidateSize();
+    mapReady = true;
+    renderMap('1', false);
+    setActiveCard('1');
+  }, 150);
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTOR HEADER
+  // ═══════════════════════════════════════════════════════════
+  const shTitle   = document.getElementById('sh-title');
+  const shGps     = document.getElementById('sh-gps');
+  const shWeather = document.getElementById('sh-weather');
+
+  let currentHeaderDay = null;
+
+  function updateSectorHeader(day) {
+    if (!DAY_DATA[day] || day === currentHeaderDay) return;
+    currentHeaderDay = day;
+    const d = DAY_DATA[day];
+    [shTitle, shGps, shWeather].forEach(el => el.classList.add('sh-fading'));
+    setTimeout(() => {
+      shTitle.textContent   = d.sector;
+      shGps.textContent     = 'GPS: ' + d.gps;
+      shWeather.innerHTML   = d.weather;
+      [shTitle, shGps, shWeather].forEach(el => el.classList.remove('sh-fading'));
+    }, 200);
+  }
+
+  function updateMap(day) {
+    updateSectorHeader(day);
+    if (mapReady) renderMap(day);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // APP CONTROLS
+  // ═══════════════════════════════════════════════════════════
+  const dashboard    = document.querySelector('.dashboard');
+  const dayColumn    = document.querySelector('.day-column');
+  const detailScroll = document.getElementById('day-detail-scroll');
+  const hamburger    = document.getElementById('topbar-hamburger');
+  const tabOverview  = document.getElementById('tab-overview');
+  const tabItin      = document.getElementById('tab-itinerary');
+  const itinClose    = document.getElementById('itin-close');
+  const phaseLabel   = document.getElementById('itin-phase-label');
+  const phaseFrom    = document.getElementById('itin-phase-from');
+  const phaseTo      = document.getElementById('itin-phase-to');
+  const phaseSub     = document.getElementById('itin-phase-sub');
+  const phaseDays    = document.getElementById('itin-phase-days');
+  const phaseMi      = document.getElementById('itin-phase-mi');
+
+  const PHASE_DATA = {
+    '01': { label:'PHASE 01', from:'LA',      to:'GLACIER',    sub:'Los Angeles, CA — Glacier National Park, MT', days:'DAYS 01–02', mi:'2,150 MI' },
+    '02': { label:'PHASE 02', from:'BC',       to:'ALASKA HWY', sub:'British Columbia — Alaska Highway, YT',       days:'DAYS 03–08', mi:'1,820 MI' },
+  };
+
+  function updatePhaseHeader(phase) {
+    const d = PHASE_DATA[phase];
+    if (!d) return;
+    if (phaseLabel) phaseLabel.textContent = d.label;
+    if (phaseFrom)  phaseFrom.textContent  = d.from;
+    if (phaseTo)    phaseTo.textContent    = d.to;
+    if (phaseSub)   phaseSub.textContent   = d.sub;
+    if (phaseDays)  phaseDays.textContent  = d.days;
+    if (phaseMi)    phaseMi.textContent    = d.mi;
+  }
+
+  hamburger.addEventListener('click', () => {
+    dashboard.classList.toggle('sidebar-hidden');
+    setTimeout(() => map && map.invalidateSize(), 310);
+  });
+
+  tabOverview.addEventListener('click', () => { dayColumn.classList.toggle('overview-active'); });
+  tabItin.addEventListener('click',     () => { dayColumn.classList.remove('overview-active'); dayColumn.scrollTop = 0; });
+  itinClose.addEventListener('click', () => {
+    dashboard.classList.add('detail-collapsed');
+    setTimeout(() => {
+      map && map.invalidateSize();
+      const activeCard = document.querySelector('.day-card.active');
+      const day = activeCard?.dataset?.day || '1';
+      if (mapReady) renderMap(day, true);
+    }, 320);
+  });
+
+  function setActiveCard(day) {
+    // Day column cards + auto-scroll active into view
+    document.querySelectorAll('.day-card').forEach(c => {
+      const on = c.dataset.day === String(day);
+      c.classList.toggle('active', on);
+      c.querySelectorAll('.dc-meta, .dc-day-num, .dc-date, .dc-route').forEach(el => {
+        el.classList.toggle('active', on);
+      });
+      if (on) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    // Green bg on the matching sticky day header — use setProperty to avoid cssText accumulation
+    document.querySelectorAll('.dd-header[data-day]').forEach(h => {
+      const match = h.dataset.day === String(day);
+      if (match) {
+        h.style.setProperty('background', 'rgb(28,58,32)', 'important');
+        const r = h.querySelector('.dd-route'); if (r) r.style.color = '#ffffff';
+        const s = h.querySelector('.dd-stats');  if (s) s.style.color = '#ffffff';
+      } else {
+        h.style.removeProperty('background');
+        const r = h.querySelector('.dd-route'); if (r) r.style.color = '';
+        const s = h.querySelector('.dd-stats');  if (s) s.style.color = '';
+      }
+    });
+  }
+
+  document.querySelectorAll('.day-card[data-day]').forEach(card => {
+    card.addEventListener('click', () => {
+      const wasCollapsed = dashboard.classList.contains('detail-collapsed');
+      dashboard.classList.remove('detail-collapsed');
+      const day = card.dataset.day;
+      const header = document.getElementById('day-header-' + day);
+      if (header) {
+        detailScroll.scrollTo({ top: header.closest('.day-section').offsetTop, behavior: 'smooth' });
+      }
+      setActiveCard(day);
+      updateMap(day);
+    });
+  });
+
+  function updateActiveFromScroll() {
+    const containerTop = detailScroll.getBoundingClientRect().top;
+    let activeDay = '1', activePhase = '01';
+    document.querySelectorAll('.day-section[data-day]').forEach(section => {
+      if (section.getBoundingClientRect().top - containerTop <= 50) {
+        activeDay   = section.dataset.day;
+        activePhase = section.dataset.phase;
+      }
+    });
+    setActiveCard(activeDay);
+    updatePhaseHeader(activePhase);
+    updateMap(activeDay);
+  }
+
+  detailScroll.addEventListener('scroll', updateActiveFromScroll, { passive: true });
+
+  // ── WAYPOINT TAP-TO-EXPAND ──────────────────────────────────
+  // Inject chevron into every wp-name, wire up expand/collapse
+  function initWaypointExpand() {
+    const chevronSVG = `<span class="wp-expand-chevron"><svg viewBox="0 0 10 6" width="10" height="6"><polyline points="1,1 5,5 9,1"/></svg></span>`;
+
+    document.querySelectorAll('.wp-row').forEach(row => {
+      // Add expand chevron to wp-name
+      const nameEl = row.querySelector('.wp-name');
+      if (nameEl && !nameEl.querySelector('.wp-expand-chevron')) {
+        nameEl.insertAdjacentHTML('beforeend', chevronSVG);
+      }
+
+      // Build expand panel once on first click, toggle thereafter
+      row.addEventListener('click', () => {
+        const isExpanded = row.classList.contains('expanded');
+
+        // Collapse all other rows globally
+        document.querySelectorAll('.wp-row.expanded').forEach(r => {
+          if (r !== row) r.classList.remove('expanded');
+        });
+
+        if (isExpanded) {
+          row.classList.remove('expanded');
+          return;
+        }
+
+        // Build expand panel if not yet created
+        if (!row.querySelector('.wp-expand-panel')) {
+          const thumbImg = row.querySelector('.wp-thumb img');
+          const imgSrc   = thumbImg ? thumbImg.src : '';
+          const imgAlt   = thumbImg ? thumbImg.alt : '';
+
+          // Look up GPS from DAY_POIS
+          const section = row.closest('.day-section');
+          const day     = section ? section.dataset.day : null;
+          const letter  = row.querySelector('.wp-badge-letter')?.textContent?.trim();
+          const poi     = day && letter
+            ? (DAY_POIS[day] || []).find(p => p.letter === letter)
+            : null;
+          const coords  = poi
+            ? `${Math.abs(poi.coords[1]).toFixed(4)}° ${poi.coords[1] >= 0 ? 'N' : 'S'},  ${Math.abs(poi.coords[0]).toFixed(4)}° ${poi.coords[0] <= 0 ? 'W' : 'E'}`
+            : '';
+
+          const panel = document.createElement('div');
+          panel.className = 'wp-expand-panel';
+          panel.innerHTML = `
+            ${imgSrc ? `<img class="wp-expand-hero" src="${imgSrc.replace('w=144&h=120', 'w=440&h=260')}" alt="${imgAlt}">` : ''}
+            <div class="wp-expand-meta">
+              <span class="wp-expand-coords">${coords}</span>
+              <span class="wp-expand-map-link">VIEW ON MAP ↗</span>
+            </div>`;
+
+          row.appendChild(panel);
+
+          // Wire "View on Map" to highlight + zoom to POI
+          panel.querySelector('.wp-expand-map-link')?.addEventListener('click', e => {
+            e.stopPropagation();
+            if (poi && day) {
+              highlightPOI(day, letter);
+              // Zoom to POI at closer zoom, offset-corrected for detail panel
+              if (mapReady) {
+                const zoom = 13;
+                const poiPx = map.project(L.latLng(poi.coords[1], poi.coords[0]), zoom);
+                const shiftedCenter = map.unproject(L.point(poiPx.x - 245, poiPx.y), zoom);
+                map.flyTo(shiftedCenter, zoom, { animate: true, duration: 0.8, easeLinearity: 0.4 });
+              }
+            }
+          });
+        }
+
+        row.classList.add('expanded');
+
+        // Sync map highlight + pan via scroll-spy side effect
+        const section = row.closest('.day-section');
+        const day     = section?.dataset?.day;
+        const letter  = row.querySelector('.wp-badge-letter')?.textContent?.trim();
+        if (day && letter) {
+          highlightPOI(day, letter);
+          clearTimeout(panTimeout);
+          panTimeout = setTimeout(() => panToPOI(day, letter), 200);
+        }
+      });
+    });
+  }
+
+  // Run after boot (map ready + initial render done)
+  setTimeout(initWaypointExpand, 300);
+
+
+
+</script>
+
+</div>
+</body>
+</html>
