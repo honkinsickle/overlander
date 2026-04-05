@@ -251,46 +251,58 @@
     top: 60px; left: 0;
     width: 216px;
     z-index: 2;
+    display: flex;
+    background: #0d0d0d;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
   }
 
   .tab {
-    width: 215px; height: 60px;
-    display: flex; align-items: center; justify-content: flex-end;
-    padding-right: 36px;
+    flex: 1; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
     cursor: pointer;
-    overflow: hidden;
     position: relative;
-    transition: filter 0.15s;
+    transition: background 0.15s;
   }
-  .tab:hover { filter: brightness(1.12); }
+  .tab + .tab { border-left: 1px solid rgba(255,255,255,0.07); }
+  .tab:hover { background: rgba(255,255,255,0.02); }
 
-  .tab-overview  { }   /* bg handled by switching rules above */
-  .tab-itinerary { }   /* bg handled by switching rules above */
+  .tab-overview  { background: transparent; }
+  .tab-itinerary { background: transparent; }
+
+  /* Active state — green bg + amber bottom line */
+  .day-column:not(.overview-active) .tab-itinerary {
+    background: rgba(28,58,32,0.85);
+  }
+  .day-column:not(.overview-active) .tab-itinerary::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #c77429;
+  }
+  .day-column.overview-active .tab-overview {
+    background: rgba(28,58,32,0.85);
+  }
+  .day-column.overview-active .tab-overview::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #c77429;
+  }
 
   .tab-label {
     font-family: var(--ff-sans);
     font-weight: 700;
-    font-size: 18px;
+    font-size: 13px;
     color: var(--text-primary);
   }
+  .tab-icon-svg { flex-shrink: 0; }
 
-  .tab-chevron {
-    position: absolute;
-    right: 14px; top: 50%;
-    transform: translateY(-50%) rotate(0deg);
-    width: 10px; height: 6px;
-    display: flex; align-items: center; justify-content: center;
-    transition: transform 0.2s ease;
-  }
+  /* inactive tab label dims */
+  .day-column:not(.overview-active) .tab-overview .tab-label,
+  .day-column:not(.overview-active) .tab-overview .tab-icon-svg { opacity: 0.3; }
+  .day-column.overview-active    .tab-itinerary .tab-label,
+  .day-column.overview-active    .tab-itinerary .tab-icon-svg { opacity: 0.3; }
 
-  /* itinerary tab chevron points up by default (active/expanded) */
-  .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(180deg); }
-  /* when overview is active, itinerary chevron points down */
-  .day-column.overview-active .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(0deg); }
-  /* overview tab chevron points up when overview is active */
-  .day-column.overview-active .tab-overview .tab-chevron  { transform: translateY(-50%) rotate(180deg); }
-
-  .chevron-svg { fill: none; stroke: var(--text-muted); stroke-width: 2; }
+  /* hide old chevron */
+  .tab-chevron { display: none; }
+  .chevron-svg { display: none; }
 
   /* phase headers in day column */
   .phase-header {
@@ -1130,20 +1142,12 @@
   /* ── OVERVIEW / ITINERARY TAB SWITCHING ─────────────────── */
 
   /* Itinerary tab is active by default */
-  .tab-overview  { background: var(--bg-tab-idle); border-top: 1px solid #444; }
-  .tab-itinerary { background: var(--bg-tab-idle); border-top: 1px solid #444; }
-
   /* show/hide content panels */
   .overview-panel    { display: none; }
   .itinerary-content { display: block; }
 
   .day-column.overview-active .overview-panel    { display: block; }
   .day-column.overview-active .itinerary-content { display: none; }
-
-  /* chevron flip */
-  .day-column.overview-active .tab-overview .tab-chevron  { transform: translateY(-50%) rotate(180deg); }
-  .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(180deg); }
-  .day-column.overview-active .tab-itinerary .tab-chevron { transform: translateY(-50%) rotate(0deg); }
 
   /* ── OVERVIEW PANEL CONTENT ──────────────────────────────── */
   .overview-panel {
@@ -1452,13 +1456,15 @@
     <!-- Spacer: pushes tabs below the 60px topbar -->
     <div style="height:60px; flex-shrink:0;"></div>
 
-    <!-- Tab row: sticky at top while scrolling -->
+    <!-- Tab bar: Overview + Itinerary side by side -->
     <div class="tab-row">
       <div class="tab tab-overview" id="tab-overview">
+        <svg class="tab-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
         <span class="tab-label">Overview</span>
-        <svg class="tab-chevron" viewBox="0 0 10 6" width="10" height="6">
-          <polyline class="chevron-svg" points="1,1 5,5 9,1"/>
-        </svg>
+      </div>
+      <div class="tab tab-itinerary" id="tab-itinerary">
+        <svg class="tab-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span class="tab-label">Itinerary</span>
       </div>
     </div>
 
@@ -1540,16 +1546,6 @@
         </div>
       </div>
 
-    </div>
-
-    <!-- ── ITINERARY TAB ─────────────────────────────────────── -->
-    <div class="tab-row">
-      <div class="tab tab-itinerary" id="tab-itinerary">
-        <span class="tab-label">Itinerary</span>
-        <svg class="tab-chevron" viewBox="0 0 10 6" width="10" height="6">
-          <polyline class="chevron-svg" points="1,1 5,5 9,1"/>
-        </svg>
-      </div>
     </div>
 
     <!-- ── ITINERARY CONTENT (phase headers + day cards) ───── -->
@@ -2770,7 +2766,7 @@
     setTimeout(() => map && map.invalidateSize(), 310);
   });
 
-  tabOverview.addEventListener('click', () => { dayColumn.classList.toggle('overview-active'); });
+  tabOverview.addEventListener('click', () => { dayColumn.classList.add('overview-active'); });
   tabItin.addEventListener('click',     () => { dayColumn.classList.remove('overview-active'); dayColumn.scrollTop = 0; });
   itinClose.addEventListener('click', () => {
     dashboard.classList.add('detail-collapsed');
