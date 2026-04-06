@@ -257,41 +257,44 @@
   }
 
   .tab {
-    flex: 1; height: 40px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 6px;
+    flex: 1; height: 100px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px;
     cursor: pointer;
     position: relative;
     transition: background 0.15s;
   }
+
+  .tab-label {
+    font-family: var(--ff-sans);
+    font-weight: 600;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
   .tab + .tab { border-left: 1px solid rgba(255,255,255,0.07); }
   .tab:hover { background: rgba(255,255,255,0.02); }
 
-  .tab-overview  { background: transparent; }
-  .tab-itinerary { background: transparent; }
+  .tab-overview  { background: var(--bg-card); }
+  .tab-itinerary { background: var(--bg-card); }
 
   /* Active state — green bg + amber bottom line */
   .day-column:not(.overview-active) .tab-itinerary {
-    background: rgba(28,58,32,0.85);
+    background: rgba(199,116,41,0.85);
   }
   .day-column:not(.overview-active) .tab-itinerary::after {
     content: ''; position: absolute; bottom: 0; left: 0; right: 0;
     height: 2px; background: #c77429;
   }
   .day-column.overview-active .tab-overview {
-    background: rgba(28,58,32,0.85);
+    background: rgba(199,116,41,0.85);
   }
   .day-column.overview-active .tab-overview::after {
     content: ''; position: absolute; bottom: 0; left: 0; right: 0;
     height: 2px; background: #c77429;
   }
 
-  .tab-label {
-    font-family: var(--ff-sans);
-    font-weight: 700;
-    font-size: 13px;
-    color: var(--text-primary);
-  }
+
   .tab-icon-svg { flex-shrink: 0; }
 
   /* inactive tab label dims */
@@ -313,10 +316,10 @@
   }
 
   .phase-header-inner {
-    padding: 14px;
+    padding: 0 14px;
     display: flex; gap: 0;
     align-items: center;
-    height: 88px;
+    height: 112px;
   }
 
   .ph-num-block { width: 64px; }
@@ -335,6 +338,9 @@
     width: 1px; background: var(--border-mid);
     margin: 0 12px 0 2px;
     align-self: stretch;
+    height: 70%;
+    margin-top: auto;
+    margin-bottom: auto;
   }
 
   .ph-info { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
@@ -970,7 +976,7 @@
   }
   .map-poi-marker.type-fuel.poi-active  {
     background: rgba(30,18,8,0.95);  border-color: #c77429; color: #e8c98e;
-    box-shadow: 0 0 0 5px rgba(199,116,41,0.25), 0 0 0 10px rgba(199,116,41,0.1);
+    box-shadow: 0 0 0 5px #c77429, 0 0 0 10px rgba(199,116,41,0.1);
   }
   .map-poi-marker.type-camp.poi-active  {
     background: rgba(8,22,25,0.95);  border-color: #6ecece; color: #6ecece;
@@ -1044,7 +1050,7 @@
     border: 2px solid #e8c98e;
     color: #ECEAE4;
     font-size: 10px;
-    box-shadow: 0 0 0 5px rgba(199,116,41,0.25), 0 0 0 10px rgba(199,116,41,0.1);
+    box-shadow: 0 0 0 5px #c77429, 0 0 0 10px rgba(199,116,41,0.1);
     animation: markerPop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
     z-index: 10;
   }
@@ -1210,7 +1216,7 @@
   .ov-stat-value {
     font-family: var(--ff-sans);
     font-weight: 700;
-    font-size: 22px;
+    font-size: 20px;
     color: var(--text-primary);
     line-height: 1;
   }
@@ -1459,11 +1465,11 @@
     <!-- Tab bar: Overview + Itinerary side by side -->
     <div class="tab-row">
       <div class="tab tab-overview" id="tab-overview">
-        <svg class="tab-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        <svg class="tab-icon-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
         <span class="tab-label">Overview</span>
       </div>
       <div class="tab tab-itinerary" id="tab-itinerary">
-        <svg class="tab-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <svg class="tab-icon-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         <span class="tab-label">Itinerary</span>
       </div>
     </div>
