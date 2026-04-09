@@ -1582,12 +1582,18 @@
   .hp-suggest-pill:hover { color: #888; }
   .hp-input-wrap { padding: 10px 14px 14px; border-top: 1px solid rgba(255,255,255,0.06); }
   .hp-input-row {
-    display: flex; align-items: center; gap: 8px;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    display: flex; align-items: center; gap: 8px; position: relative;
+    background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.18);
     border-radius: 10px; padding: 10px 12px; margin-bottom: 6px;
   }
-  .hp-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--ff-sans); font-size: 14px; color: #ECEAE4; }
-  .hp-input::placeholder { color: #444; }
+  .hp-input-row:focus-within { border-color: rgba(199,116,41,0.5); background: rgba(255,255,255,0.12); }
+  .hp-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--ff-sans); font-size: 14px; color: #ECEAE4; position: relative; z-index: 1; }
+  .hp-input::placeholder { color: #666; }
+  .hp-input-ghost {
+    position: absolute; left: 44px; top: 50%; transform: translateY(-50%);
+    font-family: var(--ff-sans); font-size: 14px; color: #444; pointer-events: none; z-index: 0;
+    white-space: nowrap; overflow: hidden;
+  }
   .hp-attach-btn, .hp-mic-btn {
     width: 28px; height: 28px; border-radius: 6px;
     border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
@@ -1707,6 +1713,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             </div>
             <input id="hp-input" class="hp-input" placeholder="Ask anything" autocomplete="off">
+            <div class="hp-input-ghost" id="hp-input-ghost"></div>
             <div class="hp-mic-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
             </div>
@@ -4095,14 +4102,55 @@
     }
   }
 
-  // Enter key
+  // ── Predictive text ────────────────────────────────────────────
+  const SUGGESTIONS = [
+    'Deadhorse, Alaska', 'Dalton Highway', 'Denali National Park',
+    'Fairbanks', 'Whitehorse', 'Dawson Creek', 'Jasper National Park',
+    'Glacier National Park', 'Banff National Park', 'Lake Louise',
+    'Moab', 'Zion National Park', 'Grand Teton', 'Yellowstone',
+    'Olympic Peninsula', 'San Francisco', 'Big Sur', 'Death Valley',
+    'Joshua Tree', 'Sedona', 'Grand Canyon', 'Monument Valley',
+    'Baja Peninsula', 'Utah BDR', 'Cascade Range',
+    'Watson Lake', 'Fort Nelson', 'Tok', 'Valdez',
+    'Icefields Parkway', 'Liard Hot Springs', 'Haines Junction',
+    'Prince Rupert', 'Stewart-Cassiar Highway', 'Alaska Highway',
+    'Dempster Highway', 'Top of the World Highway',
+  ];
+  const ghost = document.getElementById('hp-input-ghost');
+
+  function updateGhost() {
+    const val = input.value;
+    if (!val) { ghost.textContent = ''; return; }
+    const lower = val.toLowerCase();
+    const match = SUGGESTIONS.find(s => s.toLowerCase().startsWith(lower) && s.toLowerCase() !== lower);
+    if (match) {
+      ghost.textContent = val + match.slice(val.length);
+    } else {
+      ghost.textContent = '';
+    }
+  }
+
+  input.addEventListener('input', updateGhost);
+
+  // Enter key — accept suggestion or search
   input.addEventListener('keydown', (e) => {
+    // Tab or right arrow accepts the suggestion
+    if ((e.key === 'Tab' || e.key === 'ArrowRight') && ghost.textContent && input.selectionStart === input.value.length) {
+      e.preventDefault();
+      input.value = ghost.textContent;
+      ghost.textContent = '';
+      return;
+    }
     if (e.key === 'Enter' && input.value.trim()) {
       const q = input.value.trim();
       input.value = '';
+      ghost.textContent = '';
       handleSearch(q);
     }
   });
+
+  input.addEventListener('blur', () => { ghost.textContent = ''; });
+  input.addEventListener('focus', updateGhost);
 
   // Mic button acts as send
   const sendBtn = chatCol.querySelector('.hp-mic-btn');
@@ -4111,6 +4159,7 @@
       if (input.value.trim()) {
         const q = input.value.trim();
         input.value = '';
+        ghost.textContent = '';
         handleSearch(q);
       }
     });
