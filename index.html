@@ -3932,23 +3932,37 @@
     const riskColor = { HIGH: '#e85c3c', MEDIUM: '#c77429', LOW: '#4caf6a' };
     const risk = result.data_risk || 'MEDIUM';
     const score = result.reliability_score || 0;
+    const stopColors = { scenic: '#4a6fa5', fuel: '#c77429', camp: '#4caf6a', food: '#8b5cf6', permit: '#e85c3c', caution: '#e85c3c' };
 
-    const highlights = (result.highlights || []).map(h => {
-      const colors = { scenic: '#4a6fa5', fuel: '#c77429', camp: '#4caf6a', food: '#8b5cf6', permit: '#e85c3c', caution: '#e85c3c' };
-      const c = colors[h.type] || '#888';
-      return `<div style="display:flex;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,0.05);">
-        <span style="font-family:monospace;font-size:8px;color:${c};letter-spacing:1px;padding-top:1px;flex-shrink:0;">${h.type.toUpperCase()}</span>
-        <div><div style="font-size:13px;font-weight:700;color:#ECEAE4;">${h.name}</div><div style="font-size:12px;color:#888;margin-top:2px;">${h.note}</div></div>
+    const fuelWarn = result.fuel_warning ? `<div style="background:rgba(232,92,60,0.1);border:1px solid rgba(232,92,60,0.3);border-radius:7px;padding:8px 10px;margin-top:8px;font-size:12px;color:#e85c3c;">⛽ ${result.fuel_note}</div>` : '';
+
+    // Render days
+    const daysHtml = (result.days || []).map(day => {
+      const stopsHtml = (day.stops || []).map(s => {
+        const c = stopColors[s.type] || '#888';
+        return `<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,0.04);">
+          <span style="font-family:monospace;font-size:7px;color:${c};letter-spacing:1px;padding-top:2px;flex-shrink:0;min-width:48px;">${(s.type||'').toUpperCase()}</span>
+          <div><span style="font-size:12px;font-weight:600;color:#ECEAE4;">${s.name}</span> <span style="font-size:11px;color:#666;">— ${s.note}</span></div>
+        </div>`;
+      }).join('');
+
+      return `<div style="margin-top:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <div style="font-size:14px;font-weight:700;color:#c77429;">Day ${day.day} — ${day.title}</div>
+        </div>
+        <div style="font-size:12px;color:#888;font-style:italic;margin-bottom:8px;">${day.subtitle}</div>
+        <div style="font-size:12px;color:#aaa;line-height:1.6;margin-bottom:4px;"><span style="color:#666;font-weight:600;">Morning:</span> ${day.morning}</div>
+        <div style="font-size:12px;color:#aaa;line-height:1.6;margin-bottom:4px;"><span style="color:#666;font-weight:600;">Afternoon:</span> ${day.afternoon}</div>
+        <div style="font-size:12px;color:#aaa;line-height:1.6;margin-bottom:6px;"><span style="color:#666;font-weight:600;">Evening:</span> ${day.evening}</div>
+        ${stopsHtml ? `<div style="margin-top:4px;">${stopsHtml}</div>` : ''}
       </div>`;
     }).join('');
-
-    const fuelWarn = result.fuel_warning ? `<div style="background:rgba(232,92,60,0.1);border:1px solid rgba(232,92,60,0.3);border-radius:7px;padding:8px 10px;margin-top:8px;font-size:12px;color:#e85c3c;">⚠ ${result.fuel_note}</div>` : '';
 
     const card = document.createElement('div');
     card.style.cssText = 'background:#141618;border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;';
     card.innerHTML = `
       <div style="padding:12px 14px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
           <div>
             <div style="font-family:monospace;font-size:7px;color:#555;letter-spacing:2px;margin-bottom:4px;">${region.toUpperCase().replace('_',' ')} · ${sources.primary.slice(0,2).join(' + ')}</div>
             <div style="font-size:17px;font-weight:700;color:#ECEAE4;">${result.destination}</div>
@@ -3958,13 +3972,13 @@
             <div style="font-family:monospace;font-size:7px;color:#555;letter-spacing:1px;">RELIABILITY</div>
           </div>
         </div>
-        <div style="font-size:13px;color:#888;line-height:1.65;margin-bottom:8px;">${result.summary}</div>
-        <div style="background:rgba(28,58,32,0.4);border:1px solid rgba(76,175,106,0.2);border-radius:6px;padding:7px 10px;font-size:12px;color:rgba(140,210,140,0.85);margin-bottom:8px;">🚙 ${result.gx470_note}</div>
-        ${highlights ? `<div style="margin-top:4px;">${highlights}</div>` : ''}
+        <div style="font-size:13px;color:#999;line-height:1.6;margin-bottom:8px;font-style:italic;">${result.tagline || ''}</div>
+        <div style="background:rgba(28,58,32,0.4);border:1px solid rgba(76,175,106,0.2);border-radius:6px;padding:7px 10px;font-size:12px;color:rgba(140,210,140,0.85);margin-bottom:4px;">🚙 ${result.gx470_note}</div>
         ${fuelWarn}
+        ${daysHtml}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
-          <div style="font-family:monospace;font-size:7px;color:#333;letter-spacing:1px;">DATA RISK: <span style="color:${riskColor[risk]}">${risk}</span>${cached ? ' · CACHED' : ''}</div>
-          <div style="font-family:monospace;font-size:7px;color:#333;letter-spacing:1px;">${result.best_time || ''}</div>
+          <div style="font-family:monospace;font-size:7px;color:#444;letter-spacing:1px;">DATA RISK: <span style="color:${riskColor[risk]}">${risk}</span>${cached ? ' · CACHED' : ''}</div>
+          <div style="font-family:monospace;font-size:7px;color:#444;letter-spacing:1px;">${(result.data_sources||[]).join(' · ')}</div>
         </div>
       </div>`;
     feed.appendChild(card);
