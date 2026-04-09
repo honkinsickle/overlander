@@ -1558,6 +1558,7 @@
   .hp-chat-col {
     flex: 1; background: #111214;
     border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
+    overflow: hidden; min-height: 0;
   }
   .hp-chat-inner {
     flex: 1; display: flex; flex-direction: column;
@@ -3948,11 +3949,15 @@
       });
     });
 
-    // Render days
+    // Render days — each stop gets an ID so map markers can scroll to it
+    const stopIdPrefix = 'dest-stop-' + destMapCounter + '-';
+    let stopIndex = 0;
+
     const daysHtml = (result.days || []).map(day => {
       const stopsHtml = (day.stops || []).map(s => {
         const c = stopColors[s.type] || '#888';
-        return `<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,0.04);">
+        const sid = stopIdPrefix + (stopIndex++);
+        return `<div id="${sid}" style="display:flex;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,0.04);transition:background 0.3s;">
           <span style="font-family:monospace;font-size:7px;color:${c};letter-spacing:1px;padding-top:2px;flex-shrink:0;min-width:48px;">${(s.type||'').toUpperCase()}</span>
           <div><span style="font-size:12px;font-weight:600;color:#ECEAE4;">${s.name}</span> <span style="font-size:11px;color:#666;">— ${s.note}</span></div>
         </div>`;
@@ -4000,29 +4005,14 @@
     // ── Render map in the discovery (right) column ──────────────
     const discovery = document.querySelector('.hp-discovery');
     if (discovery) {
-      // Replace discovery content with map + stop list
+      // Replace discovery content with full-height map only
       discovery.innerHTML = `
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c77429" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           <span style="font-size:15px;font-weight:700;color:#ECEAE4;">${result.destination}</span>
         </div>
-        <div id="${mapId}" style="width:100%;flex:1;min-height:280px;border-radius:8px;overflow:hidden;background:#0d1117;"></div>
-        <div id="${mapId}-stops" style="overflow-y:auto;max-height:180px;margin-top:8px;"></div>
+        <div id="${mapId}" style="width:100%;flex:1;border-radius:8px;overflow:hidden;background:#0d1117;"></div>
       `;
-
-      // Render stop legend below map
-      const stopList = document.getElementById(mapId + '-stops');
-      if (stopList) {
-        stopList.innerHTML = allStops.map((s, i) => {
-          const c = stopColors[s.type] || '#888';
-          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <div style="width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0;"></div>
-            <div style="flex:1;"><span style="font-size:12px;font-weight:600;color:#ECEAE4;">${s.name}</span>
-            <span style="font-size:10px;color:#555;"> · Day ${s.day}</span></div>
-            <span style="font-family:monospace;font-size:7px;color:${c};letter-spacing:1px;">${(s.type||'').toUpperCase()}</span>
-          </div>`;
-        }).join('');
-      }
 
       // Initialize Leaflet map in discovery column
       const MAPBOX_TK = 'pk.eyJ1IjoiaG9ua2luZ3NpY2tsZSIsImEiOiJjbW16cXpicm8wY2doMnBwd2VtbWtrZjMyIn0.u-AfjTfDK-P5RZuhiHrtvA';
@@ -4035,14 +4025,29 @@
         }).addTo(destMiniMap);
 
         const bounds = [];
-        allStops.forEach(s => {
+        let markerIdx = 0;
+        allStops.forEach((s, i) => {
           const c = stopColors[s.type] || '#888';
+          const targetId = stopIdPrefix + i;
           const icon = L.divIcon({
             className: '',
-            html: `<div style="width:12px;height:12px;border-radius:50%;background:${c};border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [12, 12], iconAnchor: [6, 6]
+            html: `<div style="width:14px;height:14px;border-radius:50%;background:${c};border:2px solid rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(0,0,0,0.6);cursor:pointer;"></div>`,
+            iconSize: [14, 14], iconAnchor: [7, 7]
           });
-          L.marker([s.lat, s.lng], { icon }).addTo(destMiniMap).bindPopup(`<b style="color:#222;">${s.name}</b><br><span style="color:#555;">${s.note}</span>`);
+          const marker = L.marker([s.lat, s.lng], { icon }).addTo(destMiniMap);
+          marker.bindTooltip(s.name, { permanent: false, direction: 'top', className: 'dest-marker-tip' });
+
+          // Click marker → scroll chat to the corresponding stop
+          marker.on('click', () => {
+            const el = document.getElementById(targetId);
+            if (el) {
+              // Flash highlight
+              el.style.background = 'rgba(199,116,41,0.15)';
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setTimeout(() => { el.style.background = ''; }, 1500);
+            }
+          });
+
           bounds.push([s.lat, s.lng]);
         });
 
