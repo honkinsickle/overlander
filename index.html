@@ -3927,14 +3927,25 @@
     if (t) t.remove();
   }
 
+  let destMapCounter = 0;
+
   function addDestinationCard(result, region, sources, cached) {
     const feed = getChatFeed();
     const riskColor = { HIGH: '#e85c3c', MEDIUM: '#c77429', LOW: '#4caf6a' };
     const risk = result.data_risk || 'MEDIUM';
     const score = result.reliability_score || 0;
     const stopColors = { scenic: '#4a6fa5', fuel: '#c77429', camp: '#4caf6a', food: '#8b5cf6', permit: '#e85c3c', caution: '#e85c3c' };
+    const mapId = 'dest-map-' + (destMapCounter++);
 
     const fuelWarn = result.fuel_warning ? `<div style="background:rgba(232,92,60,0.1);border:1px solid rgba(232,92,60,0.3);border-radius:7px;padding:8px 10px;margin-top:8px;font-size:12px;color:#e85c3c;">⛽ ${result.fuel_note}</div>` : '';
+
+    // Collect all stops with coordinates for the map
+    const allStops = [];
+    (result.days || []).forEach(day => {
+      (day.stops || []).forEach(s => {
+        if (s.lat && s.lng) allStops.push({ ...s, day: day.day });
+      });
+    });
 
     // Render days
     const daysHtml = (result.days || []).map(day => {
@@ -3961,6 +3972,7 @@
     const card = document.createElement('div');
     card.style.cssText = 'background:#141618;border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;';
     card.innerHTML = `
+      <div id="${mapId}" style="width:100%;height:200px;background:#0d1117;"></div>
       <div style="padding:12px 14px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
           <div>
@@ -3983,6 +3995,37 @@
       </div>`;
     feed.appendChild(card);
     feed.scrollTop = feed.scrollHeight;
+
+    // Initialize Leaflet mini-map
+    const MAPBOX_TK = 'pk.eyJ1IjoiaG9ua2luZ3NpY2tsZSIsImEiOiJjbW16cXpicm8wY2doMnBwd2VtbWtrZjMyIn0.u-AfjTfDK-P5RZuhiHrtvA';
+    setTimeout(() => {
+      const center = result.center || [40, -100];
+      const miniMap = L.map(mapId, { zoomControl: false, attributionControl: false, scrollWheelZoom: false, dragging: true }).setView(center, 7);
+      L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=' + MAPBOX_TK, {
+        tileSize: 512, zoomOffset: -1, maxZoom: 16
+      }).addTo(miniMap);
+
+      // Plot stops with colored markers
+      const bounds = [];
+      allStops.forEach(s => {
+        const c = stopColors[s.type] || '#888';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:12px;height:12px;border-radius:50%;background:${c};border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
+          iconSize: [12, 12], iconAnchor: [6, 6]
+        });
+        L.marker([s.lat, s.lng], { icon }).addTo(miniMap).bindPopup(`<b style="color:#222;">${s.name}</b><br><span style="color:#555;">${s.note}</span>`);
+        bounds.push([s.lat, s.lng]);
+      });
+
+      // Draw route line connecting stops in order
+      if (bounds.length > 1) {
+        L.polyline(bounds, { color: '#c77429', weight: 2.5, opacity: 0.7, dashArray: '6 4' }).addTo(miniMap);
+        miniMap.fitBounds(bounds, { padding: [20, 20] });
+      } else if (bounds.length === 1) {
+        miniMap.setView(bounds[0], 10);
+      }
+    }, 100);
   }
 
   function addErrorMessage(text) {
