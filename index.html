@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1133, height=744, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=1133">
 <title>OVERLANDER_01 — Tactical Expedition Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 1133px; height: 744px; overflow: hidden; background: #0a0b0c; }
 
   :root {
     --bg-base:       #0a0b0c;
@@ -3872,6 +3871,165 @@
 
 })();
 </script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DESTINATION SEARCH — Ask anything → /api/destination/search
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const API_BASE = 'http://localhost:3000';
+
+  const input    = document.getElementById('hp-input');
+  const chatCol  = document.querySelector('.hp-chat-col');
+
+  if (!input || !chatCol) return;
+
+  // ── Chat message renderer ────────────────────────────────────
+  function getChatFeed() {
+    let feed = document.getElementById('hp-chat-feed');
+    if (!feed) {
+      feed = document.createElement('div');
+      feed.id = 'hp-chat-feed';
+      feed.style.cssText = 'flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px;';
+      feed.style.scrollbarWidth = 'none';
+      // Insert before input wrap
+      const inputWrap = chatCol.querySelector('.hp-input-wrap');
+      chatCol.insertBefore(feed, inputWrap);
+      // Hide the old static chat-inner
+      const inner = chatCol.querySelector('.hp-chat-inner');
+      if (inner) inner.style.display = 'none';
+    }
+    return feed;
+  }
+
+  function addUserMessage(text) {
+    const feed = getChatFeed();
+    const msg = document.createElement('div');
+    msg.style.cssText = 'align-self:flex-end;max-width:85%;background:rgba(199,116,41,0.12);border:1px solid rgba(199,116,41,0.25);border-radius:10px;padding:9px 13px;font-size:13px;color:#c8a96e;line-height:1.5;';
+    msg.textContent = text;
+    feed.appendChild(msg);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function addThinking() {
+    const feed = getChatFeed();
+    const msg = document.createElement('div');
+    msg.id = 'hp-thinking';
+    msg.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 0;';
+    msg.innerHTML = '<div style="display:flex;gap:4px;"><span style="width:6px;height:6px;border-radius:50%;background:#4caf6a;animation:cpulse 0.8s 0s infinite;display:inline-block;"></span><span style="width:6px;height:6px;border-radius:50%;background:#4caf6a;animation:cpulse 0.8s 0.2s infinite;display:inline-block;"></span><span style="width:6px;height:6px;border-radius:50%;background:#4caf6a;animation:cpulse 0.8s 0.4s infinite;display:inline-block;"></span></div><span style="font-family:monospace;font-size:9px;color:#555;letter-spacing:1.5px;">SEARCHING SOURCES...</span>';
+    feed.appendChild(msg);
+    feed.scrollTop = feed.scrollHeight;
+    return msg;
+  }
+
+  function removeThinking() {
+    const t = document.getElementById('hp-thinking');
+    if (t) t.remove();
+  }
+
+  function addDestinationCard(result, region, sources, cached) {
+    const feed = getChatFeed();
+    const riskColor = { HIGH: '#e85c3c', MEDIUM: '#c77429', LOW: '#4caf6a' };
+    const risk = result.data_risk || 'MEDIUM';
+    const score = result.reliability_score || 0;
+
+    const highlights = (result.highlights || []).map(h => {
+      const colors = { scenic: '#4a6fa5', fuel: '#c77429', camp: '#4caf6a', food: '#8b5cf6', permit: '#e85c3c', caution: '#e85c3c' };
+      const c = colors[h.type] || '#888';
+      return `<div style="display:flex;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <span style="font-family:monospace;font-size:8px;color:${c};letter-spacing:1px;padding-top:1px;flex-shrink:0;">${h.type.toUpperCase()}</span>
+        <div><div style="font-size:13px;font-weight:700;color:#ECEAE4;">${h.name}</div><div style="font-size:12px;color:#888;margin-top:2px;">${h.note}</div></div>
+      </div>`;
+    }).join('');
+
+    const fuelWarn = result.fuel_warning ? `<div style="background:rgba(232,92,60,0.1);border:1px solid rgba(232,92,60,0.3);border-radius:7px;padding:8px 10px;margin-top:8px;font-size:12px;color:#e85c3c;">⚠ ${result.fuel_note}</div>` : '';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#141618;border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;';
+    card.innerHTML = `
+      <div style="padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div>
+            <div style="font-family:monospace;font-size:7px;color:#555;letter-spacing:2px;margin-bottom:4px;">${region.toUpperCase().replace('_',' ')} · ${sources.primary.slice(0,2).join(' + ')}</div>
+            <div style="font-size:17px;font-weight:700;color:#ECEAE4;">${result.destination}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:20px;font-weight:700;color:${riskColor[risk] || '#888'};">${score}</div>
+            <div style="font-family:monospace;font-size:7px;color:#555;letter-spacing:1px;">RELIABILITY</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:#888;line-height:1.65;margin-bottom:8px;">${result.summary}</div>
+        <div style="background:rgba(28,58,32,0.4);border:1px solid rgba(76,175,106,0.2);border-radius:6px;padding:7px 10px;font-size:12px;color:rgba(140,210,140,0.85);margin-bottom:8px;">🚙 ${result.gx470_note}</div>
+        ${highlights ? `<div style="margin-top:4px;">${highlights}</div>` : ''}
+        ${fuelWarn}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="font-family:monospace;font-size:7px;color:#333;letter-spacing:1px;">DATA RISK: <span style="color:${riskColor[risk]}">${risk}</span>${cached ? ' · CACHED' : ''}</div>
+          <div style="font-family:monospace;font-size:7px;color:#333;letter-spacing:1px;">${result.best_time || ''}</div>
+        </div>
+      </div>`;
+    feed.appendChild(card);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function addErrorMessage(text) {
+    const feed = getChatFeed();
+    const msg = document.createElement('div');
+    msg.style.cssText = 'background:rgba(232,92,60,0.08);border:1px solid rgba(232,92,60,0.2);border-radius:8px;padding:10px 13px;font-size:13px;color:#e85c3c;';
+    msg.textContent = text;
+    feed.appendChild(msg);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  // ── Submit handler ───────────────────────────────────────────
+  async function handleSearch(query) {
+    if (!query.trim()) return;
+    addUserMessage(query);
+    const thinking = addThinking();
+    try {
+      const res = await fetch(`${API_BASE}/api/destination/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() })
+      });
+      removeThinking();
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Search failed');
+      addDestinationCard(data.result, data.region, data.sources, data.cached);
+    } catch (err) {
+      removeThinking();
+      if (err.message.includes('Failed to fetch') || err.message.includes('connect')) {
+        addErrorMessage('Backend offline — start the server on port 3000 to use destination search.');
+      } else {
+        addErrorMessage('Search failed: ' + err.message);
+      }
+    }
+  }
+
+  // Enter key
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      const q = input.value.trim();
+      input.value = '';
+      handleSearch(q);
+    }
+  });
+
+  // Mic button acts as send
+  const sendBtn = chatCol.querySelector('.hp-mic-btn');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', () => {
+      if (input.value.trim()) {
+        const q = input.value.trim();
+        input.value = '';
+        handleSearch(q);
+      }
+    });
+  }
+
+})();
+</script>
+
 
 </div>
 </body>
