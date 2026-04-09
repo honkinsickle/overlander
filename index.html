@@ -1556,10 +1556,14 @@
   .hp-nav-item:hover { background: rgba(255,255,255,0.03); color: #888; }
   .hp-nav-item span { font-family: var(--ff-sans); font-size: 15px; font-weight: 600; color: inherit; }
   .hp-chat-col {
-    flex: 1; background: #111214;
+    flex: 1; min-width: 0; min-height: 0; background: #111214;
     border-right: 1px solid rgba(255,255,255,0.06);
-    position: relative;
+    position: relative; overflow: hidden;
   }
+  #hp-chat-feed > * { flex-shrink: 0; }
+  #hp-chat-feed::-webkit-scrollbar { width: 3px; }
+  #hp-chat-feed::-webkit-scrollbar-track { background: transparent; }
+  #hp-chat-feed::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
   .hp-chat-inner {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center; padding: 32px 28px; gap: 16px;
