@@ -1557,8 +1557,8 @@
   .hp-nav-item span { font-family: var(--ff-sans); font-size: 15px; font-weight: 600; color: inherit; }
   .hp-chat-col {
     flex: 1; background: #111214;
-    border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
-    overflow: hidden; min-height: 0;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    position: relative;
   }
   .hp-chat-inner {
     flex: 1; display: flex; flex-direction: column;
@@ -3891,21 +3891,15 @@
     if (!feed) {
       feed = document.createElement('div');
       feed.id = 'hp-chat-feed';
-      feed.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px;display:flex;flex-direction:column;gap:10px;';
-      // Insert before input wrap
-      const inputWrap = chatCol.querySelector('.hp-input-wrap');
-      if (inputWrap) chatCol.insertBefore(feed, inputWrap);
-      else chatCol.appendChild(feed);
+      // Absolute positioning — guaranteed scroll, no flex chain dependency
+      feed.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:70px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px;display:flex;flex-direction:column;gap:10px;';
+      chatCol.appendChild(feed);
       // Hide the old static chat-inner
       const inner = chatCol.querySelector('.hp-chat-inner');
       if (inner) inner.style.display = 'none';
-      // Set max-height after layout is computed
-      setTimeout(() => {
-        const colH = chatCol.offsetHeight || chatCol.getBoundingClientRect().height;
-        const inputH = inputWrap ? (inputWrap.offsetHeight || 70) : 70;
-        const h = colH > 0 ? (colH - inputH) : 580;
-        feed.style.maxHeight = h + 'px';
-      }, 50);
+      // Pin input wrap to bottom
+      const inputWrap = chatCol.querySelector('.hp-input-wrap');
+      if (inputWrap) inputWrap.style.cssText += 'position:absolute;bottom:0;left:0;right:0;';
     }
     return feed;
   }
