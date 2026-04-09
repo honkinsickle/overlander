@@ -39,7 +39,7 @@
   html, body {
     background: var(--bg-base);
     width: 1133px;
-    height: 900px;
+    height: 744px;
     overflow: hidden;
     font-family: var(--ff-sans);
     color: var(--text-primary);
@@ -48,7 +48,7 @@
   .dashboard {
     position: relative;
     width: 1133px;
-    height: 900px;
+    height: 744px;
     background: var(--bg-base);
     overflow: hidden;
   }
@@ -299,9 +299,9 @@
 
   /* inactive tab label dims */
   .day-column:not(.overview-active) .tab-overview .tab-label,
-  .day-column:not(.overview-active) .tab-overview .tab-icon-svg { opacity: 0.3; }
+  .day-column:not(.overview-active) .tab-overview .tab-icon-svg { opacity: 1; color: rgba(199,116,41,0.85); stroke: rgba(199,116,41,0.85); }
   .day-column.overview-active    .tab-itinerary .tab-label,
-  .day-column.overview-active    .tab-itinerary .tab-icon-svg { opacity: 0.3; }
+  .day-column.overview-active    .tab-itinerary .tab-icon-svg { opacity: 1; color: rgba(199,116,41,0.85); stroke: rgba(199,116,41,0.85); }
 
   /* hide old chevron */
   .tab-chevron { display: none; }
@@ -316,38 +316,40 @@
   }
 
   .phase-header-inner {
-    padding: 0 14px;
+    padding: 0 16px;
     display: flex; gap: 0;
     align-items: center;
     height: 112px;
   }
 
-  .ph-num-block { width: 64px; }
+  .ph-num-block { width: 60px; flex-shrink: 0; }
   .ph-num-label {
     font-family: var(--ff-sans); font-weight: 700;
-    font-size: 16px; color: var(--text-primary);
-    line-height: 1;
+    font-size: 11px; color: var(--text-primary);
+    letter-spacing: 1px;
+    line-height: 1; text-transform: uppercase;
   }
   .ph-num {
-    font-family: var(--ff-sans); font-weight: 600;
-    font-size: 28px; color: var(--text-primary);
-    line-height: 1.2;
+    font-family: var(--ff-sans); font-weight: 700;
+    font-size: 36px; color: var(--text-primary);
+    line-height: 1.1;
   }
 
   .ph-divider {
-    width: 1px; background: var(--border-mid);
-    margin: 0 12px 0 2px;
+    width: 1px; background: rgba(255,255,255,0.18);
+    margin: 0 16px 0 -2px;
     align-self: stretch;
     height: 70%;
     margin-top: auto;
     margin-bottom: auto;
   }
 
-  .ph-info { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+  .ph-info { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
   .ph-info span {
     font-family: var(--ff-sans); font-size: 14px; color: var(--text-primary);
-    line-height: 1.4;
+    line-height: 1.45;
   }
+  .ph-info span:first-child { font-weight: 700; font-size: 15px; }
 
   /* day cards — now in normal flow (not absolute) */
   .day-card {
@@ -360,6 +362,8 @@
     position: relative;
     transition: background 0.15s;
     flex-shrink: 0;
+    padding: 10px 16px 10px 20px;
+    display: flex; flex-direction: column; justify-content: space-between;
   }
   .day-card:hover { background: #1c1f21; }
   .day-card.active {
@@ -368,40 +372,34 @@
   }
 
   .dc-meta {
-    position: absolute;
-    top: 8px; left: 20px;
-    font-family: var(--ff-sans); font-size: 14px;
+    font-family: var(--ff-sans); font-size: 13px;
     color: var(--text-muted);
+    display: flex; justify-content: space-between; align-items: baseline;
     line-height: 1;
   }
-  .dc-meta.active { color: var(--text-primary); }
+  .dc-meta.active { color: rgba(160,220,140,0.7); }
 
+  .dc-top { display: flex; justify-content: space-between; align-items: baseline; }
   .dc-day-num {
-    position: absolute;
-    top: 8px; right: 20px;
-    font-family: var(--ff-sans); font-size: 14px;
+    font-family: var(--ff-sans); font-size: 13px;
     color: var(--text-muted);
   }
-  .dc-day-num.active { color: var(--text-primary); }
+  .dc-day-num.active { color: rgba(160,220,140,0.7); }
 
   .dc-date {
-    position: absolute;
-    top: 28px; left: 20px;
-    font-family: var(--ff-sans); font-size: 30px;
+    font-family: var(--ff-sans); font-size: 30px; font-weight: 700;
     color: var(--text-muted);
-    line-height: 1.2;
+    line-height: 1.1;
     white-space: nowrap;
   }
   .dc-date.active { color: var(--amber-light); }
 
   .dc-route {
-    position: absolute;
-    left: 20px;
-    font-family: var(--ff-sans); font-size: 14px;
+    font-family: var(--ff-sans); font-size: 13px;
     color: var(--text-muted);
-    white-space: nowrap;
+    line-height: 1.4;
   }
-  .dc-route.active { color: var(--text-primary); }
+  .dc-route.active { color: rgba(220,240,220,0.85); }
 
   /* ── ITINERARY HEADER BAR — new two-column design ───────── */
   .itin-header {
@@ -834,7 +832,130 @@
     border: 1px solid rgba(110,206,206,0.15);
     border-radius: 8px;
     padding: 13px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
   }
+  .dd-camp-block:hover { border-color: rgba(199,116,41,0.4); }
+
+  .dd-camp-tap-hint {
+    display: flex; align-items: center; justify-content: center;
+    gap: 5px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-family: var(--ff-mono); font-size: 7px;
+    color: #888; letter-spacing: 1px;
+  }
+
+  /* ── OVERNIGHT SLIDE PANEL ──────────────────────────────── */
+  .overnight-panel {
+    position: fixed;
+    width: 479px;
+    background: #111214;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    z-index: 9999;
+    display: flex; flex-direction: column;
+    transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
+    transform: translateX(-110%);
+  }
+  .overnight-panel.open {
+    transform: translateX(0);
+  }
+
+  .op-header {
+    background: #000;
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 2px solid var(--amber-dark);
+    flex-shrink: 0;
+  }
+  .op-header-left { display: flex; flex-direction: column; gap: 4px; }
+  .op-eyebrow { font-family: var(--ff-mono); font-size: 8px; color: #888; letter-spacing: 2px; }
+  .op-title { font-family: var(--ff-sans); font-size: 18px; font-weight: 700; color: var(--text-primary); }
+
+  .op-close {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .op-close:hover { background: rgba(255,255,255,0.1); }
+  .op-close-icon { position: relative; width: 14px; height: 14px; }
+  .op-close-icon::before, .op-close-icon::after {
+    content: ''; position: absolute; top: 50%; left: 0;
+    width: 100%; height: 2px;
+    background: rgba(236,234,228,0.75); border-radius: 1px;
+  }
+  .op-close-icon::before { transform: translateY(-50%) rotate(45deg); }
+  .op-close-icon::after  { transform: translateY(-50%) rotate(-45deg); }
+
+  .op-tabs {
+    display: flex; background: #161819;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+  .op-tab {
+    flex: 1; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    font-family: var(--ff-sans); font-weight: 600; font-size: 13px;
+    cursor: pointer; position: relative; transition: background 0.15s;
+  }
+  .op-tab.active { background: rgba(199,116,41,0.85); color: var(--text-primary); }
+  .op-tab.active::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: var(--amber-dark);
+  }
+  .op-tab.inactive { color: #444; background: #161819; }
+  .op-tab + .op-tab { border-left: 1px solid rgba(255,255,255,0.07); }
+
+  .op-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  .op-scroll::-webkit-scrollbar { width: 2px; }
+  .op-scroll::-webkit-scrollbar-thumb { background: #2a2a2a; }
+
+  /* Recommended content */
+  .op-hero { width: 100%; height: 130px; overflow: hidden; position: relative; }
+  .op-hero img { width: 100%; height: 100%; object-fit: cover; opacity: 0.82; }
+  .op-hero-lbl { position: absolute; bottom: 8px; left: 12px; font-family: var(--ff-mono); font-size: 7px; color: rgba(255,255,255,0.5); letter-spacing: 1.5px; }
+  .op-hero-tag { position: absolute; bottom: 8px; right: 12px; font-family: var(--ff-mono); font-size: 7px; color: var(--amber); letter-spacing: 1px; }
+
+  .op-body { padding: 12px 14px; }
+  .op-camp-type-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .op-camp-type { font-family: var(--ff-mono); font-size: 7px; color: #6ecece; letter-spacing: 2.5px; }
+  .op-camp-suit { font-family: var(--ff-mono); font-size: 7px; color: #888; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; padding: 2px 7px; }
+  .op-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+  .op-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 10px; }
+  .op-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 12px; }
+  .op-stat { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 10px 12px; }
+  .op-stat-lbl { font-family: var(--ff-mono); font-size: 7px; color: #333; letter-spacing: 2.5px; margin-bottom: 4px; }
+  .op-stat-val { font-family: var(--ff-sans); font-weight: 700; font-size: 20px; color: var(--text-primary); line-height: 1; }
+  .op-stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .op-desc { font-size: 14px; color: var(--text-muted); line-height: 1.65; margin-bottom: 6px; }
+  .op-contact { font-family: var(--ff-mono); font-size: 8px; color: #555; margin-bottom: 14px; }
+  .op-confirm {
+    background: var(--amber-dark); border-radius: 6px; padding: 11px;
+    text-align: center; font-family: var(--ff-sans); font-weight: 700;
+    font-size: 14px; color: #0a0a0a; cursor: pointer; letter-spacing: 0.5px;
+    transition: filter 0.15s;
+  }
+  .op-confirm:hover { filter: brightness(1.1); }
+
+  /* Alternates list */
+  .op-alt-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer; transition: background 0.1s;
+  }
+  .op-alt-item:hover { background: rgba(255,255,255,0.02); }
+  .op-alt-item.op-sel { background: rgba(199,116,41,0.07); border-left: 2px solid var(--amber-dark); }
+  .op-alt-thumb { width: 52px; height: 44px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: #1a1a1a; border: 1px solid rgba(255,255,255,0.07); }
+  .op-alt-thumb img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+  .op-alt-name { font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .op-alt-meta { font-family: var(--ff-mono); font-size: 8px; color: var(--text-muted); margin-top: 2px; }
+  .op-alt-badge { font-family: var(--ff-mono); font-size: 7px; padding: 2px 6px; border-radius: 999px; border: 1px solid; flex-shrink: 0; }
+  .op-b-disp { color: #4caf6a; border-color: rgba(76,175,106,0.4); background: rgba(76,175,106,0.07); }
+  .op-b-camp { color: #6ecece; border-color: rgba(110,206,206,0.4); background: rgba(110,206,206,0.07); }
+  .op-b-hotel { color: #a78bfa; border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.07); }
 
   .dd-camp-header {
     display: flex;
@@ -1388,10 +1509,229 @@
   .dashboard.sidebar-hidden .day-detail      { left: 216px; }
   .dashboard.sidebar-hidden .sector-header   { left: 216px; }
   .dashboard.sidebar-hidden .map-bg-screenshot { left: 216px; }
+
+  /* ══ HOMEPAGE ══════════════════════════════════════════════ */
+  .creator-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #0a0b0c;
+    z-index: 9000; display: flex; flex-direction: column;
+    opacity: 1; transition: opacity 0.4s ease;
+  }
+  .creator-overlay.fade-out { opacity: 0; pointer-events: none; }
+  .hp-header {
+    height: 52px; flex-shrink: 0; background: #2E4738;
+    display: flex; align-items: center;
+  }
+  .hp-header-x {
+    width: 52px; height: 52px; background: #c77429;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .hp-header-x:hover { filter: brightness(1.15); }
+  .hp-header-title {
+    font-family: var(--ff-sans); font-size: 20px; font-weight: 700;
+    color: #ECEAE4; letter-spacing: 1px; padding-left: 16px;
+  }
+  .hp-content-row { flex: 1; display: flex; overflow: hidden; }
+  .hp-sidenav {
+    width: 128px; flex-shrink: 0; background: #0f1210;
+    border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
+  }
+  .hp-nav-new {
+    background: #1e3a28; border-bottom: 1px solid #c77429;
+    padding: 20px 10px 18px; display: flex; flex-direction: column;
+    align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s;
+  }
+  .hp-nav-new:hover { background: #243f2e; }
+  .hp-new-icon {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(199,116,41,0.18); border: 2px solid rgba(199,116,41,0.55);
+    display: flex; align-items: center; justify-content: center; color: #c8a96e;
+  }
+  .hp-new-lbl { font-family: var(--ff-sans); font-size: 16px; font-weight: 700; color: #c8a96e; }
+  .hp-nav-item {
+    padding: 22px 10px 20px; display: flex; flex-direction: column;
+    align-items: center; gap: 8px; cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s; color: #555;
+  }
+  .hp-nav-item:hover { background: rgba(255,255,255,0.03); color: #888; }
+  .hp-nav-item span { font-family: var(--ff-sans); font-size: 15px; font-weight: 600; color: inherit; }
+  .hp-chat-col {
+    flex: 1; background: #111214;
+    border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;
+  }
+  .hp-chat-inner {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 32px 28px; gap: 16px;
+  }
+  .hp-globe {
+    width: 88px; height: 88px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hp-headline { font-size: 26px; font-weight: 700; color: #ECEAE4; text-align: center; line-height: 1.2; }
+  .hp-subhead { font-size: 13px; color: #888; text-align: center; line-height: 1.7; max-width: 270px; }
+  .hp-suggest-row { display: flex; justify-content: center; }
+  .hp-suggest-pill {
+    font-family: var(--ff-mono); font-size: 8px; color: #555; letter-spacing: 1px;
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  }
+  .hp-suggest-pill:hover { color: #888; }
+  .hp-input-wrap { padding: 10px 14px 14px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .hp-input-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 6px;
+  }
+  .hp-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--ff-sans); font-size: 14px; color: #ECEAE4; }
+  .hp-input::placeholder { color: #444; }
+  .hp-attach-btn, .hp-mic-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+  }
+  .hp-input-hint { font-family: var(--ff-mono); font-size: 7px; color: #2a2a2a; text-align: center; letter-spacing: 1px; }
+  .hp-discovery { flex: 1; overflow-y: auto; padding: 16px 16px 24px; background: #111214; }
+  .hp-discovery::-webkit-scrollbar { width: 2px; }
+  .hp-discovery::-webkit-scrollbar-thumb { background: #2a2a2a; }
+  .hp-disc-loc-row { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .hp-disc-loc-name { font-size: 15px; font-weight: 700; color: #ECEAE4; flex: 1; }
+  .hp-disc-explore { font-family: var(--ff-mono); font-size: 8px; color: #444; letter-spacing: 1px; cursor: pointer; }
+  .hp-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .hp-disc-card {
+    border-radius: 10px; overflow: hidden; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.07); min-height: 110px; transition: border-color 0.15s;
+  }
+  .hp-disc-card:hover { border-color: rgba(199,116,41,0.4); }
+  .hp-disc-card img { width: 100%; height: 110px; object-fit: cover; opacity: 0.7; display: block; }
+  .hp-disc-card-dark { background: #161819; display: flex; align-items: center; gap: 10px; padding: 12px 10px; }
+  .hp-disc-card-icon {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .hp-disc-card-body { padding: 6px 8px; }
+  .hp-disc-card-dark .hp-disc-card-body { padding: 0; }
+  .hp-disc-card-name { font-size: 13px; font-weight: 700; color: #ECEAE4; line-height: 1.25; margin-bottom: 2px; }
+  .hp-disc-card-meta { display: flex; align-items: center; gap: 4px; font-family: var(--ff-mono); font-size: 8px; color: #555; }
+  .hp-disc-card-author { display: flex; align-items: center; gap: 5px; font-family: var(--ff-mono); font-size: 7px; color: #555; margin-bottom: 3px; }
+  .hp-author-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; }
+  .hp-disc-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .hp-disc-section-lbl { font-size: 15px; font-weight: 700; color: #ECEAE4; }
+  .hp-disc-see-all { font-family: var(--ff-mono); font-size: 8px; color: #444; letter-spacing: 1px; cursor: pointer; }
+
 </style>
 </head>
 <body>
 <div class="dashboard sidebar-hidden">
+  <!-- ══ CREATOR OVERLAY ══════════════════════════════════════ -->
+  <div class="creator-overlay" id="creator-overlay" style="display:none;">
+
+    <!-- ── HEADER: full width ── -->
+    <div class="hp-header">
+      <div class="hp-header-x" id="hp-header-x">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="12" y2="12"/><line x1="12" y1="1" x2="1" y2="12"/></svg>
+      </div>
+      <span class="hp-header-title">PLANNING</span>
+    </div>
+
+    <!-- ── CONTENT ROW: sidenav + rest ── -->
+    <div class="hp-content-row">
+
+      <!-- Vertical nav -->
+      <div class="hp-sidenav">
+        <div class="hp-nav-new" id="hp-nav-new">
+          <div class="hp-new-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <span class="hp-new-lbl">New Chat</span>
+        </div>
+        <div class="hp-nav-item" id="hp-nav-chats">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>
+          <span>Chats</span>
+        </div>
+        <div class="hp-nav-item" id="hp-nav-trips">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/><path d="M5 21 Q8 17 12 17 Q16 17 19 21" stroke-dasharray="2 2"/></svg>
+          <span>Trips</span>
+        </div>
+      </div>
+
+      <!-- Chat column -->
+      <div class="hp-chat-col">
+        <div class="hp-chat-inner">
+          <div class="hp-globe"><img src="data:image/png;base64,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" width="104" height="104" alt="map" style="border-radius:12px;"></div>
+          <div class="hp-headline">Where to today?</div>
+          <div class="hp-subhead">Hey there, I'm here to help you plan your next overland expedition. Ask me anything — destination info, route planning, gear, permits.</div>
+          <div class="hp-suggest-row">
+            <div class="hp-suggest-pill">What can I ask Claud?</div>
+          </div>
+        </div>
+        <div class="hp-input-wrap">
+          <div class="hp-input-row">
+            <div class="hp-attach-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <input id="hp-input" class="hp-input" placeholder="Ask anything" autocomplete="off">
+            <div class="hp-mic-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </div>
+          </div>
+          <div class="hp-input-hint">Claud can make mistakes. Check important info.</div>
+        </div>
+      </div>
+
+      <!-- Discovery panel -->
+      <div class="hp-discovery">
+        <div id="creator-discovery">
+          <div class="hp-disc-loc-row">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span class="hp-disc-loc-name">Los Angeles</span>
+            <span class="hp-disc-explore">Explore</span>
+          </div>
+          <div class="hp-card-grid">
+            <div class="hp-disc-card"><img src="https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=400&h=220&q=80" alt=""><div class="hp-disc-card-body"><div class="hp-disc-card-name">LA → Deadhorse, AK</div><div class="hp-disc-card-meta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/></svg> Route · 8,400 mi</div></div></div>
+            <div class="hp-disc-card"><img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&h=220&q=80" alt=""><div class="hp-disc-card-body"><div class="hp-disc-card-name">Jasper National Park</div><div class="hp-disc-card-meta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg> Attraction</div></div></div>
+          </div>
+          <div class="hp-disc-section-header">
+            <span class="hp-disc-section-lbl">Jump back in</span>
+            <span class="hp-disc-see-all">See all</span>
+          </div>
+          <div class="hp-card-grid">
+            <div class="hp-disc-card" id="hp-resume-card"><img src="https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=400&h=220&q=80" alt="Alaska"><div class="hp-disc-card-body"><div class="hp-disc-card-name">The Greatest Alaskan Adventure</div><div class="hp-disc-card-meta">LA → Deadhorse · 80 days</div></div></div>
+            <div class="hp-disc-card"><img src="https://images.unsplash.com/photo-1558618047-3c8c76ca7e8c?auto=format&fit=crop&w=400&h=220&q=80" alt="Southwest"><div class="hp-disc-card-body"><div class="hp-disc-card-name">Southwest Loop — Utah &amp; AZ</div><div class="hp-disc-card-meta">14 days · Moab · Bryce</div></div></div>
+          </div>
+          <div class="hp-disc-section-header">
+            <span class="hp-disc-section-lbl">Get inspired</span>
+            <span class="hp-disc-see-all">See all</span>
+          </div>
+          <div class="hp-card-grid">
+            <div class="hp-disc-card" style="background:#1a1510;"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=400&h=220&q=80" alt=""><div class="hp-disc-card-body"><div class="hp-disc-card-author"><div class="hp-author-dot" style="background:#c77429;"></div><span>Dispersed Camping Guide</span></div><div class="hp-disc-card-name">Best BLM camps on the Alcan Highway</div></div></div>
+            <div class="hp-disc-card" style="background:#151a15;"><img src="https://images.unsplash.com/photo-1519824145371-296894a0daa9?auto=format&fit=crop&w=400&h=220&q=80" alt=""><div class="hp-disc-card-body"><div class="hp-disc-card-author"><div class="hp-author-dot" style="background:#4caf6a;"></div><span>GX470 Prep</span></div><div class="hp-disc-card-name">A solo trip to Deadhorse — what no one tells you</div></div></div>
+          </div>
+        </div>
+        <div id="creator-scan-panel" style="display:none;">
+          <div class="creator-section-lbl" id="creator-scan-lbl">READING LOCATIONS...</div>
+          <div class="creator-scan-grid" id="creator-scan-grid"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Hidden elements for photo pipeline -->
+    <input type="file" id="creator-file-input" multiple accept="image/*" style="display:none;">
+    <div id="creator-api-row" style="display:none;"><input id="creator-api-key" type="password" placeholder="sk-ant-..." autocomplete="off"></div>
+    <div id="creator-scanning" style="display:none;">
+      <div class="creator-thumb-row" id="creator-thumb-row"></div>
+      <div class="creator-phase-bar" id="creator-phase-bar">
+        <div class="creator-phase-step" id="cps-1"><div class="cps-num">1</div><span class="cps-lbl">SCAN</span></div>
+        <div class="creator-phase-step" id="cps-2"><div class="cps-num">2</div><span class="cps-lbl">LOCATE</span></div>
+        <div class="creator-phase-step" id="cps-3"><div class="cps-num">3</div><span class="cps-lbl">BUILD</span></div>
+        <div class="creator-phase-step" id="cps-4"><div class="cps-num">4</div><span class="cps-lbl">LOAD</span></div>
+      </div>
+      <div class="creator-status" id="creator-status"><div class="creator-status-dot"></div><div class="creator-status-txt" id="creator-status-txt">READING PHOTOS...</div></div>
+    </div>
+
+  </div>
+
+
 
   <!-- ══ MAP BACKGROUND — Mapbox GL JS ══════════════════════ -->
   <div class="map-bg-screenshot">
@@ -1573,20 +1913,22 @@
 
     <!-- Day Card 01 — ACTIVE -->
     <div class="day-card active" data-day="1">
-      <span class="dc-meta active">750 mi | 10.5 hrs</span>
-      <span class="dc-day-num active">Day 01</span>
-      <span class="dc-date active">Fri 5/29</span>
-      <span class="dc-route active" style="top:66px;">Los Angeles, CA —</span>
-      <span class="dc-route active" style="top:84px;">Willard Bay, UT</span>
+      <div class="dc-top">
+        <span class="dc-meta active">750 mi | 10.5 hrs</span>
+        <span class="dc-day-num active">Day 01</span>
+      </div>
+      <div class="dc-date active">Fri 5/29</div>
+      <div class="dc-route active">Los Angeles, CA —<br>Willard Bay, UT</div>
     </div>
 
     <!-- Day Card 02 -->
     <div class="day-card" data-day="2">
-      <span class="dc-meta">710 mi | 10.0 hrs</span>
-      <span class="dc-day-num">Day 02</span>
-      <span class="dc-date">Sat 5/30</span>
-      <span class="dc-route" style="top:66px;">Willard Bay, UT —</span>
-      <span class="dc-route" style="top:84px;">Whitefish, MT</span>
+      <div class="dc-top">
+        <span class="dc-meta">710 mi | 10.0 hrs</span>
+        <span class="dc-day-num">Day 02</span>
+      </div>
+      <div class="dc-date">Sat 5/30</div>
+      <div class="dc-route">Willard Bay, UT —<br>Whitefish, MT</div>
     </div>
 
     <!-- PHASE 02 Header -->
@@ -1607,56 +1949,62 @@
 
     <!-- Day Card 03 -->
     <div class="day-card" data-day="3">
-      <span class="dc-meta">290 mi | 4.5 hrs</span>
-      <span class="dc-day-num">Day 03</span>
-      <span class="dc-date">Sun 5/31</span>
-      <span class="dc-route" style="top:66px;">Whitefish, MT —</span>
-      <span class="dc-route" style="top:84px;">Cranbrook, BC</span>
+      <div class="dc-top">
+        <span class="dc-meta">290 mi | 4.5 hrs</span>
+        <span class="dc-day-num">Day 03</span>
+      </div>
+      <div class="dc-date">Sun 5/31</div>
+      <div class="dc-route">Whitefish, MT —<br>Cranbrook, BC</div>
     </div>
 
     <!-- Day Card 04 -->
     <div class="day-card" data-day="4">
-      <span class="dc-meta">380 mi | 5.5 hrs</span>
-      <span class="dc-day-num">Day 04</span>
-      <span class="dc-date">Mon 6/01</span>
-      <span class="dc-route" style="top:66px;">Cranbrook, BC —</span>
-      <span class="dc-route" style="top:84px;">Jasper, AB</span>
+      <div class="dc-top">
+        <span class="dc-meta">380 mi | 5.5 hrs</span>
+        <span class="dc-day-num">Day 04</span>
+      </div>
+      <div class="dc-date">Mon 6/01</div>
+      <div class="dc-route">Cranbrook, BC —<br>Jasper, AB</div>
     </div>
 
     <!-- Day Card 05 -->
     <div class="day-card" data-day="5">
-      <span class="dc-meta">350 mi | 5.0 hrs</span>
-      <span class="dc-day-num">Day 05</span>
-      <span class="dc-date">Tue 6/02</span>
-      <span class="dc-route" style="top:66px;">Jasper, AB —</span>
-      <span class="dc-route" style="top:84px;">Dawson Creek, BC</span>
+      <div class="dc-top">
+        <span class="dc-meta">440 mi | 6.0 hrs</span>
+        <span class="dc-day-num">Day 05</span>
+      </div>
+      <div class="dc-date">Tue 6/02</div>
+      <div class="dc-route">Jasper, AB —<br>Dawson Creek, BC</div>
     </div>
 
     <!-- Day Card 06 -->
     <div class="day-card" data-day="6">
-      <span class="dc-meta">300 mi | 4.5 hrs</span>
-      <span class="dc-day-num">Day 06</span>
-      <span class="dc-date">Wed 6/03</span>
-      <span class="dc-route" style="top:66px;">Dawson Creek, BC —</span>
-      <span class="dc-route" style="top:84px;">Fort Nelson, BC</span>
+      <div class="dc-top">
+        <span class="dc-meta">470 mi | 7.0 hrs</span>
+        <span class="dc-day-num">Day 06</span>
+      </div>
+      <div class="dc-date">Wed 6/03</div>
+      <div class="dc-route">Dawson Creek, BC —<br>Fort Nelson, BC</div>
     </div>
 
     <!-- Day Card 07 -->
     <div class="day-card" data-day="7">
-      <span class="dc-meta">330 mi | 5.5 hrs</span>
-      <span class="dc-day-num">Day 07</span>
-      <span class="dc-date">Thu 6/04</span>
-      <span class="dc-route" style="top:66px;">Fort Nelson, BC —</span>
-      <span class="dc-route" style="top:84px;">Watson Lake, YT</span>
+      <div class="dc-top">
+        <span class="dc-meta">320 mi | 5.0 hrs</span>
+        <span class="dc-day-num">Day 07</span>
+      </div>
+      <div class="dc-date">Thu 6/04</div>
+      <div class="dc-route">Fort Nelson, BC —<br>Watson Lake, YT</div>
     </div>
 
     <!-- Day Card 08 -->
     <div class="day-card" data-day="8">
-      <span class="dc-meta">270 mi | 4.0 hrs</span>
-      <span class="dc-day-num">Day 08</span>
-      <span class="dc-date">Fri 6/05</span>
-      <span class="dc-route" style="top:66px;">Watson Lake, YT —</span>
-      <span class="dc-route" style="top:84px;">Whitehorse, YT</span>
+      <div class="dc-top">
+        <span class="dc-meta">280 mi | 4.5 hrs</span>
+        <span class="dc-day-num">Day 08</span>
+      </div>
+      <div class="dc-date">Fri 6/05</div>
+      <div class="dc-route">Watson Lake, YT —<br>Whitehorse, YT</div>
     </div>
 
     </div><!-- end .itinerary-content -->
@@ -1732,6 +2080,14 @@
           <div class="dd-camp-header"><span class="dd-camp-label">CAMPGROUND</span><span class="dd-camp-badge">DISPERSED OK NEARBY</span></div>
           <div class="dd-camp-name">Willard Bay State Park — North Marina</div>
           <div class="dd-camp-detail">Electric hookup sites · Flush toilets · Hot showers · Boat ramp<br>Fee: ~$35/night · Phone: 435-734-9494 · willardbaystatepark.com</div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:16px;"></div>
       </div>
@@ -1786,6 +2142,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Cranbrook, BC</div><div class="dd-info-card-sub">Day 03 · 290 mi</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">BORDER CROSSING</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Roosville, MT</div><div class="dd-info-card-sub">US → Canada · ~9AM ideal</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2019,6 +2379,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Dawson Creek, BC</div><div class="dd-info-card-sub">Day 05 · 350 mi</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">MILESTONE</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Mile Zero</div><div class="dd-info-card-sub">Alaska Highway begins</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2069,6 +2433,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Fort Nelson, BC</div><div class="dd-info-card-sub">Day 06 · 300 mi</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">ROAD</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alcan Hwy</div><div class="dd-info-card-sub">Alaska Hwy · Mile 0–300</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2119,6 +2487,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Watson Lake, YT</div><div class="dd-info-card-sub">Day 07 · 330 mi</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">HIGHLIGHT</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Muncho Lake</div><div class="dd-info-card-sub">Liard Hot Springs too</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2169,6 +2541,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">NEXT STOP</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Whitehorse, YT</div><div class="dd-info-card-sub">Day 08 · 270 mi</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">REST DAY</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Whitehorse</div><div class="dd-info-card-sub">Major resupply + rest</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2219,6 +2595,10 @@
         <div class="dd-info-grid">
           <div class="dd-info-card"><div class="dd-info-card-label">PHASE 03 NEXT</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">Alaska Hwy → AK</div><div class="dd-info-card-sub">Days 09+ · Haines Junction</div></div>
           <div class="dd-info-card"><div class="dd-info-card-label">REMAINING</div><div class="dd-info-card-value" style="font-size:14px;padding-top:2px;">~72 days</div><div class="dd-info-card-sub">to Deadhorse, AK</div></div>
+          <div class="dd-camp-tap-hint">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            TAP TO SELECT CAMP · VIEW ALTERNATES
+          </div>
         </div>
         <div style="height:24px;"></div>
       </div>
@@ -2530,6 +2910,29 @@
         iconAnchor: [11, 11],
       });
       const marker = L.marker([poi.coords[1], poi.coords[0]], { icon }).addTo(map);
+
+      // Click: highlight marker + scroll detail panel to matching wp-row
+      marker.on('click', () => {
+        // Open detail panel if collapsed
+        dashboard.classList.remove('detail-collapsed');
+        highlightPOI(day, poi.letter);
+        // Find the wp-row whose badge letter matches and scroll it into view
+        const section = document.querySelector(`.day-section[data-day="${day}"]`);
+        if (!section) return;
+        section.querySelectorAll('.wp-row').forEach(row => {
+          if (row.querySelector('.wp-badge-letter')?.textContent?.trim() === poi.letter) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Clear previous highlight
+            if (window._activeHighlightRow && window._activeHighlightRow !== row) {
+              window._activeHighlightRow.style.background = '';
+            }
+            window._activeHighlightRow = row;
+            row.style.transition = 'background 0.2s';
+            row.style.background = 'rgba(199,116,41,0.4)';
+          }
+        });
+      });
+
       poiMarkerRefs.push({ marker, letter: poi.letter, type: poi.type, id });
     });
   }
@@ -2924,11 +3327,499 @@
     });
   }
 
+
+
   // Run after boot (map ready + initial render done)
   setTimeout(initWaypointExpand, 300);
 
 
 
+</script>
+
+  <!-- ══ OVERNIGHT SLIDE PANEL ═══════════════════════════════ -->
+  <div class="overnight-panel" id="overnight-panel">
+    <div class="op-header">
+      <div class="op-header-left">
+        <span class="op-eyebrow" id="op-eyebrow">OVERNIGHT · DAY 01</span>
+        <span class="op-title" id="op-camp-name">Camp Selection</span>
+      </div>
+      <div class="op-close" id="op-close"><div class="op-close-icon"></div></div>
+    </div>
+    <div class="op-tabs">
+      <div class="op-tab active" id="op-tab-rec">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Recommended
+      </div>
+      <div class="op-tab inactive" id="op-tab-alt">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Alternates
+      </div>
+    </div>
+    <div class="op-scroll" id="op-scroll">
+
+      <!-- RECOMMENDED CONTENT -->
+      <div id="op-rec-content">
+        <div class="op-hero">
+          <img id="op-hero-img" src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=680&h=260&q=80" alt="">
+          <span class="op-hero-lbl" id="op-hero-lbl">CAMP · DAY 01</span>
+          <span class="op-hero-tag">↑ OVERNIGHT</span>
+        </div>
+        <div class="op-body">
+          <div class="op-camp-type-row">
+            <span class="op-camp-type" id="op-camp-type">DISPERSED · LAKEFRONT</span>
+            <span class="op-camp-suit">GX470 SUITABLE</span>
+          </div>
+          <div class="op-name" id="op-name">Willard Bay State Park</div>
+          <div class="op-sub" id="op-sub">Willard, UT · 0.0 mi from route</div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-lbl">NIGHTLY FEE</div><div class="op-stat-val" id="op-fee">$28</div><div class="op-stat-sub">USD per night</div></div>
+            <div class="op-stat"><div class="op-stat-lbl">RATING</div><div class="op-stat-val" id="op-rating">4.3★</div><div class="op-stat-sub">reserveamerica</div></div>
+            <div class="op-stat"><div class="op-stat-lbl">SITES</div><div class="op-stat-val" id="op-sites">25</div><div class="op-stat-sub">flush toilets</div></div>
+            <div class="op-stat"><div class="op-stat-lbl">WATER</div><div class="op-stat-val" id="op-water">Yes</div><div class="op-stat-sub">no hookups</div></div>
+          </div>
+          <div class="op-desc" id="op-desc">Lakefront sites with excellent sunset views. Flat ground, good GX470 pull-through. Fills Friday nights — arrive before 3PM.</div>
+          <div class="op-contact" id="op-contact">reserveamerica.com</div>
+          <div class="op-confirm" id="op-confirm">CONFIRM AS OVERNIGHT STOP →</div>
+        </div>
+      </div>
+
+      <!-- ALTERNATES CONTENT (hidden by default) -->
+      <div id="op-alt-content" style="display:none;">
+        <div class="op-alt-item op-sel">
+          <div class="op-alt-thumb"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=104&h=88&q=75" alt=""></div>
+          <div style="flex:1;min-width:0;"><div class="op-alt-name">Willard Bay State Park</div><div class="op-alt-meta">$28/night · 25 sites · 4.3★ · on route</div></div>
+          <span class="op-alt-badge op-b-camp">CAMP</span>
+        </div>
+        <div class="op-alt-item">
+          <div class="op-alt-thumb"><img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=104&h=88&q=75" alt=""></div>
+          <div style="flex:1;min-width:0;"><div class="op-alt-name">Box Elder Peak Dispersed</div><div class="op-alt-meta">Free · BLM land · no services · +4.2 mi</div></div>
+          <span class="op-alt-badge op-b-disp">DISP</span>
+        </div>
+        <div class="op-alt-item">
+          <div class="op-alt-thumb"><img src="https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=104&h=88&q=75" alt=""></div>
+          <div style="flex:1;min-width:0;"><div class="op-alt-name">Perry / Brigham City KOA</div><div class="op-alt-meta">$55/night · full hookups · showers</div></div>
+          <span class="op-alt-badge op-b-camp">CAMP</span>
+        </div>
+        <div class="op-alt-item">
+          <div class="op-alt-thumb"><img src="https://images.unsplash.com/photo-1519824145371-296894a0daa9?auto=format&fit=crop&w=104&h=88&q=75" alt=""></div>
+          <div style="flex:1;min-width:0;"><div class="op-alt-name">Hampton Inn — Ogden, UT</div><div class="op-alt-meta">~$129/night · shower · laundry · WiFi</div></div>
+          <span class="op-alt-badge op-b-hotel">HOTEL</span>
+        </div>
+        <div class="op-alt-item">
+          <div class="op-alt-thumb"><img src="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=104&h=88&q=75" alt=""></div>
+          <div style="flex:1;min-width:0;"><div class="op-alt-name">Promontory Point BLM</div><div class="op-alt-meta">Free · dispersed · lake views · +8.1 mi</div></div>
+          <span class="op-alt-badge op-b-disp">DISP</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+
+<script>
+  // ═══════════════════════════════════════════════════════════
+  // OVERNIGHT PANEL
+  // ═══════════════════════════════════════════════════════════
+  const overnightPanel  = document.getElementById('overnight-panel');
+  const opClose         = document.getElementById('op-close');
+  const opTabRec        = document.getElementById('op-tab-rec');
+  const opTabAlt        = document.getElementById('op-tab-alt');
+  const opRecContent    = document.getElementById('op-rec-content');
+  const opAltContent    = document.getElementById('op-alt-content');
+
+  // Per-day camp data
+  const CAMP_DATA = {
+    '1': { label:'CAMPGROUND · LAKEFRONT', type:'DISPERSED · LAKEFRONT', name:'Willard Bay State Park — North Marina', sub:'Willard, UT · 0.0 mi from route', fee:'$35', rating:'4.4★', sites:'40', water:'Yes', desc:'Electric hookup sites, flush toilets, hot showers, boat ramp. Fills Friday nights — arrive before 3PM.', contact:'435-734-9494 · willardbaystatepark.com', img:'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=680&h=260&q=80' },
+    '2': { label:'STATE PARK CAMPGROUND', type:'STATE PARK · LAKEFRONT', name:'Whitefish Lake State Park', sub:'Whitefish, MT · 0.3 mi from route', fee:'$28', rating:'4.5★', sites:'25', water:'Yes', desc:'Sits right on the water — excellent sunset. Flat sites, good GX470 access. Town walkable from camp.', contact:'406-862-3991 · reserveamerica.com', img:'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=680&h=260&q=80' },
+    '3': { label:'PROVINCIAL PARK', type:'PROVINCIAL PARK · LAKESIDE', name:'Jimsmith Lake Provincial Park', sub:'Cranbrook, BC · 5 km south of town', fee:'$20 CAD', rating:'4.2★', sites:'30', water:'Yes', desc:'Quiet lake campground in the pines. Arrive early on Fridays. Good wildlife watching in the evening.', contact:'discovercamping.ca', img:'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=680&h=260&q=80' },
+    '4': { label:'NATIONAL PARK CAMPGROUND', type:'NP CAMPGROUND', name:'Whistlers Campground — Jasper, AB', sub:'Jasper, AB · 3 km south of townsite', fee:'$38 CAD', rating:'4.6★', sites:'781', water:'Yes', desc:'Jasper\'s main campground. Well-run, good facilities, mountain views. Arrive early on Saturdays.', contact:'reservation.pc.gc.ca', img:'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=680&h=260&q=80' },
+    '5': { label:'RV PARK / CAMPGROUND', type:'RV PARK · FULL HOOKUPS', name:'Northern Lights RV Park', sub:'Dawson Creek, BC · city centre', fee:'$40 CAD', rating:'4.1★', sites:'60', water:'Yes', desc:'Full hookup sites, showers, laundry, WiFi. Good base for vehicle check before the Alcan.', contact:'250-782-9433', img:'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=680&h=260&q=80' },
+    '6': { label:'MUNICIPAL CAMPGROUND', type:'MUNICIPAL · SERVICED', name:'Westend Campground — Fort Nelson, BC', sub:'Fort Nelson, BC · last services 530 mi', fee:'$25 CAD', rating:'3.9★', sites:'35', water:'Yes', desc:'Serviced and unserviced sites. Last full-service stop before Watson Lake, YT.', contact:'250-774-2340', img:'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=680&h=260&q=80' },
+    '7': { label:'TERRITORIAL CAMPGROUND', type:'TERRITORIAL · SIGN POST FOREST', name:'Watson Lake Campground', sub:'Watson Lake, YT · walk to Sign Post Forest', fee:'$12 CAD', rating:'4.0★', sites:'60', water:'Yes', desc:'First come first served. Walk to Sign Post Forest: 5 min. Bring a sign to add.', contact:'yukon.ca/camping', img:'https://images.unsplash.com/photo-1519824145371-296894a0daa9?auto=format&fit=crop&w=680&h=260&q=80' },
+    '8': { label:'RV PARK — FULL SERVICE', type:'RV PARK · FULL SERVICE', name:'Hi Country RV Park — Whitehorse, YT', sub:'Whitehorse, YT · walking distance to town', fee:'$45 CAD', rating:'4.4★', sites:'80', water:'Yes', desc:'Full hookups, showers, laundry. Walking distance to Whitehorse riverfront and SS Klondike sternwheeler.', contact:'867-667-7445 · hicountryrvpark.com', img:'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=680&h=260&q=80' },
+  };
+
+  function openOvernightPanel(day) {
+    const data = CAMP_DATA[day];
+    if (!data) return;
+
+    // Populate content
+    document.getElementById('op-eyebrow').textContent   = `OVERNIGHT · DAY ${String(day).padStart(2,'0')}`;
+    document.getElementById('op-hero-img').src          = data.img;
+    document.getElementById('op-hero-lbl').textContent  = `${data.label} · DAY ${String(day).padStart(2,'0')}`;
+    document.getElementById('op-camp-type').textContent = data.type;
+    document.getElementById('op-name').textContent      = data.name;
+    document.getElementById('op-sub').textContent       = data.sub;
+    document.getElementById('op-fee').textContent       = data.fee;
+    document.getElementById('op-rating').textContent    = data.rating;
+    document.getElementById('op-sites').textContent     = data.sites;
+    document.getElementById('op-water').textContent     = data.water;
+    document.getElementById('op-desc').textContent      = data.desc;
+    document.getElementById('op-contact').textContent   = data.contact;
+
+    // Reset to recommended tab
+    switchOpTab('rec');
+
+    // Pin panel to LEFT edge of dashboard
+    const db = document.querySelector('.dashboard').getBoundingClientRect();
+    overnightPanel.style.top    = (db.top + 60) + 'px';
+    overnightPanel.style.left   = db.left + 'px';
+    overnightPanel.style.bottom = (window.innerHeight - db.bottom) + 'px';
+    overnightPanel.style.right  = '';
+    overnightPanel.classList.add('open');
+  }
+
+  function switchOpTab(which) {
+    if (which === 'rec') {
+      opTabRec.className = 'op-tab active';
+      opTabAlt.className = 'op-tab inactive';
+      opRecContent.style.display = '';
+      opAltContent.style.display = 'none';
+    } else {
+      opTabRec.className = 'op-tab inactive';
+      opTabAlt.className = 'op-tab active';
+      opRecContent.style.display = 'none';
+      opAltContent.style.display = '';
+    }
+    document.getElementById('op-scroll').scrollTop = 0;
+  }
+
+  if (opClose) opClose.addEventListener('click', () => { overnightPanel.classList.remove('open'); });
+  opTabRec.addEventListener('click', () => switchOpTab('rec'));
+  opTabAlt.addEventListener('click', () => switchOpTab('alt'));
+
+  // Move panel to body so it's not clipped by any ancestor overflow
+  document.body.appendChild(overnightPanel);
+
+  // Wire all camp blocks to open the panel
+  document.querySelectorAll('.dd-camp-block').forEach(block => {
+    block.addEventListener('click', () => {
+      const section = block.closest('.day-section');
+      const day = section?.dataset?.day;
+      if (day) openOvernightPanel(day);
+    });
+  });
+
+  document.getElementById('op-confirm').addEventListener('click', () => {
+    overnightPanel.classList.remove('open');
+  });
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CREATOR — Photo → Trip Builder
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const overlay    = document.getElementById('creator-overlay');
+  const fileInput  = document.getElementById('creator-file-input');
+  const drop       = fileInput; // no dedicated drop zone in new UI
+  const scanning   = document.getElementById('creator-scanning');
+  const thumbRow   = document.getElementById('creator-thumb-row');
+  const statusTxt  = document.getElementById('creator-status-txt');
+  const discovery  = document.getElementById('creator-discovery') || {};
+  const scanPanel  = document.getElementById('creator-scan-panel');
+  const scanGrid   = document.getElementById('creator-scan-grid');
+  const scanLbl    = document.getElementById('creator-scan-lbl');
+  const headline   = null; // removed in new UI
+  const LETTERS    = ['A','B','C','D'];
+
+  let creatorState = { thumbUrls: [], locations: [], itin: null };
+
+  // Wire drop zone to chat column
+  const chatCol = document.querySelector('.hp-chat-col');
+  if (chatCol) {
+    chatCol.addEventListener('dragover', e => { e.preventDefault(); chatCol.style.background = 'rgba(199,116,41,0.06)'; });
+    chatCol.addEventListener('dragleave', () => chatCol.style.background = ''); 
+    chatCol.addEventListener('drop', e => { e.preventDefault(); chatCol.style.background = ''; creator_run(e.dataTransfer.files); });
+  }
+  const attachBtn = document.querySelector('.hp-attach-btn');
+  if (attachBtn) attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => creator_run(e.target.files));
+
+  // Home button: open overlay; X on overlay closes it
+  document.getElementById('topbar-hamburger').addEventListener('click', function(e) {
+    const isHidden = overlay.style.display === 'none' || overlay.style.display === '';
+    if (isHidden) {
+      e.stopImmediatePropagation();
+      overlay.classList.remove('fade-out');
+      overlay.style.display = 'flex';
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.style.opacity = '1'; }, 10);
+      document.getElementById('icon-home').style.display = 'none';
+      document.getElementById('icon-close').style.display = '';
+    }
+  }, true);
+
+  // X button is the hp-header-x element in the HTML
+  const creatorCloseBtn = document.getElementById('hp-header-x');
+
+  function closeHomepage() {
+    overlay.classList.add('fade-out');
+    // Hide day column during fade to prevent bleed-through
+    const dayCol = document.querySelector('.day-column');
+    const itinHdr = document.querySelector('.itin-header');
+    if (dayCol) dayCol.style.visibility = 'hidden';
+    if (itinHdr) itinHdr.style.visibility = 'hidden';
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      overlay.classList.remove('fade-out');
+      if (dayCol) dayCol.style.visibility = '';
+      if (itinHdr) itinHdr.style.visibility = '';
+      if (window.setActiveCard) window.setActiveCard(1);
+      if (window.renderMap)     window.renderMap(1, true);
+    }, 420);
+    document.getElementById('icon-home').style.display = '';
+    document.getElementById('icon-close').style.display = 'none';
+  }
+
+  creatorCloseBtn.addEventListener('click', closeHomepage);
+
+  // Resume card loads dashboard directly
+  const resumeCard = document.getElementById('hp-resume-card');
+  if (resumeCard) {
+    resumeCard.addEventListener('click', closeHomepage);
+  }
+
+  // New trip nav item opens file picker
+  const navNew = document.getElementById('hp-nav-new');
+  if (navNew) {
+    navNew.addEventListener('click', () => {
+      document.getElementById('creator-file-input').click();
+    });
+  }
+
+  function creator_setPhase(n) {
+    ['cps-1','cps-2','cps-3','cps-4'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.className = 'creator-phase-step' + (i+1 < n ? ' cps-done' : i+1 === n ? ' cps-active' : '');
+    });
+  }
+
+  function creator_setStatus(msg) {
+    statusTxt.textContent = msg;
+  }
+
+  function creator_toBase64(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = () => rej(new Error('read failed'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function creator_identifyLocation(base64, mediaType) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': document.getElementById('creator-api-key').value.trim(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: 'Identify the location in this photo. Look for road signs, terrain, landmarks, vegetation, architecture, license plates, trail markers, or geographic clues.\n\nRespond ONLY with valid JSON (no markdown):\n{"location":"City, State, Country","short":"Short 2-3 word label","lat":number_or_null,"lng":number_or_null,"confidence":0.0-1.0,"clues":"visual clues used","terrain":"highway/desert/mountain/forest/coastal/urban/canyon"}' }
+            ]
+          }]
+        })
+      });
+      if (!resp.ok) throw new Error('API ' + resp.status);
+      const data = await resp.json();
+      const text = (data.content.find(b => b.type === 'text') || {}).text || '{}';
+      return JSON.parse(text.replace(/```json|```/g,'').trim());
+    } catch(e) {
+      return { location: 'Unknown Location', short: 'Unknown', confidence: 0, clues: 'Could not identify', terrain: 'unknown' };
+    }
+  }
+
+  async function creator_buildItinerary(locs) {
+    const locSummary = locs.map((l,i) =>
+      `Day ${i+1}: ${l.location || 'Unknown'} (terrain: ${l.terrain || 'unknown'}, lat: ${l.lat || 'unknown'}, lng: ${l.lng || 'unknown'})`
+    ).join('\n');
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': document.getElementById('creator-api-key').value.trim(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2500,
+          messages: [{
+            role: 'user',
+            content: `You are an expert overland expedition planner. Build a ${locs.length}-day itinerary for a 2004 Lexus GX470, solo driver, photography-focused, dispersed camping preferred. These are the photo locations in order:\n\n${locSummary}\n\nRespond ONLY with valid JSON (no markdown):\n{"trip_name":"evocative name","total_miles":number,"days":[{"day":1,"from":"start","to":"end","miles":number,"drive_hours":number,"headline":"short evocative title","overview":"2-3 sentences","stops":[{"name":"stop name","note":"short note","type":"viewpoint|fuel|food|camp","is_photo_location":true/false}],"overnight":"camp recommendation","lat":number,"lng":number}]}`
+          }]
+        })
+      });
+      if (!resp.ok) throw new Error('API ' + resp.status);
+      const data = await resp.json();
+      const text = (data.content.find(b => b.type === 'text') || {}).text || '{}';
+      return JSON.parse(text.replace(/```json|```/g,'').trim());
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function creator_makeScanCard(i, imgUrl, loc) {
+    const div = document.createElement('div');
+    div.className = 'creator-scan-card' + (loc ? ' csc-found' : '');
+    div.id = 'csc-' + i;
+    div.innerHTML = `
+      <div class="csc-thumb"><img src="${imgUrl}" alt=""></div>
+      <div class="csc-body">
+        <div class="csc-lbl">DAY ${i+1} · ${LETTERS[i]}</div>
+        ${loc
+          ? `<div class="csc-loc">${loc.short || 'Unknown'}</div>
+             <div class="csc-detail">${loc.location || ''}</div>
+             <div class="csc-clues">${Math.round((loc.confidence||0)*100)}% · ${loc.clues || ''}</div>`
+          : `<div style="display:flex;gap:4px;margin-top:6px;">
+               <span style="width:5px;height:5px;border-radius:50%;background:#c77429;animation:cpulse 1s 0s infinite;display:inline-block;"></span>
+               <span style="width:5px;height:5px;border-radius:50%;background:#c77429;animation:cpulse 1s .2s infinite;display:inline-block;"></span>
+               <span style="width:5px;height:5px;border-radius:50%;background:#c77429;animation:cpulse 1s .4s infinite;display:inline-block;"></span>
+             </div>
+             <div class="csc-detail" style="margin-top:5px;color:#444;">Scanning image...</div>`
+        }
+      </div>`;
+    return div;
+  }
+
+  async function creator_run(files) {
+    const apiKey = document.getElementById('creator-api-key').value.trim();
+    if (!apiKey || !apiKey.startsWith('sk-')) {
+      const keyInput = document.getElementById('creator-api-key');
+      keyInput.style.borderColor = 'rgba(199,116,41,0.8)';
+      keyInput.placeholder = 'PASTE YOUR API KEY FIRST';
+      keyInput.focus();
+      return;
+    }
+    const arr = Array.from(files).slice(0, 4);
+    if (arr.length < 2) {
+      creator_setStatus('DROP AT LEAST 2 PHOTOS TO BUILD A ROUTE');
+      return;
+    }
+
+    creatorState.thumbUrls = arr.map(f => URL.createObjectURL(f));
+    creatorState.locations = [];
+    creatorState.itin = null;
+
+    // Show scanning state
+
+    if (scanning) scanning.style.display = 'flex';
+
+    // Show right panel for scan results
+    // show scan results in discovery panel
+    if (scanPanel) { scanPanel.style.display = 'block'; }
+    scanGrid.innerHTML = '';
+    scanLbl.textContent = 'READING LOCATIONS...';
+
+    // Build thumb row + placeholder scan cards
+    thumbRow.innerHTML = '';
+    for (let i = 0; i < arr.length; i++) {
+      const t = document.createElement('div');
+      t.className = 'creator-thumb'; t.id = 'ct-' + i;
+      t.innerHTML = `<img src="${creatorState.thumbUrls[i]}" alt=""><div class="ct-badge">${LETTERS[i]}</div>`;
+      thumbRow.appendChild(t);
+      scanGrid.appendChild(creator_makeScanCard(i, creatorState.thumbUrls[i], null));
+    }
+
+    // ── PHASE 1 ───────────────────────────────────────────────
+    creator_setPhase(1);
+    creator_setStatus('READING ' + arr.length + ' PHOTOS...');
+    await delay(300);
+
+    // ── PHASE 2: ID locations ─────────────────────────────────
+    creator_setPhase(2);
+    for (let i = 0; i < arr.length; i++) {
+      document.getElementById('ct-' + i).classList.add('ct-active');
+      creator_setStatus(`CLAUDE READING IMAGE ${i+1} OF ${arr.length}...`);
+      const b64 = await creator_toBase64(arr[i]);
+      const loc = await creator_identifyLocation(b64, arr[i].type || 'image/jpeg');
+      creatorState.locations.push(loc);
+      // Update scan card
+      const old = document.getElementById('csc-' + i);
+      const updated = creator_makeScanCard(i, creatorState.thumbUrls[i], loc);
+      scanGrid.replaceChild(updated, old);
+      document.getElementById('ct-' + i).classList.remove('ct-active');
+      document.getElementById('ct-' + i).classList.add('ct-done');
+    }
+    scanLbl.textContent = arr.length + ' LOCATIONS IDENTIFIED';
+
+    // ── PHASE 3: build itinerary ──────────────────────────────
+    creator_setPhase(3);
+    creator_setStatus('BUILDING YOUR ' + arr.length + '-DAY ITINERARY...');
+    const itin = await creator_buildItinerary(creatorState.locations);
+    creatorState.itin = itin;
+
+    // ── PHASE 4: load into dashboard ──────────────────────────
+    creator_setPhase(4);
+    creator_setStatus('LOADING INTO DASHBOARD...');
+    await delay(500);
+    creator_loadIntoDashboard(itin, creatorState.locations, creatorState.thumbUrls);
+  }
+
+  function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function creator_loadIntoDashboard(itin, locs, thumbUrls) {
+    if (!itin || !itin.days || !itin.days.length) {
+      creator_setStatus('ERROR BUILDING ITINERARY · TRY AGAIN');
+      return;
+    }
+
+    // Update topbar title
+    document.querySelector('.topbar-title').textContent = itin.trip_name || 'YOUR OVERLAND TRIP';
+
+    // Update topbar title in sector header
+    const shTitle = document.getElementById('sh-title');
+
+    // Patch DAY_DATA with generated days
+    itin.days.forEach((day, i) => {
+      const d = i + 1;
+      if (window.DAY_DATA && window.DAY_DATA[d]) {
+        window.DAY_DATA[d].sector = day.headline || day.from + ' → ' + day.to;
+        if (day.lat && day.lng) {
+          window.DAY_DATA[d].gps = [day.lat, day.lng];
+        }
+      }
+    });
+
+    // Patch CAMP_DATA with overnight recommendations
+    itin.days.forEach((day, i) => {
+      const d = i + 1;
+      if (window.CAMP_DATA && window.CAMP_DATA[d] && day.overnight) {
+        window.CAMP_DATA[d].name = day.overnight;
+        window.CAMP_DATA[d].desc = day.overview || '';
+      }
+    });
+
+    // Update day detail headers with generated content
+    itin.days.forEach((day, i) => {
+      const d = i + 1;
+      // Update photo card if exists
+      const photoCards = document.querySelectorAll(`.day-section[data-day="${d}"] .photo-card img`);
+      if (photoCards.length && thumbUrls[i]) {
+        photoCards[0].src = thumbUrls[i];
+      }
+      // Update photo card label
+      const lbls = document.querySelectorAll(`.day-section[data-day="${d}"] .photo-card-label`);
+      if (lbls.length) lbls[0].textContent = (day.headline || '').toUpperCase() + ' · DAY ' + String(d).padStart(2,'0');
+      // Update route in dd-header
+      const routes = document.querySelectorAll(`.day-section[data-day="${d}"] .dd-route`);
+      if (routes.length) routes[0].textContent = (day.from || '') + ' — ' + (day.to || '');
+    });
+
+    // Fade out overlay
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      // Initialize dashboard to day 1
+      if (window.setActiveCard) window.setActiveCard(1);
+      if (window.renderMap)     window.renderMap(1, true);
+    }, 420);
+  }
+
+})();
 </script>
 
 </div>
