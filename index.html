@@ -1570,7 +1570,6 @@
     justify-content: flex-start;
     overflow-y: auto;
     padding: 16px 0 16px;
-    margin-bottom: 50px;
   }
   .hp-globe {
     width: 88px; height: 88px;
@@ -6221,7 +6220,7 @@ window.AskAnything = (function() {
     if (this.feed) return this.feed;
     this.feed = document.createElement('div');
     this.feed.className = 'aa-chat-feed';
-    this.feed.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:70px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px 24px;display:flex;flex-direction:column;gap:10px;';
+    this.feed.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:70px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px 30px;display:flex;flex-direction:column;gap:10px;';
     this.container.appendChild(this.feed);
     if (this.chatInner) { this.chatInner.style.display = 'none'; this.chatInner.classList.add('has-results'); }
     if (this.inputWrap) this.inputWrap.style.cssText += 'position:absolute;bottom:0;left:0;right:0;';
