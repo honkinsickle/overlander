@@ -2153,6 +2153,10 @@
     <span class="vnav-item-label">Trips</span>
   </div>
   <div class="vnav-spacer"></div>
+  <div class="vnav-item vnav-inactive" id="vnav-signout" style="height:56px;border-bottom:none;border-top:0.5px solid rgba(255,255,255,0.06);">
+    <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    <span class="vnav-item-label" style="font-size:9px;">Sign Out</span>
+  </div>
 </nav>
 <div class="dashboard sidebar-hidden">
   <!-- ── iOS GRABBER BAR ── -->
@@ -6489,22 +6493,17 @@ window.AskAnything = (function() {
     passEl.addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(false); });
   }
 
-  // ── Sign out button ───────────────────────────────────────
+  // ── Sign out ───────────────────────────────────────────────
+  function doSignOut() {
+    api('/auth/signout', { method: 'POST' }).catch(() => {});
+    localStorage.removeItem(LS.token); localStorage.removeItem(LS.refresh); localStorage.removeItem(LS.uid);
+    location.reload();
+  }
+
   function addSignOutBtn() {
-    const topbar = document.querySelector('.topbar');
-    if (!topbar || document.getElementById('signout-btn')) return;
-    const btn = document.createElement('span');
-    btn.id = 'signout-btn';
-    btn.textContent = 'SIGN OUT';
-    btn.style.cssText = "position:absolute;right:16px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:#888;cursor:pointer";
-    btn.onmouseenter = () => btn.style.color = '#eceae4';
-    btn.onmouseleave = () => btn.style.color = '#888';
-    btn.onclick = async () => {
-      await api('/auth/signout', { method: 'POST' }).catch(() => {});
-      localStorage.removeItem(LS.token); localStorage.removeItem(LS.refresh); localStorage.removeItem(LS.uid);
-      location.reload();
-    };
-    topbar.appendChild(btn);
+    // Wire vnav sign-out button
+    const vnavBtn = document.getElementById('vnav-signout');
+    if (vnavBtn) vnavBtn.onclick = doSignOut;
   }
 
   // ── Trip persistence ──────────────────────────────────────
