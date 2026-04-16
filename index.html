@@ -6416,6 +6416,10 @@ window.AskAnything = (function() {
         window._authToken = null;
       }
     }
+    if (!window._authToken) {
+      showAuthModal();
+      return;
+    }
     loadTrips();
     // Auto-open Trips screen on boot
     setTimeout(() => {
