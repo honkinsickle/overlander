@@ -6880,13 +6880,38 @@ window.AskAnything = (function() {
     const completeEl = addMsg(
       `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
         `<span><span style="color:#4caf6a;font-weight:600;">Trip complete</span> — ${manifest.days.length - failedCount} of ${manifest.days.length} days ready</span>` +
-        `<button id="aa-save-trip-btn" style="flex-shrink:0;padding:7px 16px;background:rgba(199,116,41,0.15);border:1px solid rgba(199,116,41,0.5);border-radius:8px;font-family:var(--ff-mono);font-size:10px;letter-spacing:0.08em;color:#c77429;cursor:pointer;text-transform:uppercase;transition:all 0.2s;">SAVE AS TRIP</button>` +
+        `<div style="display:flex;gap:8px;flex-shrink:0;">` +
+          `<button id="aa-clear-chat-btn" style="padding:7px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-family:var(--ff-mono);font-size:10px;letter-spacing:0.08em;color:#888;cursor:pointer;text-transform:uppercase;transition:all 0.2s;">CLEAR</button>` +
+          `<button id="aa-save-trip-btn" style="padding:7px 16px;background:rgba(199,116,41,0.15);border:1px solid rgba(199,116,41,0.5);border-radius:8px;font-family:var(--ff-mono);font-size:10px;letter-spacing:0.08em;color:#c77429;cursor:pointer;text-transform:uppercase;transition:all 0.2s;">SAVE AS TRIP</button>` +
+        `</div>` +
       `</div>`,
       'background:rgba(76,175,106,0.08);border:1px solid rgba(76,175,106,0.2);border-radius:8px;padding:10px 13px;font-size:13px;color:#eceae4;line-height:1.5;'
     );
 
-    // Wire Save as Trip button
+    // Wire Clear + Save buttons
     setTimeout(() => {
+      // Clear button — reset chat to initial state
+      const clearBtn = document.getElementById('aa-clear-chat-btn');
+      if (clearBtn) {
+        clearBtn.onmouseenter = () => { clearBtn.style.background = 'rgba(255,255,255,0.1)'; clearBtn.style.color = '#aaa'; };
+        clearBtn.onmouseleave = () => { clearBtn.style.background = 'rgba(255,255,255,0.05)'; clearBtn.style.color = '#888'; };
+        clearBtn.onclick = () => {
+          const chatInner = document.querySelector('.hp-chat-inner');
+          if (chatInner) {
+            chatInner.classList.remove('has-results');
+            // Re-inject initial content
+            chatInner.innerHTML = `
+              <div class="hp-globe"><img src="/images/map.png" width="104" height="104" alt="map" style="border-radius:12px;"></div>
+              <div class="hp-headline">Where to today?</div>
+              <div class="hp-subhead">Hey there, I'm here to help you plan your next overland expedition. Ask me anything — destination info, route planning, gear, permits.</div>
+              <div class="hp-suggest-row">
+                <div class="hp-suggest-pill">What can I ask?</div>
+              </div>
+            `;
+          }
+        };
+      }
+
       const saveBtn = document.getElementById('aa-save-trip-btn');
       if (saveBtn) {
         saveBtn.onmouseenter = () => { saveBtn.style.background = 'rgba(199,116,41,0.3)'; saveBtn.style.color = '#e8a04e'; };
