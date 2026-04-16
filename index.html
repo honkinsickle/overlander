@@ -6535,31 +6535,37 @@ window.AskAnything = (function() {
     }
   }, 50 * 60 * 1000);
 
-  // ── Handle OAuth callback (tokens in hash) ────────────────
+  // ── Handle OAuth callback (Supabase implicit flow — tokens in hash) ──
   function handleOAuthCallback() {
     const hash = window.location.hash;
-    if (!hash.startsWith('#auth=')) return false;
-    const params = new URLSearchParams(hash.slice(6));
+    if (!hash || !hash.includes('access_token=')) return false;
+    const params = new URLSearchParams(hash.substring(1));
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
-    const userId = params.get('user_id');
-    const email = params.get('email');
     if (!accessToken) return false;
 
     localStorage.setItem(LS.token, accessToken);
     if (refreshToken) localStorage.setItem(LS.refresh, refreshToken);
-    if (userId) localStorage.setItem(LS.uid, userId);
     window._authToken = accessToken;
-    window._authUser = { id: userId, email: email };
 
     // Clear hash from URL
     history.replaceState(null, '', window.location.pathname);
-    addSignOutBtn();
-    loadTrips();
-    setTimeout(() => {
-      const tb = document.querySelector('[data-vnav="trips"]');
-      if (tb) tb.click();
-    }, 100);
+
+    // Fetch user info with the token, then mirror to public.users
+    api('/auth/me').then(res => {
+      if (res.ok) {
+        window._authUser = { id: res.user.id, email: res.user.email };
+        localStorage.setItem(LS.uid, res.user.id);
+        addSignOutBtn();
+        // Mirror into public.users table via a lightweight endpoint
+        api('/auth/mirror', { method: 'POST' });
+      }
+      loadTrips();
+      setTimeout(() => {
+        const tb = document.querySelector('[data-vnav="trips"]');
+        if (tb) tb.click();
+      }, 100);
+    });
     return true;
   }
 
