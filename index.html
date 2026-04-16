@@ -6221,7 +6221,7 @@ window.AskAnything = (function() {
     if (this.feed) return this.feed;
     this.feed = document.createElement('div');
     this.feed.className = 'aa-chat-feed';
-    this.feed.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:70px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px;display:flex;flex-direction:column;gap:10px;';
+    this.feed.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:70px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 18px 24px;display:flex;flex-direction:column;gap:10px;';
     this.container.appendChild(this.feed);
     if (this.chatInner) { this.chatInner.style.display = 'none'; this.chatInner.classList.add('has-results'); }
     if (this.inputWrap) this.inputWrap.style.cssText += 'position:absolute;bottom:0;left:0;right:0;';
@@ -6406,23 +6406,23 @@ window.AskAnything = (function() {
   // ── Auth state check ──────────────────────────────────────
   async function checkAuth() {
     const token = localStorage.getItem(LS.token);
-    if (!token) { showAuthModal(); return; }
-    window._authToken = token;
-    const res = await api('/auth/me');
-    if (res.ok) {
-      window._authUser = { id: res.user.id, email: res.user.email };
-      addSignOutBtn();
-      loadTrips();
-      // Auto-open Trips screen on boot
-      setTimeout(() => {
-        const tb = document.querySelector('[data-vnav="trips"]');
-        if (tb) tb.click();
-      }, 100);
-    } else {
-      localStorage.removeItem(LS.token); localStorage.removeItem(LS.refresh); localStorage.removeItem(LS.uid);
-      window._authToken = null;
-      showAuthModal();
+    if (token) {
+      window._authToken = token;
+      const res = await api('/auth/me');
+      if (res.ok) {
+        window._authUser = { id: res.user.id, email: res.user.email };
+        addSignOutBtn();
+      } else {
+        localStorage.removeItem(LS.token); localStorage.removeItem(LS.refresh); localStorage.removeItem(LS.uid);
+        window._authToken = null;
+      }
     }
+    loadTrips();
+    // Auto-open Trips screen on boot
+    setTimeout(() => {
+      const tb = document.querySelector('[data-vnav="trips"]');
+      if (tb) tb.click();
+    }, 100);
   }
 
   // ── Sign-in modal ─────────────────────────────────────────
@@ -6686,10 +6686,6 @@ window.AskAnything = (function() {
   let _currentManifest = null;
 
   async function generateTrip(prompt) {
-    if (!window._authToken) {
-      addMsg('Sign in to generate trips.', 'font-size:12px;color:#e85c3c;padding:6px 0;');
-      return;
-    }
 
     // Extract days from prompt (e.g. "13-day" or "13 day")
     const daysMatch = prompt.match(/(\d+)\s*-?\s*days?/i);
