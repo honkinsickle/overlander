@@ -238,10 +238,13 @@
     position: absolute;
     top: 50px; left: 196px;
     width: 216px; height: calc(100% - 50px);
-    background: var(--bg-card);
+    background:
+      /* topo contour lines */
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='216' height='320' viewBox='0 0 216 320'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='0.5' opacity='0.09'%3E%3Cellipse cx='160' cy='40' rx='90' ry='35'/%3E%3Cellipse cx='155' cy='42' rx='70' ry='26'/%3E%3Cellipse cx='150' cy='44' rx='50' ry='18'/%3E%3Cellipse cx='145' cy='45' rx='30' ry='10'/%3E%3Cpath d='M0,110 Q50,85 108,95 T216,80'/%3E%3Cpath d='M0,120 Q60,95 108,105 T216,92'/%3E%3Cpath d='M0,130 Q70,108 108,115 T216,104'/%3E%3Cellipse cx='60' cy='190' rx='85' ry='40'/%3E%3Cellipse cx='65' cy='192' rx='65' ry='30'/%3E%3Cellipse cx='70' cy='194' rx='45' ry='20'/%3E%3Cellipse cx='75' cy='195' rx='25' ry='10'/%3E%3Cpath d='M0,260 Q80,235 140,250 T216,240'/%3E%3Cpath d='M0,272 Q90,248 140,260 T216,252'/%3E%3Cpath d='M0,284 Q100,262 140,272 T216,264'/%3E%3Cellipse cx='180' cy='310' rx='60' ry='25'/%3E%3Cellipse cx='175' cy='312' rx='40' ry='16'/%3E%3C/g%3E%3C/svg%3E") repeat-y,
+      var(--bg-card);
     border-right: 1px solid var(--border-subtle);
     z-index: 9;
-    overflow-y: auto;   /* FIX: was 'hidden' — now scrollable */
+    overflow-y: auto;
     overflow-x: hidden;
     box-shadow: 4px 0 12px rgba(0,0,0,0.5);
     opacity: 0;
@@ -1566,7 +1569,7 @@
   .hp-chat-inner.has-results {
     justify-content: flex-start;
     overflow-y: auto;
-    padding: 16px 0 0;
+    padding: 16px 0 80px;
   }
   .hp-globe {
     width: 88px; height: 88px;
@@ -1583,10 +1586,10 @@
   .hp-input-wrap { padding: 10px 14px 14px; border-top: 1px solid rgba(255,255,255,0.06); }
   .hp-input-row {
     display: flex; align-items: center; gap: 8px; position: relative;
-    background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(30,31,33,0.9); border: 1px solid rgba(255,255,255,0.16);
     border-radius: 10px; padding: 10px 12px; margin-bottom: 6px;
   }
-  .hp-input-row:focus-within { border-color: rgba(199,116,41,0.5); background: rgba(255,255,255,0.12); }
+  .hp-input-row:focus-within { border-color: rgba(199,116,41,0.5); background: #252627; }
   .hp-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--ff-sans); font-size: 14px; color: #ECEAE4; position: relative; z-index: 1; }
   .hp-input::placeholder { color: #666; }
   .hp-input-ghost {
@@ -3829,7 +3832,9 @@
       c.querySelectorAll('.dc-meta, .dc-day-num, .dc-date, .dc-route').forEach(el => {
         el.classList.toggle('active', on);
       });
-      if (on) c.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (on && dayColumn) {
+        dayColumn.scrollTop = c.offsetTop;
+      }
     });
     // Green bg on the matching sticky day header — use setProperty to avoid cssText accumulation
     document.querySelectorAll('.dd-header[data-day]').forEach(h => {
@@ -3846,12 +3851,16 @@
     });
   }
 
+  let _scrollSyncLocked = false;
+
   document.querySelectorAll('.day-card[data-day]').forEach(card => {
     card.addEventListener('click', () => {
       const wasCollapsed = dashboard.classList.contains('detail-collapsed');
       dashboard.classList.remove('detail-collapsed');
       const day = card.dataset.day;
       const header = document.getElementById('day-header-' + day);
+      // Lock scroll sync so detail-scroll doesn't fight the day column scroll
+      _scrollSyncLocked = true;
       if (header) {
         detailScroll.scrollTo({ top: header.closest('.day-section').offsetTop, behavior: 'smooth' });
       }
@@ -3860,10 +3869,12 @@
       // Sync phase header when clicking day cards
       const phase = DAY_PHASE_MAP[day] || '01';
       updatePhaseHeader(phase);
+      setTimeout(() => { _scrollSyncLocked = false; }, 800);
     });
   });
 
   function updateActiveFromScroll() {
+    if (_scrollSyncLocked) return;
     const containerTop = detailScroll.getBoundingClientRect().top;
     let activeDay = '1', activePhase = '01';
     document.querySelectorAll('.day-section[data-day]').forEach(section => {
@@ -4712,7 +4723,8 @@ window.TripItinerary = (function() {
     var trip = this.trip;
     this.days = (trip.days_data && trip.days_data.days) || trip.days || [];
     this.phases = (trip.days_data && trip.days_data.phases) || [];
-    if (!this.days.length) return;
+    console.log('[TripItinerary] init — name:', trip.name, 'days:', this.days.length, 'has days_data:', !!trip.days_data, 'first day:', this.days[0]?.from, '→', this.days[0]?.to);
+    if (!this.days.length) { console.warn('[TripItinerary] No days — aborting'); return; }
 
     // Normalize fields
     this.days.forEach(function(d) {
@@ -4756,7 +4768,14 @@ window.TripItinerary = (function() {
     if (!place) return null;
     if (this._geoCache[place]) return this._geoCache[place];
     try {
-      var res = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(place) + '.json?limit=1&access_token=' + MAPBOX_TK);
+      // Use proximity bias from nearby known coordinates to improve accuracy
+      var proximityParam = '';
+      var knownCoords = Object.values(this._geoCache);
+      if (knownCoords.length > 0) {
+        var last = knownCoords[knownCoords.length - 1];
+        proximityParam = '&proximity=' + last[0] + ',' + last[1];
+      }
+      var res = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(place) + '.json?limit=1&types=place,locality' + proximityParam + '&access_token=' + MAPBOX_TK);
       var json = await res.json();
       if (json.features && json.features[0] && json.features[0].center) {
         this._geoCache[place] = json.features[0].center;
@@ -4814,13 +4833,13 @@ window.TripItinerary = (function() {
 
   proto._buildRouteSegments = async function() {
     var self = this;
-    // Geocode all unique city names in parallel
-    var allPlaces = new Set();
-    this.days.forEach(function(day) {
-      if (day.from) allPlaces.add(day.from);
-      if (day.to) allPlaces.add(day.to);
-    });
-    await Promise.all(Array.from(allPlaces).map(function(p) { return self._geocode(p); }));
+    // Geocode city names in route order so proximity bias works
+    // (each city uses the previous city's coordinates for disambiguation)
+    for (var i = 0; i < this.days.length; i++) {
+      var day = this.days[i];
+      if (day.from) await this._geocode(day.from);
+      if (day.to) await this._geocode(day.to);
+    }
 
     // Build segments
     this.days.forEach(function(day) {
@@ -5094,7 +5113,7 @@ window.TripItinerary = (function() {
     var self = this;
     var col = document.createElement('div');
     col.className = 'day-column';
-    col.style.cssText = 'position:absolute;top:60px;left:0;width:216px;height:calc(100% - 60px);z-index:9;overflow-y:auto;overflow-x:hidden;background:#161819;border-right:1px solid rgba(255,255,255,0.07);border-top:1px solid rgba(255,255,255,0.12);';
+    col.style.cssText = 'position:absolute;top:60px;left:0;width:216px;height:calc(100% - 60px);z-index:9;overflow-y:auto;overflow-x:hidden;border-right:1px solid rgba(255,255,255,0.07);border-top:1px solid rgba(255,255,255,0.12);';
 
     // Phase headers + day cards
     var currentPhase = null;
@@ -5140,6 +5159,11 @@ window.TripItinerary = (function() {
       col.appendChild(card);
     });
 
+    // Add spacer so even the last card can scroll to the top
+    var spacer = document.createElement('div');
+    spacer.style.cssText = 'height:100vh;flex-shrink:0;pointer-events:none;';
+    col.appendChild(spacer);
+
     return col;
   };
 
@@ -5170,10 +5194,8 @@ window.TripItinerary = (function() {
       });
       cardEl.classList.add('active');
       cardEl.querySelectorAll('.dc-meta, .dc-day-num, .dc-date, .dc-route').forEach(function(el) { el.classList.add('active'); });
-      // Scroll card to top of column - walk offsetTop chain relative to scroll container
-      var offset = 0, el = cardEl;
-      while (el && el !== this._dayColEl) { offset += el.offsetTop; el = el.offsetParent; }
-      this._dayColEl.scrollTo({ top: offset, behavior: 'smooth' });
+      // Scroll card to top of column
+      this._dayColEl.scrollTop = cardEl.offsetTop;
     }
     // Update phase header
     var phaseKey = this.dayPhaseMap[dayNum] || '01';
@@ -5512,19 +5534,16 @@ window.TripItinerary = (function() {
 
   proto._setActiveCard = function(day) {
     if (!this._dayColEl) return;
+    var targetCard = null;
     this._dayColEl.querySelectorAll('.day-card').forEach(function(c) {
       var on = c.dataset.day === String(day);
       c.classList.toggle('active', on);
       c.querySelectorAll('.dc-meta, .dc-day-num, .dc-date, .dc-route').forEach(function(el) { el.classList.toggle('active', on); });
-      if (on) {
-        var col = c.closest('.day-column');
-        if (col) {
-          var off = 0, node = c;
-          while (node && node !== col) { off += node.offsetTop; node = node.offsetParent; }
-          col.scrollTo({ top: off, behavior: 'smooth' });
-        }
-      }
+      if (on) targetCard = c;
     });
+    if (targetCard) {
+      this._dayColEl.scrollTop = targetCard.offsetTop;
+    }
   };
 
   // ══════════════════════════════════════════════════════════════
@@ -6136,6 +6155,7 @@ window.AskAnything = (function() {
       }
       if (e.key === 'Enter' && self.input.value.trim()) {
         e.preventDefault();
+        self._handleSubmit();
         return;
       }
     });
@@ -6478,23 +6498,16 @@ window.AskAnything = (function() {
     const res = await api('/trips');
     if (!res.ok || !res.trips?.length) return;
     window._activeTrip = res.trips[0];
-    if (window._activeTrip.days_data && Object.keys(window._activeTrip.days_data).length) {
-      Object.assign(DAY_DATA, window._activeTrip.days_data);
-    }
+    // Load the most recent trip into the dashboard if it has day data
     if (window._activeTrip?.days_data?.days?.length && window.loadTripIntoDashboard) {
       window.loadTripIntoDashboard(window._activeTrip);
     }
   }
 
-  window.saveTrip = async function() {
-    if (!window._authToken || !window._activeTrip) return;
-    return api('/trips/' + window._activeTrip.id, {
-      method: 'PUT', body: { days_data: DAY_DATA, updated_at: new Date().toISOString() }
-    });
-  };
-
-  // Auto-save every 5 min
-  setInterval(() => { if (window._authToken && window._activeTrip) window.saveTrip(); }, 5 * 60 * 1000);
+  // NOTE: Trip data is saved to Supabase at generation time (POST + PUT in handleGenerate).
+  // The old auto-save was pushing DAY_DATA (static dashboard sector/gps/weather) which
+  // overwrote the real trip days_data. Disabled to prevent data corruption.
+  // Future: implement proper trip editing that saves changes to Supabase on demand.
 
   // ── Session refresh every 50 min ──────────────────────────
   setInterval(async () => {
@@ -6705,8 +6718,28 @@ window.AskAnything = (function() {
     // Fuel gap validation
     validateFuelGaps(manifest.days);
 
-    // Create trip record
-    const tripId = Date.now().toString();
+    // Create trip record — save to Supabase first, fall back to local ID
+    let tripId = Date.now().toString();
+    if (window._authToken) {
+      try {
+        const createRes = await fetch(API + '/trips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + window._authToken },
+          body: JSON.stringify({
+            name: manifest.name,
+            start_location: manifest.days[0]?.from || '',
+            end_location: manifest.days[manifest.days.length - 1]?.to || '',
+            total_days: manifest.days.length,
+            phases: [],
+            days_data: { summary: manifest.summary, prompt, status: 'generating', days: manifest.days.map(d => ({ ...d, status: 'pending' })) },
+          }),
+        });
+        const createData = await createRes.json();
+        console.log('[TRIP SAVE] POST /api/trips response:', createData);
+        if (createData.ok && createData.trip?.id) tripId = createData.trip.id;
+        else console.error('[TRIP SAVE] Create failed:', createData);
+      } catch(e) { console.error('[TRIP SAVE] Supabase trip create error:', e); }
+    }
     _currentTripId = tripId;
     const trip = {
       id: tripId,
@@ -6804,6 +6837,29 @@ window.AskAnything = (function() {
     trip.days = results.map((r, i) => ({ ...trip.days[i], ...r }));
     await saveTrip(trip).catch(() => {});
 
+    // Sync completed trip to Supabase
+    console.log('[TRIP SAVE] Syncing completed trip. authToken:', !!window._authToken, 'tripId:', tripId);
+    if (window._authToken) {
+      try {
+        const putRes = await fetch(API + '/trips/' + tripId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + window._authToken },
+          body: JSON.stringify({
+            days_data: {
+              days: results.filter(r => r.status !== 'failed'),
+              summary: manifest.summary,
+              prompt: prompt,
+              status: tripStatus,
+            },
+          }),
+        });
+        const putData = await putRes.json();
+        console.log('[TRIP SAVE] PUT response:', putData);
+      } catch(e) { console.error('[TRIP SAVE] Supabase trip update error:', e); }
+    } else {
+      console.warn('[TRIP SAVE] No auth token — trip only saved locally');
+    }
+
     if (statusEl) {
       statusEl.textContent = failedCount > 0
         ? `${manifest.days.length - failedCount} of ${manifest.days.length} days loaded`
@@ -6819,10 +6875,56 @@ window.AskAnything = (function() {
     };
     if (window.loadTripIntoDashboard) window.loadTripIntoDashboard(window._activeTrip);
 
-    addMsg(
-      `<span style="color:#4caf6a;font-weight:600;">Trip complete</span> — ${manifest.days.length - failedCount} of ${manifest.days.length} days ready`,
+    // "Trip complete" message + Save as Trip button
+    const completeEl = addMsg(
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
+        `<span><span style="color:#4caf6a;font-weight:600;">Trip complete</span> — ${manifest.days.length - failedCount} of ${manifest.days.length} days ready</span>` +
+        `<button id="aa-save-trip-btn" style="flex-shrink:0;padding:7px 16px;background:rgba(199,116,41,0.15);border:1px solid rgba(199,116,41,0.5);border-radius:8px;font-family:var(--ff-mono);font-size:10px;letter-spacing:0.08em;color:#c77429;cursor:pointer;text-transform:uppercase;transition:all 0.2s;">SAVE AS TRIP</button>` +
+      `</div>`,
       'background:rgba(76,175,106,0.08);border:1px solid rgba(76,175,106,0.2);border-radius:8px;padding:10px 13px;font-size:13px;color:#eceae4;line-height:1.5;'
     );
+
+    // Wire Save as Trip button
+    setTimeout(() => {
+      const saveBtn = document.getElementById('aa-save-trip-btn');
+      if (saveBtn) {
+        saveBtn.onmouseenter = () => { saveBtn.style.background = 'rgba(199,116,41,0.3)'; saveBtn.style.color = '#e8a04e'; };
+        saveBtn.onmouseleave = () => { saveBtn.style.background = 'rgba(199,116,41,0.15)'; saveBtn.style.color = '#c77429'; };
+        saveBtn.onclick = async () => {
+          saveBtn.textContent = 'SAVING...';
+          saveBtn.style.pointerEvents = 'none';
+
+          // Ensure saved to Supabase
+          if (window._authToken && tripId) {
+            try {
+              await fetch(API + '/trips/' + tripId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + window._authToken },
+                body: JSON.stringify({
+                  days_data: {
+                    days: results.filter(r => r.status !== 'failed'),
+                    summary: manifest.summary,
+                    prompt: prompt,
+                    status: tripStatus,
+                  },
+                }),
+              });
+            } catch(e) {}
+          }
+
+          saveBtn.textContent = 'SAVED ✓';
+          saveBtn.style.background = 'rgba(76,175,106,0.15)';
+          saveBtn.style.borderColor = 'rgba(76,175,106,0.4)';
+          saveBtn.style.color = '#4caf6a';
+
+          // Switch to Trips screen after brief delay
+          setTimeout(() => {
+            const tripsNav = document.querySelector('[data-vnav="trips"]');
+            if (tripsNav) tripsNav.click();
+          }, 800);
+        };
+      }
+    }, 50);
   }
 
   // ── Retry handler ─────────────────────────────────────────
@@ -7115,7 +7217,14 @@ window.loadTripIntoDashboard = async function(trip) {
     if (!place) return null;
     if (geoCache[place]) return geoCache[place];
     try {
-      const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(place)}.json?limit=1&access_token=${MAPBOX_GEO_TOKEN}`);
+      // Use proximity bias from previously geocoded cities for accuracy
+      let proximityParam = '';
+      const knownCoords = Object.values(geoCache);
+      if (knownCoords.length > 0) {
+        const last = knownCoords[knownCoords.length - 1];
+        proximityParam = `&proximity=${last[0]},${last[1]}`;
+      }
+      const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(place)}.json?limit=1&types=place,locality${proximityParam}&access_token=${MAPBOX_GEO_TOKEN}`);
       const json = await res.json();
       if (json.features?.[0]?.center) {
         geoCache[place] = json.features[0].center; // [lng, lat]
@@ -7140,13 +7249,11 @@ window.loadTripIntoDashboard = async function(trip) {
       Object.keys(window.routeCache).forEach(k => delete window.routeCache[k]);
     }
 
-    // Geocode all unique city names in parallel
-    const allPlaces = new Set();
-    days.forEach(day => {
-      if (day.from) allPlaces.add(day.from);
-      if (day.to) allPlaces.add(day.to);
-    });
-    await Promise.all([...allPlaces].map(p => geocode(p)));
+    // Geocode city names in route order so proximity bias works
+    for (const day of days) {
+      if (day.from) await geocode(day.from);
+      if (day.to) await geocode(day.to);
+    }
 
     // Build segments: from → to for each day
     days.forEach(day => {
@@ -7608,19 +7715,31 @@ function aaShowPanel() {
   async function renderTrips() {
     if (!tripsGrid) return;
     let trips = [];
-    try {
-      if (typeof getTrips === 'function') trips = await getTrips();
-      else if (window.getTrips) trips = await window.getTrips();
-    } catch(e) {}
 
-    // Also check Supabase trips if available
-    if (!trips.length && window._authToken) {
+    // Prefer Supabase (persistent, cross-device)
+    if (window._authToken) {
       try {
         const res = await fetch(window.location.origin + '/api/trips', {
           headers: { Authorization: 'Bearer ' + window._authToken }
         });
         const data = await res.json();
-        if (data.ok && data.trips) trips = data.trips;
+        if (data.ok && data.trips) {
+          // Normalize Supabase trips for card rendering
+          trips = data.trips.map(t => ({
+            ...t,
+            days: t.days_data?.days || [],
+            summary: t.days_data?.summary || '',
+            status: t.days_data?.status || 'active',
+          }));
+        }
+      } catch(e) {}
+    }
+
+    // Fall back to IndexedDB (offline / no auth)
+    if (!trips.length) {
+      try {
+        if (typeof getTrips === 'function') trips = await getTrips();
+        else if (window.getTrips) trips = await window.getTrips();
       } catch(e) {}
     }
 
@@ -7753,7 +7872,17 @@ function aaShowPanel() {
         if (action.startsWith('set-')) {
           const newStatus = action.replace('set-','');
           if (trip) trip.status = newStatus;
-          // Update IndexedDB
+          // Update Supabase
+          if (window._authToken) {
+            try {
+              await fetch(window.location.origin + '/api/trips/' + tripId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + window._authToken },
+                body: JSON.stringify({ days_data: { ...trip.days_data, status: newStatus } }),
+              });
+            } catch(ex) {}
+          }
+          // Update IndexedDB fallback
           try {
             const db = await (function(){ return new Promise((res,rej) => { const r = indexedDB.open('overlander_v1',1); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); })();
             const tx = db.transaction('trips','readwrite');
@@ -7789,6 +7918,7 @@ function aaShowPanel() {
         const action = btn ? btn.dataset.action : 'itinerary';
         const id = this.dataset.tripId;
         const trip = trips.find(t => (t.id || '').toString() === id);
+        console.log('[TRIP CLICK] id:', id, 'found:', !!trip, 'name:', trip?.name, 'days:', (trip?.days_data?.days || trip?.days || []).length, 'trip:', trip);
         if (!trip) return;
 
         // Destroy previous instance if exists
