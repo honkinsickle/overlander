@@ -5392,7 +5392,7 @@ window.TripItinerary = (function() {
   proto._buildDetailPanel = function() {
     var self = this;
     var panel = document.createElement('div');
-    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);transform:translateX(-440px);transition:transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);pointer-events:none;';
+    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);pointer-events:auto;';
 
     // Scrollable inner
     var innerWrap = document.createElement('div');
@@ -5410,32 +5410,6 @@ window.TripItinerary = (function() {
     });
 
     panel.appendChild(innerWrap);
-
-    // Grab handle on right edge
-    var grabHandle = document.createElement('div');
-    grabHandle.style.cssText = 'position:absolute;top:0;right:-20px;width:20px;height:100%;z-index:12;cursor:grab;display:flex;align-items:center;justify-content:center;';
-    grabHandle.innerHTML = '<div style="width:4px;height:40px;border-radius:2px;background:rgba(255,255,255,0.25);"></div>';
-    panel.appendChild(grabHandle);
-
-    // Slide in after delay
-    setTimeout(function() { panel.style.transform = 'translateX(0)'; panel.style.pointerEvents = 'auto'; }, 350);
-
-    // Swipe left to dismiss detail
-    var touchStartX = 0, touchStartY = 0, swiping = false;
-    panel.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; swiping = false; }, { passive: true });
-    panel.addEventListener('touchmove', function(e) {
-      var dx = e.touches[0].clientX - touchStartX;
-      var dy = Math.abs(e.touches[0].clientY - touchStartY);
-      if (dx < -30 && Math.abs(dx) > dy * 1.5) { swiping = true; panel.style.transition = 'none'; panel.style.transform = 'translateX(' + Math.min(0, dx) + 'px)'; }
-    }, { passive: true });
-    panel.addEventListener('touchend', function(e) {
-      if (!swiping) return;
-      var dx = e.changedTouches[0].clientX - touchStartX;
-      panel.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-      if (dx < -120) { panel.style.transform = 'translateX(-440px)'; panel.style.pointerEvents = 'none'; }
-      else { panel.style.transform = 'translateX(0)'; panel.style.pointerEvents = 'auto'; }
-      swiping = false;
-    }, { passive: true });
 
     // Scroll-sync
     innerWrap.addEventListener('scroll', function() { self._onDetailScroll(); }, { passive: true });
