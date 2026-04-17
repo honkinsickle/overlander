@@ -14,6 +14,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/>
 <script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script>
+<script>
+  // API host — Railway backend in production, same-origin for local dev with local backend
+  window.API_HOST = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? window.location.origin
+    : 'https://compassionate-transformation-production-824f.up.railway.app';
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5594,7 +5600,7 @@ window.TripItinerary = (function() {
       }
       TripItinerary._photoActive++;
       (function(it) {
-        fetch(window.location.origin + '/api/photos?q=' + encodeURIComponent(it.query))
+        fetch(window.API_HOST + '/api/photos?q=' + encodeURIComponent(it.query))
           .then(function(r) { return r.json(); })
           .then(function(data) {
             TripItinerary._photoCache[it.key] = data.url || null;
@@ -6275,7 +6281,7 @@ window.AskAnything = (function() {
     if (!container) throw new Error('AskAnything: container required');
     this.container = container;
     this.opts = opts || {};
-    this.API = this.opts.apiBase || (window.location.origin + '/api');
+    this.API = this.opts.apiBase || (window.API_HOST + '/api');
     this.feed = null;
     this._destroyed = false;
     this._listeners = [];
@@ -6540,7 +6546,7 @@ window.AskAnything = (function() {
 // SUPABASE AUTH + TRIP PERSISTENCE
 // ═══════════════════════════════════════════════════════════
 (function() {
-  const API = window.location.origin + '/api';
+  const API = window.API_HOST + '/api';
   const LS = { token: 'overlander_token', refresh: 'overlander_refresh_token', uid: 'overlander_user_id' };
   window._authUser = null; window._authToken = null; window._activeTrip = null;
 
@@ -6743,7 +6749,7 @@ window.AskAnything = (function() {
 // TRIP GENERATION — uses AskAnything component for UI
 // ═══════════════════════════════════════════════════════════
 (function() {
-  const API = window.location.origin + '/api';
+  const API = window.API_HOST + '/api';
 
   // Delegate UI to AskAnything component instance
   function aa() { return window._aaInstance; }
@@ -7968,7 +7974,7 @@ function aaShowPanel() {
     // Prefer Supabase (persistent, cross-device)
     if (window._authToken) {
       try {
-        const res = await fetch(window.location.origin + '/api/trips', {
+        const res = await fetch(window.API_HOST + '/api/trips', {
           headers: { Authorization: 'Bearer ' + window._authToken }
         });
         const data = await res.json();
@@ -8111,7 +8117,7 @@ function aaShowPanel() {
           } catch(ex) {}
           // Remove from Supabase
           if (window._authToken) {
-            try { await fetch(window.location.origin + '/api/trips/' + tripId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + window._authToken } }); } catch(ex) {}
+            try { await fetch(window.API_HOST + '/api/trips/' + tripId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + window._authToken } }); } catch(ex) {}
           }
           _allTrips = _allTrips.filter(t => (t.id || '').toString() !== tripId);
           renderFilteredTrips();
@@ -8124,7 +8130,7 @@ function aaShowPanel() {
           // Update Supabase
           if (window._authToken) {
             try {
-              await fetch(window.location.origin + '/api/trips/' + tripId, {
+              await fetch(window.API_HOST + '/api/trips/' + tripId, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + window._authToken },
                 body: JSON.stringify({ days_data: { ...trip.days_data, status: newStatus } }),
