@@ -2152,9 +2152,13 @@
     align-items: flex-start;
   }
   .wp-row.ddp-wp::before { display: none; }
-  .wp-row.ddp-wp:last-child { border-bottom: none; }
   .wp-row.ddp-wp:hover { background: transparent; }
   .wp-row.ddp-wp { cursor: default; }
+  /* Give the last waypoint in a day a closing border so the section feels terminated */
+  .day-section .wp-row.ddp-wp:last-of-type { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  /* Breathing room before the day-divider */
+  .day-section + .day-divider,
+  .day-divider { margin-top: 8px; }
 
   .ddp-wp-icon-col {
     display: flex;
