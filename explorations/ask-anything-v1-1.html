@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ask Anything — v1-1 (static)</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0b0c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Barlow', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .frame {
+    width: 440px;
+    height: 744px;
+    background: #111214;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+  }
+
+  /* Header */
+  .header {
+    padding: 18px 18px 18px;
+    border-bottom: 1px solid #3E3B3B;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .route-text {
+    color: #b8b8b8;
+    font-size: 14px;
+    line-height: 18px;
+  }
+  .day-text {
+    color: #E8C98E;
+    font-size: 24px;
+    line-height: 1.2;
+  }
+  .weather-pill {
+    background: #161819;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 15px;
+    padding: 5px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .weather-pill .icon { font-size: 12px; }
+  .weather-pill .temp {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #C8A96E;
+    white-space: pre;
+  }
+
+  /* Section title */
+  .scroll-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background: rgba(27,29,33,0.85);
+  }
+  .section-title {
+    color: #fff;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 13px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    padding: 14px 18px 7px;
+  }
+
+  /* Waypoint rows */
+  .wp-row {
+    display: flex;
+    gap: 12px;
+    padding: 14px 10px 14px 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .wp-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 11px;
+    padding: 5px 6px 10px 7px;
+  }
+  .wp-thumb {
+    width: 70px;
+    height: 70px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .wp-thumb.detail {
+    background: #332E2D;
+    outline: 1px solid #A7CCFD;
+    background-image: url('https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D/01KPCPF0YGKQWNM2CDZSRDCCED.png');
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+  }
+  .wp-thumb.fuel {
+    background: #4E252F;
+    border: 0.5px solid #FA9C9D;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+  }
+  .wp-thumb.camp {
+    background: #334242;
+    border: 0.5px solid #6ECECE;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+  }
+  .wp-pill {
+    border-radius: 999px;
+    padding: 2px 7px;
+    min-width: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wp-pill.detail {
+    background: #1A1B1F;
+    border: 1px solid #A7CCFD;
+  }
+  .wp-pill.detail .label {
+    color: #A7CCFD;
+    font-size: 13px;
+    letter-spacing: 0.015em;
+    text-align: center;
+    padding: 2px 6px;
+  }
+  .wp-pill.fuel {
+    border: 0.5px solid #FA9C9D;
+  }
+  .wp-pill.fuel .label {
+    color: #FA9D9D;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-align: center;
+    padding: 2px 6px;
+  }
+  .wp-pill.camp {
+    border: 0.5px solid #6ECECE;
+  }
+  .wp-pill.camp .label {
+    color: #C6BFBF;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-align: center;
+    padding: 2px 6px;
+  }
+
+  .wp-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    padding-right: 12px;
+  }
+  .wp-name {
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 1.3;
+  }
+  .wp-name.detail { color: #A7CCFD; }
+  .wp-name.fuel { color: #FA9C9D; }
+  .wp-name.camp { color: #6ECECE; }
+  .wp-desc {
+    color: #C7C6C5;
+    font-size: 16px;
+    line-height: 1.3;
+  }
+  .wp-note {
+    color: #C8A96E;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 21px;
+    margin-top: 2px;
+  }
+
+  /* Input footer */
+  .input-wrap {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 10px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .input-row {
+    background: #1E1F21;
+    border: 1px solid rgba(199,116,41,0.35);
+    border-radius: 10px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .input-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 6px;
+  }
+  .input-btn.attach { background: rgba(255,255,255,0.04); }
+  .input-placeholder {
+    flex: 1;
+    color: #9a9a9a;
+    font-size: 14px;
+    line-height: 18px;
+  }
+  .input-hint {
+    color: #2A2A2A;
+    font-family: 'Space Mono', monospace;
+    font-size: 7px;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="route-text">Calgary, AB — Canmore, AB</div>
+        <div class="day-text">Day 1 — Fri, May 29</div>
+      </div>
+      <div class="weather-pill">
+        <span class="icon">⛅</span>
+        <span class="temp">72°  /  41°F</span>
+      </div>
+    </div>
+
+    <!-- Scrollable waypoints -->
+    <div class="scroll-area">
+      <div class="section-title">Way points</div>
+
+      <!-- Row 1: Anchorage / Detail -->
+      <div class="wp-row">
+        <div class="wp-left">
+          <div class="wp-thumb detail"></div>
+          <div class="wp-pill detail"><span class="label">Detail</span></div>
+        </div>
+        <div class="wp-body">
+          <div class="wp-name detail">Anchorage</div>
+          <div class="wp-desc">Top off fuel tank and grab any forgotten supplies before leaving the park and gra...</div>
+          <div class="wp-note">↳ Petro-Canada has premium fuel and the cleanest restrooms for the next 200km.</div>
+        </div>
+      </div>
+
+      <!-- Row 2: Pilot Travel Center / Fuel -->
+      <div class="wp-row">
+        <div class="wp-left">
+          <div class="wp-thumb fuel">🛢</div>
+          <div class="wp-pill fuel"><span class="label">Fuel</span></div>
+        </div>
+        <div class="wp-body">
+          <div class="wp-name fuel">Pilot Travel Center</div>
+          <div class="wp-desc">Last reliable diesel before the Icefields Parkway adventure begins.</div>
+          <div class="wp-note">↳ Open 24/7, next fuel 180+ miles north in Jasper. Showers available for $15.</div>
+        </div>
+      </div>
+
+      <!-- Row 3: Tumalo / Camp -->
+      <div class="wp-row">
+        <div class="wp-left">
+          <div class="wp-thumb camp">⛺</div>
+          <div class="wp-pill camp"><span class="label">Camp</span></div>
+        </div>
+        <div class="wp-body">
+          <div class="wp-name camp">Tumalo State Park Area</div>
+          <div class="wp-desc">Dispersed camping along Tumalo Creek with Cascade mountain views.</div>
+          <div class="wp-note">↳ Open 24/7, next fuel 180+ miles north in Jasper. Showers available for $15.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input footer (static, not wired) -->
+    <div class="input-wrap">
+      <div class="input-row">
+        <div class="input-btn attach">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8b8b8" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <div class="input-placeholder">Ask anything</div>
+        <div class="input-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8b8b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </div>
+      </div>
+      <div class="input-hint">Claud can make mistakes. Check important info.</div>
+    </div>
+  </div>
+</body>
+</html>
