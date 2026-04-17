@@ -4,8 +4,8 @@
     {
       "name": "dashboard",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["http-server", "/Users/adamwagner/Library/CloudStorage/Dropbox/the23forty/Zoverlanding/dashboard", "-p", "8765", "-c-1"],
-      "port": 8765
+      "runtimeArgs": ["http-server", ".", "-p", "8768", "-c-1"],
+      "port": 8768
     }
   ]
 }
