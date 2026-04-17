@@ -2266,6 +2266,13 @@
   .cat-event  .ddp-wp-pill-text,
   .cat-event  .ddp-wp-title { color: #D8B4FE; }
 
+  /* Drive = navigation marker (muted, less prominent than destinations) */
+  .cat-drive  .ddp-wp-icon  { background: #26292B; border-color: rgba(255,255,255,0.22); }
+  .cat-drive  .ddp-wp-pill  { border-color: rgba(255,255,255,0.22); }
+  .cat-drive  .ddp-wp-pill-text { color: #A8A8A8; }
+  .cat-drive  .ddp-wp-title    { color: #C7C6C5; font-weight: 600; }
+  .cat-drive  .ddp-wp-desc     { color: #888; }
+
   /* New header styling for v3-1 */
   .dd-header.ddp-header {
     height: 80px;
@@ -5496,6 +5503,7 @@ window.TripItinerary = (function() {
       if (t.indexOf('fuel') !== -1) return { cat: 'fuel',   label: 'Fuel' };
       if (t.indexOf('camp') !== -1) return { cat: 'camp',   label: 'Camp' };
       if (t.indexOf('food') !== -1) return { cat: 'food',   label: 'Food' };
+      if (t.indexOf('drive') !== -1) return { cat: 'drive',  label: 'Drive' };
       if (t.indexOf('view') !== -1) return { cat: 'scenic', label: 'Scenic' };
       if (t.indexOf('photo') !== -1) return { cat: 'scenic', label: 'Scenic' };
       if (t.indexOf('event') !== -1) return { cat: 'event',  label: 'Event' };
