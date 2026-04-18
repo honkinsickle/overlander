@@ -5992,11 +5992,20 @@ window.TripItinerary = (function() {
     // Click-to-expand disabled per v3-1 design
     var self = this;
 
-    // Wire waypoint row clicks — show Location Detail in column 3
-    section.querySelectorAll('.wp-row.ddp-wp').forEach(function(row, idx) {
+    // Wire waypoint row clicks — fly the map to the POI, select the row, and show Location Detail
+    section.querySelectorAll('.wp-row.ddp-wp').forEach(function(row, wpIdx) {
       row.style.cursor = 'pointer';
       row.addEventListener('click', function() {
-        var wp = (day.waypoints || [])[idx] || {};
+        var wp = (day.waypoints || [])[wpIdx] || {};
+        // Fly the slide-up map to that POI
+        var letter = wp && wp.letter;
+        if (letter && self._map) {
+          var poi = (self.dayPOIs[d] || []).find(function(p) { return p.letter === letter; });
+          if (poi) {
+            self._map.flyTo([poi.coords[1], poi.coords[0]], 11, { duration: 0.8 });
+            if (typeof self._highlightPOI === 'function') self._highlightPOI(d, letter);
+          }
+        }
         // Mark selected across the whole detail scroll panel
         if (self._detailScroll) {
           self._detailScroll.querySelectorAll('.wp-row.ddp-wp.selected').forEach(function(r) { r.classList.remove('selected'); });
@@ -8341,10 +8350,28 @@ function aaShowPanel() {
             { letter: 'C', type: 'viewpoint', name: 'Yosemite National Park', note: 'Dispersed camping along Tumalo Creek with Cascade mountain views.', tip: 'Open 24/7, next fuel 180+ miles north.' },
             { letter: 'D', type: 'attraction', name: 'Anchorage, AK', note: 'Dispersed camping along Tumalo Creek with Cascade mountain views.', tip: 'Open 24/7, next fuel 180+ miles north.' }
           ] },
-          { day: 2, from: 'Mount Rainier NP', to: 'Yakima, WA', miles: 78, hours: 2, date: 'Sat 5/30', date_full: 'Sat, May 30', lat_from: 46.88, lon_from: -121.7269, lat_to: 46.6021, lon_to: -120.5059, waypoints: [] },
-          { day: 3, from: 'Yakima, WA', to: 'Hood River, OR', miles: 110, hours: 2.5, date: 'Sun 5/31', date_full: 'Sun, May 31', lat_from: 46.6021, lon_from: -120.5059, lat_to: 45.7054, lon_to: -121.5215, waypoints: [] },
-          { day: 4, from: 'Hood River, OR', to: 'Mt Hood', miles: 45, hours: 1.2, date: 'Mon 6/1', date_full: 'Mon, Jun 1', lat_from: 45.7054, lon_from: -121.5215, lat_to: 45.3735, lon_to: -121.696, waypoints: [] },
-          { day: 5, from: 'Mt Hood', to: 'Portland, OR', miles: 65, hours: 1.5, date: 'Tue 6/2', date_full: 'Tue, Jun 2', lat_from: 45.3735, lon_from: -121.696, lat_to: 45.5152, lon_to: -122.6784, waypoints: [] }
+          { day: 2, from: 'Mount Rainier NP', to: 'Yakima, WA', miles: 78, hours: 2, date: 'Sat 5/30', date_full: 'Sat, May 30', lat_from: 46.88, lon_from: -121.7269, lat_to: 46.6021, lon_to: -120.5059, waypoints: [
+            { letter: 'A', type: 'viewpoint', name: 'Chinook Pass Overlook', note: 'Sweeping eastern view of Rainier from 5,430 ft.', tip: 'Pull-out just past the summit, on the right.' },
+            { letter: 'B', type: 'food', name: 'Naches Tavern', note: 'Century-old roadhouse. Burgers, beer, wood-fire warmth.', tip: 'Closed Mondays. Cash preferred.' },
+            { letter: 'C', type: 'camp', name: 'Yakima Sportsman State Park', note: 'Easy riverside sites 5 min from town.', tip: 'Book ahead weekends in summer.' }
+          ] },
+          { day: 3, from: 'Yakima, WA', to: 'Hood River, OR', miles: 110, hours: 2.5, date: 'Sun 5/31', date_full: 'Sun, May 31', lat_from: 46.6021, lon_from: -120.5059, lat_to: 45.7054, lon_to: -121.5215, waypoints: [
+            { letter: 'A', type: 'fuel', name: 'Biggs Junction — Pilot', note: 'Best prices between Yakima and the gorge.', tip: 'Top off before the climb up US-197.' },
+            { letter: 'B', type: 'attraction', name: 'Maryhill Museum of Art', note: 'Mansion on a bluff overlooking the Columbia. Unexpectedly worth an hour.', tip: 'Adult $12. Closed Nov–Mar.' },
+            { letter: 'C', type: 'food', name: 'pFriem Family Brewers', note: 'Belgian-leaning brewpub on the Hood River waterfront.', tip: 'Order the frites. Patio fills by 6.' },
+            { letter: 'D', type: 'camp', name: 'Tucker Park Campground', note: 'Quiet Hood River County park on the Hood River itself.', tip: 'First-come, first-served. Arrive before 5.' }
+          ] },
+          { day: 4, from: 'Hood River, OR', to: 'Mt Hood', miles: 45, hours: 1.2, date: 'Mon 6/1', date_full: 'Mon, Jun 1', lat_from: 45.7054, lon_from: -121.5215, lat_to: 45.3735, lon_to: -121.696, waypoints: [
+            { letter: 'A', type: 'viewpoint', name: 'Panorama Point', note: 'Orchards in the foreground, Mt Hood filling the horizon.', tip: 'Free county park. Best in morning light.' },
+            { letter: 'B', type: 'attraction', name: 'Lost Lake', note: 'Postcard reflection of Mt Hood on still mornings.', tip: '$10 day-use. Canoe rentals at the store.' },
+            { letter: 'C', type: 'camp', name: 'Trillium Lake Campground', note: 'Lakeside sites with the iconic Mt Hood reflection view.', tip: 'Opens late May. Reserve on recreation.gov.' }
+          ] },
+          { day: 5, from: 'Mt Hood', to: 'Portland, OR', miles: 65, hours: 1.5, date: 'Tue 6/2', date_full: 'Tue, Jun 2', lat_from: 45.3735, lon_from: -121.696, lat_to: 45.5152, lon_to: -122.6784, waypoints: [
+            { letter: 'A', type: 'attraction', name: 'Timberline Lodge', note: 'WPA-era lodge at 6,000 ft on Mt Hood\'s south flank.', tip: 'Great coffee in the Ram\'s Head Bar. Free to wander.' },
+            { letter: 'B', type: 'viewpoint', name: 'Multnomah Falls', note: '620 ft two-tiered waterfall off the Historic Columbia River Hwy.', tip: 'Timed-entry permit required May–Sep.' },
+            { letter: 'C', type: 'food', name: 'Pine State Biscuits', note: 'Portland institution. Biscuit sandwiches done right.', tip: 'Division Street location has the shortest lines.' },
+            { letter: 'D', type: 'camp', name: 'Oxbow Regional Park', note: 'Old-growth riverside camping 20 min from downtown.', tip: 'No RVs. Closes the gate at dusk.' }
+          ] }
         ], phases: [{ phase: 1, label: 'Pacific Northwest Loop', days: '01-05', miles: 393 }] }
       };
       if (window._tripItineraryInstance) { try { window._tripItineraryInstance.destroy(); } catch(e){} }
