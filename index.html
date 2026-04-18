@@ -477,6 +477,7 @@
     -webkit-backdrop-filter: blur(8px);
     padding: 16px 18px;
     border-bottom: 1px solid #3E3B3B;
+    cursor: pointer;
   }
 
   /* highlight active day header — green bg */
@@ -4204,17 +4205,38 @@
 
 
 
-  // ── PHOTO CARD TAP → FIT MAP TO THAT DAY'S ROUTE ────────────
-  function initPhotoCardMapLink() {
-    document.querySelectorAll('.day-section .photo-card').forEach(card => {
-      if (card.dataset.mapLinkWired) return;
-      card.dataset.mapLinkWired = '1';
-      card.addEventListener('click', e => {
+  // ── CARD TAP → PAN MAP ──────────────────────────────────────
+  // .photo-card and .dd-header both fit map to that day's full route.
+  // .dd-camp-block pans to the 'Z' (camp) waypoint.
+  function initCardMapLinks() {
+    // Photo card + Day header → fit day route
+    document.querySelectorAll('.day-section .photo-card, .day-section .dd-header').forEach(el => {
+      if (el.dataset.mapLinkWired) return;
+      el.dataset.mapLinkWired = '1';
+      el.addEventListener('click', e => {
         e.stopPropagation();
-        const section = card.closest('.day-section');
+        const section = el.closest('.day-section');
         const day     = section?.dataset?.day;
         if (!day) return;
-        if (typeof renderMap === 'function') {
+        if (typeof renderMap === 'function') renderMap(day, true);
+      });
+    });
+
+    // Overnight camp block → pan to Z (camp) waypoint
+    document.querySelectorAll('.day-section .dd-camp-block').forEach(el => {
+      if (el.dataset.mapLinkWired) return;
+      el.dataset.mapLinkWired = '1';
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        const section = el.closest('.day-section');
+        const day     = section?.dataset?.day;
+        if (!day) return;
+        const campPOI = (window.DAY_POIS?.[day] || []).find(p => p.letter === 'Z');
+        if (campPOI && typeof panToPOI === 'function') {
+          if (typeof highlightPOI === 'function') highlightPOI(day, 'Z');
+          clearTimeout(panTimeout);
+          panTimeout = setTimeout(() => panToPOI(day, 'Z'), 50);
+        } else if (typeof renderMap === 'function') {
           renderMap(day, true);
         }
       });
@@ -4222,7 +4244,7 @@
   }
 
   // Run after boot (map ready + initial render done)
-  setTimeout(() => { initWaypointExpand(); initPhotoCardMapLink(); }, 300);
+  setTimeout(() => { initWaypointExpand(); initCardMapLinks(); }, 300);
 
 
 
