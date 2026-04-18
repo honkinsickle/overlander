@@ -2161,6 +2161,210 @@
   .vnav-shell > .dashboard .topbar { width: 1053px; }
   .vnav-shell > .dashboard .map-bg-screenshot { right: 0; }
 
+  /* ── LOCATION DETAIL (column 3, from 1TI-0) ─────────────── */
+  .ti-loc-detail { font-family: 'Barlow', system-ui, sans-serif; color: #ECEAE4; }
+  .ti-loc-detail::-webkit-scrollbar { width: 4px; }
+  .ti-loc-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+  .ld-hero { position: relative; width: 477px; height: 381px; overflow: hidden; flex-shrink: 0; }
+  .ld-hero-img {
+    position: absolute; inset: 0;
+    background-size: cover;
+    background-position: center;
+  }
+  .ld-hero-gradient {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(180deg, rgba(17,18,20,0) 0%, rgba(17,18,20,0) 30%, rgba(17,18,20,0.15) 50%, rgba(17,18,20,0.55) 75%, rgba(17,18,20,0.9) 92%, #111214 100%);
+  }
+  .ld-hero-btn {
+    position: absolute;
+    top: 16px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.63);
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .ld-hero-back { left: 16px; }
+  .ld-hero-close { right: 17px; }
+  .ld-hero-nav {
+    position: absolute;
+    left: 50%; top: 16px;
+    transform: translateX(-50%);
+    height: 60px;
+    display: flex; align-items: center;
+    padding: 8px 2px;
+    border-radius: 999px;
+    background: rgba(13,12,11,0.83);
+    border: 0.5px solid #165544;
+    backdrop-filter: blur(10px);
+  }
+  .ld-hero-nav-pill {
+    display: flex; align-items: center; justify-content: center;
+    height: 44px;
+    padding: 12px 33px;
+    border-radius: 999px;
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 0.02em;
+    line-height: 24px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ld-hero-nav-text {
+    display: flex; align-items: center;
+    height: 44px;
+    padding: 12px 33px;
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 0.02em;
+    line-height: 24px;
+    color: #FFFFFF;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ld-hero-nav-active {
+    background-color: rgba(200,169,110,0.15);
+    background-image: linear-gradient(#1C3A21);
+    border: 0.5px solid #1C3A21;
+    color: #E8C98E;
+    height: 55px;
+    padding: 12px 33px;
+  }
+  .ld-hero-title-wrap {
+    position: absolute;
+    left: 20px; right: 20px; bottom: 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .ld-hero-title {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 700; font-size: 32px;
+    color: #ECEAE4;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .ld-hero-updated {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    line-height: 12px;
+    color: #8A7A5A;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .ld-desc {
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 20px 28px 14px;
+  }
+  .ld-desc-text {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 16px; line-height: 1.55;
+    color: #C7C6C5;
+  }
+  .ld-read-more {
+    align-self: flex-start;
+    padding: 8px 18px;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 13px; line-height: 16px;
+    color: #ECEAE4;
+    cursor: pointer;
+  }
+
+  .ld-section {
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 18px 28px 20px;
+  }
+  .ld-section-border { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 24px; }
+  .ld-section-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 13px;
+    letter-spacing: 6px;
+    line-height: 16px;
+    color: #FFFFFF;
+    text-transform: uppercase;
+  }
+  .ld-stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .ld-stat {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.30);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+  }
+  .ld-stat-wide { grid-column: span 2; }
+  .ld-stat-icon {
+    width: 28px; height: 28px; flex-shrink: 0;
+    border-radius: 50%;
+    border: 0.5px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ld-stat-text { display: flex; flex-direction: column; }
+  .ld-stat-num {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 700; font-size: 16px;
+    line-height: 1.1;
+  }
+  .ld-stat-label {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 12px; line-height: 16px;
+    color: #B8B8B8;
+  }
+
+  .ld-index { display: flex; flex-direction: column; }
+  .ld-index-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .ld-index-row-last { border-bottom: none; }
+  .ld-index-label {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 14px; line-height: 18px;
+    color: #C7C6C5;
+  }
+  .ld-index-day { display: flex; align-items: center; gap: 10px; }
+  .ld-index-daytag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    line-height: 12px;
+    color: #C8A96E;
+    min-width: 46px;
+  }
+  .ld-index-dayname {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 14px; line-height: 18px;
+    color: #ECEAE4;
+  }
+
+  .ld-tip { display: flex; gap: 12px; }
+  .ld-tip-emoji {
+    flex-shrink: 0;
+    font-size: 20px;
+    line-height: 1.2;
+    padding-top: 2px;
+  }
+  .ld-tip-body { display: flex; flex-direction: column; gap: 4px; }
+  .ld-tip-title {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 700; font-size: 15px; line-height: 18px;
+    color: #ECEAE4;
+  }
+  .ld-tip-text {
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    color: #C7C6C5;
+  }
+
   /* ── DAY DETAIL — v3-1 style ────────────────────────────── */
   /* Header (replaces dd-date-row/dd-meta-row content) */
   .wp-row.ddp-wp {
@@ -5312,10 +5516,132 @@ window.TripItinerary = (function() {
     this._detailEl = this._buildDetailPanel();
     dashWrap.appendChild(this._detailEl);
 
+    // Location Detail panel (column 3) — from 1TI-0
+    this._locDetailEl = this._buildLocationDetail();
+    dashWrap.appendChild(this._locDetailEl);
+
     this.container.appendChild(dashWrap);
 
     // Init map after DOM is in place
     setTimeout(function() { self._initMap(mapDiv.id); }, 500);
+  };
+
+  // ── Location Detail panel (column 3, from 1TI-0) ──
+  proto._buildLocationDetail = function() {
+    var self = this;
+    var panel = document.createElement('div');
+    panel.className = 'ti-loc-detail';
+    panel.style.cssText = 'position:absolute;top:60px;left:656px;width:477px;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);';
+
+    var heroImg = 'https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?auto=format&fit=crop&w=960&h=762&q=80';
+
+    panel.innerHTML =
+      // Hero
+      '<div class="ld-hero">' +
+        '<div class="ld-hero-img" style="background-image:url(' + heroImg + ');"></div>' +
+        '<div class="ld-hero-gradient"></div>' +
+        '<button class="ld-hero-btn ld-hero-back" aria-label="Back">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
+        '</button>' +
+        '<div class="ld-hero-nav">' +
+          '<div class="ld-hero-nav-pill ld-hero-nav-active" data-ld-tab="overview">Overview</div>' +
+          '<div class="ld-hero-nav-text" data-ld-tab="map">Map</div>' +
+        '</div>' +
+        '<button class="ld-hero-btn ld-hero-close" aria-label="Close">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button>' +
+        '<div class="ld-hero-title-wrap">' +
+          '<div class="ld-hero-title">Anchorage, AK</div>' +
+          '<div class="ld-hero-updated">Updated · Mar 30, 2025</div>' +
+        '</div>' +
+      '</div>' +
+      // Description
+      '<div class="ld-desc">' +
+        '<div class="ld-desc-text">Embark on the ultimate Alaskan adventure with a comprehensive weeklong road trip guide, perfect for couples, groups, or families seeking awe-inspiring landscapes, outdoor activities, and unforgettable memories. Crafted from personal experience, this guide was curated during my own Babymoon, making it a journey that is comfortable for expectant parents seeking one last hurrah …</div>' +
+        '<div class="ld-read-more">Read more</div>' +
+      '</div>' +
+      // Places & Experiences
+      '<div class="ld-section">' +
+        '<div class="ld-section-title">Places &amp; Experiences</div>' +
+        '<div class="ld-stats-grid">' +
+          '<div class="ld-stat" style="border-color:#6ECECE40;">' +
+            '<div class="ld-stat-icon" style="background:#334242;border-color:#6ECECE;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ECECE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M6 21V10l6-4 6 4v11M10 21v-5h4v5"/></svg>' +
+            '</div>' +
+            '<div class="ld-stat-text"><div class="ld-stat-num" style="color:#6ECECE;">1</div><div class="ld-stat-label">National Park</div></div>' +
+          '</div>' +
+          '<div class="ld-stat" style="border-color:#FA9C9D40;">' +
+            '<div class="ld-stat-icon" style="background:#4E252F;border-color:#FA9C9D;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FA9C9D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7a3 3 0 0 0 6 0V2M6 2v20M18 2v20M15 9V2l3 3v6a3 3 0 0 1-3 3"/></svg>' +
+            '</div>' +
+            '<div class="ld-stat-text"><div class="ld-stat-num" style="color:#FA9C9D;">6</div><div class="ld-stat-label">Restaurants</div></div>' +
+          '</div>' +
+          '<div class="ld-stat" style="border-color:#A7CCFD40;">' +
+            '<div class="ld-stat-icon" style="background:#1E2A3A;border-color:#A7CCFD;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7CCFD" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V12a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8M2 16h20M6 14v-2"/></svg>' +
+            '</div>' +
+            '<div class="ld-stat-text"><div class="ld-stat-num" style="color:#A7CCFD;">3</div><div class="ld-stat-label">Hotels</div></div>' +
+          '</div>' +
+          '<div class="ld-stat" style="border-color:#C8A96E4D;">' +
+            '<div class="ld-stat-icon" style="background:#3A2E17;border-color:#C8A96E;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C8A96E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
+            '</div>' +
+            '<div class="ld-stat-text"><div class="ld-stat-num" style="color:#C8A96E;">9</div><div class="ld-stat-label">Attractions</div></div>' +
+          '</div>' +
+          '<div class="ld-stat ld-stat-wide" style="border-color:#FFFFFF14;">' +
+            '<div class="ld-stat-icon" style="background:#2A2A2A;border-color:#888888;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' +
+            '</div>' +
+            '<div class="ld-stat-text"><div class="ld-stat-num" style="color:#ECEAE4;">3</div><div class="ld-stat-label">Other stops</div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      // Index
+      '<div class="ld-section ld-section-border">' +
+        '<div class="ld-section-title">Index</div>' +
+        '<div class="ld-index">' +
+          '<div class="ld-index-row"><div class="ld-index-label">General Tips</div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-label">What to Pack</div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-day"><span class="ld-index-daytag">DAY 1</span><span class="ld-index-dayname">Anchorage</span></div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-day"><span class="ld-index-daytag">DAY 2</span><span class="ld-index-dayname">Seward Highway</span></div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-day"><span class="ld-index-daytag">DAY 3</span><span class="ld-index-dayname">Seward</span></div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-day"><span class="ld-index-daytag">DAY 4</span><span class="ld-index-dayname">Drive to Denali National Park</span></div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row"><div class="ld-index-day"><span class="ld-index-daytag">DAY 5–6</span><span class="ld-index-dayname">Denali National Park</span></div>' + self._ldChevron() + '</div>' +
+          '<div class="ld-index-row ld-index-row-last"><div class="ld-index-day"><span class="ld-index-daytag">DAY 7</span><span class="ld-index-dayname">Anchorage</span></div>' + self._ldChevron() + '</div>' +
+        '</div>' +
+      '</div>' +
+      // General Tips
+      '<div class="ld-section ld-section-border">' +
+        '<div class="ld-section-title">General Tips</div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">📅</div><div class="ld-tip-body"><div class="ld-tip-title">When was I there?</div><div class="ld-tip-text">June 2021</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">☀️</div><div class="ld-tip-body"><div class="ld-tip-title">Weather</div><div class="ld-tip-text">In June, Alaska weather can vary depending on the region, but it\'s generally characterized by mild to warm days with extended daylight hours due to the Midnight Sun phenomenon. Temperatures typically range from the mid-50s to low 70s °F (12–22 °C).</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">✈️</div><div class="ld-tip-body"><div class="ld-tip-title">Air Travel</div><div class="ld-tip-text">Anchorage, Alaska\'s largest city, serves as an ideal starting point for adventures across the Last Frontier. Ted Stevens Anchorage International Airport (ANC) is the largest in the state and serves more than 20+ destinations directly.</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">🚗</div><div class="ld-tip-body"><div class="ld-tip-title">Car Rental</div><div class="ld-tip-text">Car rental can be limited during the summer months due to high demand. It\'s advisable to book early to ensure availability and the best rates.</div></div></div>' +
+      '</div>' +
+      // What to Pack
+      '<div class="ld-section ld-section-border">' +
+        '<div class="ld-section-title">What to Pack</div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">🧥</div><div class="ld-tip-body"><div class="ld-tip-title">Layering Clothing</div><div class="ld-tip-text">Lightweight, breathable layers you can add or remove throughout the day as temperatures change. Pack a mix of short-sleeve and long-sleeve shirts, plus a fleece or lightweight jacket for cooler evenings.</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">🌧️</div><div class="ld-tip-body"><div class="ld-tip-title">Waterproof Outerwear</div><div class="ld-tip-text">Be prepared for rain showers with a waterproof jacket or shell. Bring waterproof pants or rain ponchos to stay dry during outdoor activities.</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">🥾</div><div class="ld-tip-body"><div class="ld-tip-title">Sturdy Footwear</div><div class="ld-tip-text">Hiking boots with ankle support for uneven trails, plus comfortable walking shoes for town days.</div></div></div>' +
+        '<div class="ld-tip"><div class="ld-tip-emoji">🦟</div><div class="ld-tip-body"><div class="ld-tip-title">Bug Spray</div><div class="ld-tip-text">Mosquitoes in Alaska are the stuff of legend — DEET-based repellent is non-negotiable in June.</div></div></div>' +
+      '</div>';
+
+    // Wire tab toggle (visual state only; map view not implemented yet)
+    var tabs = panel.querySelectorAll('[data-ld-tab]');
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        tabs.forEach(function(t) { t.classList.remove('ld-hero-nav-active'); t.classList.add('ld-hero-nav-text'); });
+        this.classList.remove('ld-hero-nav-text');
+        this.classList.add('ld-hero-nav-active');
+      });
+    });
+
+    return panel;
+  };
+
+  proto._ldChevron = function() {
+    return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>';
   };
 
   // ── Header bar ──
