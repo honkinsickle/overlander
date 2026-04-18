@@ -5952,17 +5952,25 @@ window.TripItinerary = (function() {
       return { cat: 'urban', label: 'Urban' };
     }
 
+    // Category → emoji icon (replaces random Unsplash thumbnails)
+    var _catEmoji = {
+      fuel:   { emoji: '🛢',  size: 26 },
+      camp:   { emoji: '⛺',  size: 30 },
+      food:   { emoji: '🍔',  size: 30 },
+      scenic: { emoji: '🏔️', size: 34 },
+      urban:  { emoji: '🚕',  size: 34 },
+      event:  { emoji: '👁',  size: 30 },
+      drive:  { emoji: '',    size: 30 }
+    };
     (day.waypoints || []).forEach(function(wp, wpIdx) {
       var thumbId = 'wp-thumb-' + d + '-' + wpIdx;
       var cat = _categorize(wp.type);
-      var fallbackKey = cat.cat === 'urban' ? 'attraction' : cat.cat === 'scenic' ? 'viewpoint' : cat.cat;
-      var fallbackId = _fallbackThumbs[fallbackKey] || _defaultFallback;
-      var fallbackUrl = 'https://images.unsplash.com/' + fallbackId + '?auto=format&fit=crop&w=144&h=144&q=75';
+      var ic = _catEmoji[cat.cat] || _catEmoji.urban;
       html +=
         '<div class="wp-row ddp-wp cat-' + cat.cat + ' has-thumb">' +
           '<span class="wp-badge-letter" style="display:none">' + (wp.letter || '') + '</span>' +
           '<div class="ddp-wp-icon-col">' +
-            '<div class="wp-thumb ddp-wp-icon" id="' + thumbId + '"><img src="' + fallbackUrl + '" alt="' + (wp.name || '') + '"></div>' +
+            '<div class="wp-thumb ddp-wp-icon" id="' + thumbId + '" style="font-size:' + ic.size + 'px;line-height:1;">' + ic.emoji + '</div>' +
             '<div class="ddp-wp-pill"><span class="ddp-wp-pill-text">' + cat.label + '</span></div>' +
           '</div>' +
           '<div class="ddp-wp-text">' +
@@ -6002,20 +6010,6 @@ window.TripItinerary = (function() {
         }
         row.classList.add('selected');
         self._showLocationDetail(wp);
-      });
-    });
-
-    // Async-load Pexels thumbnails
-    (day.waypoints || []).forEach(function(wp, wpIdx) {
-      var thumbId = 'wp-thumb-' + d + '-' + wpIdx;
-      var query = wp.thumbnail_query || wp.name || '';
-      if (!query) return;
-      TripItinerary._fetchPhoto(query, function(url) {
-        var el = section.querySelector('#' + thumbId);
-        if (el && url) {
-          var img = el.querySelector('img');
-          if (img) { img.src = url; img.style.opacity = '0'; img.onload = function() { img.style.opacity = '0.82'; }; }
-        }
       });
     });
 
