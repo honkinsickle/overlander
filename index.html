@@ -1956,23 +1956,23 @@
 
   /* ── ITINERARY SLIDE-UP (Bottom Sheet) ─────────────────── */
   .itin-scrim {
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: rgba(0,0,0,0.4);
-    z-index: 9999;
+    z-index: 99;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.38s ease;
   }
   .itin-scrim.active { opacity: 1; pointer-events: auto; }
   .itin-slideup {
-    position: fixed;
+    position: absolute;
     top: 10px; left: 10px; right: 10px; bottom: 0;
     background: #111214;
     border: 0.5px solid rgba(255,255,255,0.12);
     border-bottom: none;
     border-radius: 0;
-    z-index: 10000;
+    z-index: 100;
     transform: translateY(100%);
     transition: transform 0.475s cubic-bezier(0.32, 0.72, 0, 1);
     overflow: hidden;
@@ -2103,6 +2103,7 @@
     width: 1133px;
     height: 744px;
     overflow: hidden;
+    position: relative;
   }
   .vnav-bar {
     width: 80px;
@@ -5482,7 +5483,7 @@ window.TripItinerary = (function() {
   proto._buildDetailPanel = function() {
     var self = this;
     var panel = document.createElement('div');
-    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;height:calc(100% - 60px);z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);pointer-events:auto;';
+    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);pointer-events:auto;';
 
     // Scrollable inner
     var innerWrap = document.createElement('div');
@@ -8336,6 +8337,20 @@ function aaShowPanel() {
     itinBtn2.addEventListener('click', function() {
       hideTripsPanel();
     });
+  }
+})();
+</script>
+
+<!-- Hoist slide-up + scrim out of .dashboard up to .vnav-shell so they can
+     paint over the vertical nav while staying inside the iPad Mini frame. -->
+<script>
+(function(){
+  var shell = document.querySelector('.vnav-shell');
+  var scrim = document.getElementById('itin-scrim');
+  var slide = document.getElementById('itin-slideup');
+  if (shell && scrim && slide) {
+    shell.appendChild(scrim);
+    shell.appendChild(slide);
   }
 })();
 </script>
