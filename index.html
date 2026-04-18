@@ -5629,6 +5629,20 @@ window.TripItinerary = (function() {
     // Click-to-expand disabled per v3-1 design
     var self = this;
 
+    // Tap a waypoint row → fly the slide-up map to that POI
+    section.querySelectorAll('.wp-row.ddp-wp').forEach(function(row, wpIdx) {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function() {
+        var wp = (day.waypoints || [])[wpIdx];
+        var letter = wp && wp.letter;
+        if (!letter || !self._map) return;
+        var poi = (self.dayPOIs[d] || []).find(function(p) { return p.letter === letter; });
+        if (!poi) return;
+        self._map.flyTo([poi.coords[1], poi.coords[0]], 11, { duration: 0.8 });
+        if (typeof self._highlightPOI === 'function') self._highlightPOI(d, letter);
+      });
+    });
+
     // Async-load Pexels thumbnails
     (day.waypoints || []).forEach(function(wp, wpIdx) {
       var thumbId = 'wp-thumb-' + d + '-' + wpIdx;
