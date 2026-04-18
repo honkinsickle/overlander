@@ -5531,7 +5531,7 @@ window.TripItinerary = (function() {
     var self = this;
     var panel = document.createElement('div');
     panel.className = 'ti-loc-detail';
-    panel.style.cssText = 'position:absolute;top:60px;left:656px;width:477px;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);';
+    panel.style.cssText = 'position:absolute;top:60px;left:656px;width:477px;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;';
 
     var heroImg = 'https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?auto=format&fit=crop&w=960&h=762&q=80';
 
@@ -5637,7 +5637,30 @@ window.TripItinerary = (function() {
       });
     });
 
+    // Wire close button to hide panel (map becomes visible again)
+    var closeBtn = panel.querySelector('.ld-hero-close');
+    if (closeBtn) closeBtn.addEventListener('click', function() { self._hideLocationDetail(); });
+    var backBtn = panel.querySelector('.ld-hero-back');
+    if (backBtn) backBtn.addEventListener('click', function() { self._hideLocationDetail(); });
+
     return panel;
+  };
+
+  proto._showLocationDetail = function(wp) {
+    if (!this._locDetailEl) return;
+    if (wp) {
+      var titleEl = this._locDetailEl.querySelector('.ld-hero-title');
+      if (titleEl && wp.name) titleEl.textContent = wp.name;
+    }
+    this._locDetailEl.style.transform = 'translateX(0)';
+    this._locDetailEl.style.pointerEvents = 'auto';
+    this._locDetailEl.scrollTop = 0;
+  };
+
+  proto._hideLocationDetail = function() {
+    if (!this._locDetailEl) return;
+    this._locDetailEl.style.transform = 'translateX(100%)';
+    this._locDetailEl.style.pointerEvents = 'none';
   };
 
   proto._ldChevron = function() {
@@ -5954,6 +5977,15 @@ window.TripItinerary = (function() {
 
     // Click-to-expand disabled per v3-1 design
     var self = this;
+
+    // Wire waypoint row clicks — show Location Detail in column 3
+    section.querySelectorAll('.wp-row.ddp-wp').forEach(function(row, idx) {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function() {
+        var wp = (day.waypoints || [])[idx] || {};
+        self._showLocationDetail(wp);
+      });
+    });
 
     // Async-load Pexels thumbnails
     (day.waypoints || []).forEach(function(wp, wpIdx) {
