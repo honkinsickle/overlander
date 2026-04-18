@@ -2165,6 +2165,8 @@
   .ti-loc-detail { font-family: 'Barlow', system-ui, sans-serif; color: #ECEAE4; }
   .ti-loc-detail::-webkit-scrollbar { width: 4px; }
   .ti-loc-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+  /* Expanded (v1-3) — covers all three columns, paints above day sidebar (z:9) + center detail (z:8) + map (z:5), stays below header (z:13) */
+  .ti-loc-detail.ld-expanded { left: 0 !important; z-index: 12 !important; border-left: none; }
 
   .ld-hero { position: relative; width: 100%; height: 381px; overflow: hidden; flex-shrink: 0; }
   .ld-hero-img {
@@ -5625,11 +5627,12 @@ window.TripItinerary = (function() {
         '<div class="ld-tip"><div class="ld-tip-emoji">🦟</div><div class="ld-tip-body"><div class="ld-tip-title">Bug Spray</div><div class="ld-tip-text">Mosquitoes in Alaska are the stuff of legend — DEET-based repellent is non-negotiable in June.</div></div></div>' +
       '</div>';
 
-    // Wire close button to hide panel (map becomes visible again)
+    // Close button → hide panel fully (map becomes visible again)
     var closeBtn = panel.querySelector('.ld-hero-close');
     if (closeBtn) closeBtn.addEventListener('click', function() { self._hideLocationDetail(); });
+    // Back caret → toggle expanded (full-width v1-3) vs column (v1-2a)
     var backBtn = panel.querySelector('.ld-hero-back');
-    if (backBtn) backBtn.addEventListener('click', function() { self._hideLocationDetail(); });
+    if (backBtn) backBtn.addEventListener('click', function() { self._toggleLocationDetailExpanded(); });
 
     return panel;
   };
@@ -5649,9 +5652,15 @@ window.TripItinerary = (function() {
     if (!this._locDetailEl) return;
     this._locDetailEl.style.transform = 'translateX(100%)';
     this._locDetailEl.style.pointerEvents = 'none';
+    this._locDetailEl.classList.remove('ld-expanded');
     if (this._detailScroll) {
       this._detailScroll.querySelectorAll('.wp-row.ddp-wp.selected').forEach(function(r) { r.classList.remove('selected'); });
     }
+  };
+
+  proto._toggleLocationDetailExpanded = function() {
+    if (!this._locDetailEl) return;
+    this._locDetailEl.classList.toggle('ld-expanded');
   };
 
   proto._ldChevron = function() {
