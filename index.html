@@ -2166,7 +2166,7 @@
   .ti-loc-detail::-webkit-scrollbar { width: 4px; }
   .ti-loc-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
 
-  .ld-hero { position: relative; width: 477px; height: 381px; overflow: hidden; flex-shrink: 0; }
+  .ld-hero { position: relative; width: 100%; height: 381px; overflow: hidden; flex-shrink: 0; }
   .ld-hero-img {
     position: absolute; inset: 0;
     background-size: cover;
@@ -2187,8 +2187,8 @@
     cursor: pointer;
   }
   .ld-hero-back { left: 16px; }
-  /* Center-aligned (X) with the 32px header close button which sits at right:16px */
-  .ld-hero-close { right: 10px; }
+  /* Matches the header close button above: 32px @ right:16 */
+  .ld-hero-close { right: 16px; width: 32px; height: 32px; }
   .ld-hero-nav {
     position: absolute;
     left: 50%; top: 16px;
@@ -5533,7 +5533,7 @@ window.TripItinerary = (function() {
     var self = this;
     var panel = document.createElement('div');
     panel.className = 'ti-loc-detail';
-    panel.style.cssText = 'position:absolute;top:60px;left:656px;width:477px;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;';
+    panel.style.cssText = 'position:absolute;top:60px;left:656px;right:0;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;';
 
     var heroImg = 'https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?auto=format&fit=crop&w=960&h=762&q=80';
 
