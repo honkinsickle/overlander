@@ -548,6 +548,7 @@
     border-radius: 6px;
     position: relative;
     flex-shrink: 0;
+    cursor: pointer;
   }
   .photo-card img {
     width: 100%; height: 100%;
@@ -4203,8 +4204,25 @@
 
 
 
+  // ── PHOTO CARD TAP → FIT MAP TO THAT DAY'S ROUTE ────────────
+  function initPhotoCardMapLink() {
+    document.querySelectorAll('.day-section .photo-card').forEach(card => {
+      if (card.dataset.mapLinkWired) return;
+      card.dataset.mapLinkWired = '1';
+      card.addEventListener('click', e => {
+        e.stopPropagation();
+        const section = card.closest('.day-section');
+        const day     = section?.dataset?.day;
+        if (!day) return;
+        if (typeof renderMap === 'function') {
+          renderMap(day, true);
+        }
+      });
+    });
+  }
+
   // Run after boot (map ready + initial render done)
-  setTimeout(initWaypointExpand, 300);
+  setTimeout(() => { initWaypointExpand(); initPhotoCardMapLink(); }, 300);
 
 
 
