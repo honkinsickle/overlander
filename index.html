@@ -4110,6 +4110,24 @@
         nameEl.insertAdjacentHTML('beforeend', chevronSVG);
       }
 
+      // Icon/photo tap → pan map only (do NOT expand the row)
+      const badge = row.querySelector('.wp-badge');
+      const thumb = row.querySelector('.wp-thumb');
+      [badge, thumb].forEach(el => {
+        if (!el) return;
+        el.addEventListener('click', e => {
+          e.stopPropagation();
+          const section = row.closest('.day-section');
+          const day     = section?.dataset?.day;
+          const letter  = row.querySelector('.wp-badge-letter')?.textContent?.trim();
+          if (day && letter) {
+            highlightPOI(day, letter);
+            clearTimeout(panTimeout);
+            panTimeout = setTimeout(() => panToPOI(day, letter), 50);
+          }
+        });
+      });
+
       // Build expand panel once on first click, toggle thereafter
       row.addEventListener('click', () => {
         const isExpanded = row.classList.contains('expanded');
