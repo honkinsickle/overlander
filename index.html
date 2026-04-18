@@ -1967,8 +1967,7 @@
   .itin-scrim.active { opacity: 1; pointer-events: auto; }
   .itin-slideup {
     position: fixed;
-    left: 0; right: 0; bottom: 0;
-    height: 97%;
+    top: 0; left: 10px; right: 10px; bottom: 0;
     background: #111214;
     border: 0.5px solid rgba(255,255,255,0.12);
     border-bottom: none;
@@ -5345,11 +5344,11 @@ window.TripItinerary = (function() {
         '<div class="ti-phase-label" style="font-family:var(--ff-sans);font-size:18px;font-weight:700;color:#ECEAE4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phLabel + '</div>' +
         '<div class="ti-phase-eyebrow" style="font-family:var(--ff-sans);font-size:14px;color:#888;letter-spacing:0.06em;">Day ' + phDays + '/' + (phMiles ? phMiles.toLocaleString() + ' mi' : '') + '</div>' +
       '</div>' +
-      '<button class="ti-close-btn" style="width:32px;height:32px;border-radius:50%;background:#333;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">' +
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
-      '</button>' +
       '<button style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">' +
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="#888"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>' +
+      '</button>' +
+      '<button class="ti-close-btn" style="width:32px;height:32px;border-radius:50%;background:#333;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>';
 
     parent.appendChild(hdr);
