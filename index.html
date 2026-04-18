@@ -2163,8 +2163,9 @@
 
   /* ── LOCATION DETAIL (column 3, from 1TI-0) ─────────────── */
   .ti-loc-detail { font-family: 'Barlow', system-ui, sans-serif; color: #ECEAE4; }
-  .ti-loc-detail::-webkit-scrollbar { width: 4px; }
-  .ti-loc-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+  .ld-scroll { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .ld-scroll::-webkit-scrollbar { width: 4px; }
+  .ld-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
   /* Expanded (v1-3) — covers all three columns, paints above day sidebar (z:9) + center detail (z:8) + map (z:5), stays below header (z:13) */
   .ti-loc-detail.ld-expanded { left: 0 !important; z-index: 12 !important; border-left: none; }
 
@@ -2187,6 +2188,7 @@
     border: none;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
+    z-index: 5;
   }
   .ld-hero-back { left: 16px; }
   /* Same size (44×44) and top (16px) as the caret — vertically aligned */
@@ -5535,21 +5537,16 @@ window.TripItinerary = (function() {
     var self = this;
     var panel = document.createElement('div');
     panel.className = 'ti-loc-detail';
-    panel.style.cssText = 'position:absolute;top:60px;left:656px;right:0;bottom:0;z-index:8;background:#111214;overflow-y:auto;-webkit-overflow-scrolling:touch;border-left:1px solid rgba(255,255,255,0.08);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;';
+    panel.style.cssText = 'position:absolute;top:60px;left:656px;right:0;bottom:0;z-index:8;background:#111214;overflow:hidden;border-left:1px solid rgba(255,255,255,0.08);transform:translateX(100%);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;';
 
     var heroImg = 'https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?auto=format&fit=crop&w=960&h=762&q=80';
 
     panel.innerHTML =
+      '<div class="ld-scroll">' +
       // Hero
       '<div class="ld-hero">' +
         '<div class="ld-hero-img" style="background-image:url(' + heroImg + ');"></div>' +
         '<div class="ld-hero-gradient"></div>' +
-        '<button class="ld-hero-btn ld-hero-back" aria-label="Back">' +
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
-        '</button>' +
-        '<button class="ld-hero-btn ld-hero-close" aria-label="Close">' +
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
-        '</button>' +
         '<div class="ld-hero-title-wrap">' +
           '<div class="ld-hero-title">Anchorage, AK</div>' +
           '<div class="ld-hero-updated">Updated · Mar 30, 2025</div>' +
@@ -5625,7 +5622,15 @@ window.TripItinerary = (function() {
         '<div class="ld-tip"><div class="ld-tip-emoji">🌧️</div><div class="ld-tip-body"><div class="ld-tip-title">Waterproof Outerwear</div><div class="ld-tip-text">Be prepared for rain showers with a waterproof jacket or shell. Bring waterproof pants or rain ponchos to stay dry during outdoor activities.</div></div></div>' +
         '<div class="ld-tip"><div class="ld-tip-emoji">🥾</div><div class="ld-tip-body"><div class="ld-tip-title">Sturdy Footwear</div><div class="ld-tip-text">Hiking boots with ankle support for uneven trails, plus comfortable walking shoes for town days.</div></div></div>' +
         '<div class="ld-tip"><div class="ld-tip-emoji">🦟</div><div class="ld-tip-body"><div class="ld-tip-title">Bug Spray</div><div class="ld-tip-text">Mosquitoes in Alaska are the stuff of legend — DEET-based repellent is non-negotiable in June.</div></div></div>' +
-      '</div>';
+      '</div>' +
+      '</div>' + // close .ld-scroll
+      // Buttons live outside the scroll so they stay fixed
+      '<button class="ld-hero-btn ld-hero-back" aria-label="Back">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
+      '</button>' +
+      '<button class="ld-hero-btn ld-hero-close" aria-label="Close">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>';
 
     // Close button → hide panel fully (map becomes visible again)
     var closeBtn = panel.querySelector('.ld-hero-close');
