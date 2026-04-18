@@ -2381,6 +2381,7 @@
   .wp-row.ddp-wp::before { display: none; }
   .wp-row.ddp-wp:hover { background: transparent; }
   .wp-row.ddp-wp { cursor: default; }
+  .wp-row.ddp-wp.selected { background: #2A2C2E; }
   /* Give the last waypoint in a day a closing border so the section feels terminated */
   .day-section .wp-row.ddp-wp:last-of-type { border-bottom: 1px solid rgba(255,255,255,0.06); }
   /* Breathing room before the day-divider */
@@ -5647,6 +5648,9 @@ window.TripItinerary = (function() {
     if (!this._locDetailEl) return;
     this._locDetailEl.style.transform = 'translateX(100%)';
     this._locDetailEl.style.pointerEvents = 'none';
+    if (this._detailScroll) {
+      this._detailScroll.querySelectorAll('.wp-row.ddp-wp.selected').forEach(function(r) { r.classList.remove('selected'); });
+    }
   };
 
   proto._ldChevron = function() {
@@ -5969,6 +5973,11 @@ window.TripItinerary = (function() {
       row.style.cursor = 'pointer';
       row.addEventListener('click', function() {
         var wp = (day.waypoints || [])[idx] || {};
+        // Mark selected across the whole detail scroll panel
+        if (self._detailScroll) {
+          self._detailScroll.querySelectorAll('.wp-row.ddp-wp.selected').forEach(function(r) { r.classList.remove('selected'); });
+        }
+        row.classList.add('selected');
         self._showLocationDetail(wp);
       });
     });
