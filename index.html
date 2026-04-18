@@ -5530,7 +5530,8 @@ window.TripItinerary = (function() {
     this._locCloseBtn = document.createElement('button');
     this._locCloseBtn.className = 'ld-header-close';
     this._locCloseBtn.setAttribute('aria-label', 'Close location');
-    this._locCloseBtn.style.cssText = 'position:absolute;top:18px;right:92px;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.12);display:none;align-items:center;justify-content:center;cursor:pointer;z-index:14;';
+    // Below the 68px header. top:90 centers it vertically with the 44px caret (at panel-top:68 + hero-top:16 + half 22 = 106). right:18 aligns its X-center with the header close (which sits at right:-12 with container padding 16 + 60 width).
+    this._locCloseBtn.style.cssText = 'position:absolute;top:90px;right:18px;width:32px;height:32px;border-radius:8px;background:rgba(0,0,0,0.63);border:none;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:14;';
     this._locCloseBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     this._locCloseBtn.addEventListener('click', function() { self._hideLocationDetail(); });
     dashWrap.appendChild(this._locCloseBtn);
