@@ -5482,7 +5482,7 @@ window.TripItinerary = (function() {
   proto._buildDetailPanel = function() {
     var self = this;
     var panel = document.createElement('div');
-    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);pointer-events:auto;';
+    panel.style.cssText = 'position:absolute;top:60px;left:216px;width:440px;bottom:0;height:calc(100% - 60px);z-index:8;overflow:visible;background:#1B1D21D9;backdrop-filter:blur(6px);box-shadow:4px 0 16px rgba(0,0,0,0.3);pointer-events:auto;';
 
     // Scrollable inner
     var innerWrap = document.createElement('div');
