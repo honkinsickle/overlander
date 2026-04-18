@@ -2542,9 +2542,9 @@
         <div id="hp-trips-empty" style="display:none;flex:1;display:flex;align-items:center;justify-content:center;font-family:var(--ff-mono);font-size:11px;color:#636363;">No trips yet</div>
       </div>
 
-    <!-- ── ITINERARY SLIDE-UP ── -->
-      <div class="itin-scrim" id="itin-scrim"></div>
-      <div class="itin-slideup" id="itin-slideup"></div>
+    <!-- Itinerary slide-up moved to end of .vnav-shell so it paints above
+         the vertical nav and the trips overlay while staying inside the
+         iPad frame. -->
 
     <!-- Hidden elements for photo pipeline -->
     <input type="file" id="creator-file-input" multiple accept="image/*" style="display:none;">
@@ -8341,19 +8341,10 @@ function aaShowPanel() {
 })();
 </script>
 
-<!-- Hoist slide-up + scrim out of .dashboard up to .vnav-shell so they can
-     paint over the vertical nav while staying inside the iPad Mini frame. -->
-<script>
-(function(){
-  var shell = document.querySelector('.vnav-shell');
-  var scrim = document.getElementById('itin-scrim');
-  var slide = document.getElementById('itin-slideup');
-  if (shell && scrim && slide) {
-    shell.appendChild(scrim);
-    shell.appendChild(slide);
-  }
-})();
-</script>
+<!-- Itinerary slide-up — last child of .vnav-shell so it paints above the
+     vertical nav and the trips overlay while staying inside the iPad frame. -->
+<div class="itin-scrim" id="itin-scrim"></div>
+<div class="itin-slideup" id="itin-slideup"></div>
 
 </div><!-- end .vnav-shell -->
 </body>
