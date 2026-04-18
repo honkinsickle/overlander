@@ -5971,7 +5971,8 @@ window.TripItinerary = (function() {
           '<span class="wp-badge-letter" style="display:none">' + (wp.letter || '') + '</span>' +
           '<div class="ddp-wp-icon-col">' +
             '<div class="wp-thumb ddp-wp-icon" id="' + thumbId + '" style="font-size:' + ic.size + 'px;line-height:1;">' + ic.emoji + '</div>' +
-            '<div class="ddp-wp-pill"><span class="ddp-wp-pill-text">' + cat.label + '</span></div>' +
+            // Keep pill in layout (invisible) so the thumbnail stays in its original position
+            '<div class="ddp-wp-pill" style="visibility:hidden;" aria-hidden="true"><span class="ddp-wp-pill-text">' + cat.label + '</span></div>' +
           '</div>' +
           '<div class="ddp-wp-text">' +
             '<div class="ddp-wp-title">' + (wp.name || '') + '</div>' +
