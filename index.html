@@ -5526,16 +5526,6 @@ window.TripItinerary = (function() {
     this._locDetailEl = this._buildLocationDetail();
     dashWrap.appendChild(this._locDetailEl);
 
-    // Location Detail close — lives in the header row, shown only when panel is open
-    this._locCloseBtn = document.createElement('button');
-    this._locCloseBtn.className = 'ld-header-close';
-    this._locCloseBtn.setAttribute('aria-label', 'Close location');
-    // Below the 68px header. top:90 centers it vertically with the 44px caret (at panel-top:68 + hero-top:16 + half 22 = 106). right:18 aligns its X-center with the header close (which sits at right:-12 with container padding 16 + 60 width).
-    this._locCloseBtn.style.cssText = 'position:absolute;top:90px;right:18px;width:32px;height:32px;border-radius:8px;background:rgba(0,0,0,0.63);border:none;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:14;';
-    this._locCloseBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    this._locCloseBtn.addEventListener('click', function() { self._hideLocationDetail(); });
-    dashWrap.appendChild(this._locCloseBtn);
-
     this.container.appendChild(dashWrap);
 
     // Init map after DOM is in place
@@ -5634,12 +5624,15 @@ window.TripItinerary = (function() {
         '<div class="ld-tip"><div class="ld-tip-emoji">🦟</div><div class="ld-tip-body"><div class="ld-tip-title">Bug Spray</div><div class="ld-tip-text">Mosquitoes in Alaska are the stuff of legend — DEET-based repellent is non-negotiable in June.</div></div></div>' +
       '</div>' +
       '</div>' + // close .ld-scroll
-      // Back caret stays on hero; close lives in the header (see _renderItinerary)
+      // Caret + close live outside the scroll so they stay pinned; inside the panel so they slide in with it
       '<button class="ld-hero-btn ld-hero-back" aria-label="Back">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
+      '</button>' +
+      '<button class="ld-hero-btn ld-hero-close" aria-label="Close">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>';
 
-    // Close button → hide panel fully (map becomes visible again)
+    // Close (×) → hide panel fully (map becomes visible again)
     var closeBtn = panel.querySelector('.ld-hero-close');
     if (closeBtn) closeBtn.addEventListener('click', function() { self._hideLocationDetail(); });
     // Back caret → toggle expanded (full-width v1-3) vs column (v1-2a)
@@ -5658,7 +5651,6 @@ window.TripItinerary = (function() {
     this._locDetailEl.style.transform = 'translateX(0)';
     this._locDetailEl.style.pointerEvents = 'auto';
     this._locDetailEl.scrollTop = 0;
-    if (this._locCloseBtn) this._locCloseBtn.style.display = 'flex';
   };
 
   proto._hideLocationDetail = function() {
@@ -5666,7 +5658,6 @@ window.TripItinerary = (function() {
     this._locDetailEl.style.transform = 'translateX(100%)';
     this._locDetailEl.style.pointerEvents = 'none';
     this._locDetailEl.classList.remove('ld-expanded');
-    if (this._locCloseBtn) this._locCloseBtn.style.display = 'none';
     if (this._detailScroll) {
       this._detailScroll.querySelectorAll('.wp-row.ddp-wp.selected').forEach(function(r) { r.classList.remove('selected'); });
     }
