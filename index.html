@@ -451,8 +451,8 @@
     position: absolute;
     top: 152px; left: 412px;
     bottom: 0;
-    width: 478px;
-    background: var(--bg-detail);
+    width: 440px;
+    background: rgba(27, 29, 33, 0.85);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     border-radius: 0;
@@ -467,17 +467,16 @@
   /* ── DAY SECTION — one per day, stacked vertically ──────── */
   .day-section { }
 
-  /* sticky day header — locks at top as you scroll through each day */
+  /* sticky day header — v3 dark band */
   .dd-header {
     position: sticky;
     top: 0;
     z-index: 4;
-    background: rgba(28, 28, 28, 0.97);
+    background: #121111;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    padding: 22px 20px 20px;
-    border-bottom: 1px solid var(--border-subtle);
-    border-top: 1px solid rgba(255,255,255,0.04);
+    padding: 16px 18px;
+    border-bottom: 1px solid #3E3B3B;
   }
 
   /* highlight active day header — green bg */
@@ -492,7 +491,7 @@
   }
 
   .dd-date {
-    font-family: var(--ff-sans); font-size: 30px;
+    font-family: var(--ff-sans); font-size: 24px;
     color: #E8C98E;
     white-space: nowrap;
     line-height: 1.2;
@@ -507,7 +506,8 @@
 
   .dd-route {
     font-family: var(--ff-sans); font-size: 14px;
-    color: var(--text-muted);
+    color: #B8B8B8;
+    line-height: 18px;
   }
 
   .dd-stats {
@@ -538,12 +538,14 @@
     border-bottom: 1px solid rgba(255,255,255,0.03);
   }
 
-  /* ── PHOTO CARD ──────────────────────────────────────────── */
+  /* ── PHOTO CARD — v3 hero ────────────────────────────────── */
   .photo-card {
-    width: 100%;
-    height: 220px;
+    width: calc(100% - 36px);
+    margin: 14px 18px;
+    height: 175px;
     overflow: hidden;
     background: #111;
+    border-radius: 6px;
     position: relative;
     flex-shrink: 0;
   }
@@ -557,32 +559,35 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.6) 100%);
+    background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.65) 100%);
     pointer-events: none;
   }
   .photo-card-label {
     position: absolute;
     bottom: 10px; left: 14px;
     font-family: var(--ff-mono); font-size: 8px;
-    color: rgba(255,255,255,0.55);
-    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.75);
+    letter-spacing: 2px;
+    text-transform: uppercase;
     z-index: 1;
   }
   .photo-card-tag {
     position: absolute;
     bottom: 10px; right: 14px;
     font-family: var(--ff-mono); font-size: 8px;
-    color: var(--amber); letter-spacing: 1px;
+    color: #C8A96E; letter-spacing: 2px;
+    text-transform: uppercase;
     z-index: 1;
   }
 
-  /* ── SECTION LABEL ───────────────────────────────────────── */
+  /* ── SECTION LABEL — v3 Space Grotesk ────────────────────── */
   .dd-section-label {
     padding: 14px 18px 7px;
-    font-family: var(--ff-mono);
+    font-family: "Space Grotesk", system-ui, sans-serif;
     font-size: 13px;
-    color: var(--text-dim);
-    letter-spacing: 3px;
+    color: #FFFFFF;
+    letter-spacing: 6px;
+    text-transform: uppercase;
   }
 
   /* ── WAYPOINT ROWS ───────────────────────────────────────── */
@@ -610,28 +615,30 @@
     pointer-events: none;
   }
 
+  /* v3 circular icon badges */
   .wp-badge {
-    width: 22px; height: 22px;
+    width: 50px; height: 50px;
     border-radius: 50%;
     background: #1f3852;
-    border: 1px solid rgba(74,111,165,0.5);
+    border: 0.5px solid #4A6FA5;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.25);
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
     margin-top: 2px;
   }
-  .wp-badge.fuel  { background: #3b2010; border-color: rgba(199,116,41,0.5); }
-  .wp-badge.food  { background: #1a2e1a; border-color: rgba(76,175,106,0.5); }
-  .wp-badge.camp  { background: #1a2e2e; border-color: rgba(76,175,175,0.4); }
-  .wp-badge.event      { background: #2a1a3e; border-color: rgba(139,92,246,0.5); }
-  .wp-badge.attraction { background: #2a1a3e; border-color: rgba(139,92,246,0.5); }
-  .wp-badge.viewpoint  { background: #2a1e0a; border-color: rgba(200,169,110,0.5); }
-  .wp-badge.photo      { background: #1a2e1a; border-color: rgba(76,175,106,0.5); }
+  .wp-badge.fuel       { background: #4E252F; border-color: #FA9C9D; }
+  .wp-badge.food       { background: #1a2e1a; border-color: #4caf6a; }
+  .wp-badge.camp       { background: #304B4B; border-color: #6ECECE; }
+  .wp-badge.event      { background: #2a1a3e; border-color: #A78BFA; }
+  .wp-badge.attraction { background: #2a1a3e; border-color: #A78BFA; }
+  .wp-badge.viewpoint  { background: #2a1e0a; border-color: #C8A96E; }
+  .wp-badge.photo      { background: #1a2e1a; border-color: #4caf6a; }
 
   .wp-badge-letter {
-    font-family: var(--ff-mono);
-    font-size: 9px;
+    font-family: var(--ff-sans);
+    font-size: 18px;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #FFFFFF;
     line-height: 1;
   }
 
@@ -670,11 +677,19 @@
 
   .wp-name {
     font-family: var(--ff-sans); font-weight: 700;
-    font-size: 15px; color: var(--text-primary);
+    font-size: 20px; color: #FFFFFF;
     line-height: 1.3;
     display: flex; align-items: center; justify-content: space-between;
     gap: 6px;
   }
+  /* v3 category-tinted titles */
+  .wp-row:has(.wp-badge.fuel)       .wp-name { color: #FA9C9D; }
+  .wp-row:has(.wp-badge.food)       .wp-name { color: #4caf6a; }
+  .wp-row:has(.wp-badge.camp)       .wp-name { color: #6ECECE; }
+  .wp-row:has(.wp-badge.event)      .wp-name { color: #A78BFA; }
+  .wp-row:has(.wp-badge.attraction) .wp-name { color: #A78BFA; }
+  .wp-row:has(.wp-badge.viewpoint)  .wp-name { color: #C8A96E; }
+  .wp-row:has(.wp-badge.photo)      .wp-name { color: #4caf6a; }
 
   /* expand chevron inside wp-name */
   .wp-expand-chevron {
@@ -689,13 +704,13 @@
   .wp-row.expanded .wp-expand-chevron { opacity: 1; transform: rotate(180deg); }
 
   .wp-detail {
-    font-family: var(--ff-sans); font-size: 13px;
-    color: #b8b8b8; line-height: 1.5;
+    font-family: var(--ff-sans); font-size: 16px;
+    color: #C7C6C5; line-height: 1.3;
     margin-top: 3px;
   }
   .wp-note {
-    font-family: var(--ff-mono); font-size: 9px;
-    color: var(--amber); letter-spacing: 0.3px;
+    font-family: var(--ff-mono); font-size: 12px;
+    color: #C8A96E; line-height: 1.5;
     margin-top: 4px;
   }
 
