@@ -5543,10 +5543,6 @@ window.TripItinerary = (function() {
         '<button class="ld-hero-btn ld-hero-back" aria-label="Back">' +
           '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8B8B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' +
         '</button>' +
-        '<div class="ld-hero-nav">' +
-          '<div class="ld-hero-nav-pill ld-hero-nav-active" data-ld-tab="overview">Overview</div>' +
-          '<div class="ld-hero-nav-text" data-ld-tab="map">Map</div>' +
-        '</div>' +
         '<button class="ld-hero-btn ld-hero-close" aria-label="Close">' +
           '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
         '</button>' +
@@ -5626,16 +5622,6 @@ window.TripItinerary = (function() {
         '<div class="ld-tip"><div class="ld-tip-emoji">🥾</div><div class="ld-tip-body"><div class="ld-tip-title">Sturdy Footwear</div><div class="ld-tip-text">Hiking boots with ankle support for uneven trails, plus comfortable walking shoes for town days.</div></div></div>' +
         '<div class="ld-tip"><div class="ld-tip-emoji">🦟</div><div class="ld-tip-body"><div class="ld-tip-title">Bug Spray</div><div class="ld-tip-text">Mosquitoes in Alaska are the stuff of legend — DEET-based repellent is non-negotiable in June.</div></div></div>' +
       '</div>';
-
-    // Wire tab toggle (visual state only; map view not implemented yet)
-    var tabs = panel.querySelectorAll('[data-ld-tab]');
-    tabs.forEach(function(tab) {
-      tab.addEventListener('click', function() {
-        tabs.forEach(function(t) { t.classList.remove('ld-hero-nav-active'); t.classList.add('ld-hero-nav-text'); });
-        this.classList.remove('ld-hero-nav-text');
-        this.classList.add('ld-hero-nav-active');
-      });
-    });
 
     // Wire close button to hide panel (map becomes visible again)
     var closeBtn = panel.querySelector('.ld-hero-close');
