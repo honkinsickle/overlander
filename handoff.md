@@ -215,15 +215,19 @@ Safe to add in a follow-up PR when waypoint/category-related screens get impleme
 
 ---
 
+## Recently landed (this session)
+
+- ✅ **Layout grid migration** (commit `bac61e7`) — dashboard now 80 / 215 / 440 / 398 to match Paper. Old 196-wide OVERLANDER sidebar replaced with 80-wide Vertical Nav (Chats / Trips / Sign Out). `.itin-header` left alone intentionally.
+
 ## Open items / Next steps
 
 1. **Verify `#475C78` on `#1A1F28` contrast** (see AA note above). Adjust if needed.
 2. **Decide on `--cat-*` tokens** — land them before implementing waypoint cards in code.
-3. **Implement components** — Paper artboards are the specs; none of the components exist in the codebase yet. Start with Button and Form Fields since their tokens are now available.
+3. **Implement components** — Paper artboards are the specs; most components don't exist in the codebase yet. Start with Button and Form Fields since their tokens are now available.
 4. **Icon Library** — 50 icons drawn in Paper. Consider converting to an SVG sprite or a React/Svelte icon component file for use in code.
 5. **Space Grotesk usage** — the font loads now, but `.dd-section-label` was the only class using it. Audit any other places that should use `--ff-display`.
 6. **Planning v3 flow** — entire flow exists only in Paper. Build screens into the app using the aligned patterns.
-7. **Scheduled review** — if a reviewer lands PR #3, follow up with a short PR introducing `--cat-*` tokens so that waypoint-related work can land cleanly.
+7. **Vertical Nav wiring** — the new sidebar markup has `.active` hardcoded on Chats and no click handlers. When the app gains real routing, wire these to the active route.
 
 ---
 
