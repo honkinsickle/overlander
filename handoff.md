@@ -237,3 +237,31 @@ Safe to add in a follow-up PR when waypoint/category-related screens get impleme
 - Branch: `claude/silly-mccarthy` (based on `main`)
 - Paper file: `overlander_1`, Page 1 (`01KNTTXWMSGRKMFXS30V1HW3GS`)
 - Style Guide artboard: `7US-0` (top-left of the canvas, search for "Style Guide")
+
+---
+
+## Starter prompt for the next chat
+
+Copy-paste this to hand the project off cleanly:
+
+```
+Start a new worktree. Read these two things before touching anything:
+
+1. `handoff.md` in the repo root — session summary and open items
+2. index.html lines 27–73 — the canonical :root design tokens
+
+Visual specs live in Paper file `overlander_1`, artboard "Style Guide"
+(id 7US-0). The Components Index section there links to per-component
+artboards. Only use Paper tools if the task requires visual context —
+otherwise work from the code tokens directly.
+
+Key rules:
+- Blue --input-* + --button-primary-* for forms and CTAs
+- Amber for brand/active identity only (Chats active, "Automagically"
+  italic, day-card dates, --amber-dark alert)
+- Space Grotesk (--ff-display) for wide-tracked section labels
+- Form Fields primitive: 46h, radius 4, 3px focus ring
+- Layout grid: 80 / 215 / 440 / 398 (sidebar / day-col / detail / map)
+
+Confirm you've read these, then ask what to tackle.
+```
