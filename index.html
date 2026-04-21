@@ -20,7 +20,7 @@
     ? window.location.origin
     : 'https://compassionate-transformation-production-824f.up.railway.app';
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -40,12 +40,38 @@
     --amber:         #c8a96e;
     --amber-dark:    #c77429;
     --amber-light:   #e8c98e;
+
+    /* CTA (Primary Button) */
+    --button-primary:        rgba(61,162,221,0.70);
+    --button-primary-hover:  rgba(61,162,221,0.88);
+    --button-primary-pressed: #2A6D94;
+    --button-primary-border: #4DAAFF;
+    --button-primary-ring:   rgba(77,170,255,0.25);
     --text-primary:  #eceae4;
     --text-muted:    #888888;
     --text-dim:      #888888;
     --nav-border:    #46586a;
-    --ff-mono:  'Space Mono', monospace;
-    --ff-sans:  'Barlow', sans-serif;
+    --ff-mono:    'Space Mono', monospace;
+    --ff-sans:    'Barlow', sans-serif;
+    --ff-display: 'Space Grotesk', system-ui, sans-serif;
+
+    /* Form fields */
+    --input-surface:          #1A1F28;  /* empty / unfocused */
+    --input-surface-filled:   #2B3B52;  /* filled or active */
+    --input-surface-hover:    #32455F;
+    --input-surface-disabled: #242F42;
+    --input-border:           #475C78;  /* empty / unfocused */
+    --input-border-filled:    #7E98BF;  /* filled or active */
+    --input-border-hover:     #8AA2C4;
+    --input-border-focus:     #A7CCFD;
+    --input-border-disabled:  #3E516C;
+    --input-focus-ring:       rgba(167,204,253,0.18);
+    --input-accent:           #92BEFD;
+    --input-placeholder:      #B3B3B3;
+    --input-value:            #EDF1F6;
+    --input-disabled-text:    #556984;
+    --input-error:            #E08872;
+    --input-success:          #7ACEA1;
   }
 
   html, body {
