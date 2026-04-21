@@ -2,12 +2,7 @@
 
 A summary of the design-system work done in this session — what shipped to code, what lives in Paper, and what's still open.
 
-> ⚠️ **If you don't see the `--button-primary-*`, `--input-*`, or `--ff-display` tokens in `index.html :root`:** this document was written on branch `claude/silly-mccarthy` (PR #3 + follow-ups). Everything below assumes those commits are in your tree. If your worktree was cut from `main` before the PR merged, either:
->
-> - Merge PR #3 into main, then re-cut your worktree, **or**
-> - Cherry-pick the relevant commits: `git cherry-pick f3d5bb8 bac61e7` (tokens + layout migration)
->
-> The canonical state is the set of commits reachable from the tip of `claude/silly-mccarthy`.
+> ✓ **PR #3 merged to `main` as commit `47d07e1`.** Fresh worktrees cut from `main` will have all tokens.
 
 ## TL;DR
 
