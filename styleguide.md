@@ -210,6 +210,7 @@ All components specified in Paper file `overlander_1`, Page 1.
 | Waypoint Card | `ALI-0` | 420w row, uses `--cat-*` palette |
 | Slideup Header | `ANC-0` | 1113×68, 3 variants |
 | Day Section Header | `B3Q-0` | 440×80, Space Grotesk label |
+| Day Detail Hero | `G85-0` | 404×175 photo card · `.photo-card.ddp-hero` · Space Mono label + amber tag overlay |
 | Location Detail Panel | `B6O-0` | 457w; hero + description + places + index |
 | Search Input — Blue | `9WP-0` | 8 states incl. file uploads |
 | Search Input — Amber | `BKU-0` | legacy brand variant |
