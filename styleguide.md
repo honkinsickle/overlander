@@ -211,6 +211,7 @@ All components specified in Paper file `overlander_1`, Page 1.
 | Slideup Header | `ANC-0` | 1113×68, 3 variants |
 | Day Section Header | `B3Q-0` | 440×80, Space Grotesk label |
 | Day Detail Hero | `G85-0` | 404×175 photo card · `.photo-card.ddp-hero` · Space Mono label + amber tag overlay |
+| Day Detail Card | `GDB-0` | 440w composition: Day Section Header + Day Detail Hero + Waypoint Card rows; canonical instance at `G4A-0` |
 | Location Detail Panel | `B6O-0` | 457w; hero + description + places + index |
 | Search Input — Blue | `9WP-0` | 8 states incl. file uploads |
 | Search Input — Amber | `BKU-0` | legacy brand variant |
