@@ -205,14 +205,14 @@ All components specified in Paper file `overlander_1`, Page 1.
 
 | Component | Artboard | Notes |
 |---|---|---|
-| Slideup | `GHR-0` | 1113×734 shell composition; canonical instance at `FXB-0` |
+| Slideup | `GHR-0` | 1113×734 shell composition: header + 3-column body (day sidebar · day detail card · map) |
 | Vertical Nav | `AEP-0` | 80w column, amber-dark active |
 | Day Card | `AH0-0` | 3 states + sidebar stack |
 | Waypoint Card | `ALI-0` | 420w row, uses `--cat-*` palette |
 | Slideup Header | `ANC-0` | 1113×68, 3 variants |
 | Day Section Header | `B3Q-0` | 440×80, Space Grotesk label |
 | Day Detail Hero | `G85-0` | 404×175 photo card · `.photo-card.ddp-hero` · Space Mono label + amber tag overlay |
-| Day Detail Card | `GDB-0` | 440w composition: Day Section Header + Day Detail Hero + Waypoint Card rows; canonical instance at `G4A-0` |
+| Day Detail Card | `GDB-0` | 440w composition: Day Section Header + Day Detail Hero + Waypoint Card rows |
 | Location Detail Panel | `B6O-0` | 457w; hero + description + places + index |
 | Search Input — Blue | `9WP-0` | 8 states incl. file uploads |
 | Search Input — Amber | `BKU-0` | legacy brand variant |
