@@ -255,7 +255,9 @@ Contrast targets:
 
 ---
 
-## Layout grid
+## Layout grids
+
+### Dashboard
 
 Design canvas is **1133 × 744** (iPad Mini landscape). The primary split is:
 
@@ -264,6 +266,56 @@ Design canvas is **1133 × 744** (iPad Mini landscape). The primary split is:
 - Map / detail column: flexible (right)
 
 See Style Guide artboard `7US-0` for the visual grid overlay.
+
+### Itinerary slide-up
+
+Bottom sheet that overlays the dashboard to present a saved trip. Reference: Paper artboards `7KP-0` (rendered) and `ANC-0` (header component).
+
+**Shell**
+
+| Property | Value |
+|---|---|
+| Position | absolute; `top: 10px; left: 10px; right: 10px; bottom: 0` |
+| Background | `--bg-panel` (#111214) |
+| Border | 0.5px solid rgba(255,255,255,0.12), bottom removed |
+| Shadow | 0 -8px 40px rgba(0,0,0,0.5) |
+| z-index | sheet 10001, scrim 10000 |
+| Enter / exit | `transform: translateY(100% ↔ 0)` over 475ms cubic-bezier(0.32, 0.72, 0, 1) |
+| Scrim | rgba(0,0,0,0.4), 380ms opacity fade |
+
+**Internal layout** (measured at canvas width 1133)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Header — 1133 × 68                                              │
+│ ◂ | title · day range/mileage                    menu   close   │
+├───────────────┬─────────────────────────┬───────────────────────┤
+│ Day Sidebar   │ Detail Panel            │ Map Area              │
+│    216        │    440                  │    477                │
+│               │                         │ (→ Location Detail    │
+│ stacked day   │ day header · hero ·     │  panel when a         │
+│ cards         │ waypoints list          │  waypoint is opened)  │
+│               │                         │                       │
+│               │                         │                       │
+│     676       │        676              │        676            │
+└───────────────┴─────────────────────────┴───────────────────────┘
+```
+
+| Column | Width | Role |
+|---|---|---|
+| Day Sidebar | 216 | Vertical stack of day cards (left) |
+| Detail Panel | 440 | Selected day's waypoints + hero (center) |
+| Map Area | 477 | Road-snapped route + POI pins (right) |
+
+Columns sum to 1133. When a waypoint in the Detail Panel is opened, the Location Detail panel (artboard `B6O-0`) slides in and replaces the Map Area column.
+
+**Header slots** (68px tall, full width)
+
+| Slot | Content |
+|---|---|
+| Left | Back chevron + vertical divider |
+| Center | Title (Barlow 18 / 700) + day-range + mileage (Space Mono 11) |
+| Right | Menu icon + square close button (full header height) |
 
 ---
 
