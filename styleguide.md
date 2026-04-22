@@ -283,21 +283,21 @@ Bottom sheet that overlays the dashboard to present a saved trip. Reference: Pap
 | Enter / exit | `transform: translateY(100% ↔ 0)` over 475ms cubic-bezier(0.32, 0.72, 0, 1) |
 | Scrim | rgba(0,0,0,0.4), 380ms opacity fade |
 
-**Internal layout** (measured at canvas width 1133)
+**Internal layout** (measured at shell dimensions 1113 × 734 — the canvas less the 10px horizontal insets)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Header — 1133 × 68                                              │
+│ Header — 1113 × 68                                              │
 │ ◂ | title · day range/mileage                    menu   close   │
 ├───────────────┬─────────────────────────┬───────────────────────┤
 │ Day Sidebar   │ Detail Panel            │ Map Area              │
-│    215        │    440                  │    478                │
+│    215        │    440                  │    458                │
 │               │                         │ (→ Location Detail    │
 │ stacked day   │ day header · hero ·     │  panel when a         │
 │ cards         │ waypoints list          │  waypoint is opened)  │
 │               │                         │                       │
 │               │                         │                       │
-│     676       │        676              │        676            │
+│     666       │        666              │        666            │
 └───────────────┴─────────────────────────┴───────────────────────┘
 ```
 
@@ -305,9 +305,9 @@ Bottom sheet that overlays the dashboard to present a saved trip. Reference: Pap
 |---|---|---|
 | Day Sidebar | 215 | Vertical stack of day cards (left) |
 | Detail Panel | 440 | Selected day's waypoints + hero (center) |
-| Map Area | 478 | Road-snapped route + POI pins (right) |
+| Map Area | 458 | Road-snapped route + POI pins (right) |
 
-Columns sum to 1133. When a waypoint in the Detail Panel is opened, the Location Detail panel (artboard `B6O-0`) slides in and replaces the Map Area column.
+Columns sum to 1113 (the shell width). Body height is 666 (shell 734 less the 68px header). When a waypoint in the Detail Panel is opened, the Location Detail panel (artboard `B6O-0`) slides in and replaces the Map Area column.
 
 **Header slots** (68px tall, full width)
 
