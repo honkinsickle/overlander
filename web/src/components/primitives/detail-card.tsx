@@ -1,5 +1,15 @@
 import * as React from "react";
-import { X } from "lucide-react";
+import {
+  X,
+  Fuel,
+  Tent,
+  Mountain,
+  Building2,
+  UtensilsCrossed,
+  Eye,
+  Star,
+  MapPin,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type Category =
@@ -26,6 +36,22 @@ export const categoryStyle: Record<
   oddity:     { accent: "var(--cat-oddity)",     bg: "var(--cat-oddity-bg)",     label: "ODDITY" },
   attraction: { accent: "var(--cat-attraction)", bg: "var(--cat-attraction-bg)", label: "ATTRACTION" },
   neutral:    { accent: "var(--cat-neutral)",    bg: "var(--cat-neutral-bg)",    label: "NEUTRAL" },
+};
+
+/** Lucide icon per category — used in the Waypoint Card badge (Paper ALI-0).
+ *  Paper uses emoji (🛢 ⛺ 🚕 🏔 👁 🍔 ⭐); these are the closest lucide matches. */
+export const categoryIcon: Record<
+  Category,
+  React.ComponentType<{ className?: string }>
+> = {
+  fuel:       Fuel,
+  camping:    Tent,
+  mountain:   Mountain,
+  urban:      Building2,
+  food:       UtensilsCrossed,
+  oddity:     Eye,
+  attraction: Star,
+  neutral:    MapPin,
 };
 
 export type DetailCardProps = {

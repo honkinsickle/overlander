@@ -21,6 +21,23 @@ export type Day = {
   date: string;
   /** Human-readable span (e.g. "Seattle, WA — Mount Rainier NP"). */
   label: string;
+  /** `[lng, lat]` the map flies to when this day is active. */
+  coords?: [number, number];
+  /** Total driving miles for the day (sidebar stat). */
+  miles?: number;
+  /** Estimated driving hours for the day (sidebar stat). */
+  driveHours?: number;
+  /** Optional hero image URL. If absent, `heroGradient` drives the panel. */
+  heroImage?: string;
+  /** CSS `background` value used when `heroImage` is absent (Paper's
+   *  "Gradient fallback" variant from Day Detail Hero G85-0). */
+  heroGradient?: string;
+  /** Space Mono caption overlayed bottom-left on the hero
+   *  (e.g. `MOJAVE DESERT · I-15 N · DAY 01`). */
+  heroCaption?: string;
+  /** Optional amber-colored compass tag overlayed top-right on the hero
+   *  (e.g. `↑ NORTHBOUND`). */
+  heroTag?: string;
   waypoints: Waypoint[];
   overnight?: OvernightSelection;
 };

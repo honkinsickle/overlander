@@ -1,18 +1,25 @@
 import { notFound } from "next/navigation";
+import { DaySidebar } from "@/components/trip/day-sidebar";
 import { MapColumn } from "@/components/trip/map-column";
 import { getTrip } from "@/lib/trips/repository";
 
 /**
- * Split-column layout for a trip.
+ * Active-trip layout — vnav + 3-column body (day sidebar · detail · map).
  *
- * 80 (vertical nav) · 440 (center column) · 613 (map column) = 1133
- * Fixed 1133×744 canvas for now to match the prototype.
+ * Target widths at 1113w body (per styleguide.md "Itinerary slide-up"):
+ *   Day Sidebar 215 · Detail Panel 440 · Map Area 458
  *
- * The map column is rendered here so it persists across center-column
- * navigation (e.g. opening /trip/:id/ask only swaps children).
+ * Container-driven: fills whatever parent gives it (viewport for the
+ * full-page route, future slideup shell for the modal-intercepted route,
+ * future full-screen map if that ships).
  *
- * Waypoint detail fetches on demand via /api/trips/:id/waypoints/:slug
- * when the URL's `?panel=waypoint&id=<slug>` search params change.
+ * Children rely on the parent's `align-items: stretch` (flex default) for
+ * full-height sizing; `h-full` would be unreliable here because the
+ * parent's height is flex-derived rather than explicit.
+ *
+ * The day sidebar and map column live in the layout so they persist
+ * across center-column navigation (e.g. opening /trip/:id/ask only
+ * swaps the children slot).
  */
 export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
   const { id } = await props.params;
@@ -20,16 +27,19 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
   if (!trip) notFound();
 
   return (
-    <div className="flex w-[1133px] h-[744px] bg-bg-base text-text-primary">
+    <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
       <aside
-        className="w-[80px] h-full bg-bg-panel border-r border-border-subtle"
+        className="w-[80px] bg-bg-panel border-r border-border-subtle shrink-0"
         aria-label="Vertical navigation"
       />
-      <section className="w-[440px] h-full bg-bg-panel border-r border-border-subtle overflow-y-auto">
+      <aside className="w-[215px] shrink-0 overflow-hidden" aria-label="Days">
+        <DaySidebar tripId={trip.id} days={trip.days} />
+      </aside>
+      <section className="w-[440px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
         {props.children}
       </section>
-      <section className="flex-1 h-full" aria-label="Map">
-        <MapColumn tripId={trip.id} />
+      <section className="flex-1 min-w-0 relative overflow-hidden" aria-label="Map">
+        <MapColumn tripId={trip.id} days={trip.days} />
       </section>
     </div>
   );

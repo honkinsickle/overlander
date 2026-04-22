@@ -102,7 +102,9 @@ export const STEP_TITLE: Record<PlanStep, string> = {
   results: "Your trip",
 };
 
-export const TOTAL_DISPLAY_STEPS = 7;
+// Paper numbers the flow as 02–08 (step 01 is the Entry screen). We keep
+// that denominator here even though code collapses the original 04 slot.
+export const TOTAL_DISPLAY_STEPS = 8;
 
 export function nextStep(step: PlanStep): PlanStep | null {
   const i = PLAN_STEPS.indexOf(step);

@@ -7,11 +7,19 @@ import { renameDayAction, deleteDayAction } from "@/lib/trips/actions";
 import type { Day } from "@/lib/trips/types";
 
 /**
- * Day header row — span label + date + kebab menu with day actions.
+ * Day Section Header — Paper B3Q-0 / GDI-0.
  *
- * Rename: kebab → inline edit input, Enter to save, Escape to cancel.
- * Delete: kebab → native confirm → server action.
- * Move/Add: stubbed (not in this round).
+ * From `get_computed_styles` on GDI-0:
+ *   flex-col justify-center · 440×80 · padding-left 18 (only!) · gap 2
+ *   bg --bg-panel · border-b 1 solid --border-mid
+ *
+ * Children:
+ *   Route (GDJ-0): Barlow 400 · 14/18 · --text-muted · pre-wrap
+ *   Title (GDK-0): Barlow 400 · 24/28 · --amber-light · pre-wrap
+ *
+ * Kebab is NOT in Paper GDI-0. Kept as supplemental (absolutely
+ * positioned, right-aligned) so the base layout stays pixel-exact and
+ * the rename/delete flow still works.
  */
 export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
   const dayDate = new Date(`${day.date}T00:00:00`).toLocaleDateString("en-US", {
@@ -65,8 +73,8 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-2 p-4 bg-bg-card border border-input-border-focus rounded">
-        <span className="text-sm text-text-muted font-mono">
+      <header className="flex flex-col gap-[2px] h-[80px] pl-[18px] pr-4 justify-center bg-bg-panel border-b border-border-mid">
+        <span className="font-sans text-[14px] leading-[18px] text-text-muted">
           Day {day.dayNumber} — {dayDate}
         </span>
         <div className="flex items-center gap-2">
@@ -106,32 +114,37 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
             {error}
           </span>
         )}
-      </div>
+      </header>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 p-4 bg-bg-card border border-border-subtle rounded">
-      <div className="flex-1 flex flex-col gap-0.5">
-        <span className="text-sm text-text-muted font-mono">{day.label}</span>
-        <span className="font-sans font-bold text-text-primary">
-          Day {day.dayNumber} — {dayDate}
+    <header className="relative flex flex-col justify-center gap-[2px] h-[80px] pl-[18px] bg-bg-panel border-b border-border-mid">
+      <span className="font-sans text-[14px] leading-[18px] text-text-muted">
+        {day.label}
+      </span>
+      <h2 className="font-sans text-[24px] leading-[28px] text-amber-light">
+        Day {day.dayNumber} &mdash; {dayDate}
+      </h2>
+      {error && (
+        <span className="font-mono text-xs text-input-error" role="alert">
+          {error}
         </span>
-        {error && (
-          <span className="text-xs text-input-error font-mono mt-1" role="alert">
-            {error}
-          </span>
-        )}
+      )}
+
+      {/* Supplemental: kebab not in GDI-0; overlay top-right so it
+       *  doesn't disturb the flex layout. */}
+      <div className="absolute top-1/2 -translate-y-1/2 right-3">
+        <KebabMenu
+          triggerLabel={`Day ${day.dayNumber} options`}
+          items={[
+            { id: "rename", label: "Rename day",              icon: Pencil, onSelect: startRename },
+            { id: "move",   label: "Move day",                icon: Move,   onSelect: () => console.log("move", day.id) },
+            { id: "add",    label: "Add waypoint or overnight", icon: Plus, onSelect: () => console.log("add", day.id) },
+            { id: "delete", label: "Delete day",              icon: Trash2, danger: true, dividerBefore: true, onSelect: confirmDelete },
+          ]}
+        />
       </div>
-      <KebabMenu
-        triggerLabel={`Day ${day.dayNumber} options`}
-        items={[
-          { id: "rename", label: "Rename day",              icon: Pencil, onSelect: startRename },
-          { id: "move",   label: "Move day",                icon: Move,   onSelect: () => console.log("move", day.id) },
-          { id: "add",    label: "Add waypoint or overnight", icon: Plus, onSelect: () => console.log("add", day.id) },
-          { id: "delete", label: "Delete day",              icon: Trash2, danger: true, dividerBefore: true, onSelect: confirmDelete },
-        ]}
-      />
-    </div>
+    </header>
   );
 }
