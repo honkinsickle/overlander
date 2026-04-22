@@ -205,6 +205,7 @@ All components specified in Paper file `overlander_1`, Page 1.
 
 | Component | Artboard | Notes |
 |---|---|---|
+| Slideup | `GHR-0` | 1113×734 shell composition; canonical instance at `FXB-0` |
 | Vertical Nav | `AEP-0` | 80w column, amber-dark active |
 | Day Card | `AH0-0` | 3 states + sidebar stack |
 | Waypoint Card | `ALI-0` | 420w row, uses `--cat-*` palette |
