@@ -291,7 +291,7 @@ Bottom sheet that overlays the dashboard to present a saved trip. Reference: Pap
 │ ◂ | title · day range/mileage                    menu   close   │
 ├───────────────┬─────────────────────────┬───────────────────────┤
 │ Day Sidebar   │ Detail Panel            │ Map Area              │
-│    216        │    440                  │    477                │
+│    215        │    440                  │    478                │
 │               │                         │ (→ Location Detail    │
 │ stacked day   │ day header · hero ·     │  panel when a         │
 │ cards         │ waypoints list          │  waypoint is opened)  │
@@ -303,9 +303,9 @@ Bottom sheet that overlays the dashboard to present a saved trip. Reference: Pap
 
 | Column | Width | Role |
 |---|---|---|
-| Day Sidebar | 216 | Vertical stack of day cards (left) |
+| Day Sidebar | 215 | Vertical stack of day cards (left) |
 | Detail Panel | 440 | Selected day's waypoints + hero (center) |
-| Map Area | 477 | Road-snapped route + POI pins (right) |
+| Map Area | 478 | Road-snapped route + POI pins (right) |
 
 Columns sum to 1133. When a waypoint in the Detail Panel is opened, the Location Detail panel (artboard `B6O-0`) slides in and replaces the Map Area column.
 
