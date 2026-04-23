@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { MessageSquare, MapPin, LogOut } from "lucide-react";
+import { VerticalNav } from "@/components/chrome/vertical-nav";
 import { PlanningTopbar } from "./planning-topbar";
 
 /**
@@ -16,45 +16,6 @@ export function PlanningLayout({ children }: { children: ReactNode }) {
         <PlanningTopbar />
         <div className="flex-1 relative">{children}</div>
       </div>
-    </div>
-  );
-}
-
-function VerticalNav() {
-  return (
-    <aside
-      className="w-[80px] h-full flex flex-col items-center justify-between py-4 bg-bg-panel border-r border-border-subtle"
-      aria-label="Vertical navigation"
-    >
-      <div className="flex flex-col gap-6">
-        <NavButton icon={MessageSquare} label="Chats" active />
-        <NavButton icon={MapPin} label="Trips" />
-      </div>
-      <NavButton icon={LogOut} label="Sign Out" />
-    </aside>
-  );
-}
-
-function NavButton({
-  icon: Icon,
-  label,
-  active,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className={[
-          "w-10 h-10 flex items-center justify-center rounded",
-          active ? "bg-bg-tab-active text-amber" : "text-text-primary",
-        ].join(" ")}
-      >
-        <Icon className="w-5 h-5" />
-      </div>
-      <span className="font-sans text-[11px] text-text-primary">{label}</span>
     </div>
   );
 }

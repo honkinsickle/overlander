@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { VerticalNav } from "@/components/chrome/vertical-nav";
 import { DaySidebar } from "@/components/trip/day-sidebar";
 import { MapColumn } from "@/components/trip/map-column";
 import { getTrip } from "@/lib/trips/repository";
@@ -28,10 +29,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
 
   return (
     <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
-      <aside
-        className="w-[80px] bg-bg-panel border-r border-border-subtle shrink-0"
-        aria-label="Vertical navigation"
-      />
+      <VerticalNav />
       <aside className="w-[215px] shrink-0 overflow-hidden" aria-label="Days">
         <DaySidebar tripId={trip.id} days={trip.days} />
       </aside>

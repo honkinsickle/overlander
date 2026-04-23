@@ -36,9 +36,30 @@ export function DaySidebar({
 }) {
   const searchParams = useSearchParams();
   const queried = searchParams.get("day");
-  const activeId = queried && days.some((d) => d.id === queried)
-    ? queried
-    : days[0]?.id;
+  // Scroll-spy in DayDetail broadcasts via window events so it doesn't
+  // have to round-trip through the router. Local state tracks both the
+  // URL value (on navigation) and those broadcasts (on scroll).
+  const [spyActiveId, setSpyActiveId] = useState<string | null>(null);
+  const activeId =
+    spyActiveId && days.some((d) => d.id === spyActiveId)
+      ? spyActiveId
+      : queried && days.some((d) => d.id === queried)
+        ? queried
+        : days[0]?.id;
+
+  useEffect(() => {
+    const onSpy = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (id) setSpyActiveId(id);
+    };
+    window.addEventListener("trip:activeDay", onSpy);
+    return () => window.removeEventListener("trip:activeDay", onSpy);
+  }, []);
+
+  // Reset spy tracking when ?day= changes via a real navigation.
+  useEffect(() => {
+    setSpyActiveId(null);
+  }, [queried]);
   const navRef = useRef<HTMLElement>(null);
   const didInitial = useRef(false);
   // Spacer height so the last day card can always scroll to the top:

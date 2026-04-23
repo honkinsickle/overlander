@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
+import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import { WaypointCard } from "@/components/trip/waypoint-card";
 import type { Trip, Day } from "@/lib/trips/types";
 
@@ -25,13 +26,8 @@ const SCROLL_TRIGGER = 100;
  * changes use smooth scrolling.
  */
 export function DayDetail({ trip }: { trip: Trip }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const queried = searchParams.get("day");
-  const activeId =
-    queried && trip.days.some((d) => d.id === queried)
-      ? queried
-      : trip.days[0]?.id;
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
   // While a programmatic smooth scroll is in flight, the scroll-spy must
@@ -41,14 +37,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
   // feel the user reported.
   const programmaticScrollRef = useRef(false);
 
-  // Sidebar click / deep link → scroll active day into view. Skip when
-  // the section is already in its "active" band near the top (that's
-  // where the scroll-spy lives, so it would be a redundant 0–100px jump).
+  // Sidebar click / deep link → scroll requested day into view. Only
+  // fires when `?day=` is explicitly set; an initial load without the
+  // param stays at scrollTop 0 so the TripDetailHeader is visible.
   useEffect(() => {
-    if (!activeId || !scrollRef.current) return;
+    if (!queried || !scrollRef.current) return;
     const container = scrollRef.current;
     const el = container.querySelector<HTMLElement>(
-      `#day-${CSS.escape(activeId)}`,
+      `#day-${CSS.escape(queried)}`,
     );
     if (!el) return;
     const offset = el.offsetTop - container.scrollTop;
@@ -69,14 +65,17 @@ export function DayDetail({ trip }: { trip: Trip }) {
       programmaticScrollRef.current = false;
     }, 600);
     return () => clearTimeout(tid);
-  }, [activeId]);
+  }, [queried]);
 
-  // Scroll-spy: as the user scrolls, update ?day= so the sidebar
-  // highlight follows. Trigger sits just below the 80px sticky header.
+  // Scroll-spy: update the active day without touching Next's router.
+  // `history.replaceState` keeps the URL bar in sync for share/reload,
+  // and a custom event lets the sidebar follow the scroll without an
+  // RSC refetch (router.replace in this spot previously caused hundreds
+  // of chunk requests during scroll).
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
-    let lastId: string | null = null;
+    let lastEmitted: string | null = null;
     let ticking = false;
 
     const update = () => {
@@ -91,9 +90,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
           currentId = s.id.replace(/^day-/, "");
         }
       }
-      if (!currentId || currentId === lastId) return;
-      lastId = currentId;
-      router.replace(`/trip/${trip.id}?day=${currentId}`, { scroll: false });
+      if (!currentId || currentId === lastEmitted) return;
+      lastEmitted = currentId;
+      const url = new URL(window.location.href);
+      url.searchParams.set("day", currentId);
+      window.history.replaceState(null, "", url);
+      window.dispatchEvent(
+        new CustomEvent("trip:activeDay", { detail: { id: currentId } }),
+      );
     };
 
     const onScroll = () => {
@@ -104,13 +108,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
 
     root.addEventListener("scroll", onScroll, { passive: true });
     return () => root.removeEventListener("scroll", onScroll);
-  }, [trip.id, trip.days, router]);
+  }, [trip.id]);
 
   const totalStops = trip.days.reduce((n, d) => n + d.waypoints.length, 0);
 
   return (
     <div className="flex flex-col h-full">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <TripDetailHeader trip={trip} />
         {trip.days.map((day) => (
           <DaySection key={day.id} trip={trip} day={day} />
         ))}
@@ -132,16 +137,26 @@ export function DayDetail({ trip }: { trip: Trip }) {
   );
 }
 
-function DaySection({ trip, day }: { trip: Trip; day: Day }) {
+function DaySection({
+  trip,
+  day,
+  hideHeader = false,
+}: {
+  trip: Trip;
+  day: Day;
+  hideHeader?: boolean;
+}) {
   // `last:min-h-full` guarantees the final day can scroll to the top of
   // the viewport even if its content is shorter than the scroll container.
   return (
     <section id={`day-${day.id}`} className="scroll-mt-0 last:min-h-full">
       {/* ── Day Detail Card (GDH-0) ─────────────────────────── */}
       <article className="flex flex-col items-stretch bg-bg-card">
-        <div className="sticky top-0 z-10">
-          <DayHeader tripId={trip.id} day={day} />
-        </div>
+        {!hideHeader && (
+          <div className="sticky top-0 z-10">
+            <DayHeader tripId={trip.id} day={day} />
+          </div>
+        )}
 
         {/* Hero wrapper (GDL-0) */}
         <div className="flex justify-center pt-[14px]">
