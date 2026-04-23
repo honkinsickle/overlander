@@ -42,7 +42,7 @@ export const categoryStyle: Record<
  *  Paper uses emoji (🛢 ⛺ 🚕 🏔 👁 🍔 ⭐); these are the closest lucide matches. */
 export const categoryIcon: Record<
   Category,
-  React.ComponentType<{ className?: string }>
+  React.ComponentType<React.SVGProps<SVGSVGElement>>
 > = {
   fuel:       Fuel,
   camping:    Tent,

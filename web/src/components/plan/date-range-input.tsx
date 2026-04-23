@@ -42,12 +42,12 @@ export function DateRangeInput({
   return (
     <Popover>
       <div className="flex gap-2">
-        <PopoverTrigger asChild>
-          <DateField placeholder="Start" value={startLabel} />
-        </PopoverTrigger>
-        <PopoverTrigger asChild>
-          <DateField placeholder="End" value={endLabel} />
-        </PopoverTrigger>
+        <PopoverTrigger
+          render={<DateField placeholder="Start" display={startLabel} />}
+        />
+        <PopoverTrigger
+          render={<DateField placeholder="End" display={endLabel} />}
+        />
       </div>
       <PopoverContent
         className="w-auto p-3 bg-bg-panel border-border-subtle rounded-xl"
@@ -77,12 +77,12 @@ export function DateRangeInput({
 
 function DateField({
   placeholder,
-  value,
+  display,
   ...props
 }: {
   placeholder: string;
-  value: string | null;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  display: string | null;
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "value">) {
   return (
     <button
       type="button"
@@ -92,10 +92,10 @@ function DateField({
       <Calendar aria-hidden className="w-3.5 h-3.5 text-text-muted shrink-0" />
       <span
         className={
-          value ? "text-input-value" : "text-input-placeholder"
+          display ? "text-input-value" : "text-input-placeholder"
         }
       >
-        {value ?? placeholder}
+        {display ?? placeholder}
       </span>
     </button>
   );
