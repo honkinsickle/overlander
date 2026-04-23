@@ -1,0 +1,321 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Canonical design tokens — mirror of index.html :root.
+   Source of truth: /index.html lines 27–91.
+   Update both together. */
+:root {
+  /* Backgrounds */
+  --bg-base:       #0a0b0c;
+  --bg-panel:      #111214;
+  --bg-card:       #161819;
+  --bg-topbar:     #161819;
+  --bg-nav-btn:    #1b2c3e;
+  --bg-tab-active: #59472e;
+  --bg-tab-idle:   #1b2c3e;
+  --bg-day-active: rgb(28,58,32);
+  --bg-detail:     rgba(65,65,65,0.80);
+  --bg-map:        #1e2a1e;
+
+  /* Borders */
+  --border-subtle: rgba(255,255,255,0.07);
+  --border-mid:    rgba(255,255,255,0.14);
+  --nav-border:    #46586a;
+
+  /* Amber — brand/active identity only */
+  --amber:         #c8a96e;
+  --amber-dark:    #c77429;
+  --amber-light:   #e8c98e;
+
+  /* Text */
+  --text-primary:  #eceae4;
+  --text-muted:    #888888;
+  --text-dim:      #888888;
+
+  /* CTA (Primary Button) — blue */
+  --button-primary:         rgba(61,162,221,0.70);
+  --button-primary-hover:   rgba(61,162,221,0.88);
+  --button-primary-pressed: #2A6D94;
+  --button-primary-border:  #4DAAFF;
+  --button-primary-ring:    rgba(77,170,255,0.25);
+
+  /* Form fields — blue family */
+  --input-surface:          #1A1F28;
+  --input-surface-filled:   #2B3B52;
+  --input-surface-hover:    #32455F;
+  --input-surface-disabled: #242F42;
+  --input-border:           #475C78;
+  --input-border-filled:    #7E98BF;
+  --input-border-hover:     #8AA2C4;
+  --input-border-focus:     #A7CCFD;
+  --input-border-disabled:  #3E516C;
+  --input-focus-ring:       rgba(167,204,253,0.18);
+  --input-accent:           #92BEFD;
+  --input-placeholder:      #B3B3B3;
+  --input-value:            #EDF1F6;
+  --input-disabled-text:    #556984;
+  --input-error:            #E08872;
+  --input-success:          #7ACEA1;
+
+  /* Category palette — waypoint categories */
+  --cat-fuel:          #FA9C9D;
+  --cat-fuel-bg:       #4E252F;
+  --cat-camping:       #6ECECE;
+  --cat-camping-bg:    #304B4B;
+  --cat-mountain:      #2CB5FF;
+  --cat-mountain-bg:   #1A4A42;
+  --cat-urban:         #A7CCFD;
+  --cat-urban-bg:      #24354F;
+  --cat-food:          #FDBA74;
+  --cat-food-bg:       #3A2A1E;
+  --cat-oddity:        #D8B4FE;
+  --cat-oddity-bg:     #2A1A3E;
+  --cat-attraction:    #c8a96e;   /* = --amber */
+  --cat-attraction-bg: #3A2E17;
+  --cat-neutral:       #888888;
+  --cat-neutral-bg:    #26292B;
+
+  /* Typography — families set by next/font via layout.tsx */
+  --ff-sans:    var(--font-barlow),        sans-serif;
+  --ff-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --ff-mono:    var(--font-space-mono),    monospace;
+
+  /* shadcn theme slots — remapped to our dark palette so shadcn
+     components (Popover, Dialog, Drawer, Button, etc.) inherit
+     our theme without us maintaining a parallel token system. */
+  --background:           var(--bg-base);
+  --foreground:           var(--text-primary);
+  --card:                 var(--bg-card);
+  --card-foreground:      var(--text-primary);
+  --popover:              var(--bg-panel);
+  --popover-foreground:   var(--text-primary);
+  --primary:              var(--button-primary);
+  --primary-foreground:   var(--text-primary);
+  --secondary:            var(--bg-card);
+  --secondary-foreground: var(--text-primary);
+  --muted:                var(--bg-card);
+  --muted-foreground:     var(--text-muted);
+  --accent:               var(--bg-nav-btn);
+  --accent-foreground:    var(--text-primary);
+  --destructive:          var(--input-error);
+  --border:               var(--border-subtle);
+  --input:                var(--input-surface);
+  --ring:                 var(--input-border-focus);
+  --radius:               0.25rem; /* 4px — matches Form Fields primitive */
+}
+
+/* Expose tokens to Tailwind v4 as utilities.
+   Color tokens named `--color-X` become `bg-X`, `text-X`, `border-X`, `ring-X`.
+   Font tokens named `--font-X` become `font-X`. */
+@theme inline {
+  /* Our tokens */
+  --color-bg-base:       var(--bg-base);
+  --color-bg-panel:      var(--bg-panel);
+  --color-bg-card:       var(--bg-card);
+  --color-bg-topbar:     var(--bg-topbar);
+  --color-bg-nav-btn:    var(--bg-nav-btn);
+  --color-bg-tab-active: var(--bg-tab-active);
+  --color-bg-tab-idle:   var(--bg-tab-idle);
+  --color-bg-day-active: var(--bg-day-active);
+  --color-bg-detail:     var(--bg-detail);
+  --color-bg-map:        var(--bg-map);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-mid:    var(--border-mid);
+  --color-nav-border:    var(--nav-border);
+
+  --color-amber:       var(--amber);
+  --color-amber-dark:  var(--amber-dark);
+  --color-amber-light: var(--amber-light);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-muted:   var(--text-muted);
+  --color-text-dim:     var(--text-dim);
+
+  --color-button-primary:         var(--button-primary);
+  --color-button-primary-hover:   var(--button-primary-hover);
+  --color-button-primary-pressed: var(--button-primary-pressed);
+  --color-button-primary-border:  var(--button-primary-border);
+  --color-button-primary-ring:    var(--button-primary-ring);
+
+  --color-input-surface:          var(--input-surface);
+  --color-input-surface-filled:   var(--input-surface-filled);
+  --color-input-surface-hover:    var(--input-surface-hover);
+  --color-input-surface-disabled: var(--input-surface-disabled);
+  --color-input-border:           var(--input-border);
+  --color-input-border-filled:    var(--input-border-filled);
+  --color-input-border-hover:     var(--input-border-hover);
+  --color-input-border-focus:     var(--input-border-focus);
+  --color-input-border-disabled:  var(--input-border-disabled);
+  --color-input-focus-ring:       var(--input-focus-ring);
+  --color-input-accent:           var(--input-accent);
+  --color-input-placeholder:      var(--input-placeholder);
+  --color-input-value:            var(--input-value);
+  --color-input-disabled-text:    var(--input-disabled-text);
+  --color-input-error:            var(--input-error);
+  --color-input-success:          var(--input-success);
+
+  --color-cat-fuel:          var(--cat-fuel);
+  --color-cat-fuel-bg:       var(--cat-fuel-bg);
+  --color-cat-camping:       var(--cat-camping);
+  --color-cat-camping-bg:    var(--cat-camping-bg);
+  --color-cat-mountain:      var(--cat-mountain);
+  --color-cat-mountain-bg:   var(--cat-mountain-bg);
+  --color-cat-urban:         var(--cat-urban);
+  --color-cat-urban-bg:      var(--cat-urban-bg);
+  --color-cat-food:          var(--cat-food);
+  --color-cat-food-bg:       var(--cat-food-bg);
+  --color-cat-oddity:        var(--cat-oddity);
+  --color-cat-oddity-bg:     var(--cat-oddity-bg);
+  --color-cat-attraction:    var(--cat-attraction);
+  --color-cat-attraction-bg: var(--cat-attraction-bg);
+  --color-cat-neutral:       var(--cat-neutral);
+  --color-cat-neutral-bg:    var(--cat-neutral-bg);
+
+  --font-sans:    var(--ff-sans);
+  --font-display: var(--ff-display);
+  --font-mono:    var(--ff-mono);
+
+  /* shadcn theme tokens — expose as Tailwind utilities for shadcn
+     components that use `bg-background`, `border-border`, etc. */
+  --color-background:         var(--background);
+  --color-foreground:         var(--foreground);
+  --color-card:               var(--card);
+  --color-card-foreground:    var(--card-foreground);
+  --color-popover:            var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:            var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:            var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent:            var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border:      var(--border);
+  --color-input:       var(--input);
+  --color-ring:        var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--ff-sans);
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Form Fields primitive — 46h · radius 4 · 14px padding · 10px gap · 1px border.
+   Focus ring: 1px --input-border-focus + 3px --input-focus-ring. */
+.form-field {
+  height: 46px;
+  border-radius: 4px;
+  padding-inline: 14px;
+  gap: 10px;
+  border: 1px solid var(--input-border);
+  background: var(--input-surface);
+  color: var(--input-value);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  line-height: 18px;
+}
+.form-field::placeholder { color: var(--input-placeholder); }
+.form-field:hover {
+  border-color: var(--input-border-hover);
+  background: var(--input-surface-hover);
+}
+.form-field:focus-visible {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+.form-field:disabled {
+  background: var(--input-surface-disabled);
+  border-color: var(--input-border-disabled);
+  color: var(--input-disabled-text);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Section label — wide-tracked display font (EXPLORE, ITINERARY, etc). */
+.section-label {
+  font-family: var(--ff-display);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+/* react-day-picker dark theme overrides — applied to our popover. */
+.rdp-themed {
+  --rdp-accent-color: var(--input-border-focus);
+  --rdp-accent-background-color: var(--input-surface-filled);
+  --rdp-range_middle-background-color: rgba(167,204,253,0.16);
+  --rdp-range_middle-color: var(--input-value);
+  --rdp-range_start-color: #051422;
+  --rdp-range_end-color: #051422;
+  --rdp-today-color: var(--amber);
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  color: var(--text-primary);
+  font-family: var(--ff-sans);
+  font-size: 13px;
+}
+.rdp-themed .rdp-caption_label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.rdp-themed .rdp-weekday {
+  color: var(--text-muted);
+  font-family: var(--ff-display);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rdp-themed .rdp-day_button:hover:not([disabled]) {
+  background: var(--input-surface-hover);
+}
+.rdp-themed .rdp-chevron {
+  fill: var(--text-primary);
+}
+
+/* Modern scrollbars — thin, transparent track, subtle thumb that
+ * brightens on hover. Applied to any scrollable container so the
+ * chrome matches the dark UI. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-mid) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-mid);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
