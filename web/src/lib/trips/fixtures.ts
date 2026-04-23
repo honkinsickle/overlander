@@ -21,6 +21,8 @@ const seed = (): Record<string, Trip> => ({
     endDate: "2026-06-05",
     startLocation: "Los Angeles, CA",
     endLocation: "Portland, OR",
+    heroImage:
+      "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&q=80",
     weatherHiF: 84,
     weatherLoF: 64,
     days: [
@@ -32,6 +34,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-121.7603, 46.8523],
         miles: 95,
         driveHours: 2.3,
+        heroImage: "https://picsum.photos/seed/mount-rainier/800/500",
         heroGradient:
           "linear-gradient(135deg, #1e3b34 0%, #2d5045 40%, #c8a96e 100%)",
         heroCaption: "HWY 7 · MOUNT RAINIER · DAY 01",
@@ -92,6 +95,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-121.3153, 44.0582],
         miles: 280,
         driveHours: 5.8,
+        heroImage: "https://picsum.photos/seed/bend-cascades/800/500",
         heroGradient:
           "linear-gradient(135deg, #142820 0%, #1e4a3a 50%, #c77429 100%)",
         heroCaption: "US-97 · CASCADE RANGE · DAY 02",
@@ -150,6 +154,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-124.0046, 41.2132],
         miles: 410,
         driveHours: 8.2,
+        heroImage: "https://picsum.photos/seed/redwoods-coast/800/500",
         heroGradient:
           "linear-gradient(135deg, #2a1a2e 0%, #5a3a2e 50%, #c77429 100%)",
         heroCaption: "US-101 · REDWOOD COAST · DAY 03",
@@ -209,6 +214,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-122.6784, 45.5152],
         miles: 380,
         driveHours: 7.0,
+        heroImage: "https://picsum.photos/seed/pacific-coast/800/500",
         heroGradient:
           "linear-gradient(135deg, #1a2435 0%, #2b3b52 50%, #475c78 100%)",
         heroCaption: "US-101 · PACIFIC COAST · DAY 04",
@@ -254,6 +260,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-121.6959, 45.3735],
         miles: 88,
         driveHours: 2.0,
+        heroImage: "https://picsum.photos/seed/mount-hood/800/500",
         heroGradient:
           "linear-gradient(135deg, #1e3b34 0%, #2d5045 40%, #c8a96e 100%)",
         heroCaption: "US-26 · MOUNT HOOD · DAY 05",
@@ -283,6 +290,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-121.3153, 44.0582],
         miles: 145,
         driveHours: 3.1,
+        heroImage: "https://picsum.photos/seed/smith-rock/800/500",
         heroGradient:
           "linear-gradient(135deg, #1a2435 0%, #2b3b52 50%, #475c78 100%)",
         heroCaption: "US-97 · HIGH DESERT · DAY 06",
@@ -312,6 +320,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-116.2023, 43.615],
         miles: 325,
         driveHours: 5.2,
+        heroImage: "https://picsum.photos/seed/oregon-high-desert/800/500",
         heroGradient:
           "linear-gradient(135deg, #2a1d13 0%, #4a3120 50%, #c77429 100%)",
         heroCaption: "US-20 · OREGON OUTBACK · DAY 07",
@@ -341,6 +350,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-114.3518, 43.696],
         miles: 155,
         driveHours: 2.8,
+        heroImage: "https://picsum.photos/seed/sawtooths/800/500",
         heroGradient:
           "linear-gradient(135deg, #2a3b1d 0%, #4a6330 50%, #9fb66a 100%)",
         heroCaption: "ID-75 · SAWTOOTHS · DAY 08",
@@ -370,6 +380,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-119.8138, 39.5296],
         miles: 420,
         driveHours: 7.4,
+        heroImage: "https://picsum.photos/seed/great-basin/800/500",
         heroGradient:
           "linear-gradient(135deg, #3a1d1d 0%, #5a3030 50%, #c76666 100%)",
         heroCaption: "US-93 · GREAT BASIN · DAY 09",
@@ -399,6 +410,7 @@ const seed = (): Record<string, Trip> => ({
         coords: [-122.4194, 37.7749],
         miles: 220,
         driveHours: 4.0,
+        heroImage: "https://picsum.photos/seed/sierra-nevada/800/500",
         heroGradient:
           "linear-gradient(135deg, #1d2a3a 0%, #30455a 50%, #6a8ab6 100%)",
         heroCaption: "I-80 · SIERRA NEVADA · DAY 10",

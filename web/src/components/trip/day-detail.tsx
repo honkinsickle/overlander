@@ -37,35 +37,74 @@ export function DayDetail({ trip }: { trip: Trip }) {
   // feel the user reported.
   const programmaticScrollRef = useRef(false);
 
-  // Sidebar click / deep link → scroll requested day into view. Only
-  // fires when `?day=` is explicitly set; an initial load without the
-  // param stays at scrollTop 0 so the TripDetailHeader is visible.
-  useEffect(() => {
-    if (!queried || !scrollRef.current) return;
+  // Scroll the centre to a requested day — fired once on mount if
+  // `?day=` is in the URL (deep link), and on every sidebar click via
+  // the `trip:activeDay` custom event (emitted with source: "sidebar").
+  const scrollToDay = (id: string) => {
     const container = scrollRef.current;
+    if (!container) return;
     const el = container.querySelector<HTMLElement>(
-      `#day-${CSS.escape(queried)}`,
+      `#day-${CSS.escape(id)}`,
     );
     if (!el) return;
     const offset = el.offsetTop - container.scrollTop;
     if (offset >= 0 && offset <= SCROLL_TRIGGER) return;
     const smooth = didInitialScroll.current;
-    if (smooth) {
-      programmaticScrollRef.current = true;
-    }
+    if (smooth) programmaticScrollRef.current = true;
     el.scrollIntoView({
       behavior: smooth ? "smooth" : "auto",
       block: "start",
     });
     didInitialScroll.current = true;
     if (!smooth) return;
-    // Browser smooth scroll duration isn't exposed — clear a little after
-    // the typical 300–500ms so scroll-spy picks back up for manual scroll.
-    const tid = setTimeout(() => {
+    setTimeout(() => {
       programmaticScrollRef.current = false;
     }, 600);
-    return () => clearTimeout(tid);
-  }, [queried]);
+  };
+
+  // Deep-link scroll on mount.
+  useEffect(() => {
+    if (queried) scrollToDay(queried);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sidebar click → scroll via the trip:activeDay event.
+  useEffect(() => {
+    const onSidebar = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ id: string; source?: string }>
+      ).detail;
+      if (!detail?.id || detail.source !== "sidebar") return;
+      scrollToDay(detail.id);
+    };
+    window.addEventListener("trip:activeDay", onSidebar);
+    return () => window.removeEventListener("trip:activeDay", onSidebar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Overview row click → scroll to the anchor (e.g. top of the scroll
+  // container for the TripDetailHeader / EXPLORE section).
+  useEffect(() => {
+    const onScrollTo = (e: Event) => {
+      const anchor = (e as CustomEvent<{ anchor: string }>).detail?.anchor;
+      const container = scrollRef.current;
+      if (!container) return;
+      if (anchor === "top") {
+        programmaticScrollRef.current = true;
+        container.scrollTo({ top: 0, behavior: "smooth" });
+        // clear ?day= since the scroll-spy suppresses during programmatic scroll
+        const url = new URL(window.location.href);
+        url.searchParams.delete("day");
+        window.history.replaceState(null, "", url);
+        setTimeout(() => {
+          programmaticScrollRef.current = false;
+        }, 600);
+      }
+    };
+    window.addEventListener("trip:scrollTo", onScrollTo);
+    return () => window.removeEventListener("trip:scrollTo", onScrollTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Scroll-spy: update the active day without touching Next's router.
   // `history.replaceState` keeps the URL bar in sync for share/reload,

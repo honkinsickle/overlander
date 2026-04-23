@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Navigation } from "lucide-react";
 import {
   DetailCard,
@@ -40,14 +40,33 @@ export function MapColumn({
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
   const searchParams = useSearchParams();
-  const panel = searchParams.get("panel");
-  const slug = panel === "waypoint" ? searchParams.get("id") : null;
   const queriedDay = searchParams.get("day");
   const simulateParam = searchParams.get("simulate");
   const simulate =
     simulateParam === "error" || simulateParam === "timeout"
       ? simulateParam
       : null;
+
+  // Waypoint panel is driven by history.replaceState + custom events
+  // (see WaypointCard) — NOT by Next's router, because a soft nav to
+  // the same path activates the @modal intercept and opens the slideup.
+  const [panelSlug, setPanelSlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const p = new URL(window.location.href).searchParams;
+    return p.get("panel") === "waypoint" ? p.get("id") : null;
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ panel: string | null; id: string | null }>
+      ).detail;
+      if (detail?.panel === "waypoint") setPanelSlug(detail.id);
+      else setPanelSlug(null);
+    };
+    window.addEventListener("trip:panel", onOpen);
+    return () => window.removeEventListener("trip:panel", onOpen);
+  }, []);
+  const slug = panelSlug;
 
   const activeDay = useMemo(
     () =>
@@ -56,9 +75,15 @@ export function MapColumn({
   );
 
   const state = useWaypointDetail(tripId, slug, { simulate });
-  const router = useRouter();
-  const closeHref = `/trip/${tripId}`;
-  const dismiss = () => router.push(closeHref, { scroll: false });
+  const dismiss = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("panel");
+    url.searchParams.delete("id");
+    window.history.replaceState(null, "", url);
+    window.dispatchEvent(
+      new CustomEvent("trip:panel", { detail: { panel: null, id: null } }),
+    );
+  };
 
   // Initialise the map once. Markers for every day with coords.
   // A ResizeObserver keeps the canvas in sync with the column's layout
@@ -173,7 +198,7 @@ export function MapColumn({
             <WaypointDetail
               tripId={tripId}
               waypoint={state.data}
-              closeHref={closeHref}
+              onClose={dismiss}
             />
           )}
           {state.status === "not-found" && (
@@ -199,18 +224,18 @@ export function MapColumn({
 
 function WaypointDetail({
   waypoint,
-  closeHref,
+  onClose,
 }: {
   tripId: string;
   waypoint: Waypoint;
-  closeHref: string;
+  onClose: () => void;
 }) {
   return (
     <DetailCard
       category={waypoint.category}
       title={waypoint.title}
       subtitle={waypoint.subtitle}
-      closeHref={closeHref}
+      onClose={onClose}
     >
       <p className="text-sm leading-5 text-text-muted">
         {waypoint.description}

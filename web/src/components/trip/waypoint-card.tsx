@@ -1,4 +1,5 @@
-import Link from "next/link";
+"use client";
+
 import { ChevronRight } from "lucide-react";
 import {
   categoryStyle,
@@ -38,11 +39,29 @@ export function WaypointCard({
   const cat = categoryStyle[waypoint.category];
   const Icon = categoryIcon[waypoint.category];
 
+  const openPanel = () => {
+    // Route via history.replaceState + a custom event instead of Next's
+    // Link/router — a soft nav to /trip/:id?panel=... fires the @modal
+    // intercept and opens the slideup even when we're already on the
+    // full page. The detail panel lives in the map column; it shouldn't
+    // trigger navigation.
+    const url = new URL(window.location.href);
+    url.searchParams.set("panel", "waypoint");
+    url.searchParams.set("id", waypoint.slug);
+    window.history.replaceState(null, "", url);
+    window.dispatchEvent(
+      new CustomEvent("trip:panel", {
+        detail: { panel: "waypoint", id: waypoint.slug },
+      }),
+    );
+  };
+
   return (
-    <Link
-      href={`/trip/${tripId}?panel=waypoint&id=${waypoint.slug}`}
-      scroll={false}
-      className="flex items-start gap-3 px-2.5 py-3.5 border-t border-border-subtle first:border-t-0 hover:bg-white/[0.02] transition-colors"
+    <button
+      type="button"
+      data-trip-id={tripId}
+      onClick={openPanel}
+      className="w-full text-left flex items-start gap-3 px-2.5 py-3.5 border-t border-border-subtle first:border-t-0 hover:bg-white/[0.02] transition-colors"
     >
       {/* Icon badge — 60×60 circle with category tint + thin cat accent border + subtle drop shadow */}
       <div
@@ -84,7 +103,7 @@ export function WaypointCard({
           <CaretButton />
         </div>
       </div>
-    </Link>
+    </button>
   );
 }
 

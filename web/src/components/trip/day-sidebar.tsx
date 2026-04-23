@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Day } from "@/lib/trips/types";
@@ -165,14 +164,30 @@ function DayCard({
     day: "numeric",
   });
 
+  const selectDay = () => {
+    // Avoid Next's router — a soft nav to /trip/:id?day=... re-triggers
+    // the @modal intercept on the full page. Keep the URL in sync via
+    // history.replaceState and broadcast a `trip:activeDay` event so
+    // DayDetail scrolls and other listeners can react.
+    const url = new URL(window.location.href);
+    url.searchParams.set("day", day.id);
+    window.history.replaceState(null, "", url);
+    window.dispatchEvent(
+      new CustomEvent("trip:activeDay", {
+        detail: { id: day.id, source: "sidebar" },
+      }),
+    );
+  };
+
   return (
-    <Link
-      href={`/trip/${tripId}?day=${day.id}`}
-      scroll={false}
+    <button
+      type="button"
+      onClick={selectDay}
       aria-current={isActive ? "page" : undefined}
       data-day-id={day.id}
+      data-trip-id={tripId}
       className={cn(
-        "group flex flex-col justify-between h-[112px] pt-2.5 pr-4 pb-2.5 pl-5 border-b",
+        "group flex flex-col justify-between text-left w-full h-[112px] pt-2.5 pr-4 pb-2.5 pl-5 border-b",
         isActive
           ? "bg-bg-day-active border-b-2 border-amber-dark"
           : "bg-bg-card border-border-subtle hover:border-border-mid",
@@ -228,6 +243,6 @@ function DayCard({
       >
         {day.label.replace(/\s*—\s*/g, " —\n")}
       </div>
-    </Link>
+    </button>
   );
 }

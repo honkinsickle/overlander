@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
+import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetail } from "@/components/trip/day-detail";
-import { DaySidebar } from "@/components/trip/day-sidebar";
 import { MapColumn } from "@/components/trip/map-column";
 import { SlideupShell } from "@/components/trip/slideup-shell";
 import { getTrip } from "@/lib/trips/repository";
@@ -25,12 +25,7 @@ export default async function SlideupTripPage(
 
   return (
     <SlideupShell trip={trip}>
-      <aside
-        className="w-[215px] shrink-0 overflow-hidden border-r border-border-subtle"
-        aria-label="Days"
-      >
-        <DaySidebar tripId={trip.id} days={trip.days} />
-      </aside>
+      <DayColumnPlanner tripId={trip.id} days={trip.days} />
       <section className="w-[440px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
         <DayDetail trip={trip} />
       </section>
