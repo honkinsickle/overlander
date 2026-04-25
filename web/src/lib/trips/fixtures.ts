@@ -25,6 +25,7 @@ const seed = (): Record<string, Trip> => ({
       "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&q=80",
     weatherHiF: 84,
     weatherLoF: 64,
+    kicker: "the slow way north",
     days: [
       {
         id: "day-1",

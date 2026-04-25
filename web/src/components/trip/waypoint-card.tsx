@@ -61,7 +61,7 @@ export function WaypointCard({
       type="button"
       data-trip-id={tripId}
       onClick={openPanel}
-      className="w-full text-left flex items-start gap-3 px-2.5 py-3.5 border-t border-border-subtle first:border-t-0 hover:bg-white/[0.02] transition-colors"
+      className="w-full text-left flex items-start gap-3 px-2.5 pt-3.5 pb-[19px] border-t border-border-subtle first:border-t-0 hover:bg-white/[0.02] transition-colors"
     >
       {/* Icon badge — 60×60 circle with category tint + thin cat accent border + subtle drop shadow */}
       <div

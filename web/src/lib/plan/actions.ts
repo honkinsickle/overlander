@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import type { Trip, Waypoint } from "@/lib/trips/types";
 import { ALL_CHIP_IDS } from "./interests";
-import { getSuggestion } from "./suggestions";
+import { suggestionsForChips } from "./suggestions";
 import { newDraftId } from "./store";
 import { nextHref } from "./nav";
 
@@ -175,14 +175,12 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
   const tripId = `trip-${newDraftId().slice(0, 8)}`;
   const start = draft.going?.startLocation?.label ?? "Start";
   const end = draft.going?.destination?.label ?? "Destination";
-  const accepted = draft.acceptedSuggestionIds ?? [];
+  const selectedChipIds = draft.interests?.selectedChipIds ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const startDate = draft.going?.startDate ?? today;
   const endDate = draft.going?.endDate ?? startDate;
 
-  const waypoints: Waypoint[] = accepted
-    .map((id) => getSuggestion(id))
-    .filter((s): s is NonNullable<typeof s> => Boolean(s))
+  const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds)
     .map((s) => ({
       id: `wp-${s.slug}`,
       slug: s.slug,

@@ -81,6 +81,7 @@
   --ff-sans:    var(--font-barlow),        sans-serif;
   --ff-display: var(--font-space-grotesk), system-ui, sans-serif;
   --ff-mono:    var(--font-space-mono),    monospace;
+  --ff-serif:   var(--font-crimson-text),  Georgia, serif;
 
   /* shadcn theme slots — remapped to our dark palette so shadcn
      components (Popover, Dialog, Drawer, Button, etc.) inherit

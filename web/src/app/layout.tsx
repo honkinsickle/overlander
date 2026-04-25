@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { Barlow, Space_Grotesk, Space_Mono } from "next/font/google";
+import {
+  Barlow,
+  Crimson_Text,
+  Space_Grotesk,
+  Space_Mono,
+} from "next/font/google";
 import "./globals.css";
 
 const barlow = Barlow({
@@ -20,6 +25,13 @@ const spaceMono = Space_Mono({
   weight: ["400", "700"],
 });
 
+const crimsonText = Crimson_Text({
+  variable: "--font-crimson-text",
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["italic"],
+});
+
 export const metadata: Metadata = {
   title: "Overlander",
   description: "Plan overland trips with confidence.",
@@ -35,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${barlow.variable} ${spaceGrotesk.variable} ${spaceMono.variable} h-full antialiased`}
+      className={`${barlow.variable} ${spaceGrotesk.variable} ${spaceMono.variable} ${crimsonText.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}

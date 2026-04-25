@@ -34,7 +34,7 @@ export function LocationInput({
         defaultValue={defaultValue}
         placeholder={placeholder}
         required={required}
-        className="form-field w-full pl-10"
+        className="form-field w-full pl-10!"
       />
     </div>
   );
