@@ -320,3 +320,13 @@
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Kills the scrollbar gutter so content uses the full width and the
+ * scroll indicator (if the OS draws one) overlays. Trades a visible
+ * thumb for the reclaimed pixels. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -53,15 +53,17 @@ export function SuggestionCard({
         />
         {featured && (
           <div
-            className="absolute top-2 right-3 flex items-center gap-1.5 h-7 rounded-full"
+            className="absolute right-3 flex items-center gap-2 rounded-full"
             style={{
-              paddingTop: 5,
-              paddingBottom: 5,
-              paddingLeft: 8,
-              paddingRight: 10,
-              backgroundColor: "#D59B13",
-              border: "1px solid rgba(232,201,142,0.35)",
+              top: 18,
+              paddingTop: 8,
+              paddingBottom: 8,
+              paddingLeft: 14,
+              paddingRight: 16,
+              backgroundColor: "#161819CC",
+              border: "1px solid #F88112",
               backdropFilter: "blur(6px)",
+              boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
             }}
           >
             <span style={{ fontSize: 14, color: "var(--amber-light)" }}>
@@ -75,7 +77,7 @@ export function SuggestionCard({
                 fontFamily: "var(--ff-display)",
                 fontWeight: 600,
                 letterSpacing: "0.07em",
-                color: "#FFFFFF",
+                color: "rgba(255,255,255,0.7)",
               }}
             >
               Editor's Pick

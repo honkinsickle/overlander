@@ -264,7 +264,7 @@ export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
       className="flex flex-col"
       style={{
         width: 420,
-        marginLeft: "auto",
+        marginInline: "auto",
         marginTop: 13,
         gap: 8,
         paddingBottom: 12,
@@ -275,7 +275,7 @@ export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
       <div
         className="sticky z-[5] flex items-center justify-between"
         style={{
-          top: 120,
+          top: 130,
           height: 70,
           paddingInline: 13,
           paddingTop: 8,
@@ -287,7 +287,7 @@ export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
       >
         <div className="flex items-center gap-2">
           <div
-            className="flex items-center justify-center rounded-[5px] shrink-0"
+            className="flex items-center justify-center rounded-full shrink-0"
             style={{
               width: 32,
               height: 32,
@@ -317,7 +317,7 @@ export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
           style={{
             width: 28,
             height: 28,
-            border: "1px solid #F88014",
+            border: "1px solid rgba(255, 200, 180, 0.3)",
           }}
         >
           <ChevronDown
