@@ -37,8 +37,8 @@ export function KebabMenu({ items, triggerLabel, className }: KebabMenuProps) {
       <PopoverTrigger
         aria-label={triggerLabel}
         className={cn(
-          "flex items-center justify-center w-9 h-9 rounded bg-bg-nav-btn border border-border-subtle text-text-primary shadow-[0_6px_18px_rgba(0,0,0,0.45)] shrink-0",
-          "hover:border-border-mid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focus",
+          "flex items-center justify-center w-9 h-9 rounded border border-[rgba(167,204,253,0.12)] text-text-primary shrink-0",
+          "hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focus",
           className,
         )}
       >

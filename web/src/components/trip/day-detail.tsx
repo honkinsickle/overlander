@@ -155,7 +155,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar">
         <TripDetailHeader trip={trip} />
         <div
           className="uppercase bg-bg-card"
@@ -216,7 +216,7 @@ function DaySection({
       {/* ── Day Detail Card (GDH-0) ─────────────────────────── */}
       <article className="flex flex-col items-stretch bg-bg-card">
         {!hideHeader && (
-          <div className="sticky top-0 z-10">
+          <div className="sticky top-0 z-10 bg-bg-panel pb-[10px]">
             <DayHeader tripId={trip.id} day={day} />
           </div>
         )}
@@ -259,8 +259,7 @@ function DaySection({
           style={{
             paddingTop: 34,
             paddingBottom: 14,
-            paddingLeft: 10,
-            paddingRight: 16,
+            paddingInline: 13,
           }}
         >
           <button
@@ -269,7 +268,7 @@ function DaySection({
             style={{
               height: 36,
               width: "80%",
-              transform: "translate(15px, -20%)",
+              transform: "translateY(-20%)",
               backgroundColor: "var(--cat-urban-bg)",
               borderColor: "var(--cat-urban)",
             }}

@@ -196,7 +196,7 @@ function SectionHeader({
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="flex items-center justify-between w-full h-[55px] py-2.5 pl-5 pr-4 shrink-0"
+      className="flex items-center justify-between w-full h-[55px] py-2.5 pl-5 pr-4 shrink-0 border-b border-border-subtle"
       style={{ backgroundColor: "#0D0E0F" }}
     >
       <span
