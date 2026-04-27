@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# 1. Find a warm sibling .env.local to copy from.
+src=""
+for d in ../*/web/.env.local; do
+  if [[ -f "$d" ]]; then
+    src="$d"
+    break
+  fi
+done
+
+if [[ -f web/.env.local ]]; then
+  echo "= env: web/.env.local already present, leaving alone"
+elif [[ -n "$src" ]]; then
+  cp "$src" web/.env.local
+  echo "+ env: copied from $src"
+elif [[ -f web/.env.local.example ]]; then
+  cp web/.env.local.example web/.env.local
+  echo "! env: no warm sibling found - used .env.local.example"
+  echo "  fill in real values:"
+  grep -E "^[A-Z]" web/.env.local | sed "s/^/    /"
+else
+  echo "x env: no .env.local, no sibling, no example. cannot proceed."
+  exit 1
+fi
+
+# 2. Install dependencies if node_modules is missing.
+if [[ -d web/node_modules ]]; then
+  echo "= deps: web/node_modules present, skipping install"
+else
+  echo "+ deps: running npm install (this takes ~10s)"
+  (cd web && npm install)
+fi
+
+# 3. Sanity-check launch.json.
+if grep -q '"autoPort": true' .claude/launch.json 2>/dev/null; then
+  echo "= launch.json: autoPort enabled"
+else
+  echo "! launch.json: autoPort not detected. Port collisions possible across worktrees."
+fi
+
+echo
+echo "ready. start the dev server with:"
+echo "  npm --prefix web run dev"
