@@ -31,7 +31,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
     <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
       <VerticalNav />
       <DayColumnPlanner tripId={trip.id} days={trip.days} />
-      <section className="w-[440px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
+      <section className="w-[444px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
         {props.children}
       </section>
       <section className="flex-1 min-w-0 relative overflow-hidden" aria-label="Map">

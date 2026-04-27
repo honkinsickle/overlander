@@ -73,7 +73,7 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
 
   if (editing) {
     return (
-      <header className="flex flex-col gap-[2px] h-[80px] pl-[18px] pr-4 justify-center bg-bg-panel border-b border-border-mid">
+      <header className="flex flex-col gap-[2px] h-[120px] pl-[18px] pr-4 pb-[14px] justify-end bg-bg-panel border-b border-border-mid">
         <span className="font-sans text-[14px] leading-[18px] text-text-muted">
           Day {day.dayNumber} — {dayDate}
         </span>
@@ -119,7 +119,7 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
   }
 
   return (
-    <header className="relative flex flex-col justify-center gap-[2px] h-[80px] pl-[18px] bg-bg-panel border-b border-border-mid">
+    <header className="relative flex flex-col justify-end gap-[2px] h-[120px] pb-[14px] pl-[18px] bg-bg-panel border-b border-border-mid">
       <span className="font-sans text-[14px] leading-[18px] text-text-muted">
         {day.label}
       </span>
@@ -134,7 +134,7 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
 
       {/* Supplemental: kebab not in GDI-0; overlay top-right so it
        *  doesn't disturb the flex layout. */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-3">
+      <div className="absolute bottom-[14px] right-3">
         <KebabMenu
           triggerLabel={`Day ${day.dayNumber} options`}
           items={[

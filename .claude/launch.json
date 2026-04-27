@@ -11,19 +11,14 @@
         "8768",
         "-c-1"
       ],
-      "port": 8768
+"port": 8768
     },
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "web",
-        "run",
-        "dev"
-      ],
-      "autoPort": true,
-      "port": 3210
+      "runtimeArgs": ["--prefix", "web", "run", "dev", "--", "-H", "0.0.0.0"],
+      "port": 3210,
+      "autoPort": true
     },
     {
       "name": "dashboard-zoverlanding",

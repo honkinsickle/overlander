@@ -1,19 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useSelectedLayoutSegment } from "next/navigation";
 import { EntryScene } from "./entry-scene";
 
 /**
  * Renders wizard-step chrome (entry scene + scrim + centered modal) for
- * most /plan/:id/:step routes. Steps that need full-bleed content
- * (Results) render children as-is.
+ * /plan/:id/:step routes.
  */
 export function WizardBackdrop({ children }: { children: ReactNode }) {
-  const segment = useSelectedLayoutSegment();
-  if (segment === "results") {
-    return <div className="absolute inset-0">{children}</div>;
-  }
   return (
     <>
       <EntryScene muted />

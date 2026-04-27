@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { ArrowRight } from "lucide-react";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
+import { SuggestedSection } from "@/components/trip/suggested-section";
 import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import { WaypointCard } from "@/components/trip/waypoint-card";
 import type { Trip, Day } from "@/lib/trips/types";
@@ -155,8 +157,28 @@ export function DayDetail({ trip }: { trip: Trip }) {
     <div className="flex flex-col h-full">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <TripDetailHeader trip={trip} />
-        {trip.days.map((day) => (
-          <DaySection key={day.id} trip={trip} day={day} />
+        <div
+          className="uppercase bg-bg-card"
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: 16,
+            lineHeight: "24px",
+            fontWeight: 600,
+            letterSpacing: "0.19em",
+            color: "var(--amber-light)",
+            paddingInline: 17,
+            paddingBlock: 6,
+          }}
+        >
+          Itinerary
+        </div>
+        {trip.days.map((day, i) => (
+          <DaySection
+            key={day.id}
+            trip={trip}
+            day={day}
+            extra={i < 2 ? <SuggestedSection dayNumber={i + 1} /> : null}
+          />
         ))}
       </div>
 
@@ -180,10 +202,12 @@ function DaySection({
   trip,
   day,
   hideHeader = false,
+  extra,
 }: {
   trip: Trip;
   day: Day;
   hideHeader?: boolean;
+  extra?: React.ReactNode;
 }) {
   // `last:min-h-full` guarantees the final day can scroll to the top of
   // the viewport even if its content is shorter than the scroll container.
@@ -202,18 +226,22 @@ function DaySection({
           <DayDetailHero day={day} />
         </div>
 
-        {/* WAY POINTS label (GDQ-0) — pure white, 6px letter-spacing */}
+        {/* 📍 WAYPOINTS sub-label (N98-0) — Space Mono 13/18, muted,
+         *  0.14em tracking. */}
         <div
-          className="h-[50px] pt-[17px] pr-[18px] pb-[10px] pl-[18px] uppercase"
+          className="uppercase"
           style={{
-            fontFamily: "var(--ff-display)",
-            fontSize: "13px",
-            lineHeight: "16px",
-            letterSpacing: "6px",
-            color: "#FFFFFF",
+            fontFamily: "var(--ff-mono)",
+            fontSize: 13,
+            lineHeight: "18px",
+            letterSpacing: "0.14em",
+            color: "var(--text-muted)",
+            paddingInline: 15,
+            paddingTop: 16,
+            paddingBottom: 10,
           }}
         >
-          WAY POINTS
+          📍 Waypoints
         </div>
 
         {/* Waypoints list (GDR-0) — flex-col with 10px inline padding,
@@ -223,6 +251,48 @@ function DaySection({
             <WaypointCard key={wp.id} tripId={trip.id} waypoint={wp} />
           ))}
         </div>
+
+        {/* Add Waypoints button (N8F-0) — full-width muted button,
+         *  borders on top + bottom from the waypoint list rhythm. */}
+        <div
+          className="flex items-stretch justify-center border-b border-border-subtle bg-bg-card"
+          style={{
+            paddingTop: 34,
+            paddingBottom: 14,
+            paddingLeft: 10,
+            paddingRight: 16,
+          }}
+        >
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-sm border"
+            style={{
+              height: 36,
+              width: "80%",
+              transform: "translate(15px, -20%)",
+              backgroundColor: "var(--cat-urban-bg)",
+              borderColor: "var(--cat-urban)",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 14,
+                lineHeight: "18px",
+                fontFamily: "var(--ff-sans)",
+                color: "#FFFFFF",
+              }}
+            >
+              Add Waypoints
+            </span>
+            <ArrowRight
+              className="w-3 h-3 shrink-0"
+              strokeWidth={1.75}
+              color="#FFFFFF"
+            />
+          </button>
+        </div>
+
+        {extra}
       </article>
       {/* ── End Day Detail Card ─────────────────────────────── */}
     </section>

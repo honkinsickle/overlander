@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
+import { finalizeTripAction } from "@/lib/plan/actions";
 
 /**
  * Loader step body. Simulates the planner running through 3 sub-steps
- * and then redirects to the Results step. Purely client-side timing —
+ * and then finalizes the draft into a trip. Purely client-side timing —
  * when real work lands, replace the timers with a resolving Promise.
  */
 
@@ -33,25 +33,22 @@ const SUB_STEPS: SubStep[] = [
 ];
 
 export function LoaderPanel({ draftId }: { draftId: string }) {
-  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Advance through each step on a fixed interval. When the final step
-    // would tick past the end, redirect to Results instead.
     const id = setInterval(() => {
       setCurrentStep((prev) => {
         const next = prev + 1;
         if (next >= SUB_STEPS.length) {
           clearInterval(id);
-          router.push(`/plan/${draftId}/results`);
+          void finalizeTripAction(draftId);
           return prev;
         }
         return next;
       });
     }, STEP_DURATION_MS);
     return () => clearInterval(id);
-  }, [draftId, router]);
+  }, [draftId]);
 
   return (
     <div className="flex flex-col items-center gap-5 py-2">

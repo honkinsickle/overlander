@@ -1,16 +1,14 @@
 "use client";
 
-import { Calendar, Plus, Search } from "lucide-react";
+import { Calendar } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
 
 /**
- * Centre-column top-of-scroll header — Paper `GPW-0` "Trip-Detail-Header".
+ * Centre-column top-of-scroll header — Paper N2J-0 → N9W-0.
  *
- * Three zones stacked at 10px padding, 8px gap, on `--bg-card`:
- *   1. Trip-Hero    GS4-0 · 419×315  (hero image + overlay card w/ title,
- *                                     dates, weather chip)
- *   2. Explore      GRU-0 · EXPLORE label + "Ask about anything" input
- *   3. Itinerary    GQ4-0 · heading + first-day row (route + day + chevron)
+ * Hero (440×360) with a fit-content overlay card stacking four rows:
+ * editorial kicker, title, date row, and trip stats. Weather pill sits
+ * to the right.
  */
 export function TripDetailHeader({ trip }: { trip: Trip }) {
   const firstDay = trip.days[0];
@@ -20,79 +18,114 @@ export function TripDetailHeader({ trip }: { trip: Trip }) {
     `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, "0")}`;
   const dateRange = `${fmt(startDate)}-${fmt(endDate)}`;
 
+  const dayCount =
+    Math.round(
+      (endDate.getTime() - startDate.getTime()) / 86_400_000,
+    ) + 1;
+  const totalMiles = trip.days.reduce(
+    (sum, d) => sum + (d.miles ?? 0),
+    0,
+  );
+  const overnights = Math.max(0, trip.days.length - 1);
+
   return (
     <section
       className="flex flex-col items-center w-full overflow-clip bg-bg-card"
-      style={{ paddingBlock: 20, paddingInline: 10, gap: 8 }}
+      style={{ paddingTop: 20, paddingInline: 10 }}
     >
       <TripHero
         title={trip.title}
+        kicker={trip.kicker}
         dateRange={dateRange}
         heroImage={trip.heroImage ?? firstDay?.heroImage}
         heroGradient={firstDay?.heroGradient}
         weatherHiF={trip.weatherHiF}
         weatherLoF={trip.weatherLoF}
+        dayCount={dayCount}
+        totalMiles={totalMiles > 0 ? totalMiles : undefined}
+        overnights={overnights}
       />
-      <Explore />
     </section>
   );
 }
 
-/** Paper GS4-0. Hero image with a 400×99 overlay card containing title,
- *  date row, and a pill-shaped weather chip. */
 function TripHero({
   title,
+  kicker,
   dateRange,
   heroImage,
   heroGradient,
   weatherHiF,
   weatherLoF,
+  dayCount,
+  totalMiles,
+  overnights,
 }: {
   title: string;
+  kicker?: string;
   dateRange: string;
   heroImage?: string;
   heroGradient?: string;
   weatherHiF: number;
   weatherLoF: number;
+  dayCount: number;
+  totalMiles?: number;
+  overnights: number;
 }) {
-  return (
-    <div className="relative w-[419px] h-[315px] shrink-0">
-      {/* Hero image (GSI-0) — 419×290, offset 2/-11 to peek under overlay. */}
-      <div
-        aria-hidden
-        className="absolute w-[419px] h-[290px] bg-cover bg-center"
-        style={{
-          left: 2,
-          top: -11,
-          backgroundImage: heroImage
-            ? `url(${heroImage})`
-            : (heroGradient ??
-              "linear-gradient(135deg, #1e3b34 0%, #2d5045 55%, #c8a96e 100%)"),
-        }}
-      />
+  const stats: string[] = [`${dayCount} DAYS`];
+  if (totalMiles) stats.push(`${totalMiles.toLocaleString()} MI`);
+  if (overnights > 0) stats.push(`${overnights} OVERNIGHTS`);
 
-      {/* Overlay card (GS5-0) — 400×99 at left:13 top:219, bg --bg-panel @ 90%. */}
-      <div
-        className="absolute flex items-center rounded-[2px] border-b border-border-mid"
-        style={{
-          left: 13,
-          top: 219,
-          width: 400,
-          height: 99,
-          backgroundColor: "rgba(17,18,20,0.9)",
-          boxShadow: "0 2px 3px rgba(0,0,0,0.2)",
-          gap: 2,
-        }}
-      >
-        {/* Title column (GS9-0): 295w · px 18 · py 23 · gap 2 · flex-col. */}
+  return (
+    <div className="flex flex-col items-center w-[440px] h-[360px] overflow-clip shrink-0">
+      <div className="relative w-[420px] h-[360px] shrink-0">
+        <div
+          aria-hidden
+          className="absolute w-[419px] h-[290px] bg-cover bg-center"
+          style={{
+            left: 0,
+            top: -11,
+            backgroundImage: heroImage
+              ? `url(${heroImage})`
+              : (heroGradient ??
+                "linear-gradient(135deg, #1e3b34 0%, #2d5045 55%, #c8a96e 100%)"),
+          }}
+        />
+
+        <div
+          className="absolute flex items-center justify-center rounded-[2px] border-b border-border-mid"
+          style={{
+            left: 10,
+            top: 205,
+            width: 400,
+            backgroundColor: "#111214",
+            boxShadow: "0 2px 3px rgba(0,0,0,0.2)",
+            gap: 2,
+          }}
+        >
         <div
           className="flex flex-col items-start shrink-0"
           style={{ width: 295, paddingInline: 18, paddingBlock: 23, gap: 2 }}
         >
+          {kicker && (
+            <span
+              style={{
+                fontSize: 13,
+                lineHeight: "18px",
+                letterSpacing: "0.01em",
+                marginBottom: 2,
+                color: "var(--amber)",
+                fontFamily: "var(--ff-serif)",
+                fontStyle: "italic",
+              }}
+            >
+              {kicker}
+            </span>
+          )}
           <h2
             className="truncate"
             style={{
-              fontSize: "24px",
+              fontSize: 24,
               lineHeight: "29px",
               fontFamily: "var(--ff-sans)",
               fontWeight: 400,
@@ -107,13 +140,13 @@ function TripHero({
             style={{ gap: 6, height: 22, paddingRight: 18 }}
           >
             <Calendar
-              className="w-[14px] h-[14px] shrink-0 text-text-muted"
-              strokeWidth={1.5}
+              className="w-[20px] h-[20px] shrink-0 text-text-muted"
+              strokeWidth={1.75}
             />
             <span
               className="flex-1"
               style={{
-                fontSize: "14px",
+                fontSize: 14,
                 lineHeight: "18px",
                 fontFamily: "var(--ff-sans)",
                 fontWeight: 400,
@@ -123,11 +156,34 @@ function TripHero({
               {dateRange}
             </span>
           </div>
+          <div
+            className="flex items-center"
+            style={{
+              gap: 6,
+              marginTop: 4,
+              paddingRight: 18,
+              fontFamily: "var(--ff-mono)",
+              fontSize: 13,
+              lineHeight: "18px",
+              color: "var(--text-muted)",
+            }}
+          >
+            {stats.map((s, i) => (
+              <span key={s} className="flex items-center" style={{ gap: 6 }}>
+                {i > 0 && <span style={{ opacity: 0.45 }}>·</span>}
+                <span
+                  className="uppercase"
+                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                >
+                  {s}
+                </span>
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Weather chip (GS6-0) — pill · bg --bg-panel @ 80% · border subtle. */}
         <div
-          className="flex items-center justify-center rounded-full border border-border-subtle"
+          className="flex items-center justify-center rounded-[20px] border border-border-subtle"
           style={{
             paddingBlock: 6,
             paddingInline: 12,
@@ -135,7 +191,15 @@ function TripHero({
             backgroundColor: "rgba(17,18,20,0.8)",
           }}
         >
-          <span style={{ fontSize: 11, lineHeight: "14px" }}>☀</span>
+          <span
+            style={{
+              fontSize: 11,
+              lineHeight: "14px",
+              color: "var(--amber-light)",
+            }}
+          >
+            ☀
+          </span>
           <span
             style={{
               fontSize: 11,
@@ -148,68 +212,7 @@ function TripHero({
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** Paper GRU-0 — EXPLORE heading + 400×46 focus-styled ask input. */
-function Explore() {
-  return (
-    <div
-      className="flex flex-col justify-between w-fit shrink-0 bg-bg-card border-b border-border-subtle"
-      style={{
-        paddingTop: 9,
-        paddingBottom: 30,
-        paddingLeft: 12,
-        paddingRight: 20,
-        height: 124,
-      }}
-    >
-      {/* EXPLORE label — Space Grotesk 16/33 · tracking 0.19em · amber-light. */}
-      <span
-        className="uppercase"
-        style={{
-          fontFamily: "var(--ff-display)",
-          fontSize: "16px",
-          lineHeight: "33px",
-          letterSpacing: "0.19em",
-          color: "var(--amber-light)",
-        }}
-      >
-        EXPLORE
-      </span>
-
-      {/* Ask input (GRV-0) — 400×46 · radius 4 · input-surface-filled
-       *  · focused input-border-focus border + 3px ring. */}
-      <button
-        type="button"
-        className="flex items-center justify-center w-[400px] h-[46px] rounded shrink-0"
-        style={{
-          paddingInline: 14,
-          gap: 10,
-          backgroundColor: "var(--input-surface-filled)",
-          border: "1px solid var(--input-border-focus)",
-          boxShadow: "0 0 0 3px rgba(167,204,253,0.18)",
-        }}
-      >
-        <Plus className="w-[14px] h-[14px] text-text-muted" strokeWidth={1.5} />
-        <span
-          className="flex-1 text-left"
-          style={{
-            fontSize: "14px",
-            lineHeight: "18px",
-            fontFamily: "var(--ff-sans)",
-            fontWeight: 400,
-            color: "#B3B3B3",
-          }}
-        >
-          Ask about anything
-        </span>
-        <Search
-          className="w-[14px] h-[14px] text-text-muted"
-          strokeWidth={1.5}
-        />
-      </button>
+      </div>
     </div>
   );
 }

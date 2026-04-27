@@ -11,6 +11,8 @@ export type Trip = {
   heroImage?: string;
   weatherHiF: number;
   weatherLoF: number;
+  /** Editorial kicker rendered above the title, Crimson Text italic. */
+  kicker?: string;
   days: Day[];
 };
 
