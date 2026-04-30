@@ -71,11 +71,13 @@ export function CategoryPlanningSlide({
   category,
   data,
   expanded,
+  onToggle,
   bodyExtras,
 }: {
   category: CategoryKey;
   data: PlanningSlideData;
   expanded: boolean;
+  onToggle?: () => void;
   bodyExtras?: ReactNode;
 }) {
   const accent = CATEGORY_ACCENT[category];
@@ -92,8 +94,14 @@ export function CategoryPlanningSlide({
         fontFamily: ff.sans,
       }}
     >
-      <Photo url={data.photoUrl} alt={data.photoAlt} />
-      <Sheet expanded={expanded} accent={accent} data={data} bodyExtras={bodyExtras} />
+      <Photo url={data.photoUrl} alt={data.photoAlt} onToggle={onToggle} />
+      <Sheet
+        expanded={expanded}
+        accent={accent}
+        data={data}
+        bodyExtras={bodyExtras}
+        onToggle={onToggle}
+      />
       <CtaPill copy={data.cta} />
     </div>
   );
@@ -159,15 +167,38 @@ function Chevron({ up }: { up: boolean }) {
 
 // ── Sheet + scroll mechanics ────────────────────────────────────────────────
 
-function Photo({ url, alt }: { url: string; alt: string }) {
+function Photo({
+  url,
+  alt,
+  onToggle,
+}: {
+  url: string;
+  alt: string;
+  onToggle?: () => void;
+}) {
+  const interactive = !!onToggle;
   return (
     <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onToggle}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onToggle!();
+              }
+            }
+          : undefined
+      }
       style={{
         position: "absolute",
         inset: 0,
         backgroundImage: `url(${url})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
+        cursor: interactive ? "pointer" : undefined,
       }}
       aria-label={alt}
     />
@@ -179,11 +210,13 @@ function Sheet({
   accent,
   data,
   bodyExtras,
+  onToggle,
 }: {
   expanded: boolean;
   accent: string;
   data: PlanningSlideData;
   bodyExtras?: ReactNode;
+  onToggle?: () => void;
 }) {
   const top = expanded ? SHEET_TOP_EXPANDED : SHEET_TOP_COLLAPSED;
   const sheetHeight = SLIDE_HEIGHT - top;
@@ -226,7 +259,7 @@ function Sheet({
           "top 320ms cubic-bezier(0.32, 0.72, 0, 1), height 320ms cubic-bezier(0.32, 0.72, 0, 1)",
       }}
     >
-      <GrabberBar />
+      <GrabberBar onToggle={onToggle} />
       <Grabber />
       <Header accent={accent} title={data.title} pills={data.pills} />
       <ScrollRegion scrollRef={scrollRef} onScroll={sync}>
@@ -269,9 +302,24 @@ function ScrollRegion({
   );
 }
 
-function GrabberBar() {
+function GrabberBar({ onToggle }: { onToggle?: () => void }) {
+  const interactive = !!onToggle;
   return (
     <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? "Toggle slide" : undefined}
+      onClick={onToggle}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onToggle!();
+              }
+            }
+          : undefined
+      }
       style={{
         position: "absolute",
         top: 0,
@@ -279,6 +327,8 @@ function GrabberBar() {
         right: 0,
         height: 14,
         backgroundColor: HEADER_BG,
+        cursor: interactive ? "pointer" : undefined,
+        zIndex: 2,
       }}
     />
   );

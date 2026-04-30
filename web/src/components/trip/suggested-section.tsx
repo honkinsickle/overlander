@@ -58,7 +58,7 @@ const SUGGESTIONS_BY_DAY: Record<number, Suggestion[]> = {
         "Walk onto a 10,000-year-old glacier — tour departs hourly from the Skywalk center.",
       heroImage:
         "https://images.unsplash.com/photo-1454942901704-3c44c11b2ad1?w=1000&q=80",
-      browseLabel: "Browse Scenic",
+      browseLabel: "Browse Sights & Landmarks",
     },
     {
       id: "banff-townsite",
@@ -105,7 +105,7 @@ const SUGGESTIONS_BY_DAY: Record<number, Suggestion[]> = {
         "Birthplace of American sport climbing — Misery Ridge loop is 3.7 miles of ridge views and tuff spires.",
       heroImage:
         "https://images.unsplash.com/photo-1518406432532-9cbef74e9b8f?w=1000&q=80",
-      browseLabel: "Browse Scenic",
+      browseLabel: "Browse Sights & Landmarks",
     },
     {
       id: "old-mill-bend",
@@ -256,7 +256,13 @@ const GROUPS_BY_DAY: Record<number, Group[]> = {
   ],
 };
 
-export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
+export function SuggestedSection({
+  dayNumber = 1,
+  onBrowse,
+}: {
+  dayNumber?: number;
+  onBrowse?: (category: Category) => void;
+}) {
   const suggestions = SUGGESTIONS_BY_DAY[dayNumber] ?? SUGGESTIONS_BY_DAY[1];
   const groups = GROUPS_BY_DAY[dayNumber] ?? GROUPS_BY_DAY[1];
   return (
@@ -330,7 +336,7 @@ export function SuggestedSection({ dayNumber = 1 }: { dayNumber?: number }) {
 
       <div className="flex flex-col items-center" style={{ gap: 12 }}>
         {suggestions.map((s) => (
-          <SuggestionCard key={s.id} {...s} />
+          <SuggestionCard key={s.id} {...s} onBrowse={onBrowse} />
         ))}
         {groups.map((g) => (
           <GroupCard key={g.id} {...g} />

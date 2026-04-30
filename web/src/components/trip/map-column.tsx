@@ -96,7 +96,7 @@ export function MapColumn({
     const center = firstWithCoords?.coords ?? [-121.5, 45];
     const map = new mapboxgl.Map({
       container: el,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: "mapbox://styles/honkingsickle/cmolte3b7003e01so7msf20d3",
       center,
       zoom: 6,
       attributionControl: false,

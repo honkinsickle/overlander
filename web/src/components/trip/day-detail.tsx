@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
 import { SuggestedSection } from "@/components/trip/suggested-section";
 import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import { WaypointCard } from "@/components/trip/waypoint-card";
+import {
+  CategoryBrowsePanel,
+  type BrowseTarget,
+} from "@/components/trip/category-browse-panel";
 import type { Trip, Day } from "@/lib/trips/types";
+import type { Category } from "@/components/primitives/detail-card";
 
 const SCROLL_TRIGGER = 100;
 
@@ -152,6 +157,9 @@ export function DayDetail({ trip }: { trip: Trip }) {
   }, [trip.id]);
 
   const totalStops = trip.days.reduce((n, d) => n + d.waypoints.length, 0);
+  const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
+  const openBrowse = (dayNumber: number) => (category: Category) =>
+    setBrowseTarget({ category, dayNumber });
 
   return (
     <div className="flex flex-col h-full">
@@ -177,7 +185,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
             key={day.id}
             trip={trip}
             day={day}
-            extra={i < 2 ? <SuggestedSection dayNumber={i + 1} /> : null}
+            extra={
+              i < 2 ? (
+                <SuggestedSection
+                  dayNumber={i + 1}
+                  onBrowse={openBrowse(i + 1)}
+                />
+              ) : null
+            }
           />
         ))}
       </div>
@@ -194,6 +209,11 @@ export function DayDetail({ trip }: { trip: Trip }) {
           Open Ask →
         </Link>
       </footer>
+
+      <CategoryBrowsePanel
+        target={browseTarget}
+        onClose={() => setBrowseTarget(null)}
+      />
     </div>
   );
 }

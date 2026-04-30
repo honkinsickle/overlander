@@ -34,7 +34,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
       <section className="w-[444px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
         {props.children}
       </section>
-      <section className="flex-1 min-w-0 relative overflow-hidden" aria-label="Map">
+      <section className="flex-1 min-w-0 relative overflow-hidden z-[15]" aria-label="Map">
         <MapColumn tripId={trip.id} days={trip.days} />
       </section>
     </div>

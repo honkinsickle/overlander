@@ -3,7 +3,6 @@ import {
   X,
   Fuel,
   Tent,
-  Mountain,
   Building2,
   UtensilsCrossed,
   Eye,
@@ -11,6 +10,44 @@ import {
   MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Mountain category renders the 🏔️ snow-capped mountain emoji rather than a
+// lucide stroke icon. Wrapper accepts the same SVGProps shape so it's a
+// drop-in for the rest of `categoryIcon`. Size is read from `width` prop or
+// the tailwind `w-N` class (1 unit = 4px); falls back to 20.
+function MountainEmojiIcon({
+  className,
+  style,
+  width,
+}: React.SVGProps<SVGSVGElement>) {
+  let size = 20;
+  if (typeof width === "number") size = width;
+  else if (typeof width === "string") {
+    const n = parseInt(width, 10);
+    if (!Number.isNaN(n)) size = n;
+  } else if (className) {
+    const m = /\bw-(\d+(?:\.\d+)?)\b/.exec(className);
+    if (m) size = parseFloat(m[1]) * 4;
+  }
+  return (
+    <span
+      aria-hidden
+      className={className}
+      style={{
+        ...style,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: size,
+        height: size,
+        fontSize: size,
+        lineHeight: 1,
+      }}
+    >
+      🏔️
+    </span>
+  );
+}
 
 export type Category =
   | "fuel"
@@ -30,7 +67,7 @@ export const categoryStyle: Record<
 > = {
   fuel:       { accent: "var(--cat-fuel)",       bg: "var(--cat-fuel-bg)",       label: "FUEL" },
   camping:    { accent: "var(--cat-camping)",    bg: "var(--cat-camping-bg)",    label: "CAMPING" },
-  mountain:   { accent: "var(--cat-mountain)",   bg: "var(--cat-mountain-bg)",   label: "MOUNTAIN" },
+  mountain:   { accent: "var(--cat-mountain)",   bg: "var(--cat-mountain-bg)",   label: "SIGHTS & LANDMARKS" },
   urban:      { accent: "var(--cat-urban)",      bg: "var(--cat-urban-bg)",      label: "URBAN" },
   food:       { accent: "var(--cat-food)",       bg: "var(--cat-food-bg)",       label: "FOOD" },
   oddity:     { accent: "var(--cat-oddity)",     bg: "var(--cat-oddity-bg)",     label: "ODDITY" },
@@ -46,7 +83,7 @@ export const categoryIcon: Record<
 > = {
   fuel:       Fuel,
   camping:    Tent,
-  mountain:   Mountain,
+  mountain:   MountainEmojiIcon,
   urban:      Building2,
   food:       UtensilsCrossed,
   oddity:     Eye,
