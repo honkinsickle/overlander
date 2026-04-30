@@ -187,6 +187,26 @@ export function MapColumn({
     });
   }, [activeDay?.id, activeDay?.coords]);
 
+  // Fly to a specific place when the browse panel emits trip:flyTo. Used by
+  // the CategoryBrowsePanel cards: tap a slide → map zooms to that location.
+  useEffect(() => {
+    const onFlyTo = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ coords: [number, number]; name?: string }>
+      ).detail;
+      const map = mapRef.current;
+      if (!map || !detail?.coords) return;
+      map.flyTo({
+        center: detail.coords,
+        zoom: 13,
+        duration: 1500,
+        essential: true,
+      });
+    };
+    window.addEventListener("trip:flyTo", onFlyTo);
+    return () => window.removeEventListener("trip:flyTo", onFlyTo);
+  }, []);
+
   return (
     <div className="relative w-full h-full bg-bg-map">
       <div ref={containerRef} className="w-full h-full" />

@@ -16,6 +16,7 @@ export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>>
 
 export type BrowsePlace = {
   id: string;
+  coords: [number, number];
   photoUrl: string;
   photoAlt: string;
   title: string;
@@ -70,6 +71,7 @@ export const BROWSE_PLACES: Record<
     scenic: [
       {
         id: "columbia-icefield",
+        coords: [-117.225, 52.215],
         photoUrl:
           "https://images.unsplash.com/photo-1454942901704-3c44c11b2ad1?w=1200&q=80",
         photoAlt: "Columbia Icefield glacier",
@@ -93,6 +95,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "lime-point",
+        coords: [-122.476, 37.832],
         photoUrl:
           "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=1200&q=80",
         photoAlt: "Marin Headlands view of Golden Gate",
@@ -115,6 +118,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "hawk-hill",
+        coords: [-122.499, 37.826],
         photoUrl:
           "https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=1200&q=80",
         photoAlt: "Marin Headlands ridge at sunset",
@@ -139,6 +143,7 @@ export const BROWSE_PLACES: Record<
     food: [
       {
         id: "lake-agnes",
+        coords: [-116.222, 51.413],
         photoUrl:
           "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&q=80",
         photoAlt: "Mountain lake teahouse",
@@ -161,6 +166,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "tartine",
+        coords: [-122.412, 37.762],
         photoUrl:
           "https://images.unsplash.com/photo-1568254183919-78a4f43a2877?w=1200&q=80",
         photoAlt: "Bakery interior",
@@ -184,6 +190,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "swans-market",
+        coords: [-122.273, 37.797],
         photoUrl:
           "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=80",
         photoAlt: "Food hall",
@@ -208,6 +215,7 @@ export const BROWSE_PLACES: Record<
     oddity: [
       {
         id: "powells",
+        coords: [-122.681, 45.523],
         photoUrl:
           "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200&q=80",
         photoAlt: "Powell's City of Books exterior",
@@ -231,6 +239,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "prehistoric-gardens",
+        coords: [-124.498, 42.738],
         photoUrl:
           "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=1200&q=80",
         photoAlt: "Roadside dinosaur sculpture",
@@ -253,6 +262,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "cabazon-dinosaurs",
+        coords: [-116.788, 33.917],
         photoUrl:
           "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=1200&q=80",
         photoAlt: "Roadside attraction",
@@ -277,6 +287,7 @@ export const BROWSE_PLACES: Record<
     camping: [
       {
         id: "tumalo-state",
+        coords: [-121.327, 44.119],
         photoUrl:
           "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1200&q=80",
         photoAlt: "Pine forest campground",
@@ -300,6 +311,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "hurricane-cliffs",
+        coords: [-113.290, 37.165],
         photoUrl:
           "https://images.unsplash.com/photo-1496545672447-f699b503d270?w=1200&q=80",
         photoAlt: "Open BLM dispersed camping",
@@ -322,6 +334,7 @@ export const BROWSE_PLACES: Record<
       },
       {
         id: "ohanapecosh",
+        coords: [-121.567, 46.730],
         photoUrl:
           "https://images.unsplash.com/photo-1520975954732-35dd22299614?w=1200&q=80",
         photoAlt: "Old-growth forest campground",

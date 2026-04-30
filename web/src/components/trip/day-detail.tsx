@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
@@ -156,7 +155,6 @@ export function DayDetail({ trip }: { trip: Trip }) {
     return () => root.removeEventListener("scroll", onScroll);
   }, [trip.id]);
 
-  const totalStops = trip.days.reduce((n, d) => n + d.waypoints.length, 0);
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const openBrowse = (dayNumber: number) => (category: Category) =>
     setBrowseTarget({ category, dayNumber });
@@ -196,19 +194,6 @@ export function DayDetail({ trip }: { trip: Trip }) {
           />
         ))}
       </div>
-
-      {/* SUPPLEMENTAL (not in GDB-0) — footer */}
-      <footer className="h-[65px] flex items-center justify-between px-5 border-t border-border-subtle shrink-0 bg-bg-panel">
-        <span className="text-text-muted font-mono text-xs">
-          {totalStops} stops
-        </span>
-        <Link
-          href={`/trip/${trip.id}/ask`}
-          className="px-4 py-2 rounded text-text-primary bg-button-primary hover:bg-button-primary-hover border border-button-primary-border"
-        >
-          Open Ask →
-        </Link>
-      </footer>
 
       <CategoryBrowsePanel
         target={browseTarget}
