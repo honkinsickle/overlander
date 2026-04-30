@@ -1501,8 +1501,8 @@ function CtaPill({ copy }: { copy: string }) {
         style={{
           fontFamily: ff.sans,
           fontWeight: 400,
-          fontSize: 17,
-          lineHeight: "22px",
+          fontSize: 19,
+          lineHeight: "24px",
         }}
       >
         {copy}
