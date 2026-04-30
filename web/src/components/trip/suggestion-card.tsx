@@ -17,6 +17,7 @@ export type SuggestionCardProps = {
   heroImage: string;
   browseLabel: string;
   featured?: boolean;
+  onBrowse?: (category: Category) => void;
 };
 
 export function SuggestionCard({
@@ -27,6 +28,7 @@ export function SuggestionCard({
   heroImage,
   browseLabel,
   featured = false,
+  onBrowse,
 }: SuggestionCardProps) {
   const cat = categoryStyle[category];
   const Icon = categoryIcon[category];
@@ -164,6 +166,7 @@ export function SuggestionCard({
       >
         <button
           type="button"
+          onClick={onBrowse ? () => onBrowse(category) : undefined}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-sm"
           style={{
             height: 36,
