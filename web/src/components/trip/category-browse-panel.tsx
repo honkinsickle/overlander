@@ -219,6 +219,7 @@ function PanelBody({ target }: { target: BrowseTarget }) {
           <CategoryPlanningSlide
             category={slideKey}
             data={p}
+            compact
             expanded={expandedId === p.id}
             onToggle={() =>
               setExpandedId((curr) => (curr === p.id ? null : p.id))
