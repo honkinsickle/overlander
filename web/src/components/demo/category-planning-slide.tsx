@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 // Mirrors Paper artboards WBU-1 / UTE-1 / W0C-1 / WFW-1 / WJL-1.
 
 const SLIDE_HEIGHT = 544;
-const SHEET_TOP_COLLAPSED = 230;
+const SHEET_TOP_COLLAPSED = 287;
 const SHEET_TOP_EXPANDED = 30;
 const CTA_CLEARANCE = 80;
 
@@ -262,10 +262,10 @@ function Sheet({
       <GrabberBar onToggle={onToggle} />
       <Grabber />
       <Header accent={accent} title={data.title} pills={data.pills} />
-      <ScrollRegion scrollRef={scrollRef} onScroll={sync}>
+      <ScrollRegion scrollRef={scrollRef} onScroll={sync} enabled={expanded}>
         <Body accent={accent} data={data} bodyExtras={bodyExtras} />
       </ScrollRegion>
-      <ScrollNub scroll={scroll} sheetHeight={sheetHeight} />
+      {expanded && <ScrollNub scroll={scroll} sheetHeight={sheetHeight} />}
     </section>
   );
 }
@@ -273,10 +273,12 @@ function Sheet({
 function ScrollRegion({
   scrollRef,
   onScroll,
+  enabled = true,
   children,
 }: {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onScroll: () => void;
+  enabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -289,7 +291,7 @@ function ScrollRegion({
         style={{
           flex: 1,
           minHeight: 0,
-          overflowY: "auto",
+          overflowY: enabled ? "auto" : "hidden",
           overflowX: "hidden",
           paddingBottom: CTA_CLEARANCE,
           scrollbarWidth: "none",
@@ -1519,23 +1521,23 @@ function CtaPill({ copy }: { copy: string }) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 8,
+        gap: 6,
         position: "absolute",
         right: 25,
         top: 475,
-        height: 50,
+        height: 35,
         borderRadius: 9999,
         backgroundColor: CTA_BG,
         border: `1px solid ${CTA_BORDER}`,
         boxShadow: "4px 2px 3px #00000047",
         cursor: "pointer",
         color: "#FFFFFF",
-        padding: "0 24px",
+        padding: "0 17px",
       }}
     >
       <svg
-        width="25"
-        height="25"
+        width="18"
+        height="18"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -1551,8 +1553,8 @@ function CtaPill({ copy }: { copy: string }) {
         style={{
           fontFamily: ff.sans,
           fontWeight: 400,
-          fontSize: 19,
-          lineHeight: "24px",
+          fontSize: 13,
+          lineHeight: "17px",
         }}
       >
         {copy}

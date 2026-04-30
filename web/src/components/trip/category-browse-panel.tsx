@@ -214,15 +214,26 @@ function PanelBody({ target }: { target: BrowseTarget }) {
       style={{ paddingTop: 16, paddingBottom: 16, gap: 16 }}
     >
       {places.map((p) => (
-        <CategoryPlanningSlide
+        <div
           key={p.id}
-          category={slideKey}
-          data={p}
-          expanded={expandedId === p.id}
-          onToggle={() =>
-            setExpandedId((curr) => (curr === p.id ? null : p.id))
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent("trip:flyTo", {
+                detail: { coords: p.coords, name: p.title },
+              }),
+            )
           }
-        />
+          style={{ cursor: "pointer" }}
+        >
+          <CategoryPlanningSlide
+            category={slideKey}
+            data={p}
+            expanded={expandedId === p.id}
+            onToggle={() =>
+              setExpandedId((curr) => (curr === p.id ? null : p.id))
+            }
+          />
+        </div>
       ))}
     </div>
   );
