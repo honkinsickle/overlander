@@ -69,20 +69,11 @@ export function CategoryBrowsePanel({
   return (
     <div
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-hidden={!open}
       aria-label={target ? `Browse ${style!.label}` : undefined}
-      className={`fixed inset-0 z-40 ${open ? "" : "pointer-events-none"}`}
+      className="fixed inset-0 z-40 pointer-events-none"
     >
-      {/* Invisible click-to-dismiss surface — no visual dim so the map
-       *  beside the panel reads at full brightness. */}
-      <button
-        type="button"
-        aria-label="Close browse panel"
-        tabIndex={open ? 0 : -1}
-        onClick={onClose}
-        className="absolute inset-0"
-      />
 
       <aside
         style={{
@@ -94,7 +85,7 @@ export function CategoryBrowsePanel({
           backgroundColor: "var(--bg-panel)",
           borderRight: "1px solid var(--border-subtle)",
         }}
-        className="absolute inset-y-0 left-0 flex flex-col shadow-2xl"
+        className="absolute inset-y-0 left-0 flex flex-col shadow-2xl pointer-events-auto"
       >
         <header
           className="flex items-center shrink-0"
