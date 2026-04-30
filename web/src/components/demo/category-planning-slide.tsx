@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 // Mirrors Paper artboards WBU-1 / UTE-1 / W0C-1 / WFW-1 / WJL-1.
 
 const SLIDE_HEIGHT = 544;
-const SHEET_TOP_COLLAPSED = 287;
+const SHEET_TOP_COLLAPSED = 230;
+const SHEET_TOP_COLLAPSED_COMPACT = 287;
 const SHEET_TOP_EXPANDED = 30;
 const CTA_CLEARANCE = 80;
 
@@ -71,12 +72,14 @@ export function CategoryPlanningSlide({
   category,
   data,
   expanded,
+  compact = false,
   onToggle,
   bodyExtras,
 }: {
   category: CategoryKey;
   data: PlanningSlideData;
   expanded: boolean;
+  compact?: boolean;
   onToggle?: () => void;
   bodyExtras?: ReactNode;
 }) {
@@ -97,12 +100,13 @@ export function CategoryPlanningSlide({
       <Photo url={data.photoUrl} alt={data.photoAlt} onToggle={onToggle} />
       <Sheet
         expanded={expanded}
+        compact={compact}
         accent={accent}
         data={data}
         bodyExtras={bodyExtras}
         onToggle={onToggle}
       />
-      <CtaPill copy={data.cta} />
+      <CtaPill copy={data.cta} compact={compact} />
     </div>
   );
 }
@@ -207,18 +211,21 @@ function Photo({
 
 function Sheet({
   expanded,
+  compact = false,
   accent,
   data,
   bodyExtras,
   onToggle,
 }: {
   expanded: boolean;
+  compact?: boolean;
   accent: string;
   data: PlanningSlideData;
   bodyExtras?: ReactNode;
   onToggle?: () => void;
 }) {
-  const top = expanded ? SHEET_TOP_EXPANDED : SHEET_TOP_COLLAPSED;
+  const collapsedTop = compact ? SHEET_TOP_COLLAPSED_COMPACT : SHEET_TOP_COLLAPSED;
+  const top = expanded ? SHEET_TOP_EXPANDED : collapsedTop;
   const sheetHeight = SLIDE_HEIGHT - top;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scroll, setScroll] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
@@ -1513,7 +1520,12 @@ function FirewoodIcon() {
 
 // ── CTA pill ────────────────────────────────────────────────────────────────
 
-function CtaPill({ copy }: { copy: string }) {
+function CtaPill({ copy, compact = false }: { copy: string; compact?: boolean }) {
+  // Compact variant (for browse panel context) shrinks 30% — see diary 2026-04-30.
+  // Default matches canvas spec on WBU-1 / UTE-1 / W0C-1 / WFW-1 / WJL-1.
+  const dims = compact
+    ? { height: 35, padX: 17, gap: 6, icon: 18, fontSize: 13, lineHeight: "17px" }
+    : { height: 50, padX: 24, gap: 8, icon: 25, fontSize: 19, lineHeight: "24px" };
   return (
     <button
       type="button"
@@ -1521,23 +1533,23 @@ function CtaPill({ copy }: { copy: string }) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 6,
+        gap: dims.gap,
         position: "absolute",
         right: 25,
         top: 475,
-        height: 35,
+        height: dims.height,
         borderRadius: 9999,
         backgroundColor: CTA_BG,
         border: `1px solid ${CTA_BORDER}`,
         boxShadow: "4px 2px 3px #00000047",
         cursor: "pointer",
         color: "#FFFFFF",
-        padding: "0 17px",
+        padding: `0 ${dims.padX}px`,
       }}
     >
       <svg
-        width="18"
-        height="18"
+        width={dims.icon}
+        height={dims.icon}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -1553,8 +1565,8 @@ function CtaPill({ copy }: { copy: string }) {
         style={{
           fontFamily: ff.sans,
           fontWeight: 400,
-          fontSize: 13,
-          lineHeight: "17px",
+          fontSize: dims.fontSize,
+          lineHeight: dims.lineHeight,
         }}
       >
         {copy}
