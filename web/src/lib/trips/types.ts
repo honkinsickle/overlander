@@ -8,6 +8,10 @@ export type Trip = {
   endDate: string;
   startLocation: string;
   endLocation: string;
+  /** `[lng, lat]` of the trip's starting point. Each day's `coords`
+   *  represents the *end* of that day, so without this the route line
+   *  starts at Day 1's destination instead of the origin city. */
+  startCoords?: [number, number];
   heroImage?: string;
   weatherHiF: number;
   weatherLoF: number;

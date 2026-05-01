@@ -32,9 +32,11 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 export function MapColumn({
   tripId,
   days,
+  startCoords,
 }: {
   tripId: string;
   days: Day[];
+  startCoords?: [number, number];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -103,10 +105,20 @@ export function MapColumn({
     });
     mapRef.current = map;
 
-    const routeCoords = days
+    const dayCoords = days
       .map((d) => d.coords)
       .filter((c): c is [number, number] => !!c);
+    // Each day's coords is the day's *end*, so the route line would
+    // start at Day 1's destination instead of the trip origin. Prepend
+    // the trip's startCoords (when provided) so the line begins at the
+    // origin city.
+    const routeCoords = startCoords ? [startCoords, ...dayCoords] : dayCoords;
 
+    if (startCoords) {
+      new mapboxgl.Marker({ color: "#c8a96e" })
+        .setLngLat(startCoords)
+        .addTo(map);
+    }
     days.forEach((d) => {
       if (!d.coords) return;
       new mapboxgl.Marker({ color: "#c8a96e" })
@@ -118,30 +130,75 @@ export function MapColumn({
       const controller = new AbortController();
       map.on("load", async () => {
         // Road-following route via Mapbox Directions API.
-        // Falls back to straight lines if the API fails.
-        const coordsPath = routeCoords
-          .map((c) => `${c[0]},${c[1]}`)
-          .join(";");
-        const url =
-          `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsPath}` +
-          `?geometries=geojson&overview=full` +
-          `&access_token=${mapboxgl.accessToken}`;
+        //  • Driving profile caps at 25 coords/request → chunk with overlap.
+        //  • Mapbox 422s on consecutive duplicate coords (rest days repeat
+        //    the prior day's coord), so dedupe first.
+        //  • A 200 with empty `routes` ("NoRoute") means at least one coord
+        //    in the chunk is unroutable (e.g. Brooks Falls — floatplane
+        //    only). Recursively split such chunks in half so the failure
+        //    is isolated to a single unroutable pair rather than killing
+        //    the whole 25-coord segment.
+        const CHUNK_LIMIT = 25;
 
-        let geometry: GeoJSON.Geometry = {
-          type: "LineString",
-          coordinates: routeCoords,
-        };
-        try {
-          const res = await fetch(url, { signal: controller.signal });
-          if (res.ok) {
-            const json = (await res.json()) as {
-              routes?: { geometry: GeoJSON.Geometry }[];
-            };
-            if (json.routes?.[0]?.geometry) geometry = json.routes[0].geometry;
-          }
-        } catch {
-          /* keep straight-line fallback */
+        const deduped: [number, number][] = [];
+        for (const c of routeCoords) {
+          const prev = deduped[deduped.length - 1];
+          if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) deduped.push(c);
         }
+
+        const fetchRoute = async (
+          coords: [number, number][],
+        ): Promise<[number, number][]> => {
+          if (coords.length < 2) return coords;
+          const path = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+          const url =
+            `https://api.mapbox.com/directions/v5/mapbox/driving/${path}` +
+            `?geometries=geojson&overview=full` +
+            `&access_token=${mapboxgl.accessToken}`;
+          try {
+            const res = await fetch(url, { signal: controller.signal });
+            if (res.ok) {
+              const json = (await res.json()) as {
+                routes?: {
+                  geometry?: { coordinates?: [number, number][] };
+                }[];
+              };
+              const geo = json.routes?.[0]?.geometry?.coordinates;
+              if (geo && geo.length > 0) return geo;
+              // 200 + empty routes → split and retry sub-segments
+            } else {
+              console.warn(
+                `[map] Directions ${coords.length}-coord HTTP ${res.status}`,
+              );
+            }
+          } catch (err) {
+            if ((err as Error)?.name === "AbortError") return coords;
+            console.warn("[map] Directions error:", err);
+            return coords;
+          }
+
+          if (coords.length === 2) return coords; // unroutable pair → line
+          const mid = Math.floor(coords.length / 2);
+          const left = await fetchRoute(coords.slice(0, mid + 1));
+          const right = await fetchRoute(coords.slice(mid));
+          return [...left, ...right.slice(1)];
+        };
+
+        const chunks: [number, number][][] = [];
+        for (let i = 0; i < deduped.length; i += CHUNK_LIMIT - 1) {
+          chunks.push(deduped.slice(i, i + CHUNK_LIMIT));
+          if (i + CHUNK_LIMIT >= deduped.length) break;
+        }
+        const chunkResults = await Promise.all(chunks.map(fetchRoute));
+        // Drop the first coord of every chunk after the first to avoid
+        // duplicating the overlap point.
+        const merged: [number, number][] = chunkResults.flatMap((c, i) =>
+          i === 0 ? c : c.slice(1),
+        );
+        const geometry: GeoJSON.Geometry = {
+          type: "LineString",
+          coordinates: merged,
+        };
 
         if (!mapRef.current) return; // unmounted mid-fetch
         map.addSource("trip-route", {
@@ -159,6 +216,29 @@ export function MapColumn({
             "line-opacity": 0.9,
           },
         });
+
+        // Frame the whole route on first load so the user sees the
+        // shape of the trip immediately. Subsequent ?day= changes still
+        // fly to individual days via the effect below.
+        if (!queriedDay && merged.length > 1) {
+          let minLng = Infinity,
+            minLat = Infinity,
+            maxLng = -Infinity,
+            maxLat = -Infinity;
+          for (const [lng, lat] of merged) {
+            if (lng < minLng) minLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lng > maxLng) maxLng = lng;
+            if (lat > maxLat) maxLat = lat;
+          }
+          map.fitBounds(
+            [
+              [minLng, minLat],
+              [maxLng, maxLat],
+            ],
+            { padding: 60, duration: 0 },
+          );
+        }
       });
     }
 
