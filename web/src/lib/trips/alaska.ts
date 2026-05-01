@@ -1,4 +1,5 @@
 import type { Trip } from "./types";
+import { LA_TO_DEADHORSE_POLYLINE } from "./alaska-route";
 
 /**
  * 82-day overland trip from Los Angeles to Deadhorse (Prudhoe Bay), AK.
@@ -45,6 +46,7 @@ export const LA_TO_DEADHORSE: Trip = {
   startLocation: "Los Angeles, CA",
   endLocation: "Deadhorse (Prudhoe Bay), AK",
   startCoords: [-118.2437, 34.0522],
+  routePolyline: LA_TO_DEADHORSE_POLYLINE,
   heroImage: "https://picsum.photos/seed/dalton-highway-arctic/1200/800",
   weatherHiF: 60,
   weatherLoF: 38,

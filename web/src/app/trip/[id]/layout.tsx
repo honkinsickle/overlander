@@ -39,6 +39,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
           tripId={trip.id}
           days={trip.days}
           startCoords={trip.startCoords}
+          routePolyline={trip.routePolyline}
         />
       </section>
     </div>

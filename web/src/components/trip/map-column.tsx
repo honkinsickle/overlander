@@ -20,6 +20,42 @@ import type { Day, Waypoint } from "@/lib/trips/types";
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
 /**
+ * Decode a Google polyline (precision 5) into `[lng, lat]` pairs. Inverse
+ * of the encoder in `web/scripts/prebake-routes.mjs`. The encoded stream
+ * is lat,lng per spec; we swap to our internal `[lng, lat]` convention.
+ */
+function decodePolyline(str: string): [number, number][] {
+  const factor = 1e5;
+  const out: [number, number][] = [];
+  let lat = 0;
+  let lng = 0;
+  let i = 0;
+  while (i < str.length) {
+    let result = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+    do {
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    out.push([lng / factor, lat / factor]);
+  }
+  return out;
+}
+
+/**
  * Right-side map column. Persists across center-column nav.
  *
  * The map flies to `day.coords` whenever `?day=<id>` changes. DayDetail's
@@ -33,10 +69,15 @@ export function MapColumn({
   tripId,
   days,
   startCoords,
+  routePolyline,
 }: {
   tripId: string;
   days: Day[];
   startCoords?: [number, number];
+  /** Pre-baked road-following geometry encoded as a polyline (precision
+   *  5). When present, MapColumn decodes and draws this directly instead
+   *  of calling the Mapbox Directions API. */
+  routePolyline?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -129,81 +170,90 @@ export function MapColumn({
     if (routeCoords.length >= 2) {
       const controller = new AbortController();
       map.on("load", async () => {
-        // Road-following route via Mapbox Directions API.
-        //  • Driving profile caps at 25 coords/request → chunk with overlap.
-        //  • Mapbox 422s on consecutive duplicate coords (rest days repeat
-        //    the prior day's coord), so dedupe first.
-        //  • A 200 with empty `routes` ("NoRoute") means at least one coord
-        //    in the chunk is unroutable (e.g. Brooks Falls — floatplane
-        //    only). Recursively split such chunks in half so the failure
-        //    is isolated to a single unroutable pair rather than killing
-        //    the whole 25-coord segment.
-        const CHUNK_LIMIT = 25;
+        let merged: [number, number][];
+        if (routePolyline && routePolyline.length > 0) {
+          // Pre-baked path: decode the committed polyline and draw it
+          // directly. See scripts/prebake-routes.mjs for the encoder.
+          merged = decodePolyline(routePolyline);
+        } else {
+          // Live path — same chunk + dedupe + recursive-split pipeline
+          // used to bake the geometry. Runs when a trip has no pre-baked
+          // routeGeometry, or after a mutation invalidates it.
+          //  • Driving profile caps at 25 coords/request → chunk with overlap.
+          //  • Mapbox 422s on consecutive duplicate coords (rest days repeat
+          //    the prior day's coord), so dedupe first.
+          //  • A 200 with empty `routes` ("NoRoute") means at least one coord
+          //    in the chunk is unroutable (e.g. Brooks Falls — floatplane
+          //    only). Recursively split such chunks in half so the failure
+          //    is isolated to a single unroutable pair rather than killing
+          //    the whole 25-coord segment.
+          const CHUNK_LIMIT = 25;
 
-        const deduped: [number, number][] = [];
-        for (const c of routeCoords) {
-          const prev = deduped[deduped.length - 1];
-          if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) deduped.push(c);
-        }
-
-        const fetchRoute = async (
-          coords: [number, number][],
-        ): Promise<[number, number][]> => {
-          if (coords.length < 2) return coords;
-          const path = coords.map((c) => `${c[0]},${c[1]}`).join(";");
-          const url =
-            `https://api.mapbox.com/directions/v5/mapbox/driving/${path}` +
-            `?geometries=geojson&overview=full` +
-            `&access_token=${mapboxgl.accessToken}`;
-          try {
-            const res = await fetch(url, { signal: controller.signal });
-            if (res.ok) {
-              const json = (await res.json()) as {
-                routes?: {
-                  geometry?: { coordinates?: [number, number][] };
-                }[];
-              };
-              const geo = json.routes?.[0]?.geometry?.coordinates;
-              if (geo && geo.length > 0) return geo;
-              // 200 + empty routes → split and retry sub-segments
-            } else {
-              console.warn(
-                `[map] Directions ${coords.length}-coord HTTP ${res.status}`,
-              );
-            }
-          } catch (err) {
-            if ((err as Error)?.name === "AbortError") return coords;
-            console.warn("[map] Directions error:", err);
-            return coords;
+          const deduped: [number, number][] = [];
+          for (const c of routeCoords) {
+            const prev = deduped[deduped.length - 1];
+            if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) deduped.push(c);
           }
 
-          if (coords.length === 2) return coords; // unroutable pair → line
-          const mid = Math.floor(coords.length / 2);
-          const left = await fetchRoute(coords.slice(0, mid + 1));
-          const right = await fetchRoute(coords.slice(mid));
-          return [...left, ...right.slice(1)];
-        };
+          const fetchRoute = async (
+            coords: [number, number][],
+          ): Promise<[number, number][]> => {
+            if (coords.length < 2) return coords;
+            const path = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+            const url =
+              `https://api.mapbox.com/directions/v5/mapbox/driving/${path}` +
+              `?geometries=geojson&overview=full` +
+              `&access_token=${mapboxgl.accessToken}`;
+            try {
+              const res = await fetch(url, { signal: controller.signal });
+              if (res.ok) {
+                const json = (await res.json()) as {
+                  routes?: {
+                    geometry?: { coordinates?: [number, number][] };
+                  }[];
+                };
+                const geo = json.routes?.[0]?.geometry?.coordinates;
+                if (geo && geo.length > 0) return geo;
+                // 200 + empty routes → split and retry sub-segments
+              } else {
+                console.warn(
+                  `[map] Directions ${coords.length}-coord HTTP ${res.status}`,
+                );
+              }
+            } catch (err) {
+              if ((err as Error)?.name === "AbortError") return coords;
+              console.warn("[map] Directions error:", err);
+              return coords;
+            }
 
-        const chunks: [number, number][][] = [];
-        for (let i = 0; i < deduped.length; i += CHUNK_LIMIT - 1) {
-          chunks.push(deduped.slice(i, i + CHUNK_LIMIT));
-          if (i + CHUNK_LIMIT >= deduped.length) break;
+            if (coords.length === 2) return coords; // unroutable pair → line
+            const mid = Math.floor(coords.length / 2);
+            const left = await fetchRoute(coords.slice(0, mid + 1));
+            const right = await fetchRoute(coords.slice(mid));
+            return [...left, ...right.slice(1)];
+          };
+
+          const chunks: [number, number][][] = [];
+          for (let i = 0; i < deduped.length; i += CHUNK_LIMIT - 1) {
+            chunks.push(deduped.slice(i, i + CHUNK_LIMIT));
+            if (i + CHUNK_LIMIT >= deduped.length) break;
+          }
+          const chunkResults = await Promise.all(chunks.map(fetchRoute));
+          // Drop the first coord of every chunk after the first to avoid
+          // duplicating the overlap point.
+          merged = chunkResults.flatMap((c, i) =>
+            i === 0 ? c : c.slice(1),
+          );
         }
-        const chunkResults = await Promise.all(chunks.map(fetchRoute));
-        // Drop the first coord of every chunk after the first to avoid
-        // duplicating the overlap point.
-        const merged: [number, number][] = chunkResults.flatMap((c, i) =>
-          i === 0 ? c : c.slice(1),
-        );
-        const geometry: GeoJSON.Geometry = {
-          type: "LineString",
-          coordinates: merged,
-        };
 
         if (!mapRef.current) return; // unmounted mid-fetch
         map.addSource("trip-route", {
           type: "geojson",
-          data: { type: "Feature", properties: {}, geometry },
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: merged },
+          },
         });
         map.addLayer({
           id: "trip-route-line",
