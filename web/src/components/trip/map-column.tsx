@@ -15,6 +15,7 @@ import {
   DetailCardErrorState,
 } from "@/components/primitives/detail-card-skeleton";
 import { useWaypointDetail } from "@/lib/trips/use-waypoint-detail";
+import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
@@ -335,6 +336,108 @@ export function MapColumn({
     };
     window.addEventListener("trip:flyTo", onFlyTo);
     return () => window.removeEventListener("trip:flyTo", onFlyTo);
+  }, []);
+
+  // Drop a small dot per browse-panel result. The panel emits a
+  // results event with the current category + places when it loads,
+  // and an empty event on close — we mirror exactly that into the map
+  // so panel and map can never get out of sync.
+  //
+  // Dots scale with the map zoom: 30px at zoom 13 (city view), shrinks
+  // linearly with zoom, hard-floored at 12px (40% of base) when zoomed
+  // way out so they never disappear entirely.
+  useEffect(() => {
+    const markers: mapboxgl.Marker[] = [];
+    const BASE_SIZE = 30;
+    const BASE_ZOOM = 13;
+    const MIN_SIZE = BASE_SIZE * 0.4;
+    const dotSize = (zoom: number) =>
+      Math.max(MIN_SIZE, (BASE_SIZE * zoom) / BASE_ZOOM);
+
+    const applyDotSize = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      const size = dotSize(map.getZoom());
+      for (const m of markers) {
+        const wrapper = m.getElement();
+        const dot = wrapper.children[0] as HTMLElement | undefined;
+        const label = wrapper.children[1] as HTMLElement | undefined;
+        if (!dot) continue;
+        dot.style.width = `${size}px`;
+        dot.style.height = `${size}px`;
+        if (label) label.style.left = `${size + 6}px`;
+      }
+    };
+
+    const clear = () => {
+      mapRef.current?.off("zoom", applyDotSize);
+      for (const m of markers) m.remove();
+      markers.length = 0;
+    };
+
+    const onResults = (e: Event) => {
+      clear();
+      const map = mapRef.current;
+      if (!map) return;
+      const detail = (
+        e as CustomEvent<{
+          category: keyof typeof CATEGORY_ACCENT | null;
+          places: Array<{ coords: [number, number]; title: string; id: string }>;
+        }>
+      ).detail;
+      if (!detail?.places?.length) return;
+      const color =
+        (detail.category && CATEGORY_ACCENT[detail.category]) || "#c8a96e";
+      const initialSize = dotSize(map.getZoom());
+      for (const p of detail.places) {
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText =
+          `position:relative;display:flex;align-items:center;cursor:pointer;`;
+        const dot = document.createElement("div");
+        dot.style.cssText =
+          `width:${initialSize}px;height:${initialSize}px;border-radius:50%;` +
+          `background:${color};border:2px solid #1a1816;` +
+          `box-shadow:0 0 0 1px ${color}55;flex:0 0 auto;`;
+        const label = document.createElement("div");
+        label.textContent = p.title;
+        label.style.cssText =
+          `position:absolute;left:${initialSize + 6}px;top:50%;` +
+          `transform:translateY(-50%);white-space:nowrap;padding:3px 8px;` +
+          `background:rgba(26,24,22,0.92);color:#F4EBE1;` +
+          `font-family:var(--ff-mono),monospace;font-size:11px;` +
+          `letter-spacing:0.04em;border-radius:3px;opacity:0;` +
+          `pointer-events:none;transition:opacity 120ms ease;` +
+          `border:1px solid ${color}66;`;
+        wrapper.appendChild(dot);
+        wrapper.appendChild(label);
+        wrapper.addEventListener("mouseenter", () => {
+          label.style.opacity = "1";
+          // Lift the hovered marker so its label sits above neighbours.
+          wrapper.parentElement!.style.zIndex = "10";
+        });
+        wrapper.addEventListener("mouseleave", () => {
+          label.style.opacity = "0";
+          wrapper.parentElement!.style.zIndex = "";
+        });
+        wrapper.addEventListener("click", () => {
+          window.dispatchEvent(
+            new CustomEvent("trip:flyTo", {
+              detail: { coords: p.coords, name: p.title },
+            }),
+          );
+        });
+        const marker = new mapboxgl.Marker({ element: wrapper })
+          .setLngLat(p.coords)
+          .addTo(map);
+        markers.push(marker);
+      }
+      map.on("zoom", applyDotSize);
+    };
+    window.addEventListener("trip:browseResults", onResults);
+    return () => {
+      window.removeEventListener("trip:browseResults", onResults);
+      clear();
+    };
   }, []);
 
   return (

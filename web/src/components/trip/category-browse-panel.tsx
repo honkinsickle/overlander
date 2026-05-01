@@ -9,13 +9,17 @@ import {
 } from "@/components/primitives/detail-card";
 import { CategoryPlanningSlide } from "@/components/demo/category-planning-slide";
 import {
-  BROWSE_PLACES,
+  type BrowsePlace,
   TRIP_CATEGORY_TO_SLIDE,
 } from "@/lib/trip-browse/places";
 
 export type BrowseTarget = {
   category: Category;
   dayNumber: number;
+  /** IDs needed for the live discovery fetch — the API resolves the
+   *  day's coords from these to compute its bbox. */
+  tripId: string;
+  dayId: string;
 };
 
 const PANEL_WIDTH = 686;
@@ -171,32 +175,97 @@ export function CategoryBrowsePanel({
   );
 }
 
+type FetchState =
+  | { status: "loading" }
+  | { status: "success"; places: BrowsePlace[]; source: "fixture" | "discovery" }
+  | { status: "error"; message: string };
+
+/** Tell MapColumn which places the panel is currently showing so it
+ *  can drop a dot per result. Empty `places` clears the layer. */
+function emitBrowseResults(
+  category: string | null,
+  places: BrowsePlace[],
+): void {
+  window.dispatchEvent(
+    new CustomEvent("trip:browseResults", {
+      detail: {
+        category,
+        places: places.map((p) => ({ coords: p.coords, title: p.title, id: p.id })),
+      },
+    }),
+  );
+}
+
 function PanelBody({ target }: { target: BrowseTarget }) {
   const slideKey = TRIP_CATEGORY_TO_SLIDE[target.category];
-  const places = slideKey
-    ? BROWSE_PLACES[target.dayNumber]?.[slideKey] ?? []
-    : [];
+  const [state, setState] = useState<FetchState>({ status: "loading" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  if (!slideKey || places.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center"
-        style={{
-          minHeight: "100%",
-          padding: 24,
-          fontFamily: "var(--ff-mono)",
-          fontSize: 12,
-          lineHeight: "18px",
-          letterSpacing: "0.14em",
-          color: "var(--text-muted)",
-          textTransform: "uppercase",
-          textAlign: "center",
-        }}
-      >
-        No places yet for this category on Day {target.dayNumber}
-      </div>
-    );
+  // Sync map markers to whatever's currently in the panel. Cleanup
+  // fires both on category change (markers are replaced) and on panel
+  // close (PanelBody unmounts, markers cleared).
+  useEffect(() => {
+    if (state.status !== "success") return;
+    emitBrowseResults(slideKey ?? null, state.places);
+    return () => emitBrowseResults(null, []);
+  }, [state, slideKey]);
+
+  useEffect(() => {
+    if (!slideKey) {
+      setState({ status: "success", places: [], source: "fixture" });
+      return;
+    }
+    setState({ status: "loading" });
+    setExpandedId(null);
+    const ctrl = new AbortController();
+    const url =
+      `/api/trip-browse/${encodeURIComponent(target.tripId)}/${encodeURIComponent(target.dayId)}` +
+      `?category=${slideKey}`;
+    fetch(url, { signal: ctrl.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<{
+          source: "fixture" | "discovery";
+          places: BrowsePlace[];
+        }>;
+      })
+      .then((json) => {
+        setState({ status: "success", places: json.places, source: json.source });
+      })
+      .catch((err: unknown) => {
+        if ((err as Error)?.name === "AbortError") return;
+        setState({
+          status: "error",
+          message: err instanceof Error ? err.message : "Unknown error",
+        });
+      });
+    return () => ctrl.abort();
+  }, [target.tripId, target.dayId, slideKey]);
+
+  const empty = (msg: string) => (
+    <div
+      className="flex items-center justify-center"
+      style={{
+        minHeight: "100%",
+        padding: 24,
+        fontFamily: "var(--ff-mono)",
+        fontSize: 12,
+        lineHeight: "18px",
+        letterSpacing: "0.14em",
+        color: "var(--text-muted)",
+        textTransform: "uppercase",
+        textAlign: "center",
+      }}
+    >
+      {msg}
+    </div>
+  );
+
+  if (!slideKey) return empty(`No browse for ${target.category} yet`);
+  if (state.status === "loading") return empty("Loading nearby places…");
+  if (state.status === "error") return empty(`Couldn't load places — ${state.message}`);
+  if (state.places.length === 0) {
+    return empty(`No places found for this category on Day ${target.dayNumber}`);
   }
 
   return (
@@ -204,7 +273,7 @@ function PanelBody({ target }: { target: BrowseTarget }) {
       className="flex flex-col items-center"
       style={{ paddingTop: 16, paddingBottom: 16, gap: 16 }}
     >
-      {places.map((p) => (
+      {state.places.map((p) => (
         <div
           key={p.id}
           onClick={() =>

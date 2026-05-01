@@ -17,7 +17,10 @@ export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>>
 export type BrowsePlace = {
   id: string;
   coords: [number, number];
-  photoUrl: string;
+  /** Hero photo URL. Optional: discovery sources (OSM and friends)
+   *  often have no photo, in which case the slide renders a category-
+   *  themed gradient. Editorial fixture entries always include one. */
+  photoUrl?: string;
   photoAlt: string;
   title: string;
   pills: { label: string; status?: boolean }[];

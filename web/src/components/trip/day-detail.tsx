@@ -156,8 +156,9 @@ export function DayDetail({ trip }: { trip: Trip }) {
   }, [trip.id]);
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
-  const openBrowse = (dayNumber: number) => (category: Category) =>
-    setBrowseTarget({ category, dayNumber });
+  const openBrowse =
+    (dayNumber: number, dayId: string) => (category: Category) =>
+      setBrowseTarget({ category, dayNumber, tripId: trip.id, dayId });
 
   return (
     <div className="flex flex-col h-full">
@@ -187,7 +188,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
               i < 2 ? (
                 <SuggestedSection
                   dayNumber={i + 1}
-                  onBrowse={openBrowse(i + 1)}
+                  onBrowse={openBrowse(i + 1, day.id)}
                 />
               ) : null
             }
