@@ -11,7 +11,7 @@ const SHEET_TOP_COLLAPSED_COMPACT = 287;
 const SHEET_TOP_EXPANDED = 30;
 const CTA_CLEARANCE = 80;
 
-const CATEGORY_ACCENT: Record<CategoryKey, string> = {
+export const CATEGORY_ACCENT: Record<CategoryKey, string> = {
   oddity: "#D8B4FE",
   food: "#FDBA74",
   scenic: "#2AB5FF",
@@ -50,7 +50,10 @@ export interface Pill {
 }
 
 export interface PlanningSlideData {
-  photoUrl: string;
+  /** Hero photo URL. Optional — when absent (e.g. for discovery
+   *  results from OSM that lack imagery) the slide renders a
+   *  category-themed gradient instead. */
+  photoUrl?: string;
   photoAlt: string;
   title: string;
   pills: Pill[];
@@ -97,7 +100,12 @@ export function CategoryPlanningSlide({
         fontFamily: ff.sans,
       }}
     >
-      <Photo url={data.photoUrl} alt={data.photoAlt} onToggle={onToggle} />
+      <Photo
+        url={data.photoUrl}
+        alt={data.photoAlt}
+        accent={accent}
+        onToggle={onToggle}
+      />
       <Sheet
         expanded={expanded}
         compact={compact}
@@ -174,13 +182,21 @@ function Chevron({ up }: { up: boolean }) {
 function Photo({
   url,
   alt,
+  accent,
   onToggle,
 }: {
-  url: string;
+  url?: string;
   alt: string;
+  accent: string;
   onToggle?: () => void;
 }) {
   const interactive = !!onToggle;
+  // No photo → category-themed gradient fallback. Used by discovery
+  // sources (OSM etc.) that don't carry imagery; a Phase 2 Wikipedia
+  // backfill will replace this for matched places.
+  const background = url
+    ? `url(${url})`
+    : `linear-gradient(135deg, oklab(22% 0.012 0.012) 0%, ${accent} 140%)`;
   return (
     <div
       role={interactive ? "button" : undefined}
@@ -199,7 +215,7 @@ function Photo({
       style={{
         position: "absolute",
         inset: 0,
-        backgroundImage: `url(${url})`,
+        backgroundImage: background,
         backgroundSize: "cover",
         backgroundPosition: "center",
         cursor: interactive ? "pointer" : undefined,

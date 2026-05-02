@@ -35,7 +35,12 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
         {props.children}
       </section>
       <section className="flex-1 min-w-0 relative overflow-hidden z-[15]" aria-label="Map">
-        <MapColumn tripId={trip.id} days={trip.days} />
+        <MapColumn
+          tripId={trip.id}
+          days={trip.days}
+          startCoords={trip.startCoords}
+          routePolyline={trip.routePolyline}
+        />
       </section>
     </div>
   );

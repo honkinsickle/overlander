@@ -1,4 +1,5 @@
 import type { Trip } from "./types";
+import { LA_TO_DEADHORSE } from "./alaska";
 
 /**
  * Sample trips — in-memory fixtures.
@@ -14,6 +15,7 @@ import type { Trip } from "./types";
  * function; keep the shape in `./types.ts`.
  */
 const seed = (): Record<string, Trip> => ({
+  "la-to-deadhorse": LA_TO_DEADHORSE,
   "la-to-portland": {
     id: "la-to-portland",
     title: "Los Angeles to Portland",

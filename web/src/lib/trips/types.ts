@@ -8,6 +8,17 @@ export type Trip = {
   endDate: string;
   startLocation: string;
   endLocation: string;
+  /** `[lng, lat]` of the trip's starting point. Each day's `coords`
+   *  represents the *end* of that day, so without this the route line
+   *  starts at Day 1's destination instead of the origin city. */
+  startCoords?: [number, number];
+  /** Pre-baked road-following geometry for the full trip route,
+   *  encoded as a Google polyline (precision 5, ~1m). Computed offline
+   *  by `scripts/prebake-routes.mjs`. When present, MapColumn decodes
+   *  and draws this directly, skipping the Mapbox Directions API. Set
+   *  to `undefined` after a mutation (e.g. `addWaypoint`) to force a
+   *  live re-fetch. */
+  routePolyline?: string;
   heroImage?: string;
   weatherHiF: number;
   weatherLoF: number;

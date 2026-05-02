@@ -15,9 +15,46 @@ import {
   DetailCardErrorState,
 } from "@/components/primitives/detail-card-skeleton";
 import { useWaypointDetail } from "@/lib/trips/use-waypoint-detail";
+import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+/**
+ * Decode a Google polyline (precision 5) into `[lng, lat]` pairs. Inverse
+ * of the encoder in `web/scripts/prebake-routes.mjs`. The encoded stream
+ * is lat,lng per spec; we swap to our internal `[lng, lat]` convention.
+ */
+function decodePolyline(str: string): [number, number][] {
+  const factor = 1e5;
+  const out: [number, number][] = [];
+  let lat = 0;
+  let lng = 0;
+  let i = 0;
+  while (i < str.length) {
+    let result = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+    do {
+      b = str.charCodeAt(i++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    out.push([lng / factor, lat / factor]);
+  }
+  return out;
+}
 
 /**
  * Right-side map column. Persists across center-column nav.
@@ -32,9 +69,16 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 export function MapColumn({
   tripId,
   days,
+  startCoords,
+  routePolyline,
 }: {
   tripId: string;
   days: Day[];
+  startCoords?: [number, number];
+  /** Pre-baked road-following geometry encoded as a polyline (precision
+   *  5). When present, MapColumn decodes and draws this directly instead
+   *  of calling the Mapbox Directions API. */
+  routePolyline?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -103,10 +147,20 @@ export function MapColumn({
     });
     mapRef.current = map;
 
-    const routeCoords = days
+    const dayCoords = days
       .map((d) => d.coords)
       .filter((c): c is [number, number] => !!c);
+    // Each day's coords is the day's *end*, so the route line would
+    // start at Day 1's destination instead of the trip origin. Prepend
+    // the trip's startCoords (when provided) so the line begins at the
+    // origin city.
+    const routeCoords = startCoords ? [startCoords, ...dayCoords] : dayCoords;
 
+    if (startCoords) {
+      new mapboxgl.Marker({ color: "#c8a96e" })
+        .setLngLat(startCoords)
+        .addTo(map);
+    }
     days.forEach((d) => {
       if (!d.coords) return;
       new mapboxgl.Marker({ color: "#c8a96e" })
@@ -117,36 +171,90 @@ export function MapColumn({
     if (routeCoords.length >= 2) {
       const controller = new AbortController();
       map.on("load", async () => {
-        // Road-following route via Mapbox Directions API.
-        // Falls back to straight lines if the API fails.
-        const coordsPath = routeCoords
-          .map((c) => `${c[0]},${c[1]}`)
-          .join(";");
-        const url =
-          `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsPath}` +
-          `?geometries=geojson&overview=full` +
-          `&access_token=${mapboxgl.accessToken}`;
+        let merged: [number, number][];
+        if (routePolyline && routePolyline.length > 0) {
+          // Pre-baked path: decode the committed polyline and draw it
+          // directly. See scripts/prebake-routes.mjs for the encoder.
+          merged = decodePolyline(routePolyline);
+        } else {
+          // Live path — same chunk + dedupe + recursive-split pipeline
+          // used to bake the geometry. Runs when a trip has no pre-baked
+          // routeGeometry, or after a mutation invalidates it.
+          //  • Driving profile caps at 25 coords/request → chunk with overlap.
+          //  • Mapbox 422s on consecutive duplicate coords (rest days repeat
+          //    the prior day's coord), so dedupe first.
+          //  • A 200 with empty `routes` ("NoRoute") means at least one coord
+          //    in the chunk is unroutable (e.g. Brooks Falls — floatplane
+          //    only). Recursively split such chunks in half so the failure
+          //    is isolated to a single unroutable pair rather than killing
+          //    the whole 25-coord segment.
+          const CHUNK_LIMIT = 25;
 
-        let geometry: GeoJSON.Geometry = {
-          type: "LineString",
-          coordinates: routeCoords,
-        };
-        try {
-          const res = await fetch(url, { signal: controller.signal });
-          if (res.ok) {
-            const json = (await res.json()) as {
-              routes?: { geometry: GeoJSON.Geometry }[];
-            };
-            if (json.routes?.[0]?.geometry) geometry = json.routes[0].geometry;
+          const deduped: [number, number][] = [];
+          for (const c of routeCoords) {
+            const prev = deduped[deduped.length - 1];
+            if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) deduped.push(c);
           }
-        } catch {
-          /* keep straight-line fallback */
+
+          const fetchRoute = async (
+            coords: [number, number][],
+          ): Promise<[number, number][]> => {
+            if (coords.length < 2) return coords;
+            const path = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+            const url =
+              `https://api.mapbox.com/directions/v5/mapbox/driving/${path}` +
+              `?geometries=geojson&overview=full` +
+              `&access_token=${mapboxgl.accessToken}`;
+            try {
+              const res = await fetch(url, { signal: controller.signal });
+              if (res.ok) {
+                const json = (await res.json()) as {
+                  routes?: {
+                    geometry?: { coordinates?: [number, number][] };
+                  }[];
+                };
+                const geo = json.routes?.[0]?.geometry?.coordinates;
+                if (geo && geo.length > 0) return geo;
+                // 200 + empty routes → split and retry sub-segments
+              } else {
+                console.warn(
+                  `[map] Directions ${coords.length}-coord HTTP ${res.status}`,
+                );
+              }
+            } catch (err) {
+              if ((err as Error)?.name === "AbortError") return coords;
+              console.warn("[map] Directions error:", err);
+              return coords;
+            }
+
+            if (coords.length === 2) return coords; // unroutable pair → line
+            const mid = Math.floor(coords.length / 2);
+            const left = await fetchRoute(coords.slice(0, mid + 1));
+            const right = await fetchRoute(coords.slice(mid));
+            return [...left, ...right.slice(1)];
+          };
+
+          const chunks: [number, number][][] = [];
+          for (let i = 0; i < deduped.length; i += CHUNK_LIMIT - 1) {
+            chunks.push(deduped.slice(i, i + CHUNK_LIMIT));
+            if (i + CHUNK_LIMIT >= deduped.length) break;
+          }
+          const chunkResults = await Promise.all(chunks.map(fetchRoute));
+          // Drop the first coord of every chunk after the first to avoid
+          // duplicating the overlap point.
+          merged = chunkResults.flatMap((c, i) =>
+            i === 0 ? c : c.slice(1),
+          );
         }
 
         if (!mapRef.current) return; // unmounted mid-fetch
         map.addSource("trip-route", {
           type: "geojson",
-          data: { type: "Feature", properties: {}, geometry },
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: merged },
+          },
         });
         map.addLayer({
           id: "trip-route-line",
@@ -159,6 +267,29 @@ export function MapColumn({
             "line-opacity": 0.9,
           },
         });
+
+        // Frame the whole route on first load so the user sees the
+        // shape of the trip immediately. Subsequent ?day= changes still
+        // fly to individual days via the effect below.
+        if (!queriedDay && merged.length > 1) {
+          let minLng = Infinity,
+            minLat = Infinity,
+            maxLng = -Infinity,
+            maxLat = -Infinity;
+          for (const [lng, lat] of merged) {
+            if (lng < minLng) minLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lng > maxLng) maxLng = lng;
+            if (lat > maxLat) maxLat = lat;
+          }
+          map.fitBounds(
+            [
+              [minLng, minLat],
+              [maxLng, maxLat],
+            ],
+            { padding: 60, duration: 0 },
+          );
+        }
       });
     }
 
@@ -205,6 +336,108 @@ export function MapColumn({
     };
     window.addEventListener("trip:flyTo", onFlyTo);
     return () => window.removeEventListener("trip:flyTo", onFlyTo);
+  }, []);
+
+  // Drop a small dot per browse-panel result. The panel emits a
+  // results event with the current category + places when it loads,
+  // and an empty event on close — we mirror exactly that into the map
+  // so panel and map can never get out of sync.
+  //
+  // Dots scale with the map zoom: 30px at zoom 13 (city view), shrinks
+  // linearly with zoom, hard-floored at 12px (40% of base) when zoomed
+  // way out so they never disappear entirely.
+  useEffect(() => {
+    const markers: mapboxgl.Marker[] = [];
+    const BASE_SIZE = 30;
+    const BASE_ZOOM = 13;
+    const MIN_SIZE = BASE_SIZE * 0.4;
+    const dotSize = (zoom: number) =>
+      Math.max(MIN_SIZE, (BASE_SIZE * zoom) / BASE_ZOOM);
+
+    const applyDotSize = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      const size = dotSize(map.getZoom());
+      for (const m of markers) {
+        const wrapper = m.getElement();
+        const dot = wrapper.children[0] as HTMLElement | undefined;
+        const label = wrapper.children[1] as HTMLElement | undefined;
+        if (!dot) continue;
+        dot.style.width = `${size}px`;
+        dot.style.height = `${size}px`;
+        if (label) label.style.left = `${size + 6}px`;
+      }
+    };
+
+    const clear = () => {
+      mapRef.current?.off("zoom", applyDotSize);
+      for (const m of markers) m.remove();
+      markers.length = 0;
+    };
+
+    const onResults = (e: Event) => {
+      clear();
+      const map = mapRef.current;
+      if (!map) return;
+      const detail = (
+        e as CustomEvent<{
+          category: keyof typeof CATEGORY_ACCENT | null;
+          places: Array<{ coords: [number, number]; title: string; id: string }>;
+        }>
+      ).detail;
+      if (!detail?.places?.length) return;
+      const color =
+        (detail.category && CATEGORY_ACCENT[detail.category]) || "#c8a96e";
+      const initialSize = dotSize(map.getZoom());
+      for (const p of detail.places) {
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText =
+          `position:relative;display:flex;align-items:center;cursor:pointer;`;
+        const dot = document.createElement("div");
+        dot.style.cssText =
+          `width:${initialSize}px;height:${initialSize}px;border-radius:50%;` +
+          `background:${color};border:2px solid #1a1816;` +
+          `box-shadow:0 0 0 1px ${color}55;flex:0 0 auto;`;
+        const label = document.createElement("div");
+        label.textContent = p.title;
+        label.style.cssText =
+          `position:absolute;left:${initialSize + 6}px;top:50%;` +
+          `transform:translateY(-50%);white-space:nowrap;padding:3px 8px;` +
+          `background:rgba(26,24,22,0.92);color:#F4EBE1;` +
+          `font-family:var(--ff-mono),monospace;font-size:11px;` +
+          `letter-spacing:0.04em;border-radius:3px;opacity:0;` +
+          `pointer-events:none;transition:opacity 120ms ease;` +
+          `border:1px solid ${color}66;`;
+        wrapper.appendChild(dot);
+        wrapper.appendChild(label);
+        wrapper.addEventListener("mouseenter", () => {
+          label.style.opacity = "1";
+          // Lift the hovered marker so its label sits above neighbours.
+          wrapper.parentElement!.style.zIndex = "10";
+        });
+        wrapper.addEventListener("mouseleave", () => {
+          label.style.opacity = "0";
+          wrapper.parentElement!.style.zIndex = "";
+        });
+        wrapper.addEventListener("click", () => {
+          window.dispatchEvent(
+            new CustomEvent("trip:flyTo", {
+              detail: { coords: p.coords, name: p.title },
+            }),
+          );
+        });
+        const marker = new mapboxgl.Marker({ element: wrapper })
+          .setLngLat(p.coords)
+          .addTo(map);
+        markers.push(marker);
+      }
+      map.on("zoom", applyDotSize);
+    };
+    window.addEventListener("trip:browseResults", onResults);
+    return () => {
+      window.removeEventListener("trip:browseResults", onResults);
+      clear();
+    };
   }, []);
 
   return (
