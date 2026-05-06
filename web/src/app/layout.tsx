@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   Barlow,
+  Barlow_Condensed,
   Crimson_Text,
   Space_Grotesk,
   Space_Mono,
@@ -11,6 +12,12 @@ const barlow = Barlow({
   variable: "--font-barlow",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
+});
+
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
 });
 
 const spaceGrotesk = Space_Grotesk({
@@ -47,7 +54,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${barlow.variable} ${spaceGrotesk.variable} ${spaceMono.variable} ${crimsonText.variable} h-full antialiased`}
+      className={`${barlow.variable} ${barlowCondensed.variable} ${spaceGrotesk.variable} ${spaceMono.variable} ${crimsonText.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}
