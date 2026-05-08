@@ -160,6 +160,54 @@ export function DayDetail({ trip }: { trip: Trip }) {
     (dayNumber: number, dayId: string) => (category: Category) =>
       setBrowseTarget({ category, dayNumber, tripId: trip.id, dayId });
 
+  // ── Added places (per day) ──────────────────────────────────
+  // Owns the Source of Truth for places the user has tapped "Add to
+  // Day N" on, keyed by dayId. Both CategoryBrowsePanel (cards grid)
+  // and MapDetailOverlay (detail slide-up) dispatch trip:toggleAdded;
+  // this component listens, mutates the map, and re-broadcasts the
+  // current addedIds via trip:addedSync so the dim/CTA-label state
+  // in those siblings stays in sync.
+  const [addedByDay, setAddedByDay] = useState<
+    Record<string, AddedPlace[]>
+  >({});
+  // Temporary dev affordance — fixed waypoint IDs the user has tapped
+  // the X on. Hidden from the day section render; not persisted.
+  const [removedFixedByDay, setRemovedFixedByDay] = useState<
+    Record<string, Set<string>>
+  >({});
+
+  useEffect(() => {
+    const onToggle = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{
+          placeId: string;
+          dayId: string;
+          place: AddedPlace;
+        }>
+      ).detail;
+      if (!detail?.placeId || !detail?.dayId || !detail?.place) return;
+      setAddedByDay((prev) => {
+        const list = prev[detail.dayId] ?? [];
+        const exists = list.some((p) => p.id === detail.placeId);
+        const nextList = exists
+          ? list.filter((p) => p.id !== detail.placeId)
+          : [...list, detail.place];
+        return { ...prev, [detail.dayId]: nextList };
+      });
+    };
+    window.addEventListener("trip:toggleAdded", onToggle);
+    return () => window.removeEventListener("trip:toggleAdded", onToggle);
+  }, []);
+
+  useEffect(() => {
+    const ids = Object.values(addedByDay)
+      .flat()
+      .map((p) => p.id);
+    window.dispatchEvent(
+      new CustomEvent("trip:addedSync", { detail: { addedIds: ids } }),
+    );
+  }, [addedByDay]);
+
   return (
     <div className="flex flex-col h-full">
       <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar">
@@ -184,6 +232,27 @@ export function DayDetail({ trip }: { trip: Trip }) {
             key={day.id}
             trip={trip}
             day={day}
+            addedPlaces={addedByDay[day.id] ?? []}
+            removedFixedIds={removedFixedByDay[day.id] ?? EMPTY_SET}
+            onDeleteFixed={(waypointId) =>
+              setRemovedFixedByDay((prev) => ({
+                ...prev,
+                [day.id]: new Set([...(prev[day.id] ?? []), waypointId]),
+              }))
+            }
+            onDeleteAdded={(placeId) =>
+              window.dispatchEvent(
+                new CustomEvent("trip:toggleAdded", {
+                  detail: {
+                    placeId,
+                    dayId: day.id,
+                    place: (addedByDay[day.id] ?? []).find(
+                      (p) => p.id === placeId,
+                    ),
+                  },
+                }),
+              )
+            }
             extra={
               i < 2 ? (
                 <SuggestedSection
@@ -198,23 +267,71 @@ export function DayDetail({ trip }: { trip: Trip }) {
 
       <CategoryBrowsePanel
         target={browseTarget}
-        onClose={() => setBrowseTarget(null)}
+        onClose={() => {
+          setBrowseTarget(null);
+          // Browse panel and detail overlay are part of the same flow —
+          // closing the panel should also tuck the detail back away.
+          window.dispatchEvent(
+            new CustomEvent("trip:openDetail", {
+              detail: { place: null },
+            }),
+          );
+        }}
       />
     </div>
   );
 }
+
+/** Subset of BrowsePlace needed to materialize an added Waypoint. The
+ *  toggleAdded event carries this shape; we keep it loose so we don't
+ *  drag the full BrowsePlace import into every consumer. */
+type AddedPlace = {
+  id: string;
+  title: string;
+  description?: string;
+  photoUrl?: string;
+  coords?: [number, number];
+};
+
+/** Map an added BrowsePlace into the WaypointCard's expected shape.
+ *  Currently pinned to "mountain" since the slideout grid renders all
+ *  results in the Scenic palette. */
+function addedPlaceToWaypoint(p: AddedPlace) {
+  return {
+    id: p.id,
+    slug: p.id,
+    category: "mountain" as const,
+    title: p.title,
+    subtitle: "Added stop",
+    description: p.description ?? "",
+    stats: [],
+  };
+}
+
+const EMPTY_SET = new Set<string>();
 
 function DaySection({
   trip,
   day,
   hideHeader = false,
   extra,
+  addedPlaces = [],
+  removedFixedIds = EMPTY_SET,
+  onDeleteFixed,
+  onDeleteAdded,
 }: {
   trip: Trip;
   day: Day;
   hideHeader?: boolean;
   extra?: React.ReactNode;
+  addedPlaces?: AddedPlace[];
+  removedFixedIds?: Set<string>;
+  onDeleteFixed?: (waypointId: string) => void;
+  onDeleteAdded?: (placeId: string) => void;
 }) {
+  const visibleFixed = day.waypoints.filter(
+    (wp) => !removedFixedIds.has(wp.id),
+  );
   // `last:min-h-full` guarantees the final day can scroll to the top of
   // the viewport even if its content is shorter than the scroll container.
   return (
@@ -253,8 +370,25 @@ function DaySection({
         {/* Waypoints list (GDR-0) — flex-col with 10px inline padding,
          *  no frame of its own (rows carry their own top borders). */}
         <div className="flex flex-col px-[10px]">
-          {day.waypoints.map((wp) => (
-            <WaypointCard key={wp.id} tripId={trip.id} waypoint={wp} />
+          {visibleFixed.map((wp) => (
+            <WaypointCard
+              key={wp.id}
+              tripId={trip.id}
+              waypoint={wp}
+              onDelete={
+                onDeleteFixed ? () => onDeleteFixed(wp.id) : undefined
+              }
+            />
+          ))}
+          {addedPlaces.map((p) => (
+            <WaypointCard
+              key={`added-${p.id}`}
+              tripId={trip.id}
+              waypoint={addedPlaceToWaypoint(p)}
+              onDelete={
+                onDeleteAdded ? () => onDeleteAdded(p.id) : undefined
+              }
+            />
           ))}
         </div>
 

@@ -7,7 +7,7 @@ import {
   categoryStyle,
   categoryIcon,
 } from "@/components/primitives/detail-card";
-import { CategoryPlanningSlide } from "@/components/demo/category-planning-slide";
+import { LocationCard } from "@/components/primitives/location-card";
 import {
   type BrowsePlace,
   TRIP_CATEGORY_TO_SLIDE,
@@ -22,8 +22,62 @@ export type BrowseTarget = {
   dayId: string;
 };
 
-const PANEL_WIDTH = 686;
+const PANEL_WIDTH = 655;
 const TRANSITION_MS = 280;
+
+const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
+
+/** Extra demo cards appended to the fetched results so the grid feels
+ *  populated while the discovery layer is still thin. SceneryCard only
+ *  reads `id`, `title`, `photoUrl`, `coords` — the rest of BrowsePlace
+ *  is filled with empty placeholders to satisfy the type. */
+const EXTRA_DEMO_PLACES: BrowsePlace[] = [
+  {
+    id: "demo-crater-lake",
+    coords: [-122.108, 42.945],
+    title: "Crater Lake National Park",
+    photoUrl: `${PAPER_CDN}/78R7DE7V2NKT3G0EDJFF24TDKZ.png`,
+    photoAlt: "Crater Lake at golden hour",
+    pills: [],
+    stats: [],
+    mention: { primary: "", secondary: "" },
+    description:
+      "Caldera lake formed when Mount Mazama collapsed 7,700 years ago — the deepest in the U.S. at 1,949 ft. Rim Drive loops the rim with 30+ overlooks.",
+    pullquote: { text: "", name: "", meta: "" },
+    placeInfo: { address: "" },
+    cta: "",
+  },
+  {
+    id: "demo-diamond-lake",
+    coords: [-122.135, 43.165],
+    title: "Diamond Lake Overlook",
+    photoUrl: `${PAPER_CDN}/01KQXV7RGFDADF3EDNVB4THDV5.png`,
+    photoAlt: "Diamond Lake reflection",
+    pills: [],
+    stats: [],
+    mention: { primary: "", secondary: "" },
+    description:
+      "Mile-wide alpine lake with Mount Bailey to the west and Mount Thielsen to the east. Ringed by the Rim Trail and a paved bike path.",
+    pullquote: { text: "", name: "", meta: "" },
+    placeInfo: { address: "" },
+    cta: "",
+  },
+  {
+    id: "demo-klamath-falls",
+    coords: [-121.78, 42.225],
+    title: "Klamath Falls Vista",
+    photoUrl: `${PAPER_CDN}/01KQXWN6ZC3T2VGR430QM8EHYH.png`,
+    photoAlt: "Klamath Falls autumn street",
+    pills: [],
+    stats: [],
+    mention: { primary: "", secondary: "" },
+    description:
+      "Birding capital of the Pacific Flyway — Upper Klamath Lake and the surrounding refuges host bald eagles in winter and white pelicans in summer.",
+    pullquote: { text: "", name: "", meta: "" },
+    placeInfo: { address: "" },
+    cta: "",
+  },
+];
 
 export function CategoryBrowsePanel({
   target,
@@ -67,8 +121,11 @@ export function CategoryBrowsePanel({
     };
   }, [open]);
 
-  const style = target ? categoryStyle[target.category] : null;
-  const Icon = target ? categoryIcon[target.category] : null;
+  // Cards in the body always render with the Scenic (mountain) palette,
+  // so force the panel header label/icon to match regardless of which
+  // category opened the panel.
+  const style = target ? categoryStyle.mountain : null;
+  const Icon = target ? categoryIcon.mountain : null;
 
   return (
     <div
@@ -89,7 +146,7 @@ export function CategoryBrowsePanel({
           backgroundColor: "var(--bg-panel)",
           borderRight: "1px solid var(--border-subtle)",
         }}
-        className="absolute inset-y-0 left-0 flex flex-col shadow-2xl pointer-events-auto"
+        className="absolute top-[68px] bottom-0 left-0 flex flex-col shadow-2xl pointer-events-auto"
       >
         <header
           className="flex items-center shrink-0"
@@ -199,7 +256,20 @@ function emitBrowseResults(
 function PanelBody({ target }: { target: BrowseTarget }) {
   const slideKey = TRIP_CATEGORY_TO_SLIDE[target.category];
   const [state, setState] = useState<FetchState>({ status: "loading" });
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Local mirror of DayDetail's added-place set, kept in sync via
+  // `trip:addedSync`. Drives the dim/CTA-label state on each card.
+  // DayDetail is the source of truth; this panel only dispatches
+  // `trip:toggleAdded` to mutate it.
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const ids = (e as CustomEvent<{ addedIds: string[] }>).detail?.addedIds;
+      if (Array.isArray(ids)) setAddedIds(new Set(ids));
+    };
+    window.addEventListener("trip:addedSync", onSync);
+    return () => window.removeEventListener("trip:addedSync", onSync);
+  }, []);
 
   // Sync map markers to whatever's currently in the panel. Cleanup
   // fires both on category change (markers are replaced) and on panel
@@ -216,7 +286,6 @@ function PanelBody({ target }: { target: BrowseTarget }) {
       return;
     }
     setState({ status: "loading" });
-    setExpandedId(null);
     const ctrl = new AbortController();
     const url =
       `/api/trip-browse/${encodeURIComponent(target.tripId)}/${encodeURIComponent(target.dayId)}` +
@@ -268,34 +337,159 @@ function PanelBody({ target }: { target: BrowseTarget }) {
     return empty(`No places found for this category on Day ${target.dayNumber}`);
   }
 
+  // Augment the fetched results with a few extra demo cards so the grid
+  // shows enough rows to feel populated while the discovery layer is
+  // still thin on this category.
+  const placesWithExtras = [...state.places, ...EXTRA_DEMO_PLACES];
+
   return (
     <div
-      className="flex flex-col items-center"
-      style={{ paddingTop: 16, paddingBottom: 16, gap: 16 }}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "300px 300px",
+        justifyContent: "center",
+        gap: 16,
+        padding: 16,
+      }}
     >
-      {state.places.map((p) => (
-        <div
+      {placesWithExtras.map((p) => (
+        <SceneryCard
           key={p.id}
-          onClick={() =>
+          place={p}
+          dayNumber={target.dayNumber}
+          isAdded={addedIds.has(p.id)}
+          onToggleAdded={() =>
+            window.dispatchEvent(
+              new CustomEvent("trip:toggleAdded", {
+                detail: {
+                  placeId: p.id,
+                  dayId: target.dayId,
+                  dayNumber: target.dayNumber,
+                  place: p,
+                },
+              }),
+            )
+          }
+          onCardClick={() => {
+            // Body tap = fly map first, then slide the detail panel up
+            // for this place (after the fly registers).
             window.dispatchEvent(
               new CustomEvent("trip:flyTo", {
                 detail: { coords: p.coords, name: p.title },
               }),
-            )
-          }
-          style={{ cursor: "pointer" }}
-        >
-          <CategoryPlanningSlide
-            category={slideKey}
-            data={p}
-            compact
-            expanded={expandedId === p.id}
-            onToggle={() =>
-              setExpandedId((curr) => (curr === p.id ? null : p.id))
-            }
-          />
-        </div>
+            );
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent("trip:openDetail", {
+                  detail: {
+                    place: {
+                    id: p.id,
+                    title: p.title,
+                    photoUrl: p.photoUrl,
+                    dayNumber: target.dayNumber,
+                    dayId: target.dayId,
+                    coords: p.coords,
+                    description: p.description,
+                  },
+                  },
+                }),
+              );
+            }, 350);
+          }}
+          onDetailsClick={() => {
+            // Details tap = fly map + open detail panel for this place.
+            window.dispatchEvent(
+              new CustomEvent("trip:flyTo", {
+                detail: { coords: p.coords, name: p.title },
+              }),
+            );
+            window.dispatchEvent(
+              new CustomEvent("trip:openDetail", {
+                detail: {
+                  place: {
+                    id: p.id,
+                    title: p.title,
+                    photoUrl: p.photoUrl,
+                    dayNumber: target.dayNumber,
+                    dayId: target.dayId,
+                    coords: p.coords,
+                    description: p.description,
+                  },
+                },
+              }),
+            );
+          }}
+        />
       ))}
+    </div>
+  );
+}
+
+/** Code-aligned to Paper 1E2E-0 — Mountain/Scenery compact card.
+ *  Maps `BrowsePlace.title` and `photoUrl` into the canonical Scenery
+ *  palette + copy from the demo page. */
+function SceneryCard({
+  place,
+  dayNumber,
+  isAdded,
+  onToggleAdded,
+  onCardClick,
+  onDetailsClick,
+}: {
+  place: BrowsePlace;
+  dayNumber: number;
+  isAdded: boolean;
+  onToggleAdded: () => void;
+  onCardClick: () => void;
+  onDetailsClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onCardClick}
+      style={{
+        cursor: "pointer",
+        opacity: isAdded ? 0.45 : 1,
+        filter: isAdded ? "grayscale(0.6)" : "none",
+        transition: "opacity 200ms ease, filter 200ms ease",
+      }}
+    >
+      <LocationCard
+        category="mountain"
+        title={place.title}
+        titleColor="#A6C9F9"
+        badgeBg="#24354F"
+        badgeBorder="#A6C9F9"
+        ctaBg="#24354F"
+        ctaBorder="#A6C9F9"
+        photoUrl={place.photoUrl}
+        dayTag={`Day ${dayNumber} / 12.4 mi off`}
+        reliability={{ score: 94, label: "High reliability" }}
+        cost={{
+          primary: "Detour: 1h28m",
+          secondary: "$30 entry · Daily",
+          hero: "Adds 1h28m",
+          eta: (
+            <>
+              New ETA at Klamath <br />Falls: 8:46pm
+            </>
+          ),
+        }}
+        rating={{ value: "4.8", count: "(12.4k)" }}
+        ctaLabel={isAdded ? "Added" : `Add to Day ${dayNumber}`}
+        onCtaClick={(e) => {
+          // Don't bubble to the card body click (which would re-fly the
+          // map and re-open the detail panel). Toggles between Added /
+          // Add to Day N — re-tap restores the original state.
+          e?.stopPropagation();
+          onToggleAdded();
+        }}
+        onOpenClick={(e) => {
+          // Stop the body-click handler from also firing — Details has its
+          // own behavior (open detail panel) that supersedes the body tap.
+          e?.stopPropagation();
+          onDetailsClick();
+        }}
+      />
     </div>
   );
 }

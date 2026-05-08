@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import {
   categoryStyle,
   categoryIcon,
@@ -32,9 +32,13 @@ import type { Waypoint } from "@/lib/trips/types";
 export function WaypointCard({
   tripId,
   waypoint,
+  onDelete,
 }: {
   tripId: string;
   waypoint: Waypoint;
+  /** Temporary dev affordance — when provided, renders an X in the
+   *  top-right that calls this handler instead of opening the panel. */
+  onDelete?: () => void;
 }) {
   const cat = categoryStyle[waypoint.category];
   const Icon = categoryIcon[waypoint.category];
@@ -57,11 +61,27 @@ export function WaypointCard({
   };
 
   return (
-    <button
+    <div
+      className="relative w-full border-t border-border-subtle first:border-t-0"
+    >
+      {onDelete ? (
+        <button
+          type="button"
+          aria-label={`Delete ${waypoint.title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="absolute top-2 right-2 z-10 flex items-center justify-center w-6 h-6 rounded-md bg-black/40 hover:bg-black/60"
+        >
+          <X className="w-3 h-3 text-text-muted" strokeWidth={1.75} />
+        </button>
+      ) : null}
+      <button
       type="button"
       data-trip-id={tripId}
       onClick={openPanel}
-      className="w-full text-left flex items-start gap-3 px-2.5 pt-3.5 pb-[19px] border-t border-border-subtle first:border-t-0 hover:bg-white/[0.02] transition-colors"
+      className="w-full text-left flex items-start gap-3 px-2.5 pt-3.5 pb-[19px] hover:bg-white/[0.02] transition-colors"
     >
       {/* Icon badge — 60×60 circle with category tint + thin cat accent border + subtle drop shadow */}
       <div
@@ -104,6 +124,7 @@ export function WaypointCard({
         </div>
       </div>
     </button>
+    </div>
   );
 }
 

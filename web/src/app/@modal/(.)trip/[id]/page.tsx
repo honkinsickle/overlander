@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetail } from "@/components/trip/day-detail";
 import { MapColumn } from "@/components/trip/map-column";
+import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
 import { SlideupShell } from "@/components/trip/slideup-shell";
 import { getTrip } from "@/lib/trips/repository";
 
@@ -34,6 +35,7 @@ export default async function SlideupTripPage(
         aria-label="Map"
       >
         <MapColumn tripId={trip.id} days={trip.days} />
+        <MapDetailOverlay />
       </section>
     </SlideupShell>
   );
