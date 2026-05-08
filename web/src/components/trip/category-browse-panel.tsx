@@ -41,7 +41,8 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
     pills: [],
     stats: [],
     mention: { primary: "", secondary: "" },
-    description: "",
+    description:
+      "Caldera lake formed when Mount Mazama collapsed 7,700 years ago — the deepest in the U.S. at 1,949 ft. Rim Drive loops the rim with 30+ overlooks.",
     pullquote: { text: "", name: "", meta: "" },
     placeInfo: { address: "" },
     cta: "",
@@ -55,7 +56,8 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
     pills: [],
     stats: [],
     mention: { primary: "", secondary: "" },
-    description: "",
+    description:
+      "Mile-wide alpine lake with Mount Bailey to the west and Mount Thielsen to the east. Ringed by the Rim Trail and a paved bike path.",
     pullquote: { text: "", name: "", meta: "" },
     placeInfo: { address: "" },
     cta: "",
@@ -69,7 +71,8 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
     pills: [],
     stats: [],
     mention: { primary: "", secondary: "" },
-    description: "",
+    description:
+      "Birding capital of the Pacific Flyway — Upper Klamath Lake and the surrounding refuges host bald eagles in winter and white pelicans in summer.",
     pullquote: { text: "", name: "", meta: "" },
     placeInfo: { address: "" },
     cta: "",
@@ -253,36 +256,20 @@ function emitBrowseResults(
 function PanelBody({ target }: { target: BrowseTarget }) {
   const slideKey = TRIP_CATEGORY_TO_SLIDE[target.category];
   const [state, setState] = useState<FetchState>({ status: "loading" });
-  // Place IDs the user has tapped "Add to Day N" on. Persists per panel
-  // open; resets when the panel closes (PanelBody unmounts). Toggles are
-  // routed through the global `trip:toggleAdded` event so both the cards
-  // in this grid and the detail overlay's CTA can drive the same set.
+  // Local mirror of DayDetail's added-place set, kept in sync via
+  // `trip:addedSync`. Drives the dim/CTA-label state on each card.
+  // DayDetail is the source of truth; this panel only dispatches
+  // `trip:toggleAdded` to mutate it.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    const onToggle = (e: Event) => {
-      const id = (e as CustomEvent<{ placeId: string }>).detail?.placeId;
-      if (!id) return;
-      setAddedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
+    const onSync = (e: Event) => {
+      const ids = (e as CustomEvent<{ addedIds: string[] }>).detail?.addedIds;
+      if (Array.isArray(ids)) setAddedIds(new Set(ids));
     };
-    window.addEventListener("trip:toggleAdded", onToggle);
-    return () => window.removeEventListener("trip:toggleAdded", onToggle);
+    window.addEventListener("trip:addedSync", onSync);
+    return () => window.removeEventListener("trip:addedSync", onSync);
   }, []);
-
-  // Mirror current addedIds out to MapDetailOverlay so its dim + CTA
-  // label stay in sync.
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("trip:addedSync", {
-        detail: { addedIds: Array.from(addedIds) },
-      }),
-    );
-  }, [addedIds]);
 
   // Sync map markers to whatever's currently in the panel. Cleanup
   // fires both on category change (markers are replaced) and on panel
@@ -374,7 +361,12 @@ function PanelBody({ target }: { target: BrowseTarget }) {
           onToggleAdded={() =>
             window.dispatchEvent(
               new CustomEvent("trip:toggleAdded", {
-                detail: { placeId: p.id },
+                detail: {
+                  placeId: p.id,
+                  dayId: target.dayId,
+                  dayNumber: target.dayNumber,
+                  place: p,
+                },
               }),
             )
           }
@@ -395,6 +387,9 @@ function PanelBody({ target }: { target: BrowseTarget }) {
                     title: p.title,
                     photoUrl: p.photoUrl,
                     dayNumber: target.dayNumber,
+                    dayId: target.dayId,
+                    coords: p.coords,
+                    description: p.description,
                   },
                   },
                 }),
@@ -416,6 +411,9 @@ function PanelBody({ target }: { target: BrowseTarget }) {
                     title: p.title,
                     photoUrl: p.photoUrl,
                     dayNumber: target.dayNumber,
+                    dayId: target.dayId,
+                    coords: p.coords,
+                    description: p.description,
                   },
                 },
               }),

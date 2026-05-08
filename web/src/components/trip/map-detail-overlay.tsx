@@ -10,6 +10,9 @@ type DetailPlace = {
   title: string;
   photoUrl?: string;
   dayNumber?: number;
+  dayId?: string;
+  coords?: [number, number];
+  description?: string;
 };
 
 type SheetState = "closed" | "peek" | "half" | "expanded";
@@ -143,7 +146,12 @@ export function MapDetailOverlay() {
             onToggleAdded={() =>
               window.dispatchEvent(
                 new CustomEvent("trip:toggleAdded", {
-                  detail: { placeId: place.id },
+                  detail: {
+                    placeId: place.id,
+                    dayId: place.dayId,
+                    dayNumber: place.dayNumber,
+                    place,
+                  },
                 }),
               )
             }
