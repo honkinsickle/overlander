@@ -323,12 +323,37 @@ export function MapColumn({
   useEffect(() => {
     const onFlyTo = (e: Event) => {
       const detail = (
-        e as CustomEvent<{ coords: [number, number]; name?: string }>
+        e as CustomEvent<{
+          coords: [number, number];
+          name?: string;
+          /** Pixels to offset where the center coord lands on screen.
+           *  Used by the cards-grid path to push the marker above the
+           *  detail slide-up so it isn't covered. */
+          offset?: [number, number];
+        }>
       ).detail;
       const map = mapRef.current;
       if (!map || !detail?.coords) return;
+      // Mapbox's `offset` and `padding` behavior on flyTo is unreliable
+      // across versions — both silently no-op'd here. Instead, project
+      // the desired pixel offset into a lat-shift at the target zoom and
+      // apply it directly to the center coord.
+      let center: [number, number] = detail.coords;
+      if (detail.offset) {
+        const targetZoom = 13;
+        // Mercator latitude pixel-scale at lat L and zoom z:
+        //   pxPerLatDeg = (256 * 2^z) / (360 * cos(L))
+        // We're shifting the CENTER south by N pixels, which makes the
+        // marker appear N pixels ABOVE its prior location.
+        const latRad = (detail.coords[1] * Math.PI) / 180;
+        const pxPerLatDeg =
+          (256 * Math.pow(2, targetZoom)) / (360 * Math.cos(latRad));
+        const latShiftPx = detail.offset[1]; // negative = move marker up
+        const latShiftDeg = latShiftPx / pxPerLatDeg;
+        center = [detail.coords[0], detail.coords[1] + latShiftDeg];
+      }
       map.flyTo({
-        center: detail.coords,
+        center,
         zoom: 13,
         duration: 1500,
         essential: true,
@@ -386,8 +411,12 @@ export function MapColumn({
         }>
       ).detail;
       if (!detail?.places?.length) return;
-      const color =
-        (detail.category && CATEGORY_ACCENT[detail.category]) || "#c8a96e";
+      // Browse panel renders all cards as Scenic regardless of category,
+      // so force the map dots to match — `#A6C9F9` is the title color
+      // used by both the cards and the panel header.
+      const color = "#A6C9F9";
+      void detail.category;
+      void CATEGORY_ACCENT;
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
         const wrapper = document.createElement("div");

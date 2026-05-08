@@ -123,8 +123,13 @@ export function CategoryBrowsePanel({
 
   // Cards in the body always render with the Scenic (mountain) palette,
   // so force the panel header label/icon to match regardless of which
-  // category opened the panel.
-  const style = target ? categoryStyle.mountain : null;
+  // category opened the panel. Title/icon stroke use the lighter Scenic
+  // blue (`#A6C9F9`) — same as the LocationCard titles — rather than the
+  // brighter `var(--cat-mountain)` (`#2CB5FF`) so the header reads as
+  // part of the same palette as the cards.
+  const style = target
+    ? { ...categoryStyle.mountain, accent: "#A6C9F9" }
+    : null;
   const Icon = target ? categoryIcon.mountain : null;
 
   return (
@@ -371,11 +376,23 @@ function PanelBody({ target }: { target: BrowseTarget }) {
             )
           }
           onCardClick={() => {
-            // Body tap = fly map first, then slide the detail panel up
-            // for this place (after the fly registers).
+            // Body tap = tuck any open detail down (parallel with the
+            // map fly), then re-slide it up with this place's content
+            // after the fly registers. If no detail is open, the
+            // initial close dispatch is a no-op.
+            window.dispatchEvent(
+              new CustomEvent("trip:openDetail", { detail: { place: null } }),
+            );
             window.dispatchEvent(
               new CustomEvent("trip:flyTo", {
-                detail: { coords: p.coords, name: p.title },
+                detail: {
+                  coords: p.coords,
+                  name: p.title,
+                  // Push the marker into the visible (above-detail) area
+                  // so the slide-up doesn't cover it. ~half the half-
+                  // state visible height.
+                  offset: [0, -60] as [number, number],
+                },
               }),
             );
             setTimeout(() => {
@@ -394,13 +411,20 @@ function PanelBody({ target }: { target: BrowseTarget }) {
                   },
                 }),
               );
-            }, 350);
+            }, 1000);
           }}
           onDetailsClick={() => {
             // Details tap = fly map + open detail panel for this place.
             window.dispatchEvent(
               new CustomEvent("trip:flyTo", {
-                detail: { coords: p.coords, name: p.title },
+                detail: {
+                  coords: p.coords,
+                  name: p.title,
+                  // Push the marker into the visible (above-detail) area
+                  // so the slide-up doesn't cover it. ~half the half-
+                  // state visible height.
+                  offset: [0, -60] as [number, number],
+                },
               }),
             );
             window.dispatchEvent(
