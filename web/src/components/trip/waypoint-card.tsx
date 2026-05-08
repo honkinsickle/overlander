@@ -33,12 +33,18 @@ export function WaypointCard({
   tripId,
   waypoint,
   onDelete,
+  disableOpen = false,
 }: {
   tripId: string;
   waypoint: Waypoint;
   /** Temporary dev affordance — when provided, renders an X in the
    *  top-right that calls this handler instead of opening the panel. */
   onDelete?: () => void;
+  /** Suppress the openPanel click handler. Used for client-only
+   *  "added" waypoints whose slugs aren't in the server trip data
+   *  (otherwise the panel-open dispatches `trip:panel` and the map
+   *  column shows a "Waypoint not found" toast). */
+  disableOpen?: boolean;
 }) {
   const cat = categoryStyle[waypoint.category];
   const Icon = categoryIcon[waypoint.category];
@@ -80,8 +86,8 @@ export function WaypointCard({
       <button
       type="button"
       data-trip-id={tripId}
-      onClick={openPanel}
-      className="w-full text-left flex items-start gap-3 px-2.5 pt-3.5 pb-[19px] hover:bg-white/[0.02] transition-colors"
+      onClick={disableOpen ? undefined : openPanel}
+      className={`w-full text-left flex items-start gap-3 px-2.5 pt-3.5 pb-[19px] ${disableOpen ? "" : "hover:bg-white/[0.02]"} transition-colors`}
     >
       {/* Icon badge — 60×60 circle with category tint + thin cat accent border + subtle drop shadow */}
       <div

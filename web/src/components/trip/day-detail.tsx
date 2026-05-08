@@ -254,12 +254,10 @@ export function DayDetail({ trip }: { trip: Trip }) {
               )
             }
             extra={
-              i < 2 ? (
-                <SuggestedSection
-                  dayNumber={i + 1}
-                  onBrowse={openBrowse(i + 1, day.id)}
-                />
-              ) : null
+              <SuggestedSection
+                dayNumber={i + 1}
+                onBrowse={openBrowse(i + 1, day.id)}
+              />
             }
           />
         ))}
@@ -385,6 +383,7 @@ function DaySection({
               key={`added-${p.id}`}
               tripId={trip.id}
               waypoint={addedPlaceToWaypoint(p)}
+              disableOpen
               onDelete={
                 onDeleteAdded ? () => onDeleteAdded(p.id) : undefined
               }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-const TRANSITION_MS = 280;
+const TRANSITION_MS = 470;
 
 type DetailPlace = {
   id: string;
@@ -87,7 +87,7 @@ export function MapDetailOverlay() {
           // above the map column edge.
           "calc(100% - 30px)"
         : sheet === "half"
-          ? "calc(50% + 100px)"
+          ? "calc(50% + 50px)"
           : "0";
 
   return (
@@ -100,7 +100,7 @@ export function MapDetailOverlay() {
         transform: `translateY(${translateY})`,
         transitionProperty: "transform",
         transitionDuration: `${TRANSITION_MS}ms`,
-        transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
+        transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
         backgroundColor: "#1A1A1A",
         borderTop: "0.5px solid rgba(255,255,255,0.18)",
         borderLeft: "0.5px solid rgba(255,255,255,0.12)",
