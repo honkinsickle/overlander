@@ -267,8 +267,8 @@ export const BROWSE_PLACES: Record<
         id: "cabazon-dinosaurs",
         coords: [-116.788, 33.917],
         photoUrl:
-          "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=1200&q=80",
-        photoAlt: "Roadside attraction",
+          "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Cabazon_Dinosaurs%2C_Mr._Rex%2C_2014.jpg/1280px-Cabazon_Dinosaurs%2C_Mr._Rex%2C_2014.jpg",
+        photoAlt: "Mr. Rex — the Cabazon Dinosaurs T-Rex",
         title: "Cabazon Dinosaurs",
         pills: BASE_PILLS.oddity,
         stats: BASE_STATS("ENTRY", "0"),

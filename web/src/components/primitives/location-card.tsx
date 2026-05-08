@@ -55,8 +55,8 @@ export type LocationCardProps = {
   rating: { value: string; count: string };
   /** CTA copy + handler. */
   ctaLabel: string;
-  onCtaClick?: () => void;
-  onOpenClick?: () => void;
+  onCtaClick?: (e?: React.MouseEvent) => void;
+  onOpenClick?: (e?: React.MouseEvent) => void;
   className?: string;
 };
 
