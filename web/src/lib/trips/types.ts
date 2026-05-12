@@ -59,6 +59,10 @@ export type Day = {
   weather?: { departure?: string; arrival?: string };
   /** Practical notes — fuel cadence, supply tips, backup plans, etc. */
   notes?: string[];
+  /** Pre-resolved top photo-bearing place per slide category. Populated by
+   *  `resolveSuggestions` at trip-load so the SuggestedSection can render
+   *  without a client-side fetch. Categories with no match are absent. */
+  suggestions?: Partial<Record<import("@/lib/trip-browse/places").SlideCategoryKey, import("@/lib/trip-browse/places").BrowsePlace>>;
 };
 
 export type Waypoint = {
@@ -144,4 +148,16 @@ export type Overnight = {
   /** Cost summary (e.g. "free", "$15 showers", "$30/night"). */
   cost: string;
   notes?: string;
+  /** Populated by `resolveOvernights` at trip-load: a best-match record
+   *  from USFS / Recreation.gov / Foursquare / OSM. Slide-up enrichment.
+   *  Optional — dispersed sites and obscure dispersed pulls won't match. */
+  enriched?: {
+    description?: string;
+    photoUrl?: string;
+    address?: string;
+    phone?: string;
+    website?: string;
+    coords?: [number, number];
+    sources: string[];
+  };
 };

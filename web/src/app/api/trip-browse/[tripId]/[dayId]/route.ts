@@ -5,6 +5,8 @@ import { bboxFromCoords, discover } from "@/lib/discovery/discovery";
 import { overpassSource } from "@/lib/discovery/overpass";
 import { recGovSource } from "@/lib/discovery/rec-gov";
 import { foursquareSource } from "@/lib/discovery/foursquare";
+import { usfsSource } from "@/lib/discovery/usfs";
+import { blmSource } from "@/lib/discovery/blm";
 
 const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "scenic",
@@ -12,6 +14,7 @@ const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "oddity",
   "camping",
   "overnight",
+  "fuel",
 ];
 
 /** Per-category search radius around each day endpoint. Camping leans
@@ -24,6 +27,7 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
   oddity: 25,
   overnight: 15,
   camping: 50,
+  fuel: 10,
 };
 
 /**
@@ -90,7 +94,7 @@ export async function GET(
   const places = await discover({
     bboxes,
     categories: [slideKey],
-    sources: [overpassSource, recGovSource, foursquareSource],
+    sources: [overpassSource, recGovSource, foursquareSource, usfsSource, blmSource],
     signal: req.signal,
   });
 

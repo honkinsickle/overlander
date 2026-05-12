@@ -10,6 +10,8 @@ export type SourceId =
   | "ioverlander"
   | "wikipedia"
   | "foursquare"
+  | "usfs"
+  | "blm"
   | "fixture";
 
 /** A normalised place from a single source — the common shape every
