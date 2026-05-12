@@ -267,7 +267,8 @@ export function DayDetail({ trip }: { trip: Trip }) {
             extra={
               i < 2 ? (
                 <SuggestedSection
-                  dayNumber={i + 1}
+                  tripId={trip.id}
+                  day={day}
                   onBrowse={openBrowse(i + 1, day)}
                 />
               ) : null

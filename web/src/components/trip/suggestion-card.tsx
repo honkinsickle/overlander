@@ -18,6 +18,7 @@ export type SuggestionCardProps = {
   browseLabel: string;
   featured?: boolean;
   onBrowse?: (category: Category) => void;
+  onOpenDetail?: () => void;
 };
 
 export function SuggestionCard({
@@ -29,6 +30,7 @@ export function SuggestionCard({
   browseLabel,
   featured = false,
   onBrowse,
+  onOpenDetail,
 }: SuggestionCardProps) {
   const cat = categoryStyle[category];
   const Icon = categoryIcon[category];
@@ -145,6 +147,7 @@ export function SuggestionCard({
         <button
           type="button"
           aria-label={`${title} details`}
+          onClick={onOpenDetail}
           className="flex items-center justify-center rounded-sm shrink-0"
           style={{
             width: 28,

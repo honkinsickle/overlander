@@ -123,7 +123,6 @@ function TripHero({
             </span>
           )}
           <h2
-            className="truncate"
             style={{
               fontSize: 24,
               lineHeight: "29px",

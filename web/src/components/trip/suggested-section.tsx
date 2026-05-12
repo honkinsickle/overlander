@@ -1,270 +1,138 @@
-import { ChevronDown } from "lucide-react";
-import { GroupCard, type GroupItem } from "./group-card";
-import { SuggestionCard } from "./suggestion-card";
+"use client";
+
+import { useEffect, useState } from "react";
+import { SuggestionCard, type SuggestionCardProps } from "./suggestion-card";
 import type { Category } from "@/components/primitives/detail-card";
+import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
+import type { Day } from "@/lib/trips/types";
 
-type Suggestion = {
-  id: string;
-  category: Category;
-  title: string;
-  hours?: string;
-  description: string;
-  heroImage: string;
-  browseLabel: string;
-  featured?: boolean;
+type FetchKey = "oddity" | "food" | "scenic" | "camping";
+
+const SLIDE_TO_CATEGORY: Record<FetchKey, Category> = {
+  oddity: "oddity",
+  food: "food",
+  scenic: "mountain",
+  camping: "camping",
 };
 
-type Group = {
-  id: string;
-  variant: "overnight" | "fuel";
-  groupTitle: string;
-  groupSubtitle: string;
-  heroImage: string;
-  browseLabel: string;
-  items: GroupItem[];
+const BROWSE_LABEL: Record<FetchKey, string> = {
+  oddity: "Browse Oddities",
+  food: "Browse Food",
+  scenic: "Browse Sights & Landmarks",
+  camping: "Browse Camping",
 };
 
-const SUGGESTIONS_BY_DAY: Record<number, Suggestion[]> = {
-  1: [
-    {
-      id: "powells",
-      category: "oddity",
-      title: "Powell's City of Books",
-      hours: "Open · 10A – 9P",
-      description:
-        "Iconic bookseller covering a full city block — used and new volumes, plus gifts for bibliophiles.",
-      heroImage:
-        "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1000&q=80",
-      browseLabel: "Browse Oddities",
-      featured: true,
-    },
-    {
-      id: "lake-agnes",
-      category: "food",
-      title: "Lake Agnes Tea House",
-      hours: "Open · 10A – 9P",
-      description:
-        "2-mile uphill hike earns a scone and glacier-fed lake view from the 1905 log tea house.",
-      heroImage:
-        "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1000&q=80",
-      browseLabel: "Browse Food",
-    },
-    {
-      id: "columbia-icefield",
-      category: "mountain",
-      title: "Columbia Icefield",
-      hours: "Open · 10A – 9P",
-      description:
-        "Walk onto a 10,000-year-old glacier — tour departs hourly from the Skywalk center.",
-      heroImage:
-        "https://images.unsplash.com/photo-1454942901704-3c44c11b2ad1?w=1000&q=80",
-      browseLabel: "Browse Sights & Landmarks",
-    },
-    {
-      id: "banff-townsite",
-      category: "urban",
-      title: "Banff Townsite",
-      hours: "Open · 10A – 9P",
-      description:
-        "Last real supply stop before the Icefields Parkway — hot showers, pharmacy, and a proper coffee.",
-      heroImage:
-        "https://images.unsplash.com/photo-1609825488888-3a766db05542?w=1000&q=80",
-      browseLabel: "Browse Urban",
-    },
-  ],
-  2: [
-    {
-      id: "trees-of-mystery",
-      category: "oddity",
-      title: "Trees of Mystery",
-      hours: "Open · 9A – 6P",
-      description:
-        "Roadside Americana with a 49-foot Paul Bunyan, a SkyTrail gondola, and a museum of Yurok artifacts.",
-      heroImage:
-        "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=1000&q=80",
-      browseLabel: "Browse Oddities",
-      featured: true,
-    },
-    {
-      id: "sisters-bakery",
-      category: "food",
-      title: "Sisters Bakery",
-      hours: "Open · 5A – 4P",
-      description:
-        "Famous marionberry cinnamon rolls and dawn-baked sourdough — line out the door by 7am, worth it.",
-      heroImage:
-        "https://images.unsplash.com/photo-1568254183919-78a4f43a2877?w=1000&q=80",
-      browseLabel: "Browse Food",
-    },
-    {
-      id: "smith-rock",
-      category: "mountain",
-      title: "Smith Rock State Park",
-      hours: "Open · sunrise – sunset",
-      description:
-        "Birthplace of American sport climbing — Misery Ridge loop is 3.7 miles of ridge views and tuff spires.",
-      heroImage:
-        "https://images.unsplash.com/photo-1518406432532-9cbef74e9b8f?w=1000&q=80",
-      browseLabel: "Browse Sights & Landmarks",
-    },
-    {
-      id: "old-mill-bend",
-      category: "urban",
-      title: "Old Mill District",
-      hours: "Shops · 10A – 8P",
-      description:
-        "Former lumber mill turned riverwalk — breweries, gear shops, and a clean fuel + grocery resupply.",
-      heroImage:
-        "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1000&q=80",
-      browseLabel: "Browse Urban",
-    },
-  ],
-};
+const FETCH_CATEGORIES: FetchKey[] = ["scenic", "food", "oddity", "camping"];
 
-const GROUPS_BY_DAY: Record<number, Group[]> = {
-  1: [
-    {
-      id: "tumalo-creek",
-      variant: "overnight",
-      groupTitle: "Tumalo Creek Area",
-      groupSubtitle: "Bend, OR · 4 options within 25 mi",
-      heroImage:
-        "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1000&q=80",
-      browseLabel: "Browse Overnight",
-      items: [
-        {
-          id: "tumalo-state",
-          category: "camping",
-          title: "Tumalo State Park",
-          meta: "State park · +4 mi detour · reservable",
-          tip: "$24/night · hot showers · Cascade views",
-        },
-        {
-          id: "hurricane-cliffs",
-          category: "camping",
-          title: "Hurricane Cliffs BLM",
-          meta: "Dispersed · +12 mi detour · no reservation",
-          tip: "Free · 14-day stay limit",
-        },
-        {
-          id: "ohanapecosh",
-          category: "camping",
-          title: "Ohanapecosh Campground NPS",
-          meta: "National Park · +18 mi detour · reservable",
-          tip: "$30/night · last 3 sites left this week",
-        },
-      ],
-    },
-    {
-      id: "bend-fuel",
-      variant: "fuel",
-      groupTitle: "Bend Fuel Stops",
-      groupSubtitle: "Bend, OR · 4 stations within 10 mi",
-      heroImage:
-        "https://images.unsplash.com/photo-1545459720-aac8509eb02c?w=1000&q=80",
-      browseLabel: "Browse Fuel Stops",
-      items: [
-        {
-          id: "pilot",
-          category: "fuel",
-          title: "Pilot Travel Center",
-          meta: "Truck stop · +2 mi · open 24h",
-          tip: "$4.29/gal diesel · DEF · showers",
-        },
-        {
-          id: "chevron",
-          category: "fuel",
-          title: "Chevron",
-          meta: "Station · +1 mi · open 24h",
-          tip: "$4.79/gal · 87/89/91 · car wash",
-        },
-        {
-          id: "maverik",
-          category: "fuel",
-          title: "Maverik",
-          meta: "Station · +3 mi · open 5a–11p",
-          tip: "$4.59/gal · BonFire grill · clean",
-        },
-      ],
-    },
-  ],
-  2: [
-    {
-      id: "deschutes-overnight",
-      variant: "overnight",
-      groupTitle: "Deschutes Forest",
-      groupSubtitle: "Sisters, OR · 5 options within 30 mi",
-      heroImage:
-        "https://images.unsplash.com/photo-1496545672447-f699b503d270?w=1000&q=80",
-      browseLabel: "Browse Overnight",
-      items: [
-        {
-          id: "indian-ford",
-          category: "camping",
-          title: "Indian Ford Campground",
-          meta: "USFS · +6 mi detour · reservable",
-          tip: "$18/night · creekside · vault toilets",
-        },
-        {
-          id: "three-creek-lake",
-          category: "camping",
-          title: "Three Creek Lake",
-          meta: "Dispersed · +14 mi detour · first-come",
-          tip: "Free · alpine lake · no signal",
-        },
-        {
-          id: "blue-bay",
-          category: "camping",
-          title: "Blue Bay USFS",
-          meta: "Forest service · +9 mi detour · reservable",
-          tip: "$22/night · boat ramp · pet-friendly",
-        },
-      ],
-    },
-    {
-      id: "madras-fuel",
-      variant: "fuel",
-      groupTitle: "Madras Stations",
-      groupSubtitle: "Madras, OR · 3 stations within 5 mi",
-      heroImage:
-        "https://images.unsplash.com/photo-1520975954732-35dd22299614?w=1000&q=80",
-      browseLabel: "Browse Fuel Stops",
-      items: [
-        {
-          id: "loves-madras",
-          category: "fuel",
-          title: "Love's Travel Stop",
-          meta: "Truck stop · +1 mi · open 24h",
-          tip: "$4.19/gal diesel · DEF · big rig parking",
-        },
-        {
-          id: "shell-madras",
-          category: "fuel",
-          title: "Shell",
-          meta: "Station · +2 mi · open 24h",
-          tip: "$4.69/gal · car wash · ATM",
-        },
-        {
-          id: "76-madras",
-          category: "fuel",
-          title: "76",
-          meta: "Station · +0.5 mi · open 5a–11p",
-          tip: "$4.49/gal · clean restrooms · espresso",
-        },
-      ],
-    },
-  ],
-};
+function placeToSuggestion(
+  place: BrowsePlace,
+  slideKey: FetchKey,
+): SuggestionCardProps {
+  const hoursStat = place.stats.find(
+    (s) => /hours|open/i.test(s.label) && !/always/i.test(s.value),
+  );
+  return {
+    category: SLIDE_TO_CATEGORY[slideKey],
+    title: place.title,
+    hours: hoursStat?.value,
+    description: place.description,
+    heroImage: place.photoUrl as string, // gated upstream
+    browseLabel: BROWSE_LABEL[slideKey],
+    featured: false,
+  };
+}
+
+async function fetchTopPhotoPlace(
+  tripId: string,
+  dayId: string,
+  slideKey: SlideCategoryKey,
+  signal: AbortSignal,
+): Promise<BrowsePlace | null> {
+  const res = await fetch(
+    `/api/trip-browse/${encodeURIComponent(tripId)}/${encodeURIComponent(dayId)}?category=${slideKey}`,
+    { signal },
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { places?: BrowsePlace[] };
+  const photoFirst = (data.places ?? []).find(
+    (p) => p.photoUrl && p.description && p.title,
+  );
+  return photoFirst ?? null;
+}
+
+type SuggestionEntry = { props: SuggestionCardProps; place: BrowsePlace };
 
 export function SuggestedSection({
-  dayNumber = 1,
+  tripId,
+  day,
   onBrowse,
 }: {
-  dayNumber?: number;
+  tripId: string;
+  day: Day;
   onBrowse?: (category: Category) => void;
 }) {
-  const suggestions = SUGGESTIONS_BY_DAY[dayNumber] ?? SUGGESTIONS_BY_DAY[1];
-  const groups = GROUPS_BY_DAY[dayNumber] ?? GROUPS_BY_DAY[1];
+  const [suggestions, setSuggestions] = useState<SuggestionEntry[] | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    let cancelled = false;
+    setSuggestions(null);
+
+    Promise.all(
+      FETCH_CATEGORIES.map((c) =>
+        fetchTopPhotoPlace(tripId, day.id, c, ctrl.signal).then(
+          (place) => (place ? { props: placeToSuggestion(place, c), place } : null),
+          () => null,
+        ),
+      ),
+    ).then((entries) => {
+      if (cancelled) return;
+      setSuggestions(entries.filter((e): e is SuggestionEntry => e !== null));
+    });
+
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [tripId, day.id]);
+
+  const openDetailFor = (place: BrowsePlace) => () => {
+    const hoursStat = place.stats.find(
+      (s) => /hours|open/i.test(s.label) && !/always/i.test(s.value),
+    );
+    window.dispatchEvent(
+      new CustomEvent("trip:flyTo", {
+        detail: { coords: place.coords, name: place.title },
+      }),
+    );
+    window.dispatchEvent(
+      new CustomEvent("trip:openDetail", {
+        detail: {
+          place: {
+            id: place.id,
+            title: place.title,
+            photoUrl: place.photoUrl,
+            dayNumber: day.dayNumber,
+            dayId: day.id,
+            coords: place.coords,
+            description: place.description,
+            pills: place.pills.map((p) => p.label),
+            hours: hoursStat?.value,
+            address: place.placeInfo.address || undefined,
+            phone: place.placeInfo.phone?.display,
+            website: place.placeInfo.website?.display,
+            dataSources: place.mention.secondary,
+          },
+        },
+      }),
+    );
+  };
+
+  const loading = suggestions === null;
+  const empty = !loading && suggestions.length === 0;
+
   return (
     <section
       className="flex flex-col"
@@ -274,74 +142,282 @@ export function SuggestedSection({
         marginTop: 13,
         gap: 8,
         paddingBottom: 12,
-        backgroundColor: "#C16B0B54",
-        borderRadius: 4,
+        backgroundColor: "#25365D54",
+        border: "1px solid #3D3C3C",
+        borderRadius: 15,
       }}
     >
       <div
-        className="sticky z-[5] flex items-center justify-between"
+        className="sticky z-[5] flex items-center justify-center"
         style={{
           top: 130,
           height: 70,
           paddingInline: 13,
           paddingTop: 8,
           paddingBottom: 0,
-          backgroundColor: "#4E3314",
-          borderTopLeftRadius: 4,
-          borderTopRightRadius: 4,
         }}
       >
-        <div className="flex items-center gap-2">
-          <div
-            className="flex items-center justify-center rounded-full shrink-0"
-            style={{
-              width: 32,
-              height: 32,
-              backgroundColor: "#BC6117",
-              border: "1px solid #F88112",
-            }}
-          >
-            <span style={{ fontSize: 16, lineHeight: "24px" }}>🚀</span>
-          </div>
-          <span
-            className="uppercase"
-            style={{
-              fontSize: 16,
-              lineHeight: "24px",
-              fontFamily: "var(--ff-display)",
-              letterSpacing: "0.19em",
-              color: "#FFFFFF",
-            }}
-          >
-            Suggested Stops Day {dayNumber}
-          </span>
-        </div>
-        <button
-          type="button"
-          aria-label="Collapse Suggested"
-          className="flex items-center justify-center rounded-sm"
+        <span
+          className="uppercase"
           style={{
-            width: 28,
-            height: 28,
-            border: "1px solid rgba(255, 200, 180, 0.3)",
+            fontSize: 16,
+            lineHeight: "24px",
+            fontFamily: "var(--ff-display)",
+            letterSpacing: "0.19em",
+            color: "#FFFFFF",
           }}
         >
-          <ChevronDown
-            className="w-4 h-4"
-            color="#FFC8B4"
-            strokeWidth={1.75}
-          />
-        </button>
+          Suggested Stops Day {day.dayNumber}
+        </span>
       </div>
 
       <div className="flex flex-col items-center" style={{ gap: 12 }}>
-        {suggestions.map((s) => (
-          <SuggestionCard key={s.id} {...s} onBrowse={onBrowse} />
-        ))}
-        {groups.map((g) => (
-          <GroupCard key={g.id} {...g} />
-        ))}
+        <DayBriefingCard day={day} />
+        {loading && <SuggestionSkeletons />}
+        {!loading &&
+          suggestions.map((s, i) => (
+            <SuggestionCard
+              key={`${s.props.category}-${i}`}
+              {...s.props}
+              onBrowse={onBrowse}
+              onOpenDetail={openDetailFor(s.place)}
+            />
+          ))}
+        {empty && <EmptyState />}
       </div>
     </section>
+  );
+}
+
+function SuggestionSkeletons() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-[410px] rounded-[4px] overflow-clip border border-border-subtle"
+          style={{
+            height: 270,
+            backgroundColor: "#161819BF",
+          }}
+        >
+          <div
+            style={{
+              height: 130,
+              backgroundImage:
+                "linear-gradient(120deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 100%)",
+              backgroundSize: "200% 100%",
+              animation: "shimmer 1.4s ease-in-out infinite",
+            }}
+          />
+          <div style={{ padding: 12 }}>
+            <div
+              style={{
+                height: 18,
+                width: "55%",
+                marginBottom: 8,
+                borderRadius: 2,
+                backgroundColor: "rgba(255,255,255,0.06)",
+              }}
+            />
+            <div
+              style={{
+                height: 14,
+                width: "85%",
+                borderRadius: 2,
+                backgroundColor: "rgba(255,255,255,0.04)",
+              }}
+            />
+          </div>
+        </div>
+      ))}
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </>
+  );
+}
+
+function DayBriefingCard({ day }: { day: Day }) {
+  const hasContent = day.description || day.weather || (day.notes && day.notes.length > 0);
+  if (!hasContent) return null;
+  const route = [day.miles && `${day.miles} mi`, day.driveHours && `${day.driveHours} hrs`]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div
+      className="w-[410px] rounded-[4px] overflow-clip border border-border-subtle"
+      style={{ backgroundColor: "#161819BF", padding: 16 }}
+    >
+      <div className="flex flex-col" style={{ gap: 12 }}>
+        <div className="flex flex-col" style={{ gap: 4 }}>
+          <span
+            className="uppercase"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontSize: 11,
+              lineHeight: "14px",
+              letterSpacing: "0.16em",
+              color: "var(--amber-dark)",
+            }}
+          >
+            Day {day.dayNumber} Briefing
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--ff-sans)",
+              fontSize: 16,
+              lineHeight: "22px",
+              fontWeight: 700,
+              color: "#FFFFFF",
+            }}
+          >
+            {day.label}
+          </span>
+          {route && (
+            <span
+              style={{
+                fontFamily: "var(--ff-mono)",
+                fontSize: 12,
+                lineHeight: "16px",
+                color: "var(--amber)",
+              }}
+            >
+              {route}
+            </span>
+          )}
+        </div>
+
+        {day.description && (
+          <p
+            style={{
+              fontFamily: "var(--ff-sans)",
+              fontSize: 13,
+              lineHeight: "20px",
+              color: "#CFCFCF",
+            }}
+          >
+            {day.description}
+          </p>
+        )}
+
+        {day.weather && (day.weather.departure || day.weather.arrival) && (
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <span
+              className="uppercase"
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontSize: 11,
+                lineHeight: "14px",
+                letterSpacing: "0.14em",
+                color: "#98AC64",
+              }}
+            >
+              Weather
+            </span>
+            {day.weather.departure && (
+              <span style={{ fontFamily: "var(--ff-sans)", fontSize: 13, color: "#CFCFCF" }}>
+                Depart · {day.weather.departure}
+              </span>
+            )}
+            {day.weather.arrival && (
+              <span style={{ fontFamily: "var(--ff-sans)", fontSize: 13, color: "#CFCFCF" }}>
+                Arrive · {day.weather.arrival}
+              </span>
+            )}
+          </div>
+        )}
+
+        {day.overnight && (
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <span
+              className="uppercase"
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontSize: 11,
+                lineHeight: "14px",
+                letterSpacing: "0.14em",
+                color: "#98AC64",
+              }}
+            >
+              Camping
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--ff-sans)",
+                fontSize: 13,
+                lineHeight: "20px",
+                color: "#CFCFCF",
+              }}
+            >
+              {day.overnight.selected.name}
+              {day.overnight.selected.cost && ` · ${day.overnight.selected.cost}`}
+            </span>
+            {day.overnight.selected.notes && (
+              <span
+                style={{
+                  fontFamily: "var(--ff-sans)",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  color: "#8A8A8A",
+                }}
+              >
+                {day.overnight.selected.notes}
+              </span>
+            )}
+          </div>
+        )}
+
+        {day.notes && day.notes.length > 0 && (
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <span
+              className="uppercase"
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontSize: 11,
+                lineHeight: "14px",
+                letterSpacing: "0.14em",
+                color: "#98AC64",
+              }}
+            >
+              Notes
+            </span>
+            {day.notes.map((note, i) => (
+              <div key={i} className="flex gap-2">
+                <span style={{ color: "var(--amber)", fontSize: 13, lineHeight: "20px" }}>
+                  ↳
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--ff-sans)",
+                    fontSize: 13,
+                    lineHeight: "20px",
+                    color: "#CFCFCF",
+                  }}
+                >
+                  {note}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div
+      className="w-[410px] rounded-[4px] flex items-center justify-center"
+      style={{
+        height: 80,
+        backgroundColor: "rgba(255,255,255,0.03)",
+        border: "1px dashed rgba(255,255,255,0.12)",
+        fontFamily: "var(--ff-sans)",
+        fontSize: 13,
+        color: "rgba(255,255,255,0.5)",
+      }}
+    >
+      No suggestions found along today's route yet.
+    </div>
   );
 }

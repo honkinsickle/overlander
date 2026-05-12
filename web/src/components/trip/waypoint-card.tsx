@@ -63,6 +63,16 @@ export function WaypointCard({
         },
       }),
     );
+    // Fly the map to the waypoint if it has coords on it. The slide-up
+    // opens regardless; this just keeps the map context tight when the
+    // user is reading the detail.
+    if (waypoint.coords) {
+      window.dispatchEvent(
+        new CustomEvent("trip:flyTo", {
+          detail: { coords: waypoint.coords, name: waypoint.title },
+        }),
+      );
+    }
   };
 
   return (

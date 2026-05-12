@@ -179,6 +179,80 @@ export function MapColumn({
           .addTo(map),
       );
     });
+
+    // Per-waypoint pins — category-colored circle head with an emoji icon
+    // and a downward tail. Mapbox anchor:"bottom" lands the tip on the coord.
+    // Pushed onto the same ref as trip-day markers so they hide together
+    // when the browse panel opens (otherwise they compete with browse dots).
+    const CAT_EMOJI: Record<string, string> = {
+      fuel: "⛽",
+      camping: "⛺",
+      mountain: "🏔",
+      urban: "🏙",
+      food: "🍔",
+      oddity: "👁",
+      attraction: "⭐",
+      neutral: "📍",
+    };
+    days.forEach((d) => {
+      for (const wp of d.waypoints) {
+        if (!wp.coords) continue;
+        const emoji = CAT_EMOJI[wp.category] ?? "📍";
+        const el = document.createElement("div");
+        el.setAttribute("aria-label", wp.title);
+        el.style.cssText =
+          "position:relative;width:32px;height:42px;cursor:pointer;";
+
+        const head = document.createElement("div");
+        head.style.cssText =
+          "position:absolute;top:0;left:0;width:32px;height:32px;" +
+          `background:var(--cat-${wp.category});` +
+          "border:2px solid #1A1A1A;border-radius:50%;" +
+          "display:flex;align-items:center;justify-content:center;" +
+          "font-size:16px;line-height:1;" +
+          "box-shadow:0 2px 6px rgba(0,0,0,0.5);";
+        head.textContent = emoji;
+
+        const tip = document.createElement("div");
+        tip.style.cssText =
+          "position:absolute;top:28px;left:11px;width:0;height:0;" +
+          "border-left:5px solid transparent;border-right:5px solid transparent;" +
+          `border-top:10px solid var(--cat-${wp.category});` +
+          "filter:drop-shadow(0 1px 0 #1A1A1A);";
+
+        el.appendChild(head);
+        el.appendChild(tip);
+
+        el.addEventListener("click", () => {
+          window.dispatchEvent(
+            new CustomEvent("trip:flyTo", {
+              detail: { coords: wp.coords, name: wp.title },
+            }),
+          );
+          window.dispatchEvent(
+            new CustomEvent("trip:openDetail", {
+              detail: {
+                place: {
+                  id: wp.id,
+                  title: wp.title,
+                  photoUrl: wp.photoUrl,
+                  description: wp.description,
+                  dayNumber: d.dayNumber,
+                  waypoint: wp,
+                },
+              },
+            }),
+          );
+        });
+
+        tripDayMarkers.push(
+          new mapboxgl.Marker({ element: el, anchor: "bottom" })
+            .setLngLat(wp.coords)
+            .addTo(map),
+        );
+      }
+    });
+
     tripDayMarkersRef.current = tripDayMarkers;
 
     if (routeCoords.length >= 2) {

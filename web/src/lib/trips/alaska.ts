@@ -75,13 +75,26 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       dayNumber: 1,
       date: "2026-05-29",
       label: "Los Angeles, CA — St. George, UT",
-      coords: [-113.5841, 37.0965],
-      miles: 390,
-      driveHours: 6.0,
+      coords: [-113.5163, 37.0469],
+      miles: 385,
+      driveHours: 5.75,
       heroImage: "https://picsum.photos/seed/la-departure/800/500",
       heroGradient: HERO_DESERT,
       heroCaption: "I-15 N · MOJAVE · DAY 01",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "Trip start. Shakedown day — confirm fridge, solar, storage. ~385 mi / 5h 45m via I-15 N. Cajon Pass, Mojave Preserve viewpoint, Virgin River Gorge into UT.",
+      weather: {
+        departure: "75-82F dry",
+        arrival: "88-95F day / 60-65F night",
+      },
+      notes: [
+        "Breakfast send-off: Grand Central Market / Eggslut before departure",
+        "Top off fuel in Barstow",
+        "Full water tanks before leaving CA",
+        "Check tire pressures after Cajon Pass climb",
+        "Backup camp: Sand Hollow State Park · (435) 680-0715 · stateparks.utah.gov",
+      ],
       waypoints: [
         {
           id: "wp-eggslut",
@@ -97,6 +110,9 @@ const LA_TO_DEADHORSE_RAW: Trip = {
             { label: "STOP TIME", value: "~30 min" },
             { label: "ETA", value: "8:15am" },
           ],
+          coords: [-118.2492, 34.0506],
+          photoUrl:
+            "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&q=80",
         },
         {
           id: "wp-guisados",
@@ -111,6 +127,62 @@ const LA_TO_DEADHORSE_RAW: Trip = {
             { label: "STOP TIME", value: "~45 min" },
             { label: "ETA", value: "12:30pm" },
           ],
+          coords: [-118.2092, 34.0419],
+          photoUrl:
+            "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80",
+        },
+        {
+          id: "wp-barstow-fuel",
+          slug: "barstow-fuel",
+          category: "fuel",
+          title: "Barstow Fuel Stop",
+          subtitle: "Day 1 · Last cheap fuel before UT",
+          description:
+            "Top off in Barstow — last reliably cheap gas before crossing into Utah. Multiple stations off I-15 (Lenwood Rd, exit 178).",
+          tip: "Pilot or Love's on Lenwood Rd has the most space for a roof-rack rig.",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~15 min" },
+            { label: "ETA", value: "11:00am" },
+          ],
+          coords: [-117.0773, 34.8717],
+          photoUrl:
+            "https://images.unsplash.com/photo-1545459720-aac8509eb02c?w=800&q=80",
+        },
+        {
+          id: "wp-mojave-viewpoint",
+          slug: "mojave-preserve-viewpoint",
+          category: "mountain",
+          title: "Mojave Preserve Viewpoint",
+          subtitle: "Day 1 · Scenic break on I-15",
+          description:
+            "Pull-out east of Baker offering long views into Mojave National Preserve. Quick leg-stretch on the longest stretch of the day.",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~15 min" },
+            { label: "ETA", value: "12:30pm" },
+          ],
+          coords: [-116.0775, 35.2683],
+          photoUrl:
+            "https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?w=800&q=80",
+        },
+        {
+          id: "wp-virgin-river-gorge",
+          slug: "virgin-river-gorge",
+          category: "mountain",
+          title: "Virgin River Gorge",
+          subtitle: "Day 1 · Last 20 mi into UT",
+          description:
+            "I-15 threads through near-vertical walls cut by the Virgin River for the final stretch before St. George. Stop at the Cedar Pocket interpretive site.",
+          tip: "Cedar Pocket is the only safe pull-out — don't try the shoulder inside the gorge.",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~20 min" },
+            { label: "ETA", value: "3:00pm" },
+          ],
+          coords: [-113.8442, 36.9215],
+          photoUrl:
+            "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80",
         },
       ],
       overnight: {
@@ -120,9 +192,17 @@ const LA_TO_DEADHORSE_RAW: Trip = {
           type: "Dispersed",
           detourMiles: 8,
           cost: "free",
-          notes: "Red Cliffs area pull-outs; level dirt; no services",
+          notes: "Warner Valley Rd / Sand Mountain OHV area; easy rig access, red rock views, no services",
         },
         alternatives: [
+          {
+            id: "on-sand-hollow",
+            name: "Sand Hollow State Park",
+            type: "State park",
+            detourMiles: 15,
+            cost: "$35/night",
+            notes: "Reservable backup; (435) 680-0715; stateparks.utah.gov",
+          },
           {
             id: "on-snow-canyon",
             name: "Snow Canyon State Park",
@@ -147,14 +227,31 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       dayNumber: 2,
       date: "2026-05-30",
       label: "St. George, UT — Monte Cristo Summit, UT",
-      coords: [-111.5, 41.4],
-      miles: 310,
-      driveHours: 5.5,
+      coords: [-111.5036, 41.4631],
+      miles: 330,
+      driveHours: 5.0,
       heroImage: "https://picsum.photos/seed/wasatch-cache/800/500",
       heroGradient: HERO_DESERT,
       heroCaption: "I-15 N · WASATCH FRONT · DAY 02",
       heroTag: "↑ NORTHBOUND",
       waypoints: [
+        {
+          id: "wp-cove-fort",
+          slug: "cove-fort-historic",
+          category: "attraction",
+          title: "Cove Fort Historic Site",
+          subtitle: "Day 2 · Quick history stop",
+          description:
+            "Basalt fort built in 1867 as a way station on the Mormon Road. Free 30-min tour by LDS missionaries; clean grounds; restrooms.",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~30 min" },
+            { label: "ETA", value: "10:00am" },
+          ],
+          coords: [-112.58, 38.6075],
+          photoUrl:
+            "https://images.unsplash.com/photo-1564564321837-a57b7070ac4f?w=800&q=80",
+        },
         {
           id: "wp-red-iguana",
           slug: "red-iguana-slc",
@@ -169,6 +266,26 @@ const LA_TO_DEADHORSE_RAW: Trip = {
             { label: "STOP TIME", value: "~1 hr" },
             { label: "ETA", value: "12:00pm" },
           ],
+          coords: [-111.9234, 40.7711],
+          photoUrl:
+            "https://images.unsplash.com/photo-1574942537135-93c4a3f0e7e8?w=800&q=80",
+        },
+        {
+          id: "wp-publik-coffee",
+          slug: "publik-coffee-slc",
+          category: "food",
+          title: "Publik Coffee · SLC",
+          subtitle: "Day 2 · Post-lunch coffee",
+          description:
+            "Local-favorite roaster on 9th South. Pour-over, espresso, brioche pastries. Good wifi for a quick laptop break.",
+          stats: [
+            { label: "DETOUR", value: "+2 mi" },
+            { label: "STOP TIME", value: "~30 min" },
+            { label: "ETA", value: "1:30pm" },
+          ],
+          coords: [-111.8742, 40.7395],
+          photoUrl:
+            "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80",
         },
       ],
       overnight: {
@@ -178,7 +295,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
           type: "Dispersed",
           detourMiles: 0,
           cost: "free",
-          notes: "Wasatch-Cache NF, ~8,000 ft; cool nights, alpine meadow pull-outs",
+          notes: "Wasatch-Cache NF along SR-39, ~8,000 ft; pine forest pull-outs, cold nights, dark sky, no services",
         },
         alternatives: [
           {
@@ -204,27 +321,65 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       dayNumber: 3,
       date: "2026-05-31",
       label: "Monte Cristo Summit — Whitefish, MT",
-      coords: [-114.3398, 48.4108],
-      miles: 460,
-      driveHours: 8.0,
+      coords: [-114.1131, 48.4944],
+      miles: 600,
+      driveHours: 10.0,
       heroImage: "https://picsum.photos/seed/whitefish-blankenship/800/500",
       heroGradient: HERO_ROCKIES,
       heroCaption: "US-93 N · BITTERROOTS · DAY 03",
       heroTag: "⚓ FIXED",
       waypoints: [
         {
+          id: "wp-lost-trail-pass",
+          slug: "lost-trail-pass",
+          category: "mountain",
+          title: "Lost Trail Pass · MT/ID Border",
+          subtitle: "Day 3 · Midday leg-stretch",
+          description:
+            "7,014-ft pass on the Continental Divide marking the MT/ID border. Pull-out with interpretive signs about the Lewis & Clark route. Critical break on the longest drive day.",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~20 min" },
+            { label: "ETA", value: "1:30pm" },
+          ],
+          coords: [-113.9492, 45.6797],
+          photoUrl:
+            "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80",
+        },
+        {
+          id: "wp-missoula-fuel",
+          slug: "missoula-fuel",
+          category: "fuel",
+          title: "Missoula Fuel Stop",
+          subtitle: "Day 3 · Last fuel before Whitefish",
+          description:
+            "Top off in Missoula — fuel cadence is critical on this leg (SLC → Pocatello → Butte → Missoula → Whitefish, ~200 mi each). Stations off I-90 exit 96 (Reserve St).",
+          stats: [
+            { label: "DETOUR", value: "+0 mi" },
+            { label: "STOP TIME", value: "~15 min" },
+            { label: "ETA", value: "4:30pm" },
+          ],
+          coords: [-114.0286, 46.8702],
+          photoUrl:
+            "https://images.unsplash.com/photo-1520975954732-35dd22299614?w=800&q=80",
+        },
+        {
           id: "wp-loulas",
           slug: "loulas-whitefish",
           category: "food",
           title: "Loula's · Whitefish",
-          subtitle: "Day 3 · Late breakfast",
+          subtitle: "Day 3 · Late dinner if open",
           description:
-            "French toast and eggs benedict in a converted house downtown. Arrive before 9am or expect 30 min.",
+            "French toast, eggs benedict, and full dinner menu in a converted house downtown. If arriving before 9pm, fits as dinner; otherwise hold for Day 4 breakfast.",
+          tip: "Closes at 9pm — verify hours before detouring off US-93.",
           stats: [
             { label: "DETOUR", value: "+0 mi" },
             { label: "STOP TIME", value: "~1 hr" },
-            { label: "ETA", value: "11:30am" },
+            { label: "ETA", value: "8:00pm" },
           ],
+          coords: [-114.3375, 48.4111],
+          photoUrl:
+            "https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800&q=80",
         },
         {
           id: "wp-blankenship",
@@ -240,6 +395,9 @@ const LA_TO_DEADHORSE_RAW: Trip = {
             { label: "STOP TIME", value: "OVERNIGHT" },
             { label: "ETA", value: "6:00pm" },
           ],
+          coords: [-114.1131, 48.4944],
+          photoUrl:
+            "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&q=80",
         },
       ],
       overnight: {
@@ -277,8 +435,8 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       date: "2026-06-01",
       label: "Whitefish, MT — Banff, AB",
       coords: [-115.5708, 51.1784],
-      miles: 285,
-      driveHours: 5.5,
+      miles: 250,
+      driveHours: 5.0,
       heroImage: "https://picsum.photos/seed/banff-townsite/800/500",
       heroGradient: HERO_ROCKIES,
       heroCaption: "US-93 N · CROWN OF THE CONTINENT · DAY 04",
@@ -317,11 +475,11 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       overnight: {
         selected: {
           id: "on-tunnel-mountain-1",
-          name: "Tunnel Mountain Village I",
+          name: "Tunnel Mountain Village II",
           type: "NPS",
           detourMiles: 2,
           cost: "$30/night CAD",
-          notes: "Reserved 3-4 mo ahead; flush toilets, showers, RTT-friendly",
+          notes: "Reservation required 3-4 mo ahead (877-737-3783); electric sites, showers, walk to townsite",
         },
         alternatives: [
           {
@@ -348,9 +506,9 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       dayNumber: 5,
       date: "2026-06-02",
       label: "Banff, AB · Moraine Lake",
-      coords: [-116.1859, 51.3217],
-      miles: 80,
-      driveHours: 2.0,
+      coords: [-116.1860, 51.3217],
+      miles: 140,
+      driveHours: 3.0,
       heroImage: "https://picsum.photos/seed/moraine-lake/800/500",
       heroGradient: HERO_ROCKIES,
       heroCaption: "MORAINE LAKE RD · VALLEY OF TEN PEAKS · DAY 05",
@@ -389,7 +547,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       overnight: {
         selected: {
           id: "on-tunnel-mountain-2",
-          name: "Tunnel Mountain Village I (night 2)",
+          name: "Tunnel Mountain Village II (night 2)",
           type: "NPS",
           detourMiles: 2,
           cost: "$30/night CAD",
