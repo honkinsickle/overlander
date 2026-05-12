@@ -1,28 +1,35 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
-import { UpcomingEventsCard } from "@/components/home/upcoming-events-card";
+import type { ReactNode } from "react";
 
 /**
  * Planning Entry Scene — Paper `CR4-0` (from v3-1 / v3-2 / v3-3).
  *
  * Left panel (`CR5-0`, 537×684): Logo + eyebrow + heading + description
  * + "Create a Trip" CTA + browse-expeditions link.
- * Right panel: Map-style stub with recent-trip markers.
+ * Right panel: Map-style stub with recent-trip markers. `mapSlot` lets
+ * the caller mount a server-only widget (like UpcomingEventsCard) into
+ * the map panel without forcing that import path through `wizard-backdrop`
+ * (which is a client component and can't transitively pull node:fs).
  *
  * Rendered full-opacity as the home `/` landing; the `WizardBackdrop`
  * renders the same component with `muted` so the Going / Vehicle / etc.
  * modals sit on top of the scene the user came from.
  */
-export function EntryScene({ muted = false }: { muted?: boolean }) {
+export function EntryScene({
+  muted = false,
+  mapSlot,
+}: {
+  muted?: boolean;
+  mapSlot?: ReactNode;
+}) {
   return (
     <div
       aria-hidden={muted}
       className={`absolute inset-0 flex ${muted ? "opacity-60 pointer-events-none select-none" : ""}`}
     >
       <EntryLeft muted={muted} />
-      <EntryMap>
-        <UpcomingEventsCard />
-      </EntryMap>
+      <EntryMap>{mapSlot}</EntryMap>
     </div>
   );
 }

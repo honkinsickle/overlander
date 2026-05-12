@@ -34,7 +34,7 @@ export type CardStats = {
   reliability: { score: number; label: string };
   cost: {
     primary: string;
-    secondary?: string;
+    secondary: string;
     hero: string;
     eta: string;
   };
