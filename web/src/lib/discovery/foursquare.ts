@@ -33,6 +33,10 @@ const FSQ_TOP_LEVEL_IDS: Record<SlideCategoryKey, string[]> = {
   oddity: ["4d4b7105d754a06376d81259"], // Arts and Entertainment
   camping: ["4d4b7105d754a06377d81259"], // Outdoors and Recreation
   overnight: ["4d4b7105d754a06379d81259"], // Travel and Transportation
+  // Fuel intentionally empty — OSM/BLM cover gas-station coverage well
+  // and Foursquare's gas-station data is sparser. Empty array short-
+  // circuits in `query()` to return [].
+  fuel: [],
 };
 
 /** Match a place's Foursquare sub-category names back into our
