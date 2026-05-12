@@ -53,6 +53,12 @@ export type Day = {
   heroTag?: string;
   waypoints: Waypoint[];
   overnight?: OvernightSelection;
+  /** Short narrative of the day's drive (route, road, key transitions). */
+  description?: string;
+  /** Forecast strings for departure and arrival points (e.g. "75-82F dry"). */
+  weather?: { departure?: string; arrival?: string };
+  /** Practical notes — fuel cadence, supply tips, backup plans, etc. */
+  notes?: string[];
 };
 
 export type Waypoint = {
@@ -75,6 +81,9 @@ export type Waypoint = {
   /** Hero photo for the detail panel. Falls back to a category
    *  gradient when absent. */
   photoUrl?: string;
+  /** `[lng, lat]` — when present, a marker is dropped on the map at
+   *  this point and clicking it opens the slide-up. */
+  coords?: [number, number];
   /** Pill row under the title (e.g. ["National Park", "Scenic Vista"]). */
   tags?: string[];
   /** Reliability score box (0–100) + caption. */
