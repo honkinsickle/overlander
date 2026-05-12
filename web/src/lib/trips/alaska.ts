@@ -234,6 +234,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_DESERT,
       heroCaption: "I-15 N · WASATCH FRONT · DAY 02",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~330 mi / 5h via I-15 N to US-89 to SR-39 E. Cove Fort historic stop; optional Logan Canyon scenic byway detour; SR-39 climb out of Huntsville. Elevation ~8000 ft.",
+      weather: { arrival: "55-65F day / 30-40F night" },
+      notes: [
+        "Lunch: Red Iguana SLC (mole negro)",
+        "First cold night - test sleep system",
+        "Watch for cattle on SR-39 at dusk",
+        "Top off fuel in Ogden or Huntsville",
+      ],
       waypoints: [
         {
           id: "wp-cove-fort",
@@ -328,6 +337,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ROCKIES,
       heroCaption: "US-93 N · BITTERROOTS · DAY 03",
       heroTag: "⚓ FIXED",
+      description:
+        "~600 mi / 10h via I-15 N to I-90 to US-93 N. Longest day of trip. Lost Trail Pass MT/ID border break; fuel at Missoula. Late-spring rain possible; mosquitoes starting.",
+      weather: { arrival: "50-68F day / 35-45F night" },
+      notes: [
+        "FIXED EVENT",
+        "Plan dawn departure ~5:30 AM",
+        "Two drivers ideal",
+        "Fuel cadence: SLC to Pocatello to Butte to Missoula to Whitefish",
+        "Verify Blankenship access road in daylight - last 2 mi gravel",
+      ],
       waypoints: [
         {
           id: "wp-lost-trail-pass",
@@ -441,6 +460,17 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ROCKIES,
       heroCaption: "US-93 N · CROWN OF THE CONTINENT · DAY 04",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~250 mi / 5h via US-93 N to Crowsnest Pass (Hwy 3) to Hwy 22 to Hwy 1 W. US/CA border crossing at Sweetgrass/Coutts (open 24h). Crowsnest Pass viewpoint; Frank Slide interpretive. Snow flurries possible at Crowsnest.",
+      weather: { arrival: "40-60F day / 28-38F night" },
+      notes: [
+        "Border prep: US passport, vehicle reg, proof of insurance (CDN-valid)",
+        "Declare food, alcohol, fuel cans",
+        "No firearms",
+        "Buy Canadian Rocky Mountain Parks Pass online before crossing",
+        "Breakfast: Loulas Whitefish before 9am",
+        "Dinner: Tooloulous Banff",
+      ],
       waypoints: [
         {
           id: "wp-sweetgrass",
@@ -513,6 +543,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ROCKIES,
       heroCaption: "MORAINE LAKE RD · VALLEY OF TEN PEAKS · DAY 05",
       heroTag: "★ PHOTO PRIORITY",
+      description:
+        "~140 mi RT / 3h driving plus day at lake. Moraine Lake - Valley of Ten Peaks (Rockpile Trail, Consolation Lakes hike); Lake Louise lakeshore; Vermilion Lakes evening drive. Lake may still have ice ring. Afternoon thunderstorm risk.",
+      weather: { arrival: "40-60F day / 30-38F night" },
+      notes: [
+        "Moraine Lake vehicle access is reservation-only in peak season - confirm timed-entry",
+        "Best photo window 6-8 AM east-facing light before tour buses",
+        "Breakfast: Whitebark Cafe espresso",
+        "Lunch: Laggans Mountain Bakery cinnamon roll",
+        "Fuel up in Banff - no fuel for 105 mi between Lake Louise and Saskatchewan River Crossing tomorrow",
+      ],
       waypoints: [
         {
           id: "wp-moraine-lake",
@@ -575,6 +615,14 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ROCKIES,
       heroCaption: "AB-93 · ICEFIELDS PARKWAY · DAY 06",
       heroTag: "★ PHOTO PRIORITY",
+      description:
+        "~180 mi / 5h via Hwy 1 to Icefields Pkwy (Hwy 93 N). Major scenic stops: Bow Lake, Peyto Lake overlook (wolf-head turquoise lake), Saskatchewan River Crossing, Columbia Icefield / Athabasca Glacier, Sunwapta Falls, Athabasca Falls. Possible snow at Sunwapta Pass (6675 ft).",
+      weather: { arrival: "35-65F day / 28-38F night" },
+      notes: [
+        "FUEL: Last fuel at Lake Louise before 105 mi gap to Saskatchewan River Crossing",
+        "Photo priorities: Peyto Lake 10am-noon, Athabasca Glacier overcast ideal",
+        "Watch for wildlife (elk, sheep, bears) on Icefields Pkwy",
+      ],
       waypoints: [
         {
           id: "wp-laggans",
@@ -655,6 +703,17 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ROCKIES,
       heroCaption: "JASPER · LAYOVER · DAY 07",
       heroTag: "◆ REST DAY",
+      description:
+        "Rest day. Maligne Canyon walk (free, 1-2h); Maligne Lake drive (30 mi each way) if energy permits; Jasper SkyTram optional. Vehicle inspection: fluids, tire pressure, undercarriage check before AK Hwy push.",
+      weather: { arrival: "35-65F day / 30-40F night" },
+      notes: [
+        "Resupply at Robinson's IGA",
+        "Laundry in town",
+        "Breakfast: Cocos Cafe",
+        "Dinner: Evil Daves Grill (elk, bison - last real dinner before highway)",
+        "Top off fuel in Jasper",
+        "Print or download offline maps - cell service drops north of here",
+      ],
       waypoints: [
         {
           id: "wp-cocos",
@@ -708,6 +767,14 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ALASKA_HWY,
       heroCaption: "BC-43 · MILE 0 · DAY 08",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~360 mi / 6.5h via Hwy 16 E to Hwy 40 N (Bighorn Hwy) through Grande Cache and Grande Prairie. Photo at Mile 0 Post in downtown Dawson Creek. Alaska Highway officially begins here.",
+      weather: { arrival: "45-70F day / 38-50F night" },
+      notes: [
+        "Fuel up in Grande Prairie - last major resupply before northern BC",
+        "Pick up bear spray if not already carrying",
+        "Cell coverage solid in Dawson Creek - use it for downloads/uploads before the gap begins",
+      ],
       waypoints: [
         {
           id: "wp-mile-0",
@@ -756,6 +823,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ALASKA_HWY,
       heroCaption: "AK HWY · BOREAL FOREST · DAY 09",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~280 mi / 5h via Alaska Hwy 97 N. Final full-service stop before Watson Lake (next major town 325 mi north). Stops: Kiskatinaw Curved Wooden Bridge (historic), Pink Mountain viewpoint.",
+      weather: { arrival: "40-70F day / 38-48F night" },
+      notes: [
+        "CRITICAL FUEL STOP",
+        "Fill main tank PLUS spare cans completely - 325 mi gap ahead with only Toad River (~75 mi) as midpoint option",
+        "Stock 2-3 days of food",
+        "Bears active along Alaska Hwy from here north",
+        "Cell service unreliable past Fort Nelson",
+      ],
       waypoints: [
         {
           id: "wp-fort-nelson-fuel",
@@ -806,6 +883,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_ALASKA_HWY,
       heroCaption: "AK HWY · STONE MOUNTAIN PP · DAY 10",
       heroTag: "⚠ FUEL GAP 325 MI",
+      description:
+        "~325 mi / 7h via Alaska Hwy. Stone sheep at Stone Mountain Provincial Park; Muncho Lake (turquoise, often glassy AM); Liard River Hot Springs Provincial Park (worth 1-2h soak); cross into Yukon Territory. Sign Post Forest in Watson Lake.",
+      weather: { arrival: "40-65F day / 35-45F night" },
+      notes: [
+        "FUEL: Fill at Toad River (~75 mi in) if open - confirm hours",
+        "Liard Hot Springs is a must-stop - one of the best on the entire AK Hwy",
+        "Sign Post Forest tradition: bring a small sign with your hometown",
+        "Bison commonly on road - drive cautiously dawn/dusk",
+      ],
       waypoints: [
         {
           id: "wp-toad-river",
@@ -884,6 +970,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_YUKON,
       heroCaption: "AK HWY · YUKON · DAY 11",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~275 mi / 5h via Alaska Hwy. Cross continental divide; Teslin Lake and Teslin River bridge; Jakes Corner. Whitehorse is the largest city on the Alaska Hwy - full services, hospital, dealerships.",
+      weather: { arrival: "45-70F day / 38-50F night" },
+      notes: [
+        "First major resupply since Fort Nelson",
+        "Yukon Visitor Information Centre on 2nd Avenue has road condition reports for everywhere north and west",
+        "Cell service strong in Whitehorse - use it",
+        "Refill propane if needed",
+      ],
       waypoints: [
         {
           id: "wp-sign-post-forest",
@@ -941,6 +1036,17 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_YUKON,
       heroCaption: "WHITEHORSE · LAYOVER · DAY 12",
       heroTag: "◆ REST DAY",
+      description:
+        "Rest day. SS Klondike sternwheeler (national historic site); Yukon Beringia Interpretive Centre; MacBride Museum; walk along Yukon River. Light prep work for Kluane Lake / AK border stretch.",
+      weather: { arrival: "45-70F day / 40-50F night" },
+      notes: [
+        "Breakfast: Burnt Toast Cafe (arrive early)",
+        "Coffee: Baked Cafe",
+        "Dinner: Woodcutters Blanket (Yukon Arctic char - regional must-try)",
+        "Grocery: Independent or Real Canadian Superstore",
+        "Top off fuel and fluids",
+        "Verify Top of the World Highway opening status if planning that return route",
+      ],
       waypoints: [
         {
           id: "wp-burnt-toast",
@@ -1008,6 +1114,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_YUKON,
       heroCaption: "AK HWY · KLUANE NP · DAY 13",
       heroTag: "↑ NORTHBOUND",
+      description:
+        "~100 mi / 2h via Alaska Hwy. Short driving day to position for Kluane Lake. Kluane National Park visitor centre in Haines Junction; St. Elias Mountains views. Bakery stop: Village Bakery (legendary in Haines Junction).",
+      weather: { arrival: "40-65F day / 35-45F night" },
+      notes: [
+        "Easy day by design - rest before remote stretch",
+        "Village Bakery has excellent bread and pies",
+        "Fuel up in Haines Junction - next reliable fuel is Beaver Creek (~180 mi)",
+        "Verify Destruction Bay/Burwash Landing fuel hours at Kluane NP visitor centre",
+      ],
       waypoints: [
         {
           id: "wp-kluane-overlook",
@@ -1056,6 +1171,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_YUKON,
       heroCaption: "AK HWY · KLUANE LAKE · DAY 14",
       heroTag: "⚠ VERIFY FUEL HOURS",
+      description:
+        "~70 mi / 1.5h via Alaska Hwy along Kluane Lake (largest lake in Yukon, stunning turquoise/grey glacial water with St. Elias Mountains backdrop). Short driving day to enjoy the lake.",
+      weather: { arrival: "35-60F day / 30-40F night" },
+      notes: [
+        "Verify fuel hours at Destruction Bay or Burwash Landing - both can be limited/closed",
+        "Carry full cans",
+        "Photo opportunity: Kluane Lake evening light",
+        "Grizzly habitat - strict food storage in vehicle",
+        "Sheep Mountain viewing if alert",
+      ],
       waypoints: [
         {
           id: "wp-destruction-bay",
@@ -1119,6 +1244,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "AK HWY · BEAVER CREEK BORDER · DAY 15",
       heroTag: "← USA RE-ENTRY",
+      description:
+        "~200 mi / 4.5h via Alaska Hwy. Beaver Creek (last YT town) then Canada/US border at Port Alcan (open 24h). Frost heaves and rough pavement common between Beaver Creek and Tok - drive slowly. Tok is the AK Hwy hub.",
+      weather: { arrival: "40-70F day / 35-50F night" },
+      notes: [
+        "BORDER CROSSING USA",
+        "US passport, vehicle reg, declare food/firearms/alcohol/fuel",
+        "Fresh fruit/vegetables restricted - eat or discard before border",
+        "Reset clocks - Alaska time (1h behind Yukon)",
+        "Visit Tok APLIC (Alaska Public Lands Info Center) for road conditions and bear awareness",
+      ],
       waypoints: [
         {
           id: "wp-beaver-creek-border",
@@ -1169,6 +1304,14 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "GLENN HWY · MATANUSKA · DAY 16",
       heroTag: "↓ SOUTHBOUND",
+      description:
+        "~325 mi / 6h via Tok Cutoff to Glenn Hwy. Major scenic stops: Mentasta Pass, Eureka Summit (3322 ft - high point), Matanuska Glacier viewpoints and pullouts (Glacier Park MP 102 paid access if going on ice). Long but spectacular driving day.",
+      weather: { arrival: "45-70F day / 40-50F night" },
+      notes: [
+        "Glenn Hwy is one of the most scenic drives in Alaska - allow stops",
+        "Matanuska Glacier visible from pullouts at MP 101 and 113 (free) or paid access via Glacier Park ($30/person)",
+        "Cell service returns approaching Palmer",
+      ],
       waypoints: [
         {
           id: "wp-matanuska",
@@ -1226,6 +1369,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "ANCHORAGE · LAYOVER · DAY 17",
       heroTag: "◆ REST DAY",
+      description:
+        "Full reset day. Resupply, laundry, vehicle wash and inspection. Optional: Anchorage Museum, Tony Knowles Coastal Trail, Earthquake Park. Major outdoor stores (REI, AMH) for any gear gaps before Kenai/Dalton.",
+      weather: { arrival: "50-70F day / 45-55F night" },
+      notes: [
+        "Dinner: Mooses Tooth Pub and Pizzeria (call ahead or arrive 5pm) OR 49th State Brewing (smoked salmon dip, reindeer sausage pizza)",
+        "Coffee: Kaladi Brothers",
+        "Top off fuel, stock cooler, replace any used supplies",
+        "Confirm Kenai Fjords boat tour for Day 21 (Jun 18)",
+      ],
       waypoints: [
         {
           id: "wp-kaladi",
@@ -1293,6 +1445,15 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "AK-1 · TURNAGAIN ARM · DAY 18",
       heroTag: "↓ SOUTHBOUND",
+      description:
+        "~150 mi / 3.5h via Seward Hwy then Sterling Hwy west. Scenic drive along Turnagain Arm (bore tide if timing aligns; beluga whales possible at Beluga Point); cross Kenai Mountains; descend into Kenai Peninsula river country. Possible Dall sheep on cliffs at Windy Corner.",
+      weather: { arrival: "50-65F day / 42-52F night" },
+      notes: [
+        "Turnagain Arm: check bore tide schedule for best viewing",
+        "Stop at Potter Marsh for waterfowl",
+        "King salmon run on Kenai/Kasilof in June - watch fishermen if interested",
+        "Fuel in Soldotna - largest service town on the peninsula",
+      ],
       waypoints: [
         {
           id: "wp-turnagain-arm",
@@ -1341,6 +1502,14 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "KENAI · EXPLORE · DAY 19",
       heroTag: "◆ EXPLORE",
+      description:
+        "Explore day. Options: Kenai Old Town and Russian Orthodox church; Ninilchik (historic Russian village, Cook Inlet bluffs); Clam Gulch beach; Captain Cook State Park trails. Light driving, recovery focus before Kenai Fjords boat tour.",
+      weather: { arrival: "50-65F day / 42-52F night" },
+      notes: [
+        "Flexible day - adjust based on weather and energy",
+        "Cosmic Kitchen (Homer detour 80 mi south if time allows) for breakfast burritos",
+        "Watch for moose - very common on Kenai Peninsula roads at dawn/dusk",
+      ],
       waypoints: [
         {
           id: "wp-russian-river",
@@ -1381,6 +1550,16 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       heroGradient: HERO_KENAI,
       heroCaption: "AK-9 · RESURRECTION BAY · DAY 20",
       heroTag: "↓ PRE-POSITION",
+      description:
+        "~127 mi / 2.5h via Sterling Hwy back east to Seward Hwy south. Pre-position for Jun 18 Kenai Fjords Northwestern Fjords boat tour. Arrive Seward afternoon to settle, prep camera/cold gear, check in with tour operator.",
+      weather: { arrival: "45-60F day / 40-50F night" },
+      notes: [
+        "CRITICAL: Confirm boat tour booking (Kenai Fjords Tours or Major Marine Tours) - 8-9h Northwestern Fjords departure typically 11:30 AM Jun 18",
+        "Dress in layers: 40s on glacier, wind, spray",
+        "Charge cameras tonight",
+        "Dinner: Rays Waterfront (halibut fish and chips) on the harbor",
+        "Early bed - long day tomorrow",
+      ],
       waypoints: [
         {
           id: "wp-exit-glacier",
