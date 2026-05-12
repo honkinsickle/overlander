@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { SuggestionCard, type SuggestionCardProps } from "./suggestion-card";
 import type { Category } from "@/components/primitives/detail-card";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
@@ -71,11 +72,49 @@ export function SuggestedSection({
   day: Day;
   onBrowse?: (category: Category) => void;
 }) {
+  // Server-side `resolveSuggestions` runs at trip-load and attaches the
+  // top photo-bearing place per slide category to `day.suggestions`. When
+  // at least one category resolved, render synchronously and skip the
+  // client-side fetch. When the server returned nothing (empty object or
+  // missing), fall through to the lazy fetch so the gap can be filled.
+  const hasPreResolved =
+    day.suggestions && Object.keys(day.suggestions).length > 0;
+  const preResolved = hasPreResolved
+    ? FETCH_CATEGORIES.map((c) => {
+        const place = day.suggestions?.[c];
+        return place ? { props: placeToSuggestion(place, c), place } : null;
+      }).filter((e): e is SuggestionEntry => e !== null)
+    : null;
+
   const [suggestions, setSuggestions] = useState<SuggestionEntry[] | null>(
-    null,
+    preResolved,
   );
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [inView, setInView] = useState(hasPreResolved);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    // Once observed in view, keep mounted — no need to re-watch.
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    // Skip client-side fetch when the server pre-resolved at least one
+    // category for this day. Empty `suggestions: {}` falls through to a
+    // lazy fetch on scroll.
+    if (!inView || hasPreResolved) return;
     const ctrl = new AbortController();
     let cancelled = false;
     setSuggestions(null);
@@ -96,7 +135,7 @@ export function SuggestedSection({
       cancelled = true;
       ctrl.abort();
     };
-  }, [tripId, day.id]);
+  }, [inView, tripId, day.id, hasPreResolved]);
 
   const openDetailFor = (place: BrowsePlace) => () => {
     const hoursStat = place.stats.find(
@@ -130,11 +169,12 @@ export function SuggestedSection({
     );
   };
 
-  const loading = suggestions === null;
-  const empty = !loading && suggestions.length === 0;
+  const loading = inView && suggestions === null;
+  const empty = inView && suggestions !== null && suggestions.length === 0;
 
   return (
     <section
+      ref={sectionRef}
       className="flex flex-col"
       style={{
         width: 420,
@@ -147,14 +187,21 @@ export function SuggestedSection({
         borderRadius: 15,
       }}
     >
-      <div
-        className="sticky z-[5] flex items-center justify-center"
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        aria-expanded={!collapsed}
+        aria-controls={`suggested-body-${day.id}`}
+        className="sticky z-[5] flex items-center justify-center w-full border-0 cursor-pointer"
         style={{
           top: 130,
           height: 70,
           paddingInline: 13,
           paddingTop: 8,
           paddingBottom: 0,
+          backgroundColor: "#1B2230",
+          borderTopLeftRadius: 15,
+          borderTopRightRadius: 15,
         }}
       >
         <span
@@ -169,22 +216,40 @@ export function SuggestedSection({
         >
           Suggested Stops Day {day.dayNumber}
         </span>
-      </div>
+        <ChevronDown
+          aria-hidden
+          className="ml-2"
+          style={{
+            width: 20,
+            height: 20,
+            color: "#FFFFFF",
+            transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+            transition: "transform 150ms ease",
+          }}
+          strokeWidth={2}
+        />
+      </button>
 
-      <div className="flex flex-col items-center" style={{ gap: 12 }}>
-        <DayBriefingCard day={day} />
-        {loading && <SuggestionSkeletons />}
-        {!loading &&
-          suggestions.map((s, i) => (
-            <SuggestionCard
-              key={`${s.props.category}-${i}`}
-              {...s.props}
-              onBrowse={onBrowse}
-              onOpenDetail={openDetailFor(s.place)}
-            />
-          ))}
-        {empty && <EmptyState />}
-      </div>
+      {!collapsed && (
+        <div
+          id={`suggested-body-${day.id}`}
+          className="flex flex-col items-center"
+          style={{ gap: 12 }}
+        >
+          <DayBriefingCard day={day} />
+          {loading && <SuggestionSkeletons />}
+          {suggestions &&
+            suggestions.map((s, i) => (
+              <SuggestionCard
+                key={`${s.props.category}-${i}`}
+                {...s.props}
+                onBrowse={onBrowse}
+                onOpenDetail={openDetailFor(s.place)}
+              />
+            ))}
+          {empty && <EmptyState />}
+        </div>
+      )}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
 import { SuggestedSection } from "@/components/trip/suggested-section";
+import { FuelStopCard } from "@/components/trip/fuel-stop-card";
 import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import { WaypointCard } from "@/components/trip/waypoint-card";
 import {
@@ -16,6 +17,29 @@ import type { Trip, Day } from "@/lib/trips/types";
 import type { Category } from "@/components/primitives/detail-card";
 
 const SCROLL_TRIGGER = 100;
+
+const FUEL_THRESHOLD_MI = 300;
+
+/** Returns the set of day IDs that should display a synthesized fuel
+ *  waypoint. Walks the trip cumulatively: each day's miles add to the
+ *  running counter; the counter resets to 0 whenever the day already
+ *  has a fuel-category waypoint OR when this function tags the day as
+ *  needing one. */
+function computeFuelDays(days: Day[]): Set<string> {
+  const out = new Set<string>();
+  let milesSinceFuel = 0;
+  for (const day of days) {
+    const hasFuel = day.waypoints.some((wp) => wp.category === "fuel");
+    milesSinceFuel += day.miles || 0;
+    if (hasFuel) {
+      milesSinceFuel = 0;
+    } else if (milesSinceFuel >= FUEL_THRESHOLD_MI) {
+      out.add(day.id);
+      milesSinceFuel = 0;
+    }
+  }
+  return out;
+}
 
 /**
  * Centre-column Day Detail — stacks all days into one long scroll.
@@ -215,6 +239,8 @@ export function DayDetail({ trip }: { trip: Trip }) {
     );
   }, [addedByDay]);
 
+  const fuelDayIds = computeFuelDays(trip.days);
+
   return (
     <div className="flex flex-col h-full">
       <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar">
@@ -239,6 +265,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
             key={day.id}
             trip={trip}
             day={day}
+            needsFuel={fuelDayIds.has(day.id)}
             addedPlaces={addedByDay[day.id] ?? []}
             removedFixedIds={removedFixedByDay[day.id] ?? EMPTY_SET}
             onDeleteFixed={(waypointId) =>
@@ -265,13 +292,11 @@ export function DayDetail({ trip }: { trip: Trip }) {
             // category, so the generic "Add Waypoints" CTA defaults to it.
             onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
             extra={
-              i < 2 ? (
-                <SuggestedSection
-                  tripId={trip.id}
-                  day={day}
-                  onBrowse={openBrowse(i + 1, day)}
-                />
-              ) : null
+              <SuggestedSection
+                tripId={trip.id}
+                day={day}
+                onBrowse={openBrowse(i + 1, day)}
+              />
             }
           />
         ))}
@@ -320,6 +345,39 @@ function addedPlaceToWaypoint(p: AddedPlace) {
   };
 }
 
+function overnightToWaypoint(day: Day) {
+  const sel = day.overnight?.selected;
+  if (!sel) return null;
+  const e = sel.enriched;
+  const costSuffix = sel.cost ? ` · ${sel.cost}` : "";
+  // Prefer trip-plan notes for description (curated copy beats raw OSM/USFS
+  // boilerplate); fall back to enriched description when no plan notes.
+  const description = sel.notes || e?.description || "";
+  return {
+    id: `overnight-${day.id}-${sel.id}`,
+    slug: sel.id,
+    category: "camping" as const,
+    title: sel.name,
+    subtitle: `Day ${day.dayNumber} · ${sel.type}${costSuffix}`,
+    description,
+    stats: [
+      { label: "TYPE", value: sel.type },
+      { label: "COST", value: sel.cost },
+      { label: "DETOUR", value: `+${sel.detourMiles} mi` },
+    ],
+    tags: [sel.type],
+    coords: e?.coords,
+    photoUrl: e?.photoUrl,
+    logistics: {
+      entry: sel.cost,
+      phone: e?.phone,
+      website: e?.website,
+    },
+    routeOffsetMi: sel.detourMiles,
+    dataSources: e?.sources?.length ? ["Trip plan", ...e.sources] : ["Trip plan"],
+  };
+}
+
 const EMPTY_SET = new Set<string>();
 
 function DaySection({
@@ -329,6 +387,7 @@ function DaySection({
   extra,
   addedPlaces = [],
   removedFixedIds = EMPTY_SET,
+  needsFuel = false,
   onDeleteFixed,
   onDeleteAdded,
   onAddWaypoints,
@@ -339,6 +398,7 @@ function DaySection({
   extra?: React.ReactNode;
   addedPlaces?: AddedPlace[];
   removedFixedIds?: Set<string>;
+  needsFuel?: boolean;
   onDeleteFixed?: (waypointId: string) => void;
   onDeleteAdded?: (placeId: string) => void;
   onAddWaypoints?: () => void;
@@ -346,6 +406,9 @@ function DaySection({
   const visibleFixed = day.waypoints.filter(
     (wp) => !removedFixedIds.has(wp.id),
   );
+  const overnightWp = visibleFixed.some((wp) => wp.category === "camping")
+    ? null
+    : overnightToWaypoint(day);
   // `last:min-h-full` guarantees the final day can scroll to the top of
   // the viewport even if its content is shorter than the scroll container.
   return (
@@ -404,6 +467,14 @@ function DaySection({
               }
             />
           ))}
+          {needsFuel && <FuelStopCard tripId={trip.id} day={day} />}
+          {overnightWp && (
+            <WaypointCard
+              key={overnightWp.id}
+              tripId={trip.id}
+              waypoint={overnightWp}
+            />
+          )}
         </div>
 
         {/* Add Waypoints button (N8F-0) — full-width muted button,

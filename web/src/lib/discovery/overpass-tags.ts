@@ -45,6 +45,7 @@ export const OSM_TAG_QUERIES: Record<SlideCategoryKey, string[]> = {
     'node["tourism"="guest_house"]',
     'node["tourism"="hostel"]',
   ],
+  fuel: ['node["amenity"="fuel"]'],
 };
 
 /** Reverse-derive the slide category for an OSM element from its tags.
@@ -56,6 +57,9 @@ export function categoryFromTags(
 ): SlideCategoryKey | null {
   if (!tags) return null;
 
+  if (tags.amenity === "fuel") {
+    return "fuel";
+  }
   if (tags.tourism === "camp_site" || tags.tourism === "caravan_site") {
     return "camping";
   }

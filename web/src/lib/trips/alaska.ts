@@ -1,6 +1,8 @@
 import type { Day, Trip, Waypoint } from "./types";
 import { LA_TO_DEADHORSE_POLYLINE } from "./alaska-route";
 import { enrichTrip } from "./enrich";
+import { resolveOvernights } from "./resolve-overnights";
+import { resolveSuggestions } from "./resolve-suggestions";
 import {
   loadAlaskaDoc,
   findFixedEventByDate,
@@ -4087,7 +4089,16 @@ export async function getAlaskaTrip(): Promise<Trip> {
   // side-trip). Pull endDate from the last merged day so trip-level metadata
   // stays consistent with days.length.
   const endDate = days[days.length - 1]?.date ?? LA_TO_DEADHORSE_RAW.endDate;
-  const trip = enrichTrip({ ...LA_TO_DEADHORSE_RAW, days, endDate });
+  const enriched = enrichTrip({ ...LA_TO_DEADHORSE_RAW, days, endDate });
+  // Eager-resolve each day's overnight against USFS/RIDB/Foursquare/OSM so
+  // the synthesized camping slide-up shows real description/photo/contact
+  // info instead of trip-plan-only metadata. Cached with the trip; cost
+  // is paid once per server start.
+  const withOvernights = await resolveOvernights(enriched);
+  // Same pattern for the SuggestedSection: pre-fetch the top photo-bearing
+  // place per slide category per day. Pushes ~264 discovery calls to first
+  // trip-load (cached after).
+  const trip = await resolveSuggestions(withOvernights);
   cachedTrip = { version: parsed.version, trip };
   return trip;
 }

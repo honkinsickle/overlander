@@ -8,6 +8,8 @@ const SOURCE_LABEL: Record<SourceId, string> = {
   ioverlander: "iOverlander",
   wikipedia: "Wikipedia",
   foursquare: "Foursquare",
+  usfs: "USFS",
+  blm: "BLM",
   fixture: "Editorial",
 };
 
@@ -17,6 +19,7 @@ const PILLS_BY_CATEGORY: Record<SlideCategoryKey, BrowsePlace["pills"]> = {
   oddity: [{ label: "Roadside" }, { label: "Quirky" }],
   camping: [{ label: "Tent sites" }],
   overnight: [{ label: "Hotel" }],
+  fuel: [{ label: "Fuel" }],
 };
 
 /** Build a `BrowsePlace` from one or more source results that have

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Health-check the app's data sources + env. Prints one line per source,
+# ✓ green or ✗ with HTTP code. Exits 0 even when some sources are red,
+# so SessionStart / hook runs don't block the session — eyeball the
+# output instead.
+#
+# Run any time: ./bin/preflight
+# Re-run after rotating a key in web/.env.local.
+
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if [[ ! -f web/.env.local ]]; then
+  echo "✗ web/.env.local missing — copy from a sibling worktree, then re-run."
+  echo "  Hint: bin/setup-worktree"
+  exit 0
+fi
+
+# Source so ${RIDB_API_KEY} et al. resolve below. Values in .env.local
+# must be quoted ("…") — MAPILLARY_TOKEN's pipes (MLY|x|y) otherwise
+# trigger zsh's pipeline parser when sourced.
+set -a; source web/.env.local; set +a
+
+check() {
+  local name="$1" code="$2"
+  if [[ "$code" == "200" ]]; then
+    printf "  ✓ %s\n" "$name"
+  else
+    printf "  ✗ %s (%s)\n" "$name" "$code"
+  fi
+}
+
+echo "preflight: $(date '+%Y-%m-%d %H:%M:%S')"
+
+check OVERPASS  "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+  "${OVERPASS_URL:-https://overpass.kumi.systems/api/interpreter}" \
+  --data-urlencode 'data=[out:json];out 0;')"
+
+check WIKIPEDIA "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  https://en.wikipedia.org/api/rest_v1/page/summary/Tesla)"
+
+check MAPILLARY "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  "https://graph.mapillary.com/images?limit=1&access_token=${MAPILLARY_TOKEN-}")"
+
+check RIDB      "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  -H "apikey: ${RIDB_API_KEY-}" \
+  'https://ridb.recreation.gov/api/v1/facilities?limit=1')"
+
+check FOURSQUARE "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  -H "Authorization: Bearer ${FSQ_API_KEY-}" \
+  -H 'X-Places-Api-Version: 2025-06-17' \
+  'https://places-api.foursquare.com/places/search?ll=37.1,-113.58&radius=1000&limit=1')"
+
+check USFS      "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RecreationOpportunities_01/MapServer/0?f=json')"
+
+check BLM       "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  'https://gis.blm.gov/arcgis/rest/services/recreation/BLM_Natl_Recs_pts/MapServer/23?f=json')"
+
+check MAPBOX    "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+  "https://api.mapbox.com/styles/v1/honkingsickle/cmolte3b7003e01so7msf20d3?access_token=${NEXT_PUBLIC_MAPBOX_TOKEN-}")"
+
+exit 0

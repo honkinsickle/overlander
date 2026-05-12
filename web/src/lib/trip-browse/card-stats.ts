@@ -47,6 +47,7 @@ const STOP_MINUTES_BY_CATEGORY: Record<SlideCategoryKey, number> = {
   oddity: 30,
   camping: 30,
   overnight: 30,
+  fuel: 10,
 };
 
 const ENTRY_BY_CATEGORY: Record<SlideCategoryKey, string> = {
@@ -55,6 +56,7 @@ const ENTRY_BY_CATEGORY: Record<SlideCategoryKey, string> = {
   oddity: "Free · donation",
   camping: "$15–25 / night",
   overnight: "$25 / night",
+  fuel: "Pump price",
 };
 
 /** Drive speed assumption for converting detour miles → minutes. Real
@@ -192,6 +194,7 @@ const SLIDE_TO_TRIP_CATEGORY: Record<SlideCategoryKey, Category> = {
   oddity: "oddity",
   camping: "camping",
   overnight: "neutral",
+  fuel: "fuel",
 };
 
 const TAGS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
@@ -200,6 +203,7 @@ const TAGS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
   oddity: ["Roadside", "Quirky", "Quick Stop"],
   camping: ["Tent + RV", "Reservable", "Pit toilets"],
   overnight: ["Lodging", "Reservable", "Quick Reset"],
+  fuel: ["Gas", "Diesel"],
 };
 
 const FACTUAL_BY_SLIDE: Record<SlideCategoryKey, { label: string; text: string }> = {
@@ -223,6 +227,10 @@ const FACTUAL_BY_SLIDE: Record<SlideCategoryKey, { label: string; text: string }
     label: "Stay Notes",
     text: "Lodging option from public listings. Rates and availability vary by season — verify directly before relying on the stop.",
   },
+  fuel: {
+    label: "Fuel Notes",
+    text: "Gas station pulled from public data sources. Rural pumps can be card-only or seasonal — check posted hours and brand reviews before relying on a single stop in a long stretch.",
+  },
 };
 
 const AMENITIES_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
@@ -231,6 +239,7 @@ const AMENITIES_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
   oddity: ["Free entry", "Photo op", "Restrooms"],
   camping: ["Pit toilets", "Picnic tables", "Fire rings"],
   overnight: ["Wifi", "Parking", "Pet-friendly"],
+  fuel: ["Restrooms", "Snacks", "ATM"],
 };
 
 const TIPS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
@@ -252,6 +261,9 @@ const TIPS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
   ],
   overnight: [
     "Confirm the latest cancellation window before booking peak nights.",
+  ],
+  fuel: [
+    "Top off here if the next stretch is long — rural pumps can be unreliable or seasonal.",
   ],
 };
 

@@ -21,6 +21,13 @@
       "autoPort": true
     },
     {
+      "name": "web-ecstatic",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web", "run", "dev", "--", "-H", "0.0.0.0"],
+      "port": 3212,
+      "autoPort": true
+    },
+    {
       "name": "dashboard-zoverlanding",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
