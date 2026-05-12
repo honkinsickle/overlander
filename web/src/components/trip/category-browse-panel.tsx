@@ -12,6 +12,11 @@ import {
   type BrowsePlace,
   TRIP_CATEGORY_TO_SLIDE,
 } from "@/lib/trip-browse/places";
+import {
+  browsePlaceToWaypoint,
+  computeCardStats,
+  type CardCtx,
+} from "@/lib/trip-browse/card-stats";
 
 export type BrowseTarget = {
   category: Category;
@@ -20,6 +25,12 @@ export type BrowseTarget = {
    *  day's coords from these to compute its bbox. */
   tripId: string;
   dayId: string;
+  /** End-of-day coords passed through from DayDetail so each card can
+   *  show a real detour distance and ETA delta. */
+  dayCoords?: [number, number];
+  /** Day label like "Whitefish, MT — Banff, AB" — used to derive the
+   *  next-anchor name for the "new ETA at X" line. */
+  dayLabel?: string;
 };
 
 const PANEL_WIDTH = 655;
@@ -352,11 +363,26 @@ function PanelBody({ target }: { target: BrowseTarget }) {
         padding: 16,
       }}
     >
-      {placesWithExtras.map((p) => (
+      {placesWithExtras.map((p) => {
+        const ctx: CardCtx = {
+          category: slideKey ?? "scenic",
+          dayCoords: target.dayCoords,
+          dayLabel: target.dayLabel,
+          dayNumber: target.dayNumber,
+        };
+        const synthWaypoint = browsePlaceToWaypoint(
+          p,
+          ctx,
+          computeCardStats(p, ctx),
+        );
+        return (
         <SceneryCard
           key={p.id}
           place={p}
           dayNumber={target.dayNumber}
+          dayCoords={target.dayCoords}
+          dayLabel={target.dayLabel}
+          slideKey={slideKey ?? "scenic"}
           isAdded={addedIds.has(p.id)}
           onToggleAdded={() =>
             window.dispatchEvent(
@@ -390,6 +416,7 @@ function PanelBody({ target }: { target: BrowseTarget }) {
                     dayId: target.dayId,
                     coords: p.coords,
                     description: p.description,
+                    waypoint: synthWaypoint,
                   },
                   },
                 }),
@@ -414,23 +441,30 @@ function PanelBody({ target }: { target: BrowseTarget }) {
                     dayId: target.dayId,
                     coords: p.coords,
                     description: p.description,
+                    waypoint: synthWaypoint,
                   },
                 },
               }),
             );
           }}
         />
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 /** Code-aligned to Paper 1E2E-0 — Mountain/Scenery compact card.
  *  Maps `BrowsePlace.title` and `photoUrl` into the canonical Scenery
- *  palette + copy from the demo page. */
+ *  palette + copy from the demo page. Stats (detour / adds / new ETA /
+ *  reliability / rating) are computed from real day-context via
+ *  `computeCardStats`. */
 function SceneryCard({
   place,
   dayNumber,
+  dayCoords,
+  dayLabel,
+  slideKey,
   isAdded,
   onToggleAdded,
   onCardClick,
@@ -438,11 +472,20 @@ function SceneryCard({
 }: {
   place: BrowsePlace;
   dayNumber: number;
+  dayCoords?: [number, number];
+  dayLabel?: string;
+  slideKey: import("@/lib/trip-browse/places").SlideCategoryKey;
   isAdded: boolean;
   onToggleAdded: () => void;
   onCardClick: () => void;
   onDetailsClick: () => void;
 }) {
+  const stats = computeCardStats(place, {
+    category: slideKey,
+    dayCoords,
+    dayLabel,
+    dayNumber,
+  });
   return (
     <div
       onClick={onCardClick}
@@ -462,19 +505,10 @@ function SceneryCard({
         ctaBg="#24354F"
         ctaBorder="#A6C9F9"
         photoUrl={place.photoUrl}
-        dayTag={`Day ${dayNumber} / 12.4 mi off`}
-        reliability={{ score: 94, label: "High reliability" }}
-        cost={{
-          primary: "Detour: 1h28m",
-          secondary: "$30 entry · Daily",
-          hero: "Adds 1h28m",
-          eta: (
-            <>
-              New ETA at Klamath <br />Falls: 8:46pm
-            </>
-          ),
-        }}
-        rating={{ value: "4.8", count: "(12.4k)" }}
+        dayTag={stats.dayTag}
+        reliability={stats.reliability}
+        cost={stats.cost}
+        rating={stats.rating}
         ctaLabel={isAdded ? "Added" : `Add to Day ${dayNumber}`}
         onCtaClick={(e) => {
           // Don't bubble to the card body click (which would re-fly the

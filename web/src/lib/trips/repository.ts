@@ -1,4 +1,4 @@
-import { TRIPS } from "./fixtures";
+import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
 import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
 
 /**
@@ -7,6 +7,7 @@ import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
  */
 
 export async function getTrip(id: string): Promise<Trip | null> {
+  if (id === "la-to-deadhorse") await ensureAlaskaUpgraded();
   return TRIPS[id] ?? null;
 }
 
@@ -15,6 +16,7 @@ export async function getWaypoint(
   tripId: string,
   slug: string,
 ): Promise<Waypoint | null> {
+  if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return null;
   for (const day of trip.days) {
@@ -28,6 +30,7 @@ export async function listOvernightAlternatives(
   tripId: string,
   dayId: string,
 ): Promise<OvernightSelection | null> {
+  if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return null;
   const day = trip.days.find((d) => d.id === dayId);
@@ -39,6 +42,7 @@ export async function listOvernightAlternatives(
 export async function getWaypointsBySlug(
   tripId: string,
 ): Promise<Record<string, Waypoint>> {
+  if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return {};
   const out: Record<string, Waypoint> = {};
@@ -70,6 +74,7 @@ export async function removeDay(
   tripId: string,
   dayId: string,
 ): Promise<boolean> {
+  if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return false;
   const idx = trip.days.findIndex((d) => d.id === dayId);

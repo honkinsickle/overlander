@@ -1,25 +1,35 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
+import type { ReactNode } from "react";
 
 /**
  * Planning Entry Scene — Paper `CR4-0` (from v3-1 / v3-2 / v3-3).
  *
  * Left panel (`CR5-0`, 537×684): Logo + eyebrow + heading + description
  * + "Create a Trip" CTA + browse-expeditions link.
- * Right panel: Map-style stub with recent-trip markers.
+ * Right panel: Map-style stub with recent-trip markers. `mapSlot` lets
+ * the caller mount a server-only widget (like UpcomingEventsCard) into
+ * the map panel without forcing that import path through `wizard-backdrop`
+ * (which is a client component and can't transitively pull node:fs).
  *
  * Rendered full-opacity as the home `/` landing; the `WizardBackdrop`
  * renders the same component with `muted` so the Going / Vehicle / etc.
  * modals sit on top of the scene the user came from.
  */
-export function EntryScene({ muted = false }: { muted?: boolean }) {
+export function EntryScene({
+  muted = false,
+  mapSlot,
+}: {
+  muted?: boolean;
+  mapSlot?: ReactNode;
+}) {
   return (
     <div
       aria-hidden={muted}
       className={`absolute inset-0 flex ${muted ? "opacity-60 pointer-events-none select-none" : ""}`}
     >
       <EntryLeft muted={muted} />
-      <EntryMap />
+      <EntryMap>{mapSlot}</EntryMap>
     </div>
   );
 }
@@ -117,12 +127,12 @@ function EntryLeft({ muted }: { muted: boolean }) {
 
       {/* Browse link — Paper CRL-0 · Barlow 400 · 13/16 · text-muted */}
       <Link
-        href="/trip/la-to-portland"
+        href="/trip/la-to-deadhorse"
         tabIndex={muted ? -1 : 0}
         className="font-sans text-text-muted hover:text-text-primary"
         style={{ fontSize: "13px", lineHeight: "16px" }}
       >
-        or browse past expeditions
+        Los Angeles to Deadhorse →
       </Link>
     </div>
   );
@@ -131,7 +141,7 @@ function EntryLeft({ muted }: { muted: boolean }) {
 /** Placeholder world-map panel (Paper CRM-0). Real Mapbox can slot in
  *  later; for now a radial-gradient ground + muted grid + "Your World"
  *  tag keeps the scene readable. */
-function EntryMap() {
+function EntryMap({ children }: { children?: React.ReactNode }) {
   return (
     <div className="relative flex-1 h-full overflow-hidden bg-bg-map">
       <div
@@ -167,6 +177,7 @@ function EntryMap() {
           Your World
         </span>
       </div>
+      {children}
     </div>
   );
 }

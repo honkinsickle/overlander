@@ -1,5 +1,12 @@
-import type { Trip } from "./types";
+import type { Day, Trip, Waypoint } from "./types";
 import { LA_TO_DEADHORSE_POLYLINE } from "./alaska-route";
+import { enrichTrip } from "./enrich";
+import {
+  loadAlaskaDoc,
+  findFixedEventByDate,
+  resolvePermitStatuses,
+  type ParsedAlaskaDoc,
+} from "./alaska-md";
 
 /**
  * 82-day overland trip from Los Angeles to Deadhorse (Prudhoe Bay), AK.
@@ -38,7 +45,18 @@ const HERO_PNW =
 const HERO_CASCADES =
   "linear-gradient(135deg, #1a2a1d 0%, #2d4530 50%, #8aa66a 100%)";
 
-export const LA_TO_DEADHORSE: Trip = {
+/**
+ * Sidecar overrides for the Alaska trip. The reference doc (parsed via
+ * `alaska-md.ts`) is the source of truth for dates / labels / fixed
+ * events / permit status. This object holds everything markdown can't
+ * carry: per-day coords, hero images, waypoint prose, overnight picks.
+ *
+ * Days 1-66 align by date with §04 of the reference doc. Days 67-82 in
+ * the original draft were a Seattle → Enchantments side-trip not in
+ * v3.4 — content-bearing days have been moved to `RETURN_LEG_DAYS`
+ * below; empty stub days were dropped.
+ */
+const LA_TO_DEADHORSE_RAW: Trip = {
   id: "la-to-deadhorse",
   title: "Los Angeles to Deadhorse",
   startDate: "2026-05-29",
@@ -3308,6 +3326,19 @@ export const LA_TO_DEADHORSE: Trip = {
         alternatives: [],
       },
     },
+  ],
+};
+
+/**
+ * Orphan day overrides for the Seattle → Enchantments side-trip that
+ * lived in early drafts (days 67-82) but isn't in the v3.4 reference
+ * doc. Preserved here so the content can be revived if §03/§04 ever
+ * extend past Aug 2. Not currently merged into LA_TO_DEADHORSE.
+ *
+ * Empty stub days (68 / 71-73 / 77-78 / 80-81) were dropped entirely.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const RETURN_LEG_DAYS: Day[] = [
     {
       id: "day-67",
       dayNumber: 67,
@@ -3353,30 +3384,6 @@ export const LA_TO_DEADHORSE: Trip = {
             cost: "$80/night",
           },
         ],
-      },
-    },
-    {
-      id: "day-68",
-      dayNumber: 68,
-      date: "2026-08-04",
-      label: "Seattle, WA · Explore",
-      coords: [-122.3321, 47.6062],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/seattle-explore/800/500",
-      heroGradient: HERO_PNW,
-      heroCaption: "SEATTLE · LAYOVER · DAY 68",
-      heroTag: "◆ EXPLORE",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-seattle-hotel-2",
-          name: "Seattle hotel (night 2)",
-          type: "Hotel",
-          detourMiles: 1,
-          cost: "$210/night",
-        },
-        alternatives: [],
       },
     },
     {
@@ -3460,78 +3467,6 @@ export const LA_TO_DEADHORSE: Trip = {
         selected: {
           id: "on-leavenworth-rv-2",
           name: "Icicle River RV (night 2)",
-          type: "RV park",
-          detourMiles: 2,
-          cost: "$65/night",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-71",
-      dayNumber: 71,
-      date: "2026-08-07",
-      label: "Leavenworth, WA · Gear prep",
-      coords: [-120.6615, 47.5965],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/gear-prep/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "LEAVENWORTH · GEAR PREP · DAY 71",
-      heroTag: "◆ STAGING",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-leavenworth-rv-3",
-          name: "Icicle River RV (night 3)",
-          type: "RV park",
-          detourMiles: 2,
-          cost: "$65/night",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-72",
-      dayNumber: 72,
-      date: "2026-08-08",
-      label: "Leavenworth, WA · Staging",
-      coords: [-120.6615, 47.5965],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/leavenworth-staging/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "LEAVENWORTH · REST · DAY 72",
-      heroTag: "◆ STAGING",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-leavenworth-rv-4",
-          name: "Icicle River RV (night 4)",
-          type: "RV park",
-          detourMiles: 2,
-          cost: "$65/night",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-73",
-      dayNumber: 73,
-      date: "2026-08-09",
-      label: "Leavenworth, WA · Final staging",
-      coords: [-120.6615, 47.5965],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/leavenworth-final/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "LEAVENWORTH · FINAL STAGING · DAY 73",
-      heroTag: "◆ STAGING",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-leavenworth-rv-5",
-          name: "Icicle River RV (night 5)",
           type: "RV park",
           detourMiles: 2,
           cost: "$65/night",
@@ -3660,54 +3595,6 @@ export const LA_TO_DEADHORSE: Trip = {
       },
     },
     {
-      id: "day-77",
-      dayNumber: 77,
-      date: "2026-08-13",
-      label: "Enchantments Wilderness · Explore",
-      coords: [-120.7833, 47.5167],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/enchantments-explore/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "CORE ENCHANTMENTS · EXPLORE · DAY 77",
-      heroTag: "⚓ FIXED EVENT",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-enchantments-camp-3",
-          name: "Core Enchantments (night 3)",
-          type: "Backcountry",
-          detourMiles: 0,
-          cost: "Permit fee",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-78",
-      dayNumber: 78,
-      date: "2026-08-14",
-      label: "Enchantments Wilderness · Buffer",
-      coords: [-120.7833, 47.5167],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/enchantments-buffer/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "CORE ENCHANTMENTS · BUFFER · DAY 78",
-      heroTag: "◆ BUFFER",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-enchantments-camp-4",
-          name: "Core Enchantments (night 4)",
-          type: "Backcountry",
-          detourMiles: 0,
-          cost: "Permit fee",
-        },
-        alternatives: [],
-      },
-    },
-    {
       id: "day-79",
       dayNumber: 79,
       date: "2026-08-15",
@@ -3743,54 +3630,6 @@ export const LA_TO_DEADHORSE: Trip = {
           detourMiles: 2,
           cost: "$65/night",
           notes: "Real shower, real bed-substitute; truck reset",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-80",
-      dayNumber: 80,
-      date: "2026-08-16",
-      label: "Leavenworth, WA · Rest",
-      coords: [-120.6615, 47.5965],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/leavenworth-recovery/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "LEAVENWORTH · RECOVERY · DAY 80",
-      heroTag: "◆ REST",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-leavenworth-rv-7",
-          name: "Icicle River RV (night 7)",
-          type: "RV park",
-          detourMiles: 2,
-          cost: "$65/night",
-        },
-        alternatives: [],
-      },
-    },
-    {
-      id: "day-81",
-      dayNumber: 81,
-      date: "2026-08-17",
-      label: "Leavenworth, WA · Final staging",
-      coords: [-120.6615, 47.5965],
-      miles: 0,
-      driveHours: 0,
-      heroImage: "https://picsum.photos/seed/leavenworth-final-stage/800/500",
-      heroGradient: HERO_CASCADES,
-      heroCaption: "LEAVENWORTH · FINAL · DAY 81",
-      heroTag: "◆ REST",
-      waypoints: [],
-      overnight: {
-        selected: {
-          id: "on-leavenworth-rv-8",
-          name: "Icicle River RV (night 8)",
-          type: "RV park",
-          detourMiles: 2,
-          cost: "$65/night",
         },
         alternatives: [],
       },
@@ -3835,6 +3674,88 @@ export const LA_TO_DEADHORSE: Trip = {
         },
         alternatives: [],
       },
-    },
-  ],
-};
+    }
+];
+
+/** Resolve drift between markdown days and override days. Markdown is
+ *  authoritative for which days exist; overrides keyed by dayNumber
+ *  contribute coords / hero / waypoints / overnight. */
+function mergeDays(parsed: ParsedAlaskaDoc, overrides: Day[]): Day[] {
+  const overridesByNumber = new Map(overrides.map((d) => [d.dayNumber, d]));
+  const merged: Day[] = [];
+  for (const md of parsed.days) {
+    const ov = overridesByNumber.get(md.day);
+    const baseDay: Day = ov ?? {
+      id: `day-${md.day}`,
+      dayNumber: md.day,
+      date: md.date,
+      label: md.segment,
+      waypoints: [],
+    };
+
+    // Start from the override's waypoints (or empty), then attach booking
+    // status to the day's anchor waypoint when this is a fixed-event day.
+    const waypoints: Waypoint[] = baseDay.waypoints.map((w) => ({ ...w }));
+    const fixedEvent = findFixedEventByDate(parsed, md.date);
+    if (fixedEvent && waypoints.length > 0) {
+      const statuses = resolvePermitStatuses(parsed, fixedEvent);
+      if (statuses.length > 0) {
+        // Convention: first waypoint of a fixed-event day = the anchor.
+        // Documented in master-prompt-v1.1.md §G.
+        waypoints[0] = {
+          ...waypoints[0],
+          bookingStatus: statuses.map((s) => ({
+            permitName: s.name,
+            status: s.status,
+          })),
+        };
+      }
+    }
+
+    merged.push({
+      ...baseDay,
+      // Markdown is canonical for date + label; override props win for
+      // everything visual (coords, hero, etc.) but if md and override
+      // disagree on date/label, md wins per Option A's rule.
+      date: md.date,
+      label: ov?.label ?? md.segment,
+      waypoints,
+    });
+  }
+  // Log any override day numbers the markdown didn't claim (drift signal).
+  for (const ov of overrides) {
+    if (!parsed.days.find((d) => d.day === ov.dayNumber)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[alaska] override for day ${ov.dayNumber} has no matching §04 row`,
+      );
+    }
+  }
+  return merged;
+}
+
+let cachedTrip: { version: string; trip: Trip } | null = null;
+
+/** Build the LA→Deadhorse trip by merging §04 (canonical days) with
+ *  the per-day overrides above, attaching §08 booking status via §03's
+ *  permit_ref linkage, and running enrichment. Cached against the
+ *  parsed doc's version string. */
+export async function getAlaskaTrip(): Promise<Trip> {
+  const parsed = await loadAlaskaDoc();
+  if (cachedTrip && cachedTrip.version === parsed.version) {
+    return cachedTrip.trip;
+  }
+  const days = mergeDays(parsed, LA_TO_DEADHORSE_RAW.days);
+  // The merge can drop days (e.g. 82 → 66 when v3.4 trimmed the Enchantments
+  // side-trip). Pull endDate from the last merged day so trip-level metadata
+  // stays consistent with days.length.
+  const endDate = days[days.length - 1]?.date ?? LA_TO_DEADHORSE_RAW.endDate;
+  const trip = enrichTrip({ ...LA_TO_DEADHORSE_RAW, days, endDate });
+  cachedTrip = { version: parsed.version, trip };
+  return trip;
+}
+
+/** Synchronous, sidecar-only fallback. Used by code paths that can't
+ *  await (legacy fixture seeding). Loses §04 canonicity and booking
+ *  status but keeps the app rendering if the markdown is missing. */
+export const LA_TO_DEADHORSE: Trip = enrichTrip(LA_TO_DEADHORSE_RAW);

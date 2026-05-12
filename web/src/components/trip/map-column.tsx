@@ -82,6 +82,9 @@ export function MapColumn({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  /** Trip-day pins, shared across the marker-init and browse-results
+   *  effects so the latter can hide/show them when the panel toggles. */
+  const tripDayMarkersRef = useRef<mapboxgl.Marker[]>([]);
 
   const searchParams = useSearchParams();
   const queriedDay = searchParams.get("day");
@@ -156,17 +159,27 @@ export function MapColumn({
     // origin city.
     const routeCoords = startCoords ? [startCoords, ...dayCoords] : dayCoords;
 
+    // Trip day pins (orange Mapbox defaults). Kept on a ref so the
+    // browse-results handler in the sibling effect can hide them while
+    // the browse panel is open — otherwise 66 pins compete with browse
+    // dots for visual attention on a Day-1 zoom.
+    const tripDayMarkers: mapboxgl.Marker[] = [];
     if (startCoords) {
-      new mapboxgl.Marker({ color: "#c8a96e" })
-        .setLngLat(startCoords)
-        .addTo(map);
+      tripDayMarkers.push(
+        new mapboxgl.Marker({ color: "#c8a96e" })
+          .setLngLat(startCoords)
+          .addTo(map),
+      );
     }
     days.forEach((d) => {
       if (!d.coords) return;
-      new mapboxgl.Marker({ color: "#c8a96e" })
-        .setLngLat(d.coords)
-        .addTo(map);
+      tripDayMarkers.push(
+        new mapboxgl.Marker({ color: "#c8a96e" })
+          .setLngLat(d.coords)
+          .addTo(map),
+      );
     });
+    tripDayMarkersRef.current = tripDayMarkers;
 
     if (routeCoords.length >= 2) {
       const controller = new AbortController();
@@ -375,6 +388,12 @@ export function MapColumn({
       markers.length = 0;
     };
 
+    const setTripPinsVisible = (visible: boolean) => {
+      for (const m of tripDayMarkersRef.current) {
+        m.getElement().style.display = visible ? "" : "none";
+      }
+    };
+
     const onResults = (e: Event) => {
       clear();
       const map = mapRef.current;
@@ -385,7 +404,15 @@ export function MapColumn({
           places: Array<{ coords: [number, number]; title: string; id: string }>;
         }>
       ).detail;
-      if (!detail?.places?.length) return;
+      // Browse panel closing (or arriving with no results) → restore the
+      // trip-day pins so the user has trip context again.
+      if (!detail?.places?.length) {
+        setTripPinsVisible(true);
+        return;
+      }
+      // Browse open with results → hide the 66 trip pins so the browse
+      // dots can read clearly without competing for attention.
+      setTripPinsVisible(false);
       const color =
         (detail.category && CATEGORY_ACCENT[detail.category]) || "#c8a96e";
       const initialSize = dotSize(map.getZoom());

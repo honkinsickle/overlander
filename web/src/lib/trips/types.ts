@@ -67,6 +67,58 @@ export type Waypoint = {
   /** Optional `↳`-style tip rendered amber. */
   tip?: string;
   stats: { label: string; value: string }[];
+
+  // ── Detail-panel fields ──────────────────────────────────────
+  // All optional so existing fixtures keep rendering. Backfilled
+  // for the Alaska trip via `enrichWaypoint` at module load.
+
+  /** Hero photo for the detail panel. Falls back to a category
+   *  gradient when absent. */
+  photoUrl?: string;
+  /** Pill row under the title (e.g. ["National Park", "Scenic Vista"]). */
+  tags?: string[];
+  /** Reliability score box (0–100) + caption. */
+  reliability?: { score: number; label: string; sourceCount: number };
+  /** Distance from the route line (e.g. 0.4 = "0.4 mi on route"). */
+  routeOffsetMi?: number;
+  /** "If you stop here" simulator block. */
+  simulator?: {
+    stopTime: string;
+    entryCost?: string;
+    addsTime: string;
+    newEtaPlace: string;
+    plannedEta: string;
+    withStopEta: string;
+    sunset?: string;
+    /** "Day N unaffected" footer (omit to hide). */
+    unaffectedNote?: string;
+  };
+  /** Category-themed factual block under the description (e.g.
+   *  "Geology Notes" for Scenic, "Cultural" for Urban). */
+  factualNote?: { label: string; text: string };
+  /** Logistics grid — hours / entry / phone / website. */
+  logistics?: {
+    hours?: string;
+    entry?: string;
+    phone?: string;
+    website?: string;
+  };
+  /** Community section — rating + review count + tip bullets. */
+  community?: {
+    rating: number;
+    reviewCount: number;
+    tips: string[];
+    lastVerified: string;
+  };
+  /** Amenity tag chips. */
+  amenities?: string[];
+  /** Data-source attribution chips at the bottom. */
+  dataSources?: string[];
+
+  /** Booking status sourced from §08 of the reference doc via §03's
+   *  `Permit Ref` linkage. Only populated for waypoints that anchor a
+   *  fixed-date event. Format: "Not Yet Booked" / "Booked" / etc. */
+  bookingStatus?: { permitName: string; status: string }[];
 };
 
 export type OvernightSelection = {
