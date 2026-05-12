@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import type { Waypoint } from "@/lib/trips/types";
 
 const TRANSITION_MS = 280;
 
+/** The slide-up's source-of-truth shape. Browse-panel cards only carry
+ *  a subset (id/title/photoUrl/description); trip waypoints carry the
+ *  full enriched Waypoint shape via `waypoint`. The panel renders
+ *  whichever fields are present and hides the rest. */
 type DetailPlace = {
   id: string;
   title: string;
@@ -13,6 +18,9 @@ type DetailPlace = {
   dayId?: string;
   coords?: [number, number];
   description?: string;
+  /** When opened from a trip waypoint, the full enriched record is
+   *  passed through so all the rich detail sections can render. */
+  waypoint?: Waypoint;
 };
 
 type SheetState = "closed" | "peek" | "half" | "expanded";
@@ -164,9 +172,10 @@ export function MapDetailOverlay() {
 
 /**
  * Scenic / Sights & Landmarks detail panel. Same structural skeleton as
- * Paper canonical `1FGH-0` (the Food/Trapper's variant), but re-tinted
- * to the Scenic palette and populated with park-themed copy. Title +
- * hero photo are driven by `place`; everything else is canonical.
+ * Paper canonical `1FGH-0`, re-tinted to the Scenic palette. All
+ * metadata (pills, reliability, simulator, logistics, community,
+ * amenities, sources) is read from `place.waypoint` when present;
+ * sections fall back to placeholders or hide when fields are missing.
  */
 function TrappersDetailPanel({
   place,
@@ -177,14 +186,29 @@ function TrappersDetailPanel({
   isAdded: boolean;
   onToggleAdded: () => void;
 }) {
+  const wp = place.waypoint;
+  const tags = wp?.tags ?? [];
+  const reliability = wp?.reliability;
+  const sim = wp?.simulator;
+  const factual = wp?.factualNote;
+  const logistics = wp?.logistics;
+  const community = wp?.community;
+  const amenities = wp?.amenities ?? [];
+  const sources = wp?.dataSources ?? [];
+  const description = wp?.description ?? place.description;
+  const photoUrl = wp?.photoUrl ?? place.photoUrl;
+  const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
+  const routeOffset = wp?.routeOffsetMi;
+  const bookingStatus = wp?.bookingStatus ?? [];
+
   return (
     <article className="flex flex-col items-center bg-[#1A1A1A]">
-      {/* Hero — 458×150 with bottom gradient + Day chip top-left */}
+      {/* Hero — 458×150 with bottom gradient */}
       <div className="relative w-full h-[150px] shrink-0 overflow-hidden">
-        {place.photoUrl ? (
+        {photoUrl ? (
           <div
             className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${place.photoUrl})` }}
+            style={{ backgroundImage: `url(${photoUrl})` }}
           />
         ) : (
           <div
@@ -222,471 +246,575 @@ function TrappersDetailPanel({
             {place.title}
           </h2>
 
-          <div className="flex items-center flex-wrap gap-1.5">
-            {["National Park", "Scenic Vista", "Hiking"].map((label) => (
-              <span
-                key={label}
-                className="rounded-sm py-[5px] px-2.5"
-                style={{
-                  fontFamily: "var(--ff-sans)",
-                  fontSize: 11,
-                  lineHeight: 1,
-                  color: "#A6C9F9",
-                  backgroundColor: "rgba(166,201,249,0.12)",
-                  border: "1px solid rgba(166,201,249,0.32)",
-                }}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-
-          {/* Reliability — 88 / GOOD RELIABILITY / computed from 3 sources */}
-          <div className="flex items-center gap-1.5">
-            <div
-              className="flex items-center justify-center rounded-sm w-8 h-8 shrink-0"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.10)",
-                border: "0.5px solid #F68A0D",
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: "var(--ff-mono)",
-                  fontSize: 14,
-                  lineHeight: "16px",
-                  fontWeight: 700,
-                  color: "#FF8E05",
-                }}
-              >
-                88
-              </span>
+          {tags.length > 0 && (
+            <div className="flex items-center flex-wrap gap-1.5">
+              {tags.map((label) => (
+                <span
+                  key={label}
+                  className="rounded-sm py-[5px] px-2.5"
+                  style={{
+                    fontFamily: "var(--ff-sans)",
+                    fontSize: 11,
+                    lineHeight: 1,
+                    color: "#A6C9F9",
+                    backgroundColor: "rgba(166,201,249,0.12)",
+                    border: "1px solid rgba(166,201,249,0.32)",
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
             </div>
-            <span
-              className="uppercase"
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "16px",
-                letterSpacing: "0.08em",
-                color: "#FF8E05",
-              }}
-            >
-              Good reliability /
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "16px",
-                color: "#817A6D",
-              }}
-            >
-              computed from 3 sources
-            </span>
-          </div>
+          )}
 
-          {/* Route eyebrow */}
-          <div className="flex flex-col gap-[5px]">
-            <span
-              className="uppercase"
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "14px",
-                letterSpacing: "0.14em",
-                color: "#98AC64",
-              }}
-            >
-              Route
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "16px",
-                letterSpacing: "0.02em",
-                color: "var(--amber)",
-              }}
-            >
-              Day 14 · 0.4 mi on route
-            </span>
-          </div>
-        </div>
+          {bookingStatus.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {bookingStatus.map((b) => {
+                const isBooked = /^booked|confirmed/i.test(b.status);
+                const isWarn = /not yet|waitlist/i.test(b.status);
+                const accent = isBooked
+                  ? "#7DD18E"
+                  : isWarn
+                    ? "#F6C744"
+                    : "#A89C90";
+                return (
+                  <div
+                    key={b.permitName}
+                    className="flex items-center gap-2 rounded-sm py-1.5 px-2.5"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.04)",
+                      border: `1px solid ${accent}55`,
+                    }}
+                  >
+                    <span
+                      className="rounded-full shrink-0"
+                      style={{
+                        width: 6,
+                        height: 6,
+                        backgroundColor: accent,
+                      }}
+                    />
+                    <span
+                      className="uppercase shrink-0"
+                      style={{
+                        fontFamily: "var(--ff-display)",
+                        fontSize: 11,
+                        lineHeight: "14px",
+                        letterSpacing: "0.12em",
+                        color: accent,
+                      }}
+                    >
+                      {b.status}
+                    </span>
+                    <span
+                      className="truncate"
+                      style={{
+                        fontFamily: "var(--ff-sans)",
+                        fontSize: 12,
+                        lineHeight: "14px",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      · {b.permitName}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-        {/* Simulator card — IF YOU STOP HERE. Dims when this place is
-         *  already added so the panel matches the card grid state. */}
-        <div
-          className="flex flex-col rounded-sm gap-2 self-stretch py-[22px] px-[22px]"
-          style={{
-            backgroundColor: "rgba(89,97,93,0.21)",
-            opacity: isAdded ? 0.45 : 1,
-            filter: isAdded ? "grayscale(0.6)" : "none",
-            transition: "opacity 200ms ease, filter 200ms ease",
-          }}
-        >
-          <span
-            className="uppercase"
-            style={{
-              fontFamily: "var(--ff-display)",
-              fontSize: 14,
-              lineHeight: "14px",
-              letterSpacing: "0.14em",
-              color: "#A6C9F9",
-            }}
-          >
-            If you stop here
-          </span>
-
-          <div className="flex items-center gap-1.5">
-            <span
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 13,
-                lineHeight: "16px",
-                letterSpacing: "0.06em",
-                color: "var(--amber)",
-              }}
-            >
-              Stop time: 1h
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "16px",
-                fontWeight: 500,
-                color: "#86897E",
-              }}
-            >
-              |
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 13,
-                lineHeight: "16px",
-                letterSpacing: "0.06em",
-                color: "var(--amber)",
-              }}
-            >
-              $30 entry · Daily
-            </span>
-          </div>
-
-          <span
-            style={{
-              fontFamily: "var(--ff-display)",
-              fontSize: 24,
-              lineHeight: "30px",
-              fontWeight: 600,
-              letterSpacing: "0.02em",
-              color: "#FFFFFF",
-            }}
-          >
-            Adds 1h28m
-          </span>
-
-          <span
-            className="uppercase"
-            style={{
-              fontFamily: "var(--ff-display)",
-              fontSize: 13,
-              lineHeight: "16px",
-              letterSpacing: "0.06em",
-              color: "#98AC65",
-            }}
-          >
-            new ETA at Klamath Falls
-          </span>
-
-          <ScheduleRow
-            label="Planned"
-            value="8:18pm"
-            barColor="#A89C90"
-            textColor="#A89C90"
-            fillPct={78}
-          />
-          <ScheduleRow
-            label="With stop"
-            value="8:43pm"
-            barColor="var(--amber)"
-            textColor="var(--amber)"
-            fillPct={100}
-          />
-          <div className="flex items-center">
-            <span
-              className="w-[87px] shrink-0"
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 15,
-                lineHeight: "18px",
-                color: "var(--amber)",
-              }}
-            >
-              Sunset
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 14,
-                lineHeight: "18px",
-                color: "var(--amber)",
-              }}
-            >
-              9:02pm
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 mt-2">
-            <span
-              className="rounded-full w-1.5 h-1.5 shrink-0"
-              style={{ backgroundColor: "#98AC64" }}
-            />
-            <span
-              className="uppercase"
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "14px",
-                letterSpacing: "0.12em",
-                color: "#899B5E",
-              }}
-            >
-              Day 15 unaffected
-            </span>
-          </div>
-
-          <div
-            className="flex justify-center pt-[19px]"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.25)" }}
-          >
-            <button
-              type="button"
-              onClick={onToggleAdded}
-              className="flex items-center justify-center h-10 rounded-sm px-6"
-              style={{
-                backgroundColor: "#24354F",
-                border: "1px solid #A6C9F9",
-                cursor: "pointer",
-              }}
-            >
+          {reliability && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="flex items-center justify-center rounded-sm w-8 h-8 shrink-0"
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.10)",
+                  border: "0.5px solid #F68A0D",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "var(--ff-mono)",
+                    fontSize: 14,
+                    lineHeight: "16px",
+                    fontWeight: 700,
+                    color: "#FF8E05",
+                  }}
+                >
+                  {reliability.score}
+                </span>
+              </div>
               <span
                 className="uppercase"
                 style={{
                   fontFamily: "var(--ff-display)",
-                  fontSize: 14,
+                  fontSize: 12,
                   lineHeight: "16px",
-                  fontWeight: 600,
                   letterSpacing: "0.08em",
-                  color: "var(--text-primary)",
+                  color: "#FF8E05",
                 }}
               >
-                {isAdded ? "Added" : `Add to Day ${place.dayNumber ?? 14}`}
+                {reliability.label} /
               </span>
-            </button>
-          </div>
+              <span
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  color: "#817A6D",
+                }}
+              >
+                computed from {reliability.sourceCount} source
+                {reliability.sourceCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
+
+          {dayNumberLabel != null && routeOffset != null && (
+            <div className="flex flex-col gap-[5px]">
+              <span
+                className="uppercase"
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 12,
+                  lineHeight: "14px",
+                  letterSpacing: "0.14em",
+                  color: "#98AC64",
+                }}
+              >
+                Route
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  letterSpacing: "0.02em",
+                  color: "var(--amber)",
+                }}
+              >
+                Day {dayNumberLabel} · {routeOffset.toFixed(1)} mi on route
+              </span>
+            </div>
+          )}
         </div>
 
-        <Divider />
-
-        <Section label="Description">
-          <p
-            style={{
-              fontFamily: "var(--ff-sans)",
-              fontSize: 13,
-              lineHeight: "21px",
-              color: "#A89C90",
-            }}
-          >
-            Massive caldera lake formed when Mount Mazama collapsed 7,700 years
-            ago — the deepest lake in the United States at 1,949 feet. The
-            Rim Drive loop circles the rim with 30+ pullouts, vista trails,
-            and access to Wizard Island via boat tour.
-          </p>
+        {/* Simulator card — IF YOU STOP HERE. Hidden when no simulator
+         *  data is available (browse-panel BrowsePlace path). */}
+        {sim && (
           <div
-            className="mt-2.5 flex flex-col rounded-sm py-2.5 px-3 gap-1.5"
+            className="flex flex-col rounded-sm gap-2 self-stretch py-[22px] px-[22px]"
             style={{
-              backgroundColor: "#232323",
-              border: "1px solid #5A5A5A",
+              backgroundColor: "rgba(89,97,93,0.21)",
+              opacity: isAdded ? 0.45 : 1,
+              filter: isAdded ? "grayscale(0.6)" : "none",
+              transition: "opacity 200ms ease, filter 200ms ease",
             }}
           >
             <span
               className="uppercase"
               style={{
-                fontFamily: "var(--ff-mono)",
-                fontSize: 12,
+                fontFamily: "var(--ff-display)",
+                fontSize: 14,
                 lineHeight: "14px",
                 letterSpacing: "0.14em",
-                color: "#B7B4B2",
+                color: "#A6C9F9",
               }}
             >
-              Geology Notes
+              If you stop here
             </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 12,
-                lineHeight: "19px",
-                color: "#A89C90",
-              }}
-            >
-              Crater Lake&apos;s caldera formed in a single catastrophic
-              eruption 7,700 years ago. Designated a National Park in 1902,
-              the country&apos;s 5th oldest, and one of the world&apos;s
-              clearest large lakes.
-            </span>
-          </div>
-        </Section>
 
-        <Divider />
-
-        <Section label="Logistics">
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-2.5">
-              <LogisticsCell
-                label="Hours"
-                value="Daily · sunrise to sunset"
-                labelColor="#98AC64"
-              />
-              <LogisticsCell
-                label="Entry"
-                value="$30 / vehicle · 7-day pass"
-                labelColor="#98AC64"
-              />
-            </div>
-            <div className="flex gap-2.5">
-              <LogisticsCell label="Phone" value="(541) 594-3000" />
-              <LogisticsCell
-                label="Website"
-                value="nps.gov/crla"
-                valueColor="#A6C9F9"
-              />
-            </div>
-          </div>
-        </Section>
-
-        <Divider />
-
-        <Section label="Community">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-16 h-1 rounded-sm overflow-hidden shrink-0"
-              style={{ backgroundColor: "#1E1E1E" }}
-            >
-              <div
-                className="h-full rounded-sm"
-                style={{ width: "96%", backgroundColor: "var(--amber)" }}
-              />
-            </div>
-            <span
-              style={{
-                fontFamily: "var(--ff-mono)",
-                fontSize: 12,
-                lineHeight: "16px",
-                color: "var(--amber)",
-              }}
-            >
-              4.5
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--ff-sans)",
-                fontSize: 12,
-                lineHeight: "16px",
-                color: "#8A8070",
-              }}
-            >
-              (320)
-            </span>
-          </div>
-          {[
-            "Rim Drive opens late June through October — check status before arriving",
-            "Best light for photos: first 2 hours after sunrise from Watchman Overlook",
-          ].map((tip) => (
-            <div key={tip} className="flex gap-2 mt-1.5">
+            <div className="flex items-center gap-1.5">
               <span
-                className="shrink-0"
                 style={{
                   fontFamily: "var(--ff-sans)",
-                  fontSize: 16,
-                  lineHeight: "20px",
+                  fontSize: 13,
+                  lineHeight: "16px",
+                  letterSpacing: "0.06em",
                   color: "var(--amber)",
                 }}
               >
-                ▸
+                Stop time: {sim.stopTime}
               </span>
-              <span
-                style={{
-                  fontFamily: "var(--ff-sans)",
-                  fontSize: 12,
-                  lineHeight: "18px",
-                  color: "#8A8070",
-                }}
-              >
-                {tip}
-              </span>
+              {sim.entryCost && (
+                <>
+                  <span
+                    style={{
+                      fontFamily: "var(--ff-display)",
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      fontWeight: 500,
+                      color: "#86897E",
+                    }}
+                  >
+                    |
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--ff-sans)",
+                      fontSize: 13,
+                      lineHeight: "16px",
+                      letterSpacing: "0.06em",
+                      color: "var(--amber)",
+                    }}
+                  >
+                    {sim.entryCost}
+                  </span>
+                </>
+              )}
             </div>
-          ))}
-          <span
-            className="mt-2.5 block"
-            style={{
-              fontFamily: "var(--ff-mono)",
-              fontSize: 12,
-              lineHeight: "16px",
-              color: "var(--text-muted)",
-            }}
-          >
-            Last verified: Apr 2026
-          </span>
-        </Section>
 
-        <Divider />
-
-        <Section label="Amenities">
-          <div className="flex flex-wrap gap-1.5">
-            {["Hiking trails", "Visitor center", "Restrooms", "Boat tours"].map((a) => (
+            {/* Hero "Adds X" + eta eyebrow read as one unit — wrap them
+             *  in a tight inner column so the parent's gap-2 doesn't
+             *  open a gap between the two. */}
+            <div className="flex flex-col gap-0">
               <span
-                key={a}
-                className="rounded-sm py-0.5 px-2"
                 style={{
-                  fontFamily: "var(--ff-mono)",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  color: "#6A8A6A",
-                  backgroundColor: "#141A14",
-                  border: "1px solid #2A2A2A",
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 24,
+                  lineHeight: "30px",
+                  fontWeight: 600,
+                  letterSpacing: "0.02em",
+                  color: "#FFFFFF",
                 }}
               >
-                {a}
+                Adds {sim.addsTime}
               </span>
-            ))}
-          </div>
-        </Section>
 
-        <Divider />
-
-        <Section label="Data Sources">
-          <div className="flex flex-wrap gap-1">
-            {["NPS.gov", "AllTrails", "OSM"].map((s) => (
               <span
-                key={s}
-                className="rounded-sm py-px px-1.5"
+                className="uppercase"
                 style={{
-                  fontFamily: "var(--ff-mono)",
-                  fontSize: 12,
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 13,
                   lineHeight: "16px",
                   letterSpacing: "0.06em",
-                  color: "var(--text-muted)",
-                  backgroundColor: "#141414",
-                  border: "1px solid #222222",
+                  color: "#98AC65",
                 }}
               >
-                {s}
+                to your day. You&apos;d arrive at {sim.newEtaPlace} at {sim.withStopEta}
               </span>
-            ))}
+            </div>
+
+            <ScheduleRow
+              label="Planned"
+              value={sim.plannedEta}
+              barColor="#A89C90"
+              textColor="#A89C90"
+              fillPct={78}
+            />
+            <ScheduleRow
+              label="With stop"
+              value={sim.withStopEta}
+              barColor="var(--amber)"
+              textColor="var(--amber)"
+              fillPct={100}
+            />
+            {sim.sunset && (
+              <div className="flex items-center">
+                <span
+                  className="w-[87px] shrink-0"
+                  style={{
+                    fontFamily: "var(--ff-sans)",
+                    fontSize: 15,
+                    lineHeight: "18px",
+                    color: "var(--amber)",
+                  }}
+                >
+                  Sunset
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--ff-sans)",
+                    fontSize: 14,
+                    lineHeight: "18px",
+                    color: "var(--amber)",
+                  }}
+                >
+                  {sim.sunset}
+                </span>
+              </div>
+            )}
+
+            {sim.unaffectedNote && (
+              <div className="flex items-center gap-2 mt-2">
+                <span
+                  className="rounded-full w-1.5 h-1.5 shrink-0"
+                  style={{ backgroundColor: "#98AC64" }}
+                />
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 12,
+                    lineHeight: "14px",
+                    letterSpacing: "0.12em",
+                    color: "#899B5E",
+                  }}
+                >
+                  {sim.unaffectedNote}
+                </span>
+              </div>
+            )}
+
+            <div
+              className="flex justify-center pt-[19px]"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.25)" }}
+            >
+              <button
+                type="button"
+                onClick={onToggleAdded}
+                className="flex items-center justify-center h-10 rounded-sm px-6"
+                style={{
+                  backgroundColor: "#24354F",
+                  border: "1px solid #A6C9F9",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 14,
+                    lineHeight: "16px",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {isAdded
+                    ? "Added"
+                    : dayNumberLabel != null
+                      ? `Add to Day ${dayNumberLabel}`
+                      : "Add to trip"}
+                </span>
+              </button>
+            </div>
           </div>
-        </Section>
+        )}
+
+        {description && (
+          <>
+            <Divider />
+            <Section label="Description">
+              <p
+                style={{
+                  fontFamily: "var(--ff-sans)",
+                  fontSize: 13,
+                  lineHeight: "21px",
+                  color: "#A89C90",
+                }}
+              >
+                {description}
+              </p>
+              {factual && (
+                <div
+                  className="mt-2.5 flex flex-col rounded-sm py-2.5 px-3 gap-1.5"
+                  style={{
+                    backgroundColor: "#232323",
+                    border: "1px solid #5A5A5A",
+                  }}
+                >
+                  <span
+                    className="uppercase"
+                    style={{
+                      fontFamily: "var(--ff-mono)",
+                      fontSize: 12,
+                      lineHeight: "14px",
+                      letterSpacing: "0.14em",
+                      color: "#B7B4B2",
+                    }}
+                  >
+                    {factual.label}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--ff-sans)",
+                      fontSize: 12,
+                      lineHeight: "19px",
+                      color: "#A89C90",
+                    }}
+                  >
+                    {factual.text}
+                  </span>
+                </div>
+              )}
+            </Section>
+          </>
+        )}
+
+        {logistics &&
+          (logistics.hours || logistics.entry || logistics.phone || logistics.website) && (
+            <>
+              <Divider />
+              <Section label="Logistics">
+                <div className="flex flex-col gap-4">
+                  {(logistics.hours || logistics.entry) && (
+                    <div className="flex gap-2.5">
+                      {logistics.hours && (
+                        <LogisticsCell
+                          label="Hours"
+                          value={logistics.hours}
+                          labelColor="#98AC64"
+                        />
+                      )}
+                      {logistics.entry && (
+                        <LogisticsCell
+                          label="Entry"
+                          value={logistics.entry}
+                          labelColor="#98AC64"
+                        />
+                      )}
+                    </div>
+                  )}
+                  {(logistics.phone || logistics.website) && (
+                    <div className="flex gap-2.5">
+                      {logistics.phone && (
+                        <LogisticsCell label="Phone" value={logistics.phone} />
+                      )}
+                      {logistics.website && (
+                        <LogisticsCell
+                          label="Website"
+                          value={logistics.website}
+                          valueColor="#A6C9F9"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            </>
+          )}
+
+        {community && (
+          <>
+            <Divider />
+            <Section label="Community">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-16 h-1 rounded-sm overflow-hidden shrink-0"
+                  style={{ backgroundColor: "#1E1E1E" }}
+                >
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: `${Math.min(100, Math.round((community.rating / 5) * 100))}%`,
+                      backgroundColor: "var(--amber)",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    fontFamily: "var(--ff-mono)",
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    color: "var(--amber)",
+                  }}
+                >
+                  {community.rating.toFixed(1)}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--ff-sans)",
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    color: "#8A8070",
+                  }}
+                >
+                  ({community.reviewCount.toLocaleString()})
+                </span>
+              </div>
+              {community.tips.map((tip) => (
+                <div key={tip} className="flex gap-2 mt-1.5">
+                  <span
+                    className="shrink-0"
+                    style={{
+                      fontFamily: "var(--ff-sans)",
+                      fontSize: 16,
+                      lineHeight: "20px",
+                      color: "var(--amber)",
+                    }}
+                  >
+                    ▸
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--ff-sans)",
+                      fontSize: 12,
+                      lineHeight: "18px",
+                      color: "#8A8070",
+                    }}
+                  >
+                    {tip}
+                  </span>
+                </div>
+              ))}
+              <span
+                className="mt-2.5 block"
+                style={{
+                  fontFamily: "var(--ff-mono)",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Last verified: {community.lastVerified}
+              </span>
+            </Section>
+          </>
+        )}
+
+        {amenities.length > 0 && (
+          <>
+            <Divider />
+            <Section label="Amenities">
+              <div className="flex flex-wrap gap-1.5">
+                {amenities.map((a) => (
+                  <span
+                    key={a}
+                    className="rounded-sm py-0.5 px-2"
+                    style={{
+                      fontFamily: "var(--ff-mono)",
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      color: "#6A8A6A",
+                      backgroundColor: "#141A14",
+                      border: "1px solid #2A2A2A",
+                    }}
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </Section>
+          </>
+        )}
+
+        {sources.length > 0 && (
+          <>
+            <Divider />
+            <Section label="Data Sources">
+              <div className="flex flex-wrap gap-1">
+                {sources.map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-sm py-px px-1.5"
+                    style={{
+                      fontFamily: "var(--ff-mono)",
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      letterSpacing: "0.06em",
+                      color: "var(--text-muted)",
+                      backgroundColor: "#141414",
+                      border: "1px solid #222222",
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </Section>
+          </>
+        )}
       </div>
     </article>
   );

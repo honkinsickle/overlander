@@ -1,5 +1,5 @@
 import type { Trip } from "./types";
-import { LA_TO_DEADHORSE } from "./alaska";
+import { getAlaskaTrip, LA_TO_DEADHORSE } from "./alaska";
 
 /**
  * Sample trips — in-memory fixtures.
@@ -13,6 +13,11 @@ import { LA_TO_DEADHORSE } from "./alaska";
  * same reference. Standard Next.js pattern (also used for Prisma etc).
  * Swap this module for a real data source by replacing the `seed`
  * function; keep the shape in `./types.ts`.
+ *
+ * `la-to-deadhorse` is initially seeded with the sidecar-only fallback
+ * (`LA_TO_DEADHORSE`); the first `getTrip("la-to-deadhorse")` call
+ * upgrades it with the parsed-and-merged version from §04 of the
+ * reference doc via `getAlaskaTrip()`.
  */
 const seed = (): Record<string, Trip> => ({
   "la-to-deadhorse": LA_TO_DEADHORSE,
@@ -439,9 +444,42 @@ const seed = (): Record<string, Trip> => ({
   },
 });
 
-type TripStore = { trips: Record<string, Trip> };
+type TripStore = {
+  trips: Record<string, Trip>;
+  /** Pending upgrade promises, keyed by trip id. Concurrent callers
+   *  await the same promise so they all see the upgraded trip. */
+  upgrades: Map<string, Promise<void>>;
+};
 const globalForTrips = globalThis as unknown as { __tripStore?: TripStore };
 const store: TripStore =
-  globalForTrips.__tripStore ?? (globalForTrips.__tripStore = { trips: seed() });
+  globalForTrips.__tripStore ??
+  (globalForTrips.__tripStore = { trips: seed(), upgrades: new Map() });
+
+// Defensive: older dev snapshots may be pinned on `globalThis` without
+// the `upgrades` map.
+if (!store.upgrades) store.upgrades = new Map();
 
 export const TRIPS: Record<string, Trip> = store.trips;
+
+/** Promote `la-to-deadhorse` from the sidecar fallback to the merged
+ *  (markdown + overrides + enrichment) version on first access. All
+ *  concurrent callers share the same in-flight promise. */
+export async function ensureAlaskaUpgraded(): Promise<void> {
+  const id = "la-to-deadhorse";
+  let pending = store.upgrades.get(id);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        store.trips[id] = await getAlaskaTrip();
+      } catch (err) {
+        // Markdown missing/malformed — keep the fallback Trip in place
+        // and forget the failed upgrade so the next request can retry.
+        store.upgrades.delete(id);
+        // eslint-disable-next-line no-console
+        console.warn("[trips] failed to upgrade la-to-deadhorse:", err);
+      }
+    })();
+    store.upgrades.set(id, pending);
+  }
+  await pending;
+}

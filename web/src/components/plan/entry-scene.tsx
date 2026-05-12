@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
+import { UpcomingEventsCard } from "@/components/home/upcoming-events-card";
 
 /**
  * Planning Entry Scene — Paper `CR4-0` (from v3-1 / v3-2 / v3-3).
@@ -19,7 +20,9 @@ export function EntryScene({ muted = false }: { muted?: boolean }) {
       className={`absolute inset-0 flex ${muted ? "opacity-60 pointer-events-none select-none" : ""}`}
     >
       <EntryLeft muted={muted} />
-      <EntryMap />
+      <EntryMap>
+        <UpcomingEventsCard />
+      </EntryMap>
     </div>
   );
 }
@@ -117,12 +120,12 @@ function EntryLeft({ muted }: { muted: boolean }) {
 
       {/* Browse link — Paper CRL-0 · Barlow 400 · 13/16 · text-muted */}
       <Link
-        href="/trip/la-to-portland"
+        href="/trip/la-to-deadhorse"
         tabIndex={muted ? -1 : 0}
         className="font-sans text-text-muted hover:text-text-primary"
         style={{ fontSize: "13px", lineHeight: "16px" }}
       >
-        or browse past expeditions
+        Los Angeles to Deadhorse →
       </Link>
     </div>
   );
@@ -131,7 +134,7 @@ function EntryLeft({ muted }: { muted: boolean }) {
 /** Placeholder world-map panel (Paper CRM-0). Real Mapbox can slot in
  *  later; for now a radial-gradient ground + muted grid + "Your World"
  *  tag keeps the scene readable. */
-function EntryMap() {
+function EntryMap({ children }: { children?: React.ReactNode }) {
   return (
     <div className="relative flex-1 h-full overflow-hidden bg-bg-map">
       <div
@@ -167,6 +170,7 @@ function EntryMap() {
           Your World
         </span>
       </div>
+      {children}
     </div>
   );
 }

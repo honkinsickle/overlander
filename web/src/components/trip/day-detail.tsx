@@ -157,8 +157,15 @@ export function DayDetail({ trip }: { trip: Trip }) {
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const openBrowse =
-    (dayNumber: number, dayId: string) => (category: Category) =>
-      setBrowseTarget({ category, dayNumber, tripId: trip.id, dayId });
+    (dayNumber: number, day: Day) => (category: Category) =>
+      setBrowseTarget({
+        category,
+        dayNumber,
+        tripId: trip.id,
+        dayId: day.id,
+        dayCoords: day.coords,
+        dayLabel: day.label,
+      });
 
   // ── Added places (per day) ──────────────────────────────────
   // Owns the Source of Truth for places the user has tapped "Add to
@@ -253,11 +260,15 @@ export function DayDetail({ trip }: { trip: Trip }) {
                 }),
               )
             }
+            // The browse panel always renders results in the Scenic palette
+            // (see CategoryBrowsePanel.style override) regardless of opening
+            // category, so the generic "Add Waypoints" CTA defaults to it.
+            onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
             extra={
               i < 2 ? (
                 <SuggestedSection
                   dayNumber={i + 1}
-                  onBrowse={openBrowse(i + 1, day.id)}
+                  onBrowse={openBrowse(i + 1, day)}
                 />
               ) : null
             }
@@ -319,6 +330,7 @@ function DaySection({
   removedFixedIds = EMPTY_SET,
   onDeleteFixed,
   onDeleteAdded,
+  onAddWaypoints,
 }: {
   trip: Trip;
   day: Day;
@@ -328,6 +340,7 @@ function DaySection({
   removedFixedIds?: Set<string>;
   onDeleteFixed?: (waypointId: string) => void;
   onDeleteAdded?: (placeId: string) => void;
+  onAddWaypoints?: () => void;
 }) {
   const visibleFixed = day.waypoints.filter(
     (wp) => !removedFixedIds.has(wp.id),
@@ -404,6 +417,7 @@ function DaySection({
         >
           <button
             type="button"
+            onClick={onAddWaypoints}
             className="flex items-center justify-center gap-2 rounded-sm border"
             style={{
               height: 36,
@@ -411,6 +425,7 @@ function DaySection({
               transform: "translateY(-20%)",
               backgroundColor: "var(--cat-urban-bg)",
               borderColor: "var(--cat-urban)",
+              cursor: onAddWaypoints ? "pointer" : "default",
             }}
           >
             <span

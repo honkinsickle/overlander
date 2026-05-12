@@ -44,18 +44,23 @@ export function WaypointCard({
   const Icon = categoryIcon[waypoint.category];
 
   const openPanel = () => {
-    // Route via history.replaceState + a custom event instead of Next's
-    // Link/router — a soft nav to /trip/:id?panel=... fires the @modal
-    // intercept and opens the slideup even when we're already on the
-    // full page. The detail panel lives in the map column; it shouldn't
-    // trigger navigation.
-    const url = new URL(window.location.href);
-    url.searchParams.set("panel", "waypoint");
-    url.searchParams.set("id", waypoint.slug);
-    window.history.replaceState(null, "", url);
+    // Open the rich slide-up overlay with the full enriched waypoint.
+    // The day number lives in the subtitle ("Day 12 · …") — pull it so
+    // the overlay's "Add to Day N" / route eyebrow render correctly.
+    const dayMatch = waypoint.subtitle?.match(/Day\s+(\d+)/);
+    const dayNumber = dayMatch ? parseInt(dayMatch[1], 10) : undefined;
     window.dispatchEvent(
-      new CustomEvent("trip:panel", {
-        detail: { panel: "waypoint", id: waypoint.slug },
+      new CustomEvent("trip:openDetail", {
+        detail: {
+          place: {
+            id: waypoint.id,
+            title: waypoint.title,
+            photoUrl: waypoint.photoUrl,
+            description: waypoint.description,
+            dayNumber,
+            waypoint,
+          },
+        },
       }),
     );
   };

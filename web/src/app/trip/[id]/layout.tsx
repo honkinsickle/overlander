@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { VerticalNav } from "@/components/chrome/vertical-nav";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { MapColumn } from "@/components/trip/map-column";
+import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
 import { getTrip } from "@/lib/trips/repository";
 
 /**
@@ -41,6 +42,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
         />
+        <MapDetailOverlay />
       </section>
     </div>
   );

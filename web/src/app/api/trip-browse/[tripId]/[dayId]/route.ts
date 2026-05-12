@@ -94,5 +94,13 @@ export async function GET(
     signal: req.signal,
   });
 
-  return NextResponse.json({ source: "discovery", places });
+  // Surface photo-bearing places first so the panel's initial viewport
+  // shows real imagery. Within each group preserve the discovery order
+  // (already roughly distance-sorted upstream).
+  const sorted = [
+    ...places.filter((p) => p.photoUrl),
+    ...places.filter((p) => !p.photoUrl),
+  ];
+
+  return NextResponse.json({ source: "discovery", places: sorted });
 }
