@@ -117,6 +117,71 @@ export async function removeDay(
   return true;
 }
 
+/** Append a waypoint to a day. Idempotent on waypoint id — re-adding
+ *  the same id returns null (nothing changed). Clears the trip's
+ *  `routePolyline` so the map redraws the route on next render. */
+export async function addWaypoint(
+  tripId: string,
+  dayId: string,
+  waypoint: Waypoint,
+): Promise<Waypoint | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
+      day.waypoints.push(waypoint);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return (
+      updated?.days
+        .find((d) => d.id === dayId)
+        ?.waypoints.find((wp) => wp.id === waypoint.id) ?? null
+    );
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return null;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return null;
+  if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
+  day.waypoints.push(waypoint);
+  trip.routePolyline = undefined;
+  return waypoint;
+}
+
+/** Remove a waypoint by id from a day. Returns true if removed, false
+ *  if trip/day/waypoint not found. Clears `routePolyline`. */
+export async function removeWaypoint(
+  tripId: string,
+  dayId: string,
+  waypointId: string,
+): Promise<boolean> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
+      if (idx === -1) return null;
+      day.waypoints.splice(idx, 1);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return updated !== null;
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return false;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return false;
+  const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
+  if (idx === -1) return false;
+  day.waypoints.splice(idx, 1);
+  trip.routePolyline = undefined;
+  return true;
+}
+
 /** Promote an overnight (from selected or alternatives) to `selected`.
  *  Returns the updated selection, or null if anything wasn't found. */
 export async function pickOvernight(

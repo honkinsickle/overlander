@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import * as repo from "./repository";
+import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
 
 /**
  * Server Actions for trip mutations.
@@ -48,6 +49,32 @@ export async function pickOvernightAction(
 ): Promise<ActionResult> {
   const updated = await repo.pickOvernight(tripId, dayId, overnightId);
   if (!updated) return { ok: false, error: "Overnight not found." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function addWaypointAction(
+  tripId: string,
+  dayId: string,
+  place: AddedPlace,
+): Promise<ActionResult> {
+  if (!place?.id || !place?.title) {
+    return { ok: false, error: "Missing place." };
+  }
+  const waypoint = addedPlaceToWaypoint(place);
+  const added = await repo.addWaypoint(tripId, dayId, waypoint);
+  if (!added) return { ok: false, error: "Could not add stop." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function removeWaypointAction(
+  tripId: string,
+  dayId: string,
+  waypointId: string,
+): Promise<ActionResult> {
+  const ok = await repo.removeWaypoint(tripId, dayId, waypointId);
+  if (!ok) return { ok: false, error: "Could not remove stop." };
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }

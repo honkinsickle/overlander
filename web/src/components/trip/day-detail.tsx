@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowRight } from "lucide-react";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
@@ -15,6 +15,14 @@ import {
 } from "@/components/trip/category-browse-panel";
 import type { Trip, Day } from "@/lib/trips/types";
 import type { Category } from "@/components/primitives/detail-card";
+import {
+  addedPlaceToWaypoint,
+  type AddedPlace,
+} from "@/lib/trips/added-place";
+import {
+  addWaypointAction,
+  removeWaypointAction,
+} from "@/lib/trips/actions";
 
 const SCROLL_TRIGGER = 100;
 
@@ -192,20 +200,39 @@ export function DayDetail({ trip }: { trip: Trip }) {
       });
 
   // ── Added places (per day) ──────────────────────────────────
-  // Owns the Source of Truth for places the user has tapped "Add to
-  // Day N" on, keyed by dayId. Both CategoryBrowsePanel (cards grid)
-  // and MapDetailOverlay (detail slide-up) dispatch trip:toggleAdded;
-  // this component listens, mutates the map, and re-broadcasts the
-  // current addedIds via trip:addedSync so the dim/CTA-label state
-  // in those siblings stays in sync.
+  // Optimistic per-day buffer of places the user just tapped "Add to
+  // Day N" on. CategoryBrowsePanel (cards grid) and MapDetailOverlay
+  // (detail slide-up) dispatch trip:toggleAdded; this listener writes
+  // the change to public.trips.payload via server action AND updates
+  // the optimistic buffer, then re-broadcasts addedIds via
+  // trip:addedSync so the dim/CTA-label state in siblings stays in
+  // sync. After revalidatePath fires, the added place flows back as a
+  // canonical day.waypoints entry on the next render; the buffer
+  // entry is filtered out at render-time to avoid double-rendering
+  // (see addedPlaces filter in DaySection).
   const [addedByDay, setAddedByDay] = useState<
     Record<string, AddedPlace[]>
   >({});
-  // Temporary dev affordance — fixed waypoint IDs the user has tapped
-  // the X on. Hidden from the day section render; not persisted.
+  // Per-day Set of fixed-waypoint IDs the user has tapped X on. Used
+  // for an instant optimistic hide; the server action persists the
+  // removal and revalidatePath drops the row from day.waypoints on
+  // the next render.
   const [removedFixedByDay, setRemovedFixedByDay] = useState<
     Record<string, Set<string>>
   >({});
+
+  // Refs so the toggleAdded handler can read current trip + optimistic
+  // state without re-registering the event listener on every change.
+  const tripRef = useRef(trip);
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
+  const addedByDayRef = useRef(addedByDay);
+  useEffect(() => {
+    addedByDayRef.current = addedByDay;
+  }, [addedByDay]);
+
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     const onToggle = (e: Event) => {
@@ -217,6 +244,18 @@ export function DayDetail({ trip }: { trip: Trip }) {
         }>
       ).detail;
       if (!detail?.placeId || !detail?.dayId || !detail?.place) return;
+
+      const currentTrip = tripRef.current;
+      const currentAdded = addedByDayRef.current;
+      const isCanonical =
+        currentTrip.days
+          .find((d) => d.id === detail.dayId)
+          ?.waypoints.some((wp) => wp.id === detail.placeId) ?? false;
+      const isOptimistic = (currentAdded[detail.dayId] ?? []).some(
+        (p) => p.id === detail.placeId,
+      );
+      const currentlyAdded = isCanonical || isOptimistic;
+
       setAddedByDay((prev) => {
         const list = prev[detail.dayId] ?? [];
         const exists = list.some((p) => p.id === detail.placeId);
@@ -224,6 +263,22 @@ export function DayDetail({ trip }: { trip: Trip }) {
           ? list.filter((p) => p.id !== detail.placeId)
           : [...list, detail.place];
         return { ...prev, [detail.dayId]: nextList };
+      });
+
+      startTransition(async () => {
+        if (currentlyAdded) {
+          await removeWaypointAction(
+            currentTrip.id,
+            detail.dayId,
+            detail.placeId,
+          );
+        } else {
+          await addWaypointAction(
+            currentTrip.id,
+            detail.dayId,
+            detail.place,
+          );
+        }
       });
     };
     window.addEventListener("trip:toggleAdded", onToggle);
@@ -268,12 +323,15 @@ export function DayDetail({ trip }: { trip: Trip }) {
             needsFuel={fuelDayIds.has(day.id)}
             addedPlaces={addedByDay[day.id] ?? []}
             removedFixedIds={removedFixedByDay[day.id] ?? EMPTY_SET}
-            onDeleteFixed={(waypointId) =>
+            onDeleteFixed={(waypointId) => {
               setRemovedFixedByDay((prev) => ({
                 ...prev,
                 [day.id]: new Set([...(prev[day.id] ?? []), waypointId]),
-              }))
-            }
+              }));
+              startTransition(async () => {
+                await removeWaypointAction(trip.id, day.id, waypointId);
+              });
+            }}
             onDeleteAdded={(placeId) =>
               window.dispatchEvent(
                 new CustomEvent("trip:toggleAdded", {
@@ -317,32 +375,6 @@ export function DayDetail({ trip }: { trip: Trip }) {
       />
     </div>
   );
-}
-
-/** Subset of BrowsePlace needed to materialize an added Waypoint. The
- *  toggleAdded event carries this shape; we keep it loose so we don't
- *  drag the full BrowsePlace import into every consumer. */
-type AddedPlace = {
-  id: string;
-  title: string;
-  description?: string;
-  photoUrl?: string;
-  coords?: [number, number];
-};
-
-/** Map an added BrowsePlace into the WaypointCard's expected shape.
- *  Currently pinned to "mountain" since the slideout grid renders all
- *  results in the Scenic palette. */
-function addedPlaceToWaypoint(p: AddedPlace) {
-  return {
-    id: p.id,
-    slug: p.id,
-    category: "mountain" as const,
-    title: p.title,
-    subtitle: "Added stop",
-    description: p.description ?? "",
-    stats: [],
-  };
 }
 
 function overnightToWaypoint(day: Day) {
@@ -457,16 +489,18 @@ function DaySection({
               }
             />
           ))}
-          {addedPlaces.map((p) => (
-            <WaypointCard
-              key={`added-${p.id}`}
-              tripId={trip.id}
-              waypoint={addedPlaceToWaypoint(p)}
-              onDelete={
-                onDeleteAdded ? () => onDeleteAdded(p.id) : undefined
-              }
-            />
-          ))}
+          {addedPlaces
+            .filter((p) => !day.waypoints.some((wp) => wp.id === p.id))
+            .map((p) => (
+              <WaypointCard
+                key={`added-${p.id}`}
+                tripId={trip.id}
+                waypoint={addedPlaceToWaypoint(p)}
+                onDelete={
+                  onDeleteAdded ? () => onDeleteAdded(p.id) : undefined
+                }
+              />
+            ))}
           {needsFuel && <FuelStopCard tripId={trip.id} day={day} />}
           {overnightWp && (
             <WaypointCard
