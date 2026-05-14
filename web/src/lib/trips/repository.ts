@@ -182,6 +182,55 @@ export async function removeWaypoint(
   return true;
 }
 
+/** Reorder waypoints within a single day. `fromIdx` / `toIdx` are
+ *  positions in `day.waypoints`. Clears `routePolyline` so the route
+ *  redraws on next render (stop order affects the line). */
+export async function reorderWaypoints(
+  tripId: string,
+  dayId: string,
+  fromIdx: number,
+  toIdx: number,
+): Promise<boolean> {
+  if (fromIdx === toIdx) return true;
+
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      if (
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx >= day.waypoints.length ||
+        toIdx >= day.waypoints.length
+      ) {
+        return null;
+      }
+      const [moved] = day.waypoints.splice(fromIdx, 1);
+      day.waypoints.splice(toIdx, 0, moved);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return updated !== null;
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return false;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return false;
+  if (
+    fromIdx < 0 ||
+    toIdx < 0 ||
+    fromIdx >= day.waypoints.length ||
+    toIdx >= day.waypoints.length
+  ) {
+    return false;
+  }
+  const [moved] = day.waypoints.splice(fromIdx, 1);
+  day.waypoints.splice(toIdx, 0, moved);
+  trip.routePolyline = undefined;
+  return true;
+}
+
 /** Promote an overnight (from selected or alternatives) to `selected`.
  *  Returns the updated selection, or null if anything wasn't found. */
 export async function pickOvernight(

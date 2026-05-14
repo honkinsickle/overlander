@@ -78,3 +78,21 @@ export async function removeWaypointAction(
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }
+
+export async function reorderWaypointsAction(
+  tripId: string,
+  dayId: string,
+  fromIdx: number,
+  toIdx: number,
+): Promise<ActionResult> {
+  if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx)) {
+    return { ok: false, error: "Invalid indices." };
+  }
+  if (fromIdx < 0 || toIdx < 0) {
+    return { ok: false, error: "Invalid indices." };
+  }
+  const ok = await repo.reorderWaypoints(tripId, dayId, fromIdx, toIdx);
+  if (!ok) return { ok: false, error: "Could not reorder stops." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}

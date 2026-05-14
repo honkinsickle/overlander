@@ -1,8 +1,29 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
 import { ArrowRight } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS as DndCSS } from "@dnd-kit/utilities";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
 import { SuggestedSection } from "@/components/trip/suggested-section";
@@ -13,7 +34,7 @@ import {
   CategoryBrowsePanel,
   type BrowseTarget,
 } from "@/components/trip/category-browse-panel";
-import type { Trip, Day } from "@/lib/trips/types";
+import type { Trip, Day, Waypoint } from "@/lib/trips/types";
 import type { Category } from "@/components/primitives/detail-card";
 import {
   addedPlaceToWaypoint,
@@ -22,6 +43,7 @@ import {
 import {
   addWaypointAction,
   removeWaypointAction,
+  reorderWaypointsAction,
 } from "@/lib/trips/actions";
 
 const SCROLL_TRIGGER = 100;
@@ -435,10 +457,59 @@ function DaySection({
   onDeleteAdded?: (placeId: string) => void;
   onAddWaypoints?: () => void;
 }) {
-  const visibleFixed = day.waypoints.filter(
-    (wp) => !removedFixedIds.has(wp.id),
+  const visibleFixed = useMemo(
+    () => day.waypoints.filter((wp) => !removedFixedIds.has(wp.id)),
+    [day.waypoints, removedFixedIds],
   );
-  const overnightWp = visibleFixed.some((wp) => wp.category === "camping")
+  // Optimistic local order for drag-reorder. Resynced from `visibleFixed`
+  // when its reference changes (revalidatePath after a server action, or
+  // an optimistic-remove updating `removedFixedIds`). Uses the
+  // "store-prop-in-state" pattern so we don't cascade renders via effect.
+  const [orderedFixed, setOrderedFixed] = useState<Waypoint[]>(visibleFixed);
+  const [lastFixedRef, setLastFixedRef] = useState<Waypoint[]>(visibleFixed);
+  if (visibleFixed !== lastFixedRef) {
+    setLastFixedRef(visibleFixed);
+    setOrderedFixed(visibleFixed);
+  }
+
+  const sortSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+  const [, startSortTransition] = useTransition();
+  const onWaypointDragEnd = (event: DragEndEvent) => {
+    const activeId = event.active.id as string;
+    const overId = event.over?.id as string | undefined;
+    if (!overId || activeId === overId) return;
+    const fromIdx = orderedFixed.findIndex((wp) => wp.id === activeId);
+    const toIdx = orderedFixed.findIndex((wp) => wp.id === overId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const nextOrder = [...orderedFixed];
+    const [moved] = nextOrder.splice(fromIdx, 1);
+    nextOrder.splice(toIdx, 0, moved);
+    setOrderedFixed(nextOrder);
+    // Translate visible-list positions to canonical `day.waypoints`
+    // positions: lookup each visible waypoint's index in the canonical
+    // array. Only diverges if optimistic deletes are pending; in that
+    // case the action returns ok:false and the next revalidate
+    // reconciles.
+    const canonicalFromIdx = day.waypoints.findIndex(
+      (wp) => wp.id === activeId,
+    );
+    const canonicalToIdx = day.waypoints.findIndex(
+      (wp) => wp.id === overId,
+    );
+    if (canonicalFromIdx === -1 || canonicalToIdx === -1) return;
+    startSortTransition(async () => {
+      await reorderWaypointsAction(
+        trip.id,
+        day.id,
+        canonicalFromIdx,
+        canonicalToIdx,
+      );
+    });
+  };
+
+  const overnightWp = orderedFixed.some((wp) => wp.category === "camping")
     ? null
     : overnightToWaypoint(day);
   // `last:min-h-full` guarantees the final day can scroll to the top of
@@ -477,18 +548,32 @@ function DaySection({
         </div>
 
         {/* Waypoints list (GDR-0) — flex-col with 10px inline padding,
-         *  no frame of its own (rows carry their own top borders). */}
+         *  no frame of its own (rows carry their own top borders). The
+         *  canonical (visibleFixed) list is sortable via dnd-kit; added
+         *  places and synthesized overnight/fuel rows render below and
+         *  stay fixed (they're not part of day.waypoints). */}
         <div className="flex flex-col px-[10px]">
-          {visibleFixed.map((wp) => (
-            <WaypointCard
-              key={wp.id}
-              tripId={trip.id}
-              waypoint={wp}
-              onDelete={
-                onDeleteFixed ? () => onDeleteFixed(wp.id) : undefined
-              }
-            />
-          ))}
+          <DndContext
+            sensors={sortSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onWaypointDragEnd}
+          >
+            <SortableContext
+              items={orderedFixed.map((wp) => wp.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {orderedFixed.map((wp) => (
+                <SortableWaypointCard
+                  key={wp.id}
+                  tripId={trip.id}
+                  waypoint={wp}
+                  onDelete={
+                    onDeleteFixed ? () => onDeleteFixed(wp.id) : undefined
+                  }
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
           {addedPlaces
             .filter((p) => !day.waypoints.some((wp) => wp.id === p.id))
             .map((p) => (
@@ -556,5 +641,43 @@ function DaySection({
       </article>
       {/* ── End Day Detail Card ─────────────────────────────── */}
     </section>
+  );
+}
+
+/** Wraps `WaypointCard` with a sortable container div. The drag handle
+ *  is the whole card (`cursor: grab`); PointerSensor activation
+ *  distance of 8px in DaySection's sensor config keeps short clicks
+ *  flowing through to the card's open-panel / delete buttons. */
+function SortableWaypointCard({
+  tripId,
+  waypoint,
+  onDelete,
+}: {
+  tripId: string;
+  waypoint: Waypoint;
+  onDelete?: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: waypoint.id });
+
+  const style: CSSProperties = {
+    transform: DndCSS.Transform.toString(transform),
+    transition,
+    cursor: isDragging ? "grabbing" : "grab",
+    zIndex: isDragging ? 30 : undefined,
+    boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.55)" : undefined,
+    touchAction: "none",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <WaypointCard tripId={tripId} waypoint={waypoint} onDelete={onDelete} />
+    </div>
   );
 }
