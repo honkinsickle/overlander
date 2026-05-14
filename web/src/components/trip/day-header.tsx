@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Move, Plus, RotateCcw, Trash2, Check, X } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Trash2, Check, X } from "lucide-react";
 import { KebabMenu } from "@/components/primitives/kebab-menu";
 import {
   renameDayAction,
@@ -154,7 +154,6 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
           triggerLabel={`Day ${day.dayNumber} options`}
           items={[
             { id: "rename", label: "Rename day",              icon: Pencil, onSelect: startRename },
-            { id: "move",   label: "Move day",                icon: Move,   onSelect: () => console.log("move", day.id) },
             { id: "add",    label: "Add waypoint or overnight", icon: Plus, onSelect: () => console.log("add", day.id) },
             { id: "reset",  label: "Reset to reference",      icon: RotateCcw, dividerBefore: true, onSelect: confirmResetToReference },
             { id: "delete", label: "Delete day",              icon: Trash2, danger: true, onSelect: confirmDelete },

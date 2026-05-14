@@ -1,11 +1,17 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const nextConfig: NextConfig = {
-  // Make sure the reference-trip snapshot is shipped with the server bundle.
-  // `lib/trips/reference.ts` reads it via fs at runtime as the fallback when
-  // Supabase is unreachable; without this entry Vercel won't trace it.
+  // The repo is a monorepo-ish layout: Next lives in `web/` but
+  // `planning/reference/alaska-v3.md` (read by lib/events/parse-fixed-events.ts
+  // on every home-page render) lives one level up at the repo root.
+  // Widen the trace root so includes can reach it.
+  outputFileTracingRoot: path.join(__dirname, ".."),
   outputFileTracingIncludes: {
-    "/**": [".alaska-snapshot.json"],
+    "/**": [
+      "./.alaska-snapshot.json",
+      "../planning/reference/alaska-v3.md",
+    ],
   },
 };
 
