@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Loader2, MoreVertical, Pencil, Trash2, X } from "lucide-react";
-import { renameTrip, deleteTrip, setTripState, type TripState } from "@/app/trips/actions";
+import { Check, ChevronDown, Copy, Loader2, MoreVertical, Pencil, Trash2, X } from "lucide-react";
+import {
+  renameTrip,
+  deleteTrip,
+  duplicateTrip,
+  setTripState,
+  type TripState,
+} from "@/app/trips/actions";
 import type { UserTripSummary } from "@/lib/trips/list-user-trips";
 
 const STATE_LABELS: Record<UserTripSummary["state"], string> = {
@@ -64,6 +70,19 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
     });
   }
 
+  function submitDuplicate() {
+    setError(null);
+    startTransition(async () => {
+      const result = await duplicateTrip(trip.id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // Revalidate inside the action drops the new card at the top of
+      // the list (ordered by updated_at desc).
+    });
+  }
+
   return (
     <article className="relative flex gap-4 p-4 rounded-lg bg-bg-panel border border-border-subtle hover:border-amber/60 transition-colors group">
       <div
@@ -113,6 +132,7 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
       {mode === "idle" && (
         <Kebab
           onRename={() => setMode("renaming")}
+          onDuplicate={submitDuplicate}
           onDelete={() => setMode("confirm-delete")}
         />
       )}
@@ -221,9 +241,11 @@ function ConfirmDeleteRow({
 
 function Kebab({
   onRename,
+  onDuplicate,
   onDelete,
 }: {
   onRename: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -268,6 +290,17 @@ function Kebab({
           >
             <Pencil className="w-4 h-4" />
             Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onDuplicate();
+            }}
+            className="flex items-center gap-2 px-3 py-2 text-text-primary hover:bg-bg-nav-btn font-sans text-sm text-left"
+          >
+            <Copy className="w-4 h-4" />
+            Duplicate
           </button>
           <button
             type="button"
