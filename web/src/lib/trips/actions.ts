@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import * as repo from "./repository";
+import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
 
 /**
  * Server Actions for trip mutations.
@@ -48,6 +49,65 @@ export async function pickOvernightAction(
 ): Promise<ActionResult> {
   const updated = await repo.pickOvernight(tripId, dayId, overnightId);
   if (!updated) return { ok: false, error: "Overnight not found." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function addWaypointAction(
+  tripId: string,
+  dayId: string,
+  place: AddedPlace,
+): Promise<ActionResult> {
+  if (!place?.id || !place?.title) {
+    return { ok: false, error: "Missing place." };
+  }
+  const waypoint = addedPlaceToWaypoint(place);
+  const added = await repo.addWaypoint(tripId, dayId, waypoint);
+  if (!added) return { ok: false, error: "Could not add stop." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function removeWaypointAction(
+  tripId: string,
+  dayId: string,
+  waypointId: string,
+): Promise<ActionResult> {
+  const ok = await repo.removeWaypoint(tripId, dayId, waypointId);
+  if (!ok) return { ok: false, error: "Could not remove stop." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function reorderWaypointsAction(
+  tripId: string,
+  dayId: string,
+  fromIdx: number,
+  toIdx: number,
+): Promise<ActionResult> {
+  if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx)) {
+    return { ok: false, error: "Invalid indices." };
+  }
+  if (fromIdx < 0 || toIdx < 0) {
+    return { ok: false, error: "Invalid indices." };
+  }
+  const ok = await repo.reorderWaypoints(tripId, dayId, fromIdx, toIdx);
+  if (!ok) return { ok: false, error: "Could not reorder stops." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function resetDayToReferenceAction(
+  tripId: string,
+  dayId: string,
+): Promise<ActionResult> {
+  const ok = await repo.resetDayToReference(tripId, dayId);
+  if (!ok) {
+    return {
+      ok: false,
+      error: "Could not reset day. Trip may not have a reference.",
+    };
+  }
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }

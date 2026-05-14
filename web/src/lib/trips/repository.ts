@@ -1,5 +1,10 @@
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
-import { getUserTrip, isUserTripId } from "./user-trips";
+import {
+  getUserTrip,
+  isUserTripId,
+  resetUserTripDayToReference,
+  updateUserTripPayload,
+} from "./user-trips";
 import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
 
 /**
@@ -59,9 +64,13 @@ export async function getWaypointsBySlug(
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────
-// In-memory mutation of the fixture object. Survives the process but
-// resets on server restart. Swap for a real store by replacing these
-// bodies and keeping the signatures intact.
+// Each mutator dispatches on `isUserTripId`:
+//   - UUID → read-modify-write on public.trips.payload via RLS-scoped
+//     server client. Persists across restarts.
+//   - slug → in-memory mutation of the fixture object. Survives the
+//     process but resets on server restart.
+// The fixture path's semantics are mirrored exactly in the UUID path —
+// no renumbering or date recomputation on delete (M3 territory).
 
 /** Update a day's `label`. Returns the updated day, or null if not found. */
 export async function renameDay(
@@ -69,6 +78,16 @@ export async function renameDay(
   dayId: string,
   label: string,
 ): Promise<Day | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      day.label = label;
+      return next;
+    });
+    return updated?.days.find((d) => d.id === dayId) ?? null;
+  }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
   if (!day) return null;
   day.label = label;
@@ -80,6 +99,16 @@ export async function removeDay(
   tripId: string,
   dayId: string,
 ): Promise<boolean> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const idx = next.days.findIndex((d) => d.id === dayId);
+      if (idx === -1) return null;
+      next.days.splice(idx, 1);
+      return next;
+    });
+    return updated !== null;
+  }
   if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return false;
@@ -89,6 +118,132 @@ export async function removeDay(
   return true;
 }
 
+/** Append a waypoint to a day. Idempotent on waypoint id — re-adding
+ *  the same id returns null (nothing changed). Clears the trip's
+ *  `routePolyline` so the map redraws the route on next render. */
+export async function addWaypoint(
+  tripId: string,
+  dayId: string,
+  waypoint: Waypoint,
+): Promise<Waypoint | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
+      day.waypoints.push(waypoint);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return (
+      updated?.days
+        .find((d) => d.id === dayId)
+        ?.waypoints.find((wp) => wp.id === waypoint.id) ?? null
+    );
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return null;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return null;
+  if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
+  day.waypoints.push(waypoint);
+  trip.routePolyline = undefined;
+  return waypoint;
+}
+
+/** Remove a waypoint by id from a day. Returns true if removed, false
+ *  if trip/day/waypoint not found. Clears `routePolyline`. */
+export async function removeWaypoint(
+  tripId: string,
+  dayId: string,
+  waypointId: string,
+): Promise<boolean> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
+      if (idx === -1) return null;
+      day.waypoints.splice(idx, 1);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return updated !== null;
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return false;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return false;
+  const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
+  if (idx === -1) return false;
+  day.waypoints.splice(idx, 1);
+  trip.routePolyline = undefined;
+  return true;
+}
+
+/** Reorder waypoints within a single day. `fromIdx` / `toIdx` are
+ *  positions in `day.waypoints`. Clears `routePolyline` so the route
+ *  redraws on next render (stop order affects the line). */
+export async function reorderWaypoints(
+  tripId: string,
+  dayId: string,
+  fromIdx: number,
+  toIdx: number,
+): Promise<boolean> {
+  if (fromIdx === toIdx) return true;
+
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      if (
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx >= day.waypoints.length ||
+        toIdx >= day.waypoints.length
+      ) {
+        return null;
+      }
+      const [moved] = day.waypoints.splice(fromIdx, 1);
+      day.waypoints.splice(toIdx, 0, moved);
+      next.routePolyline = undefined;
+      return next;
+    });
+    return updated !== null;
+  }
+  const trip = TRIPS[tripId];
+  if (!trip) return false;
+  const day = trip.days.find((d) => d.id === dayId);
+  if (!day) return false;
+  if (
+    fromIdx < 0 ||
+    toIdx < 0 ||
+    fromIdx >= day.waypoints.length ||
+    toIdx >= day.waypoints.length
+  ) {
+    return false;
+  }
+  const [moved] = day.waypoints.splice(fromIdx, 1);
+  day.waypoints.splice(toIdx, 0, moved);
+  trip.routePolyline = undefined;
+  return true;
+}
+
+/** Reset a single day in a user trip back to its reference content.
+ *  UUID-only: slug trips ARE the reference, nothing to reset. Returns
+ *  false if the trip has no `reference_id`, the day id doesn't exist
+ *  in either trip, or the write fails. */
+export async function resetDayToReference(
+  tripId: string,
+  dayId: string,
+): Promise<boolean> {
+  if (!isUserTripId(tripId)) return false;
+  return resetUserTripDayToReference(tripId, dayId);
+}
+
 /** Promote an overnight (from selected or alternatives) to `selected`.
  *  Returns the updated selection, or null if anything wasn't found. */
 export async function pickOvernight(
@@ -96,6 +251,22 @@ export async function pickOvernight(
   dayId: string,
   overnightId: string,
 ): Promise<OvernightSelection | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day?.overnight) return null;
+      const all = [day.overnight.selected, ...day.overnight.alternatives];
+      const picked = all.find((o) => o.id === overnightId);
+      if (!picked) return null;
+      const rest = all.filter((o) => o.id !== overnightId);
+      day.overnight = { selected: picked, alternatives: rest };
+      return next;
+    });
+    return (
+      updated?.days.find((d) => d.id === dayId)?.overnight ?? null
+    );
+  }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
   if (!day?.overnight) return null;
   const all = [day.overnight.selected, ...day.overnight.alternatives];

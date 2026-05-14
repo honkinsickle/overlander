@@ -1,9 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Move, Plus, Trash2, Check, X } from "lucide-react";
+import { Pencil, Move, Plus, RotateCcw, Trash2, Check, X } from "lucide-react";
 import { KebabMenu } from "@/components/primitives/kebab-menu";
-import { renameDayAction, deleteDayAction } from "@/lib/trips/actions";
+import {
+  renameDayAction,
+  deleteDayAction,
+  resetDayToReferenceAction,
+} from "@/lib/trips/actions";
 import type { Day } from "@/lib/trips/types";
 
 /**
@@ -67,6 +71,17 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
     if (!ok) return;
     startTransition(async () => {
       const result = await deleteDayAction(tripId, day.id);
+      if (!result.ok) setError(result.error);
+    });
+  };
+
+  const confirmResetToReference = () => {
+    const ok = window.confirm(
+      `Reset Day ${day.dayNumber} to its reference content? Your edits to this day (added stops, reordered waypoints, overnight pick, renamed label) will be lost.`,
+    );
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await resetDayToReferenceAction(tripId, day.id);
       if (!result.ok) setError(result.error);
     });
   };
@@ -141,7 +156,8 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
             { id: "rename", label: "Rename day",              icon: Pencil, onSelect: startRename },
             { id: "move",   label: "Move day",                icon: Move,   onSelect: () => console.log("move", day.id) },
             { id: "add",    label: "Add waypoint or overnight", icon: Plus, onSelect: () => console.log("add", day.id) },
-            { id: "delete", label: "Delete day",              icon: Trash2, danger: true, dividerBefore: true, onSelect: confirmDelete },
+            { id: "reset",  label: "Reset to reference",      icon: RotateCcw, dividerBefore: true, onSelect: confirmResetToReference },
+            { id: "delete", label: "Delete day",              icon: Trash2, danger: true, onSelect: confirmDelete },
           ]}
         />
       </div>
