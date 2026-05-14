@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Loader2, MoreVertical, Pencil, Trash2, X } from "lucide-react";
-import { renameTrip, deleteTrip } from "@/app/trips/actions";
+import { Check, ChevronDown, Loader2, MoreVertical, Pencil, Trash2, X } from "lucide-react";
+import { renameTrip, deleteTrip, setTripState, type TripState } from "@/app/trips/actions";
 import type { UserTripSummary } from "@/lib/trips/list-user-trips";
 
 const STATE_LABELS: Record<UserTripSummary["state"], string> = {
@@ -89,11 +89,7 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
             >
               {title}
             </Link>
-            <span
-              className={`font-mono text-[10px] tracking-[0.14em] uppercase px-2 py-0.5 rounded shrink-0 ${STATE_COLORS[trip.state]}`}
-            >
-              {STATE_LABELS[trip.state]}
-            </span>
+            <StatePill tripId={trip.id} state={trip.state} />
           </div>
         )}
         <p className="font-sans text-sm text-text-secondary truncate">
@@ -285,6 +281,85 @@ function Kebab({
             Delete
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function StatePill({ tripId, state }: { tripId: string; state: TripState }) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  function choose(next: TripState) {
+    setError(null);
+    if (next === state) {
+      setOpen(false);
+      return;
+    }
+    startTransition(async () => {
+      const result = await setTripState(tripId, next);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+    });
+  }
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={pending}
+        aria-label={`State: ${STATE_LABELS[state]}. Click to change.`}
+        aria-expanded={open}
+        className={`flex items-center gap-1 font-mono text-[10px] tracking-[0.14em] uppercase px-2 py-0.5 rounded hover:opacity-80 disabled:opacity-60 ${STATE_COLORS[state]}`}
+      >
+        {pending ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <ChevronDown className="w-3 h-3" />
+        )}
+        {STATE_LABELS[state]}
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 w-32 bg-bg-panel border border-border-subtle rounded shadow-lg flex flex-col py-1 z-10">
+          {(Object.keys(STATE_LABELS) as TripState[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => choose(s)}
+              className="flex items-center justify-between px-3 py-1.5 text-text-primary hover:bg-bg-nav-btn font-sans text-sm text-left"
+            >
+              {STATE_LABELS[s]}
+              {s === state && <Check className="w-3.5 h-3.5 text-amber" />}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && (
+        <p className="absolute top-full right-0 mt-1 font-mono text-[10px] text-red-400 whitespace-nowrap">
+          {error}
+        </p>
       )}
     </div>
   );
