@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MapPin, MessageSquare } from "lucide-react";
 import { ProfileMenu } from "./profile-menu";
 import { isConfigured } from "@/lib/supabase/env";
@@ -26,9 +27,15 @@ export async function VerticalNav({ active = "chats" }: { active?: NavItem }) {
         <NavButton
           icon={MessageSquare}
           label="Chats"
+          href="/"
           active={active === "chats"}
         />
-        <NavButton icon={MapPin} label="Trips" active={active === "trips"} />
+        <NavButton
+          icon={MapPin}
+          label="Trips"
+          href="/trips"
+          active={active === "trips"}
+        />
       </div>
       <ProfileMenu user={user} />
     </aside>
@@ -72,23 +79,35 @@ export type NavItem = "chats" | "trips";
 function NavButton({
   icon: Icon,
   label,
+  href,
   active,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  href?: string;
   active?: boolean;
 }) {
-  return (
-    <div className="flex flex-col items-center gap-1">
+  const inner = (
+    <>
       <div
         className={[
-          "w-10 h-10 flex items-center justify-center rounded",
-          active ? "bg-bg-tab-active text-amber" : "text-text-primary",
+          "w-10 h-10 flex items-center justify-center rounded transition-colors",
+          active
+            ? "bg-bg-tab-active text-amber"
+            : "text-text-primary hover:bg-bg-tab-active/40",
         ].join(" ")}
       >
         <Icon className="w-5 h-5" />
       </div>
       <span className="font-sans text-[11px] text-text-primary">{label}</span>
-    </div>
+    </>
+  );
+
+  return href ? (
+    <Link href={href} className="flex flex-col items-center gap-1">
+      {inner}
+    </Link>
+  ) : (
+    <div className="flex flex-col items-center gap-1">{inner}</div>
   );
 }
