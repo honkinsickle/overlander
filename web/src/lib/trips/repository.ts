@@ -1,14 +1,20 @@
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
+import { getUserTrip, isUserTripId } from "./user-trips";
 import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
 
 /**
  * Server-side trip repository. Async by design so callers don't
  * have to change when this module's impl swaps to a real API.
+ *
+ *   - Slug ids (e.g. "la-to-deadhorse") → in-memory fixtures
+ *   - UUID ids → public.trips (forked user trips, RLS-scoped)
  */
 
 export async function getTrip(id: string): Promise<Trip | null> {
   if (id === "la-to-deadhorse") await ensureAlaskaUpgraded();
-  return TRIPS[id] ?? null;
+  if (TRIPS[id]) return TRIPS[id];
+  if (isUserTripId(id)) return getUserTrip(id);
+  return null;
 }
 
 /** Look up a waypoint anywhere in a trip by slug. */
