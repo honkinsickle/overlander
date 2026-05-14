@@ -32,3 +32,49 @@ export async function getUserTrip(id: string): Promise<Trip | null> {
     return null;
   }
 }
+
+/** Read-modify-write a user trip's `payload`. The mutator receives the
+ *  trip in the same shape `getUserTrip` returns (DB-side id/title) and
+ *  returns the new Trip — or null to abort the write (e.g. "day not
+ *  found"). On commit, the payload's own `id`/`title` fields are
+ *  restored from the read so we don't overwrite them with DB overrides.
+ *  RLS scopes the read + write; `updated_at` ticks via trigger.
+ *
+ *  Not transactional — read and write are separate round-trips. Fine
+ *  for single-owner v1; revisit when co-driver sharing lands. */
+export async function updateUserTripPayload(
+  id: string,
+  mutate: (trip: Trip) => Trip | null,
+): Promise<Trip | null> {
+  if (!isConfigured() || !isUserTripId(id)) return null;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("trips")
+      .select("id, title, payload")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+
+    const rawPayload = data.payload as Trip;
+    const view: Trip = { ...rawPayload, id: data.id, title: data.title };
+    const updated = mutate(view);
+    if (!updated) return null;
+
+    const writePayload: Trip = {
+      ...updated,
+      id: rawPayload.id,
+      title: rawPayload.title,
+    };
+
+    const { error: updErr } = await supabase
+      .from("trips")
+      .update({ payload: writePayload })
+      .eq("id", id);
+    if (updErr) return null;
+
+    return updated;
+  } catch {
+    return null;
+  }
+}

@@ -1,5 +1,9 @@
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
-import { getUserTrip, isUserTripId } from "./user-trips";
+import {
+  getUserTrip,
+  isUserTripId,
+  updateUserTripPayload,
+} from "./user-trips";
 import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
 
 /**
@@ -59,9 +63,13 @@ export async function getWaypointsBySlug(
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────
-// In-memory mutation of the fixture object. Survives the process but
-// resets on server restart. Swap for a real store by replacing these
-// bodies and keeping the signatures intact.
+// Each mutator dispatches on `isUserTripId`:
+//   - UUID → read-modify-write on public.trips.payload via RLS-scoped
+//     server client. Persists across restarts.
+//   - slug → in-memory mutation of the fixture object. Survives the
+//     process but resets on server restart.
+// The fixture path's semantics are mirrored exactly in the UUID path —
+// no renumbering or date recomputation on delete (M3 territory).
 
 /** Update a day's `label`. Returns the updated day, or null if not found. */
 export async function renameDay(
@@ -69,6 +77,16 @@ export async function renameDay(
   dayId: string,
   label: string,
 ): Promise<Day | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      day.label = label;
+      return next;
+    });
+    return updated?.days.find((d) => d.id === dayId) ?? null;
+  }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
   if (!day) return null;
   day.label = label;
@@ -80,6 +98,16 @@ export async function removeDay(
   tripId: string,
   dayId: string,
 ): Promise<boolean> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const idx = next.days.findIndex((d) => d.id === dayId);
+      if (idx === -1) return null;
+      next.days.splice(idx, 1);
+      return next;
+    });
+    return updated !== null;
+  }
   if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
   const trip = TRIPS[tripId];
   if (!trip) return false;
@@ -96,6 +124,22 @@ export async function pickOvernight(
   dayId: string,
   overnightId: string,
 ): Promise<OvernightSelection | null> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day?.overnight) return null;
+      const all = [day.overnight.selected, ...day.overnight.alternatives];
+      const picked = all.find((o) => o.id === overnightId);
+      if (!picked) return null;
+      const rest = all.filter((o) => o.id !== overnightId);
+      day.overnight = { selected: picked, alternatives: rest };
+      return next;
+    });
+    return (
+      updated?.days.find((d) => d.id === dayId)?.overnight ?? null
+    );
+  }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
   if (!day?.overnight) return null;
   const all = [day.overnight.selected, ...day.overnight.alternatives];
