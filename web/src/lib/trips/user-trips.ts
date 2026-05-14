@@ -33,6 +33,64 @@ export async function getUserTrip(id: string): Promise<Trip | null> {
   }
 }
 
+/** Replace one day of a user trip with the same-id day from the
+ *  trip's reference (`public.trips.reference_id` → `reference_trips`).
+ *  The day's content (label, waypoints, overnight, weather, notes,
+ *  suggestions, hero*, miles, driveHours, dayNumber, date) is cloned
+ *  verbatim from reference. Clears `routePolyline` since the route
+ *  depends on the day's content. Returns false if the trip has no
+ *  reference, the day id doesn't exist in reference, RLS hides the
+ *  row, etc.
+ *
+ *  This is "Reset day to reference" — a user-trust guardrail: "undo
+ *  my edits to just this day." Does not restore deleted days; does
+ *  not touch surrounding days. */
+export async function resetUserTripDayToReference(
+  tripId: string,
+  dayId: string,
+): Promise<boolean> {
+  if (!isConfigured() || !isUserTripId(tripId)) return false;
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    const { data: userRow, error: userErr } = await supabase
+      .from("trips")
+      .select("id, title, payload, reference_id")
+      .eq("id", tripId)
+      .maybeSingle();
+    if (userErr || !userRow || !userRow.reference_id) return false;
+
+    const { data: refRow, error: refErr } = await supabase
+      .from("reference_trips")
+      .select("payload")
+      .eq("id", userRow.reference_id)
+      .maybeSingle();
+    if (refErr || !refRow) return false;
+
+    const userPayload = userRow.payload as Trip;
+    const refPayload = refRow.payload as Trip;
+    const refDay = refPayload.days.find((d) => d.id === dayId);
+    if (!refDay) return false;
+    if (!userPayload.days.some((d) => d.id === dayId)) return false;
+
+    const next: Trip = {
+      ...userPayload,
+      days: userPayload.days.map((d) =>
+        d.id === dayId ? structuredClone(refDay) : d,
+      ),
+      routePolyline: undefined,
+    };
+
+    const { error: updErr } = await supabase
+      .from("trips")
+      .update({ payload: next })
+      .eq("id", tripId);
+    return !updErr;
+  } catch {
+    return false;
+  }
+}
+
 /** Read-modify-write a user trip's `payload`. The mutator receives the
  *  trip in the same shape `getUserTrip` returns (DB-side id/title) and
  *  returns the new Trip — or null to abort the write (e.g. "day not

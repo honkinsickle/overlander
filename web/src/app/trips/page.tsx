@@ -3,9 +3,11 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { VerticalNav } from "@/components/chrome/vertical-nav";
 import { TripCard } from "@/components/trips/trip-card";
+import { ReferenceTripCard } from "@/components/trips/reference-trip-card";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listUserTrips } from "@/lib/trips/list-user-trips";
+import { listReferenceTrips } from "@/lib/trips/list-reference-trips";
 
 /** Trips index — lists the authed user's owned trips (public.trips).
  *  Anon viewers get bounced to sign-in with next=/trips so they land
@@ -23,7 +25,10 @@ export default async function TripsPage() {
     redirect("/auth/sign-in?next=/trips");
   }
 
-  const trips = await listUserTrips();
+  const [trips, references] = await Promise.all([
+    listUserTrips(),
+    listReferenceTrips(),
+  ]);
 
   return (
     <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
@@ -38,6 +43,14 @@ export default async function TripsPage() {
               Where you've been, where you're going.
             </h1>
           </header>
+
+          {references.length > 0 && (
+            <div className="flex flex-col gap-3 mb-8">
+              {references.map((ref) => (
+                <ReferenceTripCard key={ref.id} trip={ref} />
+              ))}
+            </div>
+          )}
 
           {trips.length === 0 ? <EmptyState /> : <TripList trips={trips} />}
         </div>

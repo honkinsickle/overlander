@@ -2,6 +2,7 @@ import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
 import {
   getUserTrip,
   isUserTripId,
+  resetUserTripDayToReference,
   updateUserTripPayload,
 } from "./user-trips";
 import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
@@ -229,6 +230,18 @@ export async function reorderWaypoints(
   day.waypoints.splice(toIdx, 0, moved);
   trip.routePolyline = undefined;
   return true;
+}
+
+/** Reset a single day in a user trip back to its reference content.
+ *  UUID-only: slug trips ARE the reference, nothing to reset. Returns
+ *  false if the trip has no `reference_id`, the day id doesn't exist
+ *  in either trip, or the write fails. */
+export async function resetDayToReference(
+  tripId: string,
+  dayId: string,
+): Promise<boolean> {
+  if (!isUserTripId(tripId)) return false;
+  return resetUserTripDayToReference(tripId, dayId);
 }
 
 /** Promote an overnight (from selected or alternatives) to `selected`.

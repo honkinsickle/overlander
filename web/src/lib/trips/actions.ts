@@ -96,3 +96,18 @@ export async function reorderWaypointsAction(
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }
+
+export async function resetDayToReferenceAction(
+  tripId: string,
+  dayId: string,
+): Promise<ActionResult> {
+  const ok = await repo.resetDayToReference(tripId, dayId);
+  if (!ok) {
+    return {
+      ok: false,
+      error: "Could not reset day. Trip may not have a reference.",
+    };
+  }
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
