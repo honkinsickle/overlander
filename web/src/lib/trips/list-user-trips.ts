@@ -1,5 +1,6 @@
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { WizardSlices, PlanStep } from "@/lib/plan/types";
 import type { Trip } from "./types";
 
 export type UserTripSummary = {
@@ -16,6 +17,10 @@ export type UserTripSummary = {
   endLocation: string;
   heroImage?: string;
   dayCount: number;
+  /** Wizard-step deeplink for draft cards. Drafts on /trips link to
+   *  /plan/<id>/<wizardStep> so the user lands back on the step they
+   *  left off. Active / logged trips ignore this field. */
+  wizardStep?: PlanStep;
 };
 
 /** List the authed user's trips. RLS scopes to auth.uid() === owner_id,
@@ -32,6 +37,7 @@ export async function listUserTrips(): Promise<UserTripSummary[]> {
     if (error || !data) return [];
     return data.map((row) => {
       const p = row.payload as Trip;
+      const wizard = p.wizard as WizardSlices | undefined;
       return {
         id: row.id,
         title: row.title,
@@ -44,6 +50,7 @@ export async function listUserTrips(): Promise<UserTripSummary[]> {
         endLocation: p.endLocation,
         heroImage: p.heroImage,
         dayCount: p.days?.length ?? 0,
+        wizardStep: wizard?.currentStep,
       };
     });
   } catch {

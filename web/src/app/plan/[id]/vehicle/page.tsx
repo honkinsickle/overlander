@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getDraft } from "@/lib/plan/repository";
+import { loadWizardState } from "@/lib/plan/load";
 import { listVehicles } from "@/lib/vehicles/repository";
 import { VehicleForm } from "@/components/plan/vehicle-form";
 
@@ -7,12 +7,12 @@ export default async function VehicleStep(
   props: PageProps<"/plan/[id]/vehicle">,
 ) {
   const { id } = await props.params;
-  const [draft, vehicles] = await Promise.all([
-    getDraft(id),
+  const [state, vehicles] = await Promise.all([
+    loadWizardState(id),
     listVehicles(),
   ]);
-  if (!draft) notFound();
+  if (!state) notFound();
   return (
-    <VehicleForm draftId={id} defaults={draft.vehicle} vehicles={vehicles} />
+    <VehicleForm draftId={id} defaults={state.vehicle} vehicles={vehicles} />
   );
 }

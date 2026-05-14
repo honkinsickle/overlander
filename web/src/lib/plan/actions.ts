@@ -7,14 +7,34 @@ import * as trips from "@/lib/trips/repository";
 import type {
   GoingData,
   PlanWith,
+  StopsData,
   VehicleData,
   InterestsData,
+  WizardSlices,
 } from "./types";
 import type { Trip, Waypoint } from "@/lib/trips/types";
+import {
+  isUserTripId,
+  getUserTrip,
+  writeWizardSlice,
+} from "@/lib/trips/user-trips";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ALL_CHIP_IDS } from "./interests";
 import { suggestionsForChips } from "./suggestions";
 import { newDraftId } from "./store";
 import { nextHref } from "./nav";
+
+/**
+ * Wizard ids are polymorphic:
+ *   - UUID  → authed user trip in public.trips (Sprint 1 onward)
+ *   - other → anonymous draft in the in-memory DRAFTS map (legacy /
+ *             Sprint 2 hybrid path)
+ *
+ * Every action below dispatches on `isUserTripId(id)`. The DB path
+ * writes via `writeWizardSlice` (which composes with the same
+ * `updateUserTripPayload` envelope as every other UUID writer); the
+ * draft path is the original `repo.save<Slice>` call.
+ */
 
 /**
  * Server Actions for planning-flow mutations.
@@ -57,8 +77,10 @@ export async function saveGoingAction(
     endDate: endDate || undefined,
   };
 
-  const draft = await repo.saveGoing(draftId, data);
-  if (!draft) return { error: "Draft not found." };
+  const ok = isUserTripId(draftId)
+    ? await writeWizardSlice(draftId, { going: data, currentStep: "vehicle" })
+    : await repo.saveGoing(draftId, data);
+  if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");
   const next = nextHref(draftId, "going");
@@ -89,8 +111,10 @@ export async function saveVehicleAction(
   }
 
   const data: VehicleData = { vehicleIds, milesPerDay };
-  const draft = await repo.saveVehicle(draftId, data);
-  if (!draft) return { error: "Draft not found." };
+  const ok = isUserTripId(draftId)
+    ? await writeWizardSlice(draftId, { vehicle: data, currentStep: "interests" })
+    : await repo.saveVehicle(draftId, data);
+  if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");
   const next = nextHref(draftId, "vehicle");
@@ -109,8 +133,10 @@ export async function saveInterestsAction(
   const selectedChipIds = raw.filter((id) => ALL_CHIP_IDS.has(id));
 
   const data: InterestsData = { selectedChipIds };
-  const draft = await repo.saveInterests(draftId, data);
-  if (!draft) return { error: "Draft not found." };
+  const ok = isUserTripId(draftId)
+    ? await writeWizardSlice(draftId, { interests: data, currentStep: "stops" })
+    : await repo.saveInterests(draftId, data);
+  if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");
   const next = nextHref(draftId, "interests");
@@ -131,7 +157,16 @@ export async function addStopAction(
     id: `stop-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     label,
   };
-  await repo.addPlannedStop(draftId, stop);
+  if (isUserTripId(draftId)) {
+    await writeWizardSlice(draftId, {
+      stops: await readNextStops(draftId, (s) => ({
+        ...s,
+        stops: [...s.stops, stop],
+      })),
+    });
+  } else {
+    await repo.addPlannedStop(draftId, stop);
+  }
   revalidatePath(`/plan/${draftId}`, "layout");
 }
 
@@ -140,7 +175,16 @@ export async function removeStopAction(
   draftId: string,
   stopId: string,
 ): Promise<void> {
-  await repo.removePlannedStop(draftId, stopId);
+  if (isUserTripId(draftId)) {
+    await writeWizardSlice(draftId, {
+      stops: await readNextStops(draftId, (s) => ({
+        ...s,
+        stops: s.stops.filter((p) => p.id !== stopId),
+      })),
+    });
+  } else {
+    await repo.removePlannedStop(draftId, stopId);
+  }
   revalidatePath(`/plan/${draftId}`, "layout");
 }
 
@@ -151,7 +195,14 @@ export async function saveStopsAction(
   formData: FormData,
 ): Promise<void> {
   const avoidHighways = formData.get("avoidHighways") === "on";
-  await repo.setAvoidHighways(draftId, avoidHighways);
+  if (isUserTripId(draftId)) {
+    await writeWizardSlice(draftId, {
+      stops: await readNextStops(draftId, (s) => ({ ...s, avoidHighways })),
+      currentStep: "loader",
+    });
+  } else {
+    await repo.setAvoidHighways(draftId, avoidHighways);
+  }
   revalidatePath(`/plan/${draftId}`, "layout");
   const next = nextHref(draftId, "stops");
   if (next) redirect(next);
@@ -162,13 +213,113 @@ export async function toggleSuggestionAction(
   draftId: string,
   suggestionId: string,
 ): Promise<void> {
-  await repo.toggleAcceptedSuggestion(draftId, suggestionId);
+  if (isUserTripId(draftId)) {
+    const trip = await getUserTrip(draftId);
+    if (!trip) return;
+    const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
+    const current = new Set(wizard.acceptedSuggestionIds ?? []);
+    if (current.has(suggestionId)) current.delete(suggestionId);
+    else current.add(suggestionId);
+    await writeWizardSlice(draftId, {
+      acceptedSuggestionIds: Array.from(current),
+    });
+  } else {
+    await repo.toggleAcceptedSuggestion(draftId, suggestionId);
+  }
   revalidatePath(`/plan/${draftId}`, "layout");
 }
 
-/** Promote the draft into a real Trip + redirect to /trip/:newTripId.
- *  Discards the draft afterwards. */
+/** Helper for the UUID-path stops mutators. Reads current stops slice,
+ *  hands it to the mutator with sensible empty defaults, returns the
+ *  new slice for `writeWizardSlice` to merge. Keeps the dispatch
+ *  branches in the actions short. */
+async function readNextStops(
+  tripId: string,
+  mutate: (s: StopsData) => StopsData,
+): Promise<StopsData> {
+  const trip = await getUserTrip(tripId);
+  const wizard = (trip?.wizard as WizardSlices | undefined) ?? {};
+  const current: StopsData = wizard.stops ?? {
+    stops: [],
+    avoidHighways: false,
+  };
+  return mutate(current);
+}
+
+/** Promote a wizard draft into an active trip.
+ *
+ *  UUID path: the trip already exists in public.trips with state='draft'
+ *    and an empty days[]. We build day[1] from the wizard slices, write
+ *    the payload + DB-level title + state in one update, and redirect
+ *    to /trip/<uuid>.
+ *
+ *  Draft path (anonymous, in-memory): the original flow — build a fresh
+ *    Trip, insert into the fixtures map, discard the draft. */
 export async function finalizeTripAction(draftId: string): Promise<void> {
+  if (isUserTripId(draftId)) {
+    const trip = await getUserTrip(draftId);
+    if (!trip) return;
+    const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
+
+    const start =
+      wizard.going?.startLocation?.label || trip.startLocation || "Start";
+    const end =
+      wizard.going?.destination?.label || trip.endLocation || "Destination";
+    const startDate = wizard.going?.startDate || trip.startDate;
+    const endDate = wizard.going?.endDate || startDate;
+    const selectedChipIds = wizard.interests?.selectedChipIds ?? [];
+
+    const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds).map(
+      (s) => ({
+        id: `wp-${s.slug}`,
+        slug: s.slug,
+        category: s.category,
+        title: s.title,
+        subtitle: "Day 1",
+        description: s.description,
+        tip: s.tip,
+        stats: [
+          { label: "DETOUR", value: "+0 mi" },
+          { label: "STOP TIME", value: "~30 min" },
+          { label: "ETA", value: "—" },
+        ],
+      }),
+    );
+
+    const newTitle = `${start} to ${end}`;
+    const updatedPayload: Trip = {
+      ...trip,
+      // Convention from forked trips: payload.id/title are placeholders;
+      // DB id + DB title are authoritative. Reset them so getUserTrip's
+      // DB-override is consistent.
+      id: "",
+      title: "Untitled Trip",
+      startDate,
+      endDate,
+      startLocation: start,
+      endLocation: end,
+      days: [
+        {
+          id: "day-1",
+          dayNumber: 1,
+          date: startDate,
+          label: `${start} — ${end}`,
+          waypoints,
+        },
+      ],
+    };
+
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase
+      .from("trips")
+      .update({ title: newTitle, state: "active", payload: updatedPayload })
+      .eq("id", draftId);
+    if (error) return;
+
+    redirect(`/trip/${draftId}`);
+  }
+
+  // Draft path: original anonymous in-memory flow.
   const draft = await repo.getDraft(draftId);
   if (!draft) return;
 
@@ -180,8 +331,8 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
   const startDate = draft.going?.startDate ?? today;
   const endDate = draft.going?.endDate ?? startDate;
 
-  const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds)
-    .map((s) => ({
+  const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds).map(
+    (s) => ({
       id: `wp-${s.slug}`,
       slug: s.slug,
       category: s.category,
@@ -190,11 +341,12 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
       description: s.description,
       tip: s.tip,
       stats: [
-        { label: "DETOUR",    value: "+0 mi" },
+        { label: "DETOUR", value: "+0 mi" },
         { label: "STOP TIME", value: "~30 min" },
-        { label: "ETA",       value: "—" },
+        { label: "ETA", value: "—" },
       ],
-    }));
+    }),
+  );
 
   const trip: Trip = {
     id: tripId,

@@ -520,7 +520,7 @@ function DaySection({
       <article className="flex flex-col items-stretch bg-bg-card">
         {!hideHeader && (
           <div className="sticky top-0 z-10 bg-bg-panel pb-[10px]">
-            <DayHeader tripId={trip.id} day={day} />
+            <DayHeader tripId={trip.id} day={day} referenceId={trip.referenceId} />
           </div>
         )}
 

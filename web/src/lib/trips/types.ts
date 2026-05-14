@@ -25,6 +25,18 @@ export type Trip = {
   /** Editorial kicker rendered above the title, Crimson Text italic. */
   kicker?: string;
   days: Day[];
+  /** Slug or null. Populated by `getUserTrip` from the DB column on
+   *  public.trips. Slug-keyed reference trips (la-to-deadhorse) have
+   *  this undefined — they ARE the reference. User trips forked from a
+   *  reference carry the reference's slug here; trips planned from
+   *  scratch via the wizard have it null. Drives whether the
+   *  "Reset to reference" affordance is offered. */
+  referenceId?: string | null;
+  /** Wizard state captured during /plan/[id]/* flow. Present only for
+   *  trips created via the wizard. Shape follows `WizardSlices` in
+   *  lib/plan/types.ts; stored loose here (Record) to avoid a circular
+   *  type import between lib/trips and lib/plan. */
+  wizard?: Record<string, unknown>;
 };
 
 export type Day = {

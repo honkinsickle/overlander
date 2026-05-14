@@ -69,6 +69,19 @@ export type DraftTrip = {
   acceptedSuggestionIds?: string[];
 };
 
+/** Canonical shape for `Trip.wizard` when a wizard-built trip is
+ *  persisted in public.trips. Same slices as DraftTrip minus the
+ *  DRAFTS-bookkeeping fields (id/status/createdAt). `currentStep` lets
+ *  /trips draft cards deep-link the user back to where they left off. */
+export type WizardSlices = {
+  going?: GoingData;
+  vehicle?: VehicleData;
+  interests?: InterestsData;
+  stops?: StopsData;
+  acceptedSuggestionIds?: string[];
+  currentStep?: PlanStep;
+};
+
 /** The step id is the URL segment and the storage key. */
 export const PLAN_STEPS = [
   "going",
