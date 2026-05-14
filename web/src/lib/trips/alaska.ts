@@ -4075,11 +4075,13 @@ function mergeDays(parsed: ParsedAlaskaDoc, overrides: Day[]): Day[] {
 
 let cachedTrip: { version: string; trip: Trip } | null = null;
 
-/** Build the LA→Deadhorse trip by merging §04 (canonical days) with
- *  the per-day overrides above, attaching §08 booking status via §03's
- *  permit_ref linkage, and running enrichment. Cached against the
- *  parsed doc's version string. */
-export async function getAlaskaTrip(): Promise<Trip> {
+/** Run the full markdown pipeline: parse §04 + per-day overrides, attach
+ *  §08 booking status via §03 permit_ref linkage, enrich, and pre-resolve
+ *  overnights + SuggestedSection top picks. Used by the seed script to
+ *  populate `reference_trips`; not called at runtime once seeded.
+ *
+ *  Cached against the parsed doc's version string. */
+export async function buildAlaskaTripFromMarkdown(): Promise<Trip> {
   const parsed = await loadAlaskaDoc();
   if (cachedTrip && cachedTrip.version === parsed.version) {
     return cachedTrip.trip;
@@ -4102,6 +4104,12 @@ export async function getAlaskaTrip(): Promise<Trip> {
   cachedTrip = { version: parsed.version, trip };
   return trip;
 }
+
+/** Public accessor for the LA→Deadhorse reference trip. Wired up by
+ *  `lib/trips/reference.ts` to fetch from Supabase first and fall back
+ *  to the committed snapshot. Re-exported here so existing call sites
+ *  (repository.ts, fixtures.ts) keep their imports stable. */
+export { getAlaskaTrip } from "./reference";
 
 /** Synchronous, sidecar-only fallback. Used by code paths that can't
  *  await (legacy fixture seeding). Loses §04 canonicity and booking

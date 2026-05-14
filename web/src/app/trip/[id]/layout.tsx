@@ -3,7 +3,12 @@ import { VerticalNav } from "@/components/chrome/vertical-nav";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { MapColumn } from "@/components/trip/map-column";
 import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
+import { MakeItMineCta } from "@/components/trip/make-it-mine-cta";
 import { getTrip } from "@/lib/trips/repository";
+import { isConfigured } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const REFERENCE_TRIP_IDS = new Set(["la-to-deadhorse"]);
 
 /**
  * Active-trip layout — vnav + 3-column body (day sidebar · detail · map).
@@ -28,6 +33,9 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
   const trip = await getTrip(id);
   if (!trip) notFound();
 
+  const isReference = REFERENCE_TRIP_IDS.has(trip.id);
+  const isAuthed = isReference ? await checkAuthed() : false;
+
   return (
     <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
       <VerticalNav />
@@ -43,7 +51,27 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
           routePolyline={trip.routePolyline}
         />
         <MapDetailOverlay />
+        {isReference && (
+          <MakeItMineCta
+            referenceId={trip.id}
+            isAuthed={isAuthed}
+            returnPath={`/trip/${trip.id}`}
+          />
+        )}
       </section>
     </div>
   );
+}
+
+async function checkAuthed(): Promise<boolean> {
+  if (!isConfigured()) return false;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return Boolean(user);
+  } catch {
+    return false;
+  }
 }
