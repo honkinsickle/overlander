@@ -72,9 +72,17 @@ export type Day = {
   /** Practical notes — fuel cadence, supply tips, backup plans, etc. */
   notes?: string[];
   /** Pre-resolved top photo-bearing place per slide category. Populated by
-   *  `resolveSuggestions` at trip-load so the SuggestedSection can render
-   *  without a client-side fetch. Categories with no match are absent. */
+   *  `resolveSuggestions` at trip-load (Alaska reference trip) or by the
+   *  wizard finalize action (user-built trips). Categories with no match
+   *  are absent. */
   suggestions?: Partial<Record<import("@/lib/trip-browse/places").SlideCategoryKey, import("@/lib/trip-browse/places").BrowsePlace>>;
+  /** Flat list of all places discovered along this day's route segment
+   *  during wizard finalize (Foursquare + RIDB, 25-mi radius sampled
+   *  along the polyline). Capped at a reasonable size to keep the
+   *  payload manageable. Intended for a future "browse the day" sheet
+   *  on the trip page — until then this is the source of truth that
+   *  `suggestions` (one per category) was picked from. */
+  segmentSuggestions?: import("@/lib/trip-browse/places").BrowsePlace[];
 };
 
 export type Waypoint = {

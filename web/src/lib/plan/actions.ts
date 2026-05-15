@@ -30,6 +30,7 @@ import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
+import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
 
 // Fallback pace when the wizard didn't capture one (e.g. drafts saved
 // pre-Phase-B). The wizard's PaceInput defaults to 6 hrs/day; this
@@ -97,14 +98,41 @@ async function buildRouteAwareDays(args: {
   endDate: string;
 } | null> {
   try {
+    console.log(
+      `[finalize] geocoding: "${args.startLocation.label}" → "${args.destination.label}"`,
+    );
     const [startCoords, endCoords] = await Promise.all([
       resolveCoords(args.startLocation),
       resolveCoords(args.destination),
     ]);
+    console.log(
+      `[finalize] coords: ${JSON.stringify(startCoords)} → ${JSON.stringify(endCoords)}`,
+    );
+
+    console.log(`[finalize] routing (roundTrip=${!!args.roundTrip})`);
     const route = await routeBetween([startCoords, endCoords], {
       roundTrip: args.roundTrip,
     });
-    const segments = segmentByPace(route, paceToSegmentInput(args.pace));
+    console.log(
+      `[finalize] routed: ${(route.distanceM / 1609.34).toFixed(1)} mi · ${(route.durationS / 3600).toFixed(2)} hrs · ${route.steps.length} steps`,
+    );
+
+    const paceInput = paceToSegmentInput(args.pace);
+    console.log(`[finalize] segmenting with pace ${JSON.stringify(paceInput)}`);
+    const segments = segmentByPace(route, paceInput);
+    console.log(`[finalize] segmented into ${segments.length} day(s)`);
+
+    // Resolve suggestions per day in parallel. Each call is itself an
+    // internal Promise.all across bbox samples + sources, so this
+    // saturates outbound bandwidth — fine for the ≤20 days the
+    // pace/route combinations typically produce.
+    console.log(`[finalize] querying suggestions for ${segments.length} days`);
+    const daySuggestions = await Promise.all(
+      segments.map((seg) => buildDaySuggestions(seg)),
+    );
+    console.log(
+      `[finalize] suggestions ready (${daySuggestions.map((d) => d.all.length).join(",")} per day)`,
+    );
 
     const startLabel = args.startLocation.label;
     const endLabel = args.destination.label;
@@ -124,6 +152,8 @@ async function buildRouteAwareDays(args: {
       miles: Math.round(seg.distanceM / 1609.34),
       driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
       waypoints: [],
+      suggestions: daySuggestions[i].byCategory,
+      segmentSuggestions: daySuggestions[i].all,
     }));
 
     return {
@@ -133,7 +163,11 @@ async function buildRouteAwareDays(args: {
       endDate: addDaysIso(args.startDate, Math.max(0, segments.length - 1)),
     };
   } catch (err) {
-    console.warn("[finalize] route-aware build failed, falling back:", err);
+    console.log(
+      "[finalize] route-aware build failed, falling back:",
+      err instanceof Error ? `${err.name}: ${err.message}` : err,
+    );
+    if (err instanceof Error && err.stack) console.log(err.stack);
     return null;
   }
 }

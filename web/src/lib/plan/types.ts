@@ -127,7 +127,7 @@ export const STEP_TITLE: Record<PlanStep, string> = {
   vehicle: "What are you driving?",
   interests: "What type of stops are you interested in?",
   stops: "Any must-stop waypoints?",
-  loader: "Planning your trip…",
+  loader: "Finding stops along your route…",
 };
 
 // Paper numbers the flow as 02–08 (step 01 is the Entry screen). We keep
