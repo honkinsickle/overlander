@@ -57,6 +57,10 @@ export type Day = {
   description?: string;
   /** Forecast strings for departure and arrival points (e.g. "75-82F dry"). */
   weather?: { departure?: string; arrival?: string };
+  /** Live weather for this day's destination, populated server-side at
+   *  trip-load by `resolveWeather`. `source` distinguishes real forecast
+   *  from climatology fallback. Absent when the API call failed. */
+  forecast?: import("@/lib/weather/types").WeatherSnapshot;
   /** Practical notes — fuel cadence, supply tips, backup plans, etc. */
   notes?: string[];
   /** Pre-resolved top photo-bearing place per slide category. Populated by

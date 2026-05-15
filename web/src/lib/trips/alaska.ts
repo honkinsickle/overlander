@@ -3,6 +3,7 @@ import { LA_TO_DEADHORSE_POLYLINE } from "./alaska-route";
 import { enrichTrip } from "./enrich";
 import { resolveOvernights } from "./resolve-overnights";
 import { resolveSuggestions } from "./resolve-suggestions";
+import { resolveWeather } from "./resolve-weather";
 import {
   loadAlaskaDoc,
   findFixedEventByDate,
@@ -3751,7 +3752,12 @@ export async function buildAlaskaTripFromMarkdown(): Promise<Trip> {
   // Same pattern for the SuggestedSection: pre-fetch the top photo-bearing
   // place per slide category per day. Pushes ~264 discovery calls to first
   // trip-load (cached after).
-  const trip = await resolveSuggestions(withOvernights);
+  const withSuggestions = await resolveSuggestions(withOvernights);
+  // Pull a per-day weather snapshot for every day with coords. Days within
+  // OpenMeteo's 16-day window get a real forecast; days beyond get last-year
+  // same-date climatology so the briefing card always has live numbers
+  // alongside the static `weather.arrival` planning copy.
+  const trip = await resolveWeather(withSuggestions);
   cachedTrip = { version: parsed.version, trip };
   return trip;
 }
