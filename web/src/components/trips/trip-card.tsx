@@ -103,7 +103,11 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
         ) : (
           <div className="flex items-start justify-between gap-3 pr-10">
             <Link
-              href={`/trip/${trip.id}`}
+              href={
+                trip.state === "draft"
+                  ? `/plan/${trip.id}/${trip.wizardStep ?? "going"}`
+                  : `/trip/${trip.id}`
+              }
               className="font-display text-lg leading-tight truncate text-text-primary hover:text-amber transition-colors"
             >
               {title}

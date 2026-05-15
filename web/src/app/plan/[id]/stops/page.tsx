@@ -4,7 +4,7 @@ import { MapPin, Plus, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlanningCard } from "@/components/plan/planning-card";
 import { NavFooter } from "@/components/plan/planning-footer";
-import { getDraft } from "@/lib/plan/repository";
+import { loadWizardState } from "@/lib/plan/load";
 import {
   addStopAction,
   removeStopAction,
@@ -33,11 +33,11 @@ export default async function StopsStep(
   props: PageProps<"/plan/[id]/stops">,
 ) {
   const { id } = await props.params;
-  const draft = await getDraft(id);
-  if (!draft) notFound();
+  const state = await loadWizardState(id);
+  if (!state) notFound();
 
-  const stops = draft.stops?.stops ?? [];
-  const avoidHighways = draft.stops?.avoidHighways ?? false;
+  const stops = state.stops?.stops ?? [];
+  const avoidHighways = state.stops?.avoidHighways ?? false;
   const skipHref = nextHref(id, "stops") ?? `/plan/${id}/loader`;
 
   return (

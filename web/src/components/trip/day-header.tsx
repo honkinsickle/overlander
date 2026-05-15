@@ -25,7 +25,19 @@ import type { Day } from "@/lib/trips/types";
  * positioned, right-aligned) so the base layout stays pixel-exact and
  * the rename/delete flow still works.
  */
-export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
+export function DayHeader({
+  tripId,
+  day,
+  referenceId,
+}: {
+  tripId: string;
+  day: Day;
+  /** When null/undefined, the trip has no reference (scratch wizard
+   *  trip or slug-keyed reference trip itself); the "Reset to
+   *  reference" kebab item is hidden because resetDayToReferenceAction
+   *  would silently no-op. */
+  referenceId?: string | null;
+}) {
   const dayDate = new Date(`${day.date}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -155,7 +167,9 @@ export function DayHeader({ tripId, day }: { tripId: string; day: Day }) {
           items={[
             { id: "rename", label: "Rename day",              icon: Pencil, onSelect: startRename },
             { id: "add",    label: "Add waypoint or overnight", icon: Plus, onSelect: () => console.log("add", day.id) },
-            { id: "reset",  label: "Reset to reference",      icon: RotateCcw, dividerBefore: true, onSelect: confirmResetToReference },
+            ...(referenceId
+              ? [{ id: "reset",  label: "Reset to reference",      icon: RotateCcw, dividerBefore: true as const, onSelect: confirmResetToReference }]
+              : []),
             { id: "delete", label: "Delete day",              icon: Trash2, danger: true, onSelect: confirmDelete },
           ]}
         />

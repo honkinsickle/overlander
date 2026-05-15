@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PlanningCard } from "@/components/plan/planning-card";
 import { LoaderPanel } from "@/components/plan/loader-panel";
-import { getDraft } from "@/lib/plan/repository";
+import { loadWizardState } from "@/lib/plan/load";
 import { STEP_DISPLAY_NUMBER } from "@/lib/plan/types";
 
 /**
@@ -13,8 +13,8 @@ export default async function LoaderStep(
   props: PageProps<"/plan/[id]/loader">,
 ) {
   const { id } = await props.params;
-  const draft = await getDraft(id);
-  if (!draft) notFound();
+  const state = await loadWizardState(id);
+  if (!state) notFound();
 
   return (
     <PlanningCard
