@@ -6,12 +6,15 @@ import * as repo from "./repository";
 import * as trips from "@/lib/trips/repository";
 import type {
   GoingData,
+  Pace,
+  PlanLocation,
   PlanWith,
   StopsData,
   VehicleData,
   InterestsData,
   WizardSlices,
 } from "./types";
+import { PACE_BOUNDS } from "./types";
 import type { Day, Trip, Waypoint } from "@/lib/trips/types";
 import {
   isUserTripId,
@@ -28,10 +31,11 @@ import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 
-// Phase A: hardcode the daily-driving pace at finalize time. Phase B
-// adds a slider to the wizard's `going` step and reads from
-// `wizard.going.pace`.
-const DEFAULT_PACE_HOURS = 4;
+// Fallback pace when the wizard didn't capture one (e.g. drafts saved
+// pre-Phase-B). The wizard's PaceInput defaults to 6 hrs/day; this
+// matches so old drafts get the same shape as new ones.
+const DEFAULT_PACE_HOURS = 6;
+const METERS_PER_MILE = 1609.34;
 
 function addDaysIso(isoDate: string, n: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
@@ -39,14 +43,53 @@ function addDaysIso(isoDate: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Run start/end labels through Mapbox geocoding, route between them,
- *  segment by the default pace, and return the route-aware fields
- *  (days, startCoords, routePolyline, endDate). Returns null on any
- *  failure — caller falls back to the old single-day skeleton. */
+function paceToSegmentInput(
+  pace: Pace | undefined,
+): { maxDurationS: number } | { maxDistanceM: number } {
+  if (!pace) return { maxDurationS: DEFAULT_PACE_HOURS * 3600 };
+  if (pace.kind === "hours") return { maxDurationS: pace.value * 3600 };
+  return { maxDistanceM: pace.value * METERS_PER_MILE };
+}
+
+/** Build a PlanLocation from a labeled form input + the autocomplete's
+ *  hidden `${name}Lat`/`${name}Lng` companions. If both coord fields
+ *  are numeric, store them — the wizard's autocomplete picker fills
+ *  them on select, letting finalize skip a redundant geocode call. */
+function planLocationFromFormFields(
+  label: string,
+  formData: FormData,
+  name: string,
+): PlanLocation {
+  const latRaw = String(formData.get(`${name}Lat`) ?? "");
+  const lngRaw = String(formData.get(`${name}Lng`) ?? "");
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  if (latRaw && lngRaw && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { label, lat, lng };
+  }
+  return { label };
+}
+
+/** Resolve a PlanLocation to `[lng, lat]`. Prefers the picker-supplied
+ *  coords; falls back to geocoding the label. */
+async function resolveCoords(loc: PlanLocation): Promise<[number, number]> {
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+    return [loc.lng, loc.lat];
+  }
+  return geocode(loc.label);
+}
+
+/** Resolve start/end coords (preferring picker-supplied ones, else
+ *  geocoding the labels), route between them, segment by the chosen
+ *  pace, and return the route-aware fields (days, startCoords,
+ *  routePolyline, endDate). Returns null on any failure — caller falls
+ *  back to the old single-day skeleton. */
 async function buildRouteAwareDays(args: {
-  start: string;
-  end: string;
+  startLocation: PlanLocation;
+  destination: PlanLocation;
   startDate: string;
+  pace?: Pace;
+  roundTrip?: boolean;
 }): Promise<{
   days: Day[];
   startCoords: [number, number];
@@ -55,25 +98,27 @@ async function buildRouteAwareDays(args: {
 } | null> {
   try {
     const [startCoords, endCoords] = await Promise.all([
-      geocode(args.start),
-      geocode(args.end),
+      resolveCoords(args.startLocation),
+      resolveCoords(args.destination),
     ]);
-    const route = await routeBetween([startCoords, endCoords]);
-    const segments = segmentByPace(route, {
-      maxDurationS: DEFAULT_PACE_HOURS * 3600,
+    const route = await routeBetween([startCoords, endCoords], {
+      roundTrip: args.roundTrip,
     });
+    const segments = segmentByPace(route, paceToSegmentInput(args.pace));
 
+    const startLabel = args.startLocation.label;
+    const endLabel = args.destination.label;
     const days: Day[] = segments.map((seg, i) => ({
       id: `day-${i + 1}`,
       dayNumber: i + 1,
       date: addDaysIso(args.startDate, i),
       label:
         segments.length === 1
-          ? `${args.start} — ${args.end}`
+          ? `${startLabel} — ${endLabel}`
           : i === 0
-            ? `${args.start} — end of day 1`
+            ? `${startLabel} — end of day 1`
             : i === segments.length - 1
-              ? `Day ${i + 1} — ${args.end}`
+              ? `Day ${i + 1} — ${endLabel}`
               : `Day ${i + 1}`,
       coords: seg.endCoord,
       miles: Math.round(seg.distanceM / 1609.34),
@@ -126,6 +171,19 @@ export async function saveGoingAction(
     planWithRaw === "explore" ? "explore" : "automagically";
   const startDate = String(formData.get("datesStart") ?? "").trim();
   const endDate = String(formData.get("datesEnd") ?? "").trim();
+  const roundTrip = formData.get("roundTrip") === "on";
+
+  const paceKindRaw = String(formData.get("paceKind") ?? "");
+  const paceKind: Pace["kind"] | null =
+    paceKindRaw === "hours" || paceKindRaw === "miles" ? paceKindRaw : null;
+  const paceValueRaw = String(formData.get("paceValue") ?? "");
+  const paceValueNum = Number(paceValueRaw);
+  let pace: Pace | undefined;
+  if (paceKind && Number.isFinite(paceValueNum) && paceValueNum > 0) {
+    const bounds = PACE_BOUNDS[paceKind];
+    const clamped = Math.max(bounds.min, Math.min(bounds.max, paceValueNum));
+    pace = { kind: paceKind, value: clamped };
+  }
 
   if (!startLabel) {
     return { error: "Enter a starting point." };
@@ -138,12 +196,22 @@ export async function saveGoingAction(
   }
 
   const data: GoingData = {
-    startLocation: { label: startLabel },
-    destination: { label: destinationLabel },
+    startLocation: planLocationFromFormFields(
+      startLabel,
+      formData,
+      "startLocation",
+    ),
+    destination: planLocationFromFormFields(
+      destinationLabel,
+      formData,
+      "destination",
+    ),
     saveStartAsHome,
     planWith,
     startDate: startDate || undefined,
     endDate: endDate || undefined,
+    pace,
+    roundTrip,
   };
 
   const ok = isUserTripId(draftId)
@@ -330,13 +398,23 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
     if (!trip) return;
     const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
 
-    const start =
-      wizard.going?.startLocation?.label || trip.startLocation || "Start";
-    const end =
-      wizard.going?.destination?.label || trip.endLocation || "Destination";
+    const startLocation: PlanLocation = wizard.going?.startLocation ?? {
+      label: trip.startLocation || "Start",
+    };
+    const destination: PlanLocation = wizard.going?.destination ?? {
+      label: trip.endLocation || "Destination",
+    };
+    const start = startLocation.label;
+    const end = destination.label;
     const startDate = wizard.going?.startDate || trip.startDate;
 
-    const routed = await buildRouteAwareDays({ start, end, startDate });
+    const routed = await buildRouteAwareDays({
+      startLocation,
+      destination,
+      startDate,
+      pace: wizard.going?.pace,
+      roundTrip: wizard.going?.roundTrip,
+    });
 
     // Fallback for when geocoding/routing can't produce a real
     // itinerary (e.g. an unrecognized place name, unroutable pair).

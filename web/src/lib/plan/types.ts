@@ -17,6 +17,19 @@ export type PlanLocation = {
   lng?: number;
 };
 
+/** Daily driving pace. `kind` follows the wizard's hours-or-miles
+ *  toggle; finalize converts to canonical seconds/meters before calling
+ *  segmentByPace. Bounds defined in PACE_BOUNDS below; the form clamps
+ *  on submit. */
+export type Pace =
+  | { kind: "hours"; value: number }
+  | { kind: "miles"; value: number };
+
+export const PACE_BOUNDS = {
+  hours: { min: 1, max: 14, default: 6 },
+  miles: { min: 50, max: 800, default: 300 },
+} as const;
+
 export type GoingData = {
   startLocation?: PlanLocation;
   destination?: PlanLocation;
@@ -25,6 +38,11 @@ export type GoingData = {
   /** ISO date strings, `YYYY-MM-DD`. */
   startDate?: string;
   endDate?: string;
+  /** Daily driving pace. Used by finalize to segment the route into
+   *  days that respect this cap. */
+  pace?: Pace;
+  /** Append the start point back to the route so it returns home. */
+  roundTrip?: boolean;
 };
 
 export type VehicleData = {

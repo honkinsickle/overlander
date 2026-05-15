@@ -4,9 +4,10 @@ import { useActionState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlanningCard } from "@/components/plan/planning-card";
 import { NavFooter } from "@/components/plan/planning-footer";
-import { LocationInput } from "@/components/plan/location-input";
+import { LocationAutocomplete } from "@/components/plan/location-autocomplete";
 import { ChoiceCard } from "@/components/plan/choice-card";
 import { DateRangeInput } from "@/components/plan/date-range-input";
+import { PaceInput } from "@/components/plan/pace-input";
 import {
   saveGoingAction,
   type FormState,
@@ -37,10 +38,12 @@ export function GoingForm({
       >
         <section className="flex flex-col gap-2">
           <div className="section-label text-[13px]">Starting Point</div>
-          <LocationInput
+          <LocationAutocomplete
             name="startLocation"
             placeholder="Where are you starting from?"
             defaultValue={defaults?.startLocation?.label ?? ""}
+            defaultLat={defaults?.startLocation?.lat}
+            defaultLng={defaults?.startLocation?.lng}
             required
           />
           <label className="flex items-center gap-2 mt-1 text-sm text-text-primary cursor-pointer">
@@ -54,12 +57,21 @@ export function GoingForm({
 
         <section className="flex flex-col gap-2">
           <div className="section-label text-[13px]">Destination</div>
-          <LocationInput
+          <LocationAutocomplete
             name="destination"
             placeholder="Where are you headed?"
             defaultValue={defaults?.destination?.label ?? ""}
+            defaultLat={defaults?.destination?.lat}
+            defaultLng={defaults?.destination?.lng}
             required
           />
+          <label className="flex items-center gap-2 mt-1 text-sm text-text-primary cursor-pointer">
+            <Checkbox
+              name="roundTrip"
+              defaultChecked={defaults?.roundTrip ?? false}
+            />
+            <span>Return to start</span>
+          </label>
         </section>
 
         <ChoiceCard
@@ -94,6 +106,8 @@ export function GoingForm({
             defaultEnd={defaults?.endDate}
           />
         </section>
+
+        <PaceInput defaults={defaults?.pace} />
 
         {state.error && (
           <p role="alert" className="text-sm text-input-error">
