@@ -7,6 +7,7 @@ import { NavFooter } from "@/components/plan/planning-footer";
 import { LocationInput } from "@/components/plan/location-input";
 import { ChoiceCard } from "@/components/plan/choice-card";
 import { DateRangeInput } from "@/components/plan/date-range-input";
+import { PaceInput } from "@/components/plan/pace-input";
 import {
   saveGoingAction,
   type FormState,
@@ -60,6 +61,13 @@ export function GoingForm({
             defaultValue={defaults?.destination?.label ?? ""}
             required
           />
+          <label className="flex items-center gap-2 mt-1 text-sm text-text-primary cursor-pointer">
+            <Checkbox
+              name="roundTrip"
+              defaultChecked={defaults?.roundTrip ?? false}
+            />
+            <span>Return to start</span>
+          </label>
         </section>
 
         <ChoiceCard
@@ -94,6 +102,8 @@ export function GoingForm({
             defaultEnd={defaults?.endDate}
           />
         </section>
+
+        <PaceInput defaults={defaults?.pace} />
 
         {state.error && (
           <p role="alert" className="text-sm text-input-error">
