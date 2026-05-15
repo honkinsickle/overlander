@@ -7,6 +7,7 @@ import * as trips from "@/lib/trips/repository";
 import type {
   GoingData,
   Pace,
+  PlanLocation,
   PlanWith,
   StopsData,
   VehicleData,
@@ -50,13 +51,42 @@ function paceToSegmentInput(
   return { maxDistanceM: pace.value * METERS_PER_MILE };
 }
 
-/** Run start/end labels through Mapbox geocoding, route between them,
- *  segment by the chosen pace, and return the route-aware fields
- *  (days, startCoords, routePolyline, endDate). Returns null on any
- *  failure — caller falls back to the old single-day skeleton. */
+/** Build a PlanLocation from a labeled form input + the autocomplete's
+ *  hidden `${name}Lat`/`${name}Lng` companions. If both coord fields
+ *  are numeric, store them — the wizard's autocomplete picker fills
+ *  them on select, letting finalize skip a redundant geocode call. */
+function planLocationFromFormFields(
+  label: string,
+  formData: FormData,
+  name: string,
+): PlanLocation {
+  const latRaw = String(formData.get(`${name}Lat`) ?? "");
+  const lngRaw = String(formData.get(`${name}Lng`) ?? "");
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  if (latRaw && lngRaw && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { label, lat, lng };
+  }
+  return { label };
+}
+
+/** Resolve a PlanLocation to `[lng, lat]`. Prefers the picker-supplied
+ *  coords; falls back to geocoding the label. */
+async function resolveCoords(loc: PlanLocation): Promise<[number, number]> {
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+    return [loc.lng, loc.lat];
+  }
+  return geocode(loc.label);
+}
+
+/** Resolve start/end coords (preferring picker-supplied ones, else
+ *  geocoding the labels), route between them, segment by the chosen
+ *  pace, and return the route-aware fields (days, startCoords,
+ *  routePolyline, endDate). Returns null on any failure — caller falls
+ *  back to the old single-day skeleton. */
 async function buildRouteAwareDays(args: {
-  start: string;
-  end: string;
+  startLocation: PlanLocation;
+  destination: PlanLocation;
   startDate: string;
   pace?: Pace;
   roundTrip?: boolean;
@@ -68,25 +98,27 @@ async function buildRouteAwareDays(args: {
 } | null> {
   try {
     const [startCoords, endCoords] = await Promise.all([
-      geocode(args.start),
-      geocode(args.end),
+      resolveCoords(args.startLocation),
+      resolveCoords(args.destination),
     ]);
     const route = await routeBetween([startCoords, endCoords], {
       roundTrip: args.roundTrip,
     });
     const segments = segmentByPace(route, paceToSegmentInput(args.pace));
 
+    const startLabel = args.startLocation.label;
+    const endLabel = args.destination.label;
     const days: Day[] = segments.map((seg, i) => ({
       id: `day-${i + 1}`,
       dayNumber: i + 1,
       date: addDaysIso(args.startDate, i),
       label:
         segments.length === 1
-          ? `${args.start} — ${args.end}`
+          ? `${startLabel} — ${endLabel}`
           : i === 0
-            ? `${args.start} — end of day 1`
+            ? `${startLabel} — end of day 1`
             : i === segments.length - 1
-              ? `Day ${i + 1} — ${args.end}`
+              ? `Day ${i + 1} — ${endLabel}`
               : `Day ${i + 1}`,
       coords: seg.endCoord,
       miles: Math.round(seg.distanceM / 1609.34),
@@ -164,8 +196,16 @@ export async function saveGoingAction(
   }
 
   const data: GoingData = {
-    startLocation: { label: startLabel },
-    destination: { label: destinationLabel },
+    startLocation: planLocationFromFormFields(
+      startLabel,
+      formData,
+      "startLocation",
+    ),
+    destination: planLocationFromFormFields(
+      destinationLabel,
+      formData,
+      "destination",
+    ),
     saveStartAsHome,
     planWith,
     startDate: startDate || undefined,
@@ -358,15 +398,19 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
     if (!trip) return;
     const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
 
-    const start =
-      wizard.going?.startLocation?.label || trip.startLocation || "Start";
-    const end =
-      wizard.going?.destination?.label || trip.endLocation || "Destination";
+    const startLocation: PlanLocation = wizard.going?.startLocation ?? {
+      label: trip.startLocation || "Start",
+    };
+    const destination: PlanLocation = wizard.going?.destination ?? {
+      label: trip.endLocation || "Destination",
+    };
+    const start = startLocation.label;
+    const end = destination.label;
     const startDate = wizard.going?.startDate || trip.startDate;
 
     const routed = await buildRouteAwareDays({
-      start,
-      end,
+      startLocation,
+      destination,
       startDate,
       pace: wizard.going?.pace,
       roundTrip: wizard.going?.roundTrip,
