@@ -12,7 +12,7 @@ import type {
   InterestsData,
   WizardSlices,
 } from "./types";
-import type { Trip, Waypoint } from "@/lib/trips/types";
+import type { Day, Trip, Waypoint } from "@/lib/trips/types";
 import {
   isUserTripId,
   getUserTrip,
@@ -23,6 +23,75 @@ import { ALL_CHIP_IDS } from "./interests";
 import { suggestionsForChips } from "./suggestions";
 import { newDraftId } from "./store";
 import { nextHref } from "./nav";
+import { geocode } from "@/lib/routing/geocode";
+import { routeBetween } from "@/lib/routing/route-between";
+import { segmentByPace } from "@/lib/routing/segment-by-pace";
+import { encodePolyline } from "@/lib/routing/polyline";
+
+// Phase A: hardcode the daily-driving pace at finalize time. Phase B
+// adds a slider to the wizard's `going` step and reads from
+// `wizard.going.pace`.
+const DEFAULT_PACE_HOURS = 4;
+
+function addDaysIso(isoDate: string, n: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Run start/end labels through Mapbox geocoding, route between them,
+ *  segment by the default pace, and return the route-aware fields
+ *  (days, startCoords, routePolyline, endDate). Returns null on any
+ *  failure — caller falls back to the old single-day skeleton. */
+async function buildRouteAwareDays(args: {
+  start: string;
+  end: string;
+  startDate: string;
+}): Promise<{
+  days: Day[];
+  startCoords: [number, number];
+  routePolyline: string;
+  endDate: string;
+} | null> {
+  try {
+    const [startCoords, endCoords] = await Promise.all([
+      geocode(args.start),
+      geocode(args.end),
+    ]);
+    const route = await routeBetween([startCoords, endCoords]);
+    const segments = segmentByPace(route, {
+      maxDurationS: DEFAULT_PACE_HOURS * 3600,
+    });
+
+    const days: Day[] = segments.map((seg, i) => ({
+      id: `day-${i + 1}`,
+      dayNumber: i + 1,
+      date: addDaysIso(args.startDate, i),
+      label:
+        segments.length === 1
+          ? `${args.start} — ${args.end}`
+          : i === 0
+            ? `${args.start} — end of day 1`
+            : i === segments.length - 1
+              ? `Day ${i + 1} — ${args.end}`
+              : `Day ${i + 1}`,
+      coords: seg.endCoord,
+      miles: Math.round(seg.distanceM / 1609.34),
+      driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
+      waypoints: [],
+    }));
+
+    return {
+      days,
+      startCoords,
+      routePolyline: encodePolyline(route.coordinates),
+      endDate: addDaysIso(args.startDate, Math.max(0, segments.length - 1)),
+    };
+  } catch (err) {
+    console.warn("[finalize] route-aware build failed, falling back:", err);
+    return null;
+  }
+}
 
 /**
  * Wizard ids are polymorphic:
@@ -266,48 +335,64 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
     const end =
       wizard.going?.destination?.label || trip.endLocation || "Destination";
     const startDate = wizard.going?.startDate || trip.startDate;
-    const endDate = wizard.going?.endDate || startDate;
-    const selectedChipIds = wizard.interests?.selectedChipIds ?? [];
 
-    const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds).map(
-      (s) => ({
-        id: `wp-${s.slug}`,
-        slug: s.slug,
-        category: s.category,
-        title: s.title,
-        subtitle: "Day 1",
-        description: s.description,
-        tip: s.tip,
-        stats: [
-          { label: "DETOUR", value: "+0 mi" },
-          { label: "STOP TIME", value: "~30 min" },
-          { label: "ETA", value: "—" },
-        ],
-      }),
-    );
+    const routed = await buildRouteAwareDays({ start, end, startDate });
+
+    // Fallback for when geocoding/routing can't produce a real
+    // itinerary (e.g. an unrecognized place name, unroutable pair).
+    // Mirrors the old single-day skeleton with selected-chip waypoints
+    // dumped on Day 1, so the user still ends up on a viewable trip.
+    const fallbackWaypoints: Waypoint[] = suggestionsForChips(
+      wizard.interests?.selectedChipIds ?? [],
+    ).map((s) => ({
+      id: `wp-${s.slug}`,
+      slug: s.slug,
+      category: s.category,
+      title: s.title,
+      subtitle: "Day 1",
+      description: s.description,
+      tip: s.tip,
+      stats: [
+        { label: "DETOUR", value: "+0 mi" },
+        { label: "STOP TIME", value: "~30 min" },
+        { label: "ETA", value: "—" },
+      ],
+    }));
 
     const newTitle = `${start} to ${end}`;
-    const updatedPayload: Trip = {
-      ...trip,
-      // Convention from forked trips: payload.id/title are placeholders;
-      // DB id + DB title are authoritative. Reset them so getUserTrip's
-      // DB-override is consistent.
-      id: "",
-      title: "Untitled Trip",
-      startDate,
-      endDate,
-      startLocation: start,
-      endLocation: end,
-      days: [
-        {
-          id: "day-1",
-          dayNumber: 1,
-          date: startDate,
-          label: `${start} — ${end}`,
-          waypoints,
-        },
-      ],
-    };
+    const updatedPayload: Trip = routed
+      ? {
+          ...trip,
+          // Convention from forked trips: payload.id/title are
+          // placeholders; DB id + DB title are authoritative.
+          id: "",
+          title: "Untitled Trip",
+          startDate,
+          endDate: routed.endDate,
+          startLocation: start,
+          endLocation: end,
+          startCoords: routed.startCoords,
+          routePolyline: routed.routePolyline,
+          days: routed.days,
+        }
+      : {
+          ...trip,
+          id: "",
+          title: "Untitled Trip",
+          startDate,
+          endDate: wizard.going?.endDate || startDate,
+          startLocation: start,
+          endLocation: end,
+          days: [
+            {
+              id: "day-1",
+              dayNumber: 1,
+              date: startDate,
+              label: `${start} — ${end}`,
+              waypoints: fallbackWaypoints,
+            },
+          ],
+        };
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase
