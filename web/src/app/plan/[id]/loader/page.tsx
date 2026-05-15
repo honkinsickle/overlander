@@ -2,11 +2,10 @@ import { notFound } from "next/navigation";
 import { PlanningCard } from "@/components/plan/planning-card";
 import { LoaderPanel } from "@/components/plan/loader-panel";
 import { loadWizardState } from "@/lib/plan/load";
-import { STEP_DISPLAY_NUMBER } from "@/lib/plan/types";
+import { STEP_DISPLAY_NUMBER, STEP_TITLE } from "@/lib/plan/types";
 
 /**
- * /plan/[id]/loader — "Hang tight while we find the best stops".
- * Simulated progress: auto-advances to /plan/[id]/results after ~10s.
+ * /plan/[id]/loader — auto-advances to /trip/[id] after finalize.
  * No Back/Continue — the panel drives its own redirect.
  */
 export default async function LoaderStep(
@@ -19,7 +18,7 @@ export default async function LoaderStep(
   return (
     <PlanningCard
       displayStep={STEP_DISPLAY_NUMBER.loader}
-      title="Hang tight while we find the best stops"
+      title={STEP_TITLE.loader}
     >
       <LoaderPanel draftId={id} />
     </PlanningCard>

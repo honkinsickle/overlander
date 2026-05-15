@@ -19,6 +19,12 @@ export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>>
 export type BrowsePlace = {
   id: string;
   coords: [number, number];
+  /** Which slide bucket this place belongs to. Set by
+   *  `to-browse-place.ts` on discovery results so wizard finalize can
+   *  group a flat suggestions list by category. Optional so the
+   *  editorial fixtures keyed elsewhere by category don't need to
+   *  duplicate the field. */
+  category?: SlideCategoryKey;
   /** Hero photo URL. Optional: discovery sources (OSM and friends)
    *  often have no photo, in which case the slide renders a category-
    *  themed gradient. Editorial fixture entries always include one. */

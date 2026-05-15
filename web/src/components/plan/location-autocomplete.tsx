@@ -93,9 +93,15 @@ export function LocationAutocomplete({
             const c = f.geometry?.coordinates;
             const primary = f.properties?.name ?? "";
             const secondary = f.properties?.place_formatted ?? "";
+            // Pull a short region abbreviation (state for US, province
+            // for Canada, etc.) to disambiguate at a glance — "Santa
+            // Rosa, CA" beats just "Santa Rosa". Falls back to the
+            // place name alone when context is missing.
+            const region = f.properties?.context?.region;
+            const regionCode = region?.region_code ?? region?.name ?? "";
             if (!c || c.length < 2 || !primary) return null;
             return {
-              label: primary,
+              label: regionCode ? `${primary}, ${regionCode}` : primary,
               primary,
               secondary,
               coords: [c[0], c[1]] as [number, number],
@@ -202,6 +208,12 @@ export function LocationAutocomplete({
 type MapboxGeocodingResponse = {
   features?: {
     geometry?: { coordinates?: number[] };
-    properties?: { name?: string; place_formatted?: string };
+    properties?: {
+      name?: string;
+      place_formatted?: string;
+      context?: {
+        region?: { name?: string; region_code?: string };
+      };
+    };
   }[];
 };

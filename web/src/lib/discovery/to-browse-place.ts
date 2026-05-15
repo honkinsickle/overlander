@@ -57,6 +57,7 @@ export function toBrowsePlace(results: SourceResult[]): BrowsePlace {
   return {
     id: head.externalId,
     coords: head.coords,
+    category: head.category,
     photoUrl: merged.photoUrl,
     photoAlt: merged.title,
     title: merged.title,
