@@ -106,7 +106,7 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
               href={
                 trip.state === "draft"
                   ? `/plan/${trip.id}/${trip.wizardStep ?? "going"}`
-                  : `/trip/${trip.id}`
+                  : `/trips/${trip.id}`
               }
               className="font-display text-lg leading-tight truncate text-text-primary hover:text-amber transition-colors"
             >
