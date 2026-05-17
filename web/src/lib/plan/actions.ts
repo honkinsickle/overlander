@@ -149,6 +149,7 @@ async function buildRouteAwareDays(args: {
               ? `Day ${i + 1} — ${endLabel}`
               : `Day ${i + 1}`,
       coords: seg.endCoord,
+      startCoord: seg.startCoord,
       miles: Math.round(seg.distanceM / 1609.34),
       driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
       waypoints: [],

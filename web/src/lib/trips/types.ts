@@ -46,8 +46,15 @@ export type Day = {
   date: string;
   /** Human-readable span (e.g. "Seattle, WA — Mount Rainier NP"). */
   label: string;
-  /** `[lng, lat]` the map flies to when this day is active. */
+  /** `[lng, lat]` of the *end* of this day (overnight stop). Used to chain
+   *  route geometry across days — Day N's `coords` is Day N+1's start. */
   coords?: [number, number];
+  /** `[lng, lat]` of the *start* of this day. The map flies here when the
+   *  day is active (so Day 1 lands at the trip origin, not the overnight).
+   *  Optional for backward compatibility with trips finalized before this
+   *  field existed — MapColumn falls back to `trip.startCoords` for Day 1
+   *  and to `coords` otherwise. */
+  startCoord?: [number, number];
   /** Total driving miles for the day (sidebar stat). */
   miles?: number;
   /** Estimated driving hours for the day (sidebar stat). */

@@ -393,17 +393,27 @@ export function MapColumn({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fly to the active day whenever ?day= changes.
+  // Fly to the active day whenever ?day= changes. Prefer the day's
+  // *start* coord — `coords` is the end-of-day overnight, so without
+  // this Day 1 lands at the first night's stop instead of the origin
+  // city. Backfill for trips finalized before `startCoord` existed:
+  // Day 1 → trip.startCoords, other days → `coords` (the prior day's
+  // end is also this day's start in segment chains).
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !activeDay?.coords) return;
+    if (!activeDay) return;
+    const flyCoord =
+      activeDay.startCoord ??
+      (activeDay.dayNumber === 1 ? startCoords : undefined) ??
+      activeDay.coords;
+    if (!map || !flyCoord) return;
     map.flyTo({
-      center: activeDay.coords,
+      center: flyCoord,
       zoom: 8,
       duration: 1500,
       essential: true,
     });
-  }, [activeDay?.id, activeDay?.coords]);
+  }, [activeDay, startCoords]);
 
   // Fly to a specific place when the browse panel emits trip:flyTo. Used by
   // the CategoryBrowsePanel cards: tap a slide → map zooms to that location.
