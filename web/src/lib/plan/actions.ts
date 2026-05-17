@@ -525,6 +525,12 @@ export async function finalizeTripAction(
       .eq("id", draftId);
     if (error) return { ok: false, error: "Couldn't save your trip." };
 
+    // Invalidate the /trips list so the newly-finalized trip shows up
+    // when the user closes the slideup. Other mutating actions (rename,
+    // delete, state change) revalidate the same path; finalize didn't
+    // need to historically because it redirected away to /trip/<id>.
+    revalidatePath("/trips");
+
     // The Trip we return uses the DB-authoritative id and title (the
     // payload itself keeps the placeholder id/"Untitled Trip" by
     // convention for forked trips — see updatedPayload above).
@@ -583,5 +589,6 @@ export async function finalizeTripAction(
 
   await trips.createTrip(trip);
   await repo.discardDraft(draftId);
+  revalidatePath("/trips");
   return { ok: true, tripId, trip };
 }
