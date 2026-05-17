@@ -588,7 +588,13 @@ export async function finalizeTripAction(
   };
 
   await trips.createTrip(trip);
-  await repo.discardDraft(draftId);
+  // Intentionally NOT discarding the draft. After Step 1's slideup
+  // handoff, the action returns instead of redirecting; Next.js then
+  // re-renders /plan/<id>/loader, whose layout calls
+  // loadWizardState(draftId). If we discarded the draft here, the
+  // layout would notFound() and the user would see a 404 instead of
+  // the slideup. The orphaned draft is in-memory only and gets GC'd
+  // with the process.
   revalidatePath("/trips");
   return { ok: true, tripId, trip };
 }
