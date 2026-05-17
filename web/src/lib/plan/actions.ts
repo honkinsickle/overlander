@@ -417,19 +417,30 @@ async function readNextStops(
   return mutate(current);
 }
 
+/** Result returned by finalizeTripAction. Success carries the finalized
+ *  Trip so the client can mount the slideup over the loader page without
+ *  a round-trip; failure carries a user-visible error string. */
+export type FinalizeResult =
+  | { ok: true; tripId: string; trip: Trip }
+  | { ok: false; error: string };
+
 /** Promote a wizard draft into an active trip.
  *
  *  UUID path: the trip already exists in public.trips with state='draft'
- *    and an empty days[]. We build day[1] from the wizard slices, write
- *    the payload + DB-level title + state in one update, and redirect
- *    to /trip/<uuid>.
+ *    and an empty days[]. We build day[1] from the wizard slices and
+ *    write the payload + DB-level title + state in one update.
  *
  *  Draft path (anonymous, in-memory): the original flow — build a fresh
- *    Trip, insert into the fixtures map, discard the draft. */
-export async function finalizeTripAction(draftId: string): Promise<void> {
+ *    Trip, insert into the fixtures map, discard the draft.
+ *
+ *  Returns the finalized Trip; the caller mounts the slideup over the
+ *  wizard loader instead of redirecting to /trip/<id>. */
+export async function finalizeTripAction(
+  draftId: string,
+): Promise<FinalizeResult> {
   if (isUserTripId(draftId)) {
     const trip = await getUserTrip(draftId);
-    if (!trip) return;
+    if (!trip) return { ok: false, error: "Trip not found." };
     const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
 
     const startLocation: PlanLocation = wizard.going?.startLocation ?? {
@@ -511,14 +522,18 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
       .from("trips")
       .update({ title: newTitle, state: "active", payload: updatedPayload })
       .eq("id", draftId);
-    if (error) return;
+    if (error) return { ok: false, error: "Couldn't save your trip." };
 
-    redirect(`/trip/${draftId}`);
+    // The Trip we return uses the DB-authoritative id and title (the
+    // payload itself keeps the placeholder id/"Untitled Trip" by
+    // convention for forked trips — see updatedPayload above).
+    const finalized: Trip = { ...updatedPayload, id: draftId, title: newTitle };
+    return { ok: true, tripId: draftId, trip: finalized };
   }
 
   // Draft path: original anonymous in-memory flow.
   const draft = await repo.getDraft(draftId);
-  if (!draft) return;
+  if (!draft) return { ok: false, error: "Trip draft not found." };
 
   const tripId = `trip-${newDraftId().slice(0, 8)}`;
   const start = draft.going?.startLocation?.label ?? "Start";
@@ -567,5 +582,5 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
 
   await trips.createTrip(trip);
   await repo.discardDraft(draftId);
-  redirect(`/trip/${tripId}`);
+  return { ok: true, tripId, trip };
 }

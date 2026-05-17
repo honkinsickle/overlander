@@ -18,9 +18,18 @@ import type { Trip } from "@/lib/trips/types";
 export function SlideupShell({
   trip,
   children,
+  hidePhase = false,
+  closeHref,
 }: {
   trip: Trip;
   children: React.ReactNode;
+  /** Omit the PHASE column + divider in the header. Used for un-phased
+   *  user trips (brief §7). */
+  hidePhase?: boolean;
+  /** If set, dismiss navigates here via `router.push` instead of
+   *  `router.back()`. Used by the wizard-finalize entry to converge on
+   *  `/trips` regardless of history. */
+  closeHref?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -58,8 +67,13 @@ export function SlideupShell({
 
   const dismiss = () => {
     setOpen(false);
-    // Wait out the transition, then pop the intercept.
-    setTimeout(() => router.back(), 260);
+    // Wait out the transition, then navigate. closeHref overrides the
+    // default back-pop (used by the wizard-finalize entry to land on
+    // /trips regardless of how the user got to the slideup).
+    setTimeout(() => {
+      if (closeHref) router.push(closeHref);
+      else router.back();
+    }, 260);
   };
 
   return (
@@ -96,18 +110,21 @@ export function SlideupShell({
          *  Close sits flush to the right edge via margin-right: -12 so it
          *  overlaps the container's 16 padding. */}
         <header className="flex items-center gap-3 w-full h-[68px] px-4 bg-bg-base border-b border-border-mid">
-          {/* Phase column (36w × 46h) + 1×32 divider. Gap 10 between them. */}
-          <div className="flex items-center shrink-0 gap-2.5">
-            <div className="flex flex-col items-center">
-              <span className="font-sans text-[10px] leading-[10px] font-bold tracking-[0.1em] text-text-muted">
-                PHASE
-              </span>
-              <span className="font-sans text-[36px] leading-[36px] font-bold text-text-primary">
-                01
-              </span>
+          {/* Phase column (36w × 46h) + 1×32 divider. Gap 10 between them.
+           *  Omitted for un-phased user trips (brief §7). */}
+          {!hidePhase && (
+            <div className="flex items-center shrink-0 gap-2.5">
+              <div className="flex flex-col items-center">
+                <span className="font-sans text-[10px] leading-[10px] font-bold tracking-[0.1em] text-text-muted">
+                  PHASE
+                </span>
+                <span className="font-sans text-[36px] leading-[36px] font-bold text-text-primary">
+                  01
+                </span>
+              </div>
+              <div className="w-px h-8 bg-border-mid mx-0.5" />
             </div>
-            <div className="w-px h-8 bg-border-mid mx-0.5" />
-          </div>
+          )}
 
           {/* Title + meta (flex-1). Title 18/22 Barlow 700, sub 14/18 ls .06em. */}
           <div className="flex flex-col flex-1 min-w-0">
