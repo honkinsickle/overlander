@@ -21,7 +21,9 @@ export function SlideupShell({
   hidePhase = false,
   closeHref,
 }: {
-  trip: Trip;
+  /** Optional. Absent for loading/not-found/error states where we
+   *  don't have trip data yet — header falls back to a placeholder. */
+  trip?: Trip;
   children: React.ReactNode;
   /** Omit the PHASE column + divider in the header. Used for un-phased
    *  user trips (brief §7). */
@@ -35,7 +37,7 @@ export function SlideupShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const initialPath = useRef<string | null>(null);
-  const totalMiles = trip.days.reduce((sum, d) => sum + (d.miles ?? 0), 0);
+  const totalMiles = trip?.days.reduce((sum, d) => sum + (d.miles ?? 0), 0) ?? 0;
 
   useEffect(() => {
     // Flip to open on the tick after initial render so the CSS transition
@@ -80,7 +82,7 @@ export function SlideupShell({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={trip.title}
+      aria-label={trip?.title ?? "Trip"}
       className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
     >
       {/* Backdrop */}
@@ -126,14 +128,26 @@ export function SlideupShell({
             </div>
           )}
 
-          {/* Title + meta (flex-1). Title 18/22 Barlow 700, sub 14/18 ls .06em. */}
+          {/* Title + meta (flex-1). Title 18/22 Barlow 700, sub 14/18 ls .06em.
+           *  No-trip variants (loading / not-found / error) render a
+           *  neutral placeholder so the chrome is fully present per
+           *  brief §5. */}
           <div className="flex flex-col flex-1 min-w-0">
-            <span className="font-sans text-[18px] leading-[22px] font-bold text-text-primary truncate">
-              {trip.title}
-            </span>
-            <span className="font-sans text-[14px] leading-[18px] tracking-[0.06em] text-text-muted">
-              Day 01-{String(trip.days.length).padStart(2, "0")}/{totalMiles} mi
-            </span>
+            {trip ? (
+              <>
+                <span className="font-sans text-[18px] leading-[22px] font-bold text-text-primary truncate">
+                  {trip.title}
+                </span>
+                <span className="font-sans text-[14px] leading-[18px] tracking-[0.06em] text-text-muted">
+                  Day 01-{String(trip.days.length).padStart(2, "0")}/
+                  {totalMiles} mi
+                </span>
+              </>
+            ) : (
+              <span className="font-sans text-[18px] leading-[22px] font-bold text-text-muted">
+                Trip
+              </span>
+            )}
           </div>
 
           {/* More (kebab) — 32×32 · radius 8 · bg --border-subtle · border --border-mid. */}
@@ -153,7 +167,7 @@ export function SlideupShell({
            *  margin-right -12 so it sits flush with the bar edge. Icon 22×22. */}
           <button
             type="button"
-            aria-label="Close"
+            aria-label="Close trip"
             onClick={dismiss}
             style={{ marginRight: -12 }}
             className="flex items-center justify-center shrink-0 w-[60px] h-[60px] bg-bg-card border-l border-border-subtle"
