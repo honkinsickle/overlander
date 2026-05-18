@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { ArrowLeft, ChevronsLeft, ChevronsRight } from "lucide-react";
 import {
   type Category,
   categoryStyle,
   categoryIcon,
 } from "@/components/primitives/detail-card";
-import { LocationCard } from "@/components/primitives/location-card";
 import {
   type BrowsePlace,
   TRIP_CATEGORY_TO_SLIDE,
@@ -15,8 +14,14 @@ import {
 import {
   browsePlaceToWaypoint,
   computeCardStats,
+  computeDetour,
+  formatMinutes,
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
+import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import {
+  slideCategoryToBrowseCategory,
+} from "@/lib/trip-browse/palette";
 
 export type BrowseTarget = {
   category: Category;
@@ -33,7 +38,12 @@ export type BrowseTarget = {
   dayLabel?: string;
 };
 
-const PANEL_WIDTH = 655;
+// 2-up: 16 + 300 + 16 + 300 + 16 = 648 of content + a few px slack centered.
+// 3-up: 8 + 356 + 12 + 356 + 12 + 356 + 8 = 1108 — sits inside the slideup
+// body (1113w) with 5px slack so the panel never overhangs the slideup chrome.
+const PANEL_WIDTH_2UP = 655;
+const PANEL_WIDTH_3UP = 1113;
+const CARD_W_3UP = 356;
 const TRANSITION_MS = 280;
 
 const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
@@ -98,6 +108,13 @@ export function CategoryBrowsePanel({
   onClose: () => void;
 }) {
   const open = target !== null;
+  const [expanded, setExpanded] = useState(false);
+  const panelWidth = expanded ? PANEL_WIDTH_3UP : PANEL_WIDTH_2UP;
+
+  // Reset to 2-up whenever the panel closes so reopening starts collapsed.
+  useEffect(() => {
+    if (!open) setExpanded(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +124,21 @@ export function CategoryBrowsePanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // TODO: replace with a real context menu (Save / Share / Hide / Report).
+  // For now we log so devs can confirm the kebab is wired end-to-end while
+  // the menu UI is still TBD. Listener is panel-scoped so it stops when
+  // the panel closes.
+  useEffect(() => {
+    if (!open) return;
+    const onMore = (e: Event) => {
+      const detail = (e as CustomEvent<{ placeId: string; dayId: string }>)
+        .detail;
+      console.log("[trip:openMore]", detail);
+    };
+    window.addEventListener("trip:openMore", onMore);
+    return () => window.removeEventListener("trip:openMore", onMore);
+  }, [open]);
 
   // Push the map column so its left edge meets the panel's right edge. We
   // measure dynamically (subtracting any current marginLeft) so chrome
@@ -123,14 +155,14 @@ export function CategoryBrowsePanel({
       const currentMl = parseFloat(cs.marginLeft) || 0;
       const naturalLeft =
         mapSection.getBoundingClientRect().left - currentMl;
-      mapSection.style.marginLeft = `${PANEL_WIDTH - naturalLeft}px`;
+      mapSection.style.marginLeft = `${panelWidth - naturalLeft}px`;
     } else {
       mapSection.style.marginLeft = "";
     }
     return () => {
       mapSection.style.marginLeft = "";
     };
-  }, [open]);
+  }, [open, panelWidth]);
 
   // Cards in the body always render with the Scenic (mountain) palette,
   // so force the panel header label/icon to match regardless of which
@@ -149,9 +181,9 @@ export function CategoryBrowsePanel({
 
       <aside
         style={{
-          width: PANEL_WIDTH,
-          transform: open ? "translateX(0)" : `translateX(-${PANEL_WIDTH}px)`,
-          transitionProperty: "transform",
+          width: panelWidth,
+          transform: open ? "translateX(0)" : `translateX(-${panelWidth}px)`,
+          transitionProperty: "transform, width",
           transitionDuration: `${TRANSITION_MS}ms`,
           transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
           backgroundColor: "var(--bg-panel)",
@@ -218,6 +250,23 @@ export function CategoryBrowsePanel({
             </span>
           </div>
 
+          {/* Expand / collapse — toggles the body grid between 2-up (655)
+           *  and 3-up (964). Matches Close's chrome (60×60, --bg-card, left
+           *  border) so the two read as a paired button bar. */}
+          <button
+            type="button"
+            aria-label={expanded ? "Collapse to 2 columns" : "Expand to 3 columns"}
+            aria-pressed={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center justify-center shrink-0 w-[60px] h-[60px] bg-bg-card border-l border-border-subtle"
+          >
+            {expanded ? (
+              <ChevronsLeft className="w-[22px] h-[22px] text-text-muted" strokeWidth={1.5} />
+            ) : (
+              <ChevronsRight className="w-[22px] h-[22px] text-text-muted" strokeWidth={1.5} />
+            )}
+          </button>
+
           {/* Close — Paper ANI-0 / slideup-shell parity:
            *  60×60 · bg --bg-card · 1px left border --border-subtle ·
            *  margin-right -12 so it sits flush with the bar edge. */}
@@ -236,7 +285,7 @@ export function CategoryBrowsePanel({
           className="flex-1 overflow-y-auto no-scrollbar"
           style={{ backgroundColor: "var(--bg-base)" }}
         >
-          {target ? <PanelBody target={target} /> : null}
+          {target ? <PanelBody target={target} expanded={expanded} /> : null}
         </div>
       </aside>
     </div>
@@ -264,7 +313,7 @@ function emitBrowseResults(
   );
 }
 
-function PanelBody({ target }: { target: BrowseTarget }) {
+function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boolean }) {
   const slideKey = TRIP_CATEGORY_TO_SLIDE[target.category];
   const [state, setState] = useState<FetchState>({ status: "loading" });
   // Local mirror of DayDetail's added-place set, kept in sync via
@@ -357,10 +406,12 @@ function PanelBody({ target }: { target: BrowseTarget }) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "300px 300px",
+        gridTemplateColumns: expanded
+          ? `${CARD_W_3UP}px ${CARD_W_3UP}px ${CARD_W_3UP}px`
+          : "300px 300px",
         justifyContent: "center",
-        gap: 16,
-        padding: 16,
+        gap: expanded ? 12 : 16,
+        padding: expanded ? 8 : 16,
       }}
     >
       {placesWithExtras.map((p) => {
@@ -375,155 +426,94 @@ function PanelBody({ target }: { target: BrowseTarget }) {
           ctx,
           computeCardStats(p, ctx),
         );
-        return (
-        <SceneryCard
-          key={p.id}
-          place={p}
-          dayNumber={target.dayNumber}
-          dayCoords={target.dayCoords}
-          dayLabel={target.dayLabel}
-          slideKey={slideKey ?? "scenic"}
-          isAdded={addedIds.has(p.id)}
-          onToggleAdded={() =>
-            window.dispatchEvent(
-              new CustomEvent("trip:toggleAdded", {
-                detail: {
-                  placeId: p.id,
-                  dayId: target.dayId,
+        const { miles, minutes } = computeDetour(p, ctx);
+        const detour =
+          miles < 0.1
+            ? ({ onRoute: true } as const)
+            : {
+                time: `+${formatMinutes(minutes)}`,
+                distanceMi: miles,
+              };
+        const isAdded = addedIds.has(p.id);
+        const openDetail = () => {
+          window.dispatchEvent(
+            new CustomEvent("trip:flyTo", {
+              detail: { coords: p.coords, name: p.title },
+            }),
+          );
+          window.dispatchEvent(
+            new CustomEvent("trip:openDetail", {
+              detail: {
+                place: {
+                  id: p.id,
+                  title: p.title,
+                  photoUrl: p.photoUrl,
                   dayNumber: target.dayNumber,
-                  place: p,
+                  dayId: target.dayId,
+                  coords: p.coords,
+                  description: p.description,
+                  waypoint: synthWaypoint,
                 },
-              }),
-            )
-          }
-          onCardClick={() => {
-            // Body tap = fly map first, then slide the detail panel up
-            // for this place (after the fly registers).
-            window.dispatchEvent(
-              new CustomEvent("trip:flyTo", {
-                detail: { coords: p.coords, name: p.title },
-              }),
-            );
-            setTimeout(() => {
+              },
+            }),
+          );
+        };
+        return (
+          <div
+            key={p.id}
+            onClick={() => {
+              // Body tap = fly map first, then slide the detail panel up
+              // for this place (after the fly registers).
               window.dispatchEvent(
-                new CustomEvent("trip:openDetail", {
-                  detail: {
-                    place: {
-                    id: p.id,
-                    title: p.title,
-                    photoUrl: p.photoUrl,
-                    dayNumber: target.dayNumber,
-                    dayId: target.dayId,
-                    coords: p.coords,
-                    description: p.description,
-                    waypoint: synthWaypoint,
-                  },
-                  },
+                new CustomEvent("trip:flyTo", {
+                  detail: { coords: p.coords, name: p.title },
                 }),
               );
-            }, 350);
-          }}
-          onDetailsClick={() => {
-            // Details tap = fly map + open detail panel for this place.
-            window.dispatchEvent(
-              new CustomEvent("trip:flyTo", {
-                detail: { coords: p.coords, name: p.title },
-              }),
-            );
-            window.dispatchEvent(
-              new CustomEvent("trip:openDetail", {
-                detail: {
-                  place: {
-                    id: p.id,
-                    title: p.title,
-                    photoUrl: p.photoUrl,
-                    dayNumber: target.dayNumber,
-                    dayId: target.dayId,
-                    coords: p.coords,
-                    description: p.description,
-                    waypoint: synthWaypoint,
-                  },
-                },
-              }),
-            );
-          }}
-        />
+              setTimeout(openDetail, 350);
+            }}
+            style={{
+              cursor: "pointer",
+              opacity: isAdded ? 0.45 : 1,
+              filter: isAdded ? "grayscale(0.6)" : "none",
+              transition: "opacity 200ms ease, filter 200ms ease",
+            }}
+          >
+            <LocationBrowseCard
+              place={p}
+              category={slideCategoryToBrowseCategory(slideKey ?? "scenic")}
+              dayNumber={target.dayNumber}
+              width={expanded ? 356 : 300}
+              detour={detour}
+              onAdd={(e?: MouseEvent) => {
+                e?.stopPropagation();
+                window.dispatchEvent(
+                  new CustomEvent("trip:toggleAdded", {
+                    detail: {
+                      placeId: p.id,
+                      dayId: target.dayId,
+                      dayNumber: target.dayNumber,
+                      place: p,
+                    },
+                  }),
+                );
+              }}
+              onOpen={(e?: MouseEvent) => {
+                e?.stopPropagation();
+                openDetail();
+              }}
+              onMore={(e?: MouseEvent) => {
+                e?.stopPropagation();
+                window.dispatchEvent(
+                  new CustomEvent("trip:openMore", {
+                    detail: { placeId: p.id, dayId: target.dayId },
+                  }),
+                );
+              }}
+            />
+          </div>
         );
       })}
     </div>
   );
 }
 
-/** Code-aligned to Paper 1E2E-0 — Mountain/Scenery compact card.
- *  Maps `BrowsePlace.title` and `photoUrl` into the canonical Scenery
- *  palette + copy from the demo page. Stats (detour / adds / new ETA /
- *  reliability / rating) are computed from real day-context via
- *  `computeCardStats`. */
-function SceneryCard({
-  place,
-  dayNumber,
-  dayCoords,
-  dayLabel,
-  slideKey,
-  isAdded,
-  onToggleAdded,
-  onCardClick,
-  onDetailsClick,
-}: {
-  place: BrowsePlace;
-  dayNumber: number;
-  dayCoords?: [number, number];
-  dayLabel?: string;
-  slideKey: import("@/lib/trip-browse/places").SlideCategoryKey;
-  isAdded: boolean;
-  onToggleAdded: () => void;
-  onCardClick: () => void;
-  onDetailsClick: () => void;
-}) {
-  const stats = computeCardStats(place, {
-    category: slideKey,
-    dayCoords,
-    dayLabel,
-    dayNumber,
-  });
-  return (
-    <div
-      onClick={onCardClick}
-      style={{
-        cursor: "pointer",
-        opacity: isAdded ? 0.45 : 1,
-        filter: isAdded ? "grayscale(0.6)" : "none",
-        transition: "opacity 200ms ease, filter 200ms ease",
-      }}
-    >
-      <LocationCard
-        category="mountain"
-        title={place.title}
-        titleColor="#A6C9F9"
-        badgeBg="#24354F"
-        badgeBorder="#A6C9F9"
-        ctaBg="#24354F"
-        ctaBorder="#A6C9F9"
-        photoUrl={place.photoUrl}
-        dayTag={stats.dayTag}
-        reliability={stats.reliability}
-        cost={stats.cost}
-        rating={stats.rating}
-        ctaLabel={isAdded ? "Added" : `Add to Day ${dayNumber}`}
-        onCtaClick={(e) => {
-          // Don't bubble to the card body click (which would re-fly the
-          // map and re-open the detail panel). Toggles between Added /
-          // Add to Day N — re-tap restores the original state.
-          e?.stopPropagation();
-          onToggleAdded();
-        }}
-        onOpenClick={(e) => {
-          // Stop the body-click handler from also firing — Details has its
-          // own behavior (open detail panel) that supersedes the body tap.
-          e?.stopPropagation();
-          onDetailsClick();
-        }}
-      />
-    </div>
-  );
-}

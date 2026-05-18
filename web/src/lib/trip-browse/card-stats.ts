@@ -87,7 +87,7 @@ function distanceMi(a: [number, number], b: [number, number]): number {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-function formatMinutes(min: number): string {
+export function formatMinutes(min: number): string {
   if (min <= 0) return "0m";
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
@@ -127,6 +127,20 @@ function addMinutesToTime(time: string, minutes: number): string {
   let h12 = h24 % 12;
   if (h12 === 0) h12 = 12;
   return `${h12}:${String(newMin).padStart(2, "0")} ${isPm ? "PM" : "AM"}`;
+}
+
+/** Detour primitives used by the new Browse Location Card pill. Same
+ *  math as `computeCardStats` but exposed as raw numbers so callers can
+ *  format/threshold themselves. */
+export function computeDetour(
+  place: BrowsePlace,
+  ctx: CardCtx,
+): { miles: number; minutes: number } {
+  const miles = ctx.dayCoords
+    ? distanceMi(place.coords, ctx.dayCoords) * ROAD_FACTOR
+    : 0;
+  const minutes = Math.round((miles / AVG_MPH) * 60);
+  return { miles, minutes };
 }
 
 export function computeCardStats(
