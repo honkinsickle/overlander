@@ -139,13 +139,23 @@ export function MapColumn({
   useEffect(() => {
     const el = containerRef.current;
     if (!el || mapRef.current) return;
-    const firstWithCoords = days.find((d) => d.coords);
-    const center = firstWithCoords?.coords ?? [-121.5, 45];
+    // Open on Day 1's start (the place the trip begins), matching the
+    // fly-to-active-day effect's default target. Same fallback chain it
+    // uses so trips finalized before `startCoord` existed still center
+    // sensibly. Without this, the map briefly renders at Day 1's
+    // overnight (`coords`) at zoom 6, which can hide the origin city
+    // entirely before flyTo lands.
+    const day1 = days[0];
+    const initialCenter =
+      day1?.startCoord ??
+      (day1?.dayNumber === 1 ? startCoords : undefined) ??
+      day1?.coords ??
+      [-121.5, 45];
     const map = new mapboxgl.Map({
       container: el,
       style: "mapbox://styles/honkingsickle/cmolte3b7003e01so7msf20d3",
-      center,
-      zoom: 6,
+      center: initialCenter,
+      zoom: 8,
       attributionControl: false,
     });
     mapRef.current = map;
@@ -355,28 +365,11 @@ export function MapColumn({
           },
         });
 
-        // Frame the whole route on first load so the user sees the
-        // shape of the trip immediately. Subsequent ?day= changes still
-        // fly to individual days via the effect below.
-        if (!queriedDay && merged.length > 1) {
-          let minLng = Infinity,
-            minLat = Infinity,
-            maxLng = -Infinity,
-            maxLat = -Infinity;
-          for (const [lng, lat] of merged) {
-            if (lng < minLng) minLng = lng;
-            if (lat < minLat) minLat = lat;
-            if (lng > maxLng) maxLng = lng;
-            if (lat > maxLat) maxLat = lat;
-          }
-          map.fitBounds(
-            [
-              [minLng, minLat],
-              [maxLng, maxLat],
-            ],
-            { padding: 60, duration: 0 },
-          );
-        }
+        // Intentionally NOT fitBounds-ing the whole route here. The
+        // map's initial center + the active-day effect frame Day 1's
+        // start, which matches the highlighted day card and the day's
+        // hero image. A whole-trip "Overview" view belongs to a future
+        // sidebar mode, not the default first-paint.
       });
     }
 

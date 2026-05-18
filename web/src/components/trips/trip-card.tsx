@@ -403,8 +403,11 @@ function StatePill({ tripId, state }: { tripId: string; state: TripState }) {
 }
 
 function formatDateRange(start: string, end: string): string {
+  // Append `T00:00:00` so the ISO date parses as LOCAL midnight, not
+  // UTC midnight — otherwise toLocaleDateString in PDT renders the
+  // previous day. Matches the DayHeader formatting convention.
   const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString("en-US", {
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     });
