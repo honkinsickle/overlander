@@ -51,12 +51,23 @@ const SECTION_EMOJI: Record<SlideCategoryKey, string> = {
   fuel: "⛽",
 };
 
+/** Fixed-width Paper variants from the artboards:
+ *  - 300px → 2-up in the 655w side panel
+ *  - 356px → 3-up in the 1112w expanded view
+ *  Rendered via flex-wrap so each card stays at its spec'd width and
+ *  the surface decides the column count automatically (1-up at 410w,
+ *  2-up at ~640w+, 3-up at ~1110w+). */
+export type CardWidthVariant = 300 | 356;
+
 type Props = {
   tripId: string;
   day: Day;
+  /** Card width per Paper artboard. Defaults to 300 (2-up width).
+   *  Flex-wrap handles the column count from there. */
+  cardWidth?: CardWidthVariant;
 };
 
-export function BrowseDaySection({ tripId, day }: Props) {
+export function BrowseDaySection({ tripId, day, cardWidth = 300 }: Props) {
   const suggestions = day.segmentSuggestions ?? [];
   if (suggestions.length === 0) return null;
 
@@ -86,6 +97,7 @@ export function BrowseDaySection({ tripId, day }: Props) {
             day={day}
             category={key}
             places={places}
+            cardWidth={cardWidth}
           />,
         ];
       })}
@@ -98,11 +110,13 @@ function CategoryGroup({
   day,
   category,
   places,
+  cardWidth,
 }: {
   tripId: string;
   day: Day;
   category: SlideCategoryKey;
   places: BrowsePlace[];
+  cardWidth: CardWidthVariant;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -123,15 +137,19 @@ function CategoryGroup({
           · {places.length}
         </span>
       </div>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-3">
         {places.map((place) => (
-          <BrowseDayCard
+          <div
             key={place.id}
-            tripId={tripId}
-            day={day}
-            category={category}
-            place={place}
-          />
+            style={{ flex: `0 0 ${cardWidth}px`, maxWidth: "100%" }}
+          >
+            <BrowseDayCard
+              tripId={tripId}
+              day={day}
+              category={category}
+              place={place}
+            />
+          </div>
         ))}
       </div>
     </div>
