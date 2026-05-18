@@ -1,8 +1,6 @@
 import type { SlideCategoryKey } from "@/lib/trip-browse/places";
 import type { SourceResult, WaypointSource } from "./types";
 import { OSM_TAG_QUERIES, categoryFromTags } from "./overpass-tags";
-import { enrichWithMapillary } from "./mapillary";
-import { enrichWithWikipedia } from "./wikipedia";
 
 const OVERPASS_URL =
   process.env.OVERPASS_URL ?? "https://overpass.kumi.systems/api/interpreter";
@@ -60,15 +58,10 @@ export const overpassSource: WaypointSource = {
     const results = elements.flatMap((el) =>
       elementToSourceResult(el, wanted),
     );
+    // OSM-specific: Wikidata P18 claims via the `wikidata=Q…` tag. The
+    // generic Wikipedia + Mapillary cascades run at the top level (in
+    // `discovery.ts`) so all sources benefit, not just Overpass.
     await enrichWithWikidata(results, signal);
-    // Wikipedia summary thumbnails by name (geosearch-matched) — much
-    // higher hit rate on rural features that have an article but no
-    // Wikidata P18 claim.
-    await enrichWithWikipedia(results, signal);
-    // Mapillary fills in street-level imagery for the remaining gaps,
-    // mostly roadside places without Wikipedia articles. Skipped
-    // silently when MAPILLARY_TOKEN isn't set.
-    await enrichWithMapillary(results, signal);
     return results;
   },
 };

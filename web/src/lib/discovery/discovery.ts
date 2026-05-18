@@ -1,6 +1,8 @@
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import type { SourceResult, WaypointSource } from "./types";
 import { toBrowsePlace } from "./to-browse-place";
+import { enrichWithWikipedia } from "./wikipedia";
+import { enrichWithMapillary } from "./mapillary";
 
 /** Build a square bbox `[w, s, e, n]` centred on `point`, ±radiusKm
  *  in each direction. We build one of these per day endpoint (rather
@@ -39,6 +41,14 @@ export async function discover(args: {
     ),
   );
   const all = (await Promise.all(queries)).flat();
+  // Photo cascade: Wikipedia by name/coords, then Mapillary street-level
+  // for the gaps. Runs across results from ALL sources (Foursquare,
+  // RecGov, USFS, BLM in addition to OSM) so non-OSM places aren't
+  // stuck with no hero photo. Overpass results may already have a
+  // Wikidata photo from its own per-source enrichment — the enrichers
+  // skip results that already have `photoUrl`.
+  await enrichWithWikipedia(all, args.signal);
+  await enrichWithMapillary(all, args.signal);
   const groups = dedupe(all);
   return groups.map(toBrowsePlace);
 }
