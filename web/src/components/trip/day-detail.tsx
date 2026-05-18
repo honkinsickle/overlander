@@ -27,6 +27,7 @@ import { CSS as DndCSS } from "@dnd-kit/utilities";
 import { DayHeader } from "@/components/trip/day-header";
 import { DayDetailHero } from "@/components/trip/day-detail-hero";
 import { SuggestedSection } from "@/components/trip/suggested-section";
+import { BrowseDaySection } from "@/components/trip/browse-day-section";
 import { FuelStopCard } from "@/components/trip/fuel-stop-card";
 import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import { WaypointCard } from "@/components/trip/waypoint-card";
@@ -372,11 +373,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
             // category, so the generic "Add Waypoints" CTA defaults to it.
             onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
             extra={
-              <SuggestedSection
-                tripId={trip.id}
-                day={day}
-                onBrowse={openBrowse(i + 1, day)}
-              />
+              <>
+                <SuggestedSection
+                  tripId={trip.id}
+                  day={day}
+                  onBrowse={openBrowse(i + 1, day)}
+                />
+                <BrowseDaySection tripId={trip.id} day={day} />
+              </>
             }
           />
         ))}
