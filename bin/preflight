@@ -16,10 +16,23 @@ if [[ ! -f web/.env.local ]]; then
   exit 0
 fi
 
-# Source so ${RIDB_API_KEY} et al. resolve below. Values in .env.local
-# must be quoted ("…") — MAPILLARY_TOKEN's pipes (MLY|x|y) otherwise
-# trigger zsh's pipeline parser when sourced.
-set -a; source web/.env.local; set +a
+# Load web/.env.local without `source` so unquoted values with shell
+# special chars (e.g. MAPILLARY_TOKEN=MLY|x|y, which Next.js dotenv
+# reads fine but bash would split on `|`) don't get truncated. Match
+# KEY=VALUE lines, strip optional wrapping quotes, export verbatim.
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "${line// /}" ]] && continue
+  [[ "${line#"${line%%[![:space:]]*}"}" == \#* ]] && continue
+  key="${line%%=*}"
+  val="${line#*=}"
+  [[ "$key" =~ ^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*$ ]] || continue
+  key="${key// /}"
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  export "$key=$val"
+done < web/.env.local
 
 check() {
   local name="$1" code="$2"
@@ -33,7 +46,8 @@ check() {
 echo "preflight: $(date '+%Y-%m-%d %H:%M:%S')"
 
 check OVERPASS  "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
-  "${OVERPASS_URL:-https://overpass.kumi.systems/api/interpreter}" \
+  -A 'overlander-preflight/1.0' \
+  "${OVERPASS_URL:-https://overpass-api.de/api/interpreter}" \
   --data-urlencode 'data=[out:json];out 0;')"
 
 check WIKIPEDIA "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \

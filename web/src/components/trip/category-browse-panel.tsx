@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { ArrowLeft, ChevronsLeft, ChevronsRight } from "lucide-react";
-import {
-  type Category,
-  categoryStyle,
-  categoryIcon,
-} from "@/components/primitives/detail-card";
+import { type Category } from "@/components/primitives/detail-card";
 import {
   type BrowsePlace,
+  type SlideCategoryKey,
   TRIP_CATEGORY_TO_SLIDE,
 } from "@/lib/trip-browse/places";
 import {
@@ -20,8 +17,13 @@ import {
 } from "@/lib/trip-browse/card-stats";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
 import {
+  type BrowseCardCategory,
+  BROWSE_CARD_CATEGORIES,
+  browseCardPalette,
+  browseCategoryToSlide,
   slideCategoryToBrowseCategory,
 } from "@/lib/trip-browse/palette";
+import { CategoryIcon } from "@/components/icons/category-icons";
 
 export type BrowseTarget = {
   category: Category;
@@ -49,13 +51,12 @@ const TRANSITION_MS = 280;
 const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
 
 /** Extra demo cards appended to the fetched results so the grid feels
- *  populated while the discovery layer is still thin. SceneryCard only
- *  reads `id`, `title`, `photoUrl`, `coords` — the rest of BrowsePlace
- *  is filled with empty placeholders to satisfy the type. */
+ *  populated while the discovery layer is still thin. */
 const EXTRA_DEMO_PLACES: BrowsePlace[] = [
   {
     id: "demo-crater-lake",
     coords: [-122.108, 42.945],
+    category: "scenic",
     title: "Crater Lake National Park",
     photoUrl: `${PAPER_CDN}/78R7DE7V2NKT3G0EDJFF24TDKZ.png`,
     photoAlt: "Crater Lake at golden hour",
@@ -71,6 +72,7 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
   {
     id: "demo-diamond-lake",
     coords: [-122.135, 43.165],
+    category: "scenic",
     title: "Diamond Lake Overlook",
     photoUrl: `${PAPER_CDN}/01KQXV7RGFDADF3EDNVB4THDV5.png`,
     photoAlt: "Diamond Lake reflection",
@@ -86,6 +88,7 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
   {
     id: "demo-klamath-falls",
     coords: [-121.78, 42.225],
+    category: "scenic",
     title: "Klamath Falls Vista",
     photoUrl: `${PAPER_CDN}/01KQXWN6ZC3T2VGR430QM8EHYH.png`,
     photoAlt: "Klamath Falls autumn street",
@@ -100,6 +103,18 @@ const EXTRA_DEMO_PLACES: BrowsePlace[] = [
   },
 ];
 
+/** Initial active-filter set: if the panel was opened from a per-category
+ *  Browse button (e.g. "Browse Sights"), pre-select that chip so the
+ *  user lands on the filtered view they asked for. Empty Set = "All". */
+function initialFiltersFor(
+  category: Category | undefined,
+): Set<BrowseCardCategory> {
+  if (!category) return new Set();
+  const slideKey = TRIP_CATEGORY_TO_SLIDE[category];
+  if (!slideKey) return new Set();
+  return new Set([slideCategoryToBrowseCategory(slideKey)]);
+}
+
 export function CategoryBrowsePanel({
   target,
   onClose,
@@ -111,7 +126,6 @@ export function CategoryBrowsePanel({
   const [expanded, setExpanded] = useState(false);
   const panelWidth = expanded ? PANEL_WIDTH_3UP : PANEL_WIDTH_2UP;
 
-  // Reset to 2-up whenever the panel closes so reopening starts collapsed.
   useEffect(() => {
     if (!open) setExpanded(false);
   }, [open]);
@@ -126,9 +140,6 @@ export function CategoryBrowsePanel({
   }, [open, onClose]);
 
   // TODO: replace with a real context menu (Save / Share / Hide / Report).
-  // For now we log so devs can confirm the kebab is wired end-to-end while
-  // the menu UI is still TBD. Listener is panel-scoped so it stops when
-  // the panel closes.
   useEffect(() => {
     if (!open) return;
     const onMore = (e: Event) => {
@@ -140,10 +151,6 @@ export function CategoryBrowsePanel({
     return () => window.removeEventListener("trip:openMore", onMore);
   }, [open]);
 
-  // Push the map column so its left edge meets the panel's right edge. We
-  // measure dynamically (subtracting any current marginLeft) so chrome
-  // width changes don't silently break the alignment. Cleanup restores
-  // the original style on close or unmount.
   useEffect(() => {
     const mapSection = document.querySelector<HTMLElement>(
       'section[aria-label="Map"]',
@@ -164,21 +171,14 @@ export function CategoryBrowsePanel({
     };
   }, [open, panelWidth]);
 
-  // Cards in the body always render with the Scenic (mountain) palette,
-  // so force the panel header label/icon to match regardless of which
-  // category opened the panel.
-  const style = target ? categoryStyle.mountain : null;
-  const Icon = target ? categoryIcon.mountain : null;
-
   return (
     <div
       role="dialog"
       aria-modal="false"
       aria-hidden={!open}
-      aria-label={target ? `Browse ${style!.label}` : undefined}
+      aria-label={target ? `Browse Day ${target.dayNumber}` : undefined}
       className="fixed inset-0 z-40 pointer-events-none"
     >
-
       <aside
         style={{
           width: panelWidth,
@@ -202,26 +202,6 @@ export function CategoryBrowsePanel({
             borderBottom: "1px solid var(--border-mid)",
           }}
         >
-          <div
-            className="flex items-center justify-center shrink-0 rounded-md"
-            style={{
-              width: 36,
-              height: 36,
-              backgroundColor: style?.bg ?? "transparent",
-              border: style ? `1px solid ${style.accent}` : undefined,
-            }}
-          >
-            {Icon ? (
-              <Icon
-                width={18}
-                height={18}
-                stroke={style!.accent}
-                strokeWidth={1.75}
-                fill="none"
-              />
-            ) : null}
-          </div>
-
           <div className="flex flex-col min-w-0 flex-1">
             <span
               className="uppercase truncate"
@@ -234,7 +214,7 @@ export function CategoryBrowsePanel({
                 color: "var(--text-muted)",
               }}
             >
-              Browse {target ? `Day ${target.dayNumber}` : ""}
+              Browse Day {target?.dayNumber ?? ""}
             </span>
             <span
               className="truncate"
@@ -243,16 +223,13 @@ export function CategoryBrowsePanel({
                 fontSize: 18,
                 lineHeight: "22px",
                 fontWeight: 700,
-                color: style?.accent ?? "var(--text-primary)",
+                color: "var(--text-primary)",
               }}
             >
-              {style?.label ?? ""}
+              Within 10 mi of today
             </span>
           </div>
 
-          {/* Expand / collapse — toggles the body grid between 2-up (655)
-           *  and 3-up (964). Matches Close's chrome (60×60, --bg-card, left
-           *  border) so the two read as a paired button bar. */}
           <button
             type="button"
             aria-label={expanded ? "Collapse to 2 columns" : "Expand to 3 columns"}
@@ -267,9 +244,6 @@ export function CategoryBrowsePanel({
             )}
           </button>
 
-          {/* Close — Paper ANI-0 / slideup-shell parity:
-           *  60×60 · bg --bg-card · 1px left border --border-subtle ·
-           *  margin-right -12 so it sits flush with the bar edge. */}
           <button
             type="button"
             aria-label="Close"
@@ -281,12 +255,7 @@ export function CategoryBrowsePanel({
           </button>
         </header>
 
-        <div
-          className="flex-1 overflow-y-auto no-scrollbar"
-          style={{ backgroundColor: "var(--bg-base)" }}
-        >
-          {target ? <PanelBody target={target} expanded={expanded} /> : null}
-        </div>
+        {target ? <PanelBody target={target} expanded={expanded} /> : null}
       </aside>
     </div>
   );
@@ -299,14 +268,11 @@ type FetchState =
 
 /** Tell MapColumn which places the panel is currently showing so it
  *  can drop a dot per result. Empty `places` clears the layer. */
-function emitBrowseResults(
-  category: string | null,
-  places: BrowsePlace[],
-): void {
+function emitBrowseResults(places: BrowsePlace[]): void {
   window.dispatchEvent(
     new CustomEvent("trip:browseResults", {
       detail: {
-        category,
+        category: null,
         places: places.map((p) => ({ coords: p.coords, title: p.title, id: p.id })),
       },
     }),
@@ -314,13 +280,16 @@ function emitBrowseResults(
 }
 
 function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boolean }) {
-  const slideKey = TRIP_CATEGORY_TO_SLIDE[target.category];
+  const [filters, setFilters] = useState<Set<BrowseCardCategory>>(() =>
+    initialFiltersFor(target.category),
+  );
   const [state, setState] = useState<FetchState>({ status: "loading" });
-  // Local mirror of DayDetail's added-place set, kept in sync via
-  // `trip:addedSync`. Drives the dim/CTA-label state on each card.
-  // DayDetail is the source of truth; this panel only dispatches
-  // `trip:toggleAdded` to mutate it.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
+
+  // Reset filter selection when switching to a different day's Browse.
+  useEffect(() => {
+    setFilters(initialFiltersFor(target.category));
+  }, [target.category, target.dayId]);
 
   useEffect(() => {
     const onSync = (e: Event) => {
@@ -331,25 +300,35 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     return () => window.removeEventListener("trip:addedSync", onSync);
   }, []);
 
-  // Sync map markers to whatever's currently in the panel. Cleanup
-  // fires both on category change (markers are replaced) and on panel
-  // close (PanelBody unmounts, markers cleared).
+  // Map markers track whatever's currently visible in the panel.
   useEffect(() => {
     if (state.status !== "success") return;
-    emitBrowseResults(slideKey ?? null, state.places);
-    return () => emitBrowseResults(null, []);
-  }, [state, slideKey]);
+    emitBrowseResults(state.places);
+    return () => emitBrowseResults([]);
+  }, [state]);
+
+  // Resolve the API `categories=` param from the active filter set:
+  // empty filters = "all"; non-empty = comma-joined slideKeys (urban has
+  // no data backing, so it drops out — selecting urban alone yields the
+  // empty state).
+  const apiCategories = useMemo(() => {
+    if (filters.size === 0) return "all";
+    const slideKeys = Array.from(filters)
+      .map(browseCategoryToSlide)
+      .filter((k): k is SlideCategoryKey => k !== null);
+    return slideKeys.join(",");
+  }, [filters]);
 
   useEffect(() => {
-    if (!slideKey) {
-      setState({ status: "success", places: [], source: "fixture" });
+    if (!apiCategories) {
+      setState({ status: "success", places: [], source: "discovery" });
       return;
     }
     setState({ status: "loading" });
     const ctrl = new AbortController();
     const url =
       `/api/trip-browse/${encodeURIComponent(target.tripId)}/${encodeURIComponent(target.dayId)}` +
-      `?category=${slideKey}`;
+      `?categories=${apiCategories}`;
     fetch(url, { signal: ctrl.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -369,13 +348,22 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
         });
       });
     return () => ctrl.abort();
-  }, [target.tripId, target.dayId, slideKey]);
+  }, [target.tripId, target.dayId, apiCategories]);
+
+  const toggleFilter = (c: BrowseCardCategory) => {
+    setFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  };
 
   const empty = (msg: string) => (
     <div
       className="flex items-center justify-center"
       style={{
-        minHeight: "100%",
+        flex: 1,
         padding: 24,
         fontFamily: "var(--ff-mono)",
         fontSize: 12,
@@ -390,130 +378,220 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     </div>
   );
 
-  if (!slideKey) return empty(`No browse for ${target.category} yet`);
-  if (state.status === "loading") return empty("Loading nearby places…");
-  if (state.status === "error") return empty(`Couldn't load places — ${state.message}`);
-  if (state.places.length === 0) {
-    return empty(`No places found for this category on Day ${target.dayNumber}`);
-  }
-
-  // Augment the fetched results with a few extra demo cards so the grid
-  // shows enough rows to feel populated while the discovery layer is
-  // still thin on this category.
-  const placesWithExtras = [...state.places, ...EXTRA_DEMO_PLACES];
+  // For the "scenic-only" demo augment we just append the demo cards
+  // unconditionally when scenic is in the active set (or filters are
+  // empty = "all"). Keeps the grid feeling populated while discovery
+  // remains thin on this category.
+  const showScenicDemo =
+    filters.size === 0 || filters.has("scenic");
+  const placesWithExtras =
+    state.status === "success"
+      ? showScenicDemo
+        ? [...state.places, ...EXTRA_DEMO_PLACES]
+        : state.places
+      : [];
 
   return (
+    <>
+      <FilterChipRow active={filters} onToggle={toggleFilter} />
+      <div
+        className="flex-1 overflow-y-auto no-scrollbar"
+        style={{ backgroundColor: "var(--bg-base)" }}
+      >
+        {state.status === "loading"
+          ? empty("Loading nearby places…")
+          : state.status === "error"
+            ? empty(`Couldn't load places — ${state.message}`)
+            : placesWithExtras.length === 0
+              ? empty("No places match the selected filters")
+              : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: expanded
+                        ? `${CARD_W_3UP}px ${CARD_W_3UP}px ${CARD_W_3UP}px`
+                        : "300px 300px",
+                      justifyContent: "center",
+                      gap: expanded ? 12 : 16,
+                      padding: expanded ? 8 : 16,
+                    }}
+                  >
+                    {placesWithExtras.map((p) => (
+                      <BrowseCardCell
+                        key={p.id}
+                        place={p}
+                        target={target}
+                        expanded={expanded}
+                        isAdded={addedIds.has(p.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+      </div>
+    </>
+  );
+}
+
+function FilterChipRow({
+  active,
+  onToggle,
+}: {
+  active: Set<BrowseCardCategory>;
+  onToggle: (c: BrowseCardCategory) => void;
+}) {
+  return (
     <div
+      className="flex items-center shrink-0"
+      role="toolbar"
+      aria-label="Filter by category"
       style={{
-        display: "grid",
-        gridTemplateColumns: expanded
-          ? `${CARD_W_3UP}px ${CARD_W_3UP}px ${CARD_W_3UP}px`
-          : "300px 300px",
-        justifyContent: "center",
-        gap: expanded ? 12 : 16,
-        padding: expanded ? 8 : 16,
+        gap: 12,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        backgroundColor: "var(--bg-base)",
+        borderBottom: "1px solid var(--border-subtle)",
       }}
     >
-      {placesWithExtras.map((p) => {
-        const ctx: CardCtx = {
-          category: slideKey ?? "scenic",
-          dayCoords: target.dayCoords,
-          dayLabel: target.dayLabel,
-          dayNumber: target.dayNumber,
-        };
-        const synthWaypoint = browsePlaceToWaypoint(
-          p,
-          ctx,
-          computeCardStats(p, ctx),
-        );
-        const { miles, minutes } = computeDetour(p, ctx);
-        const detour =
-          miles < 0.1
-            ? ({ onRoute: true } as const)
-            : {
-                time: `+${formatMinutes(minutes)}`,
-                distanceMi: miles,
-              };
-        const isAdded = addedIds.has(p.id);
-        const openDetail = () => {
-          window.dispatchEvent(
-            new CustomEvent("trip:flyTo", {
-              detail: { coords: p.coords, name: p.title },
-            }),
-          );
-          window.dispatchEvent(
-            new CustomEvent("trip:openDetail", {
-              detail: {
-                place: {
-                  id: p.id,
-                  title: p.title,
-                  photoUrl: p.photoUrl,
-                  dayNumber: target.dayNumber,
-                  dayId: target.dayId,
-                  coords: p.coords,
-                  description: p.description,
-                  waypoint: synthWaypoint,
-                },
-              },
-            }),
-          );
-        };
+      {BROWSE_CARD_CATEGORIES.map((c) => {
+        const palette = browseCardPalette[c];
+        const isActive = active.has(c);
         return (
-          <div
-            key={p.id}
-            onClick={() => {
-              // Body tap = fly map first, then slide the detail panel up
-              // for this place (after the fly registers).
-              window.dispatchEvent(
-                new CustomEvent("trip:flyTo", {
-                  detail: { coords: p.coords, name: p.title },
-                }),
-              );
-              setTimeout(openDetail, 350);
-            }}
+          <button
+            key={c}
+            type="button"
+            aria-pressed={isActive}
+            aria-label={`Filter: ${palette.label}`}
+            onClick={() => onToggle(c)}
+            className="flex items-center justify-center rounded-full transition-all"
             style={{
-              cursor: "pointer",
-              opacity: isAdded ? 0.45 : 1,
-              filter: isAdded ? "grayscale(0.6)" : "none",
-              transition: "opacity 200ms ease, filter 200ms ease",
+              width: 44,
+              height: 44,
+              backgroundColor: palette.iconBg,
+              border: `1px solid ${palette.accent}`,
+              opacity: active.size === 0 || isActive ? 1 : 0.4,
+              boxShadow: isActive
+                ? `0 0 0 2px ${palette.accent}`
+                : "none",
             }}
           >
-            <LocationBrowseCard
-              place={p}
-              category={slideCategoryToBrowseCategory(slideKey ?? "scenic")}
-              dayNumber={target.dayNumber}
-              width={expanded ? 356 : 300}
-              detour={detour}
-              onAdd={(e?: MouseEvent) => {
-                e?.stopPropagation();
-                window.dispatchEvent(
-                  new CustomEvent("trip:toggleAdded", {
-                    detail: {
-                      placeId: p.id,
-                      dayId: target.dayId,
-                      dayNumber: target.dayNumber,
-                      place: p,
-                    },
-                  }),
-                );
-              }}
-              onOpen={(e?: MouseEvent) => {
-                e?.stopPropagation();
-                openDetail();
-              }}
-              onMore={(e?: MouseEvent) => {
-                e?.stopPropagation();
-                window.dispatchEvent(
-                  new CustomEvent("trip:openMore", {
-                    detail: { placeId: p.id, dayId: target.dayId },
-                  }),
-                );
-              }}
-            />
-          </div>
+            <CategoryIcon category={c} size={22} stroke={palette.accent} />
+          </button>
         );
       })}
     </div>
   );
 }
 
+function BrowseCardCell({
+  place,
+  target,
+  expanded,
+  isAdded,
+}: {
+  place: BrowsePlace;
+  target: BrowseTarget;
+  expanded: boolean;
+  isAdded: boolean;
+}) {
+  // Each card renders with its OWN category palette (set by the API,
+  // falling back to scenic for demo-augmented entries that bypassed the
+  // pipeline).
+  const placeCategory: SlideCategoryKey = place.category ?? "scenic";
+  const ctx: CardCtx = {
+    category: placeCategory,
+    dayCoords: target.dayCoords,
+    dayLabel: target.dayLabel,
+    dayNumber: target.dayNumber,
+  };
+  const synthWaypoint = browsePlaceToWaypoint(
+    place,
+    ctx,
+    computeCardStats(place, ctx),
+  );
+  const { miles, minutes } = computeDetour(place, ctx);
+  const detour =
+    miles < 0.1
+      ? ({ onRoute: true } as const)
+      : {
+          time: `+${formatMinutes(minutes)}`,
+          distanceMi: miles,
+        };
+
+  const openDetail = () => {
+    window.dispatchEvent(
+      new CustomEvent("trip:flyTo", {
+        detail: { coords: place.coords, name: place.title },
+      }),
+    );
+    window.dispatchEvent(
+      new CustomEvent("trip:openDetail", {
+        detail: {
+          place: {
+            id: place.id,
+            title: place.title,
+            photoUrl: place.photoUrl,
+            dayNumber: target.dayNumber,
+            dayId: target.dayId,
+            coords: place.coords,
+            description: place.description,
+            waypoint: synthWaypoint,
+          },
+        },
+      }),
+    );
+  };
+
+  return (
+    <div
+      onClick={() => {
+        window.dispatchEvent(
+          new CustomEvent("trip:flyTo", {
+            detail: { coords: place.coords, name: place.title },
+          }),
+        );
+        setTimeout(openDetail, 350);
+      }}
+      style={{
+        cursor: "pointer",
+        opacity: isAdded ? 0.45 : 1,
+        filter: isAdded ? "grayscale(0.6)" : "none",
+        transition: "opacity 200ms ease, filter 200ms ease",
+      }}
+    >
+      <LocationBrowseCard
+        place={place}
+        category={slideCategoryToBrowseCategory(placeCategory)}
+        dayNumber={target.dayNumber}
+        width={expanded ? 356 : 300}
+        detour={detour}
+        onAdd={(e?: MouseEvent) => {
+          e?.stopPropagation();
+          window.dispatchEvent(
+            new CustomEvent("trip:toggleAdded", {
+              detail: {
+                placeId: place.id,
+                dayId: target.dayId,
+                dayNumber: target.dayNumber,
+                place,
+              },
+            }),
+          );
+        }}
+        onOpen={(e?: MouseEvent) => {
+          e?.stopPropagation();
+          openDetail();
+        }}
+        onMore={(e?: MouseEvent) => {
+          e?.stopPropagation();
+          window.dispatchEvent(
+            new CustomEvent("trip:openMore", {
+              detail: { placeId: place.id, dayId: target.dayId },
+            }),
+          );
+        }}
+      />
+    </div>
+  );
+}

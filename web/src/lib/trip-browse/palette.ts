@@ -85,3 +85,25 @@ export function slideCategoryToBrowseCategory(
   if (key === "overnight") return "hotel";
   return key;
 }
+
+/** Inverse of `slideCategoryToBrowseCategory`. Returns the data-layer key
+ *  the API can actually fetch; `urban` has no backing today so returns
+ *  null. */
+export function browseCategoryToSlide(
+  c: BrowseCardCategory,
+): SlideCategoryKey | null {
+  if (c === "hotel") return "overnight";
+  if (c === "urban") return null;
+  return c;
+}
+
+/** The 7 chips, in the order the Paper filter row renders them. */
+export const BROWSE_CARD_CATEGORIES: readonly BrowseCardCategory[] = [
+  "camping",
+  "urban",
+  "scenic",
+  "food",
+  "fuel",
+  "hotel",
+  "oddity",
+];

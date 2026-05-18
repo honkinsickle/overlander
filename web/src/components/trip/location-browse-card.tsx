@@ -273,7 +273,7 @@ function CtaRow({
       <button
         type="button"
         onClick={onAdd}
-        className="flex flex-1 items-center justify-center gap-1 h-11 rounded-md border border-solid bg-[#2A4A7FD4] border-[#3D6BB3] text-white font-sans font-bold text-[15px] leading-[18px] hover:bg-[#3D6BB3]"
+        className="flex flex-1 items-center justify-center gap-[3px] h-11 rounded-md border border-solid bg-[#24354F] border-[#A6C9F9] text-[#E7E5E1] font-sans font-bold text-[15px] leading-[18px] hover:bg-[#2E4262]"
       >
         <PlusIcon />
         {label}
