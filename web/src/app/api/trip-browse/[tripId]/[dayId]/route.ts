@@ -180,10 +180,11 @@ export async function GET(
   }
 
   // Sort: places within CORRIDOR_MI of today's route rank first; within
-  // each tier, sort by haversine distance from day-start ascending. Falls
-  // back to photo-bearing-first when neither coord is available (shouldn't
-  // happen with prebaked trips but keeps the legacy behavior tolerated).
-  const polyline = day.routePolyline;
+  // each tier, sort by haversine distance from day-start ascending. Uses
+  // the trip-level polyline (precision 5) — places are already restricted
+  // to today's bbox by the discovery layer, so any qualifying place near
+  // the full polyline is effectively also near today's segment.
+  const polyline = trip.routePolyline;
   const scored = unique.map((p) => ({
     place: p,
     inCorridor: polyline ? pointToPolylineMi(p.coords, polyline) <= CORRIDOR_MI : true,
