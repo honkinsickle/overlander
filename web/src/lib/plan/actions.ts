@@ -31,6 +31,7 @@ import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
+import { mapboxStaticForCoords } from "@/lib/imagery/mapbox-static";
 
 // Fallback pace when the wizard didn't capture one (e.g. drafts saved
 // pre-Phase-B). The wizard's PaceInput defaults to 6 hrs/day; this
@@ -94,6 +95,7 @@ async function buildRouteAwareDays(args: {
 }): Promise<{
   days: Day[];
   startCoords: [number, number];
+  endCoords: [number, number];
   routePolyline: string;
   endDate: string;
 } | null> {
@@ -149,8 +151,12 @@ async function buildRouteAwareDays(args: {
               ? `Day ${i + 1} — ${endLabel}`
               : `Day ${i + 1}`,
       coords: seg.endCoord,
+      startCoord: seg.startCoord,
       miles: Math.round(seg.distanceM / 1609.34),
       driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
+      // Per-day hero = satellite snapshot of the day's start (the
+      // place that day begins, matching the camera target).
+      heroImage: mapboxStaticForCoords(seg.startCoord),
       waypoints: [],
       suggestions: daySuggestions[i].byCategory,
       segmentSuggestions: daySuggestions[i].all,
@@ -159,6 +165,7 @@ async function buildRouteAwareDays(args: {
     return {
       days,
       startCoords,
+      endCoords,
       routePolyline: encodePolyline(route.coordinates),
       endDate: addDaysIso(args.startDate, Math.max(0, segments.length - 1)),
     };
@@ -417,19 +424,30 @@ async function readNextStops(
   return mutate(current);
 }
 
+/** Result returned by finalizeTripAction. Success carries the finalized
+ *  Trip so the client can mount the slideup over the loader page without
+ *  a round-trip; failure carries a user-visible error string. */
+export type FinalizeResult =
+  | { ok: true; tripId: string; trip: Trip }
+  | { ok: false; error: string };
+
 /** Promote a wizard draft into an active trip.
  *
  *  UUID path: the trip already exists in public.trips with state='draft'
- *    and an empty days[]. We build day[1] from the wizard slices, write
- *    the payload + DB-level title + state in one update, and redirect
- *    to /trip/<uuid>.
+ *    and an empty days[]. We build day[1] from the wizard slices and
+ *    write the payload + DB-level title + state in one update.
  *
  *  Draft path (anonymous, in-memory): the original flow — build a fresh
- *    Trip, insert into the fixtures map, discard the draft. */
-export async function finalizeTripAction(draftId: string): Promise<void> {
+ *    Trip, insert into the fixtures map, discard the draft.
+ *
+ *  Returns the finalized Trip; the caller mounts the slideup over the
+ *  wizard loader instead of redirecting to /trip/<id>. */
+export async function finalizeTripAction(
+  draftId: string,
+): Promise<FinalizeResult> {
   if (isUserTripId(draftId)) {
     const trip = await getUserTrip(draftId);
-    if (!trip) return;
+    if (!trip) return { ok: false, error: "Trip not found." };
     const wizard = (trip.wizard as WizardSlices | undefined) ?? {};
 
     const startLocation: PlanLocation = wizard.going?.startLocation ?? {
@@ -486,6 +504,8 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
           startCoords: routed.startCoords,
           routePolyline: routed.routePolyline,
           days: routed.days,
+          // Trip-card hero = satellite snapshot of the destination.
+          heroImage: mapboxStaticForCoords(routed.endCoords),
         }
       : {
           ...trip,
@@ -511,14 +531,24 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
       .from("trips")
       .update({ title: newTitle, state: "active", payload: updatedPayload })
       .eq("id", draftId);
-    if (error) return;
+    if (error) return { ok: false, error: "Couldn't save your trip." };
 
-    redirect(`/trip/${draftId}`);
+    // Invalidate the /trips list so the newly-finalized trip shows up
+    // when the user closes the slideup. Other mutating actions (rename,
+    // delete, state change) revalidate the same path; finalize didn't
+    // need to historically because it redirected away to /trip/<id>.
+    revalidatePath("/trips");
+
+    // The Trip we return uses the DB-authoritative id and title (the
+    // payload itself keeps the placeholder id/"Untitled Trip" by
+    // convention for forked trips — see updatedPayload above).
+    const finalized: Trip = { ...updatedPayload, id: draftId, title: newTitle };
+    return { ok: true, tripId: draftId, trip: finalized };
   }
 
   // Draft path: original anonymous in-memory flow.
   const draft = await repo.getDraft(draftId);
-  if (!draft) return;
+  if (!draft) return { ok: false, error: "Trip draft not found." };
 
   const tripId = `trip-${newDraftId().slice(0, 8)}`;
   const start = draft.going?.startLocation?.label ?? "Start";
@@ -566,6 +596,13 @@ export async function finalizeTripAction(draftId: string): Promise<void> {
   };
 
   await trips.createTrip(trip);
-  await repo.discardDraft(draftId);
-  redirect(`/trip/${tripId}`);
+  // Intentionally NOT discarding the draft. After Step 1's slideup
+  // handoff, the action returns instead of redirecting; Next.js then
+  // re-renders /plan/<id>/loader, whose layout calls
+  // loadWizardState(draftId). If we discarded the draft here, the
+  // layout would notFound() and the user would see a 404 instead of
+  // the slideup. The orphaned draft is in-memory only and gets GC'd
+  // with the process.
+  revalidatePath("/trips");
+  return { ok: true, tripId, trip };
 }

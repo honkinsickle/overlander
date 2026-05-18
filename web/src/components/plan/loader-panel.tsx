@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { finalizeTripAction } from "@/lib/plan/actions";
+import { WizardFinalizeSlideup } from "@/components/plan/wizard-finalize-slideup";
+import type { Trip } from "@/lib/trips/types";
 
 /**
- * Loader step body. Simulates the planner running through 3 sub-steps
- * and then finalizes the draft into a trip. Purely client-side timing —
- * when real work lands, replace the timers with a resolving Promise.
+ * Loader step body. Animates 3 sub-steps, then calls finalize. On
+ * success, mounts the trip slideup over the loader (which stays
+ * rendered underneath as a backdrop). On failure, swaps the loader body
+ * for an inline error + retry.
  */
 
 const STEP_DURATION_MS = 3000;
@@ -32,8 +35,25 @@ const SUB_STEPS: SubStep[] = [
   },
 ];
 
+type Status =
+  | { kind: "running" }
+  | { kind: "done"; trip: Trip }
+  | { kind: "error"; error: string };
+
 export function LoaderPanel({ draftId }: { draftId: string }) {
   const [currentStep, setCurrentStep] = useState(0);
+  // animationDone fires from the interval; a separate effect watches
+  // it and kicks off finalize. Kicking finalize from inside the state
+  // updater races with the Router update Next.js issues when the
+  // server action resolves, producing a "setState during render" warn.
+  const [animationDone, setAnimationDone] = useState(false);
+  const [status, setStatus] = useState<Status>({ kind: "running" });
+
+  const finalize = useCallback(async () => {
+    const result = await finalizeTripAction(draftId);
+    if (result.ok) setStatus({ kind: "done", trip: result.trip });
+    else setStatus({ kind: "error", error: result.error });
+  }, [draftId]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -41,35 +61,77 @@ export function LoaderPanel({ draftId }: { draftId: string }) {
         const next = prev + 1;
         if (next >= SUB_STEPS.length) {
           clearInterval(id);
-          void finalizeTripAction(draftId);
+          setAnimationDone(true);
           return prev;
         }
         return next;
       });
     }, STEP_DURATION_MS);
     return () => clearInterval(id);
-  }, [draftId]);
+  }, []);
+
+  useEffect(() => {
+    if (animationDone && status.kind === "running") void finalize();
+  }, [animationDone, status.kind, finalize]);
 
   return (
-    <div className="flex flex-col items-center gap-5 py-2">
-      <AutopilotMark />
-      <Spinner />
+    <>
+      {status.kind === "error" ? (
+        <ErrorState
+          error={status.error}
+          onRetry={() => {
+            setStatus({ kind: "running" });
+            void finalize();
+          }}
+        />
+      ) : (
+        <div className="flex flex-col items-center gap-5 py-2">
+          <AutopilotMark />
+          <Spinner />
 
-      <ul className="flex flex-col gap-4 w-full mt-3">
-        {SUB_STEPS.map((s, i) => {
-          const state: "done" | "active" | "pending" =
-            i < currentStep
-              ? "done"
-              : i === currentStep
-                ? "active"
-                : "pending";
-          return <SubStepRow key={s.title} step={s} state={state} />;
-        })}
-      </ul>
+          <ul className="flex flex-col gap-4 w-full mt-3">
+            {SUB_STEPS.map((s, i) => {
+              const state: "done" | "active" | "pending" =
+                i < currentStep
+                  ? "done"
+                  : i === currentStep
+                    ? "active"
+                    : "pending";
+              return <SubStepRow key={s.title} step={s} state={state} />;
+            })}
+          </ul>
 
-      <p className="section-label text-[11px] text-text-muted mt-2 text-center">
-        ~10 SECONDS &middot; DO NOT CLOSE THIS WINDOW
+          <p className="section-label text-[11px] text-text-muted mt-2 text-center">
+            ~10 SECONDS &middot; DO NOT CLOSE THIS WINDOW
+          </p>
+        </div>
+      )}
+
+      {status.kind === "done" && <WizardFinalizeSlideup trip={status.trip} />}
+    </>
+  );
+}
+
+function ErrorState({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-6 text-center">
+      <p className="font-sans text-base text-text-primary">{error}</p>
+      <p className="font-sans text-sm text-text-muted">
+        Something went wrong finalizing your trip.
       </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="h-10 px-5 rounded-full bg-amber text-bg-base font-sans text-sm font-medium hover:opacity-90 transition-opacity"
+      >
+        Try again
+      </button>
     </div>
   );
 }
