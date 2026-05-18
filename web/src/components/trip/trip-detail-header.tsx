@@ -85,8 +85,12 @@ function TripHero({
           style={{
             left: 0,
             top: -11,
+            // JSON.stringify wraps the URL in double quotes so any
+            // parens / commas / spaces inside (e.g. the Mapbox Static
+            // polyline-overlay `path-3+c8a96e-0.9(...)`) don't break
+            // CSS's url() parser.
             backgroundImage: heroImage
-              ? `url(${heroImage})`
+              ? `url(${JSON.stringify(heroImage)})`
               : (heroGradient ??
                 "linear-gradient(135deg, #1e3b34 0%, #2d5045 55%, #c8a96e 100%)"),
           }}

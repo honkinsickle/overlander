@@ -20,7 +20,12 @@ export function TripSlideupBody({ trip }: { trip: Trip }) {
         className="flex-1 min-w-0 relative overflow-hidden"
         aria-label="Map"
       >
-        <MapColumn tripId={trip.id} days={trip.days} />
+        <MapColumn
+          tripId={trip.id}
+          days={trip.days}
+          startCoords={trip.startCoords}
+          routePolyline={trip.routePolyline}
+        />
         <MapDetailOverlay />
       </section>
     </>

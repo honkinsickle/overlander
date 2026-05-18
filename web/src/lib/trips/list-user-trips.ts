@@ -2,6 +2,7 @@ import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { WizardSlices, PlanStep } from "@/lib/plan/types";
 import type { Trip } from "./types";
+import { TRIPS } from "./fixtures";
 
 export type UserTripSummary = {
   id: string;
@@ -25,11 +26,21 @@ export type UserTripSummary = {
 
 /** List the authed user's trips. RLS scopes to auth.uid() === owner_id,
  *  so the server client (cookie-backed) is the right tool here — no
- *  service role needed. */
+ *  service role needed.
+ *
+ *  TEST MODE: when there is no Supabase session (sign-in disabled),
+ *  fall back to the in-memory anon trip store so /trips still shows
+ *  trips created via the anonymous wizard path. Anon trip ids are
+ *  `trip-<8-char>` and are scoped to the dev server's lifetime. */
 export async function listUserTrips(): Promise<UserTripSummary[]> {
-  if (!isConfigured()) return [];
+  if (!isConfigured()) return listAnonTrips();
   try {
     const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return listAnonTrips();
+
     const { data, error } = await supabase
       .from("trips")
       .select("id, title, state, reference_id, updated_at, payload")
@@ -56,4 +67,26 @@ export async function listUserTrips(): Promise<UserTripSummary[]> {
   } catch {
     return [];
   }
+}
+
+/** In-memory list of anon-created trips (test mode). Skips reference
+ *  trips (slug ids like "la-to-deadhorse") — those have their own
+ *  surface via the home-page CTA. */
+function listAnonTrips(): UserTripSummary[] {
+  return Object.entries(TRIPS)
+    .filter(([id]) => id.startsWith("trip-"))
+    .map(([id, p]) => ({
+      id,
+      title: p.title,
+      state: "active" as const,
+      referenceId: null,
+      updatedAt: p.startDate,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      startLocation: p.startLocation,
+      endLocation: p.endLocation,
+      heroImage: p.heroImage,
+      dayCount: p.days?.length ?? 0,
+    }))
+    .sort((a, b) => (a.id < b.id ? 1 : -1));
 }

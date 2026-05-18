@@ -23,13 +23,18 @@ export default async function TripsLayout({
     redirect("/auth/sign-in?error=supabase_not_configured");
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/auth/sign-in?next=/trips");
-  }
+  // TEST MODE: Google sign-in is temporarily disabled. Anonymous
+  // viewers can reach /trips. `listUserTrips` falls back to the
+  // in-memory anon-trip store when there's no session. Re-enable the
+  // user gate when OAuth is back.
+  // const supabase = await createSupabaseServerClient();
+  // const {
+  //   data: { user },
+  // } = await supabase.auth.getUser();
+  // if (!user) {
+  //   redirect("/auth/sign-in?next=/trips");
+  // }
+  void createSupabaseServerClient;
 
   const trips = await listUserTrips();
 
