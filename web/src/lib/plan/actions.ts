@@ -31,6 +31,7 @@ import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
+import { mapboxStaticForCoords } from "@/lib/imagery/mapbox-static";
 
 // Fallback pace when the wizard didn't capture one (e.g. drafts saved
 // pre-Phase-B). The wizard's PaceInput defaults to 6 hrs/day; this
@@ -94,6 +95,7 @@ async function buildRouteAwareDays(args: {
 }): Promise<{
   days: Day[];
   startCoords: [number, number];
+  endCoords: [number, number];
   routePolyline: string;
   endDate: string;
 } | null> {
@@ -152,6 +154,9 @@ async function buildRouteAwareDays(args: {
       startCoord: seg.startCoord,
       miles: Math.round(seg.distanceM / 1609.34),
       driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
+      // Per-day hero = satellite snapshot of the day's start (the
+      // place that day begins, matching the camera target).
+      heroImage: mapboxStaticForCoords(seg.startCoord),
       waypoints: [],
       suggestions: daySuggestions[i].byCategory,
       segmentSuggestions: daySuggestions[i].all,
@@ -160,6 +165,7 @@ async function buildRouteAwareDays(args: {
     return {
       days,
       startCoords,
+      endCoords,
       routePolyline: encodePolyline(route.coordinates),
       endDate: addDaysIso(args.startDate, Math.max(0, segments.length - 1)),
     };
@@ -498,6 +504,8 @@ export async function finalizeTripAction(
           startCoords: routed.startCoords,
           routePolyline: routed.routePolyline,
           days: routed.days,
+          // Trip-card hero = satellite snapshot of the destination.
+          heroImage: mapboxStaticForCoords(routed.endCoords),
         }
       : {
           ...trip,
