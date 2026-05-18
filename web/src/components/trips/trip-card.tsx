@@ -88,7 +88,9 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
       <div
         className="w-32 h-24 rounded shrink-0 bg-cover bg-center bg-bg-nav-btn"
         style={
-          trip.heroImage ? { backgroundImage: `url(${trip.heroImage})` } : undefined
+          trip.heroImage
+            ? { backgroundImage: `url(${JSON.stringify(trip.heroImage)})` }
+            : undefined
         }
         aria-hidden="true"
       />

@@ -27,11 +27,16 @@ import { suggestionsForChips } from "./suggestions";
 import { newDraftId } from "./store";
 import { nextHref } from "./nav";
 import { geocode } from "@/lib/routing/geocode";
+import { reverseGeocodeCity } from "@/lib/routing/reverse-geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
-import { mapboxStaticForCoords } from "@/lib/imagery/mapbox-static";
+import {
+  mapboxStaticForCoords,
+  mapboxStaticForRoute,
+} from "@/lib/imagery/mapbox-static";
+import { destinationPhotoFor } from "@/lib/imagery/destination-photo";
 
 // Fallback pace when the wizard didn't capture one (e.g. drafts saved
 // pre-Phase-B). The wizard's PaceInput defaults to 6 hrs/day; this
@@ -97,6 +102,13 @@ async function buildRouteAwareDays(args: {
   startCoords: [number, number];
   endCoords: [number, number];
   routePolyline: string;
+  /** Downsampled polyline (segment endpoints only) for Mapbox Static
+   *  URL — `routePolyline` would overrun the 8KB URL limit. */
+  heroPolyline: string;
+  /** Best-effort photograph of the destination from the
+   *  Wikipedia → Mapillary cascade. Null when no source returned an
+   *  image; caller falls back to a Mapbox-Static route snapshot. */
+  destPhoto: string | null;
   endDate: string;
 } | null> {
   try {
@@ -124,49 +136,105 @@ async function buildRouteAwareDays(args: {
     const segments = segmentByPace(route, paceInput);
     console.log(`[finalize] segmented into ${segments.length} day(s)`);
 
-    // Resolve suggestions per day in parallel. Each call is itself an
-    // internal Promise.all across bbox samples + sources, so this
-    // saturates outbound bandwidth — fine for the ≤20 days the
-    // pace/route combinations typically produce.
+    // Reverse-geocode each segment's end coord in parallel so middle
+    // days get "Sacramento, CA — Eugene, OR" labels instead of
+    // "Day 2 — Day 3". For multi-day trips, only the intermediate
+    // endpoints need lookup; Day 1 uses the user-typed start label and
+    // the final day uses the user-typed destination label. Failures
+    // fall back to "Day N start" / "Day N end" labels per-day.
+    const cityNamesPromise: Promise<(string | null)[]> =
+      segments.length > 1
+        ? Promise.all(
+            segments
+              .slice(0, -1)
+              .map((seg) => reverseGeocodeCity(seg.endCoord)),
+          )
+        : Promise.resolve([]);
+
+    // Resolve suggestions + city names + destination photo per day in
+    // parallel. Each buildDaySuggestions is itself an internal
+    // Promise.all across bbox samples + sources, so this saturates
+    // outbound bandwidth — fine for the ≤20 days the pace/route
+    // combinations typically produce.
     console.log(`[finalize] querying suggestions for ${segments.length} days`);
-    const daySuggestions = await Promise.all(
-      segments.map((seg) => buildDaySuggestions(seg)),
+    const [daySuggestions, intermediateCities, destPhoto] = await Promise.all([
+      Promise.all(segments.map((seg) => buildDaySuggestions(seg))),
+      cityNamesPromise,
+      destinationPhotoFor(args.destination.label, endCoords),
+    ]);
+    console.log(
+      `[finalize] destination photo: ${destPhoto ? destPhoto.slice(0, 60) + "…" : "none (fallback to map)"}`,
     );
     console.log(
       `[finalize] suggestions ready (${daySuggestions.map((d) => d.all.length).join(",")} per day)`,
     );
+    if (segments.length > 1) {
+      console.log(
+        `[finalize] intermediate cities: ${intermediateCities.map((c) => c ?? "?").join(" → ")}`,
+      );
+    }
 
     const startLabel = args.startLocation.label;
     const endLabel = args.destination.label;
+    const dayStartCity = (i: number): string =>
+      i === 0 ? startLabel : intermediateCities[i - 1] ?? `Day ${i + 1} start`;
+    const dayEndCity = (i: number): string =>
+      i === segments.length - 1
+        ? endLabel
+        : intermediateCities[i] ?? `Day ${i + 1} end`;
+
+    // Per-day hero = real photo of where the day ENDS (the overnight
+    // stop, or for the final day the trip's destination). Reuse the
+    // same Wikipedia → Mapillary cascade as the trip hero so each
+    // day card surfaces a place photo instead of a satellite snapshot.
+    // The last day's photo is the same as the trip-level destPhoto;
+    // dedupe the request rather than re-fetching it.
+    const dayPhotos: (string | null)[] = await Promise.all(
+      segments.map((seg, i) =>
+        i === segments.length - 1
+          ? Promise.resolve(destPhoto)
+          : destinationPhotoFor(dayEndCity(i), seg.endCoord),
+      ),
+    );
+    console.log(
+      `[finalize] day photos: ${dayPhotos.map((p) => (p ? "✓" : "·")).join("")}`,
+    );
+
     const days: Day[] = segments.map((seg, i) => ({
       id: `day-${i + 1}`,
       dayNumber: i + 1,
       date: addDaysIso(args.startDate, i),
-      label:
-        segments.length === 1
-          ? `${startLabel} — ${endLabel}`
-          : i === 0
-            ? `${startLabel} — end of day 1`
-            : i === segments.length - 1
-              ? `Day ${i + 1} — ${endLabel}`
-              : `Day ${i + 1}`,
+      label: `${dayStartCity(i)} — ${dayEndCity(i)}`,
       coords: seg.endCoord,
       startCoord: seg.startCoord,
       miles: Math.round(seg.distanceM / 1609.34),
       driveHours: Math.round((seg.durationS / 3600) * 10) / 10,
-      // Per-day hero = satellite snapshot of the day's start (the
-      // place that day begins, matching the camera target).
-      heroImage: mapboxStaticForCoords(seg.startCoord),
+      // Per-day hero = real photo of the day's end city when
+      // available, else a Mapbox satellite snapshot of the same point.
+      heroImage:
+        dayPhotos[i] ?? mapboxStaticForCoords(seg.endCoord),
       waypoints: [],
       suggestions: daySuggestions[i].byCategory,
       segmentSuggestions: daySuggestions[i].all,
     }));
+
+    // Simplified polyline for the trip-level hero static image. Mapbox
+    // Static API caps the URL at ~8KB; the full geometry routinely
+    // produces 70KB+ encoded polylines that 414. Sampling the segment
+    // endpoints (N+1 coords for N days) keeps the rendered route line
+    // recognizable while staying well under the limit.
+    const heroPolylineCoords: [number, number][] = [
+      segments[0]!.startCoord,
+      ...segments.map((seg) => seg.endCoord),
+    ];
 
     return {
       days,
       startCoords,
       endCoords,
       routePolyline: encodePolyline(route.coordinates),
+      heroPolyline: encodePolyline(heroPolylineCoords),
+      destPhoto,
       endDate: addDaysIso(args.startDate, Math.max(0, segments.length - 1)),
     };
   } catch (err) {
@@ -505,7 +573,15 @@ export async function finalizeTripAction(
           routePolyline: routed.routePolyline,
           days: routed.days,
           // Trip-card hero = satellite snapshot of the destination.
-          heroImage: mapboxStaticForCoords(routed.endCoords),
+          // Trip-level hero = whole route drawn as a polyline on a
+          // satellite map, auto-fit to the route bounds. Tells the
+          // story of the trip in one image instead of just showing
+          // the destination city.
+          // Real destination photo if Wikipedia/Mapillary returned one,
+          // else fall back to a Mapbox-Static map snapshot with the
+          // route polyline overlaid.
+          heroImage:
+            routed.destPhoto ?? mapboxStaticForRoute(routed.heroPolyline),
         }
       : {
           ...trip,
@@ -546,7 +622,10 @@ export async function finalizeTripAction(
     return { ok: true, tripId: draftId, trip: finalized };
   }
 
-  // Draft path: original anonymous in-memory flow.
+  // Draft path: anonymous in-memory flow. Now runs the same routing
+  // logic as the UUID path so test-mode trips (sign-in disabled) get
+  // real multi-day segments + miles + per-day suggestions, not the
+  // single-day skeleton we used to ship.
   const draft = await repo.getDraft(draftId);
   if (!draft) return { ok: false, error: "Trip draft not found." };
 
@@ -556,9 +635,25 @@ export async function finalizeTripAction(
   const selectedChipIds = draft.interests?.selectedChipIds ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const startDate = draft.going?.startDate ?? today;
-  const endDate = draft.going?.endDate ?? startDate;
 
-  const waypoints: Waypoint[] = suggestionsForChips(selectedChipIds).map(
+  const startLocation: PlanLocation = draft.going?.startLocation ?? {
+    label: start,
+  };
+  const destination: PlanLocation = draft.going?.destination ?? {
+    label: end,
+  };
+
+  const routed = await buildRouteAwareDays({
+    startLocation,
+    destination,
+    startDate,
+    pace: draft.going?.pace,
+    roundTrip: draft.going?.roundTrip,
+  });
+
+  // Single-day skeleton if routing fails — preserves the prior anon
+  // behavior so a bad geocode doesn't crash the flow.
+  const fallbackWaypoints: Waypoint[] = suggestionsForChips(selectedChipIds).map(
     (s) => ({
       id: `wp-${s.slug}`,
       slug: s.slug,
@@ -575,25 +670,41 @@ export async function finalizeTripAction(
     }),
   );
 
-  const trip: Trip = {
-    id: tripId,
-    title: `${start} to ${end}`,
-    startDate,
-    endDate,
-    startLocation: start,
-    endLocation: end,
-    weatherHiF: 72,
-    weatherLoF: 55,
-    days: [
-      {
-        id: "day-1",
-        dayNumber: 1,
-        date: startDate,
-        label: `${start} — ${end}`,
-        waypoints,
-      },
-    ],
-  };
+  const trip: Trip = routed
+    ? {
+        id: tripId,
+        title: `${start} to ${end}`,
+        startDate,
+        endDate: routed.endDate,
+        startLocation: start,
+        endLocation: end,
+        startCoords: routed.startCoords,
+        routePolyline: routed.routePolyline,
+        weatherHiF: 72,
+        weatherLoF: 55,
+        days: routed.days,
+        heroImage:
+          routed.destPhoto ?? mapboxStaticForRoute(routed.heroPolyline),
+      }
+    : {
+        id: tripId,
+        title: `${start} to ${end}`,
+        startDate,
+        endDate: draft.going?.endDate ?? startDate,
+        startLocation: start,
+        endLocation: end,
+        weatherHiF: 72,
+        weatherLoF: 55,
+        days: [
+          {
+            id: "day-1",
+            dayNumber: 1,
+            date: startDate,
+            label: `${start} — ${end}`,
+            waypoints: fallbackWaypoints,
+          },
+        ],
+      };
 
   await trips.createTrip(trip);
   // Intentionally NOT discarding the draft. After Step 1's slideup
