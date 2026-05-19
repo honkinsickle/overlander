@@ -41,10 +41,12 @@ export function SuggestionCard({
       style={{ backgroundColor: "#161819BF" }}
     >
       <div
-        className="relative shrink-0 bg-cover bg-center"
+        className="relative shrink-0 bg-cover bg-center bg-bg-nav-btn"
         style={{
           height: featured ? 240 : 130,
-          backgroundImage: `url(${heroImage})`,
+          ...(heroImage
+            ? { backgroundImage: `url(${JSON.stringify(heroImage)})` }
+            : null),
         }}
       >
         <div
