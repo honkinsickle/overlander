@@ -34,23 +34,42 @@ const COOKIE_OPTS = {
 
 type DraftMap = Record<string, DraftTrip>;
 
-export async function readDrafts(): Promise<DraftMap> {
+/** Base64-encode the JSON payload before storing in the cookie. Raw
+ *  JSON contains commas — RFC 6265 reserves comma as a cookie-list
+ *  separator, and some middleware (observed on Vercel) truncates the
+ *  value at the first comma, which then fails to JSON.parse on the
+ *  next request. Base64 sticks to URL-safe alphanumeric + `+/=`. */
+function encode(map: DraftMap): string {
+  return Buffer.from(JSON.stringify(map), "utf8").toString("base64");
+}
+
+function decode(raw: string): DraftMap | null {
   try {
-    const store = await cookies();
-    const raw = store.get(COOKIE_NAME)?.value;
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return {};
+    // Tolerate either base64 (current) or plain JSON (legacy values
+    // that may still be in user cookies from before this change).
+    const looksLikeJson = raw.startsWith("{") || raw.startsWith("[");
+    const json = looksLikeJson
+      ? raw
+      : Buffer.from(raw, "base64").toString("utf8");
+    const parsed = JSON.parse(json) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
     return parsed as DraftMap;
   } catch {
-    return {};
+    return null;
   }
+}
+
+export async function readDrafts(): Promise<DraftMap> {
+  const store = await cookies();
+  const raw = store.get(COOKIE_NAME)?.value;
+  if (!raw) return {};
+  return decode(raw) ?? {};
 }
 
 export async function writeDrafts(map: DraftMap): Promise<void> {
   const trimmed = capDrafts(map);
   const store = await cookies();
-  store.set(COOKIE_NAME, JSON.stringify(trimmed), COOKIE_OPTS);
+  store.set(COOKIE_NAME, encode(trimmed), COOKIE_OPTS);
 }
 
 /** Attach the draft-map cookie to an explicit `NextResponse`. Use this
@@ -63,7 +82,7 @@ export function writeDraftsToResponse(
   map: DraftMap,
 ): void {
   const trimmed = capDrafts(map);
-  response.cookies.set(COOKIE_NAME, JSON.stringify(trimmed), COOKIE_OPTS);
+  response.cookies.set(COOKIE_NAME, encode(trimmed), COOKIE_OPTS);
 }
 
 /** Evict oldest drafts (by createdAt) until under MAX_DRAFTS and the
