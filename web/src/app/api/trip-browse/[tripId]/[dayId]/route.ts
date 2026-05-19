@@ -245,8 +245,10 @@ export async function GET(
     unique.push(p);
   }
 
-  // Sort: places within CORRIDOR_MI of today's route rank first; within
-  // each tier, sort by haversine distance from day-start ascending.
+  // Filter to within CORRIDOR_MI of today's route; sort by haversine
+  // distance from day-start ascending. The "Within 10 mi of today"
+  // panel header makes the filter explicit — places beyond the
+  // corridor used to slip in (ranked lower) but now drop out entirely.
   //
   // Corridor is computed against TODAY'S segment only — a synthetic
   // two-point line from day-start → day-end. Using the trip-level
@@ -262,18 +264,17 @@ export async function GET(
         : dayStart
           ? [dayStart]
           : [];
-  const scored = unique.map((p) => ({
-    place: p,
-    inCorridor:
-      daySegment.length > 0
-        ? pointToPolylineMi(p.coords, daySegment) <= CORRIDOR_MI
-        : true,
-    fromStart: dayStart ? haversineMi(p.coords, dayStart) : Infinity,
-  }));
-  scored.sort((a, b) => {
-    if (a.inCorridor !== b.inCorridor) return a.inCorridor ? -1 : 1;
-    return a.fromStart - b.fromStart;
-  });
+  const scored = unique
+    .map((p) => ({
+      place: p,
+      milesOffRoute:
+        daySegment.length > 0
+          ? pointToPolylineMi(p.coords, daySegment)
+          : 0,
+      fromStart: dayStart ? haversineMi(p.coords, dayStart) : Infinity,
+    }))
+    .filter((s) => s.milesOffRoute <= CORRIDOR_MI);
+  scored.sort((a, b) => a.fromStart - b.fromStart);
   const sorted = scored.map((s) => s.place);
 
   const payload = { source: "discovery", places: sorted };

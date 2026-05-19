@@ -460,8 +460,12 @@ export function MapColumn({
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
         const wrapper = document.createElement("div");
-        wrapper.style.cssText =
-          `position:relative;display:flex;align-items:center;cursor:pointer;`;
+        // No `position` set — mapboxgl applies position:absolute, which
+        // also serves as the containing block for the label's
+        // position:absolute. Setting position:relative here broke the
+        // marker's transform-based positioning and made dots stack in
+        // document flow instead of plotting at their lat/lng.
+        wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
         const dot = document.createElement("div");
         dot.style.cssText =
           `width:${initialSize}px;height:${initialSize}px;border-radius:50%;` +
