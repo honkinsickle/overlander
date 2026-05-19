@@ -33,9 +33,20 @@ type GeosearchResponse = {
   query?: { geosearch?: Array<{ pageid: number; title: string; lat: number; lon: number; dist: number }> };
 };
 
-type PageImagesResponse = {
-  query?: { pages?: Record<string, { title?: string; original?: { source?: string } }> };
+type PageDataResponse = {
+  query?: {
+    pages?: Record<
+      string,
+      {
+        title?: string;
+        original?: { source?: string };
+        extract?: string;
+      }
+    >;
+  };
 };
+
+type PageData = { photo?: string; extract?: string };
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -117,26 +128,37 @@ async function mapWithConcurrency<T, U>(
   return out;
 }
 
-/** Fetch lead-image URLs for up to `PAGEIMAGES_BATCH` titles per call. */
-async function fetchPageImages(
+/** Fetch lead image + intro extract for up to `PAGEIMAGES_BATCH` titles
+ *  per call. Combining `pageimages` + `extracts` keeps the round-trip
+ *  count flat — same Action API call, two extra props.
+ *
+ *  `exintro=1` limits the extract to the lead section; `explaintext=1`
+ *  strips the wiki markup so we get plain text suitable for a card
+ *  description; `exsentences=3` caps each at ~3 sentences. */
+async function fetchPageData(
   titles: string[],
   signal: AbortSignal | undefined,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<Map<string, PageData>> {
+  const out = new Map<string, PageData>();
   for (let i = 0; i < titles.length; i += PAGEIMAGES_BATCH) {
     const chunk = titles.slice(i, i + PAGEIMAGES_BATCH);
     const url =
-      `${ACTION_API}?action=query&prop=pageimages&piprop=original` +
+      `${ACTION_API}?action=query` +
+      `&prop=pageimages|extracts&piprop=original` +
+      `&exintro=1&explaintext=1&exsentences=3` +
       `&titles=${encodeURIComponent(chunk.join("|"))}` +
       `&format=json&origin=*`;
     try {
       const res = await fetch(url, { headers: { "user-agent": UA }, signal });
       if (!res.ok) continue;
-      const json = (await res.json()) as PageImagesResponse;
+      const json = (await res.json()) as PageDataResponse;
       for (const page of Object.values(json.query?.pages ?? {})) {
-        if (page.title && page.original?.source) {
-          out.set(page.title, page.original.source);
-        }
+        if (!page.title) continue;
+        const entry: PageData = {};
+        if (page.original?.source) entry.photo = page.original.source;
+        const extract = page.extract?.trim();
+        if (extract) entry.extract = extract;
+        if (entry.photo || entry.extract) out.set(page.title, entry);
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return out;
@@ -150,7 +172,13 @@ export async function enrichWithWikipedia(
   results: SourceResult[],
   signal?: AbortSignal,
 ): Promise<void> {
-  const targets = results.filter((r) => !r.photoUrl).slice(0, MAX_LOOKUPS);
+  // Enrich anything missing EITHER a photo or a description — Google-
+  // sourced places already have photos but lack descriptions, and OSM
+  // places often have neither. The single batched call below fetches
+  // both, so the cost of "also wanted description" is zero round-trips.
+  const targets = results
+    .filter((r) => !r.photoUrl || !r.description)
+    .slice(0, MAX_LOOKUPS);
   if (targets.length === 0) return;
 
   // Stage 1: pull whatever titles OSM already gave us (no network).
@@ -173,12 +201,14 @@ export async function enrichWithWikipedia(
 
   if (titlesByResult.size === 0) return;
 
-  // Stage 3: batch-fetch lead images for all candidate titles.
+  // Stage 3: batch-fetch lead image + intro extract for all candidates.
   const uniqueTitles = Array.from(new Set(titlesByResult.values()));
-  const photos = await fetchPageImages(uniqueTitles, signal);
+  const pages = await fetchPageData(uniqueTitles, signal);
 
   for (const [result, title] of titlesByResult) {
-    const url = photos.get(title);
-    if (url) result.photoUrl = url;
+    const page = pages.get(title);
+    if (!page) continue;
+    if (page.photo && !result.photoUrl) result.photoUrl = page.photo;
+    if (page.extract && !result.description) result.description = page.extract;
   }
 }
