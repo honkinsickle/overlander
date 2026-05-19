@@ -512,6 +512,13 @@ export type FinalizeResult =
  *  wizard loader instead of redirecting to /trip/<id>. */
 export async function finalizeTripAction(
   draftId: string,
+  /** Optional: anon wizard state captured at page-render time so the
+   *  action doesn't depend on the draft cookie surviving the round-
+   *  trip. The page-render GET reads the cookie reliably; passing the
+   *  state in as an action arg side-steps any environment where
+   *  cookies set by earlier Server Actions might not flow back into
+   *  this action's request (observed intermittently on Vercel). */
+  hydrated?: WizardSlices,
 ): Promise<FinalizeResult> {
   if (isUserTripId(draftId)) {
     const trip = await getUserTrip(draftId);
@@ -622,11 +629,10 @@ export async function finalizeTripAction(
     return { ok: true, tripId: draftId, trip: finalized };
   }
 
-  // Draft path: anonymous in-memory flow. Now runs the same routing
-  // logic as the UUID path so test-mode trips (sign-in disabled) get
-  // real multi-day segments + miles + per-day suggestions, not the
-  // single-day skeleton we used to ship.
-  const draft = await repo.getDraft(draftId);
+  // Draft path: anonymous wizard flow. Prefer the hydrated state passed
+  // from the loader page; fall back to the cookie-backed store for back-
+  // compat with any caller that still invokes the action without state.
+  const draft = hydrated ?? (await repo.getDraft(draftId));
   if (!draft) return { ok: false, error: "Trip draft not found." };
 
   const tripId = `trip-${newDraftId().slice(0, 8)}`;
