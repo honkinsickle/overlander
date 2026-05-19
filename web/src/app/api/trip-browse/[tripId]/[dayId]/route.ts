@@ -180,14 +180,28 @@ export async function GET(
   }
 
   // Sort: places within CORRIDOR_MI of today's route rank first; within
-  // each tier, sort by haversine distance from day-start ascending. Uses
-  // the trip-level polyline (precision 5) — places are already restricted
-  // to today's bbox by the discovery layer, so any qualifying place near
-  // the full polyline is effectively also near today's segment.
-  const polyline = trip.routePolyline;
+  // each tier, sort by haversine distance from day-start ascending.
+  //
+  // Corridor is computed against TODAY'S segment only — a synthetic
+  // two-point line from day-start → day-end. Using the trip-level
+  // polyline let places near a different day's segment slip in (e.g.
+  // a viewpoint near Day 27 appearing on Day 16's panel because the
+  // full trip passes within 10mi of both).
+  const dayEnd = day.coords;
+  const daySegment: [number, number][] =
+    dayStart && dayEnd
+      ? [dayStart, dayEnd]
+      : dayEnd
+        ? [dayEnd]
+        : dayStart
+          ? [dayStart]
+          : [];
   const scored = unique.map((p) => ({
     place: p,
-    inCorridor: polyline ? pointToPolylineMi(p.coords, polyline) <= CORRIDOR_MI : true,
+    inCorridor:
+      daySegment.length > 0
+        ? pointToPolylineMi(p.coords, daySegment) <= CORRIDOR_MI
+        : true,
     fromStart: dayStart ? haversineMi(p.coords, dayStart) : Infinity,
   }));
   scored.sort((a, b) => {

@@ -64,15 +64,16 @@ function project(
   return [x, y];
 }
 
-/** Min distance (miles) from `point` to any segment of `polyline`.
- *  Returns Infinity for an empty or malformed polyline so callers can
- *  treat it as "no corridor" (everything ranks beyond). */
+/** Min distance (miles) from `point` to any segment of `path`.
+ *  `path` may be either an encoded Google polyline (string) or a
+ *  pre-decoded coordinate array. Returns Infinity for an empty or
+ *  malformed path so callers can treat it as "no corridor". */
 export function pointToPolylineMi(
   point: [number, number],
-  polyline: string,
+  path: string | [number, number][],
 ): number {
-  if (!polyline) return Infinity;
-  const coords = decodePolyline(polyline);
+  if (!path) return Infinity;
+  const coords = typeof path === "string" ? decodePolyline(path) : path;
   if (coords.length === 0) return Infinity;
   if (coords.length === 1) return haversineKm(point, coords[0]) / KM_PER_MI;
 
