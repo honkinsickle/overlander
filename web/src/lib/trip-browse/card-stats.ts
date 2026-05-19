@@ -334,8 +334,9 @@ export function browsePlaceToWaypoint(
     },
     factualNote: FACTUAL_BY_SLIDE[ctx.category],
     logistics: {
-      hours: place.placeInfo?.address ? undefined : undefined,
+      hours: place.stats.find((s) => s.label === "HOURS")?.value,
       entry: stats.cost.secondary,
+      address: place.placeInfo?.address || undefined,
       phone: place.placeInfo?.phone?.display,
       website: place.placeInfo?.website?.display,
     },

@@ -136,10 +136,11 @@ export type Waypoint = {
   /** Category-themed factual block under the description (e.g.
    *  "Geology Notes" for Scenic, "Cultural" for Urban). */
   factualNote?: { label: string; text: string };
-  /** Logistics grid — hours / entry / phone / website. */
+  /** Logistics grid — hours / entry / address / phone / website. */
   logistics?: {
     hours?: string;
     entry?: string;
+    address?: string;
     phone?: string;
     website?: string;
   };
