@@ -21,6 +21,20 @@ import type { DraftTrip } from "@/lib/plan/types";
  * Components can read cookies but not write them.
  */
 export async function GET(req: Request) {
+  // CRITICAL: skip prefetches. Next.js auto-prefetches every visible
+  // `<Link href="/plan">` (Plan-a-new-trip CTAs in the layout and home
+  // page), which would otherwise mint a new draft and overwrite the
+  // user's in-flight wizard cookie on every hover/render. Real clicks
+  // and direct navigations do NOT send `Next-Router-Prefetch`; only
+  // the framework's prefetcher does.
+  //
+  // Returning a 204 with no Set-Cookie keeps Next's prefetch happy
+  // without side effects. The real navigation still hits this handler
+  // and runs the mint logic below.
+  if (req.headers.get("next-router-prefetch") === "1") {
+    return new NextResponse(null, { status: 204 });
+  }
+
   if (isConfigured()) {
     const supabase = await createSupabaseServerClient();
     const {
