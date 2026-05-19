@@ -43,6 +43,58 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
  *  route" Browse-panel spec. */
 const CORRIDOR_MI = 10;
 
+/** In-process response cache. Browse data is expensive to compute
+ *  (~7s single-category, ~13s all-fanout) but identical across requests
+ *  within the cache TTL — discover() reads bbox + categories with no
+ *  per-user state. Caching at the route handler level gives near-instant
+ *  re-opens of the same panel (chip toggles between cached filter sets,
+ *  closing + re-opening a day, etc).
+ *
+ *  On Vercel: globalThis is per-warm-lambda. First hit on a lambda is
+ *  a miss; warm lambdas serve from cache. Cold-start cost unchanged.
+ *  Stale-ness: 15 min is well within "place hasn't moved" tolerance;
+ *  fresh discovery data isn't load-bearing for the browse UX. */
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 200;
+
+type CacheEntry = { timestamp: number; payload: unknown };
+
+const cacheStore = (() => {
+  const g = globalThis as unknown as { __browseCache?: Map<string, CacheEntry> };
+  if (!g.__browseCache) g.__browseCache = new Map();
+  return g.__browseCache;
+})();
+
+function cacheKey(
+  tripId: string,
+  dayId: string,
+  categories: readonly SlideCategoryKey[],
+): string {
+  return `${tripId}|${dayId}|${[...categories].sort().join(",")}`;
+}
+
+function cacheGet(key: string): unknown | null {
+  const entry = cacheStore.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    cacheStore.delete(key);
+    return null;
+  }
+  // Refresh insertion order so this entry is "most recently used" for
+  // the simple LRU eviction below.
+  cacheStore.delete(key);
+  cacheStore.set(key, entry);
+  return entry.payload;
+}
+
+function cacheSet(key: string, payload: unknown): void {
+  if (cacheStore.size >= CACHE_MAX_ENTRIES) {
+    const oldest = cacheStore.keys().next().value;
+    if (oldest) cacheStore.delete(oldest);
+  }
+  cacheStore.set(key, { timestamp: Date.now(), payload });
+}
+
 /**
  * Browse-panel data for one day.
  *
@@ -102,6 +154,18 @@ export async function GET(
     );
   }
 
+  // Cache lookup — happens before the trip fetch so a warm cache hit
+  // is a single Map.get(). Key includes the normalized category set so
+  // chip-toggle re-fetches that match a prior filter combination land
+  // here too.
+  const cacheK = cacheKey(tripId, dayId, requested);
+  const cached = cacheGet(cacheK);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { "x-cache": "HIT" },
+    });
+  }
+
   const trip = await getTrip(tripId);
   if (!trip) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
@@ -122,7 +186,9 @@ export async function GET(
     const fixturePlaces = BROWSE_PLACES[day.dayNumber]?.[slideKey];
     if (fixturePlaces && fixturePlaces.length > 0) {
       const stamped = fixturePlaces.map((p) => ({ ...p, category: slideKey }));
-      return NextResponse.json({ source: "fixture", places: stamped });
+      const payload = { source: "fixture", places: stamped };
+      cacheSet(cacheK, payload);
+      return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
     }
   }
 
@@ -210,5 +276,7 @@ export async function GET(
   });
   const sorted = scored.map((s) => s.place);
 
-  return NextResponse.json({ source: "discovery", places: sorted });
+  const payload = { source: "discovery", places: sorted };
+  cacheSet(cacheK, payload);
+  return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
 }
