@@ -6,9 +6,9 @@ import {
   type SlideCategoryKey,
 } from "@/lib/trip-browse/places";
 import { bboxFromCoords, discover } from "@/lib/discovery/discovery";
-import { overpassSource } from "@/lib/discovery/overpass";
 import { recGovSource } from "@/lib/discovery/rec-gov";
 import { foursquareSource } from "@/lib/discovery/foursquare";
+import { googlePlacesSource } from "@/lib/discovery/google-places";
 import { usfsSource } from "@/lib/discovery/usfs";
 import { blmSource } from "@/lib/discovery/blm";
 import {
@@ -155,7 +155,7 @@ export async function GET(
         bboxes,
         categories: [slideKey],
         sources: [
-          overpassSource,
+          googlePlacesSource,
           recGovSource,
           foursquareSource,
           usfsSource,
