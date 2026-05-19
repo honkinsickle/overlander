@@ -3,7 +3,7 @@ import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createUserWizardTrip } from "@/lib/trips/user-trips";
 import { newDraftId } from "@/lib/plan/store";
-import { readDrafts, writeDraftsToResponse } from "@/lib/plan/cookie-store";
+import { writeDraftsToResponse } from "@/lib/plan/cookie-store";
 import type { DraftTrip } from "@/lib/plan/types";
 
 /**
@@ -37,22 +37,26 @@ export async function GET(req: Request) {
     }
   }
 
-  // Anon path: mint a draft id, add it to the cookie-stored map, and
-  // set the cookie on the redirect response. We can't go through the
-  // `next/headers` cookies() API here because its mutations don't
-  // attach to a manually-built NextResponse.
+  // Anon path: mint a draft id and write a fresh single-entry cookie.
+  // We REPLACE rather than merge — anon users only have one in-flight
+  // wizard, and merging caused a Vercel-only failure mode where the
+  // cookie accumulated multiple ids and the URL ended up pointing at
+  // one that hadn't merged correctly on the response chain. Old drafts
+  // are abandoned on each /plan visit; that's fine since the wizard
+  // can't be resumed mid-flow from a different tab anyway.
+  //
+  // (Reads still tolerate the legacy multi-draft cookie via the
+  // most-recent fallback in `repository.ts/getDraft`.)
   const id = newDraftId();
   const draft: DraftTrip = {
     id,
     status: "draft",
     createdAt: new Date().toISOString(),
   };
-  const drafts = await readDrafts();
-  drafts[id] = draft;
 
   const response = NextResponse.redirect(
     new URL(`/plan/${id}/going`, req.url),
   );
-  writeDraftsToResponse(response, drafts);
+  writeDraftsToResponse(response, { [id]: draft });
   return response;
 }
