@@ -35,7 +35,16 @@ export async function createDraft(): Promise<DraftTrip> {
 
 export async function getDraft(id: string): Promise<DraftTrip | null> {
   const drafts = await readDrafts();
-  return drafts[id] ?? null;
+  if (drafts[id]) return drafts[id];
+  // Fallback: the URL's draft id can diverge from the cookie's stored id
+  // when the user hits /plan more than once in a session and the second
+  // mint doesn't merge properly onto the response cookie (observed on
+  // Vercel). When there's exactly one draft in the cookie, fall back to
+  // it — the user clearly has a single in-flight wizard. Returns null
+  // for the genuinely-mismatched case (multiple drafts, none matching).
+  const ids = Object.keys(drafts);
+  if (ids.length === 1) return drafts[ids[0]];
+  return null;
 }
 
 export async function saveGoing(
