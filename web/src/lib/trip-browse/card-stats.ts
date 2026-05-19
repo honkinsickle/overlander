@@ -302,7 +302,11 @@ export function browsePlaceToWaypoint(
   const tripCategory = SLIDE_TO_TRIP_CATEGORY[ctx.category];
   const detourMatch = stats.dayTag.match(/([\d.]+)\s+mi/);
   const routeOffsetMi = detourMatch ? parseFloat(detourMatch[1]) : undefined;
-  const stopTimeMatch = stats.cost.primary.match(/Detour:\s+(\S+)/);
+  // "Stop time" = time spent AT the stop, per-category heuristic. Was
+  // previously parsed out of `cost.primary` ("Detour: …") which is the
+  // *drive* time to the stop, not the visit duration — that produced
+  // absurd labels like "Stop time: 6h47m" for a museum 285mi off-route.
+  const stopMin = STOP_MINUTES_BY_CATEGORY[ctx.category];
   const addsMatch = stats.cost.hero.match(/Adds\s+(\S+)/);
   // Pull "{anchor}" and "{time}" out of the new copy format:
   // "to your day. You'd arrive at {anchor} at {time}"
@@ -324,7 +328,7 @@ export function browsePlaceToWaypoint(
     },
     routeOffsetMi,
     simulator: {
-      stopTime: stopTimeMatch?.[1] ?? "—",
+      stopTime: formatMinutes(stopMin),
       entryCost: stats.cost.secondary,
       addsTime: addsMatch?.[1] ?? "—",
       newEtaPlace: newEtaMatch?.[1] ?? "next stop",
@@ -334,8 +338,9 @@ export function browsePlaceToWaypoint(
     },
     factualNote: FACTUAL_BY_SLIDE[ctx.category],
     logistics: {
-      hours: place.placeInfo?.address ? undefined : undefined,
+      hours: place.stats.find((s) => s.label === "HOURS")?.value,
       entry: stats.cost.secondary,
+      address: place.placeInfo?.address || undefined,
       phone: place.placeInfo?.phone?.display,
       website: place.placeInfo?.website?.display,
     },

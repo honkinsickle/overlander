@@ -20,7 +20,7 @@ export default async function LoaderStep(
       displayStep={STEP_DISPLAY_NUMBER.loader}
       title={STEP_TITLE.loader}
     >
-      <LoaderPanel draftId={id} />
+      <LoaderPanel draftId={id} wizardState={state} />
     </PlanningCard>
   );
 }

@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { finalizeTripAction } from "@/lib/plan/actions";
 import { WizardFinalizeSlideup } from "@/components/plan/wizard-finalize-slideup";
 import type { Trip } from "@/lib/trips/types";
+import type { WizardSlices } from "@/lib/plan/types";
 
 /**
  * Loader step body. Animates 3 sub-steps, then calls finalize. On
@@ -40,7 +41,16 @@ type Status =
   | { kind: "done"; trip: Trip }
   | { kind: "error"; error: string };
 
-export function LoaderPanel({ draftId }: { draftId: string }) {
+export function LoaderPanel({
+  draftId,
+  wizardState,
+}: {
+  draftId: string;
+  /** Wizard state captured at page-render time. Forwarded to the
+   *  finalize action so the action doesn't depend on the draft cookie
+   *  surviving the Server Action round-trip. */
+  wizardState?: WizardSlices;
+}) {
   const [currentStep, setCurrentStep] = useState(0);
   // animationDone fires from the interval; a separate effect watches
   // it and kicks off finalize. Kicking finalize from inside the state
@@ -50,10 +60,10 @@ export function LoaderPanel({ draftId }: { draftId: string }) {
   const [status, setStatus] = useState<Status>({ kind: "running" });
 
   const finalize = useCallback(async () => {
-    const result = await finalizeTripAction(draftId);
+    const result = await finalizeTripAction(draftId, wizardState);
     if (result.ok) setStatus({ kind: "done", trip: result.trip });
     else setStatus({ kind: "error", error: result.error });
-  }, [draftId]);
+  }, [draftId, wizardState]);
 
   useEffect(() => {
     const id = setInterval(() => {

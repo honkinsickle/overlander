@@ -10,6 +10,7 @@ export type SourceId =
   | "ioverlander"
   | "wikipedia"
   | "foursquare"
+  | "google"
   | "usfs"
   | "blm"
   | "fixture";

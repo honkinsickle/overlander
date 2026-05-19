@@ -643,7 +643,11 @@ function TrappersDetailPanel({
         )}
 
         {logistics &&
-          (logistics.hours || logistics.entry || logistics.phone || logistics.website) && (
+          (logistics.hours ||
+            logistics.entry ||
+            logistics.address ||
+            logistics.phone ||
+            logistics.website) && (
             <>
               <Divider />
               <Section label="Logistics">
@@ -665,6 +669,9 @@ function TrappersDetailPanel({
                         />
                       )}
                     </div>
+                  )}
+                  {logistics.address && (
+                    <LogisticsCell label="Address" value={logistics.address} />
                   )}
                   {(logistics.phone || logistics.website) && (
                     <div className="flex gap-2.5">

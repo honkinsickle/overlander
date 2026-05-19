@@ -102,6 +102,7 @@ function EntryLeft({ muted }: { muted: boolean }) {
        *  · shadow.  Label: Barlow 700 · 14/18 · tracking 0.06em · uppercase. */}
       <Link
         href="/plan"
+        prefetch={false}
         tabIndex={muted ? -1 : 0}
         className="flex items-center mt-2 h-[52px] px-8 rounded-full bg-button-primary hover:bg-button-primary-hover border border-button-primary-border"
         style={{

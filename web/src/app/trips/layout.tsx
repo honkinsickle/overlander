@@ -97,6 +97,7 @@ function EmptyState() {
         </Link>
         <Link
           href="/plan"
+          prefetch={false}
           className="h-10 px-5 rounded-full border border-border-subtle text-text-primary font-sans text-sm hover:border-amber/60 transition-colors flex items-center"
         >
           Plan a new trip

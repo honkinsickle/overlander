@@ -1,4 +1,5 @@
-import { DRAFTS, newDraftId } from "./store";
+import { newDraftId } from "./store";
+import { readDrafts, writeDrafts } from "./cookie-store";
 import type {
   DraftTrip,
   GoingData,
@@ -8,10 +9,36 @@ import type {
   PlannedStop,
 } from "./types";
 
+/** Resolve the draft id against the cookie map. Falls back to the
+ *  most-recently-created entry when the exact id isn't found — happens
+ *  on Vercel when the URL id and the cookie's id diverge (cross-tab
+ *  /plan visits, stale browser back-stack, etc). Used by every
+ *  read+write helper so the whole wizard fails-soft to the same draft.
+ *
+ *  Returns the actual key into `drafts`, not the requested id, so
+ *  callers can mutate the right entry. */
+function resolveDraftKey(
+  drafts: Record<string, DraftTrip>,
+  id: string,
+): string | null {
+  if (drafts[id]) return id;
+  const entries = Object.entries(drafts);
+  if (entries.length === 0) return null;
+  entries.sort(
+    (a, b) => (b[1].createdAt ?? "").localeCompare(a[1].createdAt ?? ""),
+  );
+  return entries[0][0];
+}
+
 /**
- * Draft-trip repository.
- * Sync impls internally but async API to keep callers (RSC + actions +
- * route handlers) uniform — swap for a DB without touching callers.
+ * Draft-trip repository. Anon wizard state lives in a cookie
+ * (`__plan_drafts`) so it survives across serverless lambda hops on
+ * Vercel — the legacy `globalThis.__draftStore` map evaporated between
+ * requests in production. See `cookie-store.ts` for limits and layout.
+ *
+ * Reads work in any server context; writes only work in Server Actions
+ * and Route Handlers. Authed users still go through the Supabase path
+ * in `lib/trips/user-trips.ts`, not this module.
  */
 
 export async function createDraft(): Promise<DraftTrip> {
@@ -21,52 +48,52 @@ export async function createDraft(): Promise<DraftTrip> {
     status: "draft",
     createdAt: new Date().toISOString(),
   };
-  DRAFTS[id] = draft;
+  const drafts = await readDrafts();
+  drafts[id] = draft;
+  await writeDrafts(drafts);
   return draft;
 }
 
 export async function getDraft(id: string): Promise<DraftTrip | null> {
-  return DRAFTS[id] ?? null;
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  return key ? drafts[key] : null;
 }
 
 export async function saveGoing(
   id: string,
   data: GoingData,
 ): Promise<DraftTrip | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
-  draft.going = data;
-  return draft;
+  return mutateDraft(id, (draft) => {
+    draft.going = data;
+  });
 }
 
 export async function saveVehicle(
   id: string,
   data: VehicleData,
 ): Promise<DraftTrip | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
-  draft.vehicle = data;
-  return draft;
+  return mutateDraft(id, (draft) => {
+    draft.vehicle = data;
+  });
 }
 
 export async function saveInterests(
   id: string,
   data: InterestsData,
 ): Promise<DraftTrip | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
-  draft.interests = data;
-  return draft;
+  return mutateDraft(id, (draft) => {
+    draft.interests = data;
+  });
 }
 
 export async function saveStops(
   id: string,
   data: StopsData,
 ): Promise<DraftTrip | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
-  draft.stops = data;
-  return draft;
+  return mutateDraft(id, (draft) => {
+    draft.stops = data;
+  });
 }
 
 /** Append a planned stop to the draft. Returns the appended stop. */
@@ -74,14 +101,17 @@ export async function addPlannedStop(
   id: string,
   stop: PlannedStop,
 ): Promise<PlannedStop | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
   const existing: StopsData = draft.stops ?? {
     stops: [],
     avoidHighways: false,
   };
   existing.stops = [...existing.stops, stop];
   draft.stops = existing;
+  await writeDrafts(drafts);
   return stop;
 }
 
@@ -90,11 +120,16 @@ export async function removePlannedStop(
   id: string,
   stopId: string,
 ): Promise<boolean> {
-  const draft = DRAFTS[id];
-  if (!draft?.stops) return false;
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return false;
+  const draft = drafts[key];
+  if (!draft.stops) return false;
   const before = draft.stops.stops.length;
   draft.stops.stops = draft.stops.stops.filter((s) => s.id !== stopId);
-  return draft.stops.stops.length < before;
+  const removed = draft.stops.stops.length < before;
+  if (removed) await writeDrafts(drafts);
+  return removed;
 }
 
 /** Toggle the avoid-highways preference. */
@@ -102,12 +137,15 @@ export async function setAvoidHighways(
   id: string,
   value: boolean,
 ): Promise<boolean> {
-  const draft = DRAFTS[id];
-  if (!draft) return false;
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return false;
+  const draft = drafts[key];
   draft.stops = {
     stops: draft.stops?.stops ?? [],
     avoidHighways: value,
   };
+  await writeDrafts(drafts);
   return true;
 }
 
@@ -116,17 +154,36 @@ export async function toggleAcceptedSuggestion(
   id: string,
   suggestionId: string,
 ): Promise<string[] | null> {
-  const draft = DRAFTS[id];
-  if (!draft) return null;
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
   const current = new Set(draft.acceptedSuggestionIds ?? []);
   if (current.has(suggestionId)) current.delete(suggestionId);
   else current.add(suggestionId);
   draft.acceptedSuggestionIds = Array.from(current);
+  await writeDrafts(drafts);
   return draft.acceptedSuggestionIds;
 }
 
 export async function discardDraft(id: string): Promise<boolean> {
-  if (!DRAFTS[id]) return false;
-  delete DRAFTS[id];
+  const drafts = await readDrafts();
+  if (!drafts[id]) return false;
+  delete drafts[id];
+  await writeDrafts(drafts);
   return true;
+}
+
+/** Shared read-modify-write helper used by the save* functions. */
+async function mutateDraft(
+  id: string,
+  mutator: (draft: DraftTrip) => void,
+): Promise<DraftTrip | null> {
+  const drafts = await readDrafts();
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
+  mutator(draft);
+  await writeDrafts(drafts);
+  return draft;
 }

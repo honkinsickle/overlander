@@ -1,21 +1,9 @@
-import type { DraftTrip } from "./types";
-
-/**
- * In-memory store for draft trips. Pinned to `globalThis` so RSC and
- * Route Handlers share the same instance (same pattern as trips fixture).
- * Resets on server restart; swap for a persistent store when ready.
- */
-
-type DraftStore = { drafts: Record<string, DraftTrip> };
-
-const globalForDrafts = globalThis as unknown as { __draftStore?: DraftStore };
-const store: DraftStore =
-  globalForDrafts.__draftStore ??
-  (globalForDrafts.__draftStore = { drafts: {} });
-
-export const DRAFTS: Record<string, DraftTrip> = store.drafts;
-
-/** 12-char URL-safe id. Good enough for anonymous session drafts. */
+/** 12-char URL-safe id. Good enough for anonymous session drafts.
+ *
+ *  The legacy `DRAFTS` map (globalThis-backed) used to live here too,
+ *  but it evaporated between Vercel lambda invocations and lost anon
+ *  wizard state in production. Anon drafts now live in a cookie — see
+ *  `cookie-store.ts`. */
 export function newDraftId(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   let out = "";

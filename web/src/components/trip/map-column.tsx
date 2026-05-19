@@ -17,44 +17,9 @@ import {
 import { useWaypointDetail } from "@/lib/trips/use-waypoint-detail";
 import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
+import { decodePolyline } from "@/lib/routing/point-to-polyline";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-
-/**
- * Decode a Google polyline (precision 5) into `[lng, lat]` pairs. Inverse
- * of the encoder in `web/scripts/prebake-routes.mjs`. The encoded stream
- * is lat,lng per spec; we swap to our internal `[lng, lat]` convention.
- */
-function decodePolyline(str: string): [number, number][] {
-  const factor = 1e5;
-  const out: [number, number][] = [];
-  let lat = 0;
-  let lng = 0;
-  let i = 0;
-  while (i < str.length) {
-    let result = 0;
-    let shift = 0;
-    let b: number;
-    do {
-      b = str.charCodeAt(i++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-
-    result = 0;
-    shift = 0;
-    do {
-      b = str.charCodeAt(i++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-
-    out.push([lng / factor, lat / factor]);
-  }
-  return out;
-}
 
 /**
  * Right-side map column. Persists across center-column nav.

@@ -3,7 +3,7 @@ import type { SourceResult, WaypointSource } from "./types";
 import { OSM_TAG_QUERIES, categoryFromTags } from "./overpass-tags";
 
 const OVERPASS_URL =
-  process.env.OVERPASS_URL ?? "https://overpass.kumi.systems/api/interpreter";
+  process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
 /** Cap per query so a tag-rich bbox can't return ten thousand nodes
  *  and freeze the panel. Sites already get filtered down by the
  *  named-only filters in `OSM_TAG_QUERIES`. */
