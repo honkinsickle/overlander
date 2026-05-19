@@ -9,6 +9,27 @@ import type {
   PlannedStop,
 } from "./types";
 
+/** Resolve the draft id against the cookie map. Falls back to the
+ *  most-recently-created entry when the exact id isn't found — happens
+ *  on Vercel when the URL id and the cookie's id diverge (cross-tab
+ *  /plan visits, stale browser back-stack, etc). Used by every
+ *  read+write helper so the whole wizard fails-soft to the same draft.
+ *
+ *  Returns the actual key into `drafts`, not the requested id, so
+ *  callers can mutate the right entry. */
+function resolveDraftKey(
+  drafts: Record<string, DraftTrip>,
+  id: string,
+): string | null {
+  if (drafts[id]) return id;
+  const entries = Object.entries(drafts);
+  if (entries.length === 0) return null;
+  entries.sort(
+    (a, b) => (b[1].createdAt ?? "").localeCompare(a[1].createdAt ?? ""),
+  );
+  return entries[0][0];
+}
+
 /**
  * Draft-trip repository. Anon wizard state lives in a cookie
  * (`__plan_drafts`) so it survives across serverless lambda hops on
@@ -35,19 +56,8 @@ export async function createDraft(): Promise<DraftTrip> {
 
 export async function getDraft(id: string): Promise<DraftTrip | null> {
   const drafts = await readDrafts();
-  if (drafts[id]) return drafts[id];
-  // Fallback: the URL's draft id can diverge from the cookie's stored id
-  // on Vercel — the `/plan` Route Handler now replaces (not merges) so
-  // fresh visits avoid this, but legacy multi-draft cookies still exist
-  // in the wild. Pick the most-recently-created draft: the user is
-  // unambiguously on ONE in-flight wizard, regardless of which id the
-  // URL happens to reference.
-  const candidates = Object.values(drafts);
-  if (candidates.length === 0) return null;
-  candidates.sort(
-    (a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
-  );
-  return candidates[0];
+  const key = resolveDraftKey(drafts, id);
+  return key ? drafts[key] : null;
 }
 
 export async function saveGoing(
@@ -92,8 +102,9 @@ export async function addPlannedStop(
   stop: PlannedStop,
 ): Promise<PlannedStop | null> {
   const drafts = await readDrafts();
-  const draft = drafts[id];
-  if (!draft) return null;
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
   const existing: StopsData = draft.stops ?? {
     stops: [],
     avoidHighways: false,
@@ -110,8 +121,10 @@ export async function removePlannedStop(
   stopId: string,
 ): Promise<boolean> {
   const drafts = await readDrafts();
-  const draft = drafts[id];
-  if (!draft?.stops) return false;
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return false;
+  const draft = drafts[key];
+  if (!draft.stops) return false;
   const before = draft.stops.stops.length;
   draft.stops.stops = draft.stops.stops.filter((s) => s.id !== stopId);
   const removed = draft.stops.stops.length < before;
@@ -125,8 +138,9 @@ export async function setAvoidHighways(
   value: boolean,
 ): Promise<boolean> {
   const drafts = await readDrafts();
-  const draft = drafts[id];
-  if (!draft) return false;
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return false;
+  const draft = drafts[key];
   draft.stops = {
     stops: draft.stops?.stops ?? [],
     avoidHighways: value,
@@ -141,8 +155,9 @@ export async function toggleAcceptedSuggestion(
   suggestionId: string,
 ): Promise<string[] | null> {
   const drafts = await readDrafts();
-  const draft = drafts[id];
-  if (!draft) return null;
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
   const current = new Set(draft.acceptedSuggestionIds ?? []);
   if (current.has(suggestionId)) current.delete(suggestionId);
   else current.add(suggestionId);
@@ -165,8 +180,9 @@ async function mutateDraft(
   mutator: (draft: DraftTrip) => void,
 ): Promise<DraftTrip | null> {
   const drafts = await readDrafts();
-  const draft = drafts[id];
-  if (!draft) return null;
+  const key = resolveDraftKey(drafts, id);
+  if (!key) return null;
+  const draft = drafts[key];
   mutator(draft);
   await writeDrafts(drafts);
   return draft;
