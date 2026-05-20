@@ -218,7 +218,11 @@ export function CategoryBrowsePanel({
                 color: "var(--text-muted)",
               }}
             >
-              Browse Day {target?.dayNumber ?? ""}
+              Browsing today Day {target?.dayNumber ?? ""} within{" "}
+              <span style={{ fontWeight: 700, color: "#FFFFFF" }}>
+                10 miles
+              </span>
+              {" "}of route
             </span>
             <span
               className="truncate"
@@ -230,7 +234,7 @@ export function CategoryBrowsePanel({
                 color: "var(--text-primary)",
               }}
             >
-              Within 10 mi of today
+              {target?.dayLabel ?? ""}
             </span>
           </div>
 
