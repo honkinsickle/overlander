@@ -261,39 +261,67 @@ export function SuggestedSection({
                 dayDate: day.date,
               });
               return (
-                <LocationBrowseCard
+                <div
                   key={`${s.slideKey}-${s.place.id}`}
-                  place={s.place}
-                  category={slideCategoryToBrowseCategory(s.slideKey)}
-                  dayNumber={day.dayNumber}
-                  width={410}
-                  stats={stats}
-                  onAdd={(e?: MouseEvent) => {
-                    e?.stopPropagation();
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer"
+                  onClick={() => {
                     window.dispatchEvent(
-                      new CustomEvent("trip:toggleAdded", {
+                      new CustomEvent("trip:flyTo", {
                         detail: {
-                          placeId: s.place.id,
-                          dayId: day.id,
-                          dayNumber: day.dayNumber,
-                          place: s.place,
+                          coords: s.place.coords,
+                          name: s.place.title,
                         },
                       }),
                     );
                   }}
-                  onOpen={(e?: MouseEvent) => {
-                    e?.stopPropagation();
-                    openDetailFor(s.place)();
-                  }}
-                  onMore={(e?: MouseEvent) => {
-                    e?.stopPropagation();
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
                     window.dispatchEvent(
-                      new CustomEvent("trip:openMore", {
-                        detail: { placeId: s.place.id, dayId: day.id },
+                      new CustomEvent("trip:flyTo", {
+                        detail: {
+                          coords: s.place.coords,
+                          name: s.place.title,
+                        },
                       }),
                     );
                   }}
-                />
+                >
+                  <LocationBrowseCard
+                    place={s.place}
+                    category={slideCategoryToBrowseCategory(s.slideKey)}
+                    dayNumber={day.dayNumber}
+                    width={410}
+                    stats={stats}
+                    onAdd={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent("trip:toggleAdded", {
+                          detail: {
+                            placeId: s.place.id,
+                            dayId: day.id,
+                            dayNumber: day.dayNumber,
+                            place: s.place,
+                          },
+                        }),
+                      );
+                    }}
+                    onOpen={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      openDetailFor(s.place)();
+                    }}
+                    onMore={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent("trip:openMore", {
+                          detail: { placeId: s.place.id, dayId: day.id },
+                        }),
+                      );
+                    }}
+                  />
+                </div>
               );
             })}
           {empty && <EmptyState />}
