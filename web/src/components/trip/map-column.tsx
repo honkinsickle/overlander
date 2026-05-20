@@ -787,7 +787,7 @@ export function MapColumn({
       if (!map || !detail?.coords) return;
       map.flyTo({
         center: detail.coords,
-        zoom: 15.6,
+        zoom: 17,
         duration: 1500,
         essential: true,
       });
