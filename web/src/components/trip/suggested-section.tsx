@@ -266,27 +266,15 @@ export function SuggestedSection({
                   role="button"
                   tabIndex={0}
                   className="cursor-pointer"
-                  onClick={() => {
-                    window.dispatchEvent(
-                      new CustomEvent("trip:flyTo", {
-                        detail: {
-                          coords: s.place.coords,
-                          name: s.place.title,
-                        },
-                      }),
-                    );
-                  }}
+                  // Card body click = DETAILS button click: fly the map AND
+                  // slide up the detail panel. openDetailFor dispatches
+                  // both trip:flyTo and trip:openDetail, so the click feels
+                  // like one action: "show me this place".
+                  onClick={() => openDetailFor(s.place)()}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" && e.key !== " ") return;
                     e.preventDefault();
-                    window.dispatchEvent(
-                      new CustomEvent("trip:flyTo", {
-                        detail: {
-                          coords: s.place.coords,
-                          name: s.place.title,
-                        },
-                      }),
-                    );
+                    openDetailFor(s.place)();
                   }}
                 >
                   <LocationBrowseCard
