@@ -44,6 +44,154 @@ function makeLegEndpointMarker(
   return new mapboxgl.Marker({ element: chip, anchor, offset });
 }
 
+/** Browse-panel + suggested-stops dot marker chrome. Module-scoped so
+ *  both the trip:browseResults handler and the trip:suggestedResults
+ *  handler render identical dots from the same v2 icon vocabulary —
+ *  values mirror browseCardPalette so the map reads as a legend for
+ *  the filter chips above. Changing these here propagates to both. */
+type DotBadge = { bg: string; border: string; svg: string };
+
+const DOT_BASE_SIZE = 30;
+const DOT_BASE_ZOOM = 13;
+const DOT_MIN_SIZE = DOT_BASE_SIZE * 0.4;
+function dotSize(zoom: number): number {
+  return Math.max(DOT_MIN_SIZE, (DOT_BASE_SIZE * zoom) / DOT_BASE_ZOOM);
+}
+function resizeDots(markers: mapboxgl.Marker[], size: number): void {
+  for (const m of markers) {
+    const wrapper = m.getElement();
+    const dot = wrapper.children[0] as HTMLElement | undefined;
+    const label = wrapper.children[1] as HTMLElement | undefined;
+    if (!dot) continue;
+    dot.style.width = `${size}px`;
+    dot.style.height = `${size}px`;
+    if (label) label.style.left = `${size + 6}px`;
+  }
+}
+
+const CAMPING_V2 =
+  '<path d="M11 4L3 18h16z" fill="#D4B66E"/>' +
+  '<path d="M11 9l2.5 9h-5z" fill="#1F1A0A"/>' +
+  '<path d="M2 18h18v1H2z" fill="#5C3A20"/>' +
+  '<path d="M10.7 1.5h0.6v3h-0.6z" fill="#1F1A0A"/>' +
+  '<path d="M11 1l4 1l-4 1.5z" fill="#C24837"/>';
+const SCENIC_V2 =
+  '<path d="M13 9l8 10H5z" fill="#5C8474"/>' +
+  '<path d="M8 5L1 19h14z" fill="#7AA38C"/>' +
+  '<path d="M8 5l3 6H5z" fill="#E8F2EA"/>' +
+  '<circle cx="17.5" cy="5" r="2.3" fill="#F5C04F"/>';
+const FOOD_V2 =
+  '<path d="M2 15.5h18v1.5q0 2 -2 2H4q-2 0 -2 -2z" fill="#D6905A"/>' +
+  '<path d="M2 14.5h18v1q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0z" fill="#7DB35D"/>' +
+  '<path d="M2 12.5h18v2H2z" fill="#5C3520"/>' +
+  '<path d="M2 11h18v1.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5z" fill="#F4C95D"/>' +
+  '<path d="M2 11q0 -7 9 -7q9 0 9 7z" fill="#E5A85A"/>' +
+  '<ellipse cx="7" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
+  '<ellipse cx="11" cy="6.5" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
+  '<ellipse cx="15" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>';
+const FUEL_V2 =
+  '<path d="M3 5q0 -1.5 1.5 -1.5h6q1.5 0 1.5 1.5v15H3z" fill="#C84A3E"/>' +
+  '<path d="M3 19.5h9v1.5H3z" fill="#7A2A1F"/>' +
+  '<rect x="4" y="6" width="7" height="3.5" rx="0.4" fill="#F4DB8E"/>' +
+  '<rect x="4.5" y="7.5" width="6" height="0.8" fill="#3A1410"/>' +
+  '<path d="M12 8q3 0 3 3v7q0 1.5 -1.5 1.5q-1.5 0 -1.5 -1.5v-5q0 -1.5 -1.5 -1.5z" fill="#A93A2E"/>' +
+  '<rect x="13" y="13.5" width="2" height="4" rx="0.3" fill="#5C1F18"/>';
+const HOTEL_V2 =
+  '<rect x="4" y="9" width="5" height="2" fill="#DDDDDD"/>' +
+  '<rect x="4" y="15" width="14" height="2" rx="0.3" fill="#8B5E34"/>' +
+  '<rect x="4" y="14" width="6" height="1" rx="0.3" fill="#8B5E34"/>' +
+  '<rect x="4" y="11" width="6" height="3" fill="#C2D4E5"/>' +
+  '<rect x="2" y="5" width="2" height="13" rx="0.3" fill="#8B5E34"/>' +
+  '<rect x="18" y="9" width="2" height="9" rx="0.3" fill="#8B5E34"/>' +
+  '<rect x="11" y="11" width="7" height="4" rx="0.3" fill="#92BDE3"/>' +
+  '<rect x="10" y="14" width="1" height="1" rx="0.3" fill="#8B5E34"/>' +
+  '<rect x="10" y="11" width="1" height="4" fill="#79A7D0"/>';
+const ODDITY_V2 =
+  '<path d="M1.5 11q4.5 -6 9.5 -6q5 0 9.5 6q-4.5 6 -9.5 6q-5 0 -9.5 -6z" fill="#E8D8F4"/>' +
+  '<circle cx="11" cy="11" r="3.7" fill="#5E3A8E"/>' +
+  '<circle cx="11" cy="11" r="1.6" fill="#1A1028"/>' +
+  '<circle cx="9.5" cy="9.7" r="0.9" fill="#FFE4A0"/>';
+const DOT_BADGE_BY_CATEGORY: Record<string, DotBadge> = {
+  oddity: { bg: "#2A1A3E", border: "#B589F0", svg: ODDITY_V2 },
+  food: { bg: "#773D2C", border: "#F38666", svg: FOOD_V2 },
+  scenic: { bg: "#24354F", border: "#A6C9F9", svg: SCENIC_V2 },
+  camping: { bg: "#0F2E1F", border: "#4D9A6E", svg: CAMPING_V2 },
+  overnight: { bg: "#304C4B", border: "#6ECECE", svg: HOTEL_V2 },
+  fuel: { bg: "#2E1414", border: "#E26F6F", svg: FUEL_V2 },
+};
+const DOT_BADGE_DEFAULT: DotBadge = {
+  bg: "#26292B",
+  border: "#c8a96e",
+  svg: "",
+};
+
+/** Builds a Mapbox marker for one browse/suggested dot (category-colored
+ *  square badge with the v2 icon, hover-revealed label, click flies the
+ *  map). Caller is responsible for adding it to a map and pushing it
+ *  onto whichever array tracks it for cleanup/resize. */
+function buildDotMarker(
+  p: { coords: [number, number]; title: string; category?: string },
+  initialSize: number,
+): mapboxgl.Marker {
+  const badge =
+    (p.category && DOT_BADGE_BY_CATEGORY[p.category]) || DOT_BADGE_DEFAULT;
+  const wrapper = document.createElement("div");
+  // No `position` set — mapboxgl applies position:absolute, which also
+  // serves as the containing block for the label's position:absolute.
+  // Setting position:relative here breaks the marker's transform-based
+  // positioning and dots stack in document flow instead of plotting at
+  // their lat/lng.
+  wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
+  const dot = document.createElement("div");
+  dot.style.cssText =
+    `width:${initialSize}px;height:${initialSize}px;` +
+    `border-radius:22%;background:${badge.bg};` +
+    `border:1px solid ${badge.border};flex:0 0 auto;` +
+    `display:flex;align-items:center;justify-content:center;` +
+    `box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
+  if (badge.svg) {
+    // SVG sized as % of the dot so resizeDots() automatically scales the
+    // icon when the dot resizes on zoom.
+    dot.innerHTML =
+      `<svg width="78%" height="78%" viewBox="0 0 22 22" ` +
+      `xmlns="http://www.w3.org/2000/svg" aria-hidden="true" ` +
+      `style="display:block">${badge.svg}</svg>`;
+  }
+  const label = document.createElement("div");
+  label.textContent = p.title;
+  label.style.cssText =
+    `position:absolute;left:${initialSize + 6}px;top:50%;` +
+    `transform:translateY(-50%);white-space:nowrap;padding:3px 8px;` +
+    `background:rgba(26,24,22,0.92);color:#F4EBE1;` +
+    `font-family:var(--ff-mono),monospace;font-size:11px;` +
+    `letter-spacing:0.04em;border-radius:3px;opacity:0;` +
+    `pointer-events:none;transition:opacity 120ms ease;` +
+    `border:1px solid ${badge.border}66;`;
+  wrapper.appendChild(dot);
+  wrapper.appendChild(label);
+  wrapper.addEventListener("mouseenter", () => {
+    label.style.opacity = "1";
+    wrapper.parentElement!.style.zIndex = "10";
+  });
+  wrapper.addEventListener("mouseleave", () => {
+    // A pinned marker (the current flyTo target) keeps its label
+    // visible regardless of hover — trip:flyTo from a card click sets
+    // data-pinned so the destination stays labelled after the camera
+    // animation. Cleared when a new flyTo lands on a different marker.
+    if (wrapper.dataset.pinned === "true") return;
+    label.style.opacity = "0";
+    wrapper.parentElement!.style.zIndex = "";
+  });
+  wrapper.addEventListener("click", () => {
+    window.dispatchEvent(
+      new CustomEvent("trip:flyTo", {
+        detail: { coords: p.coords, name: p.title },
+      }),
+    );
+  });
+  return new mapboxgl.Marker({ element: wrapper }).setLngLat(p.coords);
+}
+
 /** Closest-vertex search via squared planar distance in [lng, lat]
  *  space. Good enough for slicing a road-following polyline at day
  *  endpoints — both coords sit ON the polyline by construction, so the
@@ -122,6 +270,16 @@ export function MapColumn({
    *  to-gold pin recreated during an active browse session lands
    *  hidden, matching the rest of the trip pins. */
   const browseOpenRef = useRef(false);
+  /** Markers from the additive Suggested-Stops layer (rendered when the
+   *  active day's SuggestedSection dispatches trip:suggestedResults).
+   *  Tracked on a ref so the browse-results handler can hide them while
+   *  the browse panel is open without going through the suggested-
+   *  results effect again. */
+  const suggestedMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  /** Browse-panel dot markers. Lifted to a ref so the trip:flyTo handler
+   *  can pin the destination marker's label across the union of browse
+   *  + suggested dots. */
+  const browseMarkersRef = useRef<mapboxgl.Marker[]>([]);
 
   const searchParams = useSearchParams();
   const queriedDay = searchParams.get("day");
@@ -613,9 +771,14 @@ export function MapColumn({
     }
   }, [activeDay, days, startCoords]);
 
-  // Fly to a specific place when the browse panel emits trip:flyTo. Used by
-  // the CategoryBrowsePanel cards: tap a slide → map zooms to that location.
+  // Fly to a specific place when the browse panel or a Suggested Stops
+  // card emits trip:flyTo. Also "pins" the destination marker's label
+  // so it stays visible after the camera animation — otherwise the dot
+  // is just an unlabelled glyph and the user has to hover to confirm
+  // which place they just clicked. Only one marker is pinned at a time;
+  // the next flyTo clears prior pins.
   useEffect(() => {
+    const COORD_EPS = 1e-9;
     const onFlyTo = (e: Event) => {
       const detail = (
         e as CustomEvent<{ coords: [number, number]; name?: string }>
@@ -624,10 +787,37 @@ export function MapColumn({
       if (!map || !detail?.coords) return;
       map.flyTo({
         center: detail.coords,
-        zoom: 13,
+        zoom: 17,
         duration: 1500,
         essential: true,
       });
+      const [lng, lat] = detail.coords;
+      const all = [
+        ...browseMarkersRef.current,
+        ...suggestedMarkersRef.current,
+      ];
+      for (const m of all) {
+        const wrapper = m.getElement();
+        const label = wrapper.children[1] as HTMLElement | undefined;
+        if (!label) continue;
+        const ll = m.getLngLat();
+        const isTarget =
+          Math.abs(ll.lng - lng) < COORD_EPS &&
+          Math.abs(ll.lat - lat) < COORD_EPS;
+        if (isTarget) {
+          wrapper.dataset.pinned = "true";
+          label.style.opacity = "1";
+          if (wrapper.parentElement) {
+            wrapper.parentElement.style.zIndex = "10";
+          }
+        } else if (wrapper.dataset.pinned === "true") {
+          delete wrapper.dataset.pinned;
+          label.style.opacity = "0";
+          if (wrapper.parentElement) {
+            wrapper.parentElement.style.zIndex = "";
+          }
+        }
+      }
     };
     window.addEventListener("trip:flyTo", onFlyTo);
     return () => window.removeEventListener("trip:flyTo", onFlyTo);
@@ -642,32 +832,22 @@ export function MapColumn({
   // linearly with zoom, hard-floored at 12px (40% of base) when zoomed
   // way out so they never disappear entirely.
   useEffect(() => {
-    const markers: mapboxgl.Marker[] = [];
-    const BASE_SIZE = 30;
-    const BASE_ZOOM = 13;
-    const MIN_SIZE = BASE_SIZE * 0.4;
-    const dotSize = (zoom: number) =>
-      Math.max(MIN_SIZE, (BASE_SIZE * zoom) / BASE_ZOOM);
-
     const applyDotSize = () => {
       const map = mapRef.current;
       if (!map) return;
-      const size = dotSize(map.getZoom());
-      for (const m of markers) {
-        const wrapper = m.getElement();
-        const dot = wrapper.children[0] as HTMLElement | undefined;
-        const label = wrapper.children[1] as HTMLElement | undefined;
-        if (!dot) continue;
-        dot.style.width = `${size}px`;
-        dot.style.height = `${size}px`;
-        if (label) label.style.left = `${size + 6}px`;
-      }
+      resizeDots(browseMarkersRef.current, dotSize(map.getZoom()));
     };
 
     const clear = () => {
       mapRef.current?.off("zoom", applyDotSize);
-      for (const m of markers) m.remove();
-      markers.length = 0;
+      for (const m of browseMarkersRef.current) m.remove();
+      browseMarkersRef.current = [];
+    };
+
+    const setSuggestedVisible = (visible: boolean) => {
+      for (const m of suggestedMarkersRef.current) {
+        m.getElement().style.display = visible ? "" : "none";
+      }
     };
 
     const setTripPinsVisible = (visible: boolean) => {
@@ -691,68 +871,6 @@ export function MapColumn({
       for (const m of exempt) m.getElement().style.display = "";
     };
 
-    // Browse dots mirror the filter-chip chrome: dark `badgeBg`, colored
-    // `badgeBorder`, with the v2 multi-color category icon centered.
-    // Same icon vocabulary as the filter row and card thumbnails so the
-    // map reads as a legend for the panel above it. Palette values
-    // copied from browseCardPalette so the two stay in lock-step.
-    type DotBadge = { bg: string; border: string; svg: string };
-    const CAMPING_V2 =
-      '<path d="M11 4L3 18h16z" fill="#D4B66E"/>' +
-      '<path d="M11 9l2.5 9h-5z" fill="#1F1A0A"/>' +
-      '<path d="M2 18h18v1H2z" fill="#5C3A20"/>' +
-      '<path d="M10.7 1.5h0.6v3h-0.6z" fill="#1F1A0A"/>' +
-      '<path d="M11 1l4 1l-4 1.5z" fill="#C24837"/>';
-    const SCENIC_V2 =
-      '<path d="M13 9l8 10H5z" fill="#5C8474"/>' +
-      '<path d="M8 5L1 19h14z" fill="#7AA38C"/>' +
-      '<path d="M8 5l3 6H5z" fill="#E8F2EA"/>' +
-      '<circle cx="17.5" cy="5" r="2.3" fill="#F5C04F"/>';
-    const FOOD_V2 =
-      '<path d="M2 15.5h18v1.5q0 2 -2 2H4q-2 0 -2 -2z" fill="#D6905A"/>' +
-      '<path d="M2 14.5h18v1q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0z" fill="#7DB35D"/>' +
-      '<path d="M2 12.5h18v2H2z" fill="#5C3520"/>' +
-      '<path d="M2 11h18v1.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5z" fill="#F4C95D"/>' +
-      '<path d="M2 11q0 -7 9 -7q9 0 9 7z" fill="#E5A85A"/>' +
-      '<ellipse cx="7" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
-      '<ellipse cx="11" cy="6.5" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
-      '<ellipse cx="15" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>';
-    const FUEL_V2 =
-      '<path d="M3 5q0 -1.5 1.5 -1.5h6q1.5 0 1.5 1.5v15H3z" fill="#C84A3E"/>' +
-      '<path d="M3 19.5h9v1.5H3z" fill="#7A2A1F"/>' +
-      '<rect x="4" y="6" width="7" height="3.5" rx="0.4" fill="#F4DB8E"/>' +
-      '<rect x="4.5" y="7.5" width="6" height="0.8" fill="#3A1410"/>' +
-      '<path d="M12 8q3 0 3 3v7q0 1.5 -1.5 1.5q-1.5 0 -1.5 -1.5v-5q0 -1.5 -1.5 -1.5z" fill="#A93A2E"/>' +
-      '<rect x="13" y="13.5" width="2" height="4" rx="0.3" fill="#5C1F18"/>';
-    const HOTEL_V2 =
-      '<rect x="4" y="9" width="5" height="2" fill="#DDDDDD"/>' +
-      '<rect x="4" y="15" width="14" height="2" rx="0.3" fill="#8B5E34"/>' +
-      '<rect x="4" y="14" width="6" height="1" rx="0.3" fill="#8B5E34"/>' +
-      '<rect x="4" y="11" width="6" height="3" fill="#C2D4E5"/>' +
-      '<rect x="2" y="5" width="2" height="13" rx="0.3" fill="#8B5E34"/>' +
-      '<rect x="18" y="9" width="2" height="9" rx="0.3" fill="#8B5E34"/>' +
-      '<rect x="11" y="11" width="7" height="4" rx="0.3" fill="#92BDE3"/>' +
-      '<rect x="10" y="14" width="1" height="1" rx="0.3" fill="#8B5E34"/>' +
-      '<rect x="10" y="11" width="1" height="4" fill="#79A7D0"/>';
-    const ODDITY_V2 =
-      '<path d="M1.5 11q4.5 -6 9.5 -6q5 0 9.5 6q-4.5 6 -9.5 6q-5 0 -9.5 -6z" fill="#E8D8F4"/>' +
-      '<circle cx="11" cy="11" r="3.7" fill="#5E3A8E"/>' +
-      '<circle cx="11" cy="11" r="1.6" fill="#1A1028"/>' +
-      '<circle cx="9.5" cy="9.7" r="0.9" fill="#FFE4A0"/>';
-    const DOT_BADGE_BY_CATEGORY: Record<string, DotBadge> = {
-      oddity: { bg: "#2A1A3E", border: "#B589F0", svg: ODDITY_V2 },
-      food: { bg: "#773D2C", border: "#F38666", svg: FOOD_V2 },
-      scenic: { bg: "#24354F", border: "#A6C9F9", svg: SCENIC_V2 },
-      camping: { bg: "#0F2E1F", border: "#4D9A6E", svg: CAMPING_V2 },
-      overnight: { bg: "#304C4B", border: "#6ECECE", svg: HOTEL_V2 },
-      fuel: { bg: "#2E1414", border: "#E26F6F", svg: FUEL_V2 },
-    };
-    const DOT_BADGE_DEFAULT: DotBadge = {
-      bg: "#26292B",
-      border: "#c8a96e",
-      svg: "",
-    };
-
     const onResults = (e: Event) => {
       clear();
       const map = mapRef.current;
@@ -770,79 +888,85 @@ export function MapColumn({
       ).detail;
       browseOpenRef.current = !!detail?.places?.length;
       // Browse panel closing (or arriving with no results) → restore the
-      // trip-day pins so the user has trip context again.
+      // trip-day pins AND the additive Suggested-Stops dots so the user
+      // has both trip context and the active day's suggestions again.
       if (!detail?.places?.length) {
         setTripPinsVisible(true);
+        setSuggestedVisible(true);
         return;
       }
-      // Browse open with results → hide the 66 trip pins so the browse
-      // dots can read clearly without competing for attention.
+      // Browse open with results → hide the trip pins AND the
+      // suggested-stops dots so the browse dots can dominate the canvas
+      // without competing for attention.
       setTripPinsVisible(false);
+      setSuggestedVisible(false);
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
-        const badge =
-          (p.category && DOT_BADGE_BY_CATEGORY[p.category]) || DOT_BADGE_DEFAULT;
-        const wrapper = document.createElement("div");
-        // No `position` set — mapboxgl applies position:absolute, which
-        // also serves as the containing block for the label's
-        // position:absolute. Setting position:relative here broke the
-        // marker's transform-based positioning and made dots stack in
-        // document flow instead of plotting at their lat/lng.
-        wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
-        const dot = document.createElement("div");
-        dot.style.cssText =
-          `width:${initialSize}px;height:${initialSize}px;` +
-          `border-radius:22%;background:${badge.bg};` +
-          `border:1px solid ${badge.border};flex:0 0 auto;` +
-          `display:flex;align-items:center;justify-content:center;` +
-          `box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
-        if (badge.svg) {
-          // SVG sized as % of the dot so it scales automatically when
-          // applyDotSize() resizes the dot on zoom. v2 icons are 22×22
-          // viewBox with internal multi-fill paths.
-          dot.innerHTML =
-            `<svg width="78%" height="78%" viewBox="0 0 22 22" ` +
-            `xmlns="http://www.w3.org/2000/svg" aria-hidden="true" ` +
-            `style="display:block">${badge.svg}</svg>`;
-        }
-        const label = document.createElement("div");
-        label.textContent = p.title;
-        label.style.cssText =
-          `position:absolute;left:${initialSize + 6}px;top:50%;` +
-          `transform:translateY(-50%);white-space:nowrap;padding:3px 8px;` +
-          `background:rgba(26,24,22,0.92);color:#F4EBE1;` +
-          `font-family:var(--ff-mono),monospace;font-size:11px;` +
-          `letter-spacing:0.04em;border-radius:3px;opacity:0;` +
-          `pointer-events:none;transition:opacity 120ms ease;` +
-          `border:1px solid ${badge.border}66;`;
-        wrapper.appendChild(dot);
-        wrapper.appendChild(label);
-        wrapper.addEventListener("mouseenter", () => {
-          label.style.opacity = "1";
-          // Lift the hovered marker so its label sits above neighbours.
-          wrapper.parentElement!.style.zIndex = "10";
-        });
-        wrapper.addEventListener("mouseleave", () => {
-          label.style.opacity = "0";
-          wrapper.parentElement!.style.zIndex = "";
-        });
-        wrapper.addEventListener("click", () => {
-          window.dispatchEvent(
-            new CustomEvent("trip:flyTo", {
-              detail: { coords: p.coords, name: p.title },
-            }),
-          );
-        });
-        const marker = new mapboxgl.Marker({ element: wrapper })
-          .setLngLat(p.coords)
-          .addTo(map);
-        markers.push(marker);
+        const marker = buildDotMarker(p, initialSize).addTo(map);
+        browseMarkersRef.current.push(marker);
       }
       map.on("zoom", applyDotSize);
     };
     window.addEventListener("trip:browseResults", onResults);
     return () => {
       window.removeEventListener("trip:browseResults", onResults);
+      clear();
+    };
+  }, []);
+
+  // Additive Suggested-Stops dot layer. The active day's SuggestedSection
+  // dispatches trip:suggestedResults with the union of its top picks
+  // across all categories (food/scenic/oddity/camping); we render dots in
+  // the same v2 vocabulary as the browse panel. Coexists with trip-day
+  // pins (additive). Hidden while the browse panel is open — the
+  // browse-results handler above flips visibility via the shared
+  // suggestedMarkersRef.
+  useEffect(() => {
+    const applySuggestedDotSize = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      resizeDots(suggestedMarkersRef.current, dotSize(map.getZoom()));
+    };
+
+    const clear = () => {
+      mapRef.current?.off("zoom", applySuggestedDotSize);
+      for (const m of suggestedMarkersRef.current) m.remove();
+      suggestedMarkersRef.current = [];
+    };
+
+    const onSuggestedResults = (e: Event) => {
+      clear();
+      const map = mapRef.current;
+      if (!map) return;
+      const detail = (
+        e as CustomEvent<{
+          places: Array<{
+            coords: [number, number];
+            title: string;
+            id: string;
+            category?: string;
+          }>;
+        }>
+      ).detail;
+      if (!detail?.places?.length) return;
+      const initialSize = dotSize(map.getZoom());
+      for (const p of detail.places) {
+        const marker = buildDotMarker(p, initialSize).addTo(map);
+        // Start hidden if browse is currently dominating — browse close
+        // will flip them back via setSuggestedVisible(true).
+        if (browseOpenRef.current) {
+          marker.getElement().style.display = "none";
+        }
+        suggestedMarkersRef.current.push(marker);
+      }
+      map.on("zoom", applySuggestedDotSize);
+    };
+    window.addEventListener("trip:suggestedResults", onSuggestedResults);
+    return () => {
+      window.removeEventListener(
+        "trip:suggestedResults",
+        onSuggestedResults,
+      );
       clear();
     };
   }, []);

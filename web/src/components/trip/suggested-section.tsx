@@ -36,9 +36,15 @@ type SuggestionEntry = { place: BrowsePlace; slideKey: FetchKey };
 export function SuggestedSection({
   tripId,
   day,
+  isActive,
 }: {
   tripId: string;
   day: Day;
+  /** True when this day is the one the user is scrolled to in DayDetail.
+   *  Gates the trip:suggestedResults dispatch so only one day's places
+   *  are pinned on the map at a time — multiple sections rendering pre-
+   *  resolved data would otherwise stomp on each other. */
+  isActive: boolean;
 }) {
   // Server-side `resolveSuggestions` runs at trip-load and attaches the
   // top photo-bearing place per slide category to `day.suggestions`. When
@@ -104,6 +110,44 @@ export function SuggestedSection({
       ctrl.abort();
     };
   }, [inView, tripId, day.id, hasPreResolved]);
+
+  // When this day becomes active, kick the fetch even if intersection
+  // hasn't fired yet — otherwise the map dots wouldn't appear until the
+  // user scrolled this section into the rootMargin window.
+  useEffect(() => {
+    if (isActive) setInView(true);
+  }, [isActive]);
+
+  // Publish this day's suggestions to the map. Only the active section
+  // dispatches — see isActive comment on the props. On routeReady we
+  // re-dispatch in case the map mounted after the first dispatch (race
+  // between SuggestedSection's effect and MapColumn's listener
+  // registration on initial slideup mount). Unmount of the active
+  // section clears the layer.
+  useEffect(() => {
+    if (!isActive || !suggestions || suggestions.length === 0) return;
+    const places = suggestions.map((s) => ({
+      coords: s.place.coords,
+      title: s.place.title,
+      id: s.place.id,
+      category: slideCategoryToBrowseCategory(s.slideKey),
+    }));
+    const dispatch = () => {
+      window.dispatchEvent(
+        new CustomEvent("trip:suggestedResults", { detail: { places } }),
+      );
+    };
+    dispatch();
+    window.addEventListener("trip:routeReady", dispatch);
+    return () => {
+      window.removeEventListener("trip:routeReady", dispatch);
+      window.dispatchEvent(
+        new CustomEvent("trip:suggestedResults", {
+          detail: { places: [] },
+        }),
+      );
+    };
+  }, [isActive, suggestions]);
 
   const openDetailFor = (place: BrowsePlace) => () => {
     const hoursStat = place.stats.find(
@@ -217,39 +261,55 @@ export function SuggestedSection({
                 dayDate: day.date,
               });
               return (
-                <LocationBrowseCard
+                <div
                   key={`${s.slideKey}-${s.place.id}`}
-                  place={s.place}
-                  category={slideCategoryToBrowseCategory(s.slideKey)}
-                  dayNumber={day.dayNumber}
-                  width={410}
-                  stats={stats}
-                  onAdd={(e?: MouseEvent) => {
-                    e?.stopPropagation();
-                    window.dispatchEvent(
-                      new CustomEvent("trip:toggleAdded", {
-                        detail: {
-                          placeId: s.place.id,
-                          dayId: day.id,
-                          dayNumber: day.dayNumber,
-                          place: s.place,
-                        },
-                      }),
-                    );
-                  }}
-                  onOpen={(e?: MouseEvent) => {
-                    e?.stopPropagation();
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer"
+                  // Card body click = DETAILS button click: fly the map AND
+                  // slide up the detail panel. openDetailFor dispatches
+                  // both trip:flyTo and trip:openDetail, so the click feels
+                  // like one action: "show me this place".
+                  onClick={() => openDetailFor(s.place)()}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
                     openDetailFor(s.place)();
                   }}
-                  onMore={(e?: MouseEvent) => {
-                    e?.stopPropagation();
-                    window.dispatchEvent(
-                      new CustomEvent("trip:openMore", {
-                        detail: { placeId: s.place.id, dayId: day.id },
-                      }),
-                    );
-                  }}
-                />
+                >
+                  <LocationBrowseCard
+                    place={s.place}
+                    category={slideCategoryToBrowseCategory(s.slideKey)}
+                    dayNumber={day.dayNumber}
+                    width={410}
+                    stats={stats}
+                    onAdd={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent("trip:toggleAdded", {
+                          detail: {
+                            placeId: s.place.id,
+                            dayId: day.id,
+                            dayNumber: day.dayNumber,
+                            place: s.place,
+                          },
+                        }),
+                      );
+                    }}
+                    onOpen={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      openDetailFor(s.place)();
+                    }}
+                    onMore={(e?: MouseEvent) => {
+                      e?.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent("trip:openMore", {
+                          detail: { placeId: s.place.id, dayId: day.id },
+                        }),
+                      );
+                    }}
+                  />
+                </div>
               );
             })}
           {empty && <EmptyState />}

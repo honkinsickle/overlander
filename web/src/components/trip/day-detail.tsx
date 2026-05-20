@@ -90,6 +90,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
   const queried = searchParams.get("day");
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
+  // Which day section the user is "on" — drives the additive Suggested-
+  // Stops dot layer on the map (only the active day publishes its picks
+  // via trip:suggestedResults; otherwise N pre-resolved sections would
+  // race to overwrite each other). Initial value mirrors MapColumn's
+  // activeDay derivation so the first paint is consistent.
+  const [activeDayId, setActiveDayId] = useState<string>(
+    () => queried ?? trip.days[0]?.id ?? "",
+  );
   // While a programmatic smooth scroll is in flight, the scroll-spy must
   // NOT rewrite ?day= mid-flight — otherwise the active-id flips through
   // every intermediate section, and the scroll effect re-targets each,
@@ -128,13 +136,16 @@ export function DayDetail({ trip }: { trip: Trip }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sidebar click → scroll via the trip:activeDay event.
+  // Sidebar click → scroll via the trip:activeDay event. Update active
+  // state immediately so the Suggested-Stops dot layer swaps in sync
+  // with the scroll rather than only after the scroll-spy fires.
   useEffect(() => {
     const onSidebar = (e: Event) => {
       const detail = (
         e as CustomEvent<{ id: string; source?: string }>
       ).detail;
       if (!detail?.id || detail.source !== "sidebar") return;
+      setActiveDayId(detail.id);
       scrollToDay(detail.id);
     };
     window.addEventListener("trip:activeDay", onSidebar);
@@ -191,6 +202,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
       }
       if (!currentId || currentId === lastEmitted) return;
       lastEmitted = currentId;
+      setActiveDayId(currentId);
       const url = new URL(window.location.href);
       url.searchParams.set("day", currentId);
       window.history.replaceState(null, "", url);
@@ -377,7 +389,13 @@ export function DayDetail({ trip }: { trip: Trip }) {
             // (see CategoryBrowsePanel.style override) regardless of opening
             // category, so the generic "Add Waypoints" CTA defaults to it.
             onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
-            extra={<SuggestedSection tripId={trip.id} day={day} />}
+            extra={
+              <SuggestedSection
+                tripId={trip.id}
+                day={day}
+                isActive={day.id === activeDayId}
+              />
+            }
           />
         ))}
       </div>
