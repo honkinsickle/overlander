@@ -281,7 +281,12 @@ function emitBrowseResults(places: BrowsePlace[]): void {
     new CustomEvent("trip:browseResults", {
       detail: {
         category: null,
-        places: places.map((p) => ({ coords: p.coords, title: p.title, id: p.id })),
+        places: places.map((p) => ({
+          coords: p.coords,
+          title: p.title,
+          id: p.id,
+          category: p.category,
+        })),
       },
     }),
   );

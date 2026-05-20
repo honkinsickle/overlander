@@ -377,13 +377,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
             // (see CategoryBrowsePanel.style override) regardless of opening
             // category, so the generic "Add Waypoints" CTA defaults to it.
             onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
-            extra={
-              <SuggestedSection
-                tripId={trip.id}
-                day={day}
-                onBrowse={openBrowse(i + 1, day)}
-              />
-            }
+            extra={<SuggestedSection tripId={trip.id} day={day} />}
           />
         ))}
       </div>

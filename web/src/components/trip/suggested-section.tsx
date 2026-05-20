@@ -1,47 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { ChevronDown } from "lucide-react";
-import { SuggestionCard, type SuggestionCardProps } from "./suggestion-card";
-import type { Category } from "@/components/primitives/detail-card";
+import { LocationBrowseCard } from "./location-browse-card";
+import { computeCardStats } from "@/lib/trip-browse/card-stats";
+import { slideCategoryToBrowseCategory } from "@/lib/trip-browse/palette";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import type { Day } from "@/lib/trips/types";
 
 type FetchKey = "oddity" | "food" | "scenic" | "camping";
 
-const SLIDE_TO_CATEGORY: Record<FetchKey, Category> = {
-  oddity: "oddity",
-  food: "food",
-  scenic: "mountain",
-  camping: "camping",
-};
-
-const BROWSE_LABEL: Record<FetchKey, string> = {
-  oddity: "Browse Oddities",
-  food: "Browse Food",
-  scenic: "Browse Sights & Landmarks",
-  camping: "Browse Camping",
-};
-
 const FETCH_CATEGORIES: FetchKey[] = ["scenic", "food", "oddity", "camping"];
-
-function placeToSuggestion(
-  place: BrowsePlace,
-  slideKey: FetchKey,
-): SuggestionCardProps {
-  const hoursStat = place.stats.find(
-    (s) => /hours|open/i.test(s.label) && !/always/i.test(s.value),
-  );
-  return {
-    category: SLIDE_TO_CATEGORY[slideKey],
-    title: place.title,
-    hours: hoursStat?.value,
-    description: place.description,
-    heroImage: place.photoUrl as string, // gated upstream
-    browseLabel: BROWSE_LABEL[slideKey],
-    featured: false,
-  };
-}
 
 async function fetchTopPhotoPlace(
   tripId: string,
@@ -61,16 +31,14 @@ async function fetchTopPhotoPlace(
   return photoFirst ?? null;
 }
 
-type SuggestionEntry = { props: SuggestionCardProps; place: BrowsePlace };
+type SuggestionEntry = { place: BrowsePlace; slideKey: FetchKey };
 
 export function SuggestedSection({
   tripId,
   day,
-  onBrowse,
 }: {
   tripId: string;
   day: Day;
-  onBrowse?: (category: Category) => void;
 }) {
   // Server-side `resolveSuggestions` runs at trip-load and attaches the
   // top photo-bearing place per slide category to `day.suggestions`. When
@@ -82,7 +50,7 @@ export function SuggestedSection({
   const preResolved = hasPreResolved
     ? FETCH_CATEGORIES.map((c) => {
         const place = day.suggestions?.[c];
-        return place ? { props: placeToSuggestion(place, c), place } : null;
+        return place ? { place, slideKey: c } : null;
       }).filter((e): e is SuggestionEntry => e !== null)
     : null;
 
@@ -122,7 +90,7 @@ export function SuggestedSection({
     Promise.all(
       FETCH_CATEGORIES.map((c) =>
         fetchTopPhotoPlace(tripId, day.id, c, ctrl.signal).then(
-          (place) => (place ? { props: placeToSuggestion(place, c), place } : null),
+          (place) => (place ? { place, slideKey: c } : null),
           () => null,
         ),
       ),
@@ -239,14 +207,51 @@ export function SuggestedSection({
           <DayBriefingCard day={day} />
           {loading && <SuggestionSkeletons />}
           {suggestions &&
-            suggestions.map((s, i) => (
-              <SuggestionCard
-                key={`${s.props.category}-${i}`}
-                {...s.props}
-                onBrowse={onBrowse}
-                onOpenDetail={openDetailFor(s.place)}
-              />
-            ))}
+            suggestions.map((s) => {
+              const stats = computeCardStats(s.place, {
+                category: s.slideKey,
+                dayCoords: day.coords,
+                dayStartCoords: day.startCoord,
+                dayLabel: day.label,
+                dayNumber: day.dayNumber,
+                dayDate: day.date,
+              });
+              return (
+                <LocationBrowseCard
+                  key={`${s.slideKey}-${s.place.id}`}
+                  place={s.place}
+                  category={slideCategoryToBrowseCategory(s.slideKey)}
+                  dayNumber={day.dayNumber}
+                  width={410}
+                  stats={stats}
+                  onAdd={(e?: MouseEvent) => {
+                    e?.stopPropagation();
+                    window.dispatchEvent(
+                      new CustomEvent("trip:toggleAdded", {
+                        detail: {
+                          placeId: s.place.id,
+                          dayId: day.id,
+                          dayNumber: day.dayNumber,
+                          place: s.place,
+                        },
+                      }),
+                    );
+                  }}
+                  onOpen={(e?: MouseEvent) => {
+                    e?.stopPropagation();
+                    openDetailFor(s.place)();
+                  }}
+                  onMore={(e?: MouseEvent) => {
+                    e?.stopPropagation();
+                    window.dispatchEvent(
+                      new CustomEvent("trip:openMore", {
+                        detail: { placeId: s.place.id, dayId: day.id },
+                      }),
+                    );
+                  }}
+                />
+              );
+            })}
           {empty && <EmptyState />}
         </div>
       )}

@@ -233,24 +233,33 @@ export function MapColumn({
     dayPinsByIdRef.current = dayPinsById;
     dayPinCoordsByIdRef.current = dayPinCoordsById;
 
-    // Per-waypoint pins — category-colored circle head with an emoji icon
-    // and a downward tail. Mapbox anchor:"bottom" lands the tip on the coord.
+    // Per-waypoint pins — category-colored circle head with a stroked SVG
+    // category icon and a downward tail. Mapbox anchor:"bottom" lands the
+    // tip on the coord. Paths come from category-icons.tsx (24×24 viewBox,
+    // stroke-only) so they render crisply at any zoom and stay on-brand.
     // Pushed onto the same ref as trip-day markers so they hide together
     // when the browse panel opens (otherwise they compete with browse dots).
-    const CAT_EMOJI: Record<string, string> = {
-      fuel: "⛽",
-      camping: "⛺",
-      mountain: "🏔",
-      urban: "🏙",
-      food: "🍔",
-      oddity: "👁",
-      attraction: "⭐",
-      neutral: "📍",
+    const CAT_SVG: Record<string, string> = {
+      fuel:
+        '<rect x="4" y="3" width="10" height="18" rx="1"/><line x1="6" y1="7" x2="12" y2="7"/><path d="M14 9 h4 v9 a2 2 0 0 1 -2 2 a2 2 0 0 1 -2 -2 V9z"/><path d="M16 4 v3"/>',
+      camping:
+        '<path d="M3 20 L12 4 L21 20 Z"/><path d="M10 20 L12 14 L14 20"/>',
+      mountain:
+        '<polygon points="3 20 9 9 13 15 16 11 21 20"/><circle cx="17" cy="6" r="1.5"/>',
+      urban:
+        '<rect x="3" y="3" width="7" height="18"/><rect x="14" y="8" width="7" height="13"/><line x1="6" y1="7" x2="7" y2="7"/><line x1="6" y1="11" x2="7" y2="11"/><line x1="6" y1="15" x2="7" y2="15"/><line x1="17" y1="12" x2="18" y2="12"/><line x1="17" y1="16" x2="18" y2="16"/>',
+      food:
+        '<path d="M17 8h1a3 3 0 0 1 0 6h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><line x1="6" y1="2" x2="6" y2="5"/><line x1="10" y1="2" x2="10" y2="5"/><line x1="14" y1="2" x2="14" y2="5"/>',
+      oddity:
+        '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+      attraction:
+        '<polygon points="12 2 14.39 8.26 21 8.27 15.45 12.14 17.82 18.4 12 14.77 6.18 18.4 8.55 12.14 3 8.27 9.61 8.26"/>',
+      neutral: '<circle cx="12" cy="12" r="5"/>',
     };
     days.forEach((d) => {
       for (const wp of d.waypoints) {
         if (!wp.coords) continue;
-        const emoji = CAT_EMOJI[wp.category] ?? "📍";
+        const iconPaths = CAT_SVG[wp.category] ?? CAT_SVG.neutral;
         const el = document.createElement("div");
         el.setAttribute("aria-label", wp.title);
         el.style.cssText =
@@ -262,9 +271,11 @@ export function MapColumn({
           `background:var(--cat-${wp.category});` +
           "border:2px solid #1A1A1A;border-radius:50%;" +
           "display:flex;align-items:center;justify-content:center;" +
-          "font-size:16px;line-height:1;" +
           "box-shadow:0 2px 6px rgba(0,0,0,0.5);";
-        head.textContent = emoji;
+        head.innerHTML =
+          `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" ` +
+          `stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" ` +
+          `stroke-linejoin="round" aria-hidden="true">${iconPaths}</svg>`;
 
         const tip = document.createElement("div");
         tip.style.cssText =
@@ -680,6 +691,68 @@ export function MapColumn({
       for (const m of exempt) m.getElement().style.display = "";
     };
 
+    // Browse dots mirror the filter-chip chrome: dark `badgeBg`, colored
+    // `badgeBorder`, with the v2 multi-color category icon centered.
+    // Same icon vocabulary as the filter row and card thumbnails so the
+    // map reads as a legend for the panel above it. Palette values
+    // copied from browseCardPalette so the two stay in lock-step.
+    type DotBadge = { bg: string; border: string; svg: string };
+    const CAMPING_V2 =
+      '<path d="M11 4L3 18h16z" fill="#D4B66E"/>' +
+      '<path d="M11 9l2.5 9h-5z" fill="#1F1A0A"/>' +
+      '<path d="M2 18h18v1H2z" fill="#5C3A20"/>' +
+      '<path d="M10.7 1.5h0.6v3h-0.6z" fill="#1F1A0A"/>' +
+      '<path d="M11 1l4 1l-4 1.5z" fill="#C24837"/>';
+    const SCENIC_V2 =
+      '<path d="M13 9l8 10H5z" fill="#5C8474"/>' +
+      '<path d="M8 5L1 19h14z" fill="#7AA38C"/>' +
+      '<path d="M8 5l3 6H5z" fill="#E8F2EA"/>' +
+      '<circle cx="17.5" cy="5" r="2.3" fill="#F5C04F"/>';
+    const FOOD_V2 =
+      '<path d="M2 15.5h18v1.5q0 2 -2 2H4q-2 0 -2 -2z" fill="#D6905A"/>' +
+      '<path d="M2 14.5h18v1q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0q-2 1.5 -4 0z" fill="#7DB35D"/>' +
+      '<path d="M2 12.5h18v2H2z" fill="#5C3520"/>' +
+      '<path d="M2 11h18v1.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5l-3 0.5l-3 -0.5z" fill="#F4C95D"/>' +
+      '<path d="M2 11q0 -7 9 -7q9 0 9 7z" fill="#E5A85A"/>' +
+      '<ellipse cx="7" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
+      '<ellipse cx="11" cy="6.5" rx="0.7" ry="0.5" fill="#F5E4B5"/>' +
+      '<ellipse cx="15" cy="8" rx="0.7" ry="0.5" fill="#F5E4B5"/>';
+    const FUEL_V2 =
+      '<path d="M3 5q0 -1.5 1.5 -1.5h6q1.5 0 1.5 1.5v15H3z" fill="#C84A3E"/>' +
+      '<path d="M3 19.5h9v1.5H3z" fill="#7A2A1F"/>' +
+      '<rect x="4" y="6" width="7" height="3.5" rx="0.4" fill="#F4DB8E"/>' +
+      '<rect x="4.5" y="7.5" width="6" height="0.8" fill="#3A1410"/>' +
+      '<path d="M12 8q3 0 3 3v7q0 1.5 -1.5 1.5q-1.5 0 -1.5 -1.5v-5q0 -1.5 -1.5 -1.5z" fill="#A93A2E"/>' +
+      '<rect x="13" y="13.5" width="2" height="4" rx="0.3" fill="#5C1F18"/>';
+    const HOTEL_V2 =
+      '<rect x="4" y="9" width="5" height="2" fill="#DDDDDD"/>' +
+      '<rect x="4" y="15" width="14" height="2" rx="0.3" fill="#8B5E34"/>' +
+      '<rect x="4" y="14" width="6" height="1" rx="0.3" fill="#8B5E34"/>' +
+      '<rect x="4" y="11" width="6" height="3" fill="#C2D4E5"/>' +
+      '<rect x="2" y="5" width="2" height="13" rx="0.3" fill="#8B5E34"/>' +
+      '<rect x="18" y="9" width="2" height="9" rx="0.3" fill="#8B5E34"/>' +
+      '<rect x="11" y="11" width="7" height="4" rx="0.3" fill="#92BDE3"/>' +
+      '<rect x="10" y="14" width="1" height="1" rx="0.3" fill="#8B5E34"/>' +
+      '<rect x="10" y="11" width="1" height="4" fill="#79A7D0"/>';
+    const ODDITY_V2 =
+      '<path d="M1.5 11q4.5 -6 9.5 -6q5 0 9.5 6q-4.5 6 -9.5 6q-5 0 -9.5 -6z" fill="#E8D8F4"/>' +
+      '<circle cx="11" cy="11" r="3.7" fill="#5E3A8E"/>' +
+      '<circle cx="11" cy="11" r="1.6" fill="#1A1028"/>' +
+      '<circle cx="9.5" cy="9.7" r="0.9" fill="#FFE4A0"/>';
+    const DOT_BADGE_BY_CATEGORY: Record<string, DotBadge> = {
+      oddity: { bg: "#2A1A3E", border: "#B589F0", svg: ODDITY_V2 },
+      food: { bg: "#773D2C", border: "#F38666", svg: FOOD_V2 },
+      scenic: { bg: "#24354F", border: "#A6C9F9", svg: SCENIC_V2 },
+      camping: { bg: "#0F2E1F", border: "#4D9A6E", svg: CAMPING_V2 },
+      overnight: { bg: "#304C4B", border: "#6ECECE", svg: HOTEL_V2 },
+      fuel: { bg: "#2E1414", border: "#E26F6F", svg: FUEL_V2 },
+    };
+    const DOT_BADGE_DEFAULT: DotBadge = {
+      bg: "#26292B",
+      border: "#c8a96e",
+      svg: "",
+    };
+
     const onResults = (e: Event) => {
       clear();
       const map = mapRef.current;
@@ -687,7 +760,12 @@ export function MapColumn({
       const detail = (
         e as CustomEvent<{
           category: keyof typeof CATEGORY_ACCENT | null;
-          places: Array<{ coords: [number, number]; title: string; id: string }>;
+          places: Array<{
+            coords: [number, number];
+            title: string;
+            id: string;
+            category?: string;
+          }>;
         }>
       ).detail;
       browseOpenRef.current = !!detail?.places?.length;
@@ -700,10 +778,10 @@ export function MapColumn({
       // Browse open with results → hide the 66 trip pins so the browse
       // dots can read clearly without competing for attention.
       setTripPinsVisible(false);
-      const color =
-        (detail.category && CATEGORY_ACCENT[detail.category]) || "#c8a96e";
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
+        const badge =
+          (p.category && DOT_BADGE_BY_CATEGORY[p.category]) || DOT_BADGE_DEFAULT;
         const wrapper = document.createElement("div");
         // No `position` set — mapboxgl applies position:absolute, which
         // also serves as the containing block for the label's
@@ -713,9 +791,20 @@ export function MapColumn({
         wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
         const dot = document.createElement("div");
         dot.style.cssText =
-          `width:${initialSize}px;height:${initialSize}px;border-radius:50%;` +
-          `background:${color};border:2px solid #1a1816;` +
-          `box-shadow:0 0 0 1px ${color}55;flex:0 0 auto;`;
+          `width:${initialSize}px;height:${initialSize}px;` +
+          `border-radius:22%;background:${badge.bg};` +
+          `border:1px solid ${badge.border};flex:0 0 auto;` +
+          `display:flex;align-items:center;justify-content:center;` +
+          `box-shadow:0 2px 6px rgba(0,0,0,0.45);`;
+        if (badge.svg) {
+          // SVG sized as % of the dot so it scales automatically when
+          // applyDotSize() resizes the dot on zoom. v2 icons are 22×22
+          // viewBox with internal multi-fill paths.
+          dot.innerHTML =
+            `<svg width="78%" height="78%" viewBox="0 0 22 22" ` +
+            `xmlns="http://www.w3.org/2000/svg" aria-hidden="true" ` +
+            `style="display:block">${badge.svg}</svg>`;
+        }
         const label = document.createElement("div");
         label.textContent = p.title;
         label.style.cssText =
@@ -725,7 +814,7 @@ export function MapColumn({
           `font-family:var(--ff-mono),monospace;font-size:11px;` +
           `letter-spacing:0.04em;border-radius:3px;opacity:0;` +
           `pointer-events:none;transition:opacity 120ms ease;` +
-          `border:1px solid ${color}66;`;
+          `border:1px solid ${badge.border}66;`;
         wrapper.appendChild(dot);
         wrapper.appendChild(label);
         wrapper.addEventListener("mouseenter", () => {
