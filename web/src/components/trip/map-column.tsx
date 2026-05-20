@@ -18,6 +18,7 @@ import { useWaypointDetail } from "@/lib/trips/use-waypoint-detail";
 import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
 import { decodePolyline } from "@/lib/routing/point-to-polyline";
+import { UserLocationLayer } from "./user-location-layer";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -280,6 +281,10 @@ export function MapColumn({
    *  can pin the destination marker's label across the union of browse
    *  + suggested dots. */
   const browseMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  /** State copy of the map instance so child components can mount
+   *  against it without reading mapRef.current during render. Set
+   *  alongside mapRef once the Map is constructed. */
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
 
   const searchParams = useSearchParams();
   const queriedDay = searchParams.get("day");
@@ -354,6 +359,7 @@ export function MapColumn({
       attributionControl: false,
     });
     mapRef.current = map;
+    setMapInstance(map);
 
     const dayCoords = days
       .map((d) => d.coords)
@@ -618,6 +624,7 @@ export function MapColumn({
       ro.disconnect();
       map.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
     // Days is a stable server-provided array within a render — re-running
     // this effect only makes sense if the trip itself changes.
@@ -974,6 +981,13 @@ export function MapColumn({
   return (
     <div className="relative w-full h-full bg-bg-map">
       <div ref={containerRef} className="w-full h-full" />
+
+      {mapInstance && (
+        <UserLocationLayer
+          map={mapInstance}
+          routePathRef={routePathRef}
+        />
+      )}
 
       {slug && (
         <div className="absolute inset-x-4 bottom-5 pointer-events-auto">
