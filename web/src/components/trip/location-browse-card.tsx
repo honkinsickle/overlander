@@ -13,10 +13,11 @@ import {
 } from "@/components/icons/category-icons-v2";
 
 /**
- * Location Browse Card — v2 chrome (Paper "Location Card · 300w / 354w
- * · category variants (v2)"). Renders 300×455 (2-up panel default) or
- * 354×455 (3-up expanded). Outer shell + hero size scale with width;
- * everything else is shared.
+ * Location Browse Card — v2 chrome (Paper "Location Card · 300w /
+ * 354w / 410w · category variants (v2)"). Renders 300×455 (2-up panel
+ * default), 354×455 (3-up expanded), or 410×455 (day-detail suggested
+ * stops). Outer shell + hero size scale with width; everything else is
+ * shared.
  *
  * Layout (top to bottom):
  *   - Hero (212h): photo bg with absolute badge (14, 167) and a
@@ -26,7 +27,7 @@ import {
  *     arrive at..." sage line; divider; outlined CTA full width.
  */
 
-export type CardWidth = 300 | 354;
+export type CardWidth = 300 | 354 | 410;
 
 type Props = {
   place: BrowsePlace;
