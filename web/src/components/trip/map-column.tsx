@@ -21,6 +21,51 @@ import { decodePolyline } from "@/lib/routing/point-to-polyline";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
+/** Build a DOM marker showing the active day's leg endpoint label
+ *  ("Lake Louise", "Jasper, AB"). `anchor` controls which side of the
+ *  point the label sits — pass "right" for the start (label to the
+ *  right of the dot) and "left" for the end. */
+function makeLegEndpointMarker(
+  label: string,
+  side: "left" | "right",
+): mapboxgl.Marker {
+  const chip = document.createElement("div");
+  chip.textContent = label;
+  chip.style.cssText =
+    `padding:3px 8px;background:rgba(26,24,22,0.92);color:#F4EBE1;` +
+    `font-family:var(--ff-mono),monospace;font-size:11px;` +
+    `letter-spacing:0.04em;border-radius:3px;white-space:nowrap;` +
+    `border:1px solid rgba(110,177,255,0.4);`;
+  // Anchor on the side of the chip that touches the pin, then offset
+  // 18px outward so it sits beside the pin (not under its body).
+  const anchor: mapboxgl.Anchor = side === "right" ? "left" : "right";
+  const offset: [number, number] =
+    side === "right" ? [18, 0] : [-18, 0];
+  return new mapboxgl.Marker({ element: chip, anchor, offset });
+}
+
+/** Closest-vertex search via squared planar distance in [lng, lat]
+ *  space. Good enough for slicing a road-following polyline at day
+ *  endpoints — both coords sit ON the polyline by construction, so the
+ *  nearest vertex is the right one without any haversine cost. */
+function nearestIndex(
+  path: [number, number][],
+  target: [number, number],
+): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < path.length; i++) {
+    const dx = path[i][0] - target[0];
+    const dy = path[i][1] - target[1];
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 /**
  * Right-side map column. Persists across center-column nav.
  *
@@ -50,6 +95,33 @@ export function MapColumn({
   /** Trip-day pins, shared across the marker-init and browse-results
    *  effects so the latter can hide/show them when the panel toggles. */
   const tripDayMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  /** Merged road-following polyline coords. Set once the route loads;
+   *  used by the active-day-leg highlight to slice the segment that
+   *  corresponds to the currently-viewed day. */
+  const routePathRef = useRef<[number, number][] | null>(null);
+  /** Endpoint labels for the active day's leg ("Lake Louise", "Jasper,
+   *  AB"). Tracked on a ref so the effect can swap them when ?day=
+   *  changes without leaving stale labels behind. */
+  const legEndpointMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  /** Trip-day pins indexed by `Day.id` so the active-leg effect can
+   *  find the right pin to recolor (Day 5's end = Day 6's start). The
+   *  trip-start pin (no day) is keyed under "_start". */
+  const dayPinsByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  /** Coords map for the same pins so we can recreate at the same point
+   *  when swapping color. */
+  const dayPinCoordsByIdRef = useRef<Map<string, [number, number]>>(
+    new Map(),
+  );
+  /** Which pin keys are currently rendered as blue (active leg
+   *  endpoints). Used by `setTripPinsVisible` to exempt them from the
+   *  hide-all-pins behavior during browse. */
+  const activeLegPinKeysRef = useRef<Set<string>>(new Set());
+  /** Whether the browse panel is currently displaying results (and
+   *  therefore the non-endpoint trip pins should stay hidden). Set by
+   *  the browse-results handler; read by `swapPinColor` so a revert-
+   *  to-gold pin recreated during an active browse session lands
+   *  hidden, matching the rest of the trip pins. */
+  const browseOpenRef = useRef(false);
 
   const searchParams = useSearchParams();
   const queriedDay = searchParams.get("day");
@@ -139,21 +211,27 @@ export function MapColumn({
     // the browse panel is open — otherwise 66 pins compete with browse
     // dots for visual attention on a Day-1 zoom.
     const tripDayMarkers: mapboxgl.Marker[] = [];
+    const dayPinsById = new Map<string, mapboxgl.Marker>();
+    const dayPinCoordsById = new Map<string, [number, number]>();
     if (startCoords) {
-      tripDayMarkers.push(
-        new mapboxgl.Marker({ color: "#c8a96e" })
-          .setLngLat(startCoords)
-          .addTo(map),
-      );
+      const m = new mapboxgl.Marker({ color: "#c8a96e" })
+        .setLngLat(startCoords)
+        .addTo(map);
+      tripDayMarkers.push(m);
+      dayPinsById.set("_start", m);
+      dayPinCoordsById.set("_start", startCoords);
     }
     days.forEach((d) => {
       if (!d.coords) return;
-      tripDayMarkers.push(
-        new mapboxgl.Marker({ color: "#c8a96e" })
-          .setLngLat(d.coords)
-          .addTo(map),
-      );
+      const m = new mapboxgl.Marker({ color: "#c8a96e" })
+        .setLngLat(d.coords)
+        .addTo(map);
+      tripDayMarkers.push(m);
+      dayPinsById.set(d.id, m);
+      dayPinCoordsById.set(d.id, d.coords);
     });
+    dayPinsByIdRef.current = dayPinsById;
+    dayPinCoordsByIdRef.current = dayPinCoordsById;
 
     // Per-waypoint pins — category-colored circle head with an emoji icon
     // and a downward tail. Mapbox anchor:"bottom" lands the tip on the coord.
@@ -310,6 +388,7 @@ export function MapColumn({
         }
 
         if (!mapRef.current) return; // unmounted mid-fetch
+        routePathRef.current = merged;
         map.addSource("trip-route", {
           type: "geojson",
           data: {
@@ -329,6 +408,31 @@ export function MapColumn({
             "line-opacity": 0.9,
           },
         });
+        // Empty active-day-leg layer drawn above the gold trip line.
+        // The activeDay effect populates the source per day change.
+        map.addSource("active-day-leg", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: [] },
+          },
+        });
+        map.addLayer({
+          id: "active-day-leg-line",
+          type: "line",
+          source: "active-day-leg",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#6EB1FF",
+            "line-width": 4,
+            "line-opacity": 0.95,
+          },
+        });
+        // Trigger the active-day effect once the source is ready by
+        // emitting a render event — the effect listens on activeDay
+        // changes and updates the source if the map is loaded.
+        window.dispatchEvent(new CustomEvent("trip:routeReady"));
 
         // Intentionally NOT fitBounds-ing the whole route here. The
         // map's initial center + the active-day effect frame Day 1's
@@ -372,6 +476,131 @@ export function MapColumn({
       essential: true,
     });
   }, [activeDay, startCoords]);
+
+  // Highlight the active day's leg (sliced from the road-following
+  // polyline) in blue, layered above the gold trip line. Waits for
+  // the route to be ready before updating the source.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !activeDay) return;
+
+    const dayIndex = days.findIndex((d) => d.id === activeDay.id);
+    if (dayIndex < 0) return;
+
+    const prev = dayIndex > 0 ? days[dayIndex - 1] : undefined;
+    const legStart =
+      activeDay.startCoord ??
+      prev?.coords ??
+      (activeDay.dayNumber === 1 ? startCoords : undefined);
+    const legEnd = activeDay.coords;
+    if (!legStart || !legEnd) return;
+
+    const apply = () => {
+      const path = routePathRef.current;
+      if (!path || path.length < 2) return;
+      const startIdx = nearestIndex(path, legStart);
+      const endIdx = nearestIndex(path, legEnd);
+      const lo = Math.min(startIdx, endIdx);
+      const hi = Math.max(startIdx, endIdx);
+      const slice =
+        hi > lo ? path.slice(lo, hi + 1) : [path[lo], path[lo]];
+      const src = map.getSource("active-day-leg") as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (!src) return;
+      src.setData({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: slice },
+      });
+      // Swap the two trip-day pins at the leg's endpoints to blue.
+      // Previous blue pins (from the prior active day) revert to gold.
+      // Done via destroy + recreate since mapbox's default-marker color
+      // is set at construction; the map of dayId→Marker keeps the swap
+      // localized so the rest of the trip's gold pins stay untouched.
+      const swapPinColor = (
+        key: string,
+        coord: [number, number],
+        color: string,
+      ) => {
+        const prevMarker = dayPinsByIdRef.current.get(key);
+        if (prevMarker) prevMarker.remove();
+        const m = new mapboxgl.Marker({ color }).setLngLat(coord).addTo(map);
+        // If browse is open, gold pins (non-active leg) should stay
+        // hidden — sibling effect's setTripPinsVisible(false) hid all
+        // pins, and this newly-created gold pin would otherwise pop
+        // into view.
+        if (browseOpenRef.current && color === "#c8a96e") {
+          m.getElement().style.display = "none";
+        }
+        dayPinsByIdRef.current.set(key, m);
+      };
+      const previousKeys = new Set(activeLegPinKeysRef.current);
+      // Identify the two endpoint pin keys. Start-key = previous day's
+      // id (its end coord = today's start), OR "_start" for Day 1.
+      const startKey =
+        dayIndex > 0 ? days[dayIndex - 1].id : "_start";
+      const endKey = activeDay.id;
+      const startCoord = dayPinCoordsByIdRef.current.get(startKey);
+      const endCoord = dayPinCoordsByIdRef.current.get(endKey);
+      // Revert any previously-blue pins that aren't part of the new leg.
+      for (const k of previousKeys) {
+        if (k === startKey || k === endKey) continue;
+        const coord = dayPinCoordsByIdRef.current.get(k);
+        if (coord) swapPinColor(k, coord, "#c8a96e");
+      }
+      activeLegPinKeysRef.current = new Set();
+      if (startCoord) {
+        swapPinColor(startKey, startCoord, "#6EB1FF");
+        activeLegPinKeysRef.current.add(startKey);
+      }
+      if (endCoord && endKey !== startKey) {
+        swapPinColor(endKey, endCoord, "#6EB1FF");
+        activeLegPinKeysRef.current.add(endKey);
+      }
+      // Ensure the active blue pins are visible even if the browse
+      // panel is currently open (its setTripPinsVisible(false) hides
+      // pins by default; we re-show the leg endpoints here).
+      for (const k of activeLegPinKeysRef.current) {
+        const m = dayPinsByIdRef.current.get(k);
+        if (m) m.getElement().style.display = "";
+      }
+
+      // Clear old endpoint labels then re-place at the new leg's ends.
+      // Labels come from the day's label string ("Start — ... — End"),
+      // split on em-dash. Single-segment labels (rest days etc.) reuse
+      // the same label for both ends.
+      for (const m of legEndpointMarkersRef.current) m.remove();
+      legEndpointMarkersRef.current = [];
+      const parts = (activeDay.label ?? "")
+        .split(/—|→|·/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const startLabel = parts[0] ?? "";
+      const endLabel = parts[parts.length - 1] ?? "";
+      if (startLabel) {
+        legEndpointMarkersRef.current.push(
+          makeLegEndpointMarker(startLabel, "right").setLngLat(legStart).addTo(map),
+        );
+      }
+      if (endLabel && endLabel !== startLabel) {
+        legEndpointMarkersRef.current.push(
+          makeLegEndpointMarker(endLabel, "left").setLngLat(legEnd).addTo(map),
+        );
+      }
+    };
+
+    // The active-day source is created inside the map.on("load",...)
+    // route handler — if that hasn't fired yet, wait for the ready
+    // event before applying.
+    if (map.getSource("active-day-leg")) {
+      apply();
+    } else {
+      const onReady = () => apply();
+      window.addEventListener("trip:routeReady", onReady, { once: true });
+      return () => window.removeEventListener("trip:routeReady", onReady);
+    }
+  }, [activeDay, days, startCoords]);
 
   // Fly to a specific place when the browse panel emits trip:flyTo. Used by
   // the CategoryBrowsePanel cards: tap a slide → map zooms to that location.
@@ -431,9 +660,24 @@ export function MapColumn({
     };
 
     const setTripPinsVisible = (visible: boolean) => {
+      // Active-leg pins (blue) are exempt — they should stay visible
+      // even when the rest of the trip pins are hidden behind the
+      // browse panel's dots.
+      const exempt = new Set<mapboxgl.Marker>();
+      for (const k of activeLegPinKeysRef.current) {
+        const m = dayPinsByIdRef.current.get(k);
+        if (m) exempt.add(m);
+      }
       for (const m of tripDayMarkersRef.current) {
+        if (exempt.has(m)) {
+          m.getElement().style.display = "";
+          continue;
+        }
         m.getElement().style.display = visible ? "" : "none";
       }
+      // Also handle the recreated active-leg pins that aren't in
+      // tripDayMarkersRef (since we destroy+recreate during swap).
+      for (const m of exempt) m.getElement().style.display = "";
     };
 
     const onResults = (e: Event) => {
@@ -446,6 +690,7 @@ export function MapColumn({
           places: Array<{ coords: [number, number]; title: string; id: string }>;
         }>
       ).detail;
+      browseOpenRef.current = !!detail?.places?.length;
       // Browse panel closing (or arriving with no results) → restore the
       // trip-day pins so the user has trip context again.
       if (!detail?.places?.length) {
@@ -460,8 +705,12 @@ export function MapColumn({
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
         const wrapper = document.createElement("div");
-        wrapper.style.cssText =
-          `position:relative;display:flex;align-items:center;cursor:pointer;`;
+        // No `position` set — mapboxgl applies position:absolute, which
+        // also serves as the containing block for the label's
+        // position:absolute. Setting position:relative here broke the
+        // marker's transform-based positioning and made dots stack in
+        // document flow instead of plotting at their lat/lng.
+        wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
         const dot = document.createElement("div");
         dot.style.cssText =
           `width:${initialSize}px;height:${initialSize}px;border-radius:50%;` +

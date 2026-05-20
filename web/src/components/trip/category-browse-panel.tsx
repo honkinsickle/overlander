@@ -11,8 +11,6 @@ import {
 import {
   browsePlaceToWaypoint,
   computeCardStats,
-  computeDetour,
-  formatMinutes,
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
@@ -23,7 +21,7 @@ import {
   browseCategoryToSlide,
   slideCategoryToBrowseCategory,
 } from "@/lib/trip-browse/palette";
-import { CategoryIcon } from "@/components/icons/category-icons";
+import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
 
 export type BrowseTarget = {
   category: Category;
@@ -35,17 +33,23 @@ export type BrowseTarget = {
   /** End-of-day coords passed through from DayDetail so each card can
    *  show a real detour distance and ETA delta. */
   dayCoords?: [number, number];
+  /** Start-of-day coords (previous day's overnight, or trip startCoords
+   *  for Day 1). Lets cards compute perpendicular detour from the
+   *  day-start → day-end polyline rather than haversine to day-end —
+   *  matters for places on-route where the place-to-dayEnd distance is
+   *  large but the actual detour is tiny. */
+  dayStartCoords?: [number, number];
   /** Day label like "Whitefish, MT — Banff, AB" — used to derive the
    *  next-anchor name for the "new ETA at X" line. */
   dayLabel?: string;
 };
 
 // 2-up: 16 + 300 + 16 + 300 + 16 = 648 of content + a few px slack centered.
-// 3-up: 8 + 356 + 12 + 356 + 12 + 356 + 8 = 1108 — sits inside the slideup
-// body (1113w) with 5px slack so the panel never overhangs the slideup chrome.
+// 3-up: 8 + 354 + 12 + 354 + 12 + 354 + 8 = 1102 — sits inside the slideup
+// body (1113w) with 11px slack so the panel never overhangs the slideup chrome.
 const PANEL_WIDTH_2UP = 655;
 const PANEL_WIDTH_3UP = 1113;
-const CARD_W_3UP = 356;
+const CARD_W_3UP = 354;
 const TRANSITION_MS = 280;
 
 const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
@@ -214,7 +218,11 @@ export function CategoryBrowsePanel({
                 color: "var(--text-muted)",
               }}
             >
-              Browse Day {target?.dayNumber ?? ""}
+              Browsing today Day {target?.dayNumber ?? ""} within{" "}
+              <span style={{ fontWeight: 700, color: "#FFFFFF" }}>
+                10 miles
+              </span>
+              {" "}of route
             </span>
             <span
               className="truncate"
@@ -226,7 +234,7 @@ export function CategoryBrowsePanel({
                 color: "var(--text-primary)",
               }}
             >
-              Within 10 mi of today
+              {target?.dayLabel ?? ""}
             </span>
           </div>
 
@@ -301,10 +309,18 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
   }, []);
 
   // Map markers track whatever's currently visible in the panel.
+  // Re-emit once after a short delay so the map catches us even if its
+  // listener registers slightly later than the panel mounts.
   useEffect(() => {
     if (state.status !== "success") return;
     emitBrowseResults(state.places);
-    return () => emitBrowseResults([]);
+    const retry = window.setTimeout(() => {
+      emitBrowseResults(state.places);
+    }, 200);
+    return () => {
+      window.clearTimeout(retry);
+      emitBrowseResults([]);
+    };
   }, [state]);
 
   // Resolve the API `categories=` param from the active filter set:
@@ -441,7 +457,7 @@ function FilterChipRow({
 }) {
   return (
     <div
-      className="flex items-center shrink-0"
+      className="flex items-center justify-center shrink-0"
       role="toolbar"
       aria-label="Filter by category"
       style={{
@@ -464,19 +480,20 @@ function FilterChipRow({
             aria-pressed={isActive}
             aria-label={`Filter: ${palette.label}`}
             onClick={() => onToggle(c)}
-            className="flex items-center justify-center rounded-full transition-all"
+            className="flex items-center justify-center transition-all"
             style={{
-              width: 44,
-              height: 44,
-              backgroundColor: palette.iconBg,
-              border: `1px solid ${palette.accent}`,
+              width: 54,
+              height: 54,
+              borderRadius: 6,
+              backgroundColor: palette.badgeBg,
+              border: `1px solid ${palette.badgeBorder}`,
               opacity: active.size === 0 || isActive ? 1 : 0.4,
               boxShadow: isActive
-                ? `0 0 0 2px ${palette.accent}`
+                ? `0 0 0 1px ${palette.badgeBorder}`
                 : "none",
             }}
           >
-            <CategoryIcon category={c} size={22} stroke={palette.accent} />
+            <CategoryIconV2 category={c} size={28} />
           </button>
         );
       })}
@@ -502,22 +519,12 @@ function BrowseCardCell({
   const ctx: CardCtx = {
     category: placeCategory,
     dayCoords: target.dayCoords,
+    dayStartCoords: target.dayStartCoords,
     dayLabel: target.dayLabel,
     dayNumber: target.dayNumber,
   };
-  const synthWaypoint = browsePlaceToWaypoint(
-    place,
-    ctx,
-    computeCardStats(place, ctx),
-  );
-  const { miles, minutes } = computeDetour(place, ctx);
-  const detour =
-    miles < 0.1
-      ? ({ onRoute: true } as const)
-      : {
-          time: `+${formatMinutes(minutes)}`,
-          distanceMi: miles,
-        };
+  const stats = computeCardStats(place, ctx);
+  const synthWaypoint = browsePlaceToWaypoint(place, ctx, stats);
 
   const openDetail = () => {
     window.dispatchEvent(
@@ -564,8 +571,8 @@ function BrowseCardCell({
         place={place}
         category={slideCategoryToBrowseCategory(placeCategory)}
         dayNumber={target.dayNumber}
-        width={expanded ? 356 : 300}
-        detour={detour}
+        width={expanded ? 354 : 300}
+        stats={stats}
         onAdd={(e?: MouseEvent) => {
           e?.stopPropagation();
           window.dispatchEvent(

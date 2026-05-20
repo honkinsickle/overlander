@@ -1,5 +1,6 @@
 import type { Category } from "@/components/primitives/detail-card";
 import type { Waypoint } from "@/lib/trips/types";
+import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 import type { BrowsePlace, SlideCategoryKey } from "./places";
 
 /**
@@ -18,8 +19,14 @@ import type { BrowsePlace, SlideCategoryKey } from "./places";
 
 export type CardCtx = {
   category: SlideCategoryKey;
-  /** End-of-day coords from the trip's Day. Detour is measured from here. */
+  /** End-of-day coords from the trip's Day. Falls back here if
+   *  `dayStartCoords` isn't available for the perpendicular calc. */
   dayCoords?: [number, number];
+  /** Start-of-day coords (previous day's overnight, or trip startCoords
+   *  for Day 1). With both endpoints we compute perpendicular distance
+   *  from the day-start → day-end line — which matches what a real
+   *  detour costs for a place ON the route. */
+  dayStartCoords?: [number, number];
   /** Day label, e.g. "Whitefish, MT — Banff, AB". Used to derive the
    *  next anchor name for the "new ETA at X" line. */
   dayLabel?: string;
@@ -129,6 +136,19 @@ function addMinutesToTime(time: string, minutes: number): string {
   return `${h12}:${String(newMin).padStart(2, "0")} ${isPm ? "PM" : "AM"}`;
 }
 
+/** Perpendicular distance (mi) from a place to the day's route segment.
+ *  Uses the day-start → day-end polyline when both endpoints are
+ *  available; falls back to haversine-to-dayEnd, then 0 if neither.
+ *  Multiplied by ROAD_FACTOR by callers since the real off-route drive
+ *  is longer than the great-circle line. */
+function offRouteMi(p: [number, number], ctx: CardCtx): number {
+  if (ctx.dayStartCoords && ctx.dayCoords) {
+    return pointToPolylineMi(p, [ctx.dayStartCoords, ctx.dayCoords]);
+  }
+  if (ctx.dayCoords) return distanceMi(p, ctx.dayCoords);
+  return 0;
+}
+
 /** Detour primitives used by the new Browse Location Card pill. Same
  *  math as `computeCardStats` but exposed as raw numbers so callers can
  *  format/threshold themselves. */
@@ -136,9 +156,7 @@ export function computeDetour(
   place: BrowsePlace,
   ctx: CardCtx,
 ): { miles: number; minutes: number } {
-  const miles = ctx.dayCoords
-    ? distanceMi(place.coords, ctx.dayCoords) * ROAD_FACTOR
-    : 0;
+  const miles = offRouteMi(place.coords, ctx) * ROAD_FACTOR;
   const minutes = Math.round((miles / AVG_MPH) * 60);
   return { miles, minutes };
 }
@@ -149,12 +167,10 @@ export function computeCardStats(
 ): CardStats {
   const id = place.id;
 
-  // Detour: straight-line × ROAD_FACTOR. Falls back to 0 when the day
-  // has no coords (shouldn't happen for trip days, but guards against
-  // partial fixtures).
-  const detourMi = ctx.dayCoords
-    ? distanceMi(place.coords, ctx.dayCoords) * ROAD_FACTOR
-    : 0;
+  // Detour: perpendicular distance from the day's route segment ×
+  // ROAD_FACTOR. Falls back to haversine-to-dayEnd if start coords
+  // are unavailable; 0 if neither.
+  const detourMi = offRouteMi(place.coords, ctx) * ROAD_FACTOR;
   const detourMin = Math.round((detourMi / AVG_MPH) * 60);
   const stopMin = STOP_MINUTES_BY_CATEGORY[ctx.category];
   // Out-and-back detour + stop time.

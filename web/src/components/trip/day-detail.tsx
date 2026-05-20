@@ -211,15 +211,21 @@ export function DayDetail({ trip }: { trip: Trip }) {
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const openBrowse =
-    (dayNumber: number, day: Day) => (category: Category) =>
+    (dayNumber: number, day: Day) => (category: Category) => {
+      const dayIndex = trip.days.findIndex((d) => d.id === day.id);
+      const prev = dayIndex > 0 ? trip.days[dayIndex - 1] : undefined;
+      const dayStartCoords: [number, number] | undefined =
+        prev?.coords ?? (dayIndex === 0 ? trip.startCoords : undefined);
       setBrowseTarget({
         category,
         dayNumber,
         tripId: trip.id,
         dayId: day.id,
         dayCoords: day.coords,
+        dayStartCoords,
         dayLabel: day.label,
       });
+    };
 
   // ── Added places (per day) ──────────────────────────────────
   // Optimistic per-day buffer of places the user just tapped "Add to
