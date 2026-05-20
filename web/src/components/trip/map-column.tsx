@@ -174,6 +174,11 @@ function buildDotMarker(
     wrapper.parentElement!.style.zIndex = "10";
   });
   wrapper.addEventListener("mouseleave", () => {
+    // A pinned marker (the current flyTo target) keeps its label
+    // visible regardless of hover — trip:flyTo from a card click sets
+    // data-pinned so the destination stays labelled after the camera
+    // animation. Cleared when a new flyTo lands on a different marker.
+    if (wrapper.dataset.pinned === "true") return;
     label.style.opacity = "0";
     wrapper.parentElement!.style.zIndex = "";
   });
@@ -271,6 +276,10 @@ export function MapColumn({
    *  the browse panel is open without going through the suggested-
    *  results effect again. */
   const suggestedMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  /** Browse-panel dot markers. Lifted to a ref so the trip:flyTo handler
+   *  can pin the destination marker's label across the union of browse
+   *  + suggested dots. */
+  const browseMarkersRef = useRef<mapboxgl.Marker[]>([]);
 
   const searchParams = useSearchParams();
   const queriedDay = searchParams.get("day");
@@ -762,9 +771,14 @@ export function MapColumn({
     }
   }, [activeDay, days, startCoords]);
 
-  // Fly to a specific place when the browse panel emits trip:flyTo. Used by
-  // the CategoryBrowsePanel cards: tap a slide → map zooms to that location.
+  // Fly to a specific place when the browse panel or a Suggested Stops
+  // card emits trip:flyTo. Also "pins" the destination marker's label
+  // so it stays visible after the camera animation — otherwise the dot
+  // is just an unlabelled glyph and the user has to hover to confirm
+  // which place they just clicked. Only one marker is pinned at a time;
+  // the next flyTo clears prior pins.
   useEffect(() => {
+    const COORD_EPS = 1e-9;
     const onFlyTo = (e: Event) => {
       const detail = (
         e as CustomEvent<{ coords: [number, number]; name?: string }>
@@ -777,6 +791,33 @@ export function MapColumn({
         duration: 1500,
         essential: true,
       });
+      const [lng, lat] = detail.coords;
+      const all = [
+        ...browseMarkersRef.current,
+        ...suggestedMarkersRef.current,
+      ];
+      for (const m of all) {
+        const wrapper = m.getElement();
+        const label = wrapper.children[1] as HTMLElement | undefined;
+        if (!label) continue;
+        const ll = m.getLngLat();
+        const isTarget =
+          Math.abs(ll.lng - lng) < COORD_EPS &&
+          Math.abs(ll.lat - lat) < COORD_EPS;
+        if (isTarget) {
+          wrapper.dataset.pinned = "true";
+          label.style.opacity = "1";
+          if (wrapper.parentElement) {
+            wrapper.parentElement.style.zIndex = "10";
+          }
+        } else if (wrapper.dataset.pinned === "true") {
+          delete wrapper.dataset.pinned;
+          label.style.opacity = "0";
+          if (wrapper.parentElement) {
+            wrapper.parentElement.style.zIndex = "";
+          }
+        }
+      }
     };
     window.addEventListener("trip:flyTo", onFlyTo);
     return () => window.removeEventListener("trip:flyTo", onFlyTo);
@@ -791,18 +832,16 @@ export function MapColumn({
   // linearly with zoom, hard-floored at 12px (40% of base) when zoomed
   // way out so they never disappear entirely.
   useEffect(() => {
-    const markers: mapboxgl.Marker[] = [];
-
     const applyDotSize = () => {
       const map = mapRef.current;
       if (!map) return;
-      resizeDots(markers, dotSize(map.getZoom()));
+      resizeDots(browseMarkersRef.current, dotSize(map.getZoom()));
     };
 
     const clear = () => {
       mapRef.current?.off("zoom", applyDotSize);
-      for (const m of markers) m.remove();
-      markers.length = 0;
+      for (const m of browseMarkersRef.current) m.remove();
+      browseMarkersRef.current = [];
     };
 
     const setSuggestedVisible = (visible: boolean) => {
@@ -864,7 +903,7 @@ export function MapColumn({
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
         const marker = buildDotMarker(p, initialSize).addTo(map);
-        markers.push(marker);
+        browseMarkersRef.current.push(marker);
       }
       map.on("zoom", applyDotSize);
     };
