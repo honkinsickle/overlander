@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       owner_id: user.id,
       reference_id: referenceId,
       title: ref.title,
-      state: "draft",
+      state: "active",
       payload: ref.payload,
     })
     .select("id")
