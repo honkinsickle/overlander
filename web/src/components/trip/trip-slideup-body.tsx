@@ -41,7 +41,7 @@ export function TripSlideupBody({
           routePolyline={trip.routePolyline}
         />
         <MapDetailOverlay />
-        {isReference && isAuthed && (
+        {isReference && (
           <MakeItMineCta
             referenceId={trip.id}
             isAuthed={isAuthed}
