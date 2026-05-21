@@ -27,7 +27,9 @@ export function WizardFinalizeSlideup({ trip }: { trip: Trip }) {
 
   return (
     <SlideupShell trip={trip} hidePhase closeHref="/trips">
-      <TripSlideupBody trip={trip} />
+      {/* Wizard-finalize is the user finalizing their own scratch trip;
+       *  the "Make it mine" fork CTA never applies here. */}
+      <TripSlideupBody trip={trip} isReference={false} isAuthed={false} />
     </SlideupShell>
   );
 }
