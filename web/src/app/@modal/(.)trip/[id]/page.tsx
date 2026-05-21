@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { SlideupShell } from "@/components/trip/slideup-shell";
 import { TripSlideupBody } from "@/components/trip/trip-slideup-body";
+import { isConfigured } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getTrip } from "@/lib/trips/repository";
+
+// TODO(scope): duplicated from app/trip/[id]/layout.tsx. Extract to a
+// shared module if a second reference trip ever lands.
+const REFERENCE_TRIP_IDS = new Set(["la-to-deadhorse"]);
 
 /**
  * Intercepting modal for `/trip/[id]`.
@@ -18,9 +24,29 @@ export default async function SlideupTripPage(
   const trip = await getTrip(id);
   if (!trip) notFound();
 
+  const isReference = REFERENCE_TRIP_IDS.has(trip.id);
+  const isAuthed = isReference ? await checkAuthed() : false;
+
   return (
     <SlideupShell trip={trip}>
-      <TripSlideupBody trip={trip} />
+      <TripSlideupBody
+        trip={trip}
+        isReference={isReference}
+        isAuthed={isAuthed}
+      />
     </SlideupShell>
   );
+}
+
+async function checkAuthed(): Promise<boolean> {
+  if (!isConfigured()) return false;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return Boolean(user);
+  } catch {
+    return false;
+  }
 }

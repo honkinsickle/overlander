@@ -37,7 +37,7 @@ export function MakeItMineCta({ referenceId, isAuthed, returnPath }: Props) {
           throw new Error(data.error ?? `fork_failed (${res.status})`);
         }
         const { id } = (await res.json()) as { id: string };
-        router.push(`/trip/${id}`);
+        router.push(`/trips/${id}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Something went wrong");
       }

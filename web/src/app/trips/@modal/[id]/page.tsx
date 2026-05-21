@@ -16,9 +16,12 @@ export default async function TripsModalSlideup(
   const trip = await getTrip(id);
   if (!trip) notFound();
 
+  // The /trips/[id] entry is the user's own forked or wizard-built
+  // trip — never the canonical reference itself — so the "Make it mine"
+  // fork CTA isn't relevant here.
   return (
     <SlideupShell trip={trip} hidePhase>
-      <TripSlideupBody trip={trip} />
+      <TripSlideupBody trip={trip} isReference={false} isAuthed={false} />
     </SlideupShell>
   );
 }
