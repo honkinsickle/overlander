@@ -24,3 +24,19 @@ When working on a git worktree under `~/.claude/worktrees/<name>/`, open the Cla
 
 **Mid-session escape hatch:** if you're already running with the wrong root and can't reopen, add a worktree-specific entry to whatever `launch.json` is active, with `runtimeExecutable: "/bin/sh"` and `runtimeArgs: ["-c", "cd <worktree>/web && exec npm run dev -- -H 0.0.0.0 -p <port>"]`, then `preview_start` that name. Remove the entry when done.
 
+# Testing offline behavior — use a production build, not the dev preview
+
+The Mapbox + app-shell service worker at `public/sw.js` short-circuits to plain `fetch(event.request)` (no caching) when `self.location.hostname === 'localhost'`. This is deliberate: dev-mode caching gets confusing fast (HMR fights cached chunks, edited files re-serve stale, etc.).
+
+**Consequence:** the dev preview cannot exercise offline behavior. If you stop the dev server and reload, the browser shows Chrome's `ERR_INTERNET_DISCONNECTED` page — and the Network tab shows `(failed) Provisional headers are shown` for every request. That is correct behavior given the localhost-bypass, not a bug in the SW.
+
+**How to verify offline locally:**
+1. `npm run build` — emits the production bundle and (via the `postbuild` hook) writes `public/sw-version.js` from `.next/BUILD_ID`
+2. Start a production server: `npm run start -- -p 3211` (or `preview_start name=web-easley-prod` if you've added the prod entry to `.claude/launch.json`)
+3. Confirm prod mode: `ps aux | grep next-server` should show `next-server (v…)`, not `next dev`
+4. Load `/trips/<id>` once to populate the caches
+5. Stop the server (`preview_stop` or kill the PID listening on the port)
+6. Hard-reload the page in the browser — the slideup, map canvas, and cached tiles should all serve from Cache Storage
+
+**Flag to override the bypass without going to prod**: set `FORCE_CACHE_IN_DEV = true` at the top of `public/sw.js`, restart the dev preview, register the SW once, then flip back to `false`. Useful for debugging the cache contents but doesn't reproduce the real offline reload path — JS chunks in dev mode contain HMR websocket clients that fail when the dev server is down, so map hydration can stall even when the cache contents are correct. Always do the final offline verification against `next start`.
+
