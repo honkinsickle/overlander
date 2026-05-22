@@ -124,6 +124,13 @@ export function OfflinePanel({
   }
 
   async function handlePrime(phase: OfflinePhase) {
+    // No-op if a prime for this phase is already in flight. The IDB-
+    // derived `display.kind` lags the in-memory controller by up to one
+    // PROGRESS_BATCH, so the action button can briefly still read "Prime"
+    // or "Resume" while a controller is alive. Without this guard, a
+    // second click would overwrite controllersRef and orphan the original.
+    if (controllersRef.current.has(phase.id)) return;
+
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
     if (!token) return;
 
@@ -373,6 +380,7 @@ function PhaseRow({
       <PhaseStatusLine display={display} live={live} estMb={estMb} />
       <PhaseActions
         display={display}
+        live={live}
         onPrime={onPrime}
         onPause={onPause}
         onReprime={onReprime}
@@ -459,17 +467,31 @@ function PhaseStatusLine({
 
 function PhaseActions({
   display,
+  live,
   onPrime,
   onPause,
   onReprime,
   onDelete,
 }: {
   display: PhaseDisplayStatus;
+  live: PrimeProgress | undefined;
   onPrime: () => void;
   onPause: () => void;
   onReprime: () => void;
   onDelete: () => void;
 }) {
+  // Live controller is the source of truth for "is a prime running right
+  // now?" — surface Pause regardless of `display.kind`, which is sourced
+  // from IDB and lags by up to one PROGRESS_BATCH. Without this, an
+  // in-flight prime shows "Prime" / "Resume" and a click would orphan
+  // the running controller.
+  if (live) {
+    return (
+      <div className="flex gap-2">
+        <SecondaryButton onClick={onPause}>Pause</SecondaryButton>
+      </div>
+    );
+  }
   // Wired to phase-status state; mirrors the spec from session-3 step 8.
   switch (display.kind) {
     case "not-primed":
