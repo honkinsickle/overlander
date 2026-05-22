@@ -2,8 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { Cloud, X } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
+import { KebabMenu } from "@/components/primitives/kebab-menu";
+import { OfflinePanel } from "@/components/trip/offline-panel";
+
+/** UUID regex inlined so SlideupShell stays a pure client component —
+ *  importing isUserTripId from lib/trips/user-trips would pull in the
+ *  Supabase server client. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Slideup shell — Paper `GHR-0`, 1113×734.
@@ -36,8 +44,10 @@ export function SlideupShell({
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [offlineOpen, setOfflineOpen] = useState(false);
   const initialPath = useRef<string | null>(null);
   const totalMiles = trip?.days.reduce((sum, d) => sum + (d.miles ?? 0), 0) ?? 0;
+  const isUserTrip = !!trip && UUID_RE.test(trip.id);
 
   useEffect(() => {
     // Flip to open on the tick after initial render so the CSS transition
@@ -150,18 +160,35 @@ export function SlideupShell({
             )}
           </div>
 
-          {/* More (kebab) — 32×32 · radius 8 · bg --border-subtle · border --border-mid. */}
-          <button
-            type="button"
-            aria-label="More options"
-            className="flex items-center justify-center shrink-0 w-8 h-8 rounded-lg bg-border-subtle border border-border-mid"
-          >
-            <span className="flex flex-col gap-[3px]">
-              <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-              <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-              <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-            </span>
-          </button>
+          {/* More (kebab). Offline maps only surfaces for user-owned
+           *  trips — reference slugs can't host offlinePhases since their
+           *  payload isn't writable. */}
+          {isUserTrip ? (
+            <KebabMenu
+              triggerLabel="Trip options"
+              items={[
+                {
+                  id: "offline",
+                  label: "Offline maps",
+                  icon: Cloud,
+                  onSelect: () => setOfflineOpen(true),
+                },
+              ]}
+            />
+          ) : (
+            <button
+              type="button"
+              aria-label="More options"
+              disabled
+              className="flex items-center justify-center shrink-0 w-8 h-8 rounded-lg bg-border-subtle border border-border-mid opacity-40"
+            >
+              <span className="flex flex-col gap-[3px]">
+                <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
+                <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
+                <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
+              </span>
+            </button>
+          )}
 
           {/* Close — 60×60 · bg --bg-card · 1px left border --border-subtle ·
            *  margin-right -12 so it sits flush with the bar edge. Icon 22×22. */}
@@ -176,8 +203,20 @@ export function SlideupShell({
           </button>
         </header>
 
-        {/* Body: 3-column (no 80px vnav in slideup per Paper). */}
-        <div className="flex w-full h-[calc(100%-68px)]">{children}</div>
+        {/* Body: 3-column (no 80px vnav in slideup per Paper).
+         *  `relative` lets OfflinePanel absolutely-position over the
+         *  columns without disturbing the layout (decision 2: overlay
+         *  variant over push-columns). */}
+        <div className="relative flex w-full h-[calc(100%-68px)]">
+          {children}
+          {isUserTrip && trip && (
+            <OfflinePanel
+              trip={trip}
+              open={offlineOpen}
+              onClose={() => setOfflineOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

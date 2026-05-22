@@ -35,3 +35,27 @@ export async function estimateStorage(): Promise<StorageEstimate | null> {
     return null;
   }
 }
+
+/**
+ * Request persistent storage if it isn't already granted. Returns true
+ * when the origin has persistent storage by the time this resolves
+ * (whether granted now or earlier), false on browsers that don't support
+ * the API or when the request is denied.
+ *
+ * Called by the offline panel on the first [Prime] click so the user is
+ * prompted (where the browser surfaces a prompt — Chrome may; iOS Safari
+ * treats it as a hint and decides opportunistically). Safe to call
+ * multiple times: a granted origin returns true immediately.
+ */
+export async function ensurePersistentStorage(): Promise<boolean> {
+  if (typeof navigator === "undefined") return false;
+  if (!navigator.storage?.persist || !navigator.storage?.persisted) {
+    return false;
+  }
+  try {
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
