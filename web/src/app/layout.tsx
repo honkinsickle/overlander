@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Barlow,
   Barlow_Condensed,
@@ -6,6 +6,7 @@ import {
   Space_Grotesk,
   Space_Mono,
 } from "next/font/google";
+import { SwRegister } from "@/components/chrome/sw-register";
 import "./globals.css";
 
 const barlow = Barlow({
@@ -42,6 +43,27 @@ const crimsonText = Crimson_Text({
 export const metadata: Metadata = {
   title: "Overlander",
   description: "Plan overland trips with confidence.",
+  // iPad PWA install affordances. `capable: true` emits the legacy
+  // <meta name="apple-mobile-web-app-capable">; the manifest's
+  // `display: standalone` covers modern browsers. Status-bar style
+  // black-translucent lets our dark chrome (--bg-base) bleed under
+  // the iOS status bar instead of leaving a white strip.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Overlander",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // viewport-fit=cover lets the app paint under iOS safe-area insets
+  // (status bar, home indicator). Components that need to avoid them
+  // can use env(safe-area-inset-*) — none do today, but offline
+  // priming UI (sessions 3/4) likely will.
+  viewportFit: "cover",
+  themeColor: "#0a0b0c", // matches --bg-base in globals.css and the manifest
 };
 
 export default function RootLayout({
@@ -57,6 +79,7 @@ export default function RootLayout({
       className={`${barlow.variable} ${barlowCondensed.variable} ${spaceGrotesk.variable} ${spaceMono.variable} ${crimsonText.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <SwRegister />
         {children}
         {modal}
       </body>

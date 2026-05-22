@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/sw-version.mjs",
     "start": "next start",
     "lint": "eslint",
     "snapshot": "tsx --env-file=.env.local scripts/seed-reference-trips.ts --snapshot",

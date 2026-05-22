@@ -24,3 +24,15 @@ When working on a git worktree under `~/.claude/worktrees/<name>/`, open the Cla
 
 **Mid-session escape hatch:** if you're already running with the wrong root and can't reopen, add a worktree-specific entry to whatever `launch.json` is active, with `runtimeExecutable: "/bin/sh"` and `runtimeArgs: ["-c", "cd <worktree>/web && exec npm run dev -- -H 0.0.0.0 -p <port>"]`, then `preview_start` that name. Remove the entry when done.
 
+# Testing offline behavior
+
+The Mapbox + app-shell service worker at `public/sw.js` short-circuits to plain `fetch(event.request)` (no caching) when `self.location.hostname === "localhost"` or `"127.0.0.1"`. This avoids dev-mode caching confusion.
+
+**The bypass is hostname-based, not mode-based.** `next start` on localhost still triggers it. A localhost production build alone is *not* sufficient to verify offline behavior — caches won't populate, offline reload will show `ERR_INTERNET_DISCONNECTED`, and the Network tab will show `(failed) Provisional headers are shown` for every request.
+
+**To verify offline locally, do one of:**
+
+1. **Set `FORCE_CACHE_IN_DEV = true`** at the top of `public/sw.js` temporarily (fast iteration). Restart the preview, exercise the page, run the offline test, then flip the flag back. Caveat: dev-mode JS chunks embed HMR websocket clients that fail when the dev server is down, so map hydration may stall against `next dev` even with caches populated. Pair the flag flip with `next start` (not `next dev`) for cleanest local results.
+
+2. **Test against the Vercel preview URL** after pushing (cleanest, most representative — matches the iPad's actual environment). The SW activates, caches populate (`mb-baseline-v1`, `mb-style-v1`, `app-shell-html-<buildId>`, `app-shell-static-<buildId>`), and DevTools → Network → "Offline" → reload renders the full page from Cache Storage.
+
