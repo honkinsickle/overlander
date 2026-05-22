@@ -40,7 +40,7 @@ const BASELINE_CACHE = "mb-baseline-v1";
 const APP_SHELL_HTML_CACHE = `app-shell-html-${self.APP_BUILD_ID}`;
 const APP_SHELL_STATIC_CACHE = `app-shell-static-${self.APP_BUILD_ID}`;
 
-const FORCE_CACHE_IN_DEV = true;
+const FORCE_CACHE_IN_DEV = false;
 const IS_LOCAL = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
 
 // Token comes from the page via postMessage once registration completes.
