@@ -10,6 +10,7 @@
     "lint": "eslint",
     "snapshot": "tsx --env-file=.env.local scripts/seed-reference-trips.ts --snapshot",
     "check:offline-phases": "tsx scripts/check-offline-phases.ts",
+    "check:prime-status-db": "tsx scripts/check-prime-status-db.ts",
     "seed": "tsx --env-file=.env.local scripts/seed-reference-trips.ts"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
