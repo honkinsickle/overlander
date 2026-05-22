@@ -202,7 +202,10 @@ export function UserLocationLayer({
       const detail = (e as CustomEvent<{ follow: boolean }>).detail;
       if (!detail) return;
       if (detail.follow) {
-        if (status === "idle") request();
+        // Always call request(): idempotent on watching/unsupported, retries
+        // watchPosition on denied so a user who clears the URL-bar denial
+        // mid-session can re-engage without a reload.
+        request();
         if (position) {
           const snap = snapToRoute(
             position,
