@@ -42,7 +42,9 @@ Stack constraints relevant to the design: Next.js 16.2.4, React 19.2.4, Turbopac
 
 **DEM dropped offline.** Style references `mapbox-terrain-dem-v1`; map renders flat where DEM is missing. Visual cost during nav is low (route, labels, position dot all render correctly); halves storage. Online users still see full terrain.
 
-**Tile coverage math: hand-rolled** in `lib/routing/` (next to `polyline.ts`), no new dependencies. Phase polyline + buffer → `{z, x, y}` enumeration via Web Mercator. Revisit only if the math gets unexpectedly hairy.
+**Tile coverage math: hand-rolled** in `lib/offline/` (next to the SW + storage helpers), no new dependencies. Phase polyline + buffer → `{z, x, y}` enumeration via Web Mercator.
+
+**Tile enumeration signature: `enumerateTiles(coords, bufferMi, zMin, zMax)`** — takes the polyline sample set, not a bbox. A bbox over a non-rectangular corridor over-counts ~5× (LA→Jasper week 1 has a bbox of ~444K sq mi vs ~95K sq mi of actual 25mi-buffered road). Per-sample neighborhood expansion with a disc-shaped filter yields a corridor-shaped tile union that matches the analytical prediction for the phase's true buffered area.
 
 **Rate limiting:** prime loop catches 429, parses `Retry-After`, exponential backoff with jitter. Concurrency throttle (6–8 in-flight) stays, but isn't the only safeguard.
 
