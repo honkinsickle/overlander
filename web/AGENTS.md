@@ -58,3 +58,9 @@ Phase priming (`OfflinePanel` → kebab → "Offline maps") writes per-phase til
 - **`navigator.storage.persist()` on iOS:** Safari decides opportunistically; the prime loop calls `ensurePersistentStorage()` on first-prime regardless of whether the prompt surfaces.
 - **Cross-tab IDB `blocked`:** the wrapper rejects the open promise rather than retrying; user-visible behavior under two tabs simultaneously priming hasn't been tested.
 
+## Off-cache fallback banner (session 4)
+
+`OffCacheBanner` (top of `MapColumn`) surfaces when the visible viewport at the current zoom isn't covered by any primed phase. Detection is viewport-based via `useViewportCoverage`, debounced 200ms off the Mapbox `idle` event. Click the CTA → dispatches `trip:openOfflinePanel` with `{ phaseId? }` → `SlideupShell` opens the panel and scrolls to that row.
+
+**SW fall-through `postMessage` is wired but unconsumed.** The SW emits `{ type: "MAPBOX_FALLTHROUGH", url, key }` whenever a /v4 phase tile (z=6..13) misses every cache and falls through to network. Reserved for future telemetry / UX (e.g. "we noticed you've been driving in uncached territory for 10 minutes — want to prime?"). Don't drive the banner from this stream — it fires per-tile during an active prime and would flicker.
+
