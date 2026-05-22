@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useSearchParams } from "next/navigation";
-import { Navigation } from "lucide-react";
 import {
   DetailCard,
   DetailStats,
@@ -1079,22 +1078,6 @@ function WaypointDetail({
       </p>
       {waypoint.tip && <DetailTip>{waypoint.tip}</DetailTip>}
       <DetailStats items={waypoint.stats} />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent("trip:openDirections", {
-                detail: { waypointCoord: waypoint.coords },
-              }),
-            );
-          }}
-          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded bg-bg-nav-btn border border-button-primary-border text-input-border-focus hover:text-text-main"
-        >
-          <Navigation className="w-3.5 h-3.5" />
-          <span className="font-sans text-sm font-semibold">Directions</span>
-        </button>
-      </div>
     </DetailCard>
   );
 }

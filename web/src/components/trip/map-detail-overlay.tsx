@@ -557,9 +557,40 @@ function TrappersDetailPanel({
             )}
 
             <div
-              className="flex justify-center pt-[19px]"
+              className="flex justify-center gap-2 pt-[19px]"
               style={{ borderTop: "1px solid rgba(255,255,255,0.25)" }}
             >
+              <button
+                type="button"
+                onClick={() => {
+                  const coord = place.waypoint?.coords ?? place.coords;
+                  window.dispatchEvent(
+                    new CustomEvent("trip:openDirections", {
+                      detail: { waypointCoord: coord },
+                    }),
+                  );
+                }}
+                className="flex items-center justify-center h-10 rounded-sm px-6"
+                style={{
+                  backgroundColor: "transparent",
+                  border: "1px solid rgba(166,201,249,0.4)",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 14,
+                    lineHeight: "16px",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  Directions
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={onToggleAdded}
