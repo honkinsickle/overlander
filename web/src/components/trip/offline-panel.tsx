@@ -59,10 +59,15 @@ export function OfflinePanel({
   trip,
   open,
   onClose,
+  scrollToPhaseId,
 }: {
   trip: Trip;
   open: boolean;
   onClose: () => void;
+  /** When provided AND the panel transitions to open, scroll that phase
+   *  row into view. Driven by the OffCacheBanner CTA → trip:openOfflinePanel
+   *  event in SlideupShell. */
+  scrollToPhaseId?: string;
 }) {
   const router = useRouter();
   const [records, setRecords] = useState<Map<string, PhaseStatus>>(new Map());
@@ -72,6 +77,7 @@ export function OfflinePanel({
     new Map(),
   );
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
+  const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
 
   const phases = trip.offlinePhases ?? [];
 
@@ -101,6 +107,17 @@ export function OfflinePanel({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, trip.id]);
+
+  // Scroll the requested phase row into view after the drawer's slide-in
+  // settles. Delay matches the drawer's CSS transition (300ms).
+  useEffect(() => {
+    if (!open || !scrollToPhaseId) return;
+    const id = setTimeout(() => {
+      const row = rowRefs.current.get(scrollToPhaseId);
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 320);
+    return () => clearTimeout(id);
+  }, [open, scrollToPhaseId]);
 
   // Abort any in-flight primes when the panel unmounts (e.g. slideup
   // dismissal). The prime loop persists progress in batches of 25 so a
@@ -263,6 +280,11 @@ export function OfflinePanel({
                     live={live}
                     totalMiles={totalMiles}
                     estMb={estMb}
+                    rowRef={(el) => {
+                      if (el) rowRefs.current.set(phase.id, el);
+                      else rowRefs.current.delete(phase.id);
+                    }}
+                    highlighted={scrollToPhaseId === phase.id}
                     onPrime={() => handlePrime(phase)}
                     onPause={() => handlePause(phase.id)}
                     onReprime={() => handleReprime(phase)}
@@ -352,6 +374,8 @@ function PhaseRow({
   live,
   totalMiles,
   estMb,
+  rowRef,
+  highlighted,
   onPrime,
   onPause,
   onReprime,
@@ -362,13 +386,20 @@ function PhaseRow({
   live: PrimeProgress | undefined;
   totalMiles: number;
   estMb: number;
+  rowRef?: (el: HTMLLIElement | null) => void;
+  highlighted?: boolean;
   onPrime: () => void;
   onPause: () => void;
   onReprime: () => void;
   onDelete: () => void;
 }) {
   return (
-    <li className="rounded-md border border-border-subtle bg-bg-card p-3">
+    <li
+      ref={rowRef}
+      className={`rounded-md border bg-bg-card p-3 transition-colors ${
+        highlighted ? "border-amber" : "border-border-subtle"
+      }`}
+    >
       <div className="flex items-baseline justify-between gap-2 mb-1">
         <span className="font-sans text-[13px] font-semibold text-text-primary">
           {phase.label}
@@ -433,10 +464,18 @@ function PhaseStatusLine({
   }
   if (display.kind === "partial") {
     const pct = display.tilesTotal > 0 ? (display.tilesPrimed / display.tilesTotal) * 100 : 0;
+    // Distinguish user-paused (failedCount === 0) from auto-stopped-
+    // after-failures (failedCount > 0). The status enum doesn't carry
+    // this — it's all "partial" — so the failure counter is the only
+    // signal. "Stopped" is more accurate than "Paused" when tiles
+    // permanently failed retries.
+    const label = display.failedCount > 0 ? "Stopped" : "Paused";
+    const failedSuffix =
+      display.failedCount > 0 ? ` · ${display.failedCount.toLocaleString()} failed` : "";
     return (
       <div className="my-2">
         <div className="font-mono text-[11px] text-text-muted mb-1">
-          Paused · {display.tilesPrimed.toLocaleString()} / {display.tilesTotal.toLocaleString()} tiles
+          {label} · {display.tilesPrimed.toLocaleString()} / {display.tilesTotal.toLocaleString()} tiles{failedSuffix}
         </div>
         <div className="h-1 w-full rounded-full bg-bg-base overflow-hidden">
           <div className="h-full bg-amber/60" style={{ width: `${pct}%` }} />

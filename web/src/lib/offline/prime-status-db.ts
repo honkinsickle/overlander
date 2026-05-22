@@ -41,6 +41,12 @@ export type PhaseStatus = {
   tilesetVersion: string;
   /** Last error message from a failed prime/resume attempt, or null. */
   lastError: string | null;
+  /** Number of tiles that exhausted retries during the most recent
+   *  prime/resume attempt. Used by the UI to distinguish "user paused
+   *  cleanly" (0 failed) from "stopped after some failures" (>0 failed).
+   *  Optional for backward compat with IDB rows written before this
+   *  field existed — readers default to 0. */
+  failedCount?: number;
 };
 
 let dbPromise: Promise<IDBDatabase> | null = null;

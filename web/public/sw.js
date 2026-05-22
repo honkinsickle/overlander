@@ -156,7 +156,28 @@ async function handleMapbox(request, url) {
   if (response.ok && shouldCache(url, bucket)) {
     cache.put(cacheKey, response.clone()).catch(() => {});
   }
+  // Phase-tile fetches that fall through to network are signal: the
+  // user is looking at an area no primed phase covers. Notify clients;
+  // session 4 doesn't consume this yet (the off-cache banner is driven
+  // by viewport-based detection, not request fall-through, to avoid
+  // flicker during active primes), but the wire is laid for telemetry
+  // / future UX. Style and font fetches are not signalled — they
+  // fall through opportunistically and don't mean off-cache.
+  if (isPhaseTile(url)) {
+    notifyFallthrough(url, cacheKey).catch(() => {});
+  }
   return response;
+}
+
+async function notifyFallthrough(url, cacheKey) {
+  const clientsList = await self.clients.matchAll({ includeUncontrolled: true });
+  for (const client of clientsList) {
+    client.postMessage({
+      type: "MAPBOX_FALLTHROUGH",
+      url: url.toString(),
+      key: cacheKey,
+    });
+  }
 }
 
 /** /v4 tile at z=6..13 — phase-cache territory. z=0..5 lives in

@@ -2,12 +2,14 @@ import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { WizardSlices } from "@/lib/plan/types";
 import type { Trip } from "./types";
+import { isUserTrip } from "./is-user-trip";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
+/** Thin alias kept for the 15+ server-side `isUserTripId(tripId)` call
+ *  sites. Regex lives in `./is-user-trip` so client and server share
+ *  one source of truth — see `lib/trips/is-user-trip.ts` for the
+ *  preferred API. */
 export function isUserTripId(id: string): boolean {
-  return UUID_RE.test(id);
+  return isUserTrip(id);
 }
 
 /** Fetch a user-owned trip from public.trips. Returns null if there's

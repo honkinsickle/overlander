@@ -39,6 +39,7 @@ export function TripSlideupBody({
           days={trip.days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
+          trip={trip}
         />
         <MapDetailOverlay />
         {isReference && (

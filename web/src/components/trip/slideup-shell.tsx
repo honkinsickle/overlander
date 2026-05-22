@@ -6,12 +6,7 @@ import { Cloud, X } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
 import { KebabMenu } from "@/components/primitives/kebab-menu";
 import { OfflinePanel } from "@/components/trip/offline-panel";
-
-/** UUID regex inlined so SlideupShell stays a pure client component —
- *  importing isUserTripId from lib/trips/user-trips would pull in the
- *  Supabase server client. */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 
 /**
  * Slideup shell — Paper `GHR-0`, 1113×734.
@@ -45,9 +40,24 @@ export function SlideupShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [offlineScrollTo, setOfflineScrollTo] = useState<string | undefined>();
   const initialPath = useRef<string | null>(null);
   const totalMiles = trip?.days.reduce((sum, d) => sum + (d.miles ?? 0), 0) ?? 0;
-  const isUserTrip = !!trip && UUID_RE.test(trip.id);
+  const isUserTripView = !!trip && isUserTrip(trip);
+
+  // Banner CTA → open OfflinePanel (with optional scroll-to-phase).
+  // Custom-event pattern matches trip:openDirections / trip:flyTo etc.
+  // Only honored for user-owned trips (the panel itself is gated above).
+  useEffect(() => {
+    if (!isUserTripView) return;
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ phaseId?: string } | undefined>).detail;
+      setOfflineScrollTo(detail?.phaseId);
+      setOfflineOpen(true);
+    };
+    window.addEventListener("trip:openOfflinePanel", onOpen);
+    return () => window.removeEventListener("trip:openOfflinePanel", onOpen);
+  }, [isUserTripView]);
 
   useEffect(() => {
     // Flip to open on the tick after initial render so the CSS transition
@@ -163,7 +173,7 @@ export function SlideupShell({
           {/* More (kebab). Offline maps only surfaces for user-owned
            *  trips — reference slugs can't host offlinePhases since their
            *  payload isn't writable. */}
-          {isUserTrip ? (
+          {isUserTripView ? (
             <KebabMenu
               triggerLabel="Trip options"
               items={[
@@ -209,11 +219,15 @@ export function SlideupShell({
          *  variant over push-columns). */}
         <div className="relative flex w-full h-[calc(100%-68px)]">
           {children}
-          {isUserTrip && trip && (
+          {isUserTripView && trip && (
             <OfflinePanel
               trip={trip}
               open={offlineOpen}
-              onClose={() => setOfflineOpen(false)}
+              onClose={() => {
+                setOfflineOpen(false);
+                setOfflineScrollTo(undefined);
+              }}
+              scrollToPhaseId={offlineScrollTo}
             />
           )}
         </div>
