@@ -88,20 +88,26 @@ export function MapDetailOverlay() {
   // - half: 50% + 100px so the resting position sits lower in the column
   // - peek: leaves only 25px of the panel showing at the bottom
   const translateY =
-    sheet === "closed"
-      ? "100%"
-      : sheet === "peek"
-        ? // Add the 5px bottom-offset back so 25px is actually visible
-          // above the map column edge.
-          "calc(100% - 30px)"
-        : sheet === "half"
-          ? "calc(50% + 100px)"
-          : "0";
+    sheet === "peek"
+      ? // Add the 5px bottom-offset back so 25px is actually visible
+        // above the map column edge.
+        "calc(100% - 30px)"
+      : sheet === "half"
+        ? "calc(50% + 100px)"
+        : "0";
+
+  // Unmount entirely when closed. The translateY-only hide left the
+  // <aside>, grabber, and Close-detail X in the DOM, and when another
+  // overlay (e.g. the directions panel) was open simultaneously the
+  // aside would visibly leak — see bug repro: open detail → open
+  // directions → close detail → empty container with X persists.
+  // Trade-off: the 280ms slide-down close animation is dropped; close
+  // is now instant. Open animation still plays.
+  if (sheet === "closed") return null;
 
   return (
     <aside
       aria-label="Location detail"
-      aria-hidden={sheet === "closed"}
       style={{
         width: 448,
         height: "calc(100% - 4px)",
@@ -557,9 +563,40 @@ function TrappersDetailPanel({
             )}
 
             <div
-              className="flex justify-center pt-[19px]"
+              className="flex justify-center gap-2 pt-[19px]"
               style={{ borderTop: "1px solid rgba(255,255,255,0.25)" }}
             >
+              <button
+                type="button"
+                onClick={() => {
+                  const coord = place.waypoint?.coords ?? place.coords;
+                  window.dispatchEvent(
+                    new CustomEvent("trip:openDirections", {
+                      detail: { waypointCoord: coord },
+                    }),
+                  );
+                }}
+                className="flex items-center justify-center h-10 rounded-sm px-6"
+                style={{
+                  backgroundColor: "transparent",
+                  border: "1px solid rgba(166,201,249,0.4)",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 14,
+                    lineHeight: "16px",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  Directions
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={onToggleAdded}

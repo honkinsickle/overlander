@@ -13,6 +13,46 @@ import { snapToRoute } from "@/lib/location/snap-to-route";
  *  detours onto a side road. */
 const SNAP_THRESHOLD_MI = 0.25;
 
+/** Nav-style zoom for camera-follow. Tight enough to see road labels
+ *  and the next maneuver, wide enough to keep some context. */
+const FOLLOW_ZOOM = 16;
+
+/** Mapbox flyTo/easeTo wrapper that subtracts the directions panel's
+ *  occluded area from the map's effective viewport via the `padding`
+ *  option. Without this the dot flies to the geometric map center —
+ *  which sits behind the panel — and the user's surroundings end up
+ *  off-screen. When the panel is closed (or absent), padding is zero
+ *  so the dot lands at the true center. */
+function panelAwareFly(
+  map: mapboxgl.Map,
+  coord: [number, number],
+  zoom: number,
+  duration: number,
+  mode: "fly" | "ease",
+): void {
+  // setTimeout(0) defers past React's commit phase so the panel's
+  // open-state data attribute is in the DOM before we read it. rAF
+  // wasn't enough in practice.
+  setTimeout(() => {
+    const panel = document.querySelector(
+      '[data-directions-panel="open"]',
+    ) as HTMLElement | null;
+    // Use offsetHeight (intrinsic) not getBoundingClientRect.height —
+    // the panel slides up over 300ms, so mid-transition the rect would
+    // give a partial height. offsetHeight is transform-independent.
+    const bottomPad = panel?.offsetHeight ?? 0;
+    const opts = {
+      center: coord,
+      zoom,
+      duration,
+      essential: true,
+      padding: { top: 0, right: 0, bottom: bottomPad, left: 0 },
+    };
+    if (mode === "ease") map.easeTo(opts);
+    else map.flyTo(opts);
+  }, 0);
+}
+
 /** Build the DOM element for the user-location marker — a blue dot with
  *  a heading cone that points in the direction of travel when heading
  *  is known. Returns the marker plus a helper to update the cone. */
@@ -116,7 +156,7 @@ export function UserLocationLayer({
       .style.setProperty("pointer-events", "none", "important");
     markerRef.current.setHeading(heading);
     if (following) {
-      map.easeTo({ center: snap.coord, duration: 500 });
+      panelAwareFly(map, snap.coord, map.getZoom(), 500, "ease");
     }
     // routePathRef is a ref — stable identity, doesn't need to be in deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,6 +193,44 @@ export function UserLocationLayer({
     };
   }, [following, map]);
 
+  // External control: the nav-go button dispatches `trip:setFollow`
+  // when entering/leaving nav mode. We need request() to fire if the
+  // user is still in 'prompt' state, so go-button also doubles as a
+  // permission trigger.
+  useEffect(() => {
+    const onSetFollow = (e: Event) => {
+      const detail = (e as CustomEvent<{ follow: boolean }>).detail;
+      if (!detail) return;
+      if (detail.follow) {
+        // Always call request(): idempotent on watching/unsupported, retries
+        // watchPosition on denied so a user who clears the URL-bar denial
+        // mid-session can re-engage without a reload.
+        request();
+        if (position) {
+          const snap = snapToRoute(
+            position,
+            routePathRef.current,
+            SNAP_THRESHOLD_MI,
+          );
+          panelAwareFly(
+            map,
+            snap.coord,
+            Math.max(map.getZoom(), FOLLOW_ZOOM),
+            700,
+            "fly",
+          );
+        }
+        setFollowing(true);
+      } else {
+        setFollowing(false);
+      }
+    };
+    window.addEventListener("trip:setFollow", onSetFollow);
+    return () => window.removeEventListener("trip:setFollow", onSetFollow);
+    // routePathRef is a ref — stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, position, map, request]);
+
   if (status === "unsupported" || status === "denied") return null;
 
   const onFollowClick = () => {
@@ -174,12 +252,13 @@ export function UserLocationLayer({
         routePathRef.current,
         SNAP_THRESHOLD_MI,
       );
-      map.flyTo({
-        center: snap.coord,
-        zoom: Math.max(map.getZoom(), 14),
-        duration: 700,
-        essential: true,
-      });
+      panelAwareFly(
+        map,
+        snap.coord,
+        Math.max(map.getZoom(), FOLLOW_ZOOM),
+        700,
+        "fly",
+      );
     }
     setFollowing(true);
   };
