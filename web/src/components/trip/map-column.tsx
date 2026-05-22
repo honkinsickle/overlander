@@ -19,6 +19,9 @@ import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
 import { decodePolyline } from "@/lib/routing/point-to-polyline";
 import { UserLocationLayer } from "./user-location-layer";
+import { DirectionsButton } from "./directions-button";
+import { DirectionsPanel } from "./directions-panel";
+import { NavGoButton } from "./nav-go-button";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -788,13 +791,20 @@ export function MapColumn({
     const COORD_EPS = 1e-9;
     const onFlyTo = (e: Event) => {
       const detail = (
-        e as CustomEvent<{ coords: [number, number]; name?: string }>
+        e as CustomEvent<{
+          coords: [number, number];
+          name?: string;
+          zoom?: number;
+        }>
       ).detail;
       const map = mapRef.current;
       if (!map || !detail?.coords) return;
       map.flyTo({
         center: detail.coords,
-        zoom: 17,
+        // Default tight zoom matches the waypoint-pin "show me this stop"
+        // use case. Directions step clicks pass a wider zoom (~14) so
+        // surrounding road context is visible.
+        zoom: detail.zoom ?? 17,
         duration: 1500,
         essential: true,
       });
@@ -978,6 +988,23 @@ export function MapColumn({
     };
   }, []);
 
+  // Active-leg endpoints for the DirectionsPanel — mirrors the same
+  // fallback chain used by the active-day-leg-line effect so directions
+  // and the highlighted blue leg always describe the same drive.
+  const { legStart, legEnd } = useMemo(() => {
+    if (!activeDay) return { legStart: null, legEnd: null };
+    const dayIndex = days.findIndex((d) => d.id === activeDay.id);
+    const prev = dayIndex > 0 ? days[dayIndex - 1] : undefined;
+    const start =
+      activeDay.startCoord ??
+      prev?.coords ??
+      (activeDay.dayNumber === 1 ? startCoords : undefined);
+    return {
+      legStart: start ?? null,
+      legEnd: activeDay.coords ?? null,
+    };
+  }, [activeDay, days, startCoords]);
+
   return (
     <div className="relative w-full h-full bg-bg-map">
       <div ref={containerRef} className="w-full h-full" />
@@ -988,6 +1015,18 @@ export function MapColumn({
           routePathRef={routePathRef}
         />
       )}
+
+      <DirectionsButton />
+
+      <NavGoButton />
+
+      <DirectionsPanel
+        legStart={legStart}
+        legEnd={legEnd}
+        legLabel={activeDay?.label}
+        dayNumber={activeDay?.dayNumber}
+      />
+
 
       {slug && (
         <div className="absolute inset-x-4 bottom-5 pointer-events-auto">
@@ -1043,7 +1082,14 @@ function WaypointDetail({
       <div className="flex gap-2">
         <button
           type="button"
-          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded bg-bg-nav-btn border border-button-primary-border text-input-border-focus"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent("trip:openDirections", {
+                detail: { waypointCoord: waypoint.coords },
+              }),
+            );
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded bg-bg-nav-btn border border-button-primary-border text-input-border-focus hover:text-text-main"
         >
           <Navigation className="w-3.5 h-3.5" />
           <span className="font-sans text-sm font-semibold">Directions</span>
