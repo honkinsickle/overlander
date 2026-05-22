@@ -17,7 +17,11 @@ import {
   phaseCacheName,
   type PhaseStatus,
 } from "@/lib/offline/prime-status-db";
-import { estimateStorage, type StorageEstimate } from "@/lib/offline/storage";
+import {
+  ensurePersistentStorage,
+  estimateStorage,
+  type StorageEstimate,
+} from "@/lib/offline/storage";
 import {
   CURRENT_TILESET_VERSION,
   getPhaseDisplayStatus,
@@ -126,7 +130,7 @@ export function OfflinePanel({
     // First prime ever on this device: request persistent storage so iOS
     // doesn't evict the cache under pressure (Safari treats persist as a
     // hint, not a contract — but it's the closest we can get).
-    await ensurePersisted();
+    await ensurePersistentStorage();
 
     const { coords } = computePhaseGeometry(phase, trip);
     const tiles = enumerateTiles(coords, phase.bufferMi, 6, phase.maxZoom);
@@ -596,13 +600,3 @@ function formatPrimedAt(iso: string): string {
   }
 }
 
-async function ensurePersisted(): Promise<void> {
-  if (typeof navigator === "undefined") return;
-  if (!navigator.storage?.persist || !navigator.storage?.persisted) return;
-  try {
-    if (await navigator.storage.persisted()) return;
-    await navigator.storage.persist();
-  } catch {
-    /* iOS may reject silently — fine, cache still works without persistence */
-  }
-}
