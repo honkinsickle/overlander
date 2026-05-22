@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "snapshot": "tsx --env-file=.env.local scripts/seed-reference-trips.ts --snapshot",
+    "check:offline-phases": "tsx scripts/check-offline-phases.ts",
     "seed": "tsx --env-file=.env.local scripts/seed-reference-trips.ts"
   },
   "dependencies": {
