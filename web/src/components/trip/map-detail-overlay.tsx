@@ -88,20 +88,26 @@ export function MapDetailOverlay() {
   // - half: 50% + 100px so the resting position sits lower in the column
   // - peek: leaves only 25px of the panel showing at the bottom
   const translateY =
-    sheet === "closed"
-      ? "100%"
-      : sheet === "peek"
-        ? // Add the 5px bottom-offset back so 25px is actually visible
-          // above the map column edge.
-          "calc(100% - 30px)"
-        : sheet === "half"
-          ? "calc(50% + 100px)"
-          : "0";
+    sheet === "peek"
+      ? // Add the 5px bottom-offset back so 25px is actually visible
+        // above the map column edge.
+        "calc(100% - 30px)"
+      : sheet === "half"
+        ? "calc(50% + 100px)"
+        : "0";
+
+  // Unmount entirely when closed. The translateY-only hide left the
+  // <aside>, grabber, and Close-detail X in the DOM, and when another
+  // overlay (e.g. the directions panel) was open simultaneously the
+  // aside would visibly leak — see bug repro: open detail → open
+  // directions → close detail → empty container with X persists.
+  // Trade-off: the 280ms slide-down close animation is dropped; close
+  // is now instant. Open animation still plays.
+  if (sheet === "closed") return null;
 
   return (
     <aside
       aria-label="Location detail"
-      aria-hidden={sheet === "closed"}
       style={{
         width: 448,
         height: "calc(100% - 4px)",
