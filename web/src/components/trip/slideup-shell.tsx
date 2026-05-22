@@ -45,9 +45,24 @@ export function SlideupShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [offlineScrollTo, setOfflineScrollTo] = useState<string | undefined>();
   const initialPath = useRef<string | null>(null);
   const totalMiles = trip?.days.reduce((sum, d) => sum + (d.miles ?? 0), 0) ?? 0;
   const isUserTrip = !!trip && UUID_RE.test(trip.id);
+
+  // Banner CTA → open OfflinePanel (with optional scroll-to-phase).
+  // Custom-event pattern matches trip:openDirections / trip:flyTo etc.
+  // Only honored for user-owned trips (the panel itself is gated above).
+  useEffect(() => {
+    if (!isUserTrip) return;
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ phaseId?: string } | undefined>).detail;
+      setOfflineScrollTo(detail?.phaseId);
+      setOfflineOpen(true);
+    };
+    window.addEventListener("trip:openOfflinePanel", onOpen);
+    return () => window.removeEventListener("trip:openOfflinePanel", onOpen);
+  }, [isUserTrip]);
 
   useEffect(() => {
     // Flip to open on the tick after initial render so the CSS transition
@@ -213,7 +228,11 @@ export function SlideupShell({
             <OfflinePanel
               trip={trip}
               open={offlineOpen}
-              onClose={() => setOfflineOpen(false)}
+              onClose={() => {
+                setOfflineOpen(false);
+                setOfflineScrollTo(undefined);
+              }}
+              scrollToPhaseId={offlineScrollTo}
             />
           )}
         </div>
