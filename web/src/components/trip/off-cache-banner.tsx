@@ -81,6 +81,13 @@ function ctaText(
   suggestedPhase: OfflinePhase | null,
 ): string {
   if (status === "no-phases") return "Set up offline";
-  if (suggestedPhase) return `Prime ${suggestedPhase.label.split(":")[0]}`;
+  if (suggestedPhase) {
+    // TODO(phase-editing): assumes default `suggestDefaultPhases` label
+    // format "Week N: Days X–Y" — splitting on ":" gives "Week N" cleanly.
+    // When phase editing ships and labels can be user-edited (no colon,
+    // arbitrary text), tighten this — either store a separate short
+    // label on OfflinePhase or truncate by character count.
+    return `Prime ${suggestedPhase.label.split(":")[0]}`;
+  }
   return "Open offline panel";
 }

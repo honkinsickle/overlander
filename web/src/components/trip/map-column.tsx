@@ -243,7 +243,13 @@ export function MapColumn({
    *  5). When present, MapColumn decodes and draws this directly instead
    *  of calling the Mapbox Directions API. */
   routePolyline?: string;
-  /** Full trip shape — required by OffCacheBanner / useViewportCoverage,
+  /** TODO(session-5+): this prop exists *specifically* for OffCacheBanner
+   *  / useViewportCoverage. Do not couple additional MapColumn logic to
+   *  it — if something else inside MapColumn ever needs trip-shape data,
+   *  pick up the existing destructured props (tripId, days, etc.) or add
+   *  a focused new prop instead.
+   *
+   *  Full trip shape — required by OffCacheBanner / useViewportCoverage,
    *  which needs `id`, `days`, `routePolyline`, `startCoords`, AND
    *  `offlinePhases`. Caller already has the full object in scope; the
    *  existing destructured props stay to avoid churning the 40+
