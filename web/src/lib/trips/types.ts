@@ -37,6 +37,39 @@ export type Trip = {
    *  lib/plan/types.ts; stored loose here (Record) to avoid a circular
    *  type import between lib/trips and lib/plan. */
   wizard?: Record<string, unknown>;
+  /** Offline tile-cache phases (default 7-day chunks). Travels with the
+   *  trip across devices; prime status (downloaded/not) lives per-device
+   *  in IndexedDB keyed by (tripId, phaseId). See
+   *  docs/decisions/2026-05-21-offline-tile-caching-architecture.md. */
+  offlinePhases?: OfflinePhase[];
+};
+
+/**
+ * Offline tile-cache phase. Identifies a contiguous range of days
+ * whose Mapbox tiles can be downloaded as a unit for offline use.
+ *
+ * Implementation type is named `OfflinePhase` to disambiguate from
+ * the UI "Phase 01" terminology used in slideup-shell.tsx — same word,
+ * different concept. The ADR refers to this concept as "Phase".
+ */
+export type OfflinePhase = {
+  /** Stable id across edits, e.g. "phase-w1". */
+  id: string;
+  /** User-facing label, e.g. "Week 1: Days 1–7". */
+  label: string;
+  /** References `Day.id` values from this trip. */
+  dayIds: string[];
+  /** Buffer width around the phase route, miles. Default 25. */
+  bufferMi: number;
+  /** Highest zoom level included in the prime. Default 13. */
+  maxZoom: number;
+  /** Set at prime time; compared against current geometry to detect
+   *  trip edits that invalidate the cached tiles. `null` = never primed. */
+  primedPolylineHash: string | null;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp. */
+  updatedAt: string;
 };
 
 export type Day = {
