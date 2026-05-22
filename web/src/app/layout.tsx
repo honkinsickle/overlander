@@ -6,6 +6,7 @@ import {
   Space_Grotesk,
   Space_Mono,
 } from "next/font/google";
+import { SwRegister } from "@/components/chrome/sw-register";
 import "./globals.css";
 
 const barlow = Barlow({
@@ -78,6 +79,7 @@ export default function RootLayout({
       className={`${barlow.variable} ${barlowCondensed.variable} ${spaceGrotesk.variable} ${spaceMono.variable} ${crimsonText.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <SwRegister />
         {children}
         {modal}
       </body>
