@@ -1,29 +1,46 @@
 /* eslint-disable no-restricted-globals */
 
 /**
- * Overlander offline tile cache service worker (session 1).
+ * Overlander offline cache service worker (session 1).
  *
- * Scope: strictly api.mapbox.com. Any other URL returns early so the
- * normal network handles HTML, RSC, Supabase, and everything else.
+ * Two scopes:
+ *  1. api.mapbox.com — tile + style caching for the offline map
+ *  2. Same-origin app shell — HTML + /_next/static/* so an offline
+ *     reload actually serves the page that mounts the map
  *
  * Caches (session 1):
- *  - mb-style-v1   : style JSON + sprites + glyphs
- *  - mb-baseline-v1: worldwide z=0-5 vector tiles (~1.4K tiles, ~10-20 MB)
+ *  - mb-style-v1                 : Mapbox style JSON + sprites + glyphs
+ *  - mb-baseline-v1              : worldwide z=0-5 vector tiles (~1.4K tiles)
+ *  - app-shell-html-<buildId>    : HTML responses, network-first
+ *  - app-shell-static-<buildId>  : /_next/static/* (hashed assets), cache-first
  *
  * Per-phase tile caches (mb-phase-<phaseId>-streetsv8) land in session 3.
  *
  * Lifecycle: aggressive — skipWaiting on install, clients.claim on
- * activate. New SW takes over on first reload.
+ * activate. New SW takes over on first reload. On activate, stale
+ * app-shell-* caches (different buildId) are evicted; mb-* untouched.
  *
  * Dev: when self.location.hostname === 'localhost' the fetch handler
  * short-circuits to network. Flip FORCE_CACHE_IN_DEV to true to test
  * cache behavior locally.
  */
 
+// Build ID is injected by scripts/sw-version.mjs as a postbuild step.
+// Generated `public/sw-version.js` overrides the default below.
+// In dev the file doesn't exist; importScripts throws, default stays.
+self.APP_BUILD_ID = "dev";
+try {
+  importScripts("/sw-version.js");
+} catch {
+  /* sw-version.js missing — dev mode, keep default */
+}
+
 const STYLE_CACHE = "mb-style-v1";
 const BASELINE_CACHE = "mb-baseline-v1";
+const APP_SHELL_HTML_CACHE = `app-shell-html-${self.APP_BUILD_ID}`;
+const APP_SHELL_STATIC_CACHE = `app-shell-static-${self.APP_BUILD_ID}`;
 
-const FORCE_CACHE_IN_DEV = false;
+const FORCE_CACHE_IN_DEV = true;
 const IS_LOCAL = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
 
 // Token comes from the page via postMessage once registration completes.
@@ -41,14 +58,31 @@ self.addEventListener("install", () => {
 
 self.addEventListener("activate", (event) => {
   // Take control of all clients immediately so the first page load after
-  // install benefits from the SW without a reload.
-  event.waitUntil(self.clients.claim());
+  // install benefits from the SW without a reload. Also evict app-shell
+  // caches from older builds — keeps storage bounded across deploys and
+  // prevents the page from hydrating against an old chunk manifest.
+  // Mapbox caches (mb-*) are intentionally untouched here: tiles outlive
+  // app deploys and have their own version suffix (mb-*-streetsv8).
+  event.waitUntil(
+    Promise.all([self.clients.claim(), evictStaleAppShellCaches()]),
+  );
   // Baseline prime is fire-and-forget; do not block activation on it.
   // Tile count is ~1.4K — priming synchronously could hang the SW lifecycle.
   primeBaselineWhenReady().catch((err) => {
     console.warn("[sw] baseline prime failed:", err?.message || err);
   });
 });
+
+async function evictStaleAppShellCaches() {
+  const names = await caches.keys();
+  await Promise.all(
+    names.map(async (name) => {
+      if (!name.startsWith("app-shell-")) return;
+      if (name === APP_SHELL_HTML_CACHE || name === APP_SHELL_STATIC_CACHE) return;
+      await caches.delete(name);
+    }),
+  );
+}
 
 self.addEventListener("message", (event) => {
   const data = event.data;
@@ -63,18 +97,40 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+  // RSC payload requests share their URL with the HTML route but want
+  // a different response shape. Pass through so Next handles them.
+  if (request.headers.get("RSC")) return;
   let url;
   try {
     url = new URL(request.url);
   } catch {
     return;
   }
-  if (url.hostname !== "api.mapbox.com") return;
   if (IS_LOCAL && !FORCE_CACHE_IN_DEV) {
     // Localhost-bypass: pass through to network, no caching in dev.
-    return; // letting the request fall through to the network is the default
+    return;
   }
-  event.respondWith(handleMapbox(request, url));
+
+  if (url.hostname === "api.mapbox.com") {
+    event.respondWith(handleMapbox(request, url));
+    return;
+  }
+
+  // Same-origin app shell. Hashed static assets are cache-first;
+  // HTML routes are network-first so deploys stay fresh online and
+  // only fall back to cache when offline.
+  if (url.origin === self.location.origin) {
+    if (url.pathname.startsWith("/_next/static/")) {
+      event.respondWith(handleStaticCacheFirst(request));
+      return;
+    }
+    if (isAppHtmlRoute(url.pathname)) {
+      event.respondWith(handleHtmlNetworkFirst(request));
+      return;
+    }
+  }
+  // Everything else (POST, RSC, Supabase, /api/*, /auth/*, /sw.js,
+  // /sw-version.js, assorted public/ files) falls through to network.
 });
 
 async function handleMapbox(request, url) {
@@ -91,6 +147,40 @@ async function handleMapbox(request, url) {
     cache.put(cacheKey, response.clone()).catch(() => {});
   }
   return response;
+}
+
+/** Routes whose HTML the iPad might reload offline. Keep narrow:
+ *  caching the whole site invites stale-deploy / auth-leakage risk. */
+function isAppHtmlRoute(pathname) {
+  if (pathname === "/") return true;
+  if (pathname === "/trips") return true;
+  if (pathname.startsWith("/trips/")) return true;
+  return false;
+}
+
+async function handleStaticCacheFirst(request) {
+  const cache = await caches.open(APP_SHELL_STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) cache.put(request, response.clone()).catch(() => {});
+  return response;
+}
+
+async function handleHtmlNetworkFirst(request) {
+  const cache = await caches.open(APP_SHELL_HTML_CACHE);
+  try {
+    const response = await fetch(request);
+    // Only cache successful 2xx responses. Server-redirect chains for
+    // auth (3xx) and error states (4xx/5xx) would poison the cache
+    // for the offline path.
+    if (response.ok) cache.put(request, response.clone()).catch(() => {});
+    return response;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw err; // browser handles its own offline error UI
+  }
 }
 
 /** Mapbox URL → cache bucket name, or null to pass through. */
