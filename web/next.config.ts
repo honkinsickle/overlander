@@ -17,6 +17,27 @@ const nextConfig: NextConfig = {
       "../planning/reference/alaska-v3.md",
     ],
   },
+  // Service-worker file headers (per the Next 16 PWA guide). The SW must
+  // never be cached by intermediaries or the browser HTTP cache — stale
+  // SW scripts mask deploy fixes. Cache-Control here is unrelated to the
+  // Cache Storage API the SW itself uses; that's our own offline cache.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
