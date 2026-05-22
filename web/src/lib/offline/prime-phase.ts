@@ -15,6 +15,7 @@
  * with jitter; concurrency throttle is a secondary safeguard.
  */
 import {
+  getPhaseStatus,
   phaseCacheName,
   putPhaseStatus,
   type PhaseStatus,
@@ -81,18 +82,16 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
 
   const cache = await caches.open(phaseCacheName(phaseId, tilesetVersion));
 
-  // Resume support: walk the existing cache once, build a Set of
-  // already-cached cache-keys. Skipping fetches we already have prevents
-  // re-billing the Mapbox tile meter on a resumed prime.
-  const existing = await cache.keys();
-  const haveKeys = new Set(existing.map((req) => stripCacheKey(req.url)));
+  // Resume support: load the prior session's tilesPrimed so the counter
+  // continues from where we left off. We DO NOT pre-scan the cache to
+  // build a dedupe set — `cache.keys()` throws "Operation too large" on
+  // near-26K-entry caches (Chrome cap), which silently broke resume on
+  // any nearly-completed phase. Instead each worker calls `cache.match`
+  // per URL before fetching; that's O(1) and cap-free.
+  const priorRecord = await getPhaseStatus(tripId, phaseId);
+  const priorDone = priorRecord?.tilesPrimed ?? 0;
 
   const urls = tiles.map((t) => tileUrl(tilesetIds, t, mapboxToken));
-  const remaining: number[] = [];
-  for (let i = 0; i < urls.length; i++) {
-    if (!haveKeys.has(stripCacheKey(urls[i]))) remaining.push(i);
-  }
-  const alreadyDone = total - remaining.length;
 
   // Snapshot the prime as `priming` immediately so a tab-close mid-prime
   // leaves a status the next session can see ("partial — N of M").
@@ -100,15 +99,15 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
     baseRecord({
       tripId, phaseId, tilesetVersion, primedPolylineHash,
       status: "priming",
-      tilesPrimed: alreadyDone,
+      tilesPrimed: priorDone,
       tilesTotal: total,
     }),
   );
 
-  let done = alreadyDone;
+  let done = priorDone;
   let failed = 0;
   let cursor = 0;
-  let lastPersisted = alreadyDone;
+  let lastPersisted = priorDone;
   let aborted = false;
 
   // Single-writer cursor: workers pull the next index off `cursor`.
@@ -121,9 +120,15 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
         return;
       }
       const myIdx = cursor++;
-      if (myIdx >= remaining.length) return;
-      const urlIdx = remaining[myIdx];
-      const url = urls[urlIdx];
+      if (myIdx >= urls.length) return;
+      const url = urls[myIdx];
+
+      // Per-URL cache check (replaces the up-front cache.keys() pre-scan).
+      // A hit means the prior session already counted this tile in
+      // `priorDone`, so don't increment again — that would inflate the
+      // counter past the real cache size.
+      const cached = await cache.match(stripCacheKey(url));
+      if (cached) continue;
 
       const ok = await fetchAndCache(url, cache, signal);
       if (ok === "aborted") {
@@ -148,7 +153,7 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
     }
   }
 
-  const workers = Array.from({ length: Math.min(CONCURRENCY, remaining.length) }, worker);
+  const workers = Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker);
   await Promise.all(workers);
 
   // Final status:
