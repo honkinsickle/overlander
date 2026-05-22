@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import * as repo from "./repository";
 import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
+import { isUserTripId, updateUserTripPayload } from "./user-trips";
+import type { OfflinePhase } from "./types";
 
 /**
  * Server Actions for trip mutations.
@@ -109,5 +111,64 @@ export async function resetDayToReferenceAction(
     };
   }
   revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+/** Replace `trip.payload.offlinePhases` with the supplied array. Used by
+ *  the offline panel's "Set up offline cache" empty-state CTA, which
+ *  posts the output of `suggestDefaultPhases(trip)`. Session 3 doesn't
+ *  edit phases after setup; later sessions may add merge/split actions. */
+export async function setOfflinePhasesAction(
+  tripId: string,
+  phases: OfflinePhase[],
+): Promise<ActionResult<OfflinePhase[]>> {
+  if (!isUserTripId(tripId)) {
+    return { ok: false, error: "Offline maps are only available for your own trips." };
+  }
+  if (!Array.isArray(phases)) {
+    return { ok: false, error: "Invalid phases payload." };
+  }
+  const updated = await updateUserTripPayload(tripId, (trip) => ({
+    ...trip,
+    offlinePhases: phases,
+  }));
+  if (!updated) return { ok: false, error: "Could not save phases." };
+  revalidatePath(`/trips/${tripId}`);
+  return { ok: true, data: updated.offlinePhases ?? [] };
+}
+
+/** Stamp the polyline hash + tileset version onto a single phase at
+ *  prime-success time. The hash lets a future trip edit surface as
+ *  "needs re-priming" cross-device; per-device prime status still lives
+ *  in IndexedDB (see prime-status-db.ts). */
+export async function setOfflinePhaseHashAction(
+  tripId: string,
+  phaseId: string,
+  hash: string,
+  tilesetVersion: string,
+): Promise<ActionResult> {
+  if (!isUserTripId(tripId)) {
+    return { ok: false, error: "Offline maps are only available for your own trips." };
+  }
+  if (!hash || !tilesetVersion) {
+    return { ok: false, error: "Missing hash or tileset version." };
+  }
+  const now = new Date().toISOString();
+  const updated = await updateUserTripPayload(tripId, (trip) => {
+    const phases = trip.offlinePhases;
+    if (!phases) return null;
+    const idx = phases.findIndex((p) => p.id === phaseId);
+    if (idx === -1) return null;
+    const nextPhases = phases.slice();
+    nextPhases[idx] = {
+      ...nextPhases[idx],
+      primedPolylineHash: hash,
+      primedTilesetVersion: tilesetVersion,
+      updatedAt: now,
+    };
+    return { ...trip, offlinePhases: nextPhases };
+  });
+  if (!updated) return { ok: false, error: "Phase not found." };
+  revalidatePath(`/trips/${tripId}`);
   return { ok: true };
 }

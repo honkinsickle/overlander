@@ -66,6 +66,11 @@ export type OfflinePhase = {
   /** Set at prime time; compared against current geometry to detect
    *  trip edits that invalidate the cached tiles. `null` = never primed. */
   primedPolylineHash: string | null;
+  /** Mapbox tileset version captured at prime success, e.g. "streetsv8".
+   *  Mirrors the suffix on the phase's Cache Storage bucket and the IDB
+   *  record so drift detection covers tileset bumps in addition to
+   *  polyline edits. `null` until first prime. */
+  primedTilesetVersion: string | null;
   /** ISO timestamp. */
   createdAt: string;
   /** ISO timestamp. */

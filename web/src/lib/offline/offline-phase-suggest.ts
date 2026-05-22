@@ -51,6 +51,7 @@ export function suggestDefaultPhases(
       bufferMi,
       maxZoom,
       primedPolylineHash: null,
+      primedTilesetVersion: null,
       createdAt: now,
       updatedAt: now,
     });
