@@ -3,6 +3,7 @@
 import { CloudOff, X } from "lucide-react";
 import type mapboxgl from "mapbox-gl";
 import { useViewportCoverage } from "@/lib/offline/use-viewport-coverage";
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 import type { OfflinePhase, Trip } from "@/lib/trips/types";
 
 /**
@@ -25,12 +26,24 @@ export function OffCacheBanner({
   map: mapboxgl.Map | null;
   trip: Trip;
 }) {
+  // Hook runs unconditionally (Rules of Hooks). Bail to null after the
+  // hook call for reference trips, covered viewports, or user-dismissed
+  // banners — see the !isUserTrip note below for why reference trips
+  // get a hard early-return rather than relying on the natural
+  // "no-phases" fallthrough.
   const { status, suggestedPhase, dismissed, dismiss } = useViewportCoverage(
     map,
     trip,
   );
 
   if (!map) return null;
+  // Reference trips (slug ids like "la-to-deadhorse") can't host
+  // offlinePhases — `setOfflinePhasesAction` rejects non-UUID ids —
+  // and the OfflinePanel + `trip:openOfflinePanel` event listener are
+  // both gated on `isUserTrip` in SlideupShell. Without this gate the
+  // banner would surface "no-phases" on reference trips with a CTA
+  // whose dispatched event has no listener to receive it.
+  if (!isUserTrip(trip)) return null;
   if (status === "covered") return null;
   if (dismissed) return null;
 
