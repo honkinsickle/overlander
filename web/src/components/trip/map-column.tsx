@@ -21,6 +21,8 @@ import { UserLocationLayer } from "./user-location-layer";
 import { DirectionsButton } from "./directions-button";
 import { DirectionsPanel } from "./directions-panel";
 import { NavGoButton } from "./nav-go-button";
+import { OffCacheBanner } from "./off-cache-banner";
+import type { Trip } from "@/lib/trips/types";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -232,6 +234,7 @@ export function MapColumn({
   days,
   startCoords,
   routePolyline,
+  trip,
 }: {
   tripId: string;
   days: Day[];
@@ -240,6 +243,12 @@ export function MapColumn({
    *  5). When present, MapColumn decodes and draws this directly instead
    *  of calling the Mapbox Directions API. */
   routePolyline?: string;
+  /** Full trip shape — required by OffCacheBanner / useViewportCoverage,
+   *  which needs `id`, `days`, `routePolyline`, `startCoords`, AND
+   *  `offlinePhases`. Caller already has the full object in scope; the
+   *  existing destructured props stay to avoid churning the 40+
+   *  internal references inside MapColumn. */
+  trip: Trip;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -1014,6 +1023,8 @@ export function MapColumn({
           routePathRef={routePathRef}
         />
       )}
+
+      <OffCacheBanner map={mapInstance} trip={trip} />
 
       <DirectionsButton />
 

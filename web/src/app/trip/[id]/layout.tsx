@@ -49,6 +49,7 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
           days={trip.days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
+          trip={trip}
         />
         <MapDetailOverlay />
         {isReference && (
