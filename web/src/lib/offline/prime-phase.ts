@@ -15,7 +15,6 @@
  * with jitter; concurrency throttle is a secondary safeguard.
  */
 import {
-  getPhaseStatus,
   phaseCacheName,
   putPhaseStatus,
   type PhaseStatus,
@@ -82,32 +81,42 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
 
   const cache = await caches.open(phaseCacheName(phaseId, tilesetVersion));
 
-  // Resume support: load the prior session's tilesPrimed so the counter
-  // continues from where we left off. We DO NOT pre-scan the cache to
-  // build a dedupe set — `cache.keys()` throws "Operation too large" on
-  // near-26K-entry caches (Chrome cap), which silently broke resume on
-  // any nearly-completed phase. Instead each worker calls `cache.match`
-  // per URL before fetching; that's O(1) and cap-free.
-  const priorRecord = await getPhaseStatus(tripId, phaseId);
-  const priorDone = priorRecord?.tilesPrimed ?? 0;
+  // `done` represents the current cache size — count every cache hit AND
+  // every successful new fetch. Start at 0 regardless of any prior IDB
+  // value; on resume the workers walk the URL list, the existing N
+  // cached tiles bump `done` from 0 to N via cache.match hits, and any
+  // missing tiles continue from there. This is intentionally
+  // self-correcting: if IDB tilesPrimed got out of sync with the actual
+  // cache (which it can, e.g. after a partial delete or a prior version
+  // of this loop that trusted IDB blindly), the resume catches up.
+  //
+  // BEHAVIORAL NOTE: on a resume of an existing cache, the counter
+  // visibly ramps from 0 to current-cache-size in the first few seconds
+  // (cache.match walk across ~26K URLs at 8x concurrency), then continues
+  // to grow as missing tiles fetch over the network. The rampup is the
+  // intended UX vs the previous frozen-counter bug.
+  //
+  // Cache enumeration via `cache.keys()` is NOT used — it throws
+  // "Operation too large" on near-26K-entry caches (Chrome cap). Per-URL
+  // `cache.match` is O(1) and cap-free.
 
   const urls = tiles.map((t) => tileUrl(tilesetIds, t, mapboxToken));
 
   // Snapshot the prime as `priming` immediately so a tab-close mid-prime
-  // leaves a status the next session can see ("partial — N of M").
+  // leaves a status the next session can see.
   await putPhaseStatus(
     baseRecord({
       tripId, phaseId, tilesetVersion, primedPolylineHash,
       status: "priming",
-      tilesPrimed: priorDone,
+      tilesPrimed: 0,
       tilesTotal: total,
     }),
   );
 
-  let done = priorDone;
+  let done = 0;
   let failed = 0;
   let cursor = 0;
-  let lastPersisted = priorDone;
+  let lastPersisted = 0;
   let aborted = false;
 
   // Single-writer cursor: workers pull the next index off `cursor`.
@@ -123,20 +132,23 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
       if (myIdx >= urls.length) return;
       const url = urls[myIdx];
 
-      // Per-URL cache check (replaces the up-front cache.keys() pre-scan).
-      // A hit means the prior session already counted this tile in
-      // `priorDone`, so don't increment again — that would inflate the
-      // counter past the real cache size.
+      // Per-URL cache check. A hit counts as progress (we have the tile;
+      // `done` tracks total tiles in cache for this phase). A miss
+      // triggers a fetch. PROGRESS_BATCH-based persistence below catches
+      // both paths so the UI counter ramps up during the cache-walk
+      // phase on resume.
       const cached = await cache.match(stripCacheKey(url));
-      if (cached) continue;
-
-      const ok = await fetchAndCache(url, cache, signal);
-      if (ok === "aborted") {
-        aborted = true;
-        return;
+      if (cached) {
+        done++;
+      } else {
+        const ok = await fetchAndCache(url, cache, signal);
+        if (ok === "aborted") {
+          aborted = true;
+          return;
+        }
+        if (ok) done++;
+        else failed++;
       }
-      if (ok) done++;
-      else failed++;
 
       if (done - lastPersisted >= PROGRESS_BATCH) {
         lastPersisted = done;
