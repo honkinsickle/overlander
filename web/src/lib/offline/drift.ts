@@ -32,6 +32,10 @@ export type PhaseDisplayStatus =
       tilesPrimed: number;
       tilesTotal: number;
       lastError: string | null;
+      /** Count of tiles that exhausted retries during the most recent
+       *  prime/resume. 0 = user paused cleanly; >0 = stopped after
+       *  failures. Drives the row's "Paused" vs "Stopped" label. */
+      failedCount: number;
     }
   | {
       kind: "stale";
@@ -113,6 +117,9 @@ export function getPhaseDisplayStatus(
         tilesPrimed: record.tilesPrimed,
         tilesTotal: record.tilesTotal,
         lastError: record.lastError,
+        // Old IDB rows (pre-`failedCount`) default to 0 — they render
+        // as "Paused" (the prior, pre-failure-surfaced UX).
+        failedCount: record.failedCount ?? 0,
       };
     }
     return {

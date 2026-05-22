@@ -464,10 +464,18 @@ function PhaseStatusLine({
   }
   if (display.kind === "partial") {
     const pct = display.tilesTotal > 0 ? (display.tilesPrimed / display.tilesTotal) * 100 : 0;
+    // Distinguish user-paused (failedCount === 0) from auto-stopped-
+    // after-failures (failedCount > 0). The status enum doesn't carry
+    // this — it's all "partial" — so the failure counter is the only
+    // signal. "Stopped" is more accurate than "Paused" when tiles
+    // permanently failed retries.
+    const label = display.failedCount > 0 ? "Stopped" : "Paused";
+    const failedSuffix =
+      display.failedCount > 0 ? ` · ${display.failedCount.toLocaleString()} failed` : "";
     return (
       <div className="my-2">
         <div className="font-mono text-[11px] text-text-muted mb-1">
-          Paused · {display.tilesPrimed.toLocaleString()} / {display.tilesTotal.toLocaleString()} tiles
+          {label} · {display.tilesPrimed.toLocaleString()} / {display.tilesTotal.toLocaleString()} tiles{failedSuffix}
         </div>
         <div className="h-1 w-full rounded-full bg-bg-base overflow-hidden">
           <div className="h-full bg-amber/60" style={{ width: `${pct}%` }} />

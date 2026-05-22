@@ -158,6 +158,7 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
             status: "priming",
             tilesPrimed: done,
             tilesTotal: total,
+            failedCount: failed,
           }),
         );
         onProgress?.({ tilesPrimed: done, tilesTotal: total, failedCount: failed });
@@ -186,6 +187,7 @@ export async function primePhase(input: PrimePhaseInput): Promise<PrimePhaseResu
       tilesTotal: total,
       primedAt: status === "ready" ? new Date().toISOString() : null,
       lastError: failed > 0 ? `${failed} tiles failed after retries` : null,
+      failedCount: failed,
     }),
   );
   onProgress?.({ tilesPrimed: done, tilesTotal: total, failedCount: failed });
@@ -298,6 +300,7 @@ type BaseRecordInput = Pick<
   primedPolylineHash: string;
   primedAt?: string | null;
   lastError?: string | null;
+  failedCount?: number;
 };
 
 /** Build a PhaseStatus record for IDB with the right defaults. The
@@ -313,5 +316,6 @@ function baseRecord(input: BaseRecordInput): PhaseStatus {
     primedPolylineHash: input.primedPolylineHash,
     tilesetVersion: input.tilesetVersion,
     lastError: input.lastError ?? null,
+    failedCount: input.failedCount ?? 0,
   };
 }
