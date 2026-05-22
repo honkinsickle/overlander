@@ -77,44 +77,77 @@ export function computePhaseGeometry(
   return { coords, bbox: bboxOf(coords) };
 }
 
+/**
+ * Enumerate {z,x,y} tiles covering a buffered corridor around a set of
+ * polyline sample coords.
+ *
+ * NOTE on signature: the ADR's pseudo-signature took a bbox, but a bbox
+ * over-counts severely for non-rectangular corridors. For LA → Jasper
+ * (week 1 of LA-to-Deadhorse) the bbox is ~444K sq mi vs ~95K sq mi for
+ * the actual 25 mi-buffered road, a 5× overshoot at z=13 — well over
+ * the storage budget. Switched the input to `coords` so each polyline
+ * sample contributes a tile neighborhood and the union is corridor-
+ * shaped.
+ *
+ * Algorithm: per-sample neighborhood expansion. For each sample point
+ * at zoom z, compute the tile-edge length at that latitude, derive a
+ * neighborhood radius in tiles, then add the surrounding square of
+ * tiles to the set. Dense polyline sampling (Google-precision ~50m
+ * between coords) means adjacent neighborhoods overlap; corner-
+ * overshoot of the square vs disc is masked.
+ */
 export function enumerateTiles(
-  bbox: Bbox,
+  coords: Coord[],
   bufferMi: number,
   zoomMin: number,
   zoomMax: number,
 ): { z: number; x: number; y: number }[] {
-  const [west, south, east, north] = bbox;
-  if (!Number.isFinite(west + south + east + north) || west > east || south > north) {
-    return [];
-  }
-
-  // Buffer outward. Longitude buffer scales with cos(meanLat) because a
-  // degree of longitude shrinks toward the poles.
-  const meanLat = (south + north) / 2;
-  const latBufDeg = bufferMi / MI_PER_DEG_LAT;
-  const cosMean = Math.cos((meanLat * Math.PI) / 180);
-  const lngBufDeg = bufferMi / (MI_PER_DEG_LAT * Math.max(cosMean, 0.01));
-
-  const bufWest = Math.max(west - lngBufDeg, -180);
-  const bufEast = Math.min(east + lngBufDeg, 180);
-  const bufSouth = clampMerc(south - latBufDeg);
-  const bufNorth = clampMerc(north + latBufDeg);
+  if (coords.length === 0) return [];
 
   const out: { z: number; x: number; y: number }[] = [];
   for (let z = zoomMin; z <= zoomMax; z++) {
     const tileMax = (1 << z) - 1;
-    const minX = clamp(lngToTileX(bufWest, z), 0, tileMax);
-    const maxX = clamp(lngToTileX(bufEast, z), 0, tileMax);
-    // y increases SOUTHWARD, so the north edge gives the min y.
-    const minY = clamp(latToTileY(bufNorth, z), 0, tileMax);
-    const maxY = clamp(latToTileY(bufSouth, z), 0, tileMax);
-    for (let x = minX; x <= maxX; x++) {
-      for (let y = minY; y <= maxY; y++) {
-        out.push({ z, x, y });
+    const seen = new Set<number>(); // x * (tileMax+1) + y, packed
+    for (const [lng, lat] of coords) {
+      const clampedLat = clampMerc(lat);
+      const cx = lngToTileX(lng, z);
+      const cy = latToTileY(clampedLat, z);
+      const edgeMi = tileEdgeMiAtZoomLat(z, clampedLat);
+      const radius = edgeMi > 0 ? Math.ceil(bufferMi / edgeMi) : 0;
+      const xLo = clamp(cx - radius, 0, tileMax);
+      const xHi = clamp(cx + radius, 0, tileMax);
+      const yLo = clamp(cy - radius, 0, tileMax);
+      const yHi = clamp(cy + radius, 0, tileMax);
+      // Disc filter inside the square. Without this, square corners
+      // ~25 mi beyond the buffer line inflate the count by ~38% vs
+      // a true corridor at z=13 / 25 mi.
+      const bufMiSq = bufferMi * bufferMi;
+      for (let x = xLo; x <= xHi; x++) {
+        const dxMi = (x - cx) * edgeMi;
+        const dxMiSq = dxMi * dxMi;
+        for (let y = yLo; y <= yHi; y++) {
+          const dyMi = (y - cy) * edgeMi;
+          if (dxMiSq + dyMi * dyMi > bufMiSq) continue;
+          const key = x * (tileMax + 1) + y;
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ z, x, y });
+          }
+        }
       }
     }
   }
   return out;
+}
+
+/** Tile-edge length at given zoom + latitude, in miles. Equator
+ *  circumference / 2^z gives EW edge in km; multiply by cos(lat) for
+ *  the shrinkage toward the poles. */
+function tileEdgeMiAtZoomLat(z: number, lat: number): number {
+  const KM_PER_MI = 1.609344;
+  const EARTH_CIRC_KM = 40075;
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  return (EARTH_CIRC_KM * Math.max(cosLat, 0.01)) / (1 << z) / KM_PER_MI;
 }
 
 export function hashPhasePolyline(coords: Coord[]): string {
