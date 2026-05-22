@@ -142,11 +142,44 @@ async function handleMapbox(request, url) {
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
+  // Phase tiles (z=6..13) are written by the page-side prime loop in
+  // lib/offline/prime-phase.ts into per-phase caches
+  // (`mb-phase-<id>-<tilesetVersion>`). bucketFor steered us to
+  // BASELINE_CACHE — which only stores z<=5 — so on a tile miss we walk
+  // the phase caches. The SW never writes phase caches itself.
+  if (isPhaseTile(url)) {
+    const phaseHit = await matchAcrossPhaseCaches(cacheKey);
+    if (phaseHit) return phaseHit;
+  }
+
   const response = await fetch(request);
   if (response.ok && shouldCache(url, bucket)) {
     cache.put(cacheKey, response.clone()).catch(() => {});
   }
   return response;
+}
+
+/** /v4 tile at z=6..13 — phase-cache territory. z=0..5 lives in
+ *  baseline; z>=14 is uncached (overscales from z=13 per ADR). */
+function isPhaseTile(url) {
+  if (!url.pathname.startsWith("/v4/")) return false;
+  const z = parseTileZoom(url);
+  return z !== null && z >= 6 && z <= 13;
+}
+
+/** Walk `mb-phase-*` caches for a hit. Iteration order isn't meaningful
+ *  — a tile is in at most one phase cache for a given trip on a given
+ *  device; first match wins. Cost is O(primed phases) per miss-then-hit
+ *  request; with ~3 primed phases on iPad that's ~3 cache.match calls. */
+async function matchAcrossPhaseCaches(cacheKey) {
+  const names = await caches.keys();
+  for (const name of names) {
+    if (!name.startsWith("mb-phase-")) continue;
+    const cache = await caches.open(name);
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** Routes whose HTML the iPad might reload offline. Keep narrow:
