@@ -36,3 +36,25 @@ The Mapbox + app-shell service worker at `public/sw.js` short-circuits to plain 
 
 2. **Test against the Vercel preview URL** after pushing (cleanest, most representative — matches the iPad's actual environment). The SW activates, caches populate (`mb-baseline-v1`, `mb-style-v1`, `app-shell-html-<buildId>`, `app-shell-static-<buildId>`), and DevTools → Network → "Offline" → reload renders the full page from Cache Storage.
 
+## Testing phase priming (session 3+)
+
+Phase priming (`OfflinePanel` → kebab → "Offline maps") writes per-phase tile caches (`mb-phase-<phaseId>-streetsv8`) and per-device status to IndexedDB (`overlander-offline` / `phase-status` store, composite key `[tripId, phaseId]`). Same localhost-bypass applies — the prime loop's `fetch()` calls go through the SW, which short-circuits to network on localhost without caching.
+
+**To verify priming end-to-end, test on the Vercel preview URL:**
+
+1. Sign in, open a user-owned trip (UUID, not the `la-to-deadhorse` reference slug) from `/trips`. The kebab → "Offline maps" entry is gated on the trip id being a UUID; reference trips show a disabled stub kebab.
+2. Empty state → "Set up offline cache" persists default phases (~7-day chunks) to `trips.payload.offlinePhases` via `setOfflinePhasesAction`.
+3. Click "Prime" on a phase. Watch:
+   - DevTools → Application → Cache Storage → a `mb-phase-<phaseId>-streetsv8` bucket appears and fills.
+   - DevTools → Application → IndexedDB → `overlander-offline` → `phase-status` → row updates every 25 tiles (`tilesPrimed` counter ticks; `status` flips `priming` → `ready` on completion).
+   - DevTools → Network → tile requests to `api.mapbox.com/v4/...` succeed; the SW intercepts subsequent same-tile requests from cache (status: "(ServiceWorker)").
+4. **Resume:** close the tab mid-prime, reopen the same trip → panel shows "Paused · N / M tiles" with Resume + Delete actions. Clicking Resume skips already-cached tiles (no double-billing the Mapbox meter).
+5. **Drift:** edit a day in the phase (e.g. add a waypoint), close + reopen the panel → that phase row surfaces "Trip changed since prime" with "Re-prime to update".
+6. **Offline reload:** DevTools → Network → "Offline" → reload the trip. Tiles for a primed phase render; tiles for other phases overscale from baseline z=0–5 (looks blocky, not blank).
+
+**Known verification gaps (manual / synthetic only):**
+
+- **429 + Retry-After:** can't be exercised on a fresh Vercel preview without rate-limiting on purpose. The path is type-checked + reviewed; document any real-world hit.
+- **`navigator.storage.persist()` on iOS:** Safari decides opportunistically; the prime loop calls `ensurePersistentStorage()` on first-prime regardless of whether the prompt surfaces.
+- **Cross-tab IDB `blocked`:** the wrapper rejects the open promise rather than retrying; user-visible behavior under two tabs simultaneously priming hasn't been tested.
+
