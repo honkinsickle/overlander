@@ -12,7 +12,7 @@ export default function TripsModalError({
   reset: () => void;
 }) {
   return (
-    <SlideupShell hidePhase>
+    <SlideupShell>
       <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
         <p className="font-sans text-base text-text-primary text-center max-w-md">
           Couldn&apos;t load this trip. Refresh, or pick another from the list.

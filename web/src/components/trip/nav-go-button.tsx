@@ -95,7 +95,13 @@ export function NavGoButton() {
   const label = navMode ? "Stop navigation" : "Start navigation";
 
   return (
-    <div className="absolute bottom-5 right-4 z-30 pointer-events-auto">
+    <div className="absolute bottom-24 right-4 z-30 pointer-events-auto flex items-center gap-3">
+      <span
+        className="font-sans text-[13px] font-semibold text-white px-3 py-1.5 rounded-full bg-bg-card/85 border border-border-mid backdrop-blur-sm"
+        aria-hidden
+      >
+        {label}
+      </span>
       <button
         type="button"
         onClick={onClick}

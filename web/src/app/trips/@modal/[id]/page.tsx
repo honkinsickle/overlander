@@ -20,7 +20,7 @@ export default async function TripsModalSlideup(
   // trip — never the canonical reference itself — so the "Make it mine"
   // fork CTA isn't relevant here.
   return (
-    <SlideupShell trip={trip} hidePhase>
+    <SlideupShell trip={trip}>
       <TripSlideupBody trip={trip} isReference={false} isAuthed={false} />
     </SlideupShell>
   );

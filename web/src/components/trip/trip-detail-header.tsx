@@ -74,7 +74,6 @@ function TripHero({
 }) {
   const stats: string[] = [`${dayCount} DAYS`];
   if (totalMiles) stats.push(`${totalMiles.toLocaleString()} MI`);
-  if (overnights > 0) stats.push(`${overnights} OVERNIGHTS`);
 
   return (
     <div className="flex flex-col items-center w-[440px] h-[360px] overflow-clip shrink-0">
@@ -140,43 +139,41 @@ function TripHero({
           </h2>
           <div
             className="flex items-center"
-            style={{ gap: 6, height: 22, paddingRight: 18 }}
+            style={{ gap: 6, height: 22, paddingRight: 0, whiteSpace: "nowrap" }}
           >
             <Calendar
-              className="w-[20px] h-[20px] shrink-0 text-text-muted"
+              className="w-[18px] h-[18px] shrink-0 text-text-muted"
               strokeWidth={1.75}
             />
             <span
-              className="flex-1"
               style={{
                 fontSize: 14,
                 lineHeight: "18px",
                 fontFamily: "var(--ff-sans)",
                 fontWeight: 400,
                 color: "var(--text-muted)",
+                flexShrink: 0,
               }}
             >
               {dateRange}
             </span>
-          </div>
-          <div
-            className="flex items-center"
-            style={{
-              gap: 6,
-              marginTop: 4,
-              paddingRight: 18,
-              fontFamily: "var(--ff-mono)",
-              fontSize: 13,
-              lineHeight: "18px",
-              color: "var(--text-muted)",
-            }}
-          >
-            {stats.map((s, i) => (
-              <span key={s} className="flex items-center" style={{ gap: 6 }}>
-                {i > 0 && <span style={{ opacity: 0.45 }}>·</span>}
+            {stats.map((s) => (
+              <span
+                key={s}
+                className="flex items-center"
+                style={{ gap: 6, flexShrink: 0 }}
+              >
+                <span style={{ opacity: 0.45, color: "var(--text-muted)" }}>
+                  ·
+                </span>
                 <span
                   className="uppercase"
-                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                  style={{
+                    fontFamily: "var(--ff-mono)",
+                    fontSize: 13,
+                    lineHeight: "18px",
+                    color: "var(--text-muted)",
+                  }}
                 >
                   {s}
                 </span>
