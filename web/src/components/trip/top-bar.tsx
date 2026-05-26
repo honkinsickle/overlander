@@ -18,7 +18,6 @@ import type { Trip } from "@/lib/trips/types";
  */
 export function TopBar({ trip }: { trip: Trip }) {
   const totalMiles = trip.days.reduce((sum, d) => sum + (d.miles ?? 0), 0);
-  const overnights = trip.days.filter((d) => d.overnight !== undefined).length;
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
 
   return (
@@ -29,25 +28,17 @@ export function TopBar({ trip }: { trip: Trip }) {
         borderBottom: "1px solid rgba(255,255,255,0.14)",
       }}
     >
-      {/* Title + dates + metadata (left, flex-1) */}
+      {/* Title (line 1) + dates · days · miles meta (line 2) */}
       <div className="flex flex-col justify-center flex-1 min-w-0 pl-[18px] pr-3">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="font-sans text-[18px] leading-[22px] font-semibold text-[#E9E9E7] truncate">
-            {trip.title}:
-          </span>
-          <span
-            className="font-sans text-[18px] leading-[22px] font-light text-[#E9E9E7] shrink-0"
-            style={{ letterSpacing: "0.06em" }}
-          >
-            {dateRange}
-          </span>
-        </div>
+        <span className="font-sans text-[18px] leading-[22px] font-semibold text-[#E9E9E7] truncate">
+          {trip.title}
+        </span>
         <div
           className="font-sans text-[13px] leading-[18px] font-light text-amber shrink-0"
           style={{ letterSpacing: "0.06em" }}
         >
-          {trip.days.length} Days • {totalMiles.toLocaleString()} mi •{" "}
-          {overnights} {overnights === 1 ? "Overnight" : "Overnights"}
+          {dateRange} • {trip.days.length} Days •{" "}
+          {totalMiles.toLocaleString()} mi
         </div>
       </div>
 
