@@ -170,7 +170,7 @@ export function DayColumnPlanner({
           ref={scrollRef}
           aria-label="Days"
           className={cn(
-            "relative flex flex-col flex-1 overflow-y-auto",
+            "relative flex flex-col flex-1 overflow-y-auto no-scrollbar",
             !overlay && "bg-bg-panel",
           )}
         >
