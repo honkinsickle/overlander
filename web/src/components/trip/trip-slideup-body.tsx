@@ -73,7 +73,7 @@ export function TripSlideupBody({
       <div
         className="absolute top-[72px] bottom-[10px] left-[227px] w-[445px] z-20 overflow-hidden rounded-br-[15px]"
         style={{
-          background: "rgba(22,24,25,0.78)",
+          background: "rgba(22,24,25,0.59)",
           borderRight: "1px solid rgba(255,255,255,0.07)",
         }}
       >
