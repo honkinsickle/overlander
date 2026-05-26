@@ -106,7 +106,7 @@ export function SlideupShell({
         style={{
           transform: open ? "translateY(0)" : "translateY(100%)",
         }}
-        className="absolute inset-0 bg-bg-panel overflow-hidden transition-transform duration-300 ease-out"
+        className="absolute inset-0 bg-bg-panel overflow-clip transition-transform duration-300 ease-out"
       >
         {children}
         {isUserTripView && trip && (
