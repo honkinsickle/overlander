@@ -6,7 +6,7 @@ import { SlideupShell } from "@/components/trip/slideup-shell";
  *  can dismiss back to /trips. */
 export default function TripsModalNotFound() {
   return (
-    <SlideupShell hidePhase>
+    <SlideupShell>
       <div className="flex-1 flex items-center justify-center px-8">
         <p className="font-sans text-base text-text-muted text-center max-w-md">
           Trip not found. Pick another from the list.
