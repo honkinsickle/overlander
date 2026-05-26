@@ -1,9 +1,6 @@
 "use client";
 
 import { ChevronDown, Search } from "lucide-react";
-import { KebabMenu } from "@/components/primitives/kebab-menu";
-import { Cloud } from "lucide-react";
-import { isUserTrip } from "@/lib/trips/is-user-trip";
 import type { Trip } from "@/lib/trips/types";
 
 /**
@@ -20,7 +17,6 @@ import type { Trip } from "@/lib/trips/types";
  *   - Kebab (opens OfflinePanel for user trips via `trip:openOfflinePanel`)
  */
 export function TopBar({ trip }: { trip: Trip }) {
-  const isUser = isUserTrip(trip);
   const totalMiles = trip.days.reduce((sum, d) => sum + (d.miles ?? 0), 0);
   const overnights = trip.days.filter((d) => d.overnight !== undefined).length;
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
@@ -55,7 +51,7 @@ export function TopBar({ trip }: { trip: Trip }) {
         </div>
       </div>
 
-      {/* Inline search input */}
+      {/* Inline search input — right side */}
       <button
         type="button"
         aria-label="Search"
@@ -79,36 +75,6 @@ export function TopBar({ trip }: { trip: Trip }) {
           strokeWidth={1.75}
         />
       </button>
-
-      {/* Kebab */}
-      <div className="flex items-center justify-center w-[60px] h-full border-l border-white/[0.05]">
-        {isUser ? (
-          <KebabMenu
-            triggerLabel="Trip options"
-            items={[
-              {
-                id: "offline",
-                label: "Offline maps",
-                icon: Cloud,
-                onSelect: () => {
-                  window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
-                },
-              },
-            ]}
-          />
-        ) : (
-          <button
-            type="button"
-            aria-label="More options"
-            disabled
-            className="flex flex-col gap-[3px] opacity-40"
-          >
-            <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-            <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-            <span className="w-[3px] h-[3px] rounded-full bg-text-muted" />
-          </button>
-        )}
-      </div>
     </div>
   );
 }
