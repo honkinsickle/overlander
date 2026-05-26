@@ -1,6 +1,6 @@
 "use client";
 
-import { Locate, Maximize2, Compass } from "lucide-react";
+import { ArrowDown, Locate, Map, Maximize2, Compass } from "lucide-react";
 
 /**
  * Right-Edge Toolbar — 3 buttons stacked vertically at the canvas right edge.
@@ -29,6 +29,20 @@ export function RightEdgeToolbar() {
       </ToolbarButton>
       <ToolbarButton label="Toggle fullscreen" disabled>
         <Maximize2 className="w-[22px] h-[22px]" strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Offline maps"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
+        }}
+      >
+        <span className="relative inline-block w-[22px] h-[22px]">
+          <Map className="w-[22px] h-[22px]" strokeWidth={1.75} />
+          <ArrowDown
+            className="absolute -bottom-0.5 -right-0.5 w-3 h-3"
+            strokeWidth={2.5}
+          />
+        </span>
       </ToolbarButton>
     </div>
   );
