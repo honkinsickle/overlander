@@ -72,11 +72,11 @@ export function TripSlideupBody({
       {/* Day Detail — translucent overlay matched to Day Column (#161819 @ 59%).
        *  Interior treatments per design:
        *    - Day headers (bg-bg-panel) stay opaque #111214 — no override
-       *    - Waypoint cards (article.bg-bg-card) become #000000 @ 20% so the
+       *    - Waypoint cards (article.bg-bg-card) become #000000 @ 40% so the
        *      wrapper's translucency reads through behind them
        *    - "ITINERARY" label section (also bg-bg-card) inherits the same */}
       <div
-        className="absolute top-[72px] bottom-[10px] left-[227px] w-[445px] z-20 overflow-hidden rounded-br-[15px] [&_.bg-bg-card]:!bg-black/20"
+        className="absolute top-[72px] bottom-[10px] left-[227px] w-[445px] z-20 overflow-hidden rounded-br-[15px] [&_.bg-bg-card]:!bg-black/40"
         style={{
           background: "rgba(22,24,25,0.59)",
           borderRight: "1px solid rgba(255,255,255,0.07)",
