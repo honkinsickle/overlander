@@ -56,7 +56,7 @@ export function OffCacheBanner({
   };
 
   return (
-    <div className="absolute top-4 left-4 right-20 z-20 pointer-events-auto">
+    <div className="absolute top-4 right-20 z-20 max-w-[440px] pointer-events-auto">
       <div className="flex items-center gap-3 rounded-lg bg-bg-card/95 border border-border-mid px-3 py-2.5 shadow-lg backdrop-blur-sm">
         <CloudOff className="w-4 h-4 shrink-0 text-amber-light" />
         <p className="flex-1 font-sans text-[12px] leading-[16px] text-text-primary">
