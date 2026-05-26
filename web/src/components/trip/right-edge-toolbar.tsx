@@ -1,18 +1,14 @@
 "use client";
 
-import { ArrowDown, Locate, Map, Maximize2, Compass } from "lucide-react";
+import { ArrowDown, Locate, Map, Compass } from "lucide-react";
 
 /**
  * Right-Edge Toolbar — 3 buttons stacked vertically at the canvas right edge.
- * Per v2 spec (docs/design/slideup-overlay-states-v2.md §2.2 + §3).
  *
- * Order (top → bottom): Nav · Locate · Fullscreen.
+ * Order (top → bottom): Nav · Locate · Offline maps.
  *
- * This round only ships the Default-state version; Nav and Fullscreen
- * triggers are stubs (placeholder onClick handlers). The Locate button
- * is wired separately in user-location-layer.tsx today and will be
- * folded into here in a follow-up — currently this button is a visual
- * placeholder.
+ * Collapse is owned by the Top Bar chevron, not the toolbar. Nav and Locate
+ * are stubs.
  */
 export function RightEdgeToolbar() {
   return (
@@ -26,9 +22,6 @@ export function RightEdgeToolbar() {
       </ToolbarButton>
       <ToolbarButton label="Follow my location" disabled>
         <Locate className="w-[22px] h-[22px]" strokeWidth={1.75} />
-      </ToolbarButton>
-      <ToolbarButton label="Toggle fullscreen" disabled>
-        <Maximize2 className="w-[22px] h-[22px]" strokeWidth={1.75} />
       </ToolbarButton>
       <ToolbarButton
         label="Offline maps"
