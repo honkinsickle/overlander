@@ -192,19 +192,6 @@ export function DayColumnPlanner({
         </nav>
       )}
 
-      {/* Footer — "Open offline panel" CTA, moved here from the
-       *  OffCacheBanner. Amber pill matches the prior in-banner styling. */}
-      <div className="shrink-0 px-3 py-3 border-t border-border-subtle">
-        <button
-          type="button"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
-          }}
-          className="flex items-center justify-center w-full h-9 px-4 rounded-full bg-amber text-bg-base font-sans text-[13px] font-semibold hover:opacity-90 transition-opacity"
-        >
-          Open offline panel
-        </button>
-      </div>
     </aside>
   );
 }

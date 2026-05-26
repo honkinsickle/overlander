@@ -7,10 +7,10 @@ import { isUserTrip } from "@/lib/trips/is-user-trip";
 import type { Trip } from "@/lib/trips/types";
 
 /**
- * Top-of-map banner shown when the visible area isn't covered by any
- * primed phase. Surfaces awareness only — the "Open offline panel" CTA
- * lives in the DayColumnPlanner footer (always visible, single place
- * to act). Banner dismiss is local-session.
+ * Bottom-of-map banner shown when the visible area isn't covered by
+ * any primed phase. CTA opens the OfflinePanel via the
+ * `trip:openOfflinePanel` custom event; SlideupShell's listener handles
+ * the mount.
  *
  * Renders nothing when:
  *  - status is "covered"
@@ -25,9 +25,6 @@ export function OffCacheBanner({
   map: mapboxgl.Map | null;
   trip: Trip;
 }) {
-  // Hook runs unconditionally (Rules of Hooks). Bail to null after the
-  // hook call for reference trips, covered viewports, or user-dismissed
-  // banners.
   const { status, dismissed, dismiss } = useViewportCoverage(map, trip);
 
   if (!map) return null;
@@ -35,20 +32,32 @@ export function OffCacheBanner({
   if (status === "covered") return null;
   if (dismissed) return null;
 
+  const onCta = () => {
+    window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
+  };
+
   return (
-    <div className="absolute top-4 right-20 z-20 max-w-[440px] pointer-events-auto">
-      <div className="flex items-center gap-3 rounded-lg bg-bg-card/95 border border-border-mid px-3 py-2.5 shadow-lg backdrop-blur-sm">
-        <CloudOff className="w-4 h-4 shrink-0 text-amber-light" />
-        <p className="flex-1 font-sans text-[12px] leading-[16px] text-text-primary">
+    <div className="absolute bottom-4 left-4 right-20 z-20 pointer-events-auto">
+      <div className="flex items-center gap-3 rounded-lg bg-bg-card/95 border border-border-mid px-4 py-3 shadow-lg backdrop-blur-sm">
+        <CloudOff className="w-5 h-5 shrink-0 text-amber-light" />
+        <p className="flex-1 font-sans text-[14px] leading-[18px] text-text-primary">
           {bodyText(status)}
         </p>
         <button
           type="button"
+          onClick={onCta}
+          className="inline-flex items-center h-9 px-4 rounded-full font-sans text-[13px] font-semibold text-white shrink-0 hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: "var(--button-primary)" }}
+        >
+          Open Offline Maps
+        </button>
+        <button
+          type="button"
           onClick={dismiss}
           aria-label="Dismiss off-cache banner"
-          className="flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:bg-white/[0.04] shrink-0"
+          className="flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:bg-white/[0.04] shrink-0"
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>
