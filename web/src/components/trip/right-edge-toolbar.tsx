@@ -30,28 +30,20 @@ export function RightEdgeToolbar() {
       <ToolbarButton label="Toggle fullscreen" disabled>
         <Maximize2 className="w-[22px] h-[22px]" strokeWidth={1.75} />
       </ToolbarButton>
-      <div className="flex items-center gap-3 self-end">
-        <span
-          className="font-sans text-[12px] leading-[16px] text-text-primary px-3 py-1.5 rounded-full bg-bg-card/85 border border-border-mid backdrop-blur-sm whitespace-nowrap"
-          aria-hidden
-        >
-          This area isn&apos;t downloaded for offline use.
+      <ToolbarButton
+        label="Offline maps"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
+        }}
+      >
+        <span className="relative inline-block w-[22px] h-[22px]">
+          <Map className="w-[22px] h-[22px]" strokeWidth={1.75} />
+          <ArrowDown
+            className="absolute -bottom-0.5 -right-0.5 w-3 h-3"
+            strokeWidth={2.5}
+          />
         </span>
-        <ToolbarButton
-          label="Offline maps"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
-          }}
-        >
-          <span className="relative inline-block w-[22px] h-[22px]">
-            <Map className="w-[22px] h-[22px]" strokeWidth={1.75} />
-            <ArrowDown
-              className="absolute -bottom-0.5 -right-0.5 w-3 h-3"
-              strokeWidth={2.5}
-            />
-          </span>
-        </ToolbarButton>
-      </div>
+      </ToolbarButton>
     </div>
   );
 }
