@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, Locate, Maximize2, Compass } from "lucide-react";
+import { CloudDownload, Locate, Maximize2, Compass } from "lucide-react";
 
 /**
  * Right-Edge Toolbar — 3 buttons stacked vertically at the canvas right edge.
@@ -36,7 +36,7 @@ export function RightEdgeToolbar() {
           window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
         }}
       >
-        <Cloud className="w-[22px] h-[22px]" strokeWidth={1.75} />
+        <CloudDownload className="w-[22px] h-[22px]" strokeWidth={1.75} />
       </ToolbarButton>
     </div>
   );
