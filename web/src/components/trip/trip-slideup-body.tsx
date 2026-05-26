@@ -5,7 +5,6 @@ import { MapColumn } from "@/components/trip/map-column";
 import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
 import { RightEdgeToolbar } from "@/components/trip/right-edge-toolbar";
 import { TopBar } from "@/components/trip/top-bar";
-import { TripActionFab } from "@/components/trip/trip-action-fab";
 import type { Trip } from "@/lib/trips/types";
 
 /**
@@ -87,9 +86,6 @@ export function TripSlideupBody({
 
       {/* Right-Edge Toolbar */}
       <RightEdgeToolbar />
-
-      {/* Trip Action FAB */}
-      <TripActionFab />
     </div>
   );
 }

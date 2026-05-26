@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ChevronDown, ChevronRight, Map } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
   useEffect,
@@ -191,6 +191,25 @@ export function DayColumnPlanner({
           />
         </nav>
       )}
+
+      {/* Footer — Open Offline Panel trigger. Pinned to the bottom of
+       *  the column regardless of itinerary scroll. */}
+      <button
+        type="button"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
+        }}
+        className="flex items-center justify-center gap-2 shrink-0 h-12 border-t border-border-subtle text-text-muted hover:text-text-primary hover:bg-white/[0.03] transition-colors"
+      >
+        <span className="relative inline-block w-5 h-5">
+          <Map className="w-5 h-5" strokeWidth={1.75} />
+          <ArrowDown
+            className="absolute -bottom-0.5 -right-0.5 w-3 h-3"
+            strokeWidth={2.5}
+          />
+        </span>
+        <span className="font-sans text-[13px]">Offline maps</span>
+      </button>
     </aside>
   );
 }
