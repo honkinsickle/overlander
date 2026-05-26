@@ -46,7 +46,7 @@ export function TopBar({ trip }: { trip: Trip }) {
       <button
         type="button"
         aria-label="Search"
-        className="flex items-center gap-2 self-center mr-2 h-[44px] w-[216px] px-3 rounded-md bg-white/[0.04] hover:bg-white/[0.06] transition-colors"
+        className="flex items-center gap-2 self-center mr-2 h-[44px] w-[248px] px-3 rounded-md bg-white/[0.04] hover:bg-white/[0.06] transition-colors"
       >
         <Search className="w-[14px] h-[14px] text-[#6381A8] shrink-0" />
         <span className="font-sans text-[14px] text-[#B3B3B3] truncate">
