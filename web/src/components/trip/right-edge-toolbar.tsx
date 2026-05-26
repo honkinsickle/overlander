@@ -1,6 +1,6 @@
 "use client";
 
-import { Locate, Maximize2, Compass } from "lucide-react";
+import { Cloud, Locate, Maximize2, Compass } from "lucide-react";
 
 /**
  * Right-Edge Toolbar — 3 buttons stacked vertically at the canvas right edge.
@@ -29,6 +29,14 @@ export function RightEdgeToolbar() {
       </ToolbarButton>
       <ToolbarButton label="Toggle fullscreen" disabled>
         <Maximize2 className="w-[22px] h-[22px]" strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Offline maps"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("trip:openOfflinePanel"));
+        }}
+      >
+        <Cloud className="w-[22px] h-[22px]" strokeWidth={1.75} />
       </ToolbarButton>
     </div>
   );
