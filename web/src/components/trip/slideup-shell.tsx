@@ -121,14 +121,14 @@ export function SlideupShell({
           />
         )}
 
-        {/* Close ✕ — floating top-right of the viewport. Lives in the
-         *  sheet wrapper so it animates with the slide-up. */}
+        {/* Close ✕ — floating top-right, horizontally aligned with the
+         *  Right-Edge Toolbar below (right-2 = 8px from viewport edge).
+         *  Lives in the sheet wrapper so it animates with the slide-up. */}
         <button
           type="button"
           aria-label="Close trip"
           onClick={dismiss}
-          style={{ marginRight: -12 }}
-          className="absolute top-3 right-0 z-40 flex items-center justify-center w-[60px] h-[60px] bg-[#1D1E1F]/[0.56] border border-white/[0.18] rounded-tl-[8px] rounded-tr-[12px] rounded-bl-[8px] rounded-br-[8px] backdrop-blur-sm"
+          className="absolute top-3 right-2 z-40 flex items-center justify-center w-[60px] h-[60px] bg-[#1D1E1F]/[0.56] border border-white/[0.18] rounded-lg backdrop-blur-sm"
         >
           <X
             className="w-[22px] h-[22px] text-text-muted"
