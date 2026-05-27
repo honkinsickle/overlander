@@ -20,10 +20,12 @@ export function TopBar({
   trip,
   collapsed = false,
   onToggleCollapsed,
+  onOpenSearch,
 }: {
   trip: Trip;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  onOpenSearch?: () => void;
 }) {
   const totalMiles = trip.days.reduce((sum, d) => sum + (d.miles ?? 0), 0);
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
@@ -56,6 +58,7 @@ export function TopBar({
       <button
         type="button"
         aria-label="Search"
+        onClick={onOpenSearch}
         className="flex items-center gap-2 self-center mr-2 h-[44px] w-[248px] px-3 rounded-md bg-white/[0.04] hover:bg-white/[0.06] transition-colors"
       >
         <Search className="w-[14px] h-[14px] text-[#6381A8] shrink-0" />

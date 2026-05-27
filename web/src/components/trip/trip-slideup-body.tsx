@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetail } from "@/components/trip/day-detail";
+import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
 import { MakeItMineCta } from "@/components/trip/make-it-mine-cta";
 import { MapColumn } from "@/components/trip/map-column";
 import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
@@ -30,7 +31,17 @@ export function TripSlideupBody({
   isAuthed: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
   const toggleCollapsed = () => setCollapsed((c) => !c);
+
+  useEffect(() => {
+    if (!searchActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSearchActive(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchActive]);
 
   return (
     <div className="relative w-full h-full">
@@ -58,7 +69,22 @@ export function TripSlideupBody({
         trip={trip}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
+        onOpenSearch={() => setSearchActive(true)}
       />
+
+      {/* Find Nearby panel — Search Active state. Overlays the day column +
+       *  day detail area below the Top Bar (per Paper frame 5WK-0). */}
+      {searchActive && (
+        <div
+          className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
+          style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+        >
+          <FindNearbyPanel
+            dayLabel={dayLabelForFindNearby(trip)}
+            onClose={() => setSearchActive(false)}
+          />
+        </div>
+      )}
 
       {/* Body overlays — hidden in Collapsed (fullscreen-map mode) */}
       {!collapsed && (
@@ -96,4 +122,19 @@ export function TripSlideupBody({
       <RightEdgeToolbar />
     </div>
   );
+}
+
+function dayLabelForFindNearby(trip: Trip): string {
+  const day = trip.days[0];
+  if (!day) return "Day 1";
+  const date = day.date ? new Date(day.date) : null;
+  const dateStr = date
+    ? date.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      })
+    : null;
+  return dateStr ? `Day ${day.dayNumber} · ${dateStr}` : `Day ${day.dayNumber}`;
 }
