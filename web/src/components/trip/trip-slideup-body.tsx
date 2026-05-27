@@ -70,6 +70,7 @@ export function TripSlideupBody({
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
         onOpenSearch={() => setSearchActive(true)}
+        onCloseSearch={() => setSearchActive(false)}
       />
 
       {/* Find Nearby panel — Search Active state. Overlays the day column +
