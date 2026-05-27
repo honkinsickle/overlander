@@ -34,12 +34,17 @@ export function TopBar({
   trip,
   collapsed = false,
   onToggleCollapsed,
+  searchActive = false,
   onOpenSearch,
   onCloseSearch,
 }: {
   trip: Trip;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /** Mirrors the slideup-body's Find Nearby panel state. Drives the
+   *  expanded-search visual so the input stays wide while the panel is
+   *  open, even if focus moves elsewhere (clicking the map, etc.). */
+  searchActive?: boolean;
   /** Fired when the search input gains focus. Slideup body uses this to
    *  mount the Find Nearby panel. */
   onOpenSearch?: () => void;
@@ -53,13 +58,15 @@ export function TopBar({
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
   const ChevronIcon = collapsed ? ChevronUp : ChevronDown;
 
-  const [focused, setFocused] = useState(false);
   const [value, setValue] = useState("");
-  const expanded = focused || value.length > 0;
+  // Expanded follows the parent's panel state so clicks on the map (or
+  // anywhere outside the input) don't collapse the search — only the
+  // outer ✕ / Escape does. `value.length > 0` is a belt-and-suspenders
+  // guard for any path that opens with text already in the input.
+  const expanded = searchActive || value.length > 0;
 
   const exitSearch = () => {
     setValue("");
-    setFocused(false);
     // Blur any focused element inside the top bar (i.e. the input)
     if (typeof document !== "undefined") {
       const active = document.activeElement;
@@ -129,11 +136,7 @@ export function TopBar({
             placeholder="Search for anything"
             aria-label="Search"
             onChange={(e) => setValue(e.target.value)}
-            onFocus={() => {
-              setFocused(true);
-              onOpenSearch?.();
-            }}
-            onBlur={() => setFocused(false)}
+            onFocus={() => onOpenSearch?.()}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 setValue("");
@@ -172,6 +175,13 @@ export function TopBar({
               : "Collapse"
         }
         aria-pressed={expanded ? undefined : collapsed}
+        onMouseDown={(e) => {
+          // When expanded, keep the input focused so blur doesn't fire
+          // and flip `expanded` to false before our click lands —
+          // otherwise the click would resolve to `onToggleCollapsed`
+          // instead of `exitSearch`.
+          if (expanded) e.preventDefault();
+        }}
         onClick={expanded ? exitSearch : onToggleCollapsed}
         className="absolute top-0 right-0 flex items-center justify-center w-[53px] h-full border-l border-white/[0.05] text-[#888888] hover:text-[#E9E9E7] transition-colors"
       >

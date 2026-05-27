@@ -45,12 +45,12 @@ export function MakeItMineCta({ referenceId, isAuthed, returnPath }: Props) {
   }
 
   return (
-    <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
+    <div className="absolute top-[22px] right-[80px] z-20 flex flex-col items-end gap-2">
       <button
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="group flex items-center gap-2 h-10 px-4 rounded-full bg-amber text-bg-base font-sans text-sm font-medium shadow-lg hover:scale-[1.02] active:scale-[0.99] transition-transform disabled:opacity-70 disabled:hover:scale-100"
+        className="group flex items-center gap-2 h-10 px-4 rounded-[6px] bg-amber text-bg-base font-sans text-sm font-medium shadow-lg hover:scale-[1.02] active:scale-[0.99] transition-transform disabled:opacity-70 disabled:hover:scale-100"
       >
         {pending ? (
           <Loader2 className="w-4 h-4 animate-spin" />

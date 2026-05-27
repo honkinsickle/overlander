@@ -105,14 +105,13 @@ const BUCKETS: Bucket[] = [
   },
 ];
 
-const TOTAL_CHIPS = BUCKETS.reduce((n, b) => n + b.chips.length, 0);
-
 export function FindNearbyPanel({
-  dayLabel,
-  onClose,
+  onClose: _onClose,
 }: {
-  /** Day-context label shown in the "ADDING TO" strip. e.g. "Day 1 · Fri, May 29". */
-  dayLabel?: string;
+  /** Reserved — currently unused. Search/panel dismissal is owned by
+   *  the parent (Escape key + Top Bar's exit ✕). Chip clicks fire the
+   *  `trip:findNearbySelect` event and intentionally do NOT close the
+   *  panel, so a user can tap multiple categories in one session. */
   onClose?: () => void;
 }) {
   return (
@@ -122,108 +121,73 @@ export function FindNearbyPanel({
       className="flex flex-col h-full overflow-hidden"
       style={{ backgroundColor: "var(--bg-panel)" }}
     >
-      <AddingToHeader dayLabel={dayLabel} />
-      <header
-        className="flex items-baseline justify-between shrink-0"
-        style={{
-          paddingLeft: 20,
-          paddingRight: 20,
-          paddingTop: 18,
-          paddingBottom: 10,
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "var(--ff-sans)",
-            fontSize: 18,
-            lineHeight: "22px",
-            fontWeight: 700,
-            color: "var(--text-primary)",
-          }}
-        >
-          Find nearby
-        </h2>
-        <span
-          style={{
-            fontFamily: "var(--ff-mono)",
-            fontSize: 11,
-            color: "var(--text-muted)",
-            letterSpacing: "0.06em",
-          }}
-        >
-          {TOTAL_CHIPS} items · {BUCKETS.length} groups
-        </span>
-      </header>
+      <FindScopeHeader />
 
       <div
         className="flex-1 overflow-y-auto no-scrollbar"
         style={{ paddingLeft: 20, paddingRight: 20, paddingBottom: 24 }}
       >
         {BUCKETS.map((bucket) => (
-          <BucketSection key={bucket.id} bucket={bucket} onChipClick={onClose} />
+          <BucketSection key={bucket.id} bucket={bucket} />
         ))}
       </div>
     </div>
   );
 }
 
-function AddingToHeader({ dayLabel }: { dayLabel?: string }) {
+function FindScopeHeader() {
+  // TODO: make the scope chip tappable → opens a selector with
+  // alternatives like "Whole Trip", "Today", "Near me". For v1 the
+  // chip is a static badge showing the active scope.
   return (
     <div
-      className="flex items-center justify-between shrink-0"
+      className="flex items-center shrink-0"
       style={{
-        height: 43,
         paddingLeft: 20,
         paddingRight: 20,
-        backgroundColor: "rgba(255,255,255,0.03)",
-        borderBottom: "1px solid var(--border-subtle, rgba(255,255,255,0.06))",
+        paddingTop: 18,
+        paddingBottom: 14,
+        gap: 12,
       }}
     >
-      <div className="flex items-center" style={{ gap: 8 }}>
-        <span
-          className="uppercase"
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.16em",
-            color: "var(--text-muted)",
-          }}
-        >
-          Adding to
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--ff-sans)",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--amber)",
-          }}
-        >
-          {dayLabel ?? "Day 1"}
-        </span>
-      </div>
       <span
         style={{
-          fontFamily: "var(--ff-mono)",
-          fontSize: 11,
-          color: "var(--text-muted)",
-          letterSpacing: "0.04em",
+          fontFamily: "var(--ff-sans)",
+          fontSize: 22,
+          lineHeight: "28px",
+          fontWeight: 700,
+          color: "var(--text-primary)",
         }}
       >
-        tap any result to add
+        Find on:
+      </span>
+      <span
+        role="status"
+        aria-label="Scope: Current Leg"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          paddingTop: 6,
+          paddingBottom: 6,
+          paddingLeft: 14,
+          paddingRight: 14,
+          borderRadius: 5,
+          border: "1.5px solid #4D9A6E",
+          backgroundColor: "rgba(77,154,110,0.12)",
+          color: "#9CD4B0",
+          fontFamily: "var(--ff-sans)",
+          fontSize: 16,
+          lineHeight: "20px",
+          fontWeight: 500,
+        }}
+      >
+        Current Leg
       </span>
     </div>
   );
 }
 
-function BucketSection({
-  bucket,
-  onChipClick,
-}: {
-  bucket: Bucket;
-  onChipClick?: () => void;
-}) {
+function BucketSection({ bucket }: { bucket: Bucket }) {
   return (
     <section style={{ marginTop: 18 }}>
       <div
@@ -272,7 +236,6 @@ function BucketSection({
                   detail: { chipId: chip.id, bucketId: bucket.id },
                 }),
               );
-              onChipClick?.();
             }}
           />
         ))}

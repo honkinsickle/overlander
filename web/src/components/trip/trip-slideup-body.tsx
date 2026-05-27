@@ -52,7 +52,6 @@ export function TripSlideupBody({
           days={trip.days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
-          trip={trip}
         />
         <MapDetailOverlay />
         {isReference && (
@@ -69,6 +68,7 @@ export function TripSlideupBody({
         trip={trip}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
+        searchActive={searchActive}
         onOpenSearch={() => setSearchActive(true)}
         onCloseSearch={() => setSearchActive(false)}
       />
@@ -80,10 +80,7 @@ export function TripSlideupBody({
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid rgba(255,255,255,0.07)" }}
         >
-          <FindNearbyPanel
-            dayLabel={dayLabelForFindNearby(trip)}
-            onClose={() => setSearchActive(false)}
-          />
+          <FindNearbyPanel onClose={() => setSearchActive(false)} />
         </div>
       )}
 
@@ -125,17 +122,3 @@ export function TripSlideupBody({
   );
 }
 
-function dayLabelForFindNearby(trip: Trip): string {
-  const day = trip.days[0];
-  if (!day) return "Day 1";
-  const date = day.date ? new Date(day.date) : null;
-  const dateStr = date
-    ? date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      })
-    : null;
-  return dateStr ? `Day ${day.dayNumber} · ${dateStr}` : `Day ${day.dayNumber}`;
-}

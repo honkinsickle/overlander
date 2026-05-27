@@ -10,7 +10,7 @@ export function DirectionsButton() {
     window.dispatchEvent(new CustomEvent("trip:openDirections"));
   };
   return (
-    <div className="absolute top-16 right-4 z-10 pointer-events-auto">
+    <div className="absolute top-[84px] right-[18px] z-10 pointer-events-auto">
       <button
         type="button"
         onClick={onClick}
