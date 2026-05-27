@@ -108,11 +108,11 @@ export function TopBar({
         className="absolute top-1/2 -translate-y-1/2 h-[44px] transition-[left] duration-200 ease-out motion-reduce:transition-none"
         style={{
           right: 61,
-          left: expanded ? 18 : 351,
+          left: expanded ? 8 : 351,
         }}
       >
         <label
-          className={`flex items-center gap-2 h-full px-3 rounded-md transition-colors ${
+          className={`flex items-center gap-2 h-full px-3 rounded-md rounded-tl-[8px] transition-colors ${
             expanded ? "bg-white/[0.06]" : "bg-white/[0.04] hover:bg-white/[0.06]"
           }`}
           style={{
@@ -121,7 +121,7 @@ export function TopBar({
           }}
         >
           <Search
-            className={`w-[14px] h-[14px] shrink-0 ${expanded ? "text-[#8AA8D2]" : "text-[#6381A8]"}`}
+            className={`w-[14px] h-[14px] shrink-0 ${expanded ? "text-white" : "text-[#6381A8]"}`}
           />
           <input
             type="text"
@@ -140,7 +140,7 @@ export function TopBar({
                 (e.currentTarget as HTMLInputElement).blur();
               }
             }}
-            className="flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-[#E9E9E7] placeholder:text-[#B3B3B3]"
+            className={`flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-white ${expanded ? "placeholder:text-white" : "placeholder:text-[#B3B3B3]"}`}
           />
           {value.length > 0 && (
             <button
