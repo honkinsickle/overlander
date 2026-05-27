@@ -12,12 +12,16 @@
  * diagonal-plus-buffer radius, fetch, then filter client-side to the bbox for
  * defense in depth.
  *
- * OrgID → agency tag mapping (provided ad-hoc; spec didn't specify):
- *   10  → nps
+ * OrgID → agency tag mapping (verified against RIDB /organizations endpoint):
+ *   128 → nps     (NB: spec/user-provided "10" was wrong; actual is 128)
  *   131 → usfs
- *   125 → blm
+ *   126 → blm     (NB: spec/user-provided "125" was wrong; actual is 126)
  *   130 → usace
  *   other → log warning, tag federal_land only
+ *
+ * Field name: `ParentOrgID` (top-level string) — present in both facility
+ * and recarea responses. The optional `ORGANIZATION` array is only on
+ * facility responses and carries the same value, so we ignore it.
  *
  * Run via:
  *   npm run -w data ingest:manual -- --source ridb --bbox W,S,E,N
@@ -40,9 +44,9 @@ const PAGE_LIMIT = 50;
 const USER_AGENT = "overlander-data-ingestion/0.0.1 (+https://github.com/honkinsickle/overlander)";
 
 const ORG_ID_TO_AGENCY: Record<number, string> = {
-  10: "nps",
+  128: "nps",
   131: "usfs",
-  125: "blm",
+  126: "blm",
   130: "usace",
 };
 
@@ -53,13 +57,6 @@ function requireApiKey(): string {
 }
 
 // ───── Schemas ─────────────────────────────────────────────────────────
-
-const OrganizationSchema = z
-  .object({
-    OrgID: z.union([z.number(), z.string()]).optional(),
-    OrgName: z.string().optional(),
-  })
-  .passthrough();
 
 const FacilitySchema = z
   .object({
@@ -74,7 +71,7 @@ const FacilitySchema = z
     FacilityReservationURL: z.string().nullable().optional(),
     FacilityMapURL: z.string().nullable().optional(),
     FacilityAdaAccess: z.string().nullable().optional(),
-    ORGANIZATION: z.array(OrganizationSchema).optional(),
+    ParentOrgID: z.union([z.number(), z.string()]).nullable().optional(),
   })
   .passthrough();
 
@@ -88,7 +85,7 @@ const RecAreaSchema = z
     RecAreaPhone: z.string().nullable().optional(),
     RecAreaEmail: z.string().nullable().optional(),
     RecAreaMapURL: z.string().nullable().optional(),
-    ORGANIZATION: z.array(OrganizationSchema).optional(),
+    ParentOrgID: z.union([z.number(), z.string()]).nullable().optional(),
   })
   .passthrough();
 
@@ -172,22 +169,16 @@ async function fetchPaginated(
 
 // ───── Normalization ───────────────────────────────────────────────────
 
-function buildOverlanderTags(orgs: Facility["ORGANIZATION"] | RecArea["ORGANIZATION"]): string[] {
+function buildOverlanderTags(parentOrgIdRaw: number | string | null | undefined): string[] {
   const tags: string[] = ["federal_land"];
-  const seenAgencies = new Set<string>();
-  for (const o of orgs ?? []) {
-    const raw = o.OrgID;
-    const orgId = typeof raw === "string" ? parseInt(raw, 10) : raw;
-    if (orgId === undefined || Number.isNaN(orgId)) continue;
-    const agency = ORG_ID_TO_AGENCY[orgId];
-    if (agency) {
-      if (!seenAgencies.has(agency)) {
-        tags.push(agency);
-        seenAgencies.add(agency);
-      }
-    } else {
-      logger.warn({ orgId, orgName: o.OrgName }, "ridb: unknown OrgID — tagging federal_land only");
-    }
+  if (parentOrgIdRaw == null) return tags;
+  const orgId = typeof parentOrgIdRaw === "string" ? parseInt(parentOrgIdRaw, 10) : parentOrgIdRaw;
+  if (Number.isNaN(orgId)) return tags;
+  const agency = ORG_ID_TO_AGENCY[orgId];
+  if (agency) {
+    tags.push(agency);
+  } else {
+    logger.warn({ orgId }, "ridb: unknown ParentOrgID — tagging federal_land only");
   }
   return tags;
 }
@@ -209,7 +200,7 @@ function normalizeFacility(f: Facility): Record<string, unknown> {
   const access = compact({ ada: f.FacilityAdaAccess });
   return {
     description: f.FacilityDescription ?? null,
-    overlander_tags: buildOverlanderTags(f.ORGANIZATION),
+    overlander_tags: buildOverlanderTags(f.ParentOrgID),
     contact: Object.keys(contact).length ? contact : null,
     access: Object.keys(access).length ? access : null,
     amenities: null,
@@ -225,7 +216,7 @@ function normalizeRecArea(r: RecArea): Record<string, unknown> {
   });
   return {
     description: r.RecAreaDescription ?? null,
-    overlander_tags: buildOverlanderTags(r.ORGANIZATION),
+    overlander_tags: buildOverlanderTags(r.ParentOrgID),
     contact: Object.keys(contact).length ? contact : null,
     access: null,
     amenities: null,
