@@ -26,8 +26,15 @@ const SOURCE_QUALITY_SCORE = 0.4;
 const TILE_SIZE_KM = 50;
 const OVERPASS_TIMEOUT_S = 60;
 
-const OVERPASS_ENDPOINT =
-  process.env.OVERPASS_ENDPOINT ?? "https://overpass-api.de/api/interpreter";
+// Matches the existing repo's env var convention (`bin/preflight` uses OVERPASS_URL).
+// Default mirror chosen to match what `bin/preflight` validates as healthy.
+const OVERPASS_URL =
+  process.env.OVERPASS_URL ?? "https://overpass.kumi.systems/api/interpreter";
+
+// Overpass mirrors enforce User-Agent. Identify the client clearly so abuse
+// can be reported to a real party. Spec section 8.1 ("Be conservative —
+// Overpass is community-run") motivates this.
+const USER_AGENT = "overlander-data-ingestion/0.0.1 (+https://github.com/honkinsickle/overlander)";
 
 // ──────────────────────────────────────────────────────────────────────
 // Overpass response validation
@@ -131,9 +138,13 @@ out body;`;
 async function fetchTile(bbox: BoundingBox): Promise<OverpassElement[]> {
   const query = buildOverpassQuery(bbox);
   return defaultRetry(async () => {
-    const res = await fetch(OVERPASS_ENDPOINT, {
+    const res = await fetch(OVERPASS_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+      },
       body: `data=${encodeURIComponent(query)}`,
     });
     if (!res.ok) {
