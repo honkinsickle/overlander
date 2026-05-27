@@ -16,6 +16,8 @@ export interface IngestOptions {
   sinceTimestamp?: Date;
   /** Validate + log but do not write to source_record. */
   dryRun?: boolean;
+  /** NPS-specific: which park codes to query (e.g. ["jotr"]). NPS API is parkCode-driven. */
+  parkCodes?: string[];
 }
 
 export interface IngestResult {
