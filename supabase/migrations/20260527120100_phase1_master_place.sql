@@ -6,7 +6,7 @@
 set search_path = public;
 
 create table if not exists public.master_place (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
 
   -- Identity (derived from sources, can be overridden manually)
   canonical_name text not null,

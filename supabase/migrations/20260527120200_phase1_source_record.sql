@@ -5,7 +5,7 @@
 set search_path = public;
 
 create table if not exists public.source_record (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
 
   -- Source identity.
   source_id text not null,

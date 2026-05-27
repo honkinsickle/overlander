@@ -5,7 +5,7 @@
 set search_path = public;
 
 create table if not exists public.place_match (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
 
   source_record_id uuid not null references public.source_record(id) on delete cascade,
   master_place_id  uuid not null references public.master_place(id)  on delete cascade,

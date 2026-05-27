@@ -5,7 +5,7 @@
 set search_path = public;
 
 create table if not exists public.ingestion_corridor (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   geometry geometry(LineString, 4326) not null,
   buffer_meters integer not null default 80000,  -- ~50mi
