@@ -1,0 +1,19 @@
+{
+  "name": "overlander",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Overlander monorepo — Next.js web client + Phase 1 data foundation.",
+  "workspaces": [
+    "web",
+    "data"
+  ],
+  "scripts": {
+    "web:dev": "npm run -w web dev",
+    "web:build": "npm run -w web build",
+    "data:ingest:manual": "npm run -w data ingest:manual --",
+    "data:audit": "npm run -w data audit --"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

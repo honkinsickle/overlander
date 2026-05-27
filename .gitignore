@@ -1,0 +1,22 @@
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# Local notes (gitignored per diary convention)
+Diary/
+
+# Env files (workspace-level .gitignores also cover these)
+.env
+.env.local
+
+# Build / dependency artifacts
+node_modules/
+dist/
+.next/
+
+# Logs
+*.log

@@ -1,0 +1,35 @@
+{
+  "name": "data",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "OVERLANDER_01 Phase 1 data foundation — federated POI ingestion, entity resolution, prominence scoring.",
+  "scripts": {
+    "ingest:manual": "tsx ingestion/manual.ts",
+    "ingest:osm": "tsx ingestion/sources/osm.ts",
+    "ingest:all": "tsx scripts/run-all-ingestion.ts",
+    "deploy-corridor": "tsx scripts/deploy-corridor.ts",
+    "audit": "tsx entity-resolution/audit-cli.ts",
+    "audit:coverage": "tsx scripts/audit-coverage.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "@turf/turf": "^7.2.0",
+    "commander": "^12.1.0",
+    "date-fns": "^4.1.0",
+    "natural": "^8.0.1",
+    "p-limit": "^6.1.0",
+    "p-retry": "^6.2.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/natural": "^5.1.5",
+    "@types/node": "^20.16.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.8"
+  }
+}
