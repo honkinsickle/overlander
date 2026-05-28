@@ -8,7 +8,7 @@
     "postbuild": "node scripts/sw-version.mjs",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "snapshot": "tsx --env-file=.env.local scripts/seed-reference-trips.ts --snapshot",
     "check:offline-phases": "tsx scripts/check-offline-phases.ts",
     "check:prime-status-db": "tsx scripts/check-prime-status-db.ts",
