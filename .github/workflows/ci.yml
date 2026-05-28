@@ -18,3 +18,26 @@ jobs:
         run: npm run -w web typecheck
       - name: Typecheck data
         run: npm run -w data typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Serialize test runs across PRs — the suite resets state on the
+    # shared test Supabase project; parallel runs would race.
+    concurrency:
+      group: test-supabase
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm install
+      - name: Run data test suite (against isolated test project)
+        env:
+          # GitHub repo secrets — populate with the values from
+          # data/.env.test (same shape as data/.env.test.example).
+          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+        run: npm run -w data test

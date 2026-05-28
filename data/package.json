@@ -13,6 +13,7 @@
     "audit:coverage": "tsx scripts/audit-coverage.ts",
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",
     "materialize": "tsx --env-file=.env pipeline/materialize.ts",
+    "test:seed": "tsx --env-file=.env --env-file=.env.test scripts/seed-test-fixtures.ts",
     "test": "NODE_ENV=production vitest run",
     "typecheck": "tsc --noEmit"
   },

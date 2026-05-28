@@ -14,5 +14,10 @@ export default defineConfig({
     // piped (e.g., npm scripts). NODE_ENV=production disables the
     // pino-pretty transport entirely. The data/package.json `test` script
     // sets this in env — flagging here so the reader knows why.
+
+    // Phase 2.5 Part B Option 1: route the suite at the isolated test
+    // project via SUPABASE_TEST_* and set ALLOW_DESTRUCTIVE_TEST_RESET.
+    // Setup runs once per worker before tests load.
+    setupFiles: ["./test-setup.ts"],
   },
 });
