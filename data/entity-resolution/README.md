@@ -333,3 +333,21 @@ Under the corrected rules, OSM Sheep Pass campsite nodes route to
 `manual_review`, not `auto_link`. The D4 test fixture for Sheep Pass
 should expect `nps`, `ridb`, `google` auto-linked, with OSM records
 left in pending review state — not in `expected_source_ids`.
+
+---
+
+## Known limitations / 3b work
+
+### Seed-geometry coupling in amenity rollup (fix in 3b)
+Amenity rollup distance is measured against the master_place's seed
+geometry (the creating source's coords), not the final precedence-
+resolved geometry. Currently safe because source_quality_score ordering
+(NPS>RIDB>Google>OSM) coincidentally matches geometry precedence, so the
+seed source is also the geometry winner. NOT enforced — a future source
+where quality_score and geometry precedence disagree would break this.
+
+3b fix: two-pass design. Resolve named places + recompute geometry first,
+THEN roll up amenities against finalized parent geometry via polygon
+containment (preferred) or distance-to-finalized-point (fallback). This
+converges with the polygon-containment work and also fixes the 28 orphan
+dump stations.
