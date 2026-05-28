@@ -206,7 +206,7 @@ export type MatchOutcome =
       source_record_id: string;
       target: string;
       confidence: number;
-      method: "deterministic" | "fed_exact";
+      method: "deterministic" | "fed_exact" | "name_dominant";
       score: MatchScore | null;
     }
   | {
@@ -323,8 +323,29 @@ interface PlannedMasterPlace {
 
 let plannedMasterPlaces: PlannedMasterPlace[] = [];
 
+/**
+ * Tracks which source_ids have already been linked to a given master_place
+ * during the current matchAll() invocation. Used by the same-source guard
+ * (see name_dominant + close_nameless rules). Includes both planned MPs
+ * (seeded via new_master_place) and any DB-existing MPs that received an
+ * auto_link or amenity_rollup outcome earlier in this matchAll.
+ *
+ * Keys: master_place_id (string). Values: Set of source_id strings linked
+ * via this matchAll's outcomes so far. manual_review outcomes do NOT add
+ * to this map — those records remain unlinked.
+ */
+let plannedLinks: Map<string, Set<string>> = new Map();
+
 function resetPlanning(): void {
   plannedMasterPlaces = [];
+  plannedLinks = new Map();
+}
+
+function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
+  if (outcome.kind === "manual_review") return;
+  const set = plannedLinks.get(outcome.target) ?? new Set<string>();
+  set.add(sourceId);
+  plannedLinks.set(outcome.target, set);
 }
 
 function recordPlanned(
@@ -372,18 +393,49 @@ async function fetchSourceRecord(id: string): Promise<SourceRecordRow> {
 }
 
 /**
+ * Same-source guard helper. Returns true if `sourceId` is already linked
+ * to the given master_place, either via a planned outcome in the current
+ * matchAll (in-memory) or via a persisted source_record row (DB).
+ *
+ * Used by name_dominant and close_nameless rules to prevent chain-business
+ * false merges. Example: if a master_place already has an OSM record
+ * (Shell gas station #1), an incoming OSM record for Shell gas station #2
+ * within 500m with identical name + category should NOT auto-link to the
+ * first — it's a different physical store. The same-source guard forces
+ * the second record to fall through to blended scoring (and, for distant
+ * separate stations, to a new master_place).
+ */
+async function masterPlaceHasSource(
+  masterPlaceId: string,
+  sourceId: string,
+): Promise<boolean> {
+  if (plannedLinks.get(masterPlaceId)?.has(sourceId)) return true;
+  const db = getDb();
+  const { data, error } = await db
+    .from("source_record")
+    .select("id")
+    .eq("master_place_id", masterPlaceId)
+    .eq("source_id", sourceId)
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/**
  * Find master_places within `radiusM` of the source_record's geometry.
  * Includes both DB-persisted master_places (via the find_master_place_candidates
  * RPC) and in-memory planned master_places from earlier matchOne calls
  * in this matchAll invocation.
  *
- * Default radius is 200m per spec §5.2. Use 100m for amenity rollup
- * (tighter — amenities are physically inside parent boundaries) and
- * 10m for federal exact-match.
+ * Default radius is 500m, widened from spec §5.2's original 200m after
+ * the JT campground diagnostic measured cross-source drift up to 347m
+ * (Jumbo Rocks NPS↔Google) on pairs that are genuinely the same place.
+ * Callers pass tighter radii for specific purposes: 100m for amenity
+ * rollup, 10m for federal exact-match.
  */
 export async function findCandidates(
   sourceRecordId: string,
-  radiusM = 200,
+  radiusM = 500,
   categoryFilter?: readonly string[],
 ): Promise<MasterPlaceCandidate[]> {
   const db = getDb();
@@ -538,7 +590,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   const anchor = await findFederalAnchor(source);
   if (anchor) {
     logger.debug({ source_record_id: source.id, target: anchor.id }, "matcher: fed_exact hit");
-    return {
+    const outcome: MatchOutcome = {
       kind: "auto_link",
       source_record_id: source.id,
       target: anchor.id,
@@ -546,6 +598,8 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       method: "fed_exact",
       score: null,
     };
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
   }
 
   // Step 2: amenity rollup. Only applies if this source's category is
@@ -560,25 +614,26 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
         { source_record_id: source.id, target: parents[0]!.id, distance_m: parents[0]!.distance_m },
         "matcher: amenity_rollup",
       );
-      return {
+      const outcome: MatchOutcome = {
         kind: "amenity_rollup",
         source_record_id: source.id,
         target: parents[0]!.id,
       };
+      trackOutcomeLink(source.source_id, outcome);
+      return outcome;
     }
-    // If no parent within 100m, fall through to standard scoring. The
-    // amenity will most likely become its own master_place — a
-    // standalone dump station with no nearby campground is, factually,
-    // its own place. Reasonable behavior; revisit if it surfaces noise.
+    // If no parent within 100m, fall through. The amenity will most likely
+    // become its own master_place — a standalone dump station with no
+    // nearby campground is, factually, its own place.
   }
 
-  // Step 3: standard scoring.
-  const candidates = await findCandidates(source.id, 200);
+  // Fetch standard candidates (500m radius). Rules 3, 4, and 5 all use
+  // this same list — fetched once, evaluated by rule in order.
+  const candidates = await findCandidates(source.id);
   if (candidates.length === 0) {
     const newId = randomUUID();
     recordPlanned(source, newId, point);
-    logger.debug({ source_record_id: source.id, target: newId }, "matcher: new (no candidates)");
-    return {
+    const outcome: MatchOutcome = {
       kind: "new_master_place",
       source_record_id: source.id,
       target: newId,
@@ -586,24 +641,112 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       seed_geometry: point,
       seed_name: source.name,
     };
+    trackOutcomeLink(source.source_id, outcome);
+    logger.debug({ source_record_id: source.id, target: newId }, "matcher: new (no candidates)");
+    return outcome;
   }
 
+  // Score every candidate once. Distance-ASC ordering preserved from the RPC.
+  const scored = candidates.map((c) => ({ c, score: scoreMatch(source, c) }));
+
+  // Step 3: name_dominant auto_link.
+  //
+  // Diagnostic on the JT campground fixtures (see README "Phase 3a
+  // diagnostic: cross-source distance modes A/B") found that named
+  // cross-source pairs drift up to 347m apart with identical
+  // post-suffix-strip names and matching categories — too far for the
+  // blended scoring (which caps distance contribution at 100m) to
+  // auto-link. Mode A (60–100m): conf ~0.65. Mode B (200–350m): conf ~0.6.
+  //
+  // The name+category signal is high-confidence on its own when the
+  // name normalizes to identity and the categories are taxonomically
+  // compatible. The same-source guard (see masterPlaceHasSource) blocks
+  // chain-business false merges where two distinct OSM Shell gas
+  // stations within 500m would otherwise auto-link to each other.
+  for (const { c, score } of scored) {
+    if (score.distance_meters > 500) continue;
+    if (score.name_similarity < 0.85) continue;
+    if (score.category_compatibility < 0.8) continue;
+    if (await masterPlaceHasSource(c.id, source.source_id)) continue;
+    logger.debug(
+      {
+        source_record_id: source.id,
+        target: c.id,
+        distance_m: score.distance_meters,
+        name_sim: score.name_similarity,
+        cat_compat: score.category_compatibility,
+        confidence: score.combined_confidence,
+      },
+      "matcher: name_dominant auto_link",
+    );
+    const outcome: MatchOutcome = {
+      kind: "auto_link",
+      source_record_id: source.id,
+      target: c.id,
+      confidence: score.combined_confidence,
+      method: "name_dominant",
+      score,
+    };
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
+  }
+
+  // Step 4: close_nameless manual_review.
+  //
+  // Diagnostic Mode C: OSM tags some campgrounds with non-semantic
+  // names (campsite numbers "1"–"6" at Sheep Pass instead of the
+  // campground name). At 39m from the cluster with category=campground
+  // and name_sim=0, blended scoring lands at conf=0.444 — below
+  // manual_review's 0.6 floor, so they'd become orphan master_places.
+  //
+  // close_nameless captures these: tight 100m radius (close enough to
+  // be inside the same campground polygon), high category compat
+  // (parent-child), low name similarity. Routes to human review rather
+  // than auto-merging blindly.
+  for (const { c, score } of scored) {
+    if (score.distance_meters > 100) continue;
+    if (score.name_similarity >= 0.85) continue;
+    if (score.category_compatibility < 0.8) continue;
+    if (await masterPlaceHasSource(c.id, source.source_id)) continue;
+    logger.debug(
+      {
+        source_record_id: source.id,
+        target: c.id,
+        distance_m: score.distance_meters,
+        name_sim: score.name_similarity,
+      },
+      "matcher: close_nameless manual_review",
+    );
+    const outcome: MatchOutcome = {
+      kind: "manual_review",
+      source_record_id: source.id,
+      target: c.id,
+      confidence: score.combined_confidence,
+      score,
+    };
+    // Note: manual_review is intentionally NOT tracked in plannedLinks —
+    // the source_record stays unlinked until human review.
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
+  }
+
+  // Step 5: blended scoring (fallback). The original spec formula:
+  //   0.4 × distance_score (clipped at 100m) + 0.4 × name + 0.2 × category.
+  // Auto-link ≥ 0.85, manual_review ≥ 0.6, else new.
   let best: { candidate: MasterPlaceCandidate; score: MatchScore } | null = null;
-  for (const c of candidates) {
-    const s = scoreMatch(source, c);
-    if (!best || s.combined_confidence > best.score.combined_confidence) {
-      best = { candidate: c, score: s };
+  for (const { c, score } of scored) {
+    if (!best || score.combined_confidence > best.score.combined_confidence) {
+      best = { candidate: c, score };
     }
   }
-  // candidates.length > 0 above, so best is non-null.
   const { candidate, score } = best!;
 
   if (score.combined_confidence >= 0.85) {
     logger.debug(
       { source_record_id: source.id, target: candidate.id, confidence: score.combined_confidence },
-      "matcher: auto_link",
+      "matcher: blended auto_link",
     );
-    return {
+    const outcome: MatchOutcome = {
       kind: "auto_link",
       source_record_id: source.id,
       target: candidate.id,
@@ -611,19 +754,23 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       method: "deterministic",
       score,
     };
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
   }
   if (score.combined_confidence >= 0.6) {
     logger.debug(
       { source_record_id: source.id, target: candidate.id, confidence: score.combined_confidence },
-      "matcher: manual_review",
+      "matcher: blended manual_review",
     );
-    return {
+    const outcome: MatchOutcome = {
       kind: "manual_review",
       source_record_id: source.id,
       target: candidate.id,
       confidence: score.combined_confidence,
       score,
     };
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
   }
   const newId = randomUUID();
   recordPlanned(source, newId, point);
@@ -631,7 +778,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     { source_record_id: source.id, target: newId, best_confidence: score.combined_confidence },
     "matcher: new (low confidence)",
   );
-  return {
+  const outcome: MatchOutcome = {
     kind: "new_master_place",
     source_record_id: source.id,
     target: newId,
@@ -639,6 +786,8 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     seed_geometry: point,
     seed_name: source.name,
   };
+  trackOutcomeLink(source.source_id, outcome);
+  return outcome;
 }
 
 /**

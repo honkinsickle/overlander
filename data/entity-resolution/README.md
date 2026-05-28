@@ -222,3 +222,114 @@ are NOT amenities of nearby facilities. They're sibling places.
 AMENITY_TYPES (dump_station, toilet, water, fire_pit, picnic_area,
 shower, charging_station) is the correct allowlist — anything else
 should be treated as a sibling regardless of proximity.
+
+---
+
+## Phase 3a diagnostic: cross-source distance modes A/B/C and the corrected matcher rules
+
+The first `matcher.ts` pass implemented the spec §9.1 formula literally
+(0.4 × distance + 0.4 × name + 0.2 × category, distance clipped at 100m,
+auto-link at ≥0.85). A throwaway diagnostic over the 5 JT campground
+fixtures (`diagnose.ts`, uncommitted) measured pair-by-pair confidence
+under that formula and exposed three failure modes — not fixture-fitting
+but real properties of the source data:
+
+### Mode A — 60–100m drift on named cross-source pairs
+
+Pairs that are genuinely the same place but drift apart because different
+sources put the lat/lng at slightly different reference points (kiosk vs.
+center vs. parking lot).
+
+Measured under the spec formula:
+
+| Pair                                 | dist  | name_sim | cat_compat | conf  | verdict |
+|--------------------------------------|------:|---------:|-----------:|------:|---------|
+| Hidden Valley NPS↔Google             | 88.0m |    1.000 |       1.00 | 0.648 | review  |
+| Hidden Valley RIDB↔Google            | 88.0m |    1.000 |       1.00 | 0.648 | review  |
+| White Tank NPS↔Google                | 87.8m |    1.000 |       1.00 | 0.649 | review  |
+| White Tank RIDB↔Google               | 87.8m |    1.000 |       1.00 | 0.649 | review  |
+| Jumbo Rocks RIDB↔Google              | 67.5m |    1.000 |       1.00 | 0.730 | review  |
+| Sheep Pass NPS↔Google                | 41.4m |    1.000 |       1.00 | 0.834 | review  |
+
+Distance clip at 100m drops distance contribution to near zero for
+60–100m pairs. With perfect name + category they max at conf ≈ 0.83
+— just under the 0.85 auto-link threshold. The 41.4m Sheep Pass case
+misses by 0.016.
+
+### Mode B — 200–350m drift exceeds candidate radius
+
+Genuinely-same-place pairs that the spec's 200m candidate retrieval
+radius excludes entirely. The blended formula never sees them.
+
+| Pair                                 | dist   | name_sim | cat_compat | conf  | flag     |
+|--------------------------------------|-------:|---------:|-----------:|------:|----------|
+| Jumbo Rocks RIDB↔NPS                 | 340.9m |    1.000 |       1.00 | 0.600 | EXCLUDED |
+| Jumbo Rocks NPS↔Google               | 346.7m |    1.000 |       1.00 | 0.600 | EXCLUDED |
+| Sheep Pass RIDB↔Google               | 215.7m |    1.000 |       1.00 | 0.600 | EXCLUDED |
+| Sheep Pass RIDB↔NPS                  | 247.7m |    1.000 |       1.00 | 0.600 | EXCLUDED |
+
+### Mode C — non-semantic OSM names
+
+OSM tags Sheep Pass campsites with names "1" through "6" (campsite
+numbers, not the campground name). Within 39–100m of the real
+campground cluster, with `category=campground` (correct OSM
+taxonomy), but `name_sim = 0` against any neighbor.
+
+| OSM record (name)     | Distance to nearest cluster MP | name_sim | cat_compat | conf  |
+|-----------------------|--------------------------------:|---------:|-----------:|------:|
+| "5"                   | 39.0m                           |    0.000 |       1.00 | 0.444 |
+| "4"                   | 45.4m                           |    0.000 |       1.00 | 0.418 |
+| "1"                   | 99.4m                           |    0.000 |       1.00 | 0.202 |
+
+Below the 0.6 review floor — all become orphan master_places with the
+spec formula.
+
+### Corrected rules (D2 refinement)
+
+The blended formula stays unchanged — it's now the fallback for residual
+cases. Three changes upstream of it:
+
+**1. Widen candidate retrieval radius from 200m → 500m.**
+The `find_master_place_candidates` RPC default is bumped; matcher.ts
+`findCandidates` default tracks. Resolves Mode B's exclusion problem.
+
+**2. `name_dominant` auto_link rule** (matcher.ts step 3).
+
+Fires when a candidate within 500m has `name_sim ≥ 0.85` AND
+`cat_compat ≥ 0.8` AND the candidate's master_place does NOT already
+have a source_record from the incoming source. Auto-links with
+`method='name_dominant'` and `confidence` = the blended score.
+
+Resolves Mode A entirely. Also covers the Mode B pairs that re-enter
+scoring under the widened radius.
+
+The same-source guard prevents chain-business false merges: two
+distinct OSM Shell gas stations 500m apart with identical names won't
+auto-link to each other because the candidate already has OSM linked.
+Those fall through to blended scoring (where distance does its job).
+
+**3. `close_nameless` manual_review rule** (matcher.ts step 4).
+
+Fires when a candidate within 100m has `cat_compat ≥ 0.8` AND
+`name_sim < 0.85` AND the same-source guard passes. Routes to human
+review rather than blind auto-merge.
+
+Resolves Mode C: OSM Sheep Pass campsite-numbered nodes within 100m
+of the cluster queue for review. Beyond 100m they fall through to the
+blended formula and typically become their own master_places.
+
+The new rules execute **after** `fed_exact` and `amenity_rollup`,
+**before** the blended fallback. Sequence (per matcher.ts matchOne):
+
+1. fed_exact (NPS↔RIDB within 10m → auto_link conf 1.0)
+2. amenity_rollup (AMENITY_TYPES → nearest parent within 100m)
+3. **name_dominant** (NEW)
+4. **close_nameless** (NEW)
+5. blended scoring (existing fallback)
+
+### Fixture expectation adjustment for Sheep Pass
+
+Under the corrected rules, OSM Sheep Pass campsite nodes route to
+`manual_review`, not `auto_link`. The D4 test fixture for Sheep Pass
+should expect `nps`, `ridb`, `google` auto-linked, with OSM records
+left in pending review state — not in `expected_source_ids`.
