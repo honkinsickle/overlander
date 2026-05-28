@@ -378,7 +378,7 @@ async function runDiscovery(anchors: readonly DiscoverAnchor[]): Promise<Discove
 interface FinalReport {
   corridor: string;
   envelope: BoundingBox;
-  osm: IngestResult | { error: string };
+  osm: IngestResult | { skipped: true } | { error: string };
   ridb: RidbAggregate | { error: string };
   nps: (IngestResult & { parkCodes: number }) | { error: string; parkCodes: number };
   google: {
@@ -396,10 +396,11 @@ async function main(): Promise<void> {
     .name("ingest-corridor")
     .description("Run OSM + RIDB + NPS + Google ingestion for one corridor segment.")
     .requiredOption("--corridor <name>", "Corridor name (e.g. segment_a_la_pnw)")
+    .option("--skip-osm", "Skip OSM stage (e.g. when Overpass mirror is flaky)")
     .option("--skip-google", "Skip Google enrichment + discovery (free sources only)")
     .parse(process.argv);
 
-  const opts = program.opts<{ corridor: string; skipGoogle?: boolean }>();
+  const opts = program.opts<{ corridor: string; skipOsm?: boolean; skipGoogle?: boolean }>();
   const startedAt = Date.now();
 
   const corridor = await lookupCorridor(opts.corridor);
@@ -414,8 +415,13 @@ async function main(): Promise<void> {
 
   try {
     // 1. OSM
-    logger.info("ingest-corridor: stage 1 — OSM");
-    report.osm = await osmIngest({ bbox: corridor.bbox });
+    if (opts.skipOsm) {
+      logger.info("ingest-corridor: --skip-osm — stage 1 OSM skipped");
+      report.osm = { skipped: true };
+    } else {
+      logger.info("ingest-corridor: stage 1 — OSM");
+      report.osm = await osmIngest({ bbox: corridor.bbox });
+    }
 
     // 2. RIDB
     logger.info("ingest-corridor: stage 2 — RIDB");
