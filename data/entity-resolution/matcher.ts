@@ -215,6 +215,14 @@ export type MatchOutcome =
       target: string;
       confidence: number;
       score: MatchScore;
+      /**
+       * Which rule routed this to manual review:
+       *   close_nameless    — Mode C (high-cat + low-name + close distance)
+       *   blended_residual  — fallback (0.6 ≤ blended conf < 0.85)
+       * Stored as place_match.match_method so the 3b audit CLI can group
+       * pending rows by why-they're-pending without re-running the matcher.
+       */
+      method: "close_nameless" | "blended_residual";
     }
   | {
       kind: "new_master_place";
@@ -723,6 +731,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       target: c.id,
       confidence: score.combined_confidence,
       score,
+      method: "close_nameless",
     };
     // Note: manual_review is intentionally NOT tracked in plannedLinks —
     // the source_record stays unlinked until human review.
@@ -768,6 +777,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       target: candidate.id,
       confidence: score.combined_confidence,
       score,
+      method: "blended_residual",
     };
     trackOutcomeLink(source.source_id, outcome);
     return outcome;
