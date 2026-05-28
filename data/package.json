@@ -11,6 +11,7 @@
     "deploy-corridor": "tsx scripts/deploy-corridor.ts",
     "audit": "tsx entity-resolution/audit-cli.ts",
     "audit:coverage": "tsx scripts/audit-coverage.ts",
+    "search:sync": "tsx --env-file=.env search/sync-typesense.ts",
     "test": "NODE_ENV=production vitest run",
     "typecheck": "tsc --noEmit"
   },
