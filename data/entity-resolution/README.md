@@ -139,3 +139,86 @@ This needs `master_place.geometry_polygon` populated first
 (week-3 recompute_master_place reads geometry_polygon from NPS via
 field_precedence). Sequence matters: ER for parks runs after polygon
 promotion, not before.
+
+---
+
+## 4-way overlap findings — Google Places JT smoke 2026-05-27
+
+Single-tile Google Places run against the JT bbox (1 request, 5 inserts).
+All 5 inserted rows are JT campgrounds; all 5 match an OSM + RIDB + NPS
+record within 500m. Findings below.
+
+### ER Finding: Google lodging taxonomy includes campground
+
+Observed in JT 4-way overlap: requesting
+`includedPrimaryTypes: ['lodging', ...]` returned 5 results, all with
+`primaryType: "campground"`. Google's `lodging` is a taxonomic parent
+that contains `campground` as a child type.
+
+Implication for week 3 ER: the `category_compatibility` matrix in
+`matcher.ts` must include `lodging ↔ campground = 1.0`. Without
+this, a Google-discovered campground (Google's local type is
+`campground`) would fail to match an RIDB row whose
+`inferred_category='lodging'` (hypothetical — RIDB doesn't actually
+use `lodging`, but the principle generalizes to any future source
+that uses Google-style hierarchical typing).
+
+More broadly: `category_compatibility` should encode the cross-source
+type taxonomy, not just direct equality.
+
+### ER Finding: Google coordinate drift varies 8m–216m vs RIDB
+
+Observed in JT 4-way overlap: Google's lat/lng for the same
+campground vs RIDB:
+
+  - Ryan Campground:         8m
+  - Jumbo Rocks Campground: 67m
+  - Hidden Valley:          88m
+  - White Tank:             88m
+  - Sheep Pass:            216m
+
+Implication for week 3 ER: the spec §9.1 candidate-retrieval radius
+of 200m is the right floor. Tightening to ≤100m would miss Sheep
+Pass's Google↔RIDB pair. The combined_confidence formula's 0.4 ×
+distance weight (with 100m cutoff) correctly distinguishes near-zero
+matches (Ryan) from near-radius matches (Sheep Pass) — keep it.
+
+Google appears to use parking-lot or kiosk coordinates that drift
+from the campground center; RIDB uses booking-system coordinates
+which match NPS's reservation feed at 0m. Treat Google geometry as
+weaker than NPS/RIDB even when present.
+
+### ER Finding: Google lodging is the cleanest 4-way discovery route
+
+Observed in JT 4-way overlap: 5/5 of Google's results matched all
+three other sources within 500m. By comparison: RIDB ↔ NPS is 6/8;
+OSM ↔ RIDB is 6/8 (and four of those match an OSM dump_station, not
+a campground node — see the amenity-rollup finding above).
+
+Implication for week 3 ER: when seeding the test fixtures in
+`entity-resolution/tests/fixtures/`, prefer Google-anchored 4-way
+matches as positive examples. They have the strongest signal across
+all sources and clean structural typing.
+
+Caveat: this is specific to federally-bookable campgrounds. Google's
+discovery route for non-federal POIs (gas stations, restaurants) will
+behave differently — no NPS/RIDB neighbors, OSM neighbors common.
+
+### ER Finding: peak ↔ campground must be category-incompatible
+
+Observed in JT 4-way overlap: Google's Hidden Valley Campground has
+its nearest OSM neighbor as "Chimney Rock"
+(`inferred_category=peak`), 78m away — closer than the actual OSM
+amenity nodes inside the campground (dump station at ~60m).
+
+Implication for week 3 ER: the `category_compatibility` matrix must
+explicitly set `peak ↔ campground = 0.0` (or near-zero). Without it,
+the amenity-rollup path could wrongly attach a peak feature as an
+amenity of the nearest campground master_place, polluting the
+amenities JSONB.
+
+General rule: geological features (peak, spring, beach, viewpoint)
+are NOT amenities of nearby facilities. They're sibling places.
+AMENITY_TYPES (dump_station, toilet, water, fire_pit, picnic_area,
+shower, charging_station) is the correct allowlist — anything else
+should be treated as a sibling regardless of proximity.
