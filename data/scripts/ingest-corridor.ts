@@ -63,11 +63,15 @@ import type { IngestResult } from "../ingestion/sources/_types.ts";
  * US state codes per segment. Drives NPS parkCode discovery. Segment B
  * (Canada) and (future) parts of Segment C below the AK border don't
  * have NPS units — handled by the empty array.
+ *
+ * Note (2026-05-28): the corridor name `segment_a_la_pnw` is a misnomer
+ * — Adam's call after we discovered the polyline mismatch is to scope
+ * Segment A to Days 1–3 (LA → Whitefish, MT) via UT, not the original
+ * spec's CA/OR/WA. We keep the corridor name for continuity with the
+ * already-merged migrations and PR title; the actual states are below.
  */
 const SEGMENT_NPS_STATES: Record<string, readonly string[]> = {
-  segment_a_la_pnw: ["CA", "OR", "WA"],
-  segment_b_bc_ab: [],
-  segment_c_yt_ak: ["AK"],
+  segment_a_la_pnw: ["CA", "NV", "AZ", "UT", "ID", "MT"],
 };
 
 /**
@@ -76,23 +80,21 @@ const SEGMENT_NPS_STATES: Record<string, readonly string[]> = {
  * most value over the free sources. Coords are CC-BY-SA via OSM, rounded
  * to four places.
  *
- * Segment B/C lists left empty for now — populated when those PRs land.
+ * Segment A anchors trace the LA → St. George, UT → Monte Cristo, UT
+ * → Whitefish, MT route: cities along I-15 north (LA → Vegas → St.
+ * George → Salt Lake City → Pocatello) and onward via I-90 to MT.
  */
 const SEGMENT_ANCHORS: Record<string, readonly DiscoverAnchor[]> = {
   segment_a_la_pnw: [
     { label: "Los Angeles, CA", centerLng: -118.2437, centerLat: 34.0522 },
-    { label: "Bakersfield, CA", centerLng: -119.0187, centerLat: 35.3733 },
-    { label: "Sacramento, CA", centerLng: -121.4944, centerLat: 38.5816 },
-    { label: "Redding, CA", centerLng: -122.3917, centerLat: 40.5865 },
-    { label: "Medford, OR", centerLng: -122.8756, centerLat: 42.3265 },
-    { label: "Eugene, OR", centerLng: -123.0868, centerLat: 44.0521 },
-    { label: "Portland, OR", centerLng: -122.6784, centerLat: 45.5152 },
-    { label: "Olympia, WA", centerLng: -122.9007, centerLat: 47.0379 },
-    { label: "Seattle, WA", centerLng: -122.3321, centerLat: 47.6062 },
-    { label: "Bellingham, WA", centerLng: -122.4787, centerLat: 48.7519 },
+    { label: "Barstow, CA", centerLng: -117.0228, centerLat: 34.8958 },
+    { label: "Las Vegas, NV", centerLng: -115.1398, centerLat: 36.1699 },
+    { label: "St. George, UT", centerLng: -113.5841, centerLat: 37.0965 },
+    { label: "Salt Lake City, UT", centerLng: -111.891, centerLat: 40.7608 },
+    { label: "Pocatello, ID", centerLng: -112.4455, centerLat: 42.8713 },
+    { label: "Missoula, MT", centerLng: -113.994, centerLat: 46.8721 },
+    { label: "Whitefish, MT", centerLng: -114.3375, centerLat: 48.411 },
   ],
-  segment_b_bc_ab: [],
-  segment_c_yt_ak: [],
 };
 
 /**
