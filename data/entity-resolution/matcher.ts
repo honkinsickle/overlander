@@ -876,14 +876,25 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
     if (error) throw error;
     records = (data ?? []) as SourceRecordRow[];
   } else {
-    const { data, error } = await db
-      .from("source_record")
-      .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
-      .is("master_place_id", null)
-      .order("source_quality_score", { ascending: false })
-      .order("external_id", { ascending: true });
-    if (error) throw error;
-    records = (data ?? []) as SourceRecordRow[];
+    // Paginate to bypass PostgREST's 1000-row default cap. Corridor scale
+    // (~8K records) silently truncated to 1000 with the unpaginated form.
+    records = [];
+    const PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const { data, error } = await db
+        .from("source_record")
+        .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
+        .is("master_place_id", null)
+        .order("source_quality_score", { ascending: false })
+        .order("external_id", { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      const batch = (data ?? []) as SourceRecordRow[];
+      records.push(...batch);
+      if (batch.length < PAGE) break;
+      offset += PAGE;
+    }
   }
 
   const tier = (r: SourceRecordRow): number => {
