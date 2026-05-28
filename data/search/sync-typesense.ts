@@ -118,8 +118,15 @@ export interface SyncResult {
   fetched: number;
   indexed: number;
   failed: number;
+  pruned: number;
+  prune_errors: number;
   collection_created: boolean;
   duration_ms: number;
+}
+
+export interface SyncOptions {
+  /** Skip the prune-stale-docs pass after upsert. Default false (pruning runs). */
+  skipPrune?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -252,10 +259,84 @@ async function importBatch(client: Typesense.Client, docs: PlaceDocument[]): Pro
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Pruning
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Stream all indexed document IDs out of Typesense.
+ *
+ * Uses the `export` endpoint with `include_fields: id` — Typesense
+ * returns JSONL. At JT scale (~150 docs) this is trivial; at corridor
+ * scale (10k+) it's still cheap. If/when this hurts, switch to a
+ * generation-stamp scheme: stamp each upserted doc with a sync run id
+ * and delete docs whose stamp is stale.
+ */
+async function fetchIndexedIds(client: Typesense.Client): Promise<Set<string>> {
+  const exportRaw = await client
+    .collections<PlaceDocument>(COLLECTION_NAME)
+    .documents()
+    .export({ include_fields: "id" });
+  const ids = new Set<string>();
+  for (const line of exportRaw.split("\n")) {
+    if (line.length === 0) continue;
+    const parsed = JSON.parse(line) as { id?: string };
+    if (typeof parsed.id === "string") ids.add(parsed.id);
+  }
+  return ids;
+}
+
+/**
+ * Delete docs whose IDs are NOT in `currentIds`. Returns counts.
+ *
+ * Typesense's filter delete handles batches via `id:=[…]`. Splits the
+ * stale set into chunks to keep individual requests small and to limit
+ * blast radius on a partial failure (each chunk is its own DELETE).
+ */
+async function pruneStaleDocs(
+  client: Typesense.Client,
+  currentIds: Set<string>,
+): Promise<{ pruned: number; prune_errors: number }> {
+  const indexed = await fetchIndexedIds(client);
+  const stale: string[] = [];
+  for (const id of indexed) {
+    if (!currentIds.has(id)) stale.push(id);
+  }
+  if (stale.length === 0) {
+    logger.info({ indexed: indexed.size, current: currentIds.size }, "typesense: nothing to prune");
+    return { pruned: 0, prune_errors: 0 };
+  }
+
+  let pruned = 0;
+  let prune_errors = 0;
+  const PRUNE_CHUNK = 100;
+  for (let i = 0; i < stale.length; i += PRUNE_CHUNK) {
+    const chunk = stale.slice(i, i + PRUNE_CHUNK);
+    // Filter-by syntax for ID-set delete: `id:=[id1,id2,id3]`.
+    const filter = `id:=[${chunk.map((id) => `\`${id}\``).join(",")}]`;
+    try {
+      const result = await client
+        .collections<PlaceDocument>(COLLECTION_NAME)
+        .documents()
+        .delete({ filter_by: filter });
+      pruned += result.num_deleted;
+      logger.debug(
+        { chunk: Math.floor(i / PRUNE_CHUNK) + 1, deleted: result.num_deleted },
+        "typesense: prune chunk complete",
+      );
+    } catch (err: unknown) {
+      prune_errors += chunk.length;
+      logger.warn({ err, chunk_size: chunk.length }, "typesense: prune chunk failed");
+    }
+  }
+  logger.info({ stale: stale.length, pruned, prune_errors }, "typesense: prune complete");
+  return { pruned, prune_errors };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────────────────────────────
 
-export async function sync(): Promise<SyncResult> {
+export async function sync(opts: SyncOptions = {}): Promise<SyncResult> {
   const startedAt = Date.now();
   const client = getTypesenseClient();
   const collectionCreated = await ensureCollection(client);
@@ -276,20 +357,34 @@ export async function sync(): Promise<SyncResult> {
     );
   }
 
+  let pruned = 0;
+  let prune_errors = 0;
+  if (!opts.skipPrune) {
+    const currentIds = new Set(rows.map((r) => r.id));
+    const pruneResult = await pruneStaleDocs(client, currentIds);
+    pruned = pruneResult.pruned;
+    prune_errors = pruneResult.prune_errors;
+  } else {
+    logger.info("typesense: prune skipped (skipPrune=true)");
+  }
+
   return {
     fetched: rows.length,
     indexed,
     failed,
+    pruned,
+    prune_errors,
     collection_created: collectionCreated,
     duration_ms: Date.now() - startedAt,
   };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  sync()
+  const skipPrune = process.argv.includes("--skip-prune");
+  sync({ skipPrune })
     .then((result) => {
       logger.info(result, "search:sync: complete");
-      process.exit(result.failed > 0 ? 1 : 0);
+      process.exit(result.failed > 0 || result.prune_errors > 0 ? 1 : 0);
     })
     .catch((err) => {
       logger.error({ err }, "search:sync: fatal");
