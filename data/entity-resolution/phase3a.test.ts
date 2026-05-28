@@ -26,7 +26,36 @@ const db = getDb();
 let applyResult: ApplyResult;
 let runtimeMs: number;
 
-describe("Phase 3a — entity resolution over JT corpus", () => {
+// Phase 2.5 Part B Option 3 — destructive-reset TS guard.
+//
+// This suite calls reset_phase3a_test_state(), which deletes every row
+// from master_place + place_match. It MUST point at an isolated test
+// project (Phase 2.5 Option 1, currently deferred). Until that exists,
+// the suite refuses to run by default.
+//
+// Belt-and-suspenders: the SQL function itself also refuses unless a
+// row exists in public.test_marker (see
+// 20260528000000_phase2_5_guard_destructive_reset.sql). Either layer is
+// sufficient; both layers ensure that bypassing one doesn't suffice to
+// clobber real data.
+//
+// To run the suite once Option 1 ships, the test target must:
+//   - have a row in public.test_marker (insert it as part of test setup)
+//   - and the runner must set ALLOW_DESTRUCTIVE_TEST_RESET=true
+const ALLOW = process.env.ALLOW_DESTRUCTIVE_TEST_RESET === "true";
+
+if (!ALLOW) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[phase3a] suite skipped: ALLOW_DESTRUCTIVE_TEST_RESET is not 'true'. " +
+      "This suite is destructive and must run against an isolated Supabase " +
+      "project. See docs/phase-2.5-durable-materialize-spec.md Part B.",
+  );
+}
+
+const describeIfAllowed = ALLOW ? describe : describe.skip;
+
+describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   beforeAll(async () => {
     // Sanity: there's an unresolved corpus to match against.
     await db.rpc("reset_phase3a_test_state");
