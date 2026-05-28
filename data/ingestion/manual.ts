@@ -3,13 +3,14 @@
  * CLI for ad-hoc ingestion runs.
  *
  * Usage:
- *   npm run -w data ingest:manual -- --source osm  --bbox 34.0,-118.5,34.1,-118.4
- *   npm run -w data ingest:manual -- --source ridb --bbox 33.78,-116.20,34.05,-115.75
- *   npm run -w data ingest:manual -- --source nps  --park-codes jotr [--bbox W,S,E,N]
- *   npm run -w data ingest:manual -- --source osm  --dry-run
+ *   npm run -w data ingest:manual -- --source osm    --bbox 34.0,-118.5,34.1,-118.4
+ *   npm run -w data ingest:manual -- --source ridb   --bbox 33.78,-116.20,34.05,-115.75
+ *   npm run -w data ingest:manual -- --source nps    --park-codes jotr [--bbox W,S,E,N]
+ *   npm run -w data ingest:manual -- --source google --bbox 33.78,-116.20,34.05,-115.75
+ *   npm run -w data ingest:manual -- --source osm    --dry-run
  *
  * Flags:
- *   --source        (required) source name: osm | ridb | nps
+ *   --source        (required) source name: osm | ridb | nps | google
  *   --bbox          manual bbox: "west,south,east,north" (skips corridor lookup)
  *   --park-codes    comma-separated NPS park codes (NPS only)
  *   --dry-run       validate + log without writing
@@ -51,8 +52,12 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/nps.ts");
       return mod.default;
     }
+    case "google": {
+      const mod = await import("./sources/google-places.ts");
+      return mod.default;
+    }
     default:
-      throw new Error(`Unknown source: ${name}. Available: osm, ridb, nps`);
+      throw new Error(`Unknown source: ${name}. Available: osm, ridb, nps, google`);
   }
 }
 
