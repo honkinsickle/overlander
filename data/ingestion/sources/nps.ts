@@ -200,6 +200,10 @@ function parseLatLng(latStr: unknown, lngStr: unknown): [number, number] | null 
 
 function normalizePlace(p: Place): Record<string, unknown> {
   return {
+    // canonical_name from NPS's title field. NPS is the authority for federal
+    // place names (priority 1 in field_precedence) — without this, master_place
+    // canonical_name fell through to Google's name.
+    canonical_name: p.title,
     description: p.longDescription ?? p.shortDescription ?? p.bodyText ?? null,
     overlander_tags: ["federal_land", "nps"],
     contact: p.url ? { website: p.url } : null,
@@ -214,6 +218,10 @@ function normalizeCampground(c: Campground): Record<string, unknown> {
     website: c.url ?? c.reservationUrl,
   });
   return {
+    // canonical_name from NPS's name field. Federal-bookable campgrounds:
+    // NPS's name is the canonical one (e.g., "Sheep Pass Group Campground"
+    // vs RIDB's "Sheep Pass Group" vs Google's "Sheep Pass Campground").
+    canonical_name: c.name,
     description: c.description ?? null,
     overlander_tags: ["federal_land", "nps"],
     contact: Object.keys(contact).length ? contact : null,
@@ -369,6 +377,11 @@ async function persistParkBoundary(
       point: centroid,
       rawPayload: { boundary, fetched_at: new Date().toISOString() },
       normalizedPayload: {
+        // Use the same synthetic name as source_record.name. The /parks
+        // endpoint isn't fetched in this path, so we don't have the
+        // park's full title yet. A follow-up could resolve "jotr" →
+        // "Joshua Tree National Park" via a single /parks?parkCode call.
+        canonical_name: name,
         description: null,
         overlander_tags: ["federal_land", "nps"],
         contact: null,

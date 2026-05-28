@@ -166,6 +166,7 @@ async function fetchTile(bbox: BoundingBox): Promise<OverpassElement[]> {
 // ──────────────────────────────────────────────────────────────────────
 
 interface NormalizedOsm {
+  canonical_name: string;
   description: string | null;
   amenities: Record<string, unknown> | null;
   hours: Record<string, unknown> | null;
@@ -173,7 +174,10 @@ interface NormalizedOsm {
   access: Record<string, unknown> | null;
 }
 
-function normalizeOsm(tags: Record<string, string> | undefined): NormalizedOsm {
+function normalizeOsm(
+  tags: Record<string, string> | undefined,
+  name: string,
+): NormalizedOsm {
   const t = tags ?? {};
 
   const amenities = compact({
@@ -205,6 +209,10 @@ function normalizeOsm(tags: Record<string, string> | undefined): NormalizedOsm {
   const description = t.description ?? t.note ?? null;
 
   return {
+    // canonical_name lets field_precedence resolve master_place.canonical_name
+    // from OSM at priority 5. OSM names are passed through unchanged — they're
+    // already proper-cased by convention, unlike RIDB's screaming caps.
+    canonical_name: name,
     description,
     amenities: Object.keys(amenities).length > 0 ? amenities : null,
     hours,
@@ -237,7 +245,7 @@ async function persistElement(el: OverpassElement, dryRun: boolean): Promise<"in
   if (!category) return "skipped"; // Tag combination wasn't overlander-relevant.
 
   const name = inferName(el.tags, category);
-  const normalized = normalizeOsm(el.tags);
+  const normalized = normalizeOsm(el.tags, name);
   const externalId = `osm:${el.type}:${el.id}`;
 
   if (dryRun) {
