@@ -19,6 +19,25 @@ export function normalizeName(name: string): string {
 }
 
 /**
+ * Title-Case a display name. Lowercase everything, capitalize the first letter
+ * of each whitespace-delimited word.
+ *
+ * Used at RIDB ingest time because RIDB facility/recarea names often arrive
+ * in screaming caps ("JUMBO ROCKS CAMPGROUND"). Spec corollary from the JT
+ * smoke test ER findings: RIDB needs Title-Case normalization before writing
+ * source_record.name and source_record.normalized_payload.canonical_name.
+ *
+ * Known edge cases (deferred): acronyms ("RV", "USFS"), small words
+ * ("of", "the", "and"), hyphenation rules. v1 keeps it simple; week-2
+ * polish can add a small-words list if the data warrants.
+ */
+export function titleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(\p{L})/gu, (m) => m.toUpperCase());
+}
+
+/**
  * Strip common POI suffixes that vary by source.
  *   "Joshua Tree National Park Campground" → "Joshua Tree National Park"
  * Used to make name similarity more forgiving across sources.

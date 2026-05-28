@@ -25,6 +25,33 @@ When implementing `matcher.ts` in week 3, reference these values — not the ori
 
 Source: `/api/v1/organizations` endpoint (RIDB), verified 2026-05-27.
 
+## Aggregated fields (UNION, not precedence-resolved)
+
+Three master_place fields are arrays that aggregate across all linked
+source_records rather than picking one source per field via `resolve_field()`:
+
+- `alternative_names TEXT[]` — union of all distinct names seen across sources
+- `secondary_categories TEXT[]` — union of all distinct inferred_categories
+- `overlander_tags TEXT[]` — union of all tag arrays in normalized_payload.overlander_tags
+
+These three are intentionally absent from `field_precedence` and must be
+handled by a dedicated `recompute_aggregated_fields(master_place_id)` helper
+called from `recompute_master_place()` in week 3. The standard
+`resolve_field()` path returns a single value — wrong shape for arrays.
+
+Implementation sketch:
+
+```sql
+-- inside recompute_master_place(p_master_place_id UUID):
+-- after the field-precedence loop, call:
+PERFORM recompute_aggregated_fields(p_master_place_id);
+```
+
+`recompute_aggregated_fields()` reads the linked source_records, deduplicates
+across their `name` / `inferred_category` / `normalized_payload.overlander_tags`,
+and writes the result to `master_place.alternative_names` /
+`secondary_categories` / `overlander_tags`.
+
 ---
 
 ## ER Findings (observed during smoke tests, applied in week 3)
@@ -48,6 +75,11 @@ that master_place's amenities JSONB instead of creating a sibling.
 
 Do not encode in schema yet — keep AMENITY_TYPES as a const in
 matcher.ts and resolve at ER time.
+
+OSM is intentionally absent from the `amenities` row in
+`field_precedence` for this exact reason — OSM amenity data reaches
+master_place via the matcher.ts amenity-rollup path, not via
+resolve_field().
 
 ### ER Finding: NPS↔RIDB share coordinates at ~0m for federally-bookable campgrounds
 

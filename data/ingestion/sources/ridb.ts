@@ -33,7 +33,7 @@ import { logger } from "../lib/logger.ts";
 import { defaultRetry } from "../lib/retry.ts";
 import { limits } from "../lib/rate-limit.ts";
 import { getActiveCorridorBbox } from "../lib/corridor.ts";
-import { compact } from "../lib/normalize.ts";
+import { compact, titleCase } from "../lib/normalize.ts";
 import type { BoundingBox } from "../lib/geometry.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
 
@@ -191,7 +191,7 @@ function snakeCase(s: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function normalizeFacility(f: Facility): Record<string, unknown> {
+function normalizeFacility(f: Facility, cleanName: string): Record<string, unknown> {
   const contact = compact({
     phone: f.FacilityPhone,
     email: f.FacilityEmail,
@@ -199,6 +199,10 @@ function normalizeFacility(f: Facility): Record<string, unknown> {
   });
   const access = compact({ ada: f.FacilityAdaAccess });
   return {
+    // Title-cased canonical_name written at ingest time per spec corollary
+    // from JT smoke test (see data/entity-resolution/README.md ER findings).
+    // recompute_master_place() will pick this up via field_precedence in week 3.
+    canonical_name: cleanName,
     description: f.FacilityDescription ?? null,
     overlander_tags: buildOverlanderTags(f.ParentOrgID),
     contact: Object.keys(contact).length ? contact : null,
@@ -208,13 +212,14 @@ function normalizeFacility(f: Facility): Record<string, unknown> {
   };
 }
 
-function normalizeRecArea(r: RecArea): Record<string, unknown> {
+function normalizeRecArea(r: RecArea, cleanName: string): Record<string, unknown> {
   const contact = compact({
     phone: r.RecAreaPhone,
     email: r.RecAreaEmail,
     website: r.RecAreaMapURL,
   });
   return {
+    canonical_name: cleanName,
     description: r.RecAreaDescription ?? null,
     overlander_tags: buildOverlanderTags(r.ParentOrgID),
     contact: Object.keys(contact).length ? contact : null,
@@ -246,17 +251,18 @@ async function persistFacility(
 
   const externalId = `ridb:facility:${f.FacilityID}`;
   const inferredCategory = f.FacilityTypeDescription ? snakeCase(f.FacilityTypeDescription) : null;
-  const normalized = normalizeFacility(f);
+  const cleanName = titleCase(f.FacilityName);
+  const normalized = normalizeFacility(f, cleanName);
 
   if (dryRun) {
-    logger.debug({ externalId, name: f.FacilityName, category: inferredCategory }, "ridb: dry-run");
+    logger.debug({ externalId, name: cleanName, category: inferredCategory }, "ridb: dry-run");
     return "inserted";
   }
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
       externalId,
-      name: f.FacilityName,
+      name: cleanName,
       inferredCategory,
       point: [f.FacilityLongitude, f.FacilityLatitude],
       rawPayload: { facility: f, fetched_at: new Date().toISOString() },
@@ -285,17 +291,18 @@ async function persistRecArea(
   if (!withinBbox(r.RecAreaLongitude, r.RecAreaLatitude, bbox)) return "skipped";
 
   const externalId = `ridb:recarea:${r.RecAreaID}`;
-  const normalized = normalizeRecArea(r);
+  const cleanName = titleCase(r.RecAreaName);
+  const normalized = normalizeRecArea(r, cleanName);
 
   if (dryRun) {
-    logger.debug({ externalId, name: r.RecAreaName }, "ridb: dry-run");
+    logger.debug({ externalId, name: cleanName }, "ridb: dry-run");
     return "inserted";
   }
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
       externalId,
-      name: r.RecAreaName,
+      name: cleanName,
       inferredCategory: "recreation_area",
       point: [r.RecAreaLongitude, r.RecAreaLatitude],
       rawPayload: { recarea: r, fetched_at: new Date().toISOString() },
