@@ -20,3 +20,7 @@ dist/
 
 # Logs
 *.log
+
+# Ingest cache (cost ledger, enrichment lookup cache, etc.) — persisted
+# between runs for idempotency but contains nothing portable across machines.
+data/.cache/

@@ -9,6 +9,7 @@
     "ingest:osm": "tsx ingestion/sources/osm.ts",
     "ingest:all": "tsx scripts/run-all-ingestion.ts",
     "deploy-corridor": "tsx --env-file=.env scripts/deploy-corridor.ts",
+    "ingest-corridor": "tsx --env-file=.env scripts/ingest-corridor.ts",
     "audit": "tsx entity-resolution/audit-cli.ts",
     "audit:coverage": "tsx scripts/audit-coverage.ts",
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",

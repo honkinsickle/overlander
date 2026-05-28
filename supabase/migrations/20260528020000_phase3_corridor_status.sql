@@ -20,3 +20,28 @@ comment on column public.ingestion_corridor.status is
 -- idempotent form of a uniqueness constraint.
 create unique index if not exists ingestion_corridor_name_uniq
   on public.ingestion_corridor (name);
+
+-- ──────────────────────────────────────────────────────────────────────
+-- source_record_view: lat/lng-exposed projection for clients that can't
+-- call PostGIS functions inline (PostgREST). Read-only; the canonical
+-- source_record.geometry column remains the source of truth.
+-- Used by data/scripts/ingest-corridor.ts to fetch enrichment
+-- candidates within a bbox.
+-- ──────────────────────────────────────────────────────────────────────
+create or replace view public.source_record_view as
+select
+  id,
+  source_id,
+  external_id,
+  name,
+  inferred_category,
+  master_place_id,
+  st_x(geometry) as lng,
+  st_y(geometry) as lat,
+  source_quality_score,
+  is_active
+from public.source_record
+where is_active = true;
+
+comment on view public.source_record_view is
+  'Projection of source_record with lng/lat as plain columns for PostgREST clients.';
