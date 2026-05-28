@@ -344,9 +344,29 @@ let plannedMasterPlaces: PlannedMasterPlace[] = [];
  */
 let plannedLinks: Map<string, Set<string>> = new Map();
 
+/**
+ * Pre-fetched DB-side source_record → master_place_id linkage. Populated
+ * once at the start of matchAll via initMatchAllCaches() with a single
+ * bulk query. masterPlaceHasSource consults this + plannedLinks instead
+ * of doing per-candidate DB lookups (was N+1; now O(1) post-fetch).
+ *
+ * Keys: master_place_id. Values: Set of source_ids already linked in DB.
+ */
+let dbLinks: Map<string, Set<string>> = new Map();
+
+/**
+ * Per-matchAll source_record cache. Populated up-front from matchAll's
+ * record fetch, used by fetchSourceRecord to short-circuit. Previously
+ * each matchOne could call fetchSourceRecord ~4 times (top of matchOne,
+ * + 3 findCandidates invocations); now all but the first are cache hits.
+ */
+let sourceRecordCache: Map<string, SourceRecordRow> = new Map();
+
 function resetPlanning(): void {
   plannedMasterPlaces = [];
   plannedLinks = new Map();
+  dbLinks = new Map();
+  sourceRecordCache = new Map();
 }
 
 function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
@@ -354,6 +374,33 @@ function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
   const set = plannedLinks.get(outcome.target) ?? new Set<string>();
   set.add(sourceId);
   plannedLinks.set(outcome.target, set);
+}
+
+/**
+ * Bulk-load DB linkage state at the start of matchAll. One query for all
+ * existing source_record → master_place_id pairs. After this, every
+ * masterPlaceHasSource call is purely in-memory.
+ *
+ * Idempotent: callable multiple times; later calls overwrite the map.
+ * Reset alongside other planning state in resetPlanning.
+ */
+async function initMatchAllCaches(records: SourceRecordRow[]): Promise<void> {
+  // 1) source_record cache from matchAll's already-fetched records.
+  for (const r of records) sourceRecordCache.set(r.id, r);
+
+  // 2) DB-side linkage cache via a single bulk query.
+  const db = getDb();
+  const { data, error } = await db
+    .from("source_record")
+    .select("master_place_id, source_id")
+    .not("master_place_id", "is", null);
+  if (error) throw error;
+  for (const row of (data ?? []) as Array<{ master_place_id: string | null; source_id: string }>) {
+    if (!row.master_place_id) continue;
+    const existing = dbLinks.get(row.master_place_id) ?? new Set<string>();
+    existing.add(row.source_id);
+    dbLinks.set(row.master_place_id, existing);
+  }
 }
 
 function recordPlanned(
@@ -390,6 +437,8 @@ function searchPlanned(
 // ─── Core functions ───────────────────────────────────────────────────
 
 async function fetchSourceRecord(id: string): Promise<SourceRecordRow> {
+  const cached = sourceRecordCache.get(id);
+  if (cached) return cached;
   const db = getDb();
   const { data, error } = await db
     .from("source_record")
@@ -397,13 +446,19 @@ async function fetchSourceRecord(id: string): Promise<SourceRecordRow> {
     .eq("id", id)
     .single();
   if (error) throw error;
-  return data as SourceRecordRow;
+  const row = data as SourceRecordRow;
+  sourceRecordCache.set(id, row);
+  return row;
 }
 
 /**
  * Same-source guard helper. Returns true if `sourceId` is already linked
  * to the given master_place, either via a planned outcome in the current
- * matchAll (in-memory) or via a persisted source_record row (DB).
+ * matchAll (in-memory) or via the pre-fetched DB linkage cache.
+ *
+ * Synchronous since the perf pass — both lookups are now in-memory. The
+ * DB cache (`dbLinks`) is populated once at the start of matchAll by
+ * initMatchAllCaches().
  *
  * Used by name_dominant and close_nameless rules to prevent chain-business
  * false merges. Example: if a master_place already has an OSM record
@@ -413,20 +468,10 @@ async function fetchSourceRecord(id: string): Promise<SourceRecordRow> {
  * the second record to fall through to blended scoring (and, for distant
  * separate stations, to a new master_place).
  */
-async function masterPlaceHasSource(
-  masterPlaceId: string,
-  sourceId: string,
-): Promise<boolean> {
+function masterPlaceHasSource(masterPlaceId: string, sourceId: string): boolean {
   if (plannedLinks.get(masterPlaceId)?.has(sourceId)) return true;
-  const db = getDb();
-  const { data, error } = await db
-    .from("source_record")
-    .select("id")
-    .eq("master_place_id", masterPlaceId)
-    .eq("source_id", sourceId)
-    .limit(1);
-  if (error) throw error;
-  return (data ?? []).length > 0;
+  if (dbLinks.get(masterPlaceId)?.has(sourceId)) return true;
+  return false;
 }
 
 /**
@@ -552,19 +597,15 @@ async function findFederalAnchor(
   );
   if (plannedHit) return { id: plannedHit.id, method: "fed_exact" };
 
-  // DB path: find master_places within 10m, then check whether any has a
-  // linked source_record from the partner federal source. Capped at the
-  // RPC's LIMIT 10, which is a hard upper bound on the inner loop.
+  // Find master_places within 10m, then check whether any has a linked
+  // source_record from the partner federal source via the in-memory cache
+  // (dbLinks + plannedLinks). No per-candidate DB queries — masterPlaceHasSource
+  // is sync after the perf pass.
   const candidates = await findCandidates(source.id, 10);
   if (candidates.length === 0) return null;
 
-  const db = getDb();
   for (const c of candidates) {
-    const { data } = await db
-      .from("source_record")
-      .select("source_id")
-      .eq("master_place_id", c.id);
-    if ((data ?? []).some((row) => row.source_id === partner)) {
+    if (masterPlaceHasSource(c.id, partner)) {
       return { id: c.id, method: "fed_exact" };
     }
   }
@@ -675,7 +716,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     if (score.distance_meters > 500) continue;
     if (score.name_similarity < 0.85) continue;
     if (score.category_compatibility < 0.8) continue;
-    if (await masterPlaceHasSource(c.id, source.source_id)) continue;
+    if (masterPlaceHasSource(c.id, source.source_id)) continue;
     logger.debug(
       {
         source_record_id: source.id,
@@ -715,7 +756,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     if (score.distance_meters > 100) continue;
     if (score.name_similarity >= 0.85) continue;
     if (score.category_compatibility < 0.8) continue;
-    if (await masterPlaceHasSource(c.id, source.source_id)) continue;
+    if (masterPlaceHasSource(c.id, source.source_id)) continue;
     logger.debug(
       {
         source_record_id: source.id,
@@ -817,20 +858,30 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
   resetPlanning();
   const db = getDb();
 
+  // Deterministic ordering: source_quality_score DESC pushes high-authority
+  // sources (NPS=0.95, RIDB=0.9, Google=0.85, OSM=0.4) to the front of
+  // their tier. Without this, PostgREST returns rows in physical-storage
+  // order which can shift between runs and make seed-source assignment
+  // (and downstream amenity_rollup distances) non-deterministic. external_id
+  // ASC is a last-resort tiebreaker.
   let records: SourceRecordRow[];
   if (sourceRecordIds && sourceRecordIds.length > 0) {
     const { data, error } = await db
       .from("source_record")
       .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
       .in("id", sourceRecordIds)
-      .is("master_place_id", null);
+      .is("master_place_id", null)
+      .order("source_quality_score", { ascending: false })
+      .order("external_id", { ascending: true });
     if (error) throw error;
     records = (data ?? []) as SourceRecordRow[];
   } else {
     const { data, error } = await db
       .from("source_record")
       .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
-      .is("master_place_id", null);
+      .is("master_place_id", null)
+      .order("source_quality_score", { ascending: false })
+      .order("external_id", { ascending: true });
     if (error) throw error;
     records = (data ?? []) as SourceRecordRow[];
   }
@@ -850,6 +901,11 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
     if (ta !== tb) return ta - tb;
     return fedRank(a) - fedRank(b);
   });
+
+  // Populate per-matchAll caches: source_record cache (from the records
+  // we just fetched) + DB-side linkage cache (one bulk query). Both
+  // eliminate per-matchOne DB roundtrips downstream.
+  await initMatchAllCaches(records);
 
   const outcomes: MatchOutcome[] = [];
   for (const r of records) {

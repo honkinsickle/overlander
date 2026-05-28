@@ -64,13 +64,14 @@ export const JT_POSITIVE_FIXTURES: ReadonlyArray<PositiveFixture> = [
   },
   {
     canonical_name: "Sheep Pass Campground",
-    expected_source_ids: ["nps", "ridb", "google"],
+    expected_source_ids: ["nps", "ridb", "google", "osm"],
     notes:
-      "OSM campsite-numbered nodes (name='1'..'6') route to close_nameless " +
-      "manual_review, NOT linked. Resolved canonical_name = 'Sheep Pass " +
-      "Campground' (Google's name) because NPS doesn't write canonical_name " +
-      "to normalized_payload, so field_precedence falls through to Google " +
-      "at priority 2.",
+      "OSM presence is via dump_station amenity_rollup (two nodes within " +
+      "100m of the seeded MP). OSM campsite-numbered nodes (name='1'..'6') " +
+      "route to close_nameless manual_review separately and stay unlinked. " +
+      "Resolved canonical_name = 'Sheep Pass Campground' (Google) because " +
+      "NPS doesn't write canonical_name to normalized_payload — fixed in " +
+      "the next commit (canonical_name normalizer audit).",
   },
 ];
 
