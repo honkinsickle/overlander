@@ -17,6 +17,10 @@ Diary/
 node_modules/
 dist/
 .next/
+.next.bak/
+
+# Supabase CLI working state (link/db diff/db push scratch)
+supabase/.temp/
 
 # Logs
 *.log

@@ -336,6 +336,33 @@ left in pending review state — not in `expected_source_ids`.
 
 ---
 
+## Known cross-category federations
+
+`fed_exact` (NPS↔RIDB within 10m) auto-links at confidence 1.0 with
+**no category-compatibility check**. This is by design: federal
+coordinate coincidence is the strongest signal in the system — NPS
+and RIDB drawing from the same canonical coordinate effectively means
+"the agencies agree this is one physical place," which trumps
+source-side taxonomy mismatches.
+
+Observed case (Segment A rematerialize, 2026-05-29):
+
+  - **McGee Overlook** — NPS source_record (`inferred_category=viewpoint`)
+    federated into a master_place seeded by RIDB
+    (`primary_category=facility`). RIDB's taxonomy labels overlooks /
+    picnic-areas / launches as `Facility`; NPS labels the same physical
+    site as `viewpoint`. The system correctly identifies them as one
+    place via coordinate match.
+
+Auditing implication: when a 3b audit pass surfaces master_places
+whose `primary_category` disagrees with one of its linked source_records'
+`inferred_category`, this is **not necessarily a bug**. Check whether
+the link came through fed_exact (`place_match.match_method = 'fed_exact'`);
+if so, it's expected, and the right fix is at the field-precedence /
+display-category layer, not at the matcher.
+
+---
+
 ## Known limitations / 3b work
 
 ### Seed-geometry coupling in amenity rollup (fix in 3b)
