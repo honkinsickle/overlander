@@ -145,6 +145,43 @@ export async function loadFreshOutcomeCache(): Promise<MatchOutcome[] | null> {
 }
 
 /**
+ * Recovery-only loader: returns cached outcomes WITHOUT verifying the
+ * corpus fingerprint. Use when the cache is known to be semantically
+ * valid but the fingerprint has drifted due to an intervening partial
+ * apply or destructive cleanup (e.g., a partial apply failure followed
+ * by a `materialize_clear_resolution_state` rerun — the outcomes still
+ * describe the same logical corpus, but the source_record.updated_at
+ * cascade has moved).
+ *
+ * The caller is responsible for ensuring the outcomes shape still
+ * matches the corpus they're being applied to. Misuse can corrupt
+ * master_place state — this function is intentionally separate from
+ * `loadFreshOutcomeCache` to make the bypass an explicit choice at
+ * the call site.
+ */
+export async function loadOutcomeCacheBypassingFingerprint(): Promise<MatchOutcome[] | null> {
+  const path = cachePath();
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, "utf8");
+    const entry = JSON.parse(raw) as OutcomeCacheEntry;
+    logger.warn(
+      {
+        path,
+        saved_at: entry.saved_at,
+        outcomeCount: entry.outcomes.length,
+        cached_fingerprint: entry.fingerprint,
+      },
+      "outcome-cache: bypassing fingerprint check — recovery mode",
+    );
+    return entry.outcomes;
+  } catch (err) {
+    logger.warn({ err, path }, "outcome-cache: unreadable — ignoring");
+    return null;
+  }
+}
+
+/**
  * Persist matchAll outcomes for re-apply on retry. Captures the corpus
  * fingerprint at the moment of save; the next load compares against
  * the live fingerprint to decide freshness.

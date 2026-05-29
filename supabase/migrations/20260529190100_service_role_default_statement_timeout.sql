@@ -1,0 +1,24 @@
+-- Phase 3 corridor scale: raise service_role default statement_timeout.
+--
+-- Supabase's stock `statement_timeout` for the service_role is 8s. That's
+-- comfortable for typical PostgREST CRUD but insufficient for known heavy
+-- RPCs invoked by the data pipeline:
+--
+--   - materialize_clear_resolution_state — ~29K row mutations at corridor scale
+--   - apply_match_outcomes — per-batch recompute fan-out
+--   - recompute_master_place — federation-wide field-precedence resolution
+--
+-- Per-RPC `set local statement_timeout` covers the known offenders (see
+-- migrations 20260529180000, 20260529190000). This role-level default is a
+-- project-wide guard that catches the long tail: any future heavy RPC the
+-- data pipeline introduces won't surprise us at 8s before we've remembered
+-- to add a `set local` override.
+--
+-- 60s is a conservative middle ground: ~8× the stock default (catches the
+-- typical "this RPC is heavier than I thought" case), but well short of
+-- the 300s reserved for the known-pathological RPCs (defense in depth —
+-- per-RPC overrides remain effective).
+--
+-- Reverts via `alter role service_role reset statement_timeout` if needed.
+
+alter role service_role set statement_timeout = '60s';
