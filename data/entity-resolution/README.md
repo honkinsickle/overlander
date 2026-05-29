@@ -413,3 +413,32 @@ secondary items surfaced and were deferred:
    `matchOne` callers (tests, audit CLI). Cleanest fix: rename to
    `fetchSourceRecordUncached` and explicitly call that from non-matchAll
    sites; matchAll's code path uses the cache map directly.
+
+### Recompute fan-out has a heavy tail — architectural batching for 3b
+
+The 2026-05-29 partial-apply failure and recovery exposed a structural
+issue with `apply_match_outcomes`: per-outcome-batch recompute fan-out is
+unbounded by batch size. Each batch of N outcomes triggers
+`recompute_master_place(mp_id)` for every distinct master_place touched;
+recompute scope itself grows with federation size at each MP.
+
+Restoration timings (32 batches × 500 outcomes, post-PR #59 timeout
+patch):
+
+  - median batch: ~1.5s
+  - p95 batch:    ~3.5s
+  - worst batches (11, 12): **6.5–7.0s** — the same batches that timed out
+    at 8s before the patch
+
+The 300s explicit override on `apply_match_outcomes` covers the symptom.
+The underlying pattern — "operation cost = outcome batch × recompute
+scope per MP" — isn't bounded by either knob the orchestrator controls.
+At Segment B+ scale (more federation density, more sources per MP) the
+tail grows linearly while the median stays flat.
+
+3b architectural improvement: batch the recompute step inside apply,
+decoupling recompute scope from outcome batch size. Outcomes accumulate
+their recompute queue; recompute then runs in its own bounded chunks
+(e.g., recompute_master_place_batch(uuid[] LIMIT 100)). This converts
+the heavy-tail risk into a predictable cost ceiling. Bundle with the
+polygon-containment + seed-geometry refactor.

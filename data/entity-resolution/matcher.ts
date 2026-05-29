@@ -385,11 +385,33 @@ let dbLinks: Map<string, Set<string>> = new Map();
  */
 let sourceRecordCache: Map<string, SourceRecordRow> = new Map();
 
+/**
+ * Rematerialize-mode flag: when master_place is empty at matchAll start,
+ * every findCandidates RPC variant is guaranteed to return 0 rows (the
+ * spatial join has nothing to join against). Skipping the RPC entirely
+ * eliminates the dominant cost — the 2026-05-29 baseline profile measured
+ * RPC roundtrip = 95.6% of matchOne time, with every sampled call
+ * returning 0 db_count across all three variants.
+ *
+ * Set once in matchAll() based on a single COUNT(master_place) query;
+ * read in findCandidates(). Reset to false in resetPlanning() so a
+ * subsequent matchAll() invocation re-evaluates against current state.
+ *
+ * Correctness: searchPlanned() continues to work against
+ * plannedMasterPlaces as matchAll populates it, so cross-record matches
+ * still happen (fed_exact via planned, amenity_rollup via planned,
+ * standard via planned). The DB-side candidate channel is a dead channel
+ * during rematerialize — this just removes the round-trip overhead of
+ * confirming that.
+ */
+let skipRpcs = false;
+
 function resetPlanning(): void {
   plannedMasterPlaces = [];
   plannedLinks = new Map();
   dbLinks = new Map();
   sourceRecordCache = new Map();
+  skipRpcs = false;
 }
 
 function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
@@ -405,30 +427,69 @@ function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
 }
 
 /**
- * Bulk-load DB linkage state at the start of matchAll. One query for all
- * existing source_record → master_place_id pairs. After this, every
+ * Page-by-page accumulator into a master_place_id → Set<source_id> map.
+ *
+ * Exported for testability — callers in production wrap the DB call;
+ * tests inject a synthetic `fetchPage` to verify the pagination loop
+ * terminates correctly across the PostgREST 1000-row default cap.
+ *
+ * Termination: loops until `fetchPage` returns fewer than PAGE rows.
+ * Assumes the underlying query is stable across page reads (which it
+ * is during matchAll — the source_record table isn't being mutated
+ * concurrently).
+ */
+const LINK_PAGE_SIZE = 1000;
+
+export async function paginateLinkedSourceRecords(
+  fetchPage: (
+    offset: number,
+    limit: number,
+  ) => Promise<Array<{ master_place_id: string | null; source_id: string }>>,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  let offset = 0;
+  while (true) {
+    const batch = await fetchPage(offset, LINK_PAGE_SIZE);
+    for (const row of batch) {
+      if (!row.master_place_id) continue;
+      const existing = out.get(row.master_place_id) ?? new Set<string>();
+      existing.add(row.source_id);
+      out.set(row.master_place_id, existing);
+    }
+    if (batch.length < LINK_PAGE_SIZE) break;
+    offset += LINK_PAGE_SIZE;
+  }
+  return out;
+}
+
+/**
+ * Bulk-load DB linkage state at the start of matchAll. After this, every
  * masterPlaceHasSource call is purely in-memory.
  *
  * Idempotent: callable multiple times; later calls overwrite the map.
  * Reset alongside other planning state in resetPlanning.
+ *
+ * Pagination: PostgREST's default 1000-row cap silently truncated the
+ * previous unpaginated form. The fix exposes the inner pagination via
+ * the testable `paginateLinkedSourceRecords` helper above. `.order("id")`
+ * is defensive even though the table is static during matchAll.
  */
 async function initMatchAllCaches(records: SourceRecordRow[]): Promise<void> {
   // 1) source_record cache from matchAll's already-fetched records.
   for (const r of records) sourceRecordCache.set(r.id, r);
 
-  // 2) DB-side linkage cache via a single bulk query.
+  // 2) DB-side linkage cache via a paginated bulk query.
   const db = getDb();
-  const { data, error } = await db
-    .from("source_record")
-    .select("master_place_id, source_id")
-    .not("master_place_id", "is", null);
-  if (error) throw error;
-  for (const row of (data ?? []) as Array<{ master_place_id: string | null; source_id: string }>) {
-    if (!row.master_place_id) continue;
-    const existing = dbLinks.get(row.master_place_id) ?? new Set<string>();
-    existing.add(row.source_id);
-    dbLinks.set(row.master_place_id, existing);
-  }
+  dbLinks = await paginateLinkedSourceRecords(async (offset, limit) => {
+    const { data, error } = await db
+      .from("source_record")
+      .select("master_place_id, source_id")
+      .not("master_place_id", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data ?? []) as Array<{ master_place_id: string | null; source_id: string }>;
+  });
 }
 
 function recordPlanned(
@@ -565,18 +626,27 @@ export async function findCandidates(
   categoryFilter?: readonly string[],
 ): Promise<MasterPlaceCandidate[]> {
   const db = getDb();
-  const rpcStart = performance.now();
-  const { data: dbCandidates, error } = await db.rpc("find_master_place_candidates", {
-    p_source_record_id: sourceRecordId,
-    p_radius_meters: radiusM,
-    p_category_filter: categoryFilter ? [...categoryFilter] : null,
-  });
-  if (error) throw error;
-  recordRpc(
-    inferRpcVariant(radiusM),
-    performance.now() - rpcStart,
-    dbCandidates?.length ?? 0,
-  );
+  // Rematerialize-mode skip: when master_place is empty, the RPC's spatial
+  // join has nothing to join against — every variant returns 0 rows. Bypass
+  // the round-trip entirely and let searchPlanned() supply candidates from
+  // the in-memory plannedMasterPlaces list that matchAll populates as it
+  // progresses. See the `skipRpcs` module-state comment for the rationale.
+  let dbCandidates: MasterPlaceCandidate[] = [];
+  if (!skipRpcs) {
+    const rpcStart = performance.now();
+    const { data, error } = await db.rpc("find_master_place_candidates", {
+      p_source_record_id: sourceRecordId,
+      p_radius_meters: radiusM,
+      p_category_filter: categoryFilter ? [...categoryFilter] : null,
+    });
+    if (error) throw error;
+    recordRpc(
+      inferRpcVariant(radiusM),
+      performance.now() - rpcStart,
+      data?.length ?? 0,
+    );
+    dbCandidates = (data ?? []) as MasterPlaceCandidate[];
+  }
 
   let plannedCandidates: MasterPlaceCandidate[] = [];
   if (plannedMasterPlaces.length > 0) {
@@ -589,7 +659,7 @@ export async function findCandidates(
     }
   }
 
-  return [...(dbCandidates ?? []), ...plannedCandidates]
+  return [...dbCandidates, ...plannedCandidates]
     .sort((a, b) => a.distance_m - b.distance_m)
     .slice(0, 10);
 }
@@ -1006,6 +1076,24 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
   // we just fetched) + DB-side linkage cache (one bulk query). Both
   // eliminate per-matchOne DB roundtrips downstream.
   await initMatchAllCaches(records);
+
+  // Detect rematerialize mode and set the skipRpcs guard. When
+  // master_place is empty, all three findCandidates RPC variants are
+  // pre-determined to return 0 rows — skipping them saves the ~67min
+  // of pure round-trip latency measured in the 2026-05-29 baseline
+  // profile. searchPlanned still runs against plannedMasterPlaces.
+  // Single COUNT(*) query at matchAll setup; re-evaluated per matchAll
+  // invocation (resetPlanning clears the flag).
+  const { count: masterPlaceCount } = await db
+    .from("master_place")
+    .select("id", { count: "exact", head: true });
+  skipRpcs = (masterPlaceCount ?? 0) === 0;
+  logger.info(
+    { skipRpcs, master_place_count: masterPlaceCount ?? 0 },
+    skipRpcs
+      ? "matcher: master_place empty — skipping all findCandidates RPCs (rematerialize mode)"
+      : "matcher: master_place populated — using RPCs for candidate lookup",
+  );
 
   // Incremental checkpointing — only for the full-corpus path. The
   // ID-list path is used for incremental sync (small batches) where
