@@ -378,3 +378,38 @@ THEN roll up amenities against finalized parent geometry via polygon
 containment (preferred) or distance-to-finalized-point (fallback). This
 converges with the polygon-containment work and also fixes the 28 orphan
 dump stations.
+
+### matchAll perf — items deferred from the 2026-05-29 profile
+
+Step-2 profile run (313 samples across the 15,645-record Segment A
+corpus, trace at `data/.cache/matchall-perf-trace.jsonl` in the local
+working tree) measured RPC roundtrip cost at 95.6% of matchOne time —
+the empty-master_place skip is the only in-scope fix for that PR. Three
+secondary items surfaced and were deferred:
+
+1. **`searchPlanned` linear-scan replacement** (~4.1% of current
+   matchOne time; sum=3.5s across 313 samples ⇒ ~3min extrapolated to
+   the full corpus). Becomes the top remaining item once the RPC skip
+   lands. p50 grows roughly linearly with `planned_size_at_start`:
+   0.4ms at <100 → 16ms at 6–8K → 16ms at 10–15K (with a tier-2
+   short-circuit dip at 8–10K from amenity-rollup category filter).
+   At Segment B scale (no NPS/RIDB → more new_master_place outcomes →
+   larger plannedMasterPlaces) this grows further. Candidate fix: coarse
+   lat/lng grid index (e.g., 0.01°/~1km cells) for O(1) candidate
+   lookups instead of O(N) linear scan.
+
+2. **`findCandidates` merged-list re-sort.** The RPC returns
+   `dbCandidates` already sorted by distance ASC, and `searchPlanned`
+   could trivially return sorted output. The current code concats both
+   then re-sorts the combined list. Negligible cost today (scoring loop
+   is 0.0% of profile time), but correctness-equivalent to a single
+   linear merge.
+
+3. **`fetchSourceRecord` DB fallback is dead code during matchAll.**
+   `initMatchAllCaches` pre-populates the cache with every record in the
+   sort order; matchOne only ever calls `fetchSourceRecord` for IDs in
+   that set. The fallback `db.from("source_record").select(...).eq(...)`
+   path can never fire during a matchAll. Still needed for standalone
+   `matchOne` callers (tests, audit CLI). Cleanest fix: rename to
+   `fetchSourceRecordUncached` and explicitly call that from non-matchAll
+   sites; matchAll's code path uses the cache map directly.

@@ -40,6 +40,7 @@ import type { BoundingBox } from "../ingestion/lib/geometry.ts";
 import { matchAll, type MatchOutcome } from "../entity-resolution/matcher.ts";
 import {
   loadFreshOutcomeCache,
+  loadOutcomeCacheBypassingFingerprint,
   saveOutcomeCache,
 } from "../entity-resolution/outcome-cache.ts";
 import { applyMatches, type ApplyResult } from "../entity-resolution/promote.ts";
@@ -73,6 +74,16 @@ export interface MaterializeOptions {
   skipPrune: boolean;
   dryRun: boolean;
   rematerialize: boolean;
+  /**
+   * RECOVERY ONLY. With `--rematerialize`, load `matchall-outcomes.json`
+   * WITHOUT verifying its corpus fingerprint. Use when a prior matchAll
+   * completed cleanly and persisted outcomes, but applyMatches died
+   * partway through — the cache outcomes still describe the same logical
+   * corpus, even though the fingerprint has drifted via the partial
+   * mutations + a subsequent clear. Misuse can corrupt master_place
+   * state; the loader emits a warn log at every invocation.
+   */
+  skipFingerprintCheck: boolean;
 }
 
 export interface RematerializeReport {
@@ -192,7 +203,11 @@ async function findTrulyUnresolvedIds(): Promise<string[]> {
   return srRows.map((r) => r.id).filter((id) => !seenInPlaceMatch.has(id));
 }
 
-async function runResolution(rematerializeJustRan: boolean, dryRun: boolean): Promise<ApplyResult> {
+async function runResolution(
+  rematerializeJustRan: boolean,
+  dryRun: boolean,
+  skipFingerprintCheck: boolean,
+): Promise<ApplyResult> {
   // After --rematerialize, every source_record is unresolved by
   // construction; call matchAll() with no IDs so it runs its own
   // server-side query. Passing an explicit ID list at corridor scale
@@ -205,7 +220,21 @@ async function runResolution(rematerializeJustRan: boolean, dryRun: boolean): Pr
     // retry. The cache is fingerprinted against the source_record
     // corpus, so any source_record mutation (including a successful
     // apply's master_place_id writes) invalidates it implicitly.
-    const cached = dryRun ? null : await loadFreshOutcomeCache();
+    //
+    // --skip-fingerprint-check enables the bypassing loader, for
+    // recovery after a partial apply + clear sequence where the
+    // outcomes are semantically valid but the fingerprint has drifted.
+    let cached: MatchOutcome[] | null = null;
+    if (!dryRun) {
+      if (skipFingerprintCheck) {
+        logger.warn(
+          "materialize: --skip-fingerprint-check active — recovery mode",
+        );
+        cached = await loadOutcomeCacheBypassingFingerprint();
+      } else {
+        cached = await loadFreshOutcomeCache();
+      }
+    }
     if (cached) {
       outcomes = cached;
     } else {
@@ -306,7 +335,7 @@ export async function materialize(opts: MaterializeOptions): Promise<Materialize
   let erResult: ApplyResult | null = null;
   if (!opts.skipEr) {
     stagesRun.push("er");
-    erResult = await runResolution(opts.rematerialize, opts.dryRun);
+    erResult = await runResolution(opts.rematerialize, opts.dryRun, opts.skipFingerprintCheck);
     logger.info(erResult, "materialize: ER complete");
   }
 
@@ -364,6 +393,7 @@ interface CliOpts {
   skipPrune?: boolean;
   dryRun?: boolean;
   rematerialize?: boolean;
+  skipFingerprintCheck?: boolean;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -380,6 +410,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .option("--skip-prune", "Sync but don't prune stale Typesense docs.")
     .option("--dry-run", "Report what would happen, mutate nothing.")
     .option("--rematerialize", "DESTRUCTIVE: clear master_place + place_match before ER. Required for deterministic rebuilds.")
+    .option(
+      "--skip-fingerprint-check",
+      "RECOVERY ONLY (with --rematerialize): load matchall-outcomes.json without verifying corpus fingerprint. Use when resuming from a partial-apply failure via clear + re-apply.",
+    )
     .action(async (cli: CliOpts) => {
       const opts: MaterializeOptions = {
         ingest: cli.ingest ?? false,
@@ -391,6 +425,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         skipPrune: cli.skipPrune ?? false,
         dryRun: cli.dryRun ?? false,
         rematerialize: cli.rematerialize ?? false,
+        skipFingerprintCheck: cli.skipFingerprintCheck ?? false,
       };
       try {
         const report = await materialize(opts);
