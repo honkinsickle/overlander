@@ -329,6 +329,57 @@ function bboxCentroidAndRadius(bbox: BoundingBox): QueryParams {
   return { latitude, longitude, radius };
 }
 
+/**
+ * RIDB silently caps the effective radius around 25 miles regardless of
+ * what the `radius` query param asks for (confirmed empirically against
+ * /facilities — a request with radius=212 mi returned only facilities
+ * within ~25 mi of the centroid; Apgar Campground at 42 mi from the
+ * centroid was excluded). Tiling internally at a safe sub-cap size
+ * is the only way to cover a meaningful corridor segment without
+ * silently losing federally-bookable campgrounds inside national parks.
+ *
+ * A square tile of side S has diagonal S·√2; the centroid-to-corner
+ * distance is S·√2/2 = S/√2. For that to stay ≤25 mi the side must be
+ * ≤25·√2 ≈ 35.3 mi. We use 30 mi cells with a 25 mi query radius —
+ * neighbor circles overlap by ~10 mi which is plenty to cover any
+ * facility that straddles a cell boundary.
+ */
+const RIDB_SAFE_RADIUS_MI = 25;
+const RIDB_TILE_SIDE_MI = 30;
+
+function subTileBbox(bbox: BoundingBox): BoundingBox[] {
+  const [w, s, e, n] = bbox;
+  const midLat = (s + n) / 2;
+  const latDegPerMile = 1 / 69;
+  const lonDegPerMile = 1 / (69 * Math.cos((midLat * Math.PI) / 180));
+  const dLat = RIDB_TILE_SIDE_MI * latDegPerMile;
+  const dLon = RIDB_TILE_SIDE_MI * lonDegPerMile;
+
+  const out: BoundingBox[] = [];
+  for (let lat = s; lat < n; lat += dLat) {
+    for (let lon = w; lon < e; lon += dLon) {
+      out.push([lon, lat, Math.min(lon + dLon, e), Math.min(lat + dLat, n)]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Build a list of (centroid, radius) queries that together cover `bbox`,
+ * respecting RIDB's silent ~25-mile radius cap. For bboxes small enough
+ * that a single query fits (centroid-to-corner distance ≤ safe radius),
+ * returns one element — preserving the JT-smoke single-call behavior.
+ */
+function planRidbQueries(bbox: BoundingBox): QueryParams[] {
+  const single = bboxCentroidAndRadius(bbox);
+  if (single.radius <= RIDB_SAFE_RADIUS_MI) return [single];
+  const tiles = subTileBbox(bbox);
+  return tiles.map((tile) => {
+    const t = bboxCentroidAndRadius(tile);
+    return { ...t, radius: Math.min(t.radius, RIDB_SAFE_RADIUS_MI) };
+  });
+}
+
 export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResult> => {
   const startedAt = Date.now();
   let bbox: BoundingBox;
@@ -345,36 +396,51 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
     logger.info({ corridor: corridor.name, bbox }, "ridb: using corridor bbox");
   }
 
-  const queryParams = bboxCentroidAndRadius(bbox);
-  logger.info(queryParams, "ridb: derived query params (centroid + radius)");
+  const queries = planRidbQueries(bbox);
+  logger.info(
+    { tileCount: queries.length, safeRadiusMi: RIDB_SAFE_RADIUS_MI },
+    "ridb: planned queries (sub-tiled to respect ~25mi effective radius cap)",
+  );
 
   const stats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
   const limit = limits.ridb;
 
-  await Promise.all([
-    limit(async () => {
-      const facilities = await fetchPaginated("facilities", queryParams);
-      stats.fetched += facilities.length;
-      logger.info({ count: facilities.length }, "ridb: facilities fetched");
-      for (const raw of facilities) {
-        const outcome = await persistFacility(raw, bbox, opts.dryRun ?? false);
-        if (outcome === "inserted") stats.inserted += 1;
-        else if (outcome === "skipped") stats.skipped += 1;
-        else stats.errors += 1;
-      }
-    }),
-    limit(async () => {
-      const recareas = await fetchPaginated("recareas", queryParams);
-      stats.fetched += recareas.length;
-      logger.info({ count: recareas.length }, "ridb: recareas fetched");
-      for (const raw of recareas) {
-        const outcome = await persistRecArea(raw, bbox, opts.dryRun ?? false);
-        if (outcome === "inserted") stats.inserted += 1;
-        else if (outcome === "skipped") stats.skipped += 1;
-        else stats.errors += 1;
-      }
-    }),
-  ]);
+  // Schedule one (facilities, recareas) pair per sub-tile. The limit
+  // controls concurrency across the whole set; for small bboxes (JT
+  // smoke) queries.length === 1 so the original two-task shape is
+  // preserved exactly.
+  await Promise.all(
+    queries.flatMap((params, idx) => [
+      limit(async () => {
+        const facilities = await fetchPaginated("facilities", params);
+        stats.fetched += facilities.length;
+        logger.debug(
+          { tile: idx + 1, of: queries.length, count: facilities.length, params },
+          "ridb: facilities fetched",
+        );
+        for (const raw of facilities) {
+          const outcome = await persistFacility(raw, bbox, opts.dryRun ?? false);
+          if (outcome === "inserted") stats.inserted += 1;
+          else if (outcome === "skipped") stats.skipped += 1;
+          else stats.errors += 1;
+        }
+      }),
+      limit(async () => {
+        const recareas = await fetchPaginated("recareas", params);
+        stats.fetched += recareas.length;
+        logger.debug(
+          { tile: idx + 1, of: queries.length, count: recareas.length, params },
+          "ridb: recareas fetched",
+        );
+        for (const raw of recareas) {
+          const outcome = await persistRecArea(raw, bbox, opts.dryRun ?? false);
+          if (outcome === "inserted") stats.inserted += 1;
+          else if (outcome === "skipped") stats.skipped += 1;
+          else stats.errors += 1;
+        }
+      }),
+    ]),
+  );
 
   const duration_ms = Date.now() - startedAt;
   const result: IngestResult = { source_id: SOURCE_ID, duration_ms, ...stats };
