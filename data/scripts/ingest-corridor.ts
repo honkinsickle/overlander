@@ -170,28 +170,46 @@ async function fetchParkCodesByState(states: readonly string[]): Promise<string[
   const apiKey = process.env.NPS_API_KEY;
   if (!apiKey) throw new Error("NPS_API_KEY not set — needed for parkCode discovery");
 
-  const url = new URL("https://developer.nps.gov/api/v1/parks");
-  url.searchParams.set("stateCode", states.join(","));
-  url.searchParams.set("limit", "500");
-  url.searchParams.set("fields", "parkCode");
+  // Per-state query loop, NOT one multi-state query.
+  //
+  // GOTCHA (surfaced 2026-05-28): /parks?stateCode=CA,NV,AZ,UT,ID,MT silently
+  // returns CA-only results. URLSearchParams.set encodes the comma to %2C, and
+  // NPS's endpoint appears to treat the URL-encoded comma as part of a single
+  // (invalid) state code, falling back to the first valid match. The docs
+  // claim comma-separated multi-state is supported; the implementation
+  // disagrees. Result: a Segment A run for CA/NV/AZ/UT/ID/MT silently lost
+  // all Glacier / Zion / Bryce / Arches / Grand Canyon coverage and we only
+  // caught it on a federation spot-check.
+  //
+  // Fix: issue one request per state and union. NPS is free + fast, so the
+  // 6× call cost is negligible; the resulting parkCode set is deterministic
+  // after sorting + dedup.
+  const all = new Set<string>();
+  for (const state of states) {
+    const url = new URL("https://developer.nps.gov/api/v1/parks");
+    url.searchParams.set("stateCode", state);
+    url.searchParams.set("limit", "500");
+    url.searchParams.set("fields", "parkCode");
 
-  const res = await fetch(url, {
-    headers: {
-      "X-Api-Key": apiKey,
-      Accept: "application/json",
-      "User-Agent": "overlander-data-ingestion/0.0.1",
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`NPS parks list ${res.status}: ${body.slice(0, 200)}`);
+    const res = await fetch(url, {
+      headers: {
+        "X-Api-Key": apiKey,
+        Accept: "application/json",
+        "User-Agent": "overlander-data-ingestion/0.0.1",
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`NPS parks list (${state}) ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as { data?: Array<{ parkCode?: string }> };
+    for (const p of json.data ?? []) {
+      if (typeof p.parkCode === "string" && p.parkCode.length > 0) all.add(p.parkCode);
+    }
   }
-  const json = (await res.json()) as { data?: Array<{ parkCode?: string }> };
-  const codes = (json.data ?? [])
-    .map((p) => p.parkCode)
-    .filter((c): c is string => typeof c === "string" && c.length > 0);
-  // Dedup (NPS sometimes lists a park under multiple states).
-  return Array.from(new Set(codes));
+  // Sort for deterministic ordering across runs (the matcher's ordering
+  // policy assumes the ingest order is stable run-to-run).
+  return [...all].sort();
 }
 
 interface EnrichmentCandidate {
