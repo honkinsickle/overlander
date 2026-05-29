@@ -43,6 +43,18 @@ import { logger } from "../ingestion/lib/logger.ts";
 import { normalizeName as baseNormalizeName } from "../ingestion/lib/normalize.ts";
 import { computeCorpusFingerprint, type CorpusFingerprint } from "./outcome-cache.ts";
 import { clearProgress, loadProgress, saveProgress } from "./progress-cache.ts";
+import {
+  finalizeProfiler,
+  finishSample,
+  initProfiler,
+  recordPlannedTiming,
+  recordRpc,
+  recordScoring,
+  recordSearchPlanned,
+  recordTrack,
+  startSample,
+  type RpcVariant,
+} from "./profiler.ts";
 
 const DEFAULT_CHECKPOINT_INTERVAL = 500;
 
@@ -381,10 +393,15 @@ function resetPlanning(): void {
 }
 
 function trackOutcomeLink(sourceId: string, outcome: MatchOutcome): void {
-  if (outcome.kind === "manual_review") return;
+  const t = performance.now();
+  if (outcome.kind === "manual_review") {
+    recordTrack(performance.now() - t);
+    return;
+  }
   const set = plannedLinks.get(outcome.target) ?? new Set<string>();
   set.add(sourceId);
   plannedLinks.set(outcome.target, set);
+  recordTrack(performance.now() - t);
 }
 
 /**
@@ -419,6 +436,7 @@ function recordPlanned(
   targetId: string,
   point: [number, number],
 ): void {
+  const t = performance.now();
   plannedMasterPlaces.push({
     id: targetId,
     source_id: source.source_id,
@@ -427,6 +445,7 @@ function recordPlanned(
     primary_category: source.inferred_category ?? "unknown",
     geometry: point,
   });
+  recordPlannedTiming(performance.now() - t);
 }
 
 /**
@@ -528,25 +547,45 @@ function masterPlaceHasSource(masterPlaceId: string, sourceId: string): boolean 
  * Callers pass tighter radii for specific purposes: 100m for amenity
  * rollup, 10m for federal exact-match.
  */
+/**
+ * Profiling: infer the RPC variant from the caller's radius. The matcher's
+ * three call sites pass distinct radii (10/100/500), so this is unambiguous.
+ * If a future call site introduces a fourth radius, it falls through to
+ * "standard" — accuracy of the profile, not correctness, would suffer.
+ */
+function inferRpcVariant(radiusM: number): RpcVariant {
+  if (radiusM === 10) return "fed_exact";
+  if (radiusM === 100) return "amenity";
+  return "standard";
+}
+
 export async function findCandidates(
   sourceRecordId: string,
   radiusM = 500,
   categoryFilter?: readonly string[],
 ): Promise<MasterPlaceCandidate[]> {
   const db = getDb();
+  const rpcStart = performance.now();
   const { data: dbCandidates, error } = await db.rpc("find_master_place_candidates", {
     p_source_record_id: sourceRecordId,
     p_radius_meters: radiusM,
     p_category_filter: categoryFilter ? [...categoryFilter] : null,
   });
   if (error) throw error;
+  recordRpc(
+    inferRpcVariant(radiusM),
+    performance.now() - rpcStart,
+    dbCandidates?.length ?? 0,
+  );
 
   let plannedCandidates: MasterPlaceCandidate[] = [];
   if (plannedMasterPlaces.length > 0) {
     const sr = await fetchSourceRecord(sourceRecordId);
     const point = parsePoint(sr.geometry);
     if (point) {
+      const planStart = performance.now();
       plannedCandidates = searchPlanned(point, radiusM, categoryFilter);
+      recordSearchPlanned(performance.now() - planStart, plannedCandidates.length);
     }
   }
 
@@ -738,6 +777,9 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   }
 
   // Score every candidate once. Distance-ASC ordering preserved from the RPC.
+  // Profiler captures the end-to-end "scoring + rule evaluation" window for
+  // each return path below.
+  const scoringStart = performance.now();
   const scored = candidates.map((c) => ({ c, score: scoreMatch(source, c) }));
 
   // Step 3: name_dominant auto_link.
@@ -778,6 +820,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       method: "name_dominant",
       score,
     };
+    recordScoring(performance.now() - scoringStart);
     trackOutcomeLink(source.source_id, outcome);
     return outcome;
   }
@@ -818,6 +861,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     };
     // Note: manual_review is intentionally NOT tracked in plannedLinks —
     // the source_record stays unlinked until human review.
+    recordScoring(performance.now() - scoringStart);
     trackOutcomeLink(source.source_id, outcome);
     return outcome;
   }
@@ -846,6 +890,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       method: "deterministic",
       score,
     };
+    recordScoring(performance.now() - scoringStart);
     trackOutcomeLink(source.source_id, outcome);
     return outcome;
   }
@@ -862,6 +907,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
       score,
       method: "blended_residual",
     };
+    recordScoring(performance.now() - scoringStart);
     trackOutcomeLink(source.source_id, outcome);
     return outcome;
   }
@@ -879,6 +925,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     seed_geometry: point,
     seed_name: source.name,
   };
+  recordScoring(performance.now() - scoringStart);
   trackOutcomeLink(source.source_id, outcome);
   return outcome;
 }
@@ -982,17 +1029,34 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
     }
   }
 
+  // Profiler: env-gated, sampled. No-op when MATCHALL_PROFILE != 'true'.
+  // See data/entity-resolution/profiler.ts.
+  initProfiler();
+
   const interval = checkpointInterval();
   let sinceLastCheckpoint = 0;
-  for (const r of records) {
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i]!;
     if (completedIds.has(r.id)) continue;
+    const cached = sourceRecordCache.get(r.id);
+    startSample(
+      r.id,
+      cached?.source_id ?? "?",
+      cached?.inferred_category ?? null,
+      i,
+      plannedMasterPlaces.length,
+    );
+    const matchOneStart = performance.now();
     try {
-      outcomes.push(await matchOne(r.id));
+      const outcome = await matchOne(r.id);
+      outcomes.push(outcome);
+      finishSample(outcome.kind, performance.now() - matchOneStart);
     } catch (err) {
       logger.error(
         { err, source_record_id: r.id, name: r.name },
         "matcher: matchOne failed",
       );
+      finishSample("error", performance.now() - matchOneStart);
     }
     sinceLastCheckpoint++;
     if (isFullCorpusRun && fingerprint && sinceLastCheckpoint >= interval) {
@@ -1001,6 +1065,7 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
     }
   }
 
+  finalizeProfiler();
   if (isFullCorpusRun) clearProgress();
   logger.info(
     {
