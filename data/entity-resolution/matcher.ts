@@ -41,6 +41,17 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "../ingestion/lib/db.ts";
 import { logger } from "../ingestion/lib/logger.ts";
 import { normalizeName as baseNormalizeName } from "../ingestion/lib/normalize.ts";
+import { computeCorpusFingerprint, type CorpusFingerprint } from "./outcome-cache.ts";
+import { clearProgress, loadProgress, saveProgress } from "./progress-cache.ts";
+
+const DEFAULT_CHECKPOINT_INTERVAL = 500;
+
+function checkpointInterval(): number {
+  const env = process.env.MATCHALL_CHECKPOINT_INTERVAL;
+  if (!env) return DEFAULT_CHECKPOINT_INTERVAL;
+  const n = Number.parseInt(env, 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_CHECKPOINT_INTERVAL;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -416,6 +427,37 @@ function recordPlanned(
     primary_category: source.inferred_category ?? "unknown",
     geometry: point,
   });
+}
+
+/**
+ * Rebuild in-memory planning state from a checkpoint's outcomes so a
+ * resumed matchAll behaves identically to a fresh one.
+ *
+ * Called after initMatchAllCaches (which populates sourceRecordCache)
+ * and before the for-loop resumes. Iterates outcomes in their original
+ * order to recreate plannedMasterPlaces (for new_master_place outcomes)
+ * and plannedLinks (for every non-manual_review outcome).
+ *
+ * Throws if a checkpointed outcome references a source_record_id that
+ * isn't in the current corpus — the fingerprint check should prevent
+ * this, so reaching this throw indicates corruption or an unexpected
+ * corpus mutation.
+ */
+function replayPlannedState(outcomes: MatchOutcome[]): void {
+  for (const o of outcomes) {
+    const src = sourceRecordCache.get(o.source_record_id);
+    if (!src) {
+      throw new Error(
+        `progress replay: source_record ${o.source_record_id} not in current corpus`,
+      );
+    }
+    if (o.kind === "new_master_place") {
+      recordPlanned(src, o.target, o.seed_geometry);
+    }
+    if (o.kind !== "manual_review") {
+      trackOutcomeLink(src.source_id, o);
+    }
+  }
 }
 
 function searchPlanned(
@@ -876,14 +918,25 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
     if (error) throw error;
     records = (data ?? []) as SourceRecordRow[];
   } else {
-    const { data, error } = await db
-      .from("source_record")
-      .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
-      .is("master_place_id", null)
-      .order("source_quality_score", { ascending: false })
-      .order("external_id", { ascending: true });
-    if (error) throw error;
-    records = (data ?? []) as SourceRecordRow[];
+    // Paginate to bypass PostgREST's 1000-row default cap. Corridor scale
+    // (~8K records) silently truncated to 1000 with the unpaginated form.
+    records = [];
+    const PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const { data, error } = await db
+        .from("source_record")
+        .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
+        .is("master_place_id", null)
+        .order("source_quality_score", { ascending: false })
+        .order("external_id", { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      const batch = (data ?? []) as SourceRecordRow[];
+      records.push(...batch);
+      if (batch.length < PAGE) break;
+      offset += PAGE;
+    }
   }
 
   const tier = (r: SourceRecordRow): number => {
@@ -907,8 +960,32 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
   // eliminate per-matchOne DB roundtrips downstream.
   await initMatchAllCaches(records);
 
+  // Incremental checkpointing — only for the full-corpus path. The
+  // ID-list path is used for incremental sync (small batches) where
+  // resume isn't worth the bookkeeping.
+  const isFullCorpusRun = !sourceRecordIds || sourceRecordIds.length === 0;
+  let fingerprint: CorpusFingerprint | null = null;
+  let completedIds: Set<string> = new Set();
   const outcomes: MatchOutcome[] = [];
+
+  if (isFullCorpusRun) {
+    fingerprint = await computeCorpusFingerprint();
+    const resumed = loadProgress(fingerprint);
+    if (resumed && resumed.length > 0) {
+      outcomes.push(...resumed);
+      completedIds = new Set(resumed.map((o) => o.source_record_id));
+      replayPlannedState(resumed);
+      logger.info(
+        { resumed: resumed.length, total: records.length },
+        "matcher: resuming from checkpoint",
+      );
+    }
+  }
+
+  const interval = checkpointInterval();
+  let sinceLastCheckpoint = 0;
   for (const r of records) {
+    if (completedIds.has(r.id)) continue;
     try {
       outcomes.push(await matchOne(r.id));
     } catch (err) {
@@ -917,7 +994,14 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
         "matcher: matchOne failed",
       );
     }
+    sinceLastCheckpoint++;
+    if (isFullCorpusRun && fingerprint && sinceLastCheckpoint >= interval) {
+      saveProgress(outcomes, fingerprint);
+      sinceLastCheckpoint = 0;
+    }
   }
+
+  if (isFullCorpusRun) clearProgress();
   logger.info(
     {
       total: outcomes.length,

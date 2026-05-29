@@ -37,7 +37,11 @@ import npsIngest from "../ingestion/sources/nps.ts";
 import googleIngest from "../ingestion/sources/google-places.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "../ingestion/sources/_types.ts";
 import type { BoundingBox } from "../ingestion/lib/geometry.ts";
-import { matchAll } from "../entity-resolution/matcher.ts";
+import { matchAll, type MatchOutcome } from "../entity-resolution/matcher.ts";
+import {
+  loadFreshOutcomeCache,
+  saveOutcomeCache,
+} from "../entity-resolution/outcome-cache.ts";
 import { applyMatches, type ApplyResult } from "../entity-resolution/promote.ts";
 import { sync as runSync, type SyncResult } from "../search/sync-typesense.ts";
 import { getDb } from "../ingestion/lib/db.ts";
@@ -135,57 +139,98 @@ async function runRematerialize(dryRun: boolean): Promise<RematerializeReport> {
 }
 
 /**
- * Find source_records that ER has never seen — `master_place_id IS NULL`
- * AND no existing `place_match` row. After a clean --rematerialize this
- * is the entire corpus. On a bare re-run over an already-resolved
- * corpus this is empty (every unresolved record is already pending in
- * place_match). On a re-run after an incremental ingest, this is the
- * newly-added source_records only.
+ * Drain a PostgREST query that may return more than the 1000-row default
+ * cap. Caller supplies a builder so .range() can be applied per page on a
+ * fresh query each iteration.
+ *
+ * Surfaced at corridor scale: at JT (~219 records) the default cap was
+ * invisible; at Segment A (~8K records) it silently truncated to 1000.
  */
-async function findTrulyUnresolvedIds(rematerializeJustRan: boolean): Promise<string[]> {
-  const db = getDb();
-  if (rematerializeJustRan) {
-    // After --rematerialize, all source_records are unlinked and
-    // place_match is empty. Skip the NOT EXISTS check — empty by design.
-    const { data, error } = await db.from("source_record").select("id");
+async function paginatedSelect<T>(
+  buildQuery: () => { range: (from: number, to: number) => unknown },
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  let offset = 0;
+  while (true) {
+    const promise = buildQuery().range(offset, offset + PAGE - 1) as unknown as Promise<{
+      data: T[] | null;
+      error: { message?: string } | null;
+    }>;
+    const { data, error } = await promise;
     if (error) throw error;
-    return ((data ?? []) as { id: string }[]).map((r) => r.id);
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+    offset += PAGE;
   }
-  // Records with no master_place_id AND no row in place_match. PostgREST
-  // doesn't support NOT EXISTS subqueries cleanly, so do the diff in TS.
-  const [{ data: srData, error: srErr }, { data: pmData, error: pmErr }] = await Promise.all([
-    db.from("source_record").select("id").is("master_place_id", null),
-    db.from("place_match").select("source_record_id"),
+  return out;
+}
+
+/**
+ * Find source_records that ER has never seen — `master_place_id IS NULL`
+ * AND no existing `place_match` row. Used only in incremental mode (no
+ * --rematerialize). On a re-run over an already-resolved corpus this is
+ * empty. On a re-run after an incremental ingest, this is just the
+ * newly-added source_records.
+ *
+ * Rematerialize mode skips this function entirely — every source_record
+ * is unresolved by construction, and matchAll() drives its own
+ * server-side full-corpus query.
+ */
+async function findTrulyUnresolvedIds(): Promise<string[]> {
+  const db = getDb();
+  const [srRows, pmRows] = await Promise.all([
+    paginatedSelect<{ id: string }>(() =>
+      db.from("source_record").select("id").is("master_place_id", null).order("id"),
+    ),
+    paginatedSelect<{ source_record_id: string }>(() =>
+      db.from("place_match").select("source_record_id").order("source_record_id"),
+    ),
   ]);
-  if (srErr) throw srErr;
-  if (pmErr) throw pmErr;
-  const seenInPlaceMatch = new Set<string>(
-    ((pmData ?? []) as { source_record_id: string }[]).map((r) => r.source_record_id),
-  );
-  return ((srData ?? []) as { id: string }[])
-    .map((r) => r.id)
-    .filter((id) => !seenInPlaceMatch.has(id));
+  const seenInPlaceMatch = new Set<string>(pmRows.map((r) => r.source_record_id));
+  return srRows.map((r) => r.id).filter((id) => !seenInPlaceMatch.has(id));
 }
 
 async function runResolution(rematerializeJustRan: boolean, dryRun: boolean): Promise<ApplyResult> {
-  const trulyUnresolvedIds = await findTrulyUnresolvedIds(rematerializeJustRan);
-  if (trulyUnresolvedIds.length === 0) {
+  // After --rematerialize, every source_record is unresolved by
+  // construction; call matchAll() with no IDs so it runs its own
+  // server-side query. Passing an explicit ID list at corridor scale
+  // sends ~35KB+ of UUIDs through .in("id", [...]) and PostgREST
+  // returns 400 Bad Request because the URL exceeds the URL-length cap.
+  let outcomes: MatchOutcome[];
+  if (rematerializeJustRan) {
+    // Try the outcome cache first — at corridor scale matchAll takes
+    // ~35 min and we don't want to re-pay that on an applyMatches
+    // retry. The cache is fingerprinted against the source_record
+    // corpus, so any source_record mutation (including a successful
+    // apply's master_place_id writes) invalidates it implicitly.
+    const cached = dryRun ? null : await loadFreshOutcomeCache();
+    if (cached) {
+      outcomes = cached;
+    } else {
+      logger.info("materialize: ER over full corpus (rematerialize)");
+      outcomes = await matchAll();
+      if (!dryRun) await saveOutcomeCache(outcomes);
+    }
+  } else {
+    const trulyUnresolvedIds = await findTrulyUnresolvedIds();
+    if (trulyUnresolvedIds.length === 0) {
+      logger.info(
+        "materialize: ER skipped — no truly-unresolved source_records (every record is " +
+          "either already linked or already pending in place_match). Use --rematerialize for a clean rebuild.",
+      );
+      return { new_master_places: 0, auto_linked: 0, amenity_rolled_up: 0, manual_review_queued: 0, errors: [] };
+    }
     logger.info(
-      "materialize: ER skipped — no truly-unresolved source_records (every record is " +
-        "either already linked or already pending in place_match). Use --rematerialize for a clean rebuild.",
+      { unresolved: trulyUnresolvedIds.length },
+      "materialize: ER over truly-new source_records (incremental)",
     );
-    return { new_master_places: 0, auto_linked: 0, amenity_rolled_up: 0, manual_review_queued: 0, errors: [] };
+    outcomes = await matchAll(trulyUnresolvedIds);
   }
-  logger.info(
-    { unresolved: trulyUnresolvedIds.length },
-    rematerializeJustRan
-      ? "materialize: ER over full corpus (rematerialize)"
-      : "materialize: ER over truly-new source_records (incremental)",
-  );
 
   if (dryRun) {
     logger.info("materialize: --dry-run → matching but not applying");
-    const outcomes = await matchAll(trulyUnresolvedIds);
     return {
       new_master_places: outcomes.filter((o) => o.kind === "new_master_place").length,
       auto_linked: outcomes.filter((o) => o.kind === "auto_link").length,
@@ -194,7 +239,6 @@ async function runResolution(rematerializeJustRan: boolean, dryRun: boolean): Pr
       errors: [],
     };
   }
-  const outcomes = await matchAll(trulyUnresolvedIds);
   return await applyMatches(outcomes);
 }
 
@@ -215,15 +259,23 @@ async function runSyncStage(dryRun: boolean, skipPrune: boolean): Promise<SyncRe
 }
 
 async function countSourceRecords(): Promise<SourceRecordCounts> {
+  // Per-source COUNT(*) head queries avoid PostgREST's 1000-row default cap.
+  // The previous .select("source_id") form silently truncated at corridor
+  // scale; this returns true counts.
   const db = getDb();
-  const { data, error } = await db.from("source_record").select("source_id");
-  if (error) throw error;
-  const rows = (data ?? []) as { source_id: string }[];
   const by_source: Record<string, number> = {};
-  for (const row of rows) {
-    by_source[row.source_id] = (by_source[row.source_id] ?? 0) + 1;
+  let total = 0;
+  for (const id of SOURCE_IDS) {
+    const { count, error } = await db
+      .from("source_record")
+      .select("id", { count: "exact", head: true })
+      .eq("source_id", id);
+    if (error) throw error;
+    const n = count ?? 0;
+    by_source[id] = n;
+    total += n;
   }
-  return { total: rows.length, by_source };
+  return { total, by_source };
 }
 
 // ──────────────────────────────────────────────────────────────────────
