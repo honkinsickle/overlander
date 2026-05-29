@@ -227,24 +227,39 @@ async function fetchEnrichmentCandidates(
   const db = getDb();
   // Pre-filter by bbox + category server-side; in-memory dedup happens
   // in the per-seed cache check below.
-  const { data, error } = await db
-    .from("source_record_view")
-    .select("id, name, inferred_category, lng, lat")
-    .in("inferred_category", [...categories])
-    .gte("lng", bbox[0])
-    .lte("lng", bbox[2])
-    .gte("lat", bbox[1])
-    .lte("lat", bbox[3])
-    .order("id"); // deterministic order for re-runs
-  if (error) throw error;
-
-  return ((data ?? []) as Array<{
+  //
+  // Paginated via .range() to bypass PostgREST's 1000-row default cap.
+  // Surfaced at corridor scale (post-RIDB-sub-tiling fix): ~4K candidates
+  // silently truncated to 1000, so Google enrichment never reached the
+  // northern half of the corridor (Glacier / Zion / Bryce etc.).
+  const PAGE = 1000;
+  const rows: Array<{
     id: string;
     name: string;
     inferred_category: string;
     lng: number;
     lat: number;
-  }>).map((row) => ({
+  }> = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await db
+      .from("source_record_view")
+      .select("id, name, inferred_category, lng, lat")
+      .in("inferred_category", [...categories])
+      .gte("lng", bbox[0])
+      .lte("lng", bbox[2])
+      .gte("lat", bbox[1])
+      .lte("lat", bbox[3])
+      .order("id") // deterministic order for re-runs
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as typeof rows;
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    offset += PAGE;
+  }
+
+  return rows.map((row) => ({
     id: row.id,
     name: row.name,
     inferredCategory: row.inferred_category,
@@ -415,10 +430,18 @@ async function main(): Promise<void> {
     .description("Run OSM + RIDB + NPS + Google ingestion for one corridor segment.")
     .requiredOption("--corridor <name>", "Corridor name (e.g. segment_a_la_pnw)")
     .option("--skip-osm", "Skip OSM stage (e.g. when Overpass mirror is flaky)")
+    .option("--skip-ridb", "Skip RIDB stage")
+    .option("--skip-nps", "Skip NPS stage (e.g. to re-ingest only RIDB after a tiling fix)")
     .option("--skip-google", "Skip Google enrichment + discovery (free sources only)")
     .parse(process.argv);
 
-  const opts = program.opts<{ corridor: string; skipOsm?: boolean; skipGoogle?: boolean }>();
+  const opts = program.opts<{
+    corridor: string;
+    skipOsm?: boolean;
+    skipRidb?: boolean;
+    skipNps?: boolean;
+    skipGoogle?: boolean;
+  }>();
   const startedAt = Date.now();
 
   const corridor = await lookupCorridor(opts.corridor);
@@ -442,15 +465,25 @@ async function main(): Promise<void> {
     }
 
     // 2. RIDB
-    logger.info("ingest-corridor: stage 2 — RIDB");
-    report.ridb = await runRidbTiled(corridor.bbox);
+    if (opts.skipRidb) {
+      logger.info("ingest-corridor: --skip-ridb — stage 2 RIDB skipped");
+      report.ridb = {
+        fetched: 0,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        tiles: 0,
+        duration_ms: 0,
+      };
+    } else {
+      logger.info("ingest-corridor: stage 2 — RIDB");
+      report.ridb = await runRidbTiled(corridor.bbox);
+    }
 
     // 3. NPS
-    logger.info("ingest-corridor: stage 3 — NPS");
-    const states = SEGMENT_NPS_STATES[opts.corridor] ?? [];
-    const parkCodes = await fetchParkCodesByState(states);
-    logger.info({ states, parkCodeCount: parkCodes.length }, "ingest-corridor: NPS parkCodes discovered");
-    if (parkCodes.length === 0) {
+    if (opts.skipNps) {
+      logger.info("ingest-corridor: --skip-nps — stage 3 NPS skipped");
       report.nps = {
         source_id: "nps",
         fetched: 0,
@@ -462,8 +495,25 @@ async function main(): Promise<void> {
         parkCodes: 0,
       };
     } else {
-      const npsResult = await npsIngest({ parkCodes });
-      report.nps = { ...npsResult, parkCodes: parkCodes.length };
+      logger.info("ingest-corridor: stage 3 — NPS");
+      const states = SEGMENT_NPS_STATES[opts.corridor] ?? [];
+      const parkCodes = await fetchParkCodesByState(states);
+      logger.info({ states, parkCodeCount: parkCodes.length }, "ingest-corridor: NPS parkCodes discovered");
+      if (parkCodes.length === 0) {
+        report.nps = {
+          source_id: "nps",
+          fetched: 0,
+          inserted: 0,
+          updated: 0,
+          skipped: 0,
+          errors: 0,
+          duration_ms: 0,
+          parkCodes: 0,
+        };
+      } else {
+        const npsResult = await npsIngest({ parkCodes });
+        report.nps = { ...npsResult, parkCodes: parkCodes.length };
+      }
     }
 
     // 4. Google
