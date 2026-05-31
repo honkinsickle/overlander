@@ -611,3 +611,20 @@ near-duplicate pairs during the Mount Robson smoke (expected: none — the
 two surfaces describe the same park, joined on ORCS, so they collapse to
 one source_record rather than forming sibling records).
 
+### Smoke teardown not enforced in the pipeline (convention only)
+
+Surfaced during BC Parks (PR #63). Source-integration smoke tests write
+to the test project; the convention (CLAUDE.md "Source integration
+workflow") is to manually `DELETE FROM source_record WHERE source_id =
+'<new_source>'` after smoke validation passes, so the D4 baseline stays
+at its canonical 219 / 153 / 16 / 17 / 33. Without it, leftover smoke
+records become extra solo master_places under full-corpus `matchAll` and
+the D4 distribution drifts (BC Parks left 8 records → 227 / 161 until
+cleaned).
+
+Future improvement: add a `--cleanup-after` flag to the ingester that
+auto-deletes by `source_id` + ingestion-run timestamp once smoke
+validation completes. Removes the reliance on convention and makes
+baseline drift impossible by construction. Low priority — the manual
+DELETE convention is sufficient short-term.
+
