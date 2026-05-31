@@ -56,8 +56,14 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/google-places.ts");
       return mod.default;
     }
+    case "parks_canada": {
+      const mod = await import("./sources/parks-canada.ts");
+      return mod.default;
+    }
     default:
-      throw new Error(`Unknown source: ${name}. Available: osm, ridb, nps, google`);
+      throw new Error(
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada`,
+      );
   }
 }
 

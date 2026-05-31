@@ -35,6 +35,7 @@ import osmIngest from "../ingestion/sources/osm.ts";
 import ridbIngest from "../ingestion/sources/ridb.ts";
 import npsIngest from "../ingestion/sources/nps.ts";
 import googleIngest from "../ingestion/sources/google-places.ts";
+import parksCanadaIngest from "../ingestion/sources/parks-canada.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "../ingestion/sources/_types.ts";
 import type { BoundingBox } from "../ingestion/lib/geometry.ts";
 import { matchAll, type MatchOutcome } from "../entity-resolution/matcher.ts";
@@ -57,9 +58,10 @@ const SOURCE_INGESTERS: Record<SourceId, IngestFn> = {
   ridb: ridbIngest,
   nps: npsIngest,
   google: googleIngest,
+  parks_canada: parksCanadaIngest,
 };
 
-const SOURCE_IDS = ["osm", "ridb", "nps", "google"] as const;
+const SOURCE_IDS = ["osm", "ridb", "nps", "google", "parks_canada"] as const;
 type SourceId = (typeof SOURCE_IDS)[number];
 
 const DEFAULT_NPS_PARK_CODES = ["jotr"] as const;

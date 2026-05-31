@@ -442,3 +442,149 @@ their recompute queue; recompute then runs in its own bounded chunks
 (e.g., recompute_master_place_batch(uuid[] LIMIT 100)). This converts
 the heavy-tail risk into a predictable cost ceiling. Bundle with the
 polygon-containment + seed-geometry refactor.
+
+### Ingestion follow-ups from Parks Canada integration (2026-05-30)
+
+Two forward-looking items surfaced while wiring Parks Canada — neither is
+a bug; both are bets about where the next refactor pressure will appear.
+
+1. **`fed_exact` is hardcoded to the NPS↔RIDB pair.** Parks Canada
+   Reservation Service has no public API today, so `fed_exact` can't fire
+   for Parks Canada — `name_dominant` carries Parks Canada ↔ Google
+   federation in the meantime, which is acceptable per the spec. If PCRS
+   ever exposes a programmatic surface, `findFederalAnchor` (in
+   `matcher.ts`) needs extension beyond the hardcoded `nps` / `ridb`
+   source-id check. Likely a small change — generalize to a `Map<source_id,
+   partner_source_id>` lookup — but flag the dependency so the change
+   isn't missed when PCRS lands.
+
+2. **Three-endpoint ESRI client may want extraction.** Parks Canada hits
+   three ESRI REST layers via the same `fetchEsriLayer(serviceUrl, bbox,
+   label)` shape. BC Parks and Alberta Parks are both on ArcGIS Online
+   per their open-data portals — same query API. If both follow this
+   pattern, the third source confirms a shared utility belongs in
+   `data/ingestion/lib/esri.ts`. Don't pre-extract — wait for the third
+   instance to inform the abstraction shape, then refactor all three
+   together.
+
+### field_precedence resolution determinism (bundled small PR)
+
+Surfaced during Parks Canada migration design. Two related items, file
+together as a single small PR after Parks Canada lands.
+
+1. **`resolve_field` lacks a deterministic secondary tie-breaker.** The
+   recompute function does `ORDER BY priority ASC LIMIT 1` only — no
+   secondary key. If two sources share the same priority for a given
+   field on the same master_place AND both have non-null values, Postgres
+   returns one of them non-deterministically. Currently safe only because
+   the seed maintains unique-priority-per-field by convention; not
+   enforced anywhere. Proposed fix: `ORDER BY priority ASC,
+   source_quality_score DESC` — deterministic via the existing
+   per-source-record quality score.
+
+2. **`field_precedence` lacks a `UNIQUE (field_name, priority)`
+   constraint.** Convention is enforced manually; a future row addition
+   could silently introduce non-determinism (the Parks Canada
+   `canonical_name` at priority 1 already collides with NPS at 1 —
+   operationally safe via geographic disjointness, but the schema does
+   nothing to flag the collision). Proposed fix: add the unique
+   constraint at migration time. May require resolving any existing
+   inadvertent collisions first.
+
+Combined PR shape: one migration adding the unique constraint + one
+migration updating `resolve_field` and the polygon/geometry resolution
+queries in `recompute_master_place` to use the deterministic ORDER BY.
+Land after Parks Canada so the Parks Canada rows are in the table
+when the constraint is added.
+
+### Ingester insert/update counter accuracy (surfaced 2026-05-30)
+
+Every existing ingester (NPS, RIDB, Google, OSM, Parks Canada) reports
+`inserted: N, updated: 0` regardless of whether each upsert was actually
+an insert or an update of an existing row. Root cause: `upsertSourceRecord`
+calls `upsert_source_record` RPC which returns just the row id — no
+insert/update discriminator. Each ingester optimistically counts every
+successful return as "inserted".
+
+The Banff smoke iteration 2 unmasked this: 3,078 features fetched, all
+"inserted" per the counter, but only 1,888 distinct rows persisted
+because 1,190 collided on the (then-broken) external_id key. The
+counter said "OK" when reality wasn't.
+
+Fix shape (small follow-on PR across all sources):
+  - `upsert_source_record` RPC returns `{ id, is_insert }`.
+  - `upsertSourceRecord` helper threads the boolean back.
+  - Each ingester tracks `inserted` vs `updated` separately.
+  - `fetched - (inserted + updated)` becomes a real discrepancy signal.
+
+Not Segment B scope. File for batched follow-on.
+
+### Parks Canada Trails APCA dataset (Segment B follow-up)
+
+Parks Canada publishes a separate Trails dataset
+(`https://open.canada.ca/data/en/dataset/64a90e8d-5bc0-4027-8645-b5881b4068d4`)
+that this PR's three-endpoint client does NOT consume. Interest Points
+covers viewpoints, lookouts, historic points, accommodation references —
+but not trailheads. Banff smoke surfaced zero `inferred_category='trailhead'`
+records from Parks Canada.
+
+If Segment B execution shows a trailhead coverage gap (likely — OSM is
+the primary trailhead source for Segment A, but Canadian OSM coverage
+varies), add Trails APCA as a fourth Parks Canada endpoint or a separate
+spec.
+
+### Parks Canada URL_f field mislabeling (upstream data quality)
+
+Accommodation layer's `URL_f` field contains stable park-site codes
+(e.g., `"BAN-TMV1-D19"`) for 1,632 of 1,679 Banff records — not URLs as
+the field name suggests. 40 records actually contain URLs in `URL_f`;
+7 are empty. The field is being used as a code column despite being
+named for URLs.
+
+We don't depend on this: our accommodation external_id keys on
+`OBJECTID` regardless. But if Parks Canada ever cleans up this upstream
+mislabeling (puts real URLs in `URL_f` and moves the codes to a new
+field), URL_f becomes a usable canonical-key candidate, more stable
+than OBJECTID across ESRI layer rebuilds. Re-evaluate accommodation
+external_id strategy at that point.
+
+### Parks Canada within-source endpoint-disjointness (informational)
+
+14 Accommodation × Interest Points pairs within 100m in the Banff bbox,
+all describing semantically distinct features (campground vs interpretive
+feature within same site — e.g., "Rocky Mountain House Heritage Camping"
+vs "Bison Lookout - Rocky Mountain House" at 86m). Confirms the
+two-endpoint pattern doesn't create within-source federation gaps — the
+endpoints are complementary, not overlapping. BC Parks (next source,
+DataBC, also multi-endpoint) should be audited similarly during its
+smoke test.
+
+### Supabase CLI migration apply-without-execute hazard (operational risk)
+
+Supabase CLI marked migration `20260530000000_phase1_5_parks_canada_field_precedence.sql`
+as applied on the test project but skipped its INSERT statements.
+Production was unaffected (rows applied correctly). Caught only because
+the Phase 1.5 synthetic federation test specifically exercised
+`field_precedence` behavior and noticed `canonical_name` resolved to
+google instead of parks_canada.
+
+Manifested after a first push that emitted the confusing
+`"Remote migration versions not found in local migrations directory"`
+message and then a subsequent push reporting `"Applying migration …
+Finished supabase db push"` without actually running the migration body.
+Repaired via manual upsert of the 6 expected rows.
+
+Mitigation options:
+  (a) **Preferred:** small follow-on PR adding a post-migration verification
+      script — run after each `db push`, asserts expected row counts in
+      tables touched by the migration. Catches both this CLI hazard and
+      any future analogous issue with INSERT-only migrations.
+  (b) Idempotent rewrites of INSERT-only migrations (DROP-then-INSERT or
+      MERGE) — weaker; doesn't catch apply-skip on schema-only migrations.
+  (c) Error-message detection in the CLI invocation — weaker; relies on
+      Supabase keeping that exact message stable.
+
+File as separate small PR after Parks Canada lands. The synthetic
+federation test in `phase3a.test.ts` partially backstops this for the
+Parks Canada `canonical_name` case specifically; the broader solution
+needs to be a general migration-verify pattern.
