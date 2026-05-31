@@ -44,6 +44,14 @@ import { spawnSync } from "node:child_process";
 import { getDb } from "../ingestion/lib/db.ts";
 import { logger } from "../ingestion/lib/logger.ts";
 
+// The Supabase CLI resolves its project link (supabase/.temp/project-ref)
+// relative to cwd, which lives at the repo root — not under data/ where the
+// npm workspace runs this script. Spawn the CLI with cwd pinned to the repo
+// root so `npm run -w data db:push-verify` works without a manual
+// SUPABASE_WORKDIR=$(git rev-parse --show-toplevel) prefix.
+// scripts/ → data/ → repo-root.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
 // ───── CLI shape ───────────────────────────────────────────────────────
 
 interface CliArgs {
@@ -502,6 +510,7 @@ function listPendingMigrationIds(): string[] {
   // A pending migration has Local populated and Remote empty.
   const result = spawnSync("supabase", ["migration", "list"], {
     encoding: "utf8",
+    cwd: REPO_ROOT,
   });
   if (result.status !== 0) {
     throw new Error(
@@ -522,6 +531,7 @@ function runDbPush(): { ok: boolean; output: string } {
   const result = spawnSync("supabase", ["db", "push"], {
     encoding: "utf8",
     stdio: ["inherit", "pipe", "pipe"],
+    cwd: REPO_ROOT,
   });
   return {
     ok: result.status === 0,
