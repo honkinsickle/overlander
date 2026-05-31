@@ -440,6 +440,11 @@ async function fetchWfsBoundaries(bbox: BoundingBox): Promise<WfsFeature[]> {
     url.searchParams.set("srsName", "EPSG:4326");
     url.searchParams.set("count", String(WFS_PAGE_SIZE));
     url.searchParams.set("startIndex", String(startIndex));
+    // GeoServer WFS 2.0 refuses startIndex pagination without a stable
+    // sort: "Cannot do natural order without a primary key." This layer
+    // has no PK, so we sort by OBJECTID (unique per row) to give every
+    // page a deterministic order. Required even on page 0.
+    url.searchParams.set("sortBy", "OBJECTID");
     url.searchParams.set(
       "bbox",
       `${south},${west},${north},${east},urn:ogc:def:crs:EPSG::4326`,
