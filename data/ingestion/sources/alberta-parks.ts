@@ -65,18 +65,17 @@
 
 import { z } from "zod";
 
-import type { BoundingBox } from "../lib/geometry.ts";
 import { upsertSourceRecord } from "../lib/db.ts";
+import { fetchEsriFeatures } from "../lib/esri.ts";
+import { bboxCentroid, extractPolygon, type GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { limits } from "../lib/rate-limit.ts";
-import { defaultRetry } from "../lib/retry.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
 
 const SOURCE_ID = "alberta_parks";
 const SOURCE_QUALITY_SCORE = 0.9;
 const USER_AGENT =
   "overlander-data-ingestion/0.0.1 (+https://github.com/honkinsickle/overlander)";
-const PAGE_SIZE = 1000;
 
 // Park-like designations we ingest. NP (federal) is excluded by omission;
 // the conservation-only designations (NA/ER/WA/HR/WP) are deferred.
@@ -102,35 +101,6 @@ const DESIGNATION_LABELS: Record<string, string> = {
 
 const ENDPOINT =
   "https://geospatial.alberta.ca/titan/rest/services/boundary/parks_protected_areas_alberta/FeatureServer/0";
-
-// ───── ESRI GeoJSON envelope ───────────────────────────────────────────
-//
-// The layer responds with a GeoJSON FeatureCollection when queried with
-// `f=geojson`. Same wrapper schema as the Parks Canada ESRI endpoints; the
-// per-layer attribute shape is validated separately in the persistence
-// path.
-
-const GeoJsonGeometrySchema = z
-  .object({ type: z.string(), coordinates: z.unknown() })
-  .passthrough();
-
-const GeoJsonFeatureSchema = z
-  .object({
-    type: z.literal("Feature"),
-    geometry: GeoJsonGeometrySchema.nullable(),
-    properties: z.record(z.unknown()),
-  })
-  .passthrough();
-
-const GeoJsonFeatureCollectionSchema = z.object({
-  type: z.literal("FeatureCollection"),
-  features: z.array(GeoJsonFeatureSchema),
-  // ESRI sets `exceededTransferLimit: true` when a paginated response hit
-  // the server-side cap. Use it as a pagination hint when present.
-  exceededTransferLimit: z.boolean().optional(),
-});
-
-type EsriFeature = z.infer<typeof GeoJsonFeatureSchema>;
 
 // Layer attribute shape (Protected Area Designations). `.passthrough()` —
 // the layer carries many fields we don't normalize (STATUS, IUCN, OC_*,
@@ -218,47 +188,6 @@ function buildCanonicalName(
   return remaining.length === 0 ? name : `${name} ${remaining.join(" ")}`;
 }
 
-// ───── Geometry helpers ────────────────────────────────────────────────
-
-function extractPolygon(
-  geom: EsriFeature["geometry"],
-): { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null {
-  if (!geom) return null;
-  if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
-    return { type: geom.type, coordinates: geom.coordinates };
-  }
-  return null;
-}
-
-function bboxCentroid(geom: {
-  type: "Polygon" | "MultiPolygon";
-  coordinates: unknown;
-}): [number, number] | null {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  const walk = (node: unknown): void => {
-    if (
-      Array.isArray(node) &&
-      node.length >= 2 &&
-      typeof node[0] === "number" &&
-      typeof node[1] === "number"
-    ) {
-      const [lng, lat] = node as [number, number];
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-      return;
-    }
-    if (Array.isArray(node)) for (const child of node) walk(child);
-  };
-  walk(geom.coordinates);
-  if (!Number.isFinite(west)) return null;
-  return [(west + east) / 2, (south + north) / 2];
-}
-
 // ───── Category + normalizer ────────────────────────────────────────────
 
 /**
@@ -301,84 +230,12 @@ function normalizePark(args: {
   };
 }
 
-// ───── HTTP ────────────────────────────────────────────────────────────
-
-/**
- * Query the Alberta Parks ESRI REST layer for features inside `bbox`
- * matching `where`, merging paginated GeoJSON pages.
- *
- * Coercion details:
- *   - inSR=4326 — interpret the bbox as WGS84.
- *   - outSR=4326 — force WGS84 output (layer is native EPSG:3400).
- *   - f=geojson — bypass ESRI JSON encoding for downstream simplicity.
- *
- * Bbox encoding: ESRI Envelope is xmin,ymin,xmax,ymax — matches our
- * [W,S,E,N] BoundingBox tuple directly.
- */
-async function fetchEsriLayer(
-  bbox: BoundingBox,
-  where: string,
-): Promise<EsriFeature[]> {
-  const features: EsriFeature[] = [];
-  let offset = 0;
-
-  while (true) {
-    const url = new URL(`${ENDPOINT}/query`);
-    url.searchParams.set("where", where);
-    url.searchParams.set("geometry", bbox.join(","));
-    url.searchParams.set("geometryType", "esriGeometryEnvelope");
-    url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-    url.searchParams.set("inSR", "4326");
-    url.searchParams.set("outSR", "4326");
-    url.searchParams.set("outFields", "*");
-    url.searchParams.set("f", "geojson");
-    url.searchParams.set("resultOffset", String(offset));
-    url.searchParams.set("resultRecordCount", String(PAGE_SIZE));
-
-    const page = await defaultRetry(async () => {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(
-          `alberta_parks ${res.status}: ${body.slice(0, 200)}`,
-        );
-      }
-      const json = await res.json();
-      const parsed = GeoJsonFeatureCollectionSchema.safeParse(json);
-      if (!parsed.success) {
-        logger.warn(
-          { err: parsed.error.flatten() },
-          "alberta_parks: response failed FeatureCollection validation",
-        );
-        throw new Error("alberta_parks: schema mismatch");
-      }
-      return parsed.data;
-    }, "alberta_parks.fetch");
-
-    features.push(...page.features);
-    logger.debug(
-      { offset, pageSize: page.features.length, total: features.length },
-      "alberta_parks: page",
-    );
-
-    const shortPage = page.features.length < PAGE_SIZE;
-    const transferLimitHit = page.exceededTransferLimit === true;
-    if (shortPage && !transferLimitHit) break;
-    offset += page.features.length;
-    if (page.features.length === 0) break; // safety: never infinite-loop
-  }
-
-  return features;
-}
-
 // ───── Persistence ─────────────────────────────────────────────────────
 
 type PersistOutcome = "inserted" | "skipped" | "error";
 
 async function persistPark(
-  feature: EsriFeature,
+  feature: GeoJsonFeature,
   dryRun: boolean,
 ): Promise<PersistOutcome> {
   const parsed = ParkPropsSchema.safeParse(feature.properties);
@@ -474,7 +331,11 @@ export const ingest: IngestFn = async (
   const dryRun = opts.dryRun ?? false;
 
   await limit(async () => {
-    const features = await fetchEsriLayer(bbox, TYPE_WHERE);
+    const features = await fetchEsriFeatures(ENDPOINT, bbox, {
+      where: TYPE_WHERE,
+      label: SOURCE_ID,
+      userAgent: USER_AGENT,
+    });
     stats.fetched = features.length;
     logger.info({ count: features.length }, "alberta_parks: features fetched");
     for (const feature of features) {
