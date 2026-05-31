@@ -38,19 +38,18 @@
 
 import { z } from "zod";
 
-import type { BoundingBox } from "../lib/geometry.ts";
 import { upsertSourceRecord } from "../lib/db.ts";
+import { fetchEsriFeatures } from "../lib/esri.ts";
+import { bboxCentroid, extractPolygon, type GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
 import { limits } from "../lib/rate-limit.ts";
-import { defaultRetry } from "../lib/retry.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
 
 const SOURCE_ID = "parks_canada";
 const SOURCE_QUALITY_SCORE = 0.95;
 const USER_AGENT =
   "overlander-data-ingestion/0.0.1 (+https://github.com/honkinsickle/overlander)";
-const PAGE_SIZE = 1000;
 
 // ───── Endpoints ───────────────────────────────────────────────────────
 //
@@ -72,39 +71,6 @@ const ENDPOINTS = {
   interestPoints:
     "https://services2.arcgis.com/wCOMu5IS7YdSyPNx/arcgis/rest/services/vw_Interest_Point_Interet_V2_FGP/FeatureServer/0",
 } as const;
-
-// ───── ESRI GeoJSON envelope ───────────────────────────────────────────
-//
-// All three endpoints respond identically when queried with `f=geojson`:
-// a GeoJSON FeatureCollection wrapping endpoint-specific `properties`.
-// Endpoint-specific attribute shapes are validated against narrower
-// schemas inside the persistence path; the wrapper schema is shared.
-
-const GeoJsonGeometrySchema = z
-  .object({
-    type: z.string(),
-    coordinates: z.unknown(),
-  })
-  .passthrough();
-
-const GeoJsonFeatureSchema = z
-  .object({
-    type: z.literal("Feature"),
-    geometry: GeoJsonGeometrySchema.nullable(),
-    properties: z.record(z.unknown()),
-  })
-  .passthrough();
-
-const GeoJsonFeatureCollectionSchema = z.object({
-  type: z.literal("FeatureCollection"),
-  features: z.array(GeoJsonFeatureSchema),
-  // ESRI sets `exceededTransferLimit: true` when a paginated response
-  // hit the server-side cap. Use it as a pagination hint when present;
-  // fall back to count-based pagination otherwise.
-  exceededTransferLimit: z.boolean().optional(),
-});
-
-type EsriFeature = z.infer<typeof GeoJsonFeatureSchema>;
 
 // ───── Per-endpoint attribute schemas ──────────────────────────────────
 //
@@ -164,87 +130,11 @@ const InterestPointPropsSchema = z
   })
   .passthrough();
 
-// ───── HTTP ────────────────────────────────────────────────────────────
-
-/**
- * Query an ESRI REST layer (MapServer or FeatureServer) for features
- * inside `bbox`, returning a parsed FeatureCollection. Handles pagination
- * via resultOffset; merges all pages into a single collection.
- *
- * Coercion details:
- *   - inSR=4326 — interpret the bbox as WGS84.
- *   - outSR=4326 — force WGS84 output (Interest Points is native 3857).
- *   - f=geojson — bypass ESRI JSON encoding for downstream simplicity.
- *
- * Bbox encoding: ESRI Envelope is xmin,ymin,xmax,ymax — matches our
- * [W,S,E,N] tuple ordering directly.
- */
-async function fetchEsriLayer(
-  serviceUrl: string,
-  bbox: BoundingBox,
-  label: string,
-): Promise<EsriFeature[]> {
-  const features: EsriFeature[] = [];
-  let offset = 0;
-
-  while (true) {
-    const url = new URL(`${serviceUrl}/query`);
-    url.searchParams.set("where", "1=1");
-    url.searchParams.set("geometry", bbox.join(","));
-    url.searchParams.set("geometryType", "esriGeometryEnvelope");
-    url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-    url.searchParams.set("inSR", "4326");
-    url.searchParams.set("outSR", "4326");
-    url.searchParams.set("outFields", "*");
-    url.searchParams.set("f", "geojson");
-    url.searchParams.set("resultOffset", String(offset));
-    url.searchParams.set("resultRecordCount", String(PAGE_SIZE));
-
-    const page = await defaultRetry(async () => {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(
-          `parks_canada ${label} ${res.status}: ${body.slice(0, 200)}`,
-        );
-      }
-      const json = await res.json();
-      const parsed = GeoJsonFeatureCollectionSchema.safeParse(json);
-      if (!parsed.success) {
-        logger.warn(
-          { err: parsed.error.flatten(), label },
-          "parks_canada: response failed FeatureCollection validation",
-        );
-        throw new Error(`parks_canada ${label}: schema mismatch`);
-      }
-      return parsed.data;
-    }, `parks_canada.${label}.fetch`);
-
-    features.push(...page.features);
-    logger.debug(
-      { label, offset, pageSize: page.features.length, total: features.length },
-      "parks_canada: page",
-    );
-
-    // Pagination terminates when the page returns fewer than PAGE_SIZE
-    // features AND the server didn't set exceededTransferLimit (which
-    // would signal "there's more — fetch the next page"). Either signal
-    // sufficient.
-    const shortPage = page.features.length < PAGE_SIZE;
-    const transferLimitHit = page.exceededTransferLimit === true;
-    if (shortPage && !transferLimitHit) break;
-    offset += page.features.length;
-    if (page.features.length === 0) break; // safety: never infinite-loop
-  }
-
-  return features;
-}
-
 // ───── Geometry helpers ────────────────────────────────────────────────
 
-function parsePoint(geom: EsriFeature["geometry"]): [number, number] | null {
+// Point parsing is Parks-Canada-specific (Accommodation + Interest Points
+// are point features); extractPolygon / bboxCentroid come from lib/geojson.
+function parsePoint(geom: GeoJsonFeature["geometry"]): [number, number] | null {
   if (!geom || geom.type !== "Point") return null;
   const c = geom.coordinates;
   if (!Array.isArray(c) || c.length < 2) return null;
@@ -254,44 +144,6 @@ function parsePoint(geom: EsriFeature["geometry"]): [number, number] | null {
   if (Number.isNaN(lng) || Number.isNaN(lat)) return null;
   if (lng === 0 && lat === 0) return null;
   return [lng, lat];
-}
-
-function extractPolygon(
-  geom: EsriFeature["geometry"],
-): { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null {
-  if (!geom) return null;
-  if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
-    return { type: geom.type, coordinates: geom.coordinates };
-  }
-  return null;
-}
-
-function bboxCentroid(
-  geom: { type: "Polygon" | "MultiPolygon"; coordinates: unknown },
-): [number, number] | null {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  const walk = (node: unknown): void => {
-    if (
-      Array.isArray(node) &&
-      node.length >= 2 &&
-      typeof node[0] === "number" &&
-      typeof node[1] === "number"
-    ) {
-      const [lng, lat] = node as [number, number];
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-      return;
-    }
-    if (Array.isArray(node)) for (const child of node) walk(child);
-  };
-  walk(geom.coordinates);
-  if (!Number.isFinite(west)) return null;
-  return [(west + east) / 2, (south + north) / 2];
 }
 
 // ───── Bilingual name preference + category mapping ────────────────────
@@ -455,7 +307,7 @@ function normalizeInterestPoint(
 type PersistOutcome = "inserted" | "skipped" | "error";
 
 async function persistBoundary(
-  feature: EsriFeature,
+  feature: GeoJsonFeature,
   dryRun: boolean,
 ): Promise<PersistOutcome> {
   const parsed = BoundaryPropsSchema.safeParse(feature.properties);
@@ -518,7 +370,7 @@ async function persistBoundary(
 }
 
 async function persistAccommodation(
-  feature: EsriFeature,
+  feature: GeoJsonFeature,
   dryRun: boolean,
 ): Promise<PersistOutcome> {
   const parsed = AccommodationPropsSchema.safeParse(feature.properties);
@@ -575,7 +427,7 @@ async function persistAccommodation(
 }
 
 async function persistInterestPoint(
-  feature: EsriFeature,
+  feature: GeoJsonFeature,
   dryRun: boolean,
 ): Promise<PersistOutcome> {
   const parsed = InterestPointPropsSchema.safeParse(feature.properties);
@@ -652,11 +504,11 @@ export const ingest: IngestFn = async (
 
   await Promise.all([
     limit(async () => {
-      const features = await fetchEsriLayer(
-        ENDPOINTS.boundaries,
-        bbox,
-        "boundaries",
-      );
+      const features = await fetchEsriFeatures(ENDPOINTS.boundaries, bbox, {
+        where: "1=1",
+        label: "parks_canada.boundaries",
+        userAgent: USER_AGENT,
+      });
       stats.fetched += features.length;
       logger.info(
         { count: features.length },
@@ -670,11 +522,11 @@ export const ingest: IngestFn = async (
       }
     }),
     limit(async () => {
-      const features = await fetchEsriLayer(
-        ENDPOINTS.accommodation,
-        bbox,
-        "accommodation",
-      );
+      const features = await fetchEsriFeatures(ENDPOINTS.accommodation, bbox, {
+        where: "1=1",
+        label: "parks_canada.accommodation",
+        userAgent: USER_AGENT,
+      });
       stats.fetched += features.length;
       logger.info(
         { count: features.length },
@@ -688,11 +540,11 @@ export const ingest: IngestFn = async (
       }
     }),
     limit(async () => {
-      const features = await fetchEsriLayer(
-        ENDPOINTS.interestPoints,
-        bbox,
-        "interest_points",
-      );
+      const features = await fetchEsriFeatures(ENDPOINTS.interestPoints, bbox, {
+        where: "1=1",
+        label: "parks_canada.interest_points",
+        userAgent: USER_AGENT,
+      });
       stats.fetched += features.length;
       logger.info(
         { count: features.length },

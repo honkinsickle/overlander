@@ -65,6 +65,12 @@ import { z } from "zod";
 
 import type { BoundingBox } from "../lib/geometry.ts";
 import { upsertSourceRecord } from "../lib/db.ts";
+import {
+  GeoJsonFeatureCollectionSchema,
+  bboxCentroid,
+  extractPolygon,
+  type GeoJsonFeature,
+} from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { compact, titleCase } from "../lib/normalize.ts";
 import { limits } from "../lib/rate-limit.ts";
@@ -92,38 +98,6 @@ const WFS_PAGE_SIZE = 1000;
 const WFS_BASE = "https://openmaps.gov.bc.ca/geo/pub";
 const BOUNDARIES_LAYER = "WHSE_TANTALIS.TA_PARK_ECORES_PA_SVW";
 const REST_BASE = "https://bcparks.api.gov.bc.ca/api";
-
-// ───── WFS GeoJSON envelope ─────────────────────────────────────────────
-//
-// DataBC WFS 2.0 returns standard GeoJSON when queried with
-// outputFormat=application/json. Shared wrapper schema; the per-layer
-// attribute shape is validated separately inside the persistence path.
-
-const GeoJsonGeometrySchema = z
-  .object({ type: z.string(), coordinates: z.unknown() })
-  .passthrough();
-
-const GeoJsonFeatureSchema = z
-  .object({
-    type: z.literal("Feature"),
-    geometry: GeoJsonGeometrySchema.nullable(),
-    properties: z.record(z.unknown()),
-  })
-  .passthrough();
-
-const GeoJsonFeatureCollectionSchema = z
-  .object({
-    type: z.literal("FeatureCollection"),
-    features: z.array(GeoJsonFeatureSchema),
-    // WFS 2.0 pagination metadata. Present but we terminate on a short
-    // page rather than trusting numberMatched, matching the Parks Canada
-    // pattern.
-    numberReturned: z.number().optional(),
-    numberMatched: z.union([z.number(), z.string()]).optional(),
-  })
-  .passthrough();
-
-type WfsFeature = z.infer<typeof GeoJsonFeatureSchema>;
 
 // WFS boundary attributes (WHSE_TANTALIS.TA_PARK_ECORES_PA_SVW).
 // `.passthrough()` — the layer carries many fields we don't normalize
@@ -243,16 +217,9 @@ function httpUrl(value: unknown): string | null {
 }
 
 // ───── Geometry helpers ────────────────────────────────────────────────
-
-function extractPolygon(
-  geom: WfsFeature["geometry"],
-): { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null {
-  if (!geom) return null;
-  if (geom.type === "Polygon" || geom.type === "MultiPolygon") {
-    return { type: geom.type, coordinates: geom.coordinates };
-  }
-  return null;
-}
+//
+// extractPolygon / bboxCentroid come from lib/geojson; mergePolygons
+// (multi-parcel) and restPoint (REST lat/lng) are BC-Parks-specific.
 
 /**
  * Merge a park's parcel polygons into one geometry. A single parcel keeps
@@ -274,35 +241,6 @@ function mergePolygons(
     }
   }
   return { type: "MultiPolygon", coordinates };
-}
-
-function bboxCentroid(geom: {
-  type: "Polygon" | "MultiPolygon";
-  coordinates: unknown;
-}): [number, number] | null {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  const walk = (node: unknown): void => {
-    if (
-      Array.isArray(node) &&
-      node.length >= 2 &&
-      typeof node[0] === "number" &&
-      typeof node[1] === "number"
-    ) {
-      const [lng, lat] = node as [number, number];
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-      return;
-    }
-    if (Array.isArray(node)) for (const child of node) walk(child);
-  };
-  walk(geom.coordinates);
-  if (!Number.isFinite(west)) return null;
-  return [(west + east) / 2, (south + north) / 2];
 }
 
 /**
@@ -434,9 +372,9 @@ function normalizePark(args: {
  * native storage is BC Albers EPSG:3005; DataBC reprojects server-side,
  * so no client transform is needed).
  */
-async function fetchWfsBoundaries(bbox: BoundingBox): Promise<WfsFeature[]> {
+async function fetchWfsBoundaries(bbox: BoundingBox): Promise<GeoJsonFeature[]> {
   const [west, south, east, north] = bbox;
-  const features: WfsFeature[] = [];
+  const features: GeoJsonFeature[] = [];
   let startIndex = 0;
 
   while (true) {
@@ -536,7 +474,7 @@ type PersistOutcome = "inserted" | "skipped" | "error";
  */
 async function persistPark(
   orcs: string,
-  features: WfsFeature[],
+  features: GeoJsonFeature[],
   dryRun: boolean,
 ): Promise<PersistOutcome> {
   // Collect parcel polygons from every WFS row for this ORCS.
@@ -652,7 +590,7 @@ export const ingest: IngestFn = async (
   stats.fetched = features.length;
 
   // 2. Group WFS parcel rows by normalized ORCS — one record per park.
-  const groups = new Map<string, WfsFeature[]>();
+  const groups = new Map<string, GeoJsonFeature[]>();
   for (const feature of features) {
     const parsed = BoundaryPropsSchema.safeParse(feature.properties);
     const orcs = normalizeOrcs(parsed.success ? parsed.data.ORCS_PRIMARY : undefined);

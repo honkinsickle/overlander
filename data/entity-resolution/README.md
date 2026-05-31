@@ -657,10 +657,25 @@ Fix: set `cwd` (or `SUPABASE_WORKDIR`) in the script's `spawnSync` calls
 for `supabase migration list` / `supabase db push`. Two-line fix; high
 friction without it (cost the BC Parks session an iteration to diagnose).
 
+### `ingest:manual` lacks `--env-file=.env` in npm script (surfaced 2026-05-31)
+
+Unlike `db:push-verify` (which loads `--env-file=.env`), the
+`ingest:manual` script (`tsx ingestion/manual.ts`) doesn't load env, so a
+plain `npm run -w data ingest:manual -- --source <x> --bbox …` fails every
+upsert with "Missing required env var: SUPABASE_URL". Smoke runs require
+the manual `npx tsx --env-file=.env ingestion/manual.ts …` workaround.
+Same operational-friction family as the `SUPABASE_WORKDIR` and
+`db:push-verify --test` items above (caught at the Alberta Parks smoke,
+PR #66).
+
+Fix: add `--env-file=.env` to the `ingest:manual` npm script in
+`data/package.json`. Two-character fix.
+
 ---
 
-Bundling note: the two `db:push-verify` items above + the
-`geometry_polygon promotion` item + the `field_precedence resolution
-determinism` item are candidates for a single "migration-verify and
-field_precedence hardening" PR cluster.
+Bundling note: the two `db:push-verify` items + the `ingest:manual`
+env-file item above + the `geometry_polygon promotion` item + the
+`field_precedence resolution determinism` item are candidates for a
+single "migration-verify and source-integration workflow hardening" PR
+cluster.
 
