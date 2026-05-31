@@ -113,41 +113,54 @@ type EsriFeature = z.infer<typeof GeoJsonFeatureSchema>;
 // etc.). Raw payload retains everything; the schemas extract only what
 // the normalizer needs.
 
+// NPLB (NRCan MapServer) uses camelCase + Eng/Fra suffixes. Distinct
+// vendor convention from the ArcGIS Online layers below — keep schemas
+// separate rather than collapsing into a shared shape.
 const BoundaryPropsSchema = z
   .object({
     OBJECTID: z.union([z.number(), z.string()]).optional(),
-    // NPLB attribute keys vary in casing across deployments — accept
-    // the common variants and let the normalizer pick the first present.
-    AdminAreaNameEn: z.string().nullable().optional(),
-    AdminAreaNameFr: z.string().nullable().optional(),
-    AdminAreaType: z.string().nullable().optional(),
-    AdminAreaID: z.union([z.string(), z.number()]).nullable().optional(),
+    adminAreaId: z.union([z.string(), z.number()]).nullable().optional(),
+    adminAreaNameEng: z.string().nullable().optional(),
+    adminAreaNameFra: z.string().nullable().optional(),
+    distributionTypeEng: z.string().nullable().optional(),
+    distributionTypeFra: z.string().nullable().optional(),
   })
   .passthrough();
 
+// ArcGIS Online layers (services2.arcgis.com) use _e / _f suffix
+// convention. Different from the NPLB layer above.
+//
+// `Site_Num_Site` is the stable park-site identifier (e.g.
+// "BAN-TMV1-D19"); `OBJECTID` is ephemeral and changes when ESRI
+// rebuilds the layer. Idempotency depends on the stable key — prefer
+// `Site_Num_Site` for external_id, fall back to OBJECTID only when
+// Site_Num_Site is missing.
 const AccommodationPropsSchema = z
   .object({
     OBJECTID: z.union([z.number(), z.string()]).optional(),
-    AssetID: z.union([z.string(), z.number()]).nullable().optional(),
-    NameEn: z.string().nullable().optional(),
-    NameFr: z.string().nullable().optional(),
-    LocationEn: z.string().nullable().optional(),
-    LocationFr: z.string().nullable().optional(),
-    AccommodationTypeEn: z.string().nullable().optional(),
-    AccommodationTypeFr: z.string().nullable().optional(),
+    Site_Num_Site: z.union([z.string(), z.number()]).nullable().optional(),
+    Name_e: z.string().nullable().optional(),
+    Nom_f: z.string().nullable().optional(),
+    Accommodation_Type: z.string().nullable().optional(),
+    URL_e: z.string().nullable().optional(),
   })
   .passthrough();
 
+// Interest Points: same _e/_f suffix as Accommodation, plus the
+// combined "EN//FR" `Principal_type` shape that needs `splitBilingual`
+// before category inference. `Noms_Alt_Names` is captured in raw_payload
+// for future use (tracked item: feed normalized_payload.alternative_names
+// aggregate when that's added).
 const InterestPointPropsSchema = z
   .object({
     OBJECTID: z.union([z.number(), z.string()]).optional(),
-    AssetID: z.union([z.string(), z.number()]).nullable().optional(),
-    NameEn: z.string().nullable().optional(),
-    NameFr: z.string().nullable().optional(),
-    InterestTypeEn: z.string().nullable().optional(),
-    InterestTypeFr: z.string().nullable().optional(),
-    LocationEn: z.string().nullable().optional(),
-    LocationFr: z.string().nullable().optional(),
+    Name_e: z.string().nullable().optional(),
+    Nom_f: z.string().nullable().optional(),
+    Principal_type: z.string().nullable().optional(),
+    Descr_e: z.string().nullable().optional(),
+    Descr_f: z.string().nullable().optional(),
+    URL_e: z.string().nullable().optional(),
+    Noms_Alt_Names: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -290,6 +303,24 @@ function pickName(en: unknown, fr: unknown, fallback: string): string {
 }
 
 /**
+ * Parks Canada Interest Points encode bilingual values as a single
+ * concatenated string with `//` as separator — e.g.
+ * `Principal_type = "Camp//Campement"`. Split into the EN/FR halves.
+ *
+ * If no separator is present, treat the whole input as English and
+ * return an empty French half (handles plain English inputs in tests
+ * and any future fields that don't follow the bilingual convention).
+ */
+function splitBilingual(value: string, sep = "//"): { en: string; fr: string } {
+  const idx = value.indexOf(sep);
+  if (idx === -1) return { en: value.trim(), fr: "" };
+  return {
+    en: value.slice(0, idx).trim(),
+    fr: value.slice(idx + sep.length).trim(),
+  };
+}
+
+/**
  * Map a Parks Canada boundary admin-area type to a canonical category.
  * NPLB's AdminAreaType values (observed): "National Park",
  * "National Park Reserve", "National Marine Conservation Area",
@@ -314,18 +345,29 @@ function inferAccommodationCategory(_typeRaw: unknown): string {
 }
 
 /**
- * Interest Points carry a heterogeneous InterestType. Map common values
- * to canonical categories; unknown types fall back to `park_feature`
- * (the same default NPS uses for its non-categorized places).
+ * Interest Points carry a heterogeneous `Principal_type` shaped like
+ * "EN//FR" (e.g. "Camp//Campement", "Trailhead//Sentier de randonnée").
+ * Extract the English half via splitBilingual, then pattern-match.
+ *
+ * Accepts plain English input too — `splitBilingual` returns the whole
+ * input as `en` when no `//` separator is present. This keeps unit
+ * tests with plain-English fixtures valid against the same function.
+ *
+ * Unknown types fall back to `park_feature` (the same default NPS uses
+ * for its non-categorized places).
  */
 function inferInterestPointCategory(typeRaw: unknown): string {
   if (typeof typeRaw !== "string") return "park_feature";
-  const t = typeRaw.toLowerCase();
+  const { en } = splitBilingual(typeRaw);
+  const t = en.toLowerCase();
   if (/trail\s?head|trail head/.test(t)) return "trailhead";
   if (/viewpoint|lookout|vista|belvédère|belvedere/.test(t)) return "viewpoint";
   if (/picnic/.test(t)) return "picnic_area";
   if (/visitor|interpret/.test(t)) return "visitor_center";
-  if (/historic\s?site|lieu historique/.test(t)) return "national_historic_site";
+  // Catches "Historic site", "Historic point of interest", "Historic landmark",
+  // and any /historic.*/ variant. French side preserved separately because
+  // "lieu historique" doesn't share a stem with "historic".
+  if (/historic|lieu historique/.test(t)) return "national_historic_site";
   if (/marine/.test(t)) return "national_marine_conservation_area";
   if (/camp/.test(t)) return "campground";
   return "park_feature";
@@ -349,7 +391,7 @@ function normalizeBoundary(
     // Promoted by recompute_master_place via field_precedence in week 3,
     // identical mechanism to nps.ts's geometry_polygon path.
     geometry_polygon: polygon,
-    admin_area_type: props.AdminAreaType ?? null,
+    distribution_type: props.distributionTypeEng ?? null,
   };
 }
 
@@ -357,17 +399,21 @@ function normalizeAccommodation(
   props: z.infer<typeof AccommodationPropsSchema>,
   name: string,
 ): Record<string, unknown> {
-  const accommodationType = pickName(
-    props.AccommodationTypeEn,
-    props.AccommodationTypeFr,
-    "",
-  );
-  const location = pickName(props.LocationEn, props.LocationFr, "");
+  const accommodationType =
+    typeof props.Accommodation_Type === "string"
+      ? props.Accommodation_Type.trim()
+      : "";
+  // URL_e is the park-website link (URL_f at this layer is malformed —
+  // sometimes contains the site code instead of a URL; ignore it).
+  const websiteUrl =
+    typeof props.URL_e === "string" && props.URL_e.trim().startsWith("http")
+      ? props.URL_e.trim()
+      : "";
   return {
     canonical_name: name,
-    description: location.length > 0 ? location : null,
+    description: null,
     overlander_tags: ["federal_land", "parks_canada"],
-    contact: null,
+    contact: websiteUrl.length > 0 ? compact({ website: websiteUrl }) : null,
     access: null,
     amenities: accommodationType.length
       ? compact({ accommodation_type: accommodationType })
@@ -380,20 +426,25 @@ function normalizeInterestPoint(
   props: z.infer<typeof InterestPointPropsSchema>,
   name: string,
 ): Record<string, unknown> {
-  const interestType = pickName(
-    props.InterestTypeEn,
-    props.InterestTypeFr,
-    "",
-  );
-  const location = pickName(props.LocationEn, props.LocationFr, "");
+  const description = pickName(props.Descr_e, props.Descr_f, "");
+  // Principal_type is the combined "EN//FR" string; surface English half
+  // in amenities for downstream consumers, keep raw value in raw_payload.
+  const interestTypeEn =
+    typeof props.Principal_type === "string"
+      ? splitBilingual(props.Principal_type).en
+      : "";
+  const websiteUrl =
+    typeof props.URL_e === "string" && props.URL_e.trim().startsWith("http")
+      ? props.URL_e.trim()
+      : "";
   return {
     canonical_name: name,
-    description: location.length > 0 ? location : null,
+    description: description.length > 0 ? description : null,
     overlander_tags: ["federal_land", "parks_canada"],
-    contact: null,
+    contact: websiteUrl.length > 0 ? compact({ website: websiteUrl }) : null,
     access: null,
-    amenities: interestType.length
-      ? compact({ interest_type: interestType })
+    amenities: interestTypeEn.length
+      ? compact({ interest_type: interestTypeEn })
       : null,
     hours: null,
   };
@@ -427,19 +478,21 @@ async function persistBoundary(
   const centroid = bboxCentroid(polygon);
   if (!centroid) return "skipped";
 
-  const objectId = props.OBJECTID ?? props.AdminAreaID ?? "";
-  if (objectId === "") {
+  // adminAreaId is the stable park code (e.g. "BANF"). Prefer it for
+  // idempotency; fall back to OBJECTID (ephemeral) only when missing.
+  const stableId = props.adminAreaId ?? props.OBJECTID ?? "";
+  if (stableId === "") {
     logger.warn(
       { props_keys: Object.keys(props) },
-      "parks_canada: boundary missing OBJECTID/AdminAreaID — skipped",
+      "parks_canada: boundary missing adminAreaId/OBJECTID — skipped",
     );
     return "skipped";
   }
-  const externalId = `parks_canada:boundary:${objectId}`;
+  const externalId = `parks_canada:boundary:${stableId}`;
   const name = pickName(
-    props.AdminAreaNameEn,
-    props.AdminAreaNameFr,
-    `Parks Canada boundary ${objectId}`,
+    props.adminAreaNameEng,
+    props.adminAreaNameFra,
+    `Parks Canada boundary ${stableId}`,
   );
 
   if (dryRun) {
@@ -451,7 +504,7 @@ async function persistBoundary(
       sourceId: SOURCE_ID,
       externalId,
       name,
-      inferredCategory: inferBoundaryCategory(props.AdminAreaType),
+      inferredCategory: inferBoundaryCategory(props.distributionTypeEng),
       point: centroid,
       rawPayload: { feature, fetched_at: new Date().toISOString() },
       normalizedPayload: normalizeBoundary(props, polygon, name),
@@ -480,13 +533,20 @@ async function persistAccommodation(
   const point = parsePoint(feature.geometry);
   if (!point) return "skipped";
 
-  const objectId = props.AssetID ?? props.OBJECTID ?? "";
-  if (objectId === "") return "skipped";
-  const externalId = `parks_canada:accommodation:${objectId}`;
+  // OBJECTID is dataset-internally unique per ESRI contract but changes
+  // on layer rebuild. Site_Num_Site is within-park-only (site '1' exists
+  // in every park), so it collides catastrophically across parks. URL_f's
+  // stable park-site code is mislabeled in upstream data (a URL field
+  // used as a code column) and unstable to a future upstream fix.
+  // OBJECTID is the least-bad choice; rebuild orphans are recoverable
+  // via materialize_clear_resolution_state + re-ingest.
+  const stableId = props.OBJECTID ?? "";
+  if (stableId === "") return "skipped";
+  const externalId = `parks_canada:accommodation:${stableId}`;
   const name = pickName(
-    props.NameEn,
-    props.NameFr,
-    `Parks Canada accommodation ${objectId}`,
+    props.Name_e,
+    props.Nom_f,
+    `Parks Canada accommodation ${stableId}`,
   );
 
   if (dryRun) {
@@ -498,7 +558,7 @@ async function persistAccommodation(
       sourceId: SOURCE_ID,
       externalId,
       name,
-      inferredCategory: inferAccommodationCategory(props.AccommodationTypeEn),
+      inferredCategory: inferAccommodationCategory(props.Accommodation_Type),
       point,
       rawPayload: { feature, fetched_at: new Date().toISOString() },
       normalizedPayload: normalizeAccommodation(props, name),
@@ -530,13 +590,17 @@ async function persistInterestPoint(
   const point = parsePoint(feature.geometry);
   if (!point) return "skipped";
 
-  const objectId = props.AssetID ?? props.OBJECTID ?? "";
-  if (objectId === "") return "skipped";
-  const externalId = `parks_canada:interest_point:${objectId}`;
+  // Interest Points have no stable per-feature identifier — OBJECTID is
+  // the only option. This means accidental layer-rebuild on ESRI's side
+  // would produce duplicate source_records on next ingest. Tracked as
+  // an acceptable risk vs the alternative of skipping the dataset.
+  const stableId = props.OBJECTID ?? "";
+  if (stableId === "") return "skipped";
+  const externalId = `parks_canada:interest_point:${stableId}`;
   const name = pickName(
-    props.NameEn,
-    props.NameFr,
-    `Parks Canada interest point ${objectId}`,
+    props.Name_e,
+    props.Nom_f,
+    `Parks Canada interest point ${stableId}`,
   );
 
   if (dryRun) {
@@ -548,7 +612,7 @@ async function persistInterestPoint(
       sourceId: SOURCE_ID,
       externalId,
       name,
-      inferredCategory: inferInterestPointCategory(props.InterestTypeEn),
+      inferredCategory: inferInterestPointCategory(props.Principal_type),
       point,
       rawPayload: { feature, fetched_at: new Date().toISOString() },
       normalizedPayload: normalizeInterestPoint(props, name),
@@ -664,4 +728,5 @@ export const _internals = {
   normalizeInterestPoint,
   parsePoint,
   pickName,
+  splitBilingual,
 };

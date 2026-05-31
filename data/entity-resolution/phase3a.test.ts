@@ -11,8 +11,10 @@
  * configuration minimal.
  */
 
+import { randomUUID } from "node:crypto";
+
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb } from "../ingestion/lib/db.ts";
+import { getDb, upsertSourceRecord } from "../ingestion/lib/db.ts";
 import { matchAll } from "./matcher.ts";
 import { applyMatches, type ApplyResult } from "./promote.ts";
 import {
@@ -312,3 +314,161 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
     expect(orphanCount).toBeGreaterThanOrEqual(0);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 1.5 / Parks Canada — field_precedence priority resolution.
+//
+// Validates the migration-20260530000000 claim: when parks_canada and
+// google source_records co-link to the same master_place, the
+// resolve_field tie-break picks parks_canada's canonical_name because
+// parks_canada is priority 1 (above google's priority 2) for that field.
+//
+// Independent of the JT corpus suite above — its own reset + cleanup.
+// Synthetic source_records use the `test:precedence:*` external_id
+// namespace and are explicitly deleted in afterAll so they don't
+// pollute the JT D4 corpus across runs (reset_phase3a_test_state clears
+// master_place + place_match + unlinks source_record but does NOT
+// delete source_record rows).
+// ────────────────────────────────────────────────────────────────────────
+
+describeIfAllowed(
+  "Phase 1.5 — parks_canada wins canonical_name vs google (P2 field_precedence)",
+  () => {
+    // Banff-area coords. Far from JT (lat ~34, lng ~-116) so any
+    // accidental matchAll over the seeded JT corpus wouldn't federate
+    // these into JT master_places.
+    const COORDS: [number, number] = [-115.5, 51.2];
+    const PARKS_CANADA_EXT = "test:precedence:parks_canada:1";
+    const GOOGLE_EXT = "test:precedence:google:1";
+    const PARKS_CANADA_NAME = "Tunnel Mountain Campground";
+    const GOOGLE_NAME = "Tunnel Mountain Camp";
+    const masterPlaceId = randomUUID();
+
+    beforeAll(async () => {
+      await db.rpc("reset_phase3a_test_state");
+
+      // Seed two source_records at identical coords with different
+      // canonical_names in their normalized_payload.
+      await upsertSourceRecord({
+        sourceId: "parks_canada",
+        externalId: PARKS_CANADA_EXT,
+        name: PARKS_CANADA_NAME,
+        inferredCategory: "campground",
+        point: COORDS,
+        rawPayload: { synthetic: true, source: "parks_canada" },
+        normalizedPayload: {
+          canonical_name: PARKS_CANADA_NAME,
+          description: null,
+          overlander_tags: ["federal_land", "parks_canada"],
+          contact: null,
+          access: null,
+          amenities: null,
+          hours: null,
+        },
+        sourceQualityScore: 0.95,
+      });
+      await upsertSourceRecord({
+        sourceId: "google",
+        externalId: GOOGLE_EXT,
+        name: GOOGLE_NAME,
+        inferredCategory: "campground",
+        point: COORDS,
+        rawPayload: { synthetic: true, source: "google" },
+        normalizedPayload: {
+          canonical_name: GOOGLE_NAME,
+          description: null,
+          overlander_tags: [],
+          contact: null,
+          access: null,
+          amenities: null,
+          hours: null,
+        },
+        sourceQualityScore: 0.85,
+      });
+
+      // Look up the freshly-seeded source_record ids by external_id.
+      const { data: srRows, error: srErr } = await db
+        .from("source_record")
+        .select("id, external_id")
+        .in("external_id", [PARKS_CANADA_EXT, GOOGLE_EXT]);
+      expect(srErr).toBeNull();
+      expect(srRows, "synthetic source_records were upserted").toHaveLength(2);
+      const byExt = new Map(
+        (srRows ?? []).map((r) => [r.external_id, r.id as string]),
+      );
+      const parksCanadaSrId = byExt.get(PARKS_CANADA_EXT)!;
+      const googleSrId = byExt.get(GOOGLE_EXT)!;
+
+      // Apply two outcomes via the prod RPC: new_master_place anchors
+      // the master_place with parks_canada as the seed (so the seeded
+      // canonical_name is initially parks_canada's), then auto_link
+      // attaches google. Both trigger recompute_master_place at the
+      // end of apply_match_outcomes.
+      const outcomes = [
+        {
+          kind: "new_master_place",
+          source_record_id: parksCanadaSrId,
+          target: masterPlaceId,
+          seed_category: "campground",
+          seed_geometry: COORDS,
+          seed_name: PARKS_CANADA_NAME,
+        },
+        {
+          kind: "auto_link",
+          source_record_id: googleSrId,
+          target: masterPlaceId,
+          confidence: 0.95,
+          method: "name_dominant",
+          score: {
+            distance_meters: 0,
+            name_similarity: 0.95,
+            category_compatibility: 1.0,
+            combined_confidence: 0.95,
+          },
+        },
+      ];
+      const { error: applyErr } = await db.rpc("apply_match_outcomes", {
+        p_outcomes: outcomes,
+      });
+      expect(applyErr).toBeNull();
+    });
+
+    afterAll(async () => {
+      // Clear master_place + place_match + unlink source_record.
+      await db.rpc("reset_phase3a_test_state");
+      // Then explicitly delete the synthetic source_records so the JT D4
+      // run that follows doesn't see them in source_record.
+      await db
+        .from("source_record")
+        .delete()
+        .in("external_id", [PARKS_CANADA_EXT, GOOGLE_EXT]);
+    });
+
+    it("master_place.canonical_name resolves to the parks_canada value", async () => {
+      const { data: mp, error } = await db
+        .from("master_place")
+        .select("id, canonical_name, attribution")
+        .eq("id", masterPlaceId)
+        .single();
+      expect(error, "master_place lookup failed").toBeNull();
+      expect(mp, "master_place row should exist").not.toBeNull();
+
+      // Headline assertion: resolve_field walks field_precedence by
+      // priority ASC and picks the linked source_record with the lowest
+      // priority that has a non-null value for the field. parks_canada
+      // is priority 1 for canonical_name (migration 20260530000000);
+      // google is priority 2. parks_canada wins.
+      expect(
+        mp!.canonical_name,
+        "field_precedence resolved canonical_name to the wrong source — " +
+          "check that migration 20260530000000 applied (parks_canada=1 vs google=2)",
+      ).toBe(PARKS_CANADA_NAME);
+
+      // Sanity: attribution should record parks_canada as the source for
+      // canonical_name. recompute_master_place writes it from the same
+      // resolve_field result.
+      const attribution = (mp!.attribution as Record<string, unknown>) ?? {};
+      expect(attribution.canonical_name).toBe("parks_canada");
+    });
+  },
+);
