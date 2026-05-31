@@ -559,3 +559,55 @@ endpoints are complementary, not overlapping. BC Parks (next source,
 DataBC, also multi-endpoint) should be audited similarly during its
 smoke test.
 
+### geometry_polygon promotion for provincial/federal boundaries (shared PC + BC Parks follow-up)
+
+Surfaced during BC Parks integration (2026-05-31). Neither the Parks
+Canada nor the BC Parks field_precedence migration seeds a
+`geometry_polygon` row — only `nps` is in that precedence row (base seed:
+"geometry_polygon: NPS only. No fallback."). Both sources normalize a
+boundary polygon into `normalized_payload.geometry_polygon` expecting
+week-3 `recompute_master_place` to promote it, but `resolve_field()`
+resolves `geometry_polygon` solely from `nps`, so **Parks Canada and BC
+Parks boundary polygons never reach `master_place.geometry_polygon`.**
+
+Consequence: the polygon-containment ER path (OSM park-node →
+auto-link-by-containment; see "OSM park-as-node is at polygon centroid"
+above) can't fire for Canadian parks, because the containing polygon was
+never promoted. Federal/provincial parks fall back to distance-only
+candidate retrieval, which the OSM-park-node finding shows is wrong for
+park-category records.
+
+Fix shape (one small migration, both sources together): add
+`('geometry_polygon', 'parks_canada', <n>)` and
+`('geometry_polygon', 'bc_parks', <n>)` at next-unused priority (nps=1,
+so 2 and 3 — order is moot, the geometries are geographically disjoint).
+Bundle with — or sequence ahead of — the polygon-containment ER work so
+the promoted polygons have a consumer. Not BC-Parks-PR scope; filed so it
+isn't lost when the containment path is built.
+
+### BC Parks is park-scoped, not point-scoped (data-shape note, 2026-05-31)
+
+BC's open data publishes ONE record per protected area with aggregated
+amenity summaries — no per-campsite point geometry exists in DataBC
+(unlike Parks Canada's per-campsite Accommodation layer). Three
+downstream implications for Segment B execution:
+
+1. The BC Parks corpus is ~1,000 records (one per protected area), NOT
+   the ~2,000–4,000 the Segment B spec estimated from a per-campsite
+   assumption. Revise that estimate at execution time.
+2. iOverlander carries BC campsite-level granularity. BC Parks (polygons
+   + summary amenities) + iOverlander (campsite UGC) together reach
+   Parks-Canada-equivalent coverage for BC.
+3. BC Parks × Google federation is correct-by-design: BC Parks
+   contributes polygon + park-level amenity summary while Google
+   contributes commercial point data (reservation pages, visitor-centre
+   addresses) — different aspects of the same physical park, federating
+   via name_dominant (BC Parks does not participate in fed_exact).
+
+Also: BC Parks is multi-endpoint (WFS boundaries + REST per-park
+enrichment, joined on the ORCS code). Per the Parks Canada
+within-source-disjointness note above, audit for within-source
+near-duplicate pairs during the Mount Robson smoke (expected: none — the
+two surfaces describe the same park, joined on ORCS, so they collapse to
+one source_record rather than forming sibling records).
+
