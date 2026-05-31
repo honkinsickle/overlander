@@ -5,7 +5,7 @@
   "type": "module",
   "description": "OVERLANDER_01 Phase 1 data foundation — federated POI ingestion, entity resolution, prominence scoring.",
   "scripts": {
-    "ingest:manual": "tsx ingestion/manual.ts",
+    "ingest:manual": "tsx --env-file=.env ingestion/manual.ts",
     "ingest:osm": "tsx ingestion/sources/osm.ts",
     "ingest:all": "tsx scripts/run-all-ingestion.ts",
     "deploy-corridor": "tsx --env-file=.env scripts/deploy-corridor.ts",

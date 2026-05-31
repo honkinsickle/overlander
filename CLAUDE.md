@@ -64,8 +64,13 @@ For web client design tokens, see `web/CLAUDE.md` — Phase 1 work in `data/` do
 
 ## Migration workflow
 - Apply migrations via `npm run -w data db:push-verify`, NOT `supabase db push` directly. The wrapper runs `supabase db push` and then verifies expected INSERT-row presence via `data/scripts/verify-migration.ts`. Guards against the 2026-05-30-class CLI bug where `db push` reported success but skipped the migration body.
+- Run it from anywhere in the repo (including `data/`); the script pins the `supabase` CLI subprocess cwd to the repo root, so the old `SUPABASE_WORKDIR=$(git rev-parse --show-toplevel)` prefix is no longer needed.
+- **Test apply (canonical):** `npm run -w data db:push-verify -- --test`. The `--test` flag overrides the verify client to the test project from `data/.env.test`'s `SUPABASE_TEST_*` and asserts the CLI is linked to that same project (fails fast with a relink command otherwise). No `.env` swap — both push and verify are pinned to test, so split-brain is structurally impossible. This is the way to apply to test; do NOT hand-edit `data/.env`.
+- **Production apply:** bare `npm run -w data db:push-verify` (no flag) targets the **currently-linked** project. There is no `--prod` flag, so a production apply is a deliberate two-step setup: (1) `supabase link --project-ref nqzeywzcowujzyegxbsr` and (2) swap `data/.env`'s `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` to the production values, so push-side (link) and verify-side (`.env`) are both aligned to prod. Restore the link + `.env` to test afterward. Run the same three-gate pre-flight first: refs aligned (both sides), only the intended migration pending, live state matches files.
+- Emergent operator workflow: **test apply via `-- --test` (no swap); production apply via explicit re-link + `.env` swap** (until a possible future `--prod` flag mirrors `--test` for the production side).
 - CI does not run `db:push-verify` — verification happens at push-time, on the operator's machine. CI checks the verifier's own behavior via unit tests but cannot guard against CLI-side migration-execution bugs. The operator's `db:push-verify` invocation is the safety net.
 - v1 verifier covers literal `INSERT INTO <table> VALUES (...), (...), ...` only. ON CONFLICT, INSERT ... SELECT, and DDL (CREATE / ALTER / DROP / functions) are reported as "uncovered" so a green verify on a mixed migration doesn't give false confidence about unchecked DDL.
+- For ad-hoc ingestion runs, `npm run -w data ingest:manual -- --source <x> …` self-loads `--env-file=.env` — no manual `npx tsx --env-file=.env …` prefix needed.
 
 ## Source integration workflow
 - Source-integration smoke tests write to the **test** project; only deliberate full-corridor execution writes to production.

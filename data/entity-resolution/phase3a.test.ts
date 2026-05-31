@@ -1062,3 +1062,179 @@ describeIfAllowed(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 3a / 4a — resolve_field determinism under tied priority.
+//
+// Validates migration 20260601010000's 3-key tie-breaker
+// (ORDER BY priority ASC, source_quality_score DESC NULLS LAST, source_id ASC).
+//
+// nps and parks_canada both sit at canonical_name priority 1 — a real
+// jurisdictional collision (the 4-way nps/parks_canada/bc_parks/alberta_parks
+// tier). In production geographic disjointness keeps them from co-linking; here
+// we force both onto one master_place via apply_match_outcomes so the
+// tie-breaker is actually exercised. Two cases:
+//   (a) different quality → higher quality wins (2-key behaviour)
+//   (b) equal quality     → alphabetically-earlier source_id wins (the 3-key
+//       tertiary, under the real nps==parks_canada==0.95 collision shape —
+//       without it this case is non-deterministic and nothing would catch it)
+//
+// Coords are in Banff (lat ~51), far from the JT corpus (lat ~34). Synthetic
+// records use the test:determinism:* external_id namespace and are deleted in
+// afterAll (reset_phase3a_test_state unlinks but does not delete source_record
+// rows), keeping the D4 baseline intact.
+// ────────────────────────────────────────────────────────────────────────
+
+describeIfAllowed(
+  "Phase 3a / 4a — resolve_field determinism under tied priority",
+  () => {
+    const COORDS: [number, number] = [-115.55, 51.25];
+
+    async function seedTiedPairAndApply(opts: {
+      suffix: string;
+      npsQuality: number;
+      pcQuality: number;
+      npsName: string;
+      pcName: string;
+    }): Promise<{ masterPlaceId: string; npsExt: string; pcExt: string }> {
+      const npsExt = `test:determinism:${opts.suffix}:nps`;
+      const pcExt = `test:determinism:${opts.suffix}:parks_canada`;
+      const masterPlaceId = randomUUID();
+
+      await db.rpc("reset_phase3a_test_state");
+
+      // Both at the same coords, both priority 1 for canonical_name; only the
+      // per-record source_quality_score and the canonical_name value differ.
+      await upsertSourceRecord({
+        sourceId: "nps",
+        externalId: npsExt,
+        name: opts.npsName,
+        inferredCategory: "campground",
+        point: COORDS,
+        rawPayload: { synthetic: true, source: "nps" },
+        normalizedPayload: { canonical_name: opts.npsName },
+        sourceQualityScore: opts.npsQuality,
+      });
+      await upsertSourceRecord({
+        sourceId: "parks_canada",
+        externalId: pcExt,
+        name: opts.pcName,
+        inferredCategory: "campground",
+        point: COORDS,
+        rawPayload: { synthetic: true, source: "parks_canada" },
+        normalizedPayload: { canonical_name: opts.pcName },
+        sourceQualityScore: opts.pcQuality,
+      });
+
+      const { data: srRows, error: srErr } = await db
+        .from("source_record")
+        .select("id, external_id")
+        .in("external_id", [npsExt, pcExt]);
+      expect(srErr).toBeNull();
+      expect(srRows, "synthetic source_records were upserted").toHaveLength(2);
+      const byExt = new Map((srRows ?? []).map((r) => [r.external_id, r.id as string]));
+
+      // Force both onto one master_place: nps seeds it, parks_canada links in.
+      // apply_match_outcomes runs recompute_master_place → resolve_field.
+      const outcomes = [
+        {
+          kind: "new_master_place",
+          source_record_id: byExt.get(npsExt)!,
+          target: masterPlaceId,
+          seed_category: "campground",
+          seed_geometry: COORDS,
+          seed_name: opts.npsName,
+        },
+        {
+          kind: "auto_link",
+          source_record_id: byExt.get(pcExt)!,
+          target: masterPlaceId,
+          confidence: 0.95,
+          method: "name_dominant",
+          score: {
+            distance_meters: 0,
+            name_similarity: 0.95,
+            category_compatibility: 1.0,
+            combined_confidence: 0.95,
+          },
+        },
+      ];
+      const { error: applyErr } = await db.rpc("apply_match_outcomes", {
+        p_outcomes: outcomes,
+      });
+      expect(applyErr).toBeNull();
+      return { masterPlaceId, npsExt, pcExt };
+    }
+
+    // (a) Different quality at the same priority. parks_canada (0.95) must beat
+    // nps (0.80) on the source_quality_score key — and crucially it wins
+    // despite being the alphabetically *later* source_id, proving the quality
+    // key is consulted before source_id.
+    describe("(a) different quality, same priority → higher quality wins", () => {
+      let ctx: { masterPlaceId: string; npsExt: string; pcExt: string };
+      beforeAll(async () => {
+        ctx = await seedTiedPairAndApply({
+          suffix: "diffqual",
+          npsQuality: 0.8,
+          pcQuality: 0.95,
+          npsName: "Determinism A — NPS",
+          pcName: "Determinism A — Parks Canada",
+        });
+      });
+      afterAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+        await db.from("source_record").delete().in("external_id", [ctx.npsExt, ctx.pcExt]);
+      });
+
+      it("resolves canonical_name to parks_canada (quality 0.95 > nps 0.80)", async () => {
+        const { data: mp, error } = await db
+          .from("master_place")
+          .select("canonical_name, attribution")
+          .eq("id", ctx.masterPlaceId)
+          .single();
+        expect(error, "master_place lookup failed").toBeNull();
+        expect(mp!.canonical_name).toBe("Determinism A — Parks Canada");
+        const attribution = (mp!.attribution as Record<string, unknown>) ?? {};
+        expect(
+          attribution.canonical_name,
+          "quality DESC must break the priority-1 tie before source_id is consulted",
+        ).toBe("parks_canada");
+      });
+    });
+
+    // (b) Equal quality at the same priority — the real collision shape
+    // (nps == parks_canada == 0.95). source_id ASC is the only thing that makes
+    // this deterministic: 'nps' < 'parks_canada', so nps wins every time.
+    describe("(b) equal quality, same priority → alphabetically-earlier source_id wins", () => {
+      let ctx: { masterPlaceId: string; npsExt: string; pcExt: string };
+      beforeAll(async () => {
+        ctx = await seedTiedPairAndApply({
+          suffix: "eqqual",
+          npsQuality: 0.95,
+          pcQuality: 0.95,
+          npsName: "Determinism B — NPS",
+          pcName: "Determinism B — Parks Canada",
+        });
+      });
+      afterAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+        await db.from("source_record").delete().in("external_id", [ctx.npsExt, ctx.pcExt]);
+      });
+
+      it("resolves canonical_name to nps ('nps' < 'parks_canada') under equal 0.95 quality", async () => {
+        const { data: mp, error } = await db
+          .from("master_place")
+          .select("canonical_name, attribution")
+          .eq("id", ctx.masterPlaceId)
+          .single();
+        expect(error, "master_place lookup failed").toBeNull();
+        expect(mp!.canonical_name).toBe("Determinism B — NPS");
+        const attribution = (mp!.attribution as Record<string, unknown>) ?? {};
+        expect(
+          attribution.canonical_name,
+          "source_id ASC is the tertiary key that makes the equal-quality collision deterministic",
+        ).toBe("nps");
+      });
+    });
+  },
+);
