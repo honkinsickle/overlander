@@ -10,5 +10,6 @@ export const limits: Record<string, LimitFunction> = {
   google: pLimit(10),     // Plenty of headroom in Places quota.
   ridb: pLimit(4),
   nps: pLimit(4),
+  parks_canada: pLimit(4), // ESRI REST endpoints; no documented rate limit, be polite.
   ioverlander: pLimit(1), // No public API. Be polite.
 };

@@ -442,3 +442,57 @@ their recompute queue; recompute then runs in its own bounded chunks
 (e.g., recompute_master_place_batch(uuid[] LIMIT 100)). This converts
 the heavy-tail risk into a predictable cost ceiling. Bundle with the
 polygon-containment + seed-geometry refactor.
+
+### Ingestion follow-ups from Parks Canada integration (2026-05-30)
+
+Two forward-looking items surfaced while wiring Parks Canada — neither is
+a bug; both are bets about where the next refactor pressure will appear.
+
+1. **`fed_exact` is hardcoded to the NPS↔RIDB pair.** Parks Canada
+   Reservation Service has no public API today, so `fed_exact` can't fire
+   for Parks Canada — `name_dominant` carries Parks Canada ↔ Google
+   federation in the meantime, which is acceptable per the spec. If PCRS
+   ever exposes a programmatic surface, `findFederalAnchor` (in
+   `matcher.ts`) needs extension beyond the hardcoded `nps` / `ridb`
+   source-id check. Likely a small change — generalize to a `Map<source_id,
+   partner_source_id>` lookup — but flag the dependency so the change
+   isn't missed when PCRS lands.
+
+2. **Three-endpoint ESRI client may want extraction.** Parks Canada hits
+   three ESRI REST layers via the same `fetchEsriLayer(serviceUrl, bbox,
+   label)` shape. BC Parks and Alberta Parks are both on ArcGIS Online
+   per their open-data portals — same query API. If both follow this
+   pattern, the third source confirms a shared utility belongs in
+   `data/ingestion/lib/esri.ts`. Don't pre-extract — wait for the third
+   instance to inform the abstraction shape, then refactor all three
+   together.
+
+### field_precedence resolution determinism (bundled small PR)
+
+Surfaced during Parks Canada migration design. Two related items, file
+together as a single small PR after Parks Canada lands.
+
+1. **`resolve_field` lacks a deterministic secondary tie-breaker.** The
+   recompute function does `ORDER BY priority ASC LIMIT 1` only — no
+   secondary key. If two sources share the same priority for a given
+   field on the same master_place AND both have non-null values, Postgres
+   returns one of them non-deterministically. Currently safe only because
+   the seed maintains unique-priority-per-field by convention; not
+   enforced anywhere. Proposed fix: `ORDER BY priority ASC,
+   source_quality_score DESC` — deterministic via the existing
+   per-source-record quality score.
+
+2. **`field_precedence` lacks a `UNIQUE (field_name, priority)`
+   constraint.** Convention is enforced manually; a future row addition
+   could silently introduce non-determinism (the Parks Canada
+   `canonical_name` at priority 1 already collides with NPS at 1 —
+   operationally safe via geographic disjointness, but the schema does
+   nothing to flag the collision). Proposed fix: add the unique
+   constraint at migration time. May require resolving any existing
+   inadvertent collisions first.
+
+Combined PR shape: one migration adding the unique constraint + one
+migration updating `resolve_field` and the polygon/geometry resolution
+queries in `recompute_master_place` to use the deterministic ORDER BY.
+Land after Parks Canada so the Parks Canada rows are in the table
+when the constraint is added.
