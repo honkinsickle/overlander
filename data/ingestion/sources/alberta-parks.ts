@@ -176,12 +176,19 @@ function normalizePasitesId(raw: unknown): string {
 
 /**
  * Build the canonical name from the bare NAME field + the designation
- * label. The layer's NAME omits the designation suffix ("Peter Lougheed",
- * not "Peter Lougheed Provincial Park"), and NAME alone is ambiguous
- * ("Bow Valley" is both a PP and a PRA). Appending the designation gives
- * the proper, disambiguated provincial name. Guarded so a NAME that
- * already carries the suffix isn't doubled. Falls back to the PASITES_ID
- * stamp when NAME is missing.
+ * label. The layer's NAME omits the full designation suffix ("Peter
+ * Lougheed", not "Peter Lougheed Provincial Park"), and NAME alone is
+ * ambiguous ("Bow Valley" is both a PP and a PRA). Appending the
+ * designation gives the proper, disambiguated provincial name. Falls back
+ * to the PASITES_ID stamp when NAME is missing.
+ *
+ * The append absorbs any word-level overlap where the TAIL of NAME already
+ * matches the HEAD of the label, so we never double words. This matters
+ * for WPP: its names commonly already end with "Wildland" ("Bow Valley
+ * Wildland"), and a naive append would produce "Bow Valley Wildland
+ * Wildland Provincial Park". Taking the largest overlap also subsumes the
+ * already-fully-suffixed case ("Writing-on-Stone Provincial Park" stays
+ * unchanged).
  *
  * The matcher's own suffix-normalization handles cross-source comparison
  * (Google's "Peter Lougheed Provincial Park" vs this), so building the
@@ -196,8 +203,19 @@ function buildCanonicalName(
   if (name === "") return fallback;
   const label = typeof type === "string" ? DESIGNATION_LABELS[type] : undefined;
   if (!label) return name;
-  if (name.toLowerCase().endsWith(label.toLowerCase())) return name;
-  return `${name} ${label}`;
+  const nameWords = name.split(/\s+/);
+  const labelWords = label.split(/\s+/);
+  let overlap = 0;
+  for (let k = Math.min(nameWords.length, labelWords.length); k >= 1; k--) {
+    const nameTail = nameWords.slice(nameWords.length - k).join(" ").toLowerCase();
+    const labelHead = labelWords.slice(0, k).join(" ").toLowerCase();
+    if (nameTail === labelHead) {
+      overlap = k;
+      break;
+    }
+  }
+  const remaining = labelWords.slice(overlap);
+  return remaining.length === 0 ? name : `${name} ${remaining.join(" ")}`;
 }
 
 // ───── Geometry helpers ────────────────────────────────────────────────

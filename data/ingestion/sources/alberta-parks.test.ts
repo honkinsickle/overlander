@@ -76,13 +76,28 @@ describe("buildCanonicalName — bare NAME + designation label", () => {
     );
   });
 
-  it("does not double the suffix when NAME already carries it", () => {
+  it("does not double the suffix when NAME already carries it in full", () => {
     expect(
       buildCanonicalName("Writing-on-Stone Provincial Park", "PP", "x"),
     ).toBe("Writing-on-Stone Provincial Park");
     expect(
       buildCanonicalName("Bow Valley Wildland Provincial Park", "WPP", "x"),
     ).toBe("Bow Valley Wildland Provincial Park");
+  });
+
+  it("absorbs partial word overlap — WPP names already ending in 'Wildland'", () => {
+    // Real data: WPP NAME values end with "Wildland" but not the full
+    // "Wildland Provincial Park" label — a naive append doubled the word
+    // ("Bow Valley Wildland Wildland Provincial Park"), caught at smoke.
+    expect(buildCanonicalName("Bow Valley Wildland", "WPP", "x")).toBe(
+      "Bow Valley Wildland Provincial Park",
+    );
+    expect(buildCanonicalName("Don Getty Wildland", "WPP", "x")).toBe(
+      "Don Getty Wildland Provincial Park",
+    );
+    expect(buildCanonicalName("Elbow-Sheep Wildland", "WPP", "x")).toBe(
+      "Elbow-Sheep Wildland Provincial Park",
+    );
   });
 
   it("trims NAME and falls back when NAME is missing", () => {
