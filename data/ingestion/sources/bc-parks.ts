@@ -382,6 +382,15 @@ function inferParkCategory(): string {
 // at the top of this file). `geometry` is the park's representative point;
 // `geometry_polygon` carries the boundary for week-3 promotion + polygon-
 // containment ER.
+//
+// Centroid caveat: the centroid stored on source_record.geometry is the
+// park's representative point per the REST API (its true center), NOT
+// necessarily within any query bbox the record was returned by. The WFS
+// query selects parks whose POLYGON intersects the bbox, so a large park
+// clipping a corner (e.g. Wells Gray from a Mount Robson bbox) has a
+// centroid well outside that bbox — correct, not a bug. Bbox-filtered
+// park queries should therefore use polygon-intersects on
+// geometry_polygon, not point-within on geometry.
 
 function normalizePark(args: {
   name: string;
