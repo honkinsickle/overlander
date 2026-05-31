@@ -628,3 +628,39 @@ validation completes. Removes the reliance on convention and makes
 baseline drift impossible by construction. Low priority — the manual
 DELETE convention is sufficient short-term.
 
+### `db:push-verify --test` flag missing (surfaced 2026-05-31)
+
+`db:push-verify` reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` only;
+it has no test-project mode. The only way to verify against test today is
+to manually swap `data/.env`'s `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
+to the test values (and restore them afterward). The BC Parks session
+(PR #63) demonstrated the sharp edge: one missed edit/save creates a
+split-brain state where `supabase db push` (linked project) and the
+verifier (`.env` `SUPABASE_URL`) target *different* projects — the
+verifier then produces a false-green report against the wrong DB. The
+verify-migration pre-flight ref-alignment check caught it, but the
+workflow shouldn't *require* a pre-flight to be safe.
+
+Fix: add a `--test` flag that reads `SUPABASE_TEST_URL` +
+`SUPABASE_TEST_SERVICE_ROLE_KEY` directly (mirroring `test-setup.ts`),
+eliminating the swap-and-restore dance for test applies.
+
+### `db:push-verify` cwd handling (surfaced 2026-05-31)
+
+`npm run -w data db:push-verify` runs from `data/`, but the Supabase CLI
+looks for the project link at `supabase/.temp/project-ref` relative to
+cwd — which lives at the repo root, not under `data/`. It fails with a
+cryptic "Cannot find project ref. Have you run supabase link?" until
+manually prefixed with `SUPABASE_WORKDIR=$(git rev-parse --show-toplevel)`.
+
+Fix: set `cwd` (or `SUPABASE_WORKDIR`) in the script's `spawnSync` calls
+for `supabase migration list` / `supabase db push`. Two-line fix; high
+friction without it (cost the BC Parks session an iteration to diagnose).
+
+---
+
+Bundling note: the two `db:push-verify` items above + the
+`geometry_polygon promotion` item + the `field_precedence resolution
+determinism` item are candidates for a single "migration-verify and
+field_precedence hardening" PR cluster.
+
