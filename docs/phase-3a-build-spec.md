@@ -418,7 +418,7 @@ This is a simpler alternative to real transactional rollback (which Supabase JS 
 
 ## 9. Execution order
 
-1. SQL migration (`20260527130000_phase3a_recompute_functions.sql`) + the helper RPC for test reset. Apply via `supabase db push`. Verify all four functions callable.
+1. SQL migration (`20260527130000_phase3a_recompute_functions.sql`) + the helper RPC for test reset. Apply via `npm run -w data db:push-verify` (CLAUDE.md "Migration workflow"). Verify all four functions callable.
    **Commit:** `feat(data): SQL functions for master_place recompute + field resolution`.
 
 2. `matcher.ts` with constants and the four exported functions.

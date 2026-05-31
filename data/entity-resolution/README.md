@@ -559,32 +559,3 @@ endpoints are complementary, not overlapping. BC Parks (next source,
 DataBC, also multi-endpoint) should be audited similarly during its
 smoke test.
 
-### Supabase CLI migration apply-without-execute hazard (operational risk)
-
-Supabase CLI marked migration `20260530000000_phase1_5_parks_canada_field_precedence.sql`
-as applied on the test project but skipped its INSERT statements.
-Production was unaffected (rows applied correctly). Caught only because
-the Phase 1.5 synthetic federation test specifically exercised
-`field_precedence` behavior and noticed `canonical_name` resolved to
-google instead of parks_canada.
-
-Manifested after a first push that emitted the confusing
-`"Remote migration versions not found in local migrations directory"`
-message and then a subsequent push reporting `"Applying migration …
-Finished supabase db push"` without actually running the migration body.
-Repaired via manual upsert of the 6 expected rows.
-
-Mitigation options:
-  (a) **Preferred:** small follow-on PR adding a post-migration verification
-      script — run after each `db push`, asserts expected row counts in
-      tables touched by the migration. Catches both this CLI hazard and
-      any future analogous issue with INSERT-only migrations.
-  (b) Idempotent rewrites of INSERT-only migrations (DROP-then-INSERT or
-      MERGE) — weaker; doesn't catch apply-skip on schema-only migrations.
-  (c) Error-message detection in the CLI invocation — weaker; relies on
-      Supabase keeping that exact message stable.
-
-File as separate small PR after Parks Canada lands. The synthetic
-federation test in `phase3a.test.ts` partially backstops this for the
-Parks Canada `canonical_name` case specifically; the broader solution
-needs to be a general migration-verify pattern.
