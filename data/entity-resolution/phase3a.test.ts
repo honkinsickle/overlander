@@ -472,3 +472,253 @@ describeIfAllowed(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 1.5 / BC Parks — cross-jurisdiction non-overlap + name_dominant
+// federation. Validates migration 20260531000000 + locked decision #4's
+// precedence rules for bc_parks.
+//
+// Two independent synthetic scenarios, each with its own reset + cleanup.
+// Synthetic source_records use the `test:federation:*` external_id
+// namespace and are explicitly deleted in afterAll (reset_phase3a_test_state
+// unlinks + clears master_place/place_match but does NOT delete
+// source_record rows). Coordinates are in BC/Alberta (lat ~53), far from
+// the JT corpus (lat ~34), so a stray match could never federate these
+// into JT master_places.
+// ────────────────────────────────────────────────────────────────────────
+
+describeIfAllowed(
+  "Phase 1.5 — BC Parks federation (cross-jurisdiction + name_dominant)",
+  () => {
+    // (a) BC Parks ↔ Parks Canada must NOT merge across the shared BC/AB
+    // border. Two park_boundary records ~20 km apart — one in Mount Robson
+    // Provincial Park (BC), one in Jasper National Park (federal) — run
+    // through the REAL matcher. They are far beyond the 500 m candidate
+    // radius, so the matcher must emit two new_master_place outcomes, never
+    // a federation. Guards against a regression where same-category
+    // park_boundary records merge regardless of distance/jurisdiction.
+    describe("(a) cross-jurisdiction non-overlap — BC Parks ↔ Parks Canada", () => {
+      const BC_COORDS: [number, number] = [-118.7, 52.9]; // Mount Robson PP interior, near AB border
+      const PC_COORDS: [number, number] = [-118.4, 52.85]; // Jasper NP interior, ~20 km E across the border
+      const BC_EXT = "test:federation:bc_parks:mtrobson";
+      const PC_EXT = "test:federation:parks_canada:jasper";
+      const BC_NAME = "Mount Robson Provincial Park";
+      const PC_NAME = "Jasper National Park";
+
+      beforeAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+
+        await upsertSourceRecord({
+          sourceId: "bc_parks",
+          externalId: BC_EXT,
+          name: BC_NAME,
+          inferredCategory: "park_boundary",
+          point: BC_COORDS,
+          rawPayload: { synthetic: true, source: "bc_parks" },
+          normalizedPayload: {
+            canonical_name: BC_NAME,
+            description: null,
+            overlander_tags: ["provincial_land", "bc_parks"],
+            contact: null,
+            access: null,
+            amenities: null,
+            hours: null,
+          },
+          sourceQualityScore: 0.9,
+        });
+        await upsertSourceRecord({
+          sourceId: "parks_canada",
+          externalId: PC_EXT,
+          name: PC_NAME,
+          inferredCategory: "park_boundary",
+          point: PC_COORDS,
+          rawPayload: { synthetic: true, source: "parks_canada" },
+          normalizedPayload: {
+            canonical_name: PC_NAME,
+            description: null,
+            overlander_tags: ["federal_land", "parks_canada"],
+            contact: null,
+            access: null,
+            amenities: null,
+            hours: null,
+          },
+          sourceQualityScore: 0.95,
+        });
+
+        const { data: srRows, error: srErr } = await db
+          .from("source_record")
+          .select("id, external_id")
+          .in("external_id", [BC_EXT, PC_EXT]);
+        expect(srErr).toBeNull();
+        expect(srRows, "synthetic source_records were upserted").toHaveLength(2);
+        const byExt = new Map(
+          (srRows ?? []).map((r) => [r.external_id, r.id as string]),
+        );
+
+        // Run the REAL matcher over exactly these two records. master_place
+        // is empty post-reset, so any candidate could only come from the
+        // other planned record — and at ~20 km they are far outside the
+        // 500 m candidate radius.
+        const outcomes = await matchAll([byExt.get(BC_EXT)!, byExt.get(PC_EXT)!]);
+        const applyRes = await applyMatches(outcomes);
+        expect(applyRes.errors, "apply phase emitted errors").toHaveLength(0);
+      });
+
+      afterAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+        await db.from("source_record").delete().in("external_id", [BC_EXT, PC_EXT]);
+      });
+
+      it("resolves to two separate master_places, not one merged", async () => {
+        const { data: rows, error } = await db
+          .from("source_record")
+          .select("external_id, master_place_id")
+          .in("external_id", [BC_EXT, PC_EXT]);
+        expect(error, "source_record lookup failed").toBeNull();
+        expect(rows, "both synthetic records present").toHaveLength(2);
+
+        const byExt = new Map(
+          (rows ?? []).map((r) => [r.external_id, r.master_place_id as string | null]),
+        );
+        const bcMp = byExt.get(BC_EXT);
+        const pcMp = byExt.get(PC_EXT);
+
+        // Both link to a master_place (each its own new_master_place)...
+        expect(bcMp, "BC Parks record should link to a master_place").toBeTruthy();
+        expect(pcMp, "Parks Canada record should link to a master_place").toBeTruthy();
+        // ...and those master_places must be DISTINCT — no cross-jurisdiction merge.
+        expect(
+          bcMp,
+          "BC Parks (Mount Robson) and Parks Canada (Jasper) must NOT federate — " +
+            "different jurisdictions ~20 km apart across the BC/AB border",
+        ).not.toBe(pcMp);
+      });
+    });
+
+    // (b) BC Parks × Google name_dominant — mirror of the parks_canada
+    // synthetic above. bc_parks is priority 1 for canonical_name (migration
+    // 20260531000000), google is priority 2; when both co-link to one
+    // master_place, bc_parks must win. The attribution assertion is the
+    // strong one: it proves resolve_field actually picked bc_parks, not
+    // that the value coincidentally matched.
+    describe("(b) name_dominant federation — bc_parks wins canonical_name vs google", () => {
+      const COORDS: [number, number] = [-119.36, 53.05]; // Mount Robson Park representative point
+      const BC_EXT = "test:federation:bc_parks:nd";
+      const GOOGLE_EXT = "test:federation:google:nd";
+      const BC_NAME = "Mount Robson Provincial Park";
+      const GOOGLE_NAME = "Mount Robson Park";
+      const masterPlaceId = randomUUID();
+
+      beforeAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+
+        await upsertSourceRecord({
+          sourceId: "bc_parks",
+          externalId: BC_EXT,
+          name: BC_NAME,
+          inferredCategory: "park_boundary",
+          point: COORDS,
+          rawPayload: { synthetic: true, source: "bc_parks" },
+          normalizedPayload: {
+            canonical_name: BC_NAME,
+            description: null,
+            overlander_tags: ["provincial_land", "bc_parks"],
+            contact: null,
+            access: null,
+            amenities: null,
+            hours: null,
+          },
+          sourceQualityScore: 0.9,
+        });
+        await upsertSourceRecord({
+          sourceId: "google",
+          externalId: GOOGLE_EXT,
+          name: GOOGLE_NAME,
+          inferredCategory: "park_boundary",
+          point: COORDS,
+          rawPayload: { synthetic: true, source: "google" },
+          normalizedPayload: {
+            canonical_name: GOOGLE_NAME,
+            description: null,
+            overlander_tags: [],
+            contact: null,
+            access: null,
+            amenities: null,
+            hours: null,
+          },
+          sourceQualityScore: 0.85,
+        });
+
+        const { data: srRows, error: srErr } = await db
+          .from("source_record")
+          .select("id, external_id")
+          .in("external_id", [BC_EXT, GOOGLE_EXT]);
+        expect(srErr).toBeNull();
+        expect(srRows, "synthetic source_records were upserted").toHaveLength(2);
+        const byExt = new Map(
+          (srRows ?? []).map((r) => [r.external_id, r.id as string]),
+        );
+
+        // new_master_place seeds the MP with bc_parks; auto_link attaches
+        // google. apply_match_outcomes triggers recompute_master_place,
+        // which runs resolve_field over the field_precedence table.
+        const outcomes = [
+          {
+            kind: "new_master_place",
+            source_record_id: byExt.get(BC_EXT)!,
+            target: masterPlaceId,
+            seed_category: "park_boundary",
+            seed_geometry: COORDS,
+            seed_name: BC_NAME,
+          },
+          {
+            kind: "auto_link",
+            source_record_id: byExt.get(GOOGLE_EXT)!,
+            target: masterPlaceId,
+            confidence: 0.95,
+            method: "name_dominant",
+            score: {
+              distance_meters: 0,
+              name_similarity: 0.9,
+              category_compatibility: 1.0,
+              combined_confidence: 0.95,
+            },
+          },
+        ];
+        const { error: applyErr } = await db.rpc("apply_match_outcomes", {
+          p_outcomes: outcomes,
+        });
+        expect(applyErr).toBeNull();
+      });
+
+      afterAll(async () => {
+        await db.rpc("reset_phase3a_test_state");
+        await db
+          .from("source_record")
+          .delete()
+          .in("external_id", [BC_EXT, GOOGLE_EXT]);
+      });
+
+      it("master_place.canonical_name + attribution resolve to bc_parks", async () => {
+        const { data: mp, error } = await db
+          .from("master_place")
+          .select("id, canonical_name, attribution")
+          .eq("id", masterPlaceId)
+          .single();
+        expect(error, "master_place lookup failed").toBeNull();
+        expect(mp, "master_place row should exist").not.toBeNull();
+
+        // Value won by bc_parks (priority 1 for canonical_name vs google=2).
+        expect(
+          mp!.canonical_name,
+          "field_precedence resolved canonical_name to the wrong source — " +
+            "check migration 20260531000000 applied (bc_parks=1 vs google=2)",
+        ).toBe(BC_NAME);
+
+        // Stronger assertion: attribution proves resolve_field picked bc_parks.
+        const attribution = (mp!.attribution as Record<string, unknown>) ?? {};
+        expect(attribution.canonical_name).toBe("bc_parks");
+      });
+    });
+  },
+);
