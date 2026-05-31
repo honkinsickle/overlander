@@ -467,35 +467,39 @@ a bug; both are bets about where the next refactor pressure will appear.
    instance to inform the abstraction shape, then refactor all three
    together.
 
-### field_precedence resolution determinism (bundled small PR)
+### field_precedence resolution determinism (4a shipped; 4b deferred)
 
-Surfaced during Parks Canada migration design. Two related items, file
-together as a single small PR after Parks Canada lands.
+Surfaced during Parks Canada migration design; shipped 4a in the
+migration-verify workflow-hardening cluster (migration
+`20260601010000_phase3a_resolve_field_determinism`).
 
-1. **`resolve_field` lacks a deterministic secondary tie-breaker.** The
-   recompute function does `ORDER BY priority ASC LIMIT 1` only — no
-   secondary key. If two sources share the same priority for a given
-   field on the same master_place AND both have non-null values, Postgres
-   returns one of them non-deterministically. Currently safe only because
-   the seed maintains unique-priority-per-field by convention; not
-   enforced anywhere. Proposed fix: `ORDER BY priority ASC,
-   source_quality_score DESC` — deterministic via the existing
-   per-source-record quality score.
+**4a — deterministic tie-breaker (SHIPPED).** `resolve_field` and the two
+geometry resolution queries in `recompute_master_place` now order by
+`priority ASC, source_quality_score DESC NULLS LAST, source_id ASC` at all
+three resolution sites. The secondary `source_quality_score DESC` breaks a
+priority tie by quality; the tertiary `source_id ASC` guarantees a total
+order even when quality also ties — necessary because the real
+jurisdictional collisions tie on quality by ingester convention
+(nps == parks_canada == 0.95; bc_parks == alberta_parks == 0.90), so a
+two-key sort alone would NOT have delivered determinism for them.
+`NULLS LAST` is defensive only (`source_quality_score` is `NOT NULL`).
+Behaviour-preserving on current data (D4 baseline unchanged); the fix is
+defensive against any future collision, including a non-disjoint one.
 
-2. **`field_precedence` lacks a `UNIQUE (field_name, priority)`
-   constraint.** Convention is enforced manually; a future row addition
-   could silently introduce non-determinism (the Parks Canada
-   `canonical_name` at priority 1 already collides with NPS at 1 —
-   operationally safe via geographic disjointness, but the schema does
-   nothing to flag the collision). Proposed fix: add the unique
-   constraint at migration time. May require resolving any existing
-   inadvertent collisions first.
-
-Combined PR shape: one migration adding the unique constraint + one
-migration updating `resolve_field` and the polygon/geometry resolution
-queries in `recompute_master_place` to use the deterministic ORDER BY.
-Land after Parks Canada so the Parks Canada rows are in the table
-when the constraint is added.
+**4b — `UNIQUE (field_name, priority)` constraint (DEFERRED).** Not added:
+the schema **deliberately permits priority sharing across geographically-
+disjoint sources** — NPS + Parks Canada + BC Parks + Alberta Parks all
+share priority 1 for `canonical_name`, `description`, and `geometry` by
+design (co-equal jurisdictional authority; they never co-link to one
+master_place because the geographies are disjoint). A blunt global UNIQUE
+constraint would fight that design, forcing arbitrary distinct priorities
+on co-equal sources. The 4a tertiary tie-breaker provides operational
+(total-order) determinism without it. A future improvement might be a
+*partial* UNIQUE that excludes the documented disjoint groups, but the
+tie-breaker already gives total ordering. **Revisit if a future source
+pattern emerges that is non-disjoint AND priority-colliding** (a genuine
+same-geography collision), where schema-level enforcement would add value
+the tie-breaker can't.
 
 ### Ingester insert/update counter accuracy (surfaced 2026-05-30)
 
@@ -628,54 +632,11 @@ validation completes. Removes the reliance on convention and makes
 baseline drift impossible by construction. Low priority — the manual
 DELETE convention is sufficient short-term.
 
-### `db:push-verify --test` flag missing (surfaced 2026-05-31)
-
-`db:push-verify` reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` only;
-it has no test-project mode. The only way to verify against test today is
-to manually swap `data/.env`'s `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
-to the test values (and restore them afterward). The BC Parks session
-(PR #63) demonstrated the sharp edge: one missed edit/save creates a
-split-brain state where `supabase db push` (linked project) and the
-verifier (`.env` `SUPABASE_URL`) target *different* projects — the
-verifier then produces a false-green report against the wrong DB. The
-verify-migration pre-flight ref-alignment check caught it, but the
-workflow shouldn't *require* a pre-flight to be safe.
-
-Fix: add a `--test` flag that reads `SUPABASE_TEST_URL` +
-`SUPABASE_TEST_SERVICE_ROLE_KEY` directly (mirroring `test-setup.ts`),
-eliminating the swap-and-restore dance for test applies.
-
-### `db:push-verify` cwd handling (surfaced 2026-05-31)
-
-`npm run -w data db:push-verify` runs from `data/`, but the Supabase CLI
-looks for the project link at `supabase/.temp/project-ref` relative to
-cwd — which lives at the repo root, not under `data/`. It fails with a
-cryptic "Cannot find project ref. Have you run supabase link?" until
-manually prefixed with `SUPABASE_WORKDIR=$(git rev-parse --show-toplevel)`.
-
-Fix: set `cwd` (or `SUPABASE_WORKDIR`) in the script's `spawnSync` calls
-for `supabase migration list` / `supabase db push`. Two-line fix; high
-friction without it (cost the BC Parks session an iteration to diagnose).
-
-### `ingest:manual` lacks `--env-file=.env` in npm script (surfaced 2026-05-31)
-
-Unlike `db:push-verify` (which loads `--env-file=.env`), the
-`ingest:manual` script (`tsx ingestion/manual.ts`) doesn't load env, so a
-plain `npm run -w data ingest:manual -- --source <x> --bbox …` fails every
-upsert with "Missing required env var: SUPABASE_URL". Smoke runs require
-the manual `npx tsx --env-file=.env ingestion/manual.ts …` workaround.
-Same operational-friction family as the `SUPABASE_WORKDIR` and
-`db:push-verify --test` items above (caught at the Alberta Parks smoke,
-PR #66).
-
-Fix: add `--env-file=.env` to the `ingest:manual` npm script in
-`data/package.json`. Two-character fix.
-
 ---
 
-Bundling note: the two `db:push-verify` items + the `ingest:manual`
-env-file item above + the `geometry_polygon promotion` item + the
-`field_precedence resolution determinism` item are candidates for a
-single "migration-verify and source-integration workflow hardening" PR
-cluster.
+Bundling note: the "migration-verify and source-integration workflow
+hardening" PR cluster shipped four of these items — the two `db:push-verify`
+items (cwd + `--test`), the `ingest:manual` env-file item, and 4a of the
+`field_precedence resolution determinism` item (all closed/updated above).
+The `geometry_polygon promotion` item remains open for a future cluster.
 
