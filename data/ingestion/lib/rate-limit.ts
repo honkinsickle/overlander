@@ -11,5 +11,6 @@ export const limits: Record<string, LimitFunction> = {
   ridb: pLimit(4),
   nps: pLimit(4),
   parks_canada: pLimit(4), // ESRI REST endpoints; no documented rate limit, be polite.
+  bc_parks: pLimit(5), // DataBC WFS + BC Parks REST API; ~5 req/sec courtesy limit.
   ioverlander: pLimit(1), // No public API. Be polite.
 };
