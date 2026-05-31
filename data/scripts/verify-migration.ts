@@ -24,7 +24,13 @@
  *   tsx verify-migration.ts                            # latest migration by timestamp
  *   tsx verify-migration.ts <id> [<id> ...]            # specific migration ID(s)
  *   tsx verify-migration.ts --push                     # wrap: capture pending, db push, verify
+ *   tsx verify-migration.ts --push --test              # apply+verify against the isolated test project
  *   tsx verify-migration.ts --migrations-dir <path>    # override (used by tests)
+ *
+ * --test pins both sides at the test project: the verify client reads
+ * SUPABASE_TEST_URL / SUPABASE_TEST_SERVICE_ROLE_KEY from data/.env.test, and
+ * (with --push) it asserts the Supabase CLI is linked to that same project so
+ * `db push` can't reach production. No .env swap, no link mutation.
  *
  * Exit codes:
  *   0   verify clean (or nothing to verify in non-INSERT migrations)
@@ -51,11 +57,13 @@ import { logger } from "../ingestion/lib/logger.ts";
 // SUPABASE_WORKDIR=$(git rev-parse --show-toplevel) prefix.
 // scripts/ → data/ → repo-root.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const DATA_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // ───── CLI shape ───────────────────────────────────────────────────────
 
 interface CliArgs {
   push: boolean;
+  test: boolean;
   migrationsDir: string;
   migrationIds: string[];
 }
@@ -66,6 +74,7 @@ function parseArgs(argv: string[]): CliArgs {
   const defaultDir = resolve(here, "..", "..", "supabase", "migrations");
   const out: CliArgs = {
     push: false,
+    test: false,
     migrationsDir: defaultDir,
     migrationIds: [],
   };
@@ -73,6 +82,8 @@ function parseArgs(argv: string[]): CliArgs {
     const a = argv[i]!;
     if (a === "--push") {
       out.push = true;
+    } else if (a === "--test") {
+      out.test = true;
     } else if (a === "--migrations-dir") {
       out.migrationsDir = argv[++i] ?? "";
     } else if (a === "latest") {
@@ -539,10 +550,110 @@ function runDbPush(): { ok: boolean; output: string } {
   };
 }
 
+// ───── --test mode ─────────────────────────────────────────────────────
+//
+// Pin both sides of db:push-verify at the isolated test project so a test
+// apply needs no .env swap and cannot split-brain:
+//   - verify (read) client: override SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+//     from data/.env.test's SUPABASE_TEST_* (mirrors data/test-setup.ts).
+//   - push side: the CLI's `db push` targets its *linked* project, which we
+//     deliberately do NOT mutate. Instead assert the link already points at
+//     the test project and fail fast with guidance otherwise, so a --test
+//     apply can never reach production.
+
+function readEnvFile(path: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return out;
+  }
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && m[1] !== undefined && m[2] !== undefined) out[m[1]] = m[2];
+  }
+  return out;
+}
+
+function projectRefFromUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname.split(".")[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Override the verifier's read client to the test project from
+ * data/.env.test's SUPABASE_TEST_* values. Returns the parsed test project
+ * ref (for the push-side link assertion). Exits with a clear message if the
+ * test env isn't populated or the URL is unparseable.
+ */
+function applyTestOverride(): string {
+  const env = readEnvFile(resolve(DATA_DIR, ".env.test"));
+  const testUrl = env.SUPABASE_TEST_URL;
+  const testKey = env.SUPABASE_TEST_SERVICE_ROLE_KEY;
+  if (!testUrl || !testKey) {
+    logger.error(
+      "db:push-verify --test: SUPABASE_TEST_URL / SUPABASE_TEST_SERVICE_ROLE_KEY not set " +
+        "in data/.env.test. Populate it (see data/.env.test.example) and retry.",
+    );
+    process.exit(2);
+  }
+  const ref = projectRefFromUrl(testUrl);
+  if (!ref) {
+    logger.error(`db:push-verify --test: could not parse a project ref from SUPABASE_TEST_URL=${testUrl}`);
+    process.exit(2);
+  }
+  process.env.SUPABASE_URL = testUrl;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = testKey;
+  return ref;
+}
+
+/**
+ * Push-side guard for --test. The CLI's `db push` targets its linked project
+ * (supabase/.temp/project-ref), which --test does not mutate; confirm that
+ * link already points at the test project so the push can't reach the wrong
+ * one. Fails fast with the exact relink command otherwise.
+ */
+function assertLinkedToTest(testRef: string): void {
+  const refPath = join(REPO_ROOT, "supabase", ".temp", "project-ref");
+  let linked: string;
+  try {
+    linked = readFileSync(refPath, "utf8").trim();
+  } catch {
+    logger.error(
+      `db:push-verify --test: no linked project found at ${refPath}. ` +
+        `Run: supabase link --project-ref ${testRef}`,
+    );
+    process.exit(2);
+  }
+  if (linked !== testRef) {
+    logger.error(
+      `db:push-verify --test: CLI is linked to '${linked}' but --test targets test project '${testRef}'. ` +
+        `db push would hit the wrong project. Run: supabase link --project-ref ${testRef}`,
+    );
+    process.exit(2);
+  }
+}
+
 // ───── Entry ───────────────────────────────────────────────────────────
 
 async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
+
+  if (args.test) {
+    // Must run before any getDb() (verifyOne) and before runDbPush().
+    const testRef = applyTestOverride();
+    if (args.push) assertLinkedToTest(testRef);
+    // eslint-disable-next-line no-console
+    console.log(
+      `db:push-verify --test: pinned to test project ${testRef} (verify client overridden; CLI link asserted).`,
+    );
+  }
 
   let migrationIds = args.migrationIds;
   if (args.push) {
