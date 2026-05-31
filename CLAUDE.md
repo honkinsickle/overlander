@@ -61,3 +61,8 @@ For web client design tokens, see `web/CLAUDE.md` — Phase 1 work in `data/` do
 - `web/` does not import from `data/` at runtime. Phase 2 will expose query helpers via Supabase (RLS-enabled views or RPCs), not via shared TS packages.
 - Shared TS types (e.g. `MasterPlace`, `SourceRecord`) will eventually live in a `packages/types` workspace. Not yet needed in Phase 1.
 - `supabase/migrations/` is shared. New migrations append by timestamp; never reorder.
+
+## Migration workflow
+- Apply migrations via `npm run -w data db:push-verify`, NOT `supabase db push` directly. The wrapper runs `supabase db push` and then verifies expected INSERT-row presence via `data/scripts/verify-migration.ts`. Guards against the 2026-05-30-class CLI bug where `db push` reported success but skipped the migration body.
+- CI does not run `db:push-verify` — verification happens at push-time, on the operator's machine. CI checks the verifier's own behavior via unit tests but cannot guard against CLI-side migration-execution bugs. The operator's `db:push-verify` invocation is the safety net.
+- v1 verifier covers literal `INSERT INTO <table> VALUES (...), (...), ...` only. ON CONFLICT, INSERT ... SELECT, and DDL (CREATE / ALTER / DROP / functions) are reported as "uncovered" so a green verify on a mixed migration doesn't give false confidence about unchecked DDL.
