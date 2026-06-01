@@ -19,5 +19,13 @@ export default defineConfig({
     // project via SUPABASE_TEST_* and set ALLOW_DESTRUCTIVE_TEST_RESET.
     // Setup runs once per worker before tests load.
     setupFiles: ["./test-setup.ts"],
+
+    // Serialize test FILES. phase3a.test.ts and phase3b-containment.test.ts
+    // both call reset_phase3a_test_state() (deletes all master_place) against
+    // the SHARED test project. Run concurrently, one suite's reset would
+    // clobber the other mid-run and drift the D4 baseline. The other test
+    // files (matcher/profiler/progress-cache) mock the DB, so serializing is
+    // cheap. Within-file order is already sequential.
+    fileParallelism: false,
   },
 });

@@ -429,6 +429,24 @@ re-litigating.
    containment recomputed via `recompute_master_place` fan-out. Rare in
    practice; cost acceptable.
 
+   **Refined during implementation (Phase 3b milestone 2, 2026-06-01 —
+   migration `20260601040000`).** The locked wording above described fan-out
+   as recursive `recompute_master_place` calls on *previously-contained*
+   amenities. Implementation instead does a **direct edge-set rewrite inside
+   the park's own recompute** (delete + reinsert the park's `contained_in`
+   edges per role). Two reasons the mechanism changed: (a) the literal
+   "previously-contained" wording has a **grow-case gap** — when a polygon
+   expands to cover a *newly*-contained amenity, that amenity was never
+   previously contained, so a previously-contained-only fan-out would never
+   create its edge; the stateless rewrite handles grow and shrink uniformly.
+   (b) it avoids the recursive recompute fan-out separately tracked as a perf
+   heavy-tail above. Same fan-out *semantics* (one park recompute updates N
+   amenity relationships), bounded *mechanism* (one query per role, not N
+   recompute calls). Point-in-polygon is used for nested child parks too
+   (a child park is placed by its representative point), keeping `contained_in`
+   a single point-in-polygon relation; polygon-in-polygon would be a distinct
+   future relationship type. See the migration header for the full rationale.
+
 6. **Multi-park unions** (e.g., Waterton-Glacier International Peace Park):
    treat boundary records as separate park `master_places`. An amenity
    inside both registers two relationships (one per containing park). Search
