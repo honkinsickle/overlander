@@ -440,10 +440,12 @@ re-litigating.
    both. The application layer decides which to surface in the UI (typically
    the most-specific containing park), but both are queryable.
 
-**Prerequisite.** `master_place.geometry_polygon` must be populated for PC
-and BC park records (and Alberta). Currently blocked by missing
-`field_precedence` rows — see the "geometry_polygon promotion for
-parks_canada, bc_parks, and alberta_parks" tracked item.
+**Prerequisite (satisfied).** `master_place.geometry_polygon` must be
+populated for PC, BC, and Alberta park records. This was blocked by missing
+`field_precedence` rows; resolved by migration
+`20260601020000_phase1_5_geometry_polygon_promotion.sql` (applied test +
+prod 2026-06-01), which adds `geometry_polygon` precedence rows for
+`parks_canada` (1), `bc_parks` (2), and `alberta_parks` (3).
 
 **Estimated effort:** 2–3 days focused work once started. Real architecture
 work — fresh-session.
@@ -652,46 +654,6 @@ endpoints are complementary, not overlapping. BC Parks (next source,
 DataBC, also multi-endpoint) should be audited similarly during its
 smoke test.
 
-### geometry_polygon promotion for parks_canada, bc_parks, and alberta_parks (Phase 1.5 follow-up)
-
-Surfaced during BC Parks integration (2026-05-31). None of the Parks
-Canada, BC Parks, or Alberta Parks field_precedence migrations seed a
-`geometry_polygon` row — only `nps` is in that precedence row (base seed:
-"geometry_polygon: NPS only. No fallback."). All three sources normalize a
-boundary polygon into `normalized_payload.geometry_polygon` expecting
-week-3 `recompute_master_place` to promote it, but `resolve_field()`
-resolves `geometry_polygon` solely from `nps`, so **Parks Canada, BC
-Parks, and Alberta Parks boundary polygons never reach
-`master_place.geometry_polygon`.**
-
-Consequence: the polygon-containment ER path (OSM park-node →
-auto-link-by-containment; see "OSM park-as-node is at polygon centroid"
-above) can't fire for Canadian parks, because the containing polygon was
-never promoted. Federal/provincial parks fall back to distance-only
-candidate retrieval, which the OSM-park-node finding shows is wrong for
-park-category records.
-
-Fix shape (one small migration, all three sources together): add
-
-  - `('geometry_polygon', 'parks_canada', 1)` — peer with NPS for the
-    jurisdictional-authority pattern; geographic disjointness keeps the tie
-    safe.
-  - `('geometry_polygon', 'bc_parks', 2)` — provincial below federal;
-    geographic disjointness keeps the tie with PC safe.
-  - `('geometry_polygon', 'alberta_parks', 3)` — third sortation in the
-    disjoint-safe stack.
-
-The 1/2/3 values among the Canadian sources are **arbitrary** — the
-geographies are disjoint, so ties never fire on real data, and the
-priority numbers exist only to give the tie-breaker a total ordering
-(the UNIQUE constraint on `(field_key, source_id)` was deferred per PR #67's
-design decisions, so duplicate priorities would not even be rejected). The
-numbers reflect a rough "federal before provincial" intent, not actual
-authority differences. Bundle with — or sequence ahead of — the
-polygon-containment ER work so the promoted polygons have a consumer. Not
-BC-Parks-PR scope; filed so it isn't lost when the containment path is
-built.
-
 ### BC Parks is park-scoped, not point-scoped (data-shape note, 2026-05-31)
 
 BC's open data publishes ONE record per protected area with aggregated
@@ -741,5 +703,6 @@ Bundling note: the "migration-verify and source-integration workflow
 hardening" PR cluster shipped four of these items — the two `db:push-verify`
 items (cwd + `--test`), the `ingest:manual` env-file item, and 4a of the
 `field_precedence resolution determinism` item (all closed/updated above).
-The `geometry_polygon promotion` item remains open for a future cluster.
+The `geometry_polygon promotion` item shipped separately in migration
+`20260601020000` and has been removed from the open items above.
 
