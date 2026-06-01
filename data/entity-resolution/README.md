@@ -652,16 +652,17 @@ endpoints are complementary, not overlapping. BC Parks (next source,
 DataBC, also multi-endpoint) should be audited similarly during its
 smoke test.
 
-### geometry_polygon promotion for provincial/federal boundaries (shared PC + BC Parks follow-up)
+### geometry_polygon promotion for parks_canada, bc_parks, and alberta_parks (Phase 1.5 follow-up)
 
-Surfaced during BC Parks integration (2026-05-31). Neither the Parks
-Canada nor the BC Parks field_precedence migration seeds a
+Surfaced during BC Parks integration (2026-05-31). None of the Parks
+Canada, BC Parks, or Alberta Parks field_precedence migrations seed a
 `geometry_polygon` row — only `nps` is in that precedence row (base seed:
-"geometry_polygon: NPS only. No fallback."). Both sources normalize a
+"geometry_polygon: NPS only. No fallback."). All three sources normalize a
 boundary polygon into `normalized_payload.geometry_polygon` expecting
 week-3 `recompute_master_place` to promote it, but `resolve_field()`
-resolves `geometry_polygon` solely from `nps`, so **Parks Canada and BC
-Parks boundary polygons never reach `master_place.geometry_polygon`.**
+resolves `geometry_polygon` solely from `nps`, so **Parks Canada, BC
+Parks, and Alberta Parks boundary polygons never reach
+`master_place.geometry_polygon`.**
 
 Consequence: the polygon-containment ER path (OSM park-node →
 auto-link-by-containment; see "OSM park-as-node is at polygon centroid"
@@ -670,13 +671,26 @@ never promoted. Federal/provincial parks fall back to distance-only
 candidate retrieval, which the OSM-park-node finding shows is wrong for
 park-category records.
 
-Fix shape (one small migration, both sources together): add
-`('geometry_polygon', 'parks_canada', <n>)` and
-`('geometry_polygon', 'bc_parks', <n>)` at next-unused priority (nps=1,
-so 2 and 3 — order is moot, the geometries are geographically disjoint).
-Bundle with — or sequence ahead of — the polygon-containment ER work so
-the promoted polygons have a consumer. Not BC-Parks-PR scope; filed so it
-isn't lost when the containment path is built.
+Fix shape (one small migration, all three sources together): add
+
+  - `('geometry_polygon', 'parks_canada', 1)` — peer with NPS for the
+    jurisdictional-authority pattern; geographic disjointness keeps the tie
+    safe.
+  - `('geometry_polygon', 'bc_parks', 2)` — provincial below federal;
+    geographic disjointness keeps the tie with PC safe.
+  - `('geometry_polygon', 'alberta_parks', 3)` — third sortation in the
+    disjoint-safe stack.
+
+The 1/2/3 values among the Canadian sources are **arbitrary** — the
+geographies are disjoint, so ties never fire on real data, and the
+priority numbers exist only to give the tie-breaker a total ordering
+(the UNIQUE constraint on `(field_key, source_id)` was deferred per PR #67's
+design decisions, so duplicate priorities would not even be rejected). The
+numbers reflect a rough "federal before provincial" intent, not actual
+authority differences. Bundle with — or sequence ahead of — the
+polygon-containment ER work so the promoted polygons have a consumer. Not
+BC-Parks-PR scope; filed so it isn't lost when the containment path is
+built.
 
 ### BC Parks is park-scoped, not point-scoped (data-shape note, 2026-05-31)
 
