@@ -379,6 +379,95 @@ containment (preferred) or distance-to-finalized-point (fallback). This
 converges with the polygon-containment work and also fixes the 28 orphan
 dump stations.
 
+### Polygon containment: federate orphan amenities into containing parks (Phase 3b — DESIGN LOCKED 2026-05-31)
+
+**What it is.** Federate orphan amenity records into their containing park
+`master_place` via a spatial query (`ST_Covers`). Establishes a
+parent/child containment relationship so the system can answer
+"campgrounds in Banff"-style searches and render "located in Banff
+National Park" context on amenity cards. The amenity stays a distinct
+`master_place` — this is a *relationship*, not a merge.
+
+**Design status: all open questions resolved (locked 2026-05-31).** The
+decisions below are final; implementation can proceed against them without
+re-litigating.
+
+**Locked decisions:**
+
+1. **Ongoing computation with one-time backfill.** Polygon containment
+   runs as part of the `recompute_master_place` pipeline going forward. A
+   dedicated backfill script calls `recompute_master_place` for every
+   existing `master_place` at initial deployment to populate relationships
+   for existing data.
+
+2. **Trigger point: `recompute_master_place` (per-record granularity).**
+   - When recompute fires for an **amenity** (point geometry), the function
+     queries which park polygons cover the point.
+   - When recompute fires for a **park** (polygon geometry), the function
+     queries which amenity points fall inside its polygon and updates
+     relationships for all contained amenities.
+
+3. **Schema: new `place_relationships` table.**
+   - Columns: `(child_master_place_id, parent_master_place_id, relationship_type, computed_at)`.
+   - Primary key on `(child_master_place_id, parent_master_place_id, relationship_type)`.
+   - Foreign keys to `master_place(id)` with `ON DELETE CASCADE`.
+   - CHECK constraint: `relationship_type IN ('contained_in')` — strict
+     enum; future relationship types require a migration to expand.
+   - CHECK constraint: `child_master_place_id <> parent_master_place_id` —
+     prevents self-referential relationships.
+   - Indexes on **both** `(parent_master_place_id, relationship_type)` and
+     `(child_master_place_id, relationship_type)` for efficient queries in
+     both directions.
+
+4. **Spatial query uses `ST_Covers`, not `ST_Contains`.** `ST_Covers`
+   includes boundary points (a campground exactly on the park edge counts
+   as contained). `ST_Contains` is strict and creates surprising edge cases
+   for campgrounds at park boundaries.
+
+5. **Park polygon change handling: fan-out recomputation.** When a park's
+   polygon is updated, all previously-contained amenities have their
+   containment recomputed via `recompute_master_place` fan-out. Rare in
+   practice; cost acceptable.
+
+6. **Multi-park unions** (e.g., Waterton-Glacier International Peace Park):
+   treat boundary records as separate park `master_places`. An amenity
+   inside both registers two relationships (one per containing park). Search
+   returns the amenity for queries about either park. The one-to-many schema
+   supports this natively.
+
+7. **Nested parks** (e.g., a BC provincial park inside Parks Canada
+   territory): both relationships persist — the amenity is contained in
+   both. The application layer decides which to surface in the UI (typically
+   the most-specific containing park), but both are queryable.
+
+**Prerequisite.** `master_place.geometry_polygon` must be populated for PC
+and BC park records (and Alberta). Currently blocked by missing
+`field_precedence` rows — see the "geometry_polygon promotion for
+parks_canada, bc_parks, and alberta_parks" tracked item.
+
+**Estimated effort:** 2–3 days focused work once started. Real architecture
+work — fresh-session.
+
+**Implementation outline (when picked up):**
+
+1. Migration: create `place_relationships` table with all constraints and
+   indexes.
+2. Modify the `recompute_master_place` SQL function to compute containment
+   relationships per the trigger logic above.
+3. Backfill script: iterate over all `master_places` calling
+   `recompute_master_place`.
+4. Unit tests covering: amenity inside one park; amenity inside nested
+   parks; amenity exactly on boundary (`ST_Covers` behavior); amenity
+   outside all parks (no relationships); park with no amenities inside; park
+   polygon change triggering fan-out recomputation.
+5. Federation tests verifying: search "campgrounds in Banff" returns
+   contained campgrounds; card displays "located in [park]" for contained
+   amenities; no false relationships from spatial near-misses.
+6. D4 regression check (relationships are additive; `matchAll` outcomes
+   should be unchanged).
+7. Smoke test on the Banff bbox: verify ~10–20 RIDB campgrounds get a
+   `contained_in` relationship pointing at the Banff park `master_place`.
+
 ### matchAll perf — items deferred from the 2026-05-29 profile
 
 Step-2 profile run (313 samples across the 15,645-record Segment A
@@ -563,16 +652,17 @@ endpoints are complementary, not overlapping. BC Parks (next source,
 DataBC, also multi-endpoint) should be audited similarly during its
 smoke test.
 
-### geometry_polygon promotion for provincial/federal boundaries (shared PC + BC Parks follow-up)
+### geometry_polygon promotion for parks_canada, bc_parks, and alberta_parks (Phase 1.5 follow-up)
 
-Surfaced during BC Parks integration (2026-05-31). Neither the Parks
-Canada nor the BC Parks field_precedence migration seeds a
+Surfaced during BC Parks integration (2026-05-31). None of the Parks
+Canada, BC Parks, or Alberta Parks field_precedence migrations seed a
 `geometry_polygon` row — only `nps` is in that precedence row (base seed:
-"geometry_polygon: NPS only. No fallback."). Both sources normalize a
+"geometry_polygon: NPS only. No fallback."). All three sources normalize a
 boundary polygon into `normalized_payload.geometry_polygon` expecting
 week-3 `recompute_master_place` to promote it, but `resolve_field()`
-resolves `geometry_polygon` solely from `nps`, so **Parks Canada and BC
-Parks boundary polygons never reach `master_place.geometry_polygon`.**
+resolves `geometry_polygon` solely from `nps`, so **Parks Canada, BC
+Parks, and Alberta Parks boundary polygons never reach
+`master_place.geometry_polygon`.**
 
 Consequence: the polygon-containment ER path (OSM park-node →
 auto-link-by-containment; see "OSM park-as-node is at polygon centroid"
@@ -581,13 +671,26 @@ never promoted. Federal/provincial parks fall back to distance-only
 candidate retrieval, which the OSM-park-node finding shows is wrong for
 park-category records.
 
-Fix shape (one small migration, both sources together): add
-`('geometry_polygon', 'parks_canada', <n>)` and
-`('geometry_polygon', 'bc_parks', <n>)` at next-unused priority (nps=1,
-so 2 and 3 — order is moot, the geometries are geographically disjoint).
-Bundle with — or sequence ahead of — the polygon-containment ER work so
-the promoted polygons have a consumer. Not BC-Parks-PR scope; filed so it
-isn't lost when the containment path is built.
+Fix shape (one small migration, all three sources together): add
+
+  - `('geometry_polygon', 'parks_canada', 1)` — peer with NPS for the
+    jurisdictional-authority pattern; geographic disjointness keeps the tie
+    safe.
+  - `('geometry_polygon', 'bc_parks', 2)` — provincial below federal;
+    geographic disjointness keeps the tie with PC safe.
+  - `('geometry_polygon', 'alberta_parks', 3)` — third sortation in the
+    disjoint-safe stack.
+
+The 1/2/3 values among the Canadian sources are **arbitrary** — the
+geographies are disjoint, so ties never fire on real data, and the
+priority numbers exist only to give the tie-breaker a total ordering
+(the UNIQUE constraint on `(field_key, source_id)` was deferred per PR #67's
+design decisions, so duplicate priorities would not even be rejected). The
+numbers reflect a rough "federal before provincial" intent, not actual
+authority differences. Bundle with — or sequence ahead of — the
+polygon-containment ER work so the promoted polygons have a consumer. Not
+BC-Parks-PR scope; filed so it isn't lost when the containment path is
+built.
 
 ### BC Parks is park-scoped, not point-scoped (data-shape note, 2026-05-31)
 
