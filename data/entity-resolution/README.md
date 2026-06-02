@@ -983,8 +983,8 @@ code change (single fetch site) — not an architectural change.
 
 ### matchOne transient-error retry for long production passes (2026-06-02)
 
-> **RESOLVED (2026-06-02) — branch `fix/matchone-transient-retry`** (PR # added
-> on open). The `find_master_place_candidates` RPC (the only RPC in `matchOne`,
+> **RESOLVED (2026-06-02) — PR #78** (branch `fix/matchone-transient-retry`).
+> The `find_master_place_candidates` RPC (the only RPC in `matchOne`,
 > reached via `findCandidates`) is now wrapped in `withRetry` (new in
 > `ingestion/lib/retry.ts`, beside `defaultRetry`): 3 attempts, 2s per-attempt
 > `AbortController` timeout via `.abortSignal()`, 4s total budget, full-jitter
