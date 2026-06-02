@@ -1017,6 +1017,63 @@ materialization). Not blocking today's dry-run *analysis* — a clean re-run on 
 stable connection suffices for the decision data. Scoped as its own PR + tests,
 not bolted onto the dry-run session.
 
+### Parks Canada Accommodation is per-campsite — campground rollup strategy needed (2026-06-02)
+
+Discovered during the 2026-06-02 production dry-run (the read-only analysis
+equivalent of `materialize --dry-run` over the 3,086-record PC/BC
+truly-unresolved set). The PC Accommodation API returns **one record per
+campsite** (one `source_record` per `OBJECTID`), **not per campground**.
+Yesterday's PR #73 blast-radius probe undercounted from a 5-row sample:
+**"Tunnel Mountain Village I" alone has 828 `source_record`s on production**, not
+the 3 the sample suggested. The "~2,924 PC campgrounds" are really individual
+campsites, hundreds sharing one campground name.
+
+**Empirical materialize outcome distribution** (read-only dry-run; 3,086
+records; matchAll wall-clock 657s; 0 errors):
+
+| outcome | count | % |
+|---|---:|---:|
+| `new_master_place` | 270 | 8.7% |
+| `auto_link` | 128 | 4.1% — all within-batch, **zero** federation with existing corpus |
+| `manual_review` | 2,688 | 87.1% |
+
+Of the 2,688 `manual_review`, **2,681 are PC campground (campsite) records.**
+Every other category materializes cleanly: `park_boundary` 13/13 new,
+`park_feature` 70/70 new, `viewpoint` 50/52 new, `national_historic_site`
+19/24 new, `visitor_center` 3/3 new, and all 8 `bc_parks` new. The pathology is
+isolated to the PC campsite category.
+
+**Root cause.** The matcher correctly refuses to blind-merge same-source,
+same-name records 290–460 m apart: the `name_dominant` same-source guard fires
+(all `parks_canada`), so they fall to blended scoring → conf **0.600** →
+`manual_review` (`blended_residual`). Behaviour is *correct*; there's just no
+campsite→campground rollup path, so per-campsite duplicates flood manual review.
+Note: because `manual_review` records don't link (no `master_place`), a live
+apply would create ~270 master_places + queue 2,688 pending, NOT ~2,924
+campground master_places — and the per-campground containment-edge expectation
+shrinks accordingly (only the linked seeds get edges).
+
+**Resolution direction (OPEN design question — NOT a decision):**
+
+- **Option A — rollup at ingestion.** Parse the `URL_f` field (campground-site
+  code, e.g. `BAN-TMV1-D19` = campground `BAN-TMV1` + site `D19`; see the
+  `URL_f` mislabeling note above) to group campsites under a parent campground
+  at ingest time. Affects the `parks_canada` source integration only.
+- **Option B — campsite→campground rollup path in ER.** A new matcher rule that
+  recognizes per-campsite same-source clusters and rolls them up to a
+  synthesized campground `master_place`. Affects the matcher (critical path).
+- **Option C — materialize only non-campground PC categories.** A scoped
+  materialize over boundaries, features, viewpoints, NHS, and visitor_centers;
+  defers the campsite problem indefinitely.
+
+Each option has different scope and downstream implications (ingestion vs
+matcher vs operational). Worth a design session, not a quick patch.
+
+**Priority: high** (blocks PC federation completion) but unblocked enough to
+design deliberately. The 8 BC boundaries + 13 PC/BC boundaries + PC
+non-campground categories are *not* blocked by this — they materialize cleanly
+today; only the campsite category needs the rollup decision.
+
 ---
 
 Bundling note: the "migration-verify and source-integration workflow
