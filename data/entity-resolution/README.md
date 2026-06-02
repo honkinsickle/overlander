@@ -754,6 +754,65 @@ then run materialization + `backfill:polygon-containment`.
 
 Priority: medium — same shape as the Parks Canada item above.
 
+### Materialization investigation needed for park_boundary source_records (BC + PC blocked on same gap) (2026-06-01)
+
+BC Parks was executed against production this session (Mount Robson test
+bbox `[-119.5, 52.8, -118.5, 53.3]`): **8** `source_record`s landed
+(`source_id='bc_parks'`, `inferred_category='park_boundary'`) — Mount
+Robson Park, Wells Gray Park, Mount Terry Fox Park, Rearguard Falls Park,
+Small River Caves Park, Mount Robson Corridor Protected Area, Mount Robson
+Protected Area, Jackman Flats Park. All ingested cleanly (0 errors, REST
+enrichment fired, polygons in `normalized_payload.geometry_polygon`). All
+8 are `is_active=true` with `master_place_id` **NULL** — unlinked.
+
+This is the **same state** as PC's 5 `park_boundary` records (Banff, Yoho,
+Glacier, Kootenay, Jasper), surfaced in PR #71's milestone 5D. Both sets
+are inert and stable: not referenced by any production query, not in any
+federation result, not in any `place_relationships` edge.
+
+**Key mechanism finding (new this session): ingestion does NOT
+materialize.** `upsert_source_record` has no inline ER trigger — the only
+trigger on `source_record` is `set_updated_at` (timestamp). Linking
+happens exclusively in a deliberate `npm run -w data materialize`
+operation, which runs `matchAll` + `applyMatches` over the **entire**
+corpus. No materialize has been run over the BC records since ingestion.
+
+**This reframes the PR #71 5D conclusion as undersupported.** 5D claimed
+"ER materialization didn't link PC." The evidence only supports "PC's
+`park_boundary` records are unlinked." Whether that is because materialize
+*ran and failed to link them*, or materialize *was never run* over those
+records, is currently **undetermined** — and those two cases are
+indistinguishable from the unlinked state alone. The same caveat applies
+to BC: 8 unlinked records after ingestion-only is the *expected* state,
+not yet evidence of a materialization failure.
+
+Investigation questions — answer before any further production write work:
+
+1. **What is `materialize` supposed to do, in detail?** Operations,
+   idempotency properties, blast radius (bare vs `--rematerialize`).
+2. **Current state of ALL unlinked `source_record`s on production** —
+   count by `source_id` and category. Tells us the blast radius of a
+   production materialize run.
+3. **When did `materialize` last run against production?** Git history,
+   operator notes, any audit log.
+4. **Why are PC's 5 boundaries unlinked specifically?** Pre-materialize:
+   do they pass `matchAll`'s filters? Is there a category-specific
+   exclusion for `park_boundary`?
+5. **What is the ER design intent for `park_boundary` records?** Are they
+   meant to link via a different path than point-scoped records?
+6. **What would running `materialize` change about ALL unlinked records**,
+   not just BC/PC? (Whole-corpus `matchAll` blast radius.)
+
+Priority: medium-high — blocks completion of Phase 1.5 source integrations
+(PC, BC, Alberta) reaching full federation value. Current unlinked state:
+
+- 8 BC `source_record`s in production unlinked (this session's ingestion)
+- 5 PC `park_boundary` records in production unlinked
+- Alberta integration not yet executed against production
+
+The 8 BC records are stable and inert in their unlinked state. No urgent
+action needed; the fix is the deliberate materialize investigation above.
+
 ---
 
 Bundling note: the "migration-verify and source-integration workflow
