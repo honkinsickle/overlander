@@ -981,6 +981,42 @@ matchAll invocation. Add a regression test for the >1000-id delta path.
 **Priority: high but bounded.** Blocks PC materialization. Small, well-localized
 code change (single fetch site) — not an architectural change.
 
+### matchOne transient-error retry for long production passes (2026-06-02)
+
+Discovered during the 2026-06-02 production dry-run (the gate-1 read-only ER
+pass over the 3,086-record PC/BC truly-unresolved set). `matchOne`'s RPC calls
+(`find_master_place_candidates` and friends) have **no transient-error retry** —
+a single `fetch failed` rejects that record's `matchOne`, which `matchAll`
+catches, logs, and skips, producing **no outcome** for it.
+
+**Empirical.** ~36 seconds into a ~12-minute prod `matchAll` pass, a local DNS
+blip (`getaddrinfo ENOTFOUND nqzeywzcowujzyegxbsr.supabase.co`) began and
+persisted, causing **2,920 of 3,086 records to silently skip** (returned no
+outcome). The run completed "successfully" (exit 0) with a distribution that
+covered only ~3% of the corpus — a misleading green. DNS recovered on its own
+(resolved fine immediately after); it was transient, not an outage.
+
+**Risk for live apply.** The same blip during a live `materialize` apply would
+silently skip records, leaving them unresolved. Not *corrupting* —
+skipped records carry no `place_match` row, so a subsequent run re-processes
+them (idempotent) — but **incomplete in a way that's easy to miss** (exit 0,
+partial distribution). At 3,086 records over ~12 min, the exposure window is
+real.
+
+**Resolution direction.** A retry/backoff wrapper around `matchOne`'s RPC
+calls that distinguishes **transient** errors (network/DNS, HTTP 5xx, timeouts —
+retryable) from **logic** errors (bad input, 4xx, schema — not retryable), with
+bounded exponential backoff. Mirror the existing retry shape in
+`ingestion/lib/esri.ts`. Add a test asserting transient errors retry and logic
+errors propagate immediately. Consider also a post-pass guard: if any
+`matchOne` skipped due to error, surface a non-zero count loudly (so a partial
+run can't masquerade as complete).
+
+**Priority: high before the next live apply** (the PC production
+materialization). Not blocking today's dry-run *analysis* — a clean re-run on a
+stable connection suffices for the decision data. Scoped as its own PR + tests,
+not bolted onto the dry-run session.
+
 ---
 
 Bundling note: the "migration-verify and source-integration workflow
