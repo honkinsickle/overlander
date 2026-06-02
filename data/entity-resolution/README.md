@@ -936,6 +936,22 @@ action needed; the fix is the plain additive `materialize` validated above.
 
 ### matchAll ID-list batching for large-delta materializations (2026-06-02)
 
+> **RESOLVED (2026-06-02) — branch `fix/matchall-id-list-batching`** (PR # added
+> on open). The ID-list path now chunks its fetch via the exported
+> `fetchUnresolvedByIds` helper (`ID_FETCH_CHUNK = 200` ids/request, well under
+> PostgREST's URL-length cap). Because each chunk is an independent query, the
+> concatenated rows are re-sorted in-app by
+> `(source_quality_score DESC, external_id ASC)` using a code-unit string
+> compare (not `localeCompare`) — reproducing the single-query `ORDER BY`
+> exactly, so seed-source assignment and amenity-rollup distances stay
+> byte-identical to the unbatched path. Scope was localized to the ID-list
+> branch (Option A); the full-corpus (no-IDs) range-paginated path is untouched.
+> Covered by 5 unit tests in `matcher.test.ts`: chunk boundary (450 → [200,200,50]),
+> cross-chunk order reconstruction, small-list single call (the phase3a 2-id
+> path), empty list (zero fetches), and per-chunk `master_place_id IS NULL`
+> filter. The `materialize.ts` historical-400 note was updated to reflect the
+> fix. Original framing retained below.
+
 Discovered during the 2026-06-02 production blast-radius probe (PR #73). The
 additive (incremental, non-`--rematerialize`) materialize path calls
 `matchAll(trulyUnresolvedIds)`, which filters the corpus fetch with a **single
