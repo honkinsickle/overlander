@@ -793,19 +793,40 @@ Priority: medium — same shape as the Parks Canada item above.
 > remains useful for *retroactive* recomputation over existing data, but is NOT
 > required for new ingestions — materialize alone suffices.
 >
-> **Resolution path.** Production fix requires a plain
-> `npm run -w data materialize` against production (standard production env-swap
-> workflow; NOT `--rematerialize`). **Prerequisite gate:** read-only blast-radius
-> probe of the FULL truly-unresolved set on production (`master_place_id IS NULL
-> AND is_active AND no place_match`, all sources), since materialize processes
-> *every* truly-unresolved record. Expected outcome based on the rung-2 test:
->   - the 5 PC + 8 BC `park_boundary` records link as `new_master_place` with
->     promoted `MultiPolygon`s;
->   - inline containment creates `contained_in` edges for the ~2,924 PC
->     campgrounds (and any other amenities inside the newly-promoted park
->     polygons);
->   - plus processing of any other truly-unresolved records identified in the
->     blast-radius probe.
+> **Resolution path (reframed by the blast-radius finding below).** The
+> *mechanism* is unchanged — a plain `npm run -w data materialize` against
+> production (standard env-swap; NOT `--rematerialize`, which would destructively
+> rebuild the entire 15,645-row materialized prod corpus). But the **scope is far
+> larger than the original 13-boundary framing**: the full truly-unresolved set
+> is **3,086 records** (see "Blast radius finding" below) — effectively a
+> first-time materialization of the entire Parks Canada ingestion plus the 8 BC
+> boundaries. A live run would produce:
+>   - ~3,086 ER outcomes (mix of `new_master_place` and possibly `auto_link` /
+>     `amenity_rollup` / `manual_review` — distribution unknown until dry-run);
+>   - recompute fan-out across every touched master_place — the documented
+>     heavy-tail risk applies at this volume (budget wall-clock; the
+>     `apply_match_outcomes` 300s override will matter);
+>   - inline `contained_in` edges from the 5 PC + 8 BC boundary master_places to
+>     the ~2,924 PC campgrounds (and any other amenities inside those polygons);
+>   - federation with existing Google/OSM Banff-area records — untested at this
+>     scale.
+>
+> **Prerequisite gate 1 — dry-run before live apply.** Run
+> `npm run -w data materialize -- --dry-run --skip-sync` first to preview the
+> new_master_place / auto_link / amenity_rollup / manual_review split at
+> production scale and surface unexpected outcomes (e.g. duplicate-name
+> campground federation) before any live apply.
+>
+> **Prerequisite gate 2 — code change required before production execution.**
+> The additive (non-`--rematerialize`) path calls `matchAll(trulyUnresolvedIds)`,
+> which filters with a single unbatched `.in("id", […])` (matcher.ts:1031). At
+> ~3,086 UUIDs the URL exceeds PostgREST's length cap — the same 400 Bad Request
+> documented for this path (materialize.ts:215-219), which is why
+> `--rematerialize` passes no ids. Both the dry-run and the live apply route
+> through this call. A small matcher change is required to batch the `.in()` (or
+> chunk the delta into sub-1000-id incremental runs) before either dry-run or
+> live apply is executable. Tracked separately — see "matchAll ID-list batching
+> for large-delta materializations" item.
 >
 > **Caveats — what the test validated vs what production introduces.** The
 > rung-2 test verified linkage + polygon promotion + inline containment for 8 BC
@@ -816,8 +837,41 @@ Priority: medium — same shape as the Parks Canada item above.
 > reasonable to expect to hold, but production execution is the first real-data
 > test of those specific scenarios.
 >
-> **Priority: execute validated fix** (was: investigate unknown behavior). Cheap
-> and bounded — ~10 min including verification.
+> **Blast radius finding (2026-06-02).** A read-only production probe of the full
+> truly-unresolved set (`master_place_id IS NULL AND is_active AND NOT
+> EXISTS(place_match)`, all sources) materially revises the scope. It is **not**
+> the 13 records the original investigation implied.
+>
+> - **Total truly-unresolved: 3,086 records** — what a `materialize` would process.
+> - **By source:** `parks_canada` = **3,078** (the entire PC ingestion);
+>   `bc_parks` = **8**. No other source has any.
+> - **By category:** 2,924 campground · 70 park_feature · 52 viewpoint · 24
+>   national_historic_site · 13 park_boundary (8 BC + 5 PC) · 3 visitor_center.
+> - **Sample-flagged concerns:**
+>   - *Within-source duplicate names* — `Tunnel Mountain Village I` appears 3×
+>     with distinct ids/ingest timestamps; ER federation behavior for these is
+>     untested (cf. the BC Parks within-source near-duplicate audit note above).
+>   - *Heterogeneous `park_feature`* — mixes real park amenities (`Banff
+>     Gondola`, `Buffalo Nations Museum`) with adjacent commercial POIs (`IGA`,
+>     `Nesters` grocery) that may federate with Google/OSM equivalents.
+> - **Sanity:** production is *mostly* materialized — `place_match` total 15,645
+>   vs `source_record` total 18,731 — but the Parks Canada ingestion (timestamped
+>   2026-05-31, after the last materialize) is entirely unmaterialized. The 13
+>   known boundaries are a small fraction of the backlog.
+> - **Implication:** a production `materialize` is no longer a 13-record touch-up.
+>   It is **first-time completion of the full Parks Canada ingestion (~3,078
+>   records) plus the 8 BC boundaries** — see the reframed Resolution path above
+>   for the consequent state changes and prerequisite gates.
+>
+> (Probe filtered `is_active = true` per the standard query; the materialize
+> delta is `master_place_id IS NULL` regardless of `is_active`, so the true delta
+> is ≥3,086 if any inactive unresolved records exist.)
+>
+> **Priority: execute validated fix — but scope is larger than first framed.**
+> The *mechanism* is validated; the *volume* is not the ~10-min, 13-record
+> touch-up originally estimated — it is a first-time full-PC materialization
+> (~3,086 records) gated on the two prerequisites above. A deliberate,
+> dry-run-first operation, not a quick fix.
 >
 > Original investigation framing retained below for the record.
 
