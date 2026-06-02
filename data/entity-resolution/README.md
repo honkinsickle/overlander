@@ -813,6 +813,37 @@ Priority: medium-high — blocks completion of Phase 1.5 source integrations
 The 8 BC records are stable and inert in their unlinked state. No urgent
 action needed; the fix is the deliberate materialize investigation above.
 
+### matchAll ID-list batching for large-delta materializations (2026-06-02)
+
+Discovered during the 2026-06-02 production blast-radius probe (PR #73). The
+additive (incremental, non-`--rematerialize`) materialize path calls
+`matchAll(trulyUnresolvedIds)`, which filters the corpus fetch with a **single
+unbatched `.in("id", [...])`** at `matcher.ts:1031`. At ~3,086 UUIDs the request
+URL exceeds PostgREST's length cap and returns **400 Bad Request** — the same
+failure mode already documented for this path at `materialize.ts:215-219`
+(which is why `--rematerialize` deliberately passes no ids and drives its own
+server-side full-corpus query instead).
+
+**Impact.** A production blocker for any `materialize` whose truly-unresolved
+delta exceeds ~1000 records. Concretely it blocks the Parks Canada production
+materialization (3,078 unresolved records; see the `park_boundary` materialization
+item above) and would block any future large-delta additive operation. Both the
+dry-run (`--dry-run`) and the live apply route through the same `matchAll(ids)`
+call, so neither is executable at this scale until this lands.
+
+**Resolution.** Batch the `.in("id", ...)` at `matcher.ts:1031` into chunks of N
+ids (suggest <500–1000 per chunk) and concatenate the fetched rows before the
+sort / cache-init / scoring steps, OR add a chunking wrapper in `materialize.ts`
+that calls `matchAll` over sub-1000-id slices of the delta and merges the
+outcomes. Prefer the former: `matchAll` calls `resetPlanning()` and builds its
+in-memory planning/caches over the full `records` set per invocation
+(`matchAll`/`initMatchAllCaches`), so a per-slice wrapper would fragment that
+shared planning state across calls. Batching only the fetch keeps one coherent
+matchAll invocation. Add a regression test for the >1000-id delta path.
+
+**Priority: high but bounded.** Blocks PC materialization. Small, well-localized
+code change (single fetch site) — not an architectural change.
+
 ---
 
 Bundling note: the "migration-verify and source-integration workflow
