@@ -983,6 +983,25 @@ code change (single fetch site) — not an architectural change.
 
 ### matchOne transient-error retry for long production passes (2026-06-02)
 
+> **RESOLVED (2026-06-02) — branch `fix/matchone-transient-retry`** (PR # added
+> on open). The `find_master_place_candidates` RPC (the only RPC in `matchOne`,
+> reached via `findCandidates`) is now wrapped in `withRetry` (new in
+> `ingestion/lib/retry.ts`, beside `defaultRetry`): 3 attempts, 2s per-attempt
+> `AbortController` timeout via `.abortSignal()`, 4s total budget, full-jitter
+> backoff, injectable sleep/rng/clock for deterministic tests. Transient errors
+> retry; permanent errors fail fast; exhaustion throws `RetryExhaustedError`,
+> which `matchAll` skips (today's semantics) plus diagnostics. Classification is
+> string/code-based (`isTransient`) because postgrest-js 2.106.2 flattens errors
+> to `{message, details, hint, code}` and strips `.cause.code` — a canary test
+> table in `retry.test.ts` pins the exact shapes so a future upgrade fails
+> loudly. **Plus a circuit breaker** (the key addition): per-record retry helps
+> a transient blip but would turn a *sustained* outage into a ~3.4h grind that
+> still skips everything; `matchAll` now aborts with `MatchAllCircuitBreakerError`
+> after **K=15 consecutive** `RetryExhaustedError`s (reset on success), fixing
+> the "exit 0 with partial coverage" misleading-green that masked the incident.
+> Zero-partial-write is guaranteed: `matchAll` (read/compute) aborts strictly
+> before `applyMatches` (write), which runs only after matchAll returns.
+
 Discovered during the 2026-06-02 production dry-run (the gate-1 read-only ER
 pass over the 3,086-record PC/BC truly-unresolved set). `matchOne`'s RPC calls
 (`find_master_place_candidates` and friends) have **no transient-error retry** —

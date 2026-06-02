@@ -41,6 +41,7 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "../ingestion/lib/db.ts";
 import { logger } from "../ingestion/lib/logger.ts";
 import { normalizeName as baseNormalizeName } from "../ingestion/lib/normalize.ts";
+import { withRetry, RetryExhaustedError, errorMessage } from "../ingestion/lib/retry.ts";
 import { computeCorpusFingerprint, type CorpusFingerprint } from "./outcome-cache.ts";
 import { clearProgress, loadProgress, saveProgress } from "./progress-cache.ts";
 import {
@@ -724,18 +725,27 @@ export async function findCandidates(
   let dbCandidates: MasterPlaceCandidate[] = [];
   if (!skipRpcs) {
     const rpcStart = performance.now();
-    const { data, error } = await db.rpc("find_master_place_candidates", {
-      p_source_record_id: sourceRecordId,
-      p_radius_meters: radiusM,
-      p_category_filter: categoryFilter ? [...categoryFilter] : null,
-    });
-    if (error) throw error;
-    recordRpc(
-      inferRpcVariant(radiusM),
-      performance.now() - rpcStart,
-      data?.length ?? 0,
+    // Transient-error retry around the candidate-lookup read. This RPC is an
+    // idempotent read, so retrying is safe; a per-attempt abort timeout caps a
+    // hung call and full-jitter backoff spreads retries. On exhaustion this
+    // throws RetryExhaustedError, which matchAll's per-record catch handles
+    // (skip + circuit-breaker accounting). withRetry supplies a fresh
+    // AbortController signal per attempt for `.abortSignal()`.
+    dbCandidates = await withRetry(
+      async ({ signal }) => {
+        const { data, error } = await db
+          .rpc("find_master_place_candidates", {
+            p_source_record_id: sourceRecordId,
+            p_radius_meters: radiusM,
+            p_category_filter: categoryFilter ? [...categoryFilter] : null,
+          })
+          .abortSignal(signal);
+        if (error) throw error;
+        return (data ?? []) as MasterPlaceCandidate[];
+      },
+      { label: "find_master_place_candidates" },
     );
-    dbCandidates = (data ?? []) as MasterPlaceCandidate[];
+    recordRpc(inferRpcVariant(radiusM), performance.now() - rpcStart, dbCandidates.length);
   }
 
   let plannedCandidates: MasterPlaceCandidate[] = [];
@@ -1090,6 +1100,66 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   return outcome;
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Circuit breaker for matchAll.
+//
+// Per-record retry (withRetry, above) handles a *transient single-call* blip.
+// It does nothing for a *sustained* outage except prolong it: with a 4s
+// per-record budget, a 12-minute DNS outage over 3,086 records would grind for
+// ~3.4 hours and still skip everything — strictly worse than failing fast, and
+// it exits 0 with partial coverage (the misleading-green that masked the
+// 2026-06-02 incident). The breaker trips after K *consecutive*
+// RetryExhaustedErrors and aborts the whole pass with diagnostics.
+//
+// SEMANTIC: consecutive, reset-on-success. A successful match means the RPC
+// channel is healthy, so the streak resets. A permanent (non-retry-exhausted)
+// error is a single bad record, not an outage signal — it neither increments
+// nor resets. Only RetryExhaustedError (transient exhaustion) increments.
+// ──────────────────────────────────────────────────────────────────────────
+
+const CIRCUIT_BREAKER_THRESHOLD = 15;
+
+export interface CircuitBreakerDiagnostics {
+  consecutiveFailures: number;
+  lastRpcError: unknown;
+  lastRecordId: string;
+  totalProcessed: number;
+  totalRecords: number;
+}
+
+export class MatchAllCircuitBreakerError extends Error {
+  readonly diagnostics: CircuitBreakerDiagnostics;
+  constructor(diagnostics: CircuitBreakerDiagnostics) {
+    super(
+      `matchAll circuit breaker tripped: ${diagnostics.consecutiveFailures} consecutive ` +
+        `retry-exhausted failures (processed ${diagnostics.totalProcessed}/${diagnostics.totalRecords}, ` +
+        `last record ${diagnostics.lastRecordId})`,
+    );
+    this.name = "MatchAllCircuitBreakerError";
+    this.diagnostics = diagnostics;
+  }
+}
+
+export type CircuitBreakerEvent = "success" | "retry_exhausted" | "other_error";
+
+/**
+ * Pure transition for the consecutive-failure counter. Extracted so the
+ * reset/increment/trip semantics are unit-testable without matchAll's DB
+ * machinery (matchAll wires this per record; phase3a covers the live path).
+ */
+export function circuitBreakerNext(
+  consecutive: number,
+  event: CircuitBreakerEvent,
+  threshold = CIRCUIT_BREAKER_THRESHOLD,
+): { consecutive: number; trip: boolean } {
+  if (event === "success") return { consecutive: 0, trip: false };
+  if (event === "retry_exhausted") {
+    const n = consecutive + 1;
+    return { consecutive: n, trip: n >= threshold };
+  }
+  return { consecutive, trip: false }; // other_error: leave the streak unchanged
+}
+
 /**
  * Process source_records in batch. Resets in-memory planning at the start
  * so repeat invocations don't leak state.
@@ -1209,6 +1279,7 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
 
   const interval = checkpointInterval();
   let sinceLastCheckpoint = 0;
+  let consecutiveFailures = 0;
   for (let i = 0; i < records.length; i++) {
     const r = records[i]!;
     if (completedIds.has(r.id)) continue;
@@ -1225,12 +1296,39 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
       const outcome = await matchOne(r.id);
       outcomes.push(outcome);
       finishSample(outcome.kind, performance.now() - matchOneStart);
+      consecutiveFailures = circuitBreakerNext(consecutiveFailures, "success").consecutive;
     } catch (err) {
       logger.error(
         { err, source_record_id: r.id, name: r.name },
         "matcher: matchOne failed",
       );
       finishSample("error", performance.now() - matchOneStart);
+      // Circuit breaker: only retry-exhausted (sustained-transient) failures
+      // count toward the streak; a permanent error is a one-off bad record.
+      const event = err instanceof RetryExhaustedError ? "retry_exhausted" : "other_error";
+      const step = circuitBreakerNext(consecutiveFailures, event);
+      consecutiveFailures = step.consecutive;
+      if (step.trip) {
+        const diagnostics: CircuitBreakerDiagnostics = {
+          consecutiveFailures,
+          lastRpcError: err instanceof RetryExhaustedError ? err.lastError : err,
+          lastRecordId: r.id,
+          totalProcessed: outcomes.length,
+          totalRecords: records.length,
+        };
+        // Report partial progress loudly before aborting — this is the read/
+        // compute phase; matchAll and applyMatches are SEQUENTIAL phases
+        // (applyMatches runs only after matchAll returns; see materialize.ts),
+        // so throwing here aborts strictly before any write — zero partial
+        // writes. If those phases were ever streamed/interleaved, this
+        // zero-partial-write guarantee (and the abort semantics) must be
+        // re-examined.
+        logger.error(
+          { ...diagnostics, lastRpcError: errorMessage(diagnostics.lastRpcError) },
+          "matcher: circuit breaker tripped — aborting matchAll",
+        );
+        throw new MatchAllCircuitBreakerError(diagnostics);
+      }
     }
     sinceLastCheckpoint++;
     if (isFullCorpusRun && fingerprint && sinceLastCheckpoint >= interval) {
