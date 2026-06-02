@@ -88,6 +88,18 @@ export interface MaterializeOptions {
    * state; the loader emits a warn log at every invocation.
    */
   skipFingerprintCheck: boolean;
+  /**
+   * Incremental-mode only. Fail-closed allowlist: when non-empty, ONLY
+   * source_records whose `inferred_category` is in this list reach matchAll
+   * — everything else (including null/unmapped categories) is held back.
+   * Promotes exactly what's named, so a new or unmapped category can never
+   * leak into a prod write. Used to ship the clean PC/BC categories while
+   * the per-campsite `campground` rollup stays deferred (tracked in
+   * entity-resolution/README.md). Empty = no category filter (whole delta).
+   * Ignored under --rematerialize (which reprocesses the whole corpus); the
+   * orchestrator refuses that combo.
+   */
+  onlyCategories: readonly string[];
 }
 
 export interface RematerializeReport {
@@ -183,34 +195,65 @@ async function paginatedSelect<T>(
 }
 
 /**
+ * Compute the truly-unresolved id set from raw row sets — pure, DB-free,
+ * exported for unit testing. A source_record is truly-unresolved when it
+ * has no `place_match` row. `onlyCategories` is a fail-closed allowlist:
+ * when non-empty, ONLY records whose `inferred_category` is in the set are
+ * kept — everything else, including a null/absent/unmapped category, is
+ * held back. Empty allowlist = no category filter (whole delta). Promoting
+ * exactly what's named keeps any new/unmapped category out of a prod write.
+ */
+export function computeTrulyUnresolvedIds(
+  srRows: ReadonlyArray<{ id: string; inferred_category?: string | null }>,
+  placeMatchRows: ReadonlyArray<{ source_record_id: string }>,
+  onlyCategories: readonly string[] = [],
+): string[] {
+  const seenInPlaceMatch = new Set<string>(placeMatchRows.map((r) => r.source_record_id));
+  const allowed = new Set<string>(onlyCategories);
+  return srRows
+    .filter((r) => !seenInPlaceMatch.has(r.id))
+    .filter((r) => allowed.size === 0 || allowed.has(r.inferred_category ?? ""))
+    .map((r) => r.id);
+}
+
+/**
  * Find source_records that ER has never seen — `master_place_id IS NULL`
  * AND no existing `place_match` row. Used only in incremental mode (no
  * --rematerialize). On a re-run over an already-resolved corpus this is
  * empty. On a re-run after an incremental ingest, this is just the
  * newly-added source_records.
  *
+ * `onlyCategories` (default none) is a fail-closed allowlist on
+ * `inferred_category` applied before matchAll — see computeTrulyUnresolvedIds.
+ *
  * Rematerialize mode skips this function entirely — every source_record
  * is unresolved by construction, and matchAll() drives its own
  * server-side full-corpus query.
  */
-async function findTrulyUnresolvedIds(): Promise<string[]> {
+async function findTrulyUnresolvedIds(
+  onlyCategories: readonly string[] = [],
+): Promise<string[]> {
   const db = getDb();
   const [srRows, pmRows] = await Promise.all([
-    paginatedSelect<{ id: string }>(() =>
-      db.from("source_record").select("id").is("master_place_id", null).order("id"),
+    paginatedSelect<{ id: string; inferred_category: string | null }>(() =>
+      db
+        .from("source_record")
+        .select("id, inferred_category")
+        .is("master_place_id", null)
+        .order("id"),
     ),
     paginatedSelect<{ source_record_id: string }>(() =>
       db.from("place_match").select("source_record_id").order("source_record_id"),
     ),
   ]);
-  const seenInPlaceMatch = new Set<string>(pmRows.map((r) => r.source_record_id));
-  return srRows.map((r) => r.id).filter((id) => !seenInPlaceMatch.has(id));
+  return computeTrulyUnresolvedIds(srRows, pmRows, onlyCategories);
 }
 
 async function runResolution(
   rematerializeJustRan: boolean,
   dryRun: boolean,
   skipFingerprintCheck: boolean,
+  onlyCategories: readonly string[],
 ): Promise<ApplyResult> {
   // After --rematerialize, every source_record is unresolved by
   // construction; call matchAll() with no IDs so it runs its own
@@ -252,7 +295,7 @@ async function runResolution(
       if (!dryRun) await saveOutcomeCache(outcomes);
     }
   } else {
-    const trulyUnresolvedIds = await findTrulyUnresolvedIds();
+    const trulyUnresolvedIds = await findTrulyUnresolvedIds(onlyCategories);
     if (trulyUnresolvedIds.length === 0) {
       logger.info(
         "materialize: ER skipped — no truly-unresolved source_records (every record is " +
@@ -261,7 +304,7 @@ async function runResolution(
       return { new_master_places: 0, auto_linked: 0, amenity_rolled_up: 0, manual_review_queued: 0, errors: [] };
     }
     logger.info(
-      { unresolved: trulyUnresolvedIds.length },
+      { unresolved: trulyUnresolvedIds.length, onlyCategories },
       "materialize: ER over truly-new source_records (incremental)",
     );
     outcomes = await matchAll(trulyUnresolvedIds);
@@ -322,6 +365,17 @@ async function countSourceRecords(): Promise<SourceRecordCounts> {
 
 export async function materialize(opts: MaterializeOptions): Promise<MaterializeReport> {
   const startedAt = Date.now();
+
+  // --only-categories scopes the *incremental* delta; --rematerialize
+  // reprocesses the whole corpus server-side and never consults that delta,
+  // so the combination would silently ignore the scope. Refuse loudly.
+  if (opts.rematerialize && opts.onlyCategories.length > 0) {
+    throw new Error(
+      "materialize: --only-categories has no effect with --rematerialize " +
+        "(rematerialize reprocesses the whole corpus). Refusing to run to avoid a silent no-op scope.",
+    );
+  }
+
   const stagesRun: string[] = [];
 
   let ingestResults: Record<string, IngestResult> | null = null;
@@ -344,7 +398,12 @@ export async function materialize(opts: MaterializeOptions): Promise<Materialize
   let erResult: ApplyResult | null = null;
   if (!opts.skipEr) {
     stagesRun.push("er");
-    erResult = await runResolution(opts.rematerialize, opts.dryRun, opts.skipFingerprintCheck);
+    erResult = await runResolution(
+      opts.rematerialize,
+      opts.dryRun,
+      opts.skipFingerprintCheck,
+      opts.onlyCategories,
+    );
     logger.info(erResult, "materialize: ER complete");
   }
 
@@ -392,6 +451,15 @@ function parseParkCodes(value: string): readonly string[] {
   return value.split(",").map((s) => s.trim().toLowerCase());
 }
 
+// Categories match `inferred_category` exactly (lowercase by ingester
+// convention, e.g. 'park_boundary'); trim only, don't case-fold.
+function parseOnlyCategories(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 interface CliOpts {
   ingest?: boolean;
   sources?: readonly SourceId[];
@@ -403,6 +471,7 @@ interface CliOpts {
   dryRun?: boolean;
   rematerialize?: boolean;
   skipFingerprintCheck?: boolean;
+  onlyCategories?: readonly string[];
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -423,6 +492,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       "--skip-fingerprint-check",
       "RECOVERY ONLY (with --rematerialize): load matchall-outcomes.json without verifying corpus fingerprint. Use when resuming from a partial-apply failure via clear + re-apply.",
     )
+    .option(
+      "--only-categories <list>",
+      "Fail-closed allowlist: comma-separated inferred_category values; ONLY these reach the incremental ER delta, everything else (incl. unmapped) is held back. Incompatible with --rematerialize.",
+      parseOnlyCategories,
+    )
     .action(async (cli: CliOpts) => {
       const opts: MaterializeOptions = {
         ingest: cli.ingest ?? false,
@@ -435,6 +509,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         dryRun: cli.dryRun ?? false,
         rematerialize: cli.rematerialize ?? false,
         skipFingerprintCheck: cli.skipFingerprintCheck ?? false,
+        onlyCategories: cli.onlyCategories ?? [],
       };
       try {
         const report = await materialize(opts);
