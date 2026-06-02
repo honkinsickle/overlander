@@ -715,6 +715,45 @@ validation completes. Removes the reliance on convention and makes
 baseline drift impossible by construction. Low priority — the manual
 DELETE convention is sufficient short-term.
 
+### Parks Canada park-boundary records unlinked on production (surfaced by Phase 3b backfill, 2026-06-01)
+
+5 Parks Canada park-boundary `source_record`s exist in production — Banff,
+Yoho, Glacier, Kootenay, Jasper — each `is_active = true` with valid `Polygon`
+GeoJSON in `normalized_payload.geometry_polygon`, but `master_place_id = NULL`
+on all five. ER materialization never linked them, so no Parks Canada
+`master_place` exists to carry their boundary, and the `geometry_polygon`
+precedence rows added in PR #70 (parks_canada = 1) never fire for them.
+
+Consequence: Parks Canada park polygons never promote to
+`master_place.geometry_polygon`, so the 2,924+ Parks Canada campgrounds in
+production receive **no** `contained_in` edges. The Phase 3b backfill produced
+3,647 edges, all pointing at NPS parks; every Canadian park containment is
+empty. This is an upstream ER/materialization gap, not a Phase 3b defect — the
+containment function and backfill are correct for the data that exists.
+
+Resolution path: investigate why `apply_match_outcomes` / recompute never
+linked these `park_boundary` records (likely a category-mapping or
+matching-rules issue specific to `park_boundary`); run materialization to
+create their `master_place`s; re-run `backfill:polygon-containment`
+(idempotent — safe to re-run, will light up Banff/Yoho/Glacier/Kootenay/Jasper
+containment).
+
+Priority: medium — production search is incomplete for Canadian parks but
+functional.
+
+### BC Parks and Alberta Parks integrations not yet executed against production (surfaced by Phase 3b backfill, 2026-06-01)
+
+Phase 1.5 BC Parks (#63) and Alberta Parks (#66) integrations were
+smoke-tested on the test project only, never executed against production —
+zero `bc_parks` and zero `alberta_parks` `source_record`s exist in production.
+Consequence: no BC/Alberta park containment in production federation.
+
+Resolution path: run the established ingestion commands against production
+(the integrations are validated test-side; swap to the prod env and execute),
+then run materialization + `backfill:polygon-containment`.
+
+Priority: medium — same shape as the Parks Canada item above.
+
 ---
 
 Bundling note: the "migration-verify and source-integration workflow
