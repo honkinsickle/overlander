@@ -936,8 +936,8 @@ action needed; the fix is the plain additive `materialize` validated above.
 
 ### matchAll ID-list batching for large-delta materializations (2026-06-02)
 
-> **RESOLVED (2026-06-02) — branch `fix/matchall-id-list-batching`** (PR # added
-> on open). The ID-list path now chunks its fetch via the exported
+> **RESOLVED (2026-06-02) — PR #75** (branch `fix/matchall-id-list-batching`).
+> The ID-list path now chunks its fetch via the exported
 > `fetchUnresolvedByIds` helper (`ID_FETCH_CHUNK = 200` ids/request, well under
 > PostgREST's URL-length cap). Because each chunk is an independent query, the
 > concatenated rows are re-sorted in-app by
