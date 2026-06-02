@@ -756,6 +756,125 @@ Priority: medium — same shape as the Parks Canada item above.
 
 ### Materialization investigation needed for park_boundary source_records (BC + PC blocked on same gap) (2026-06-01)
 
+> **RESOLVED via rung-2 empirical test (2026-06-02).** The investigation
+> question — does the matcher have a structural gap that prevents
+> `park_boundary` records from linking, or were these records simply never
+> processed by materialize? — is answered: **no structural gap.** The 8 BC
+> `park_boundary` records from the Mount Robson test bbox materialized cleanly
+> via plain additive `materialize` on the test environment, each linking as
+> `new_master_place` with promoted `MultiPolygon`. There is no category
+> exclusion (none in `matcher.ts`); production's unlinked state is "**materialize
+> was never run over these records**," not "materialize ran and failed" — the two
+> were indistinguishable from the unlinked state alone (see original framing
+> below); the empirical test distinguishes them.
+>
+> **Test design.** On the test project (`znldzjdatkogdktymtvi`): materialized the
+> canonical JT corpus to a fully-linked baseline (D4 = 153/16/17/33, unchanged),
+> real-ingested the 8 BC Mount Robson `park_boundary` records (bbox
+> `[-119.5, 52.8, -118.5, 53.3]`), then ran **plain**
+> `npm run -w data materialize -- --skip-sync` (NOT `--rematerialize`). This is
+> the production analog: an already-materialized corpus plus
+> newly-ingested-but-never-matched records, processed additively via
+> `findTrulyUnresolvedIds` → `matchAll(delta)`.
+>
+> **Result.** `findTrulyUnresolvedIds` returned exactly the 8 BC records (the 33
+> JT manual_review records were correctly excluded — they carry `place_match`
+> rows). All **8/8 linked** as `new_master_place` (`match_method='deterministic'`,
+> confirmed, confidence 1.0), each with `geometry_polygon` promoted to a
+> `MultiPolygon` via the migration `20260601020000` precedence rows. 0 errors.
+>
+> **Bonus finding — containment runs inline; no backfill required for new
+> ingestions.** Phase 3b containment runs *inside* `recompute_master_place`
+> (locked decision #2), so the plain materialize ALSO created `contained_in`
+> edges in the same pass — including a nested-park edge (`Mount Robson Park ⊃
+> Mount Robson Corridor Protected Area`, child placed by representative point). A
+> post-materialize `backfill:polygon-containment --dry-run` showed state already
+> converged (a real run would be idempotent). `backfill:polygon-containment`
+> remains useful for *retroactive* recomputation over existing data, but is NOT
+> required for new ingestions — materialize alone suffices.
+>
+> **Resolution path (reframed by the blast-radius finding below).** The
+> *mechanism* is unchanged — a plain `npm run -w data materialize` against
+> production (standard env-swap; NOT `--rematerialize`, which would destructively
+> rebuild the entire 15,645-row materialized prod corpus). But the **scope is far
+> larger than the original 13-boundary framing**: the full truly-unresolved set
+> is **3,086 records** (see "Blast radius finding" below) — effectively a
+> first-time materialization of the entire Parks Canada ingestion plus the 8 BC
+> boundaries. A live run would produce:
+>   - ~3,086 ER outcomes (mix of `new_master_place` and possibly `auto_link` /
+>     `amenity_rollup` / `manual_review` — distribution unknown until dry-run);
+>   - recompute fan-out across every touched master_place — the documented
+>     heavy-tail risk applies at this volume (budget wall-clock; the
+>     `apply_match_outcomes` 300s override will matter);
+>   - inline `contained_in` edges from the 5 PC + 8 BC boundary master_places to
+>     the ~2,924 PC campgrounds (and any other amenities inside those polygons);
+>   - federation with existing Google/OSM Banff-area records — untested at this
+>     scale.
+>
+> **Prerequisite gate 1 — dry-run before live apply.** Run
+> `npm run -w data materialize -- --dry-run --skip-sync` first to preview the
+> new_master_place / auto_link / amenity_rollup / manual_review split at
+> production scale and surface unexpected outcomes (e.g. duplicate-name
+> campground federation) before any live apply.
+>
+> **Prerequisite gate 2 — code change required before production execution.**
+> The additive (non-`--rematerialize`) path calls `matchAll(trulyUnresolvedIds)`,
+> which filters with a single unbatched `.in("id", […])` (matcher.ts:1031). At
+> ~3,086 UUIDs the URL exceeds PostgREST's length cap — the same 400 Bad Request
+> documented for this path (materialize.ts:215-219), which is why
+> `--rematerialize` passes no ids. Both the dry-run and the live apply route
+> through this call. A small matcher change is required to batch the `.in()` (or
+> chunk the delta into sub-1000-id incremental runs) before either dry-run or
+> live apply is executable. Tracked separately — see "matchAll ID-list batching
+> for large-delta materializations" item.
+>
+> **Caveats — what the test validated vs what production introduces.** The
+> rung-2 test verified linkage + polygon promotion + inline containment for 8 BC
+> records on a small JT-centric corpus. Production materialize introduces
+> variables not covered by the test: PC `park_boundary` records specifically (not
+> tested — only BC was in the test fixture), 12k+ corpus scale, and any other
+> truly-unresolved records in production state. The validated mechanism is
+> reasonable to expect to hold, but production execution is the first real-data
+> test of those specific scenarios.
+>
+> **Blast radius finding (2026-06-02).** A read-only production probe of the full
+> truly-unresolved set (`master_place_id IS NULL AND is_active AND NOT
+> EXISTS(place_match)`, all sources) materially revises the scope. It is **not**
+> the 13 records the original investigation implied.
+>
+> - **Total truly-unresolved: 3,086 records** — what a `materialize` would process.
+> - **By source:** `parks_canada` = **3,078** (the entire PC ingestion);
+>   `bc_parks` = **8**. No other source has any.
+> - **By category:** 2,924 campground · 70 park_feature · 52 viewpoint · 24
+>   national_historic_site · 13 park_boundary (8 BC + 5 PC) · 3 visitor_center.
+> - **Sample-flagged concerns:**
+>   - *Within-source duplicate names* — `Tunnel Mountain Village I` appears 3×
+>     with distinct ids/ingest timestamps; ER federation behavior for these is
+>     untested (cf. the BC Parks within-source near-duplicate audit note above).
+>   - *Heterogeneous `park_feature`* — mixes real park amenities (`Banff
+>     Gondola`, `Buffalo Nations Museum`) with adjacent commercial POIs (`IGA`,
+>     `Nesters` grocery) that may federate with Google/OSM equivalents.
+> - **Sanity:** production is *mostly* materialized — `place_match` total 15,645
+>   vs `source_record` total 18,731 — but the Parks Canada ingestion (timestamped
+>   2026-05-31, after the last materialize) is entirely unmaterialized. The 13
+>   known boundaries are a small fraction of the backlog.
+> - **Implication:** a production `materialize` is no longer a 13-record touch-up.
+>   It is **first-time completion of the full Parks Canada ingestion (~3,078
+>   records) plus the 8 BC boundaries** — see the reframed Resolution path above
+>   for the consequent state changes and prerequisite gates.
+>
+> (Probe filtered `is_active = true` per the standard query; the materialize
+> delta is `master_place_id IS NULL` regardless of `is_active`, so the true delta
+> is ≥3,086 if any inactive unresolved records exist.)
+>
+> **Priority: execute validated fix — but scope is larger than first framed.**
+> The *mechanism* is validated; the *volume* is not the ~10-min, 13-record
+> touch-up originally estimated — it is a first-time full-PC materialization
+> (~3,086 records) gated on the two prerequisites above. A deliberate,
+> dry-run-first operation, not a quick fix.
+>
+> Original investigation framing retained below for the record.
+
 BC Parks was executed against production this session (Mount Robson test
 bbox `[-119.5, 52.8, -118.5, 53.3]`): **8** `source_record`s landed
 (`source_id='bc_parks'`, `inferred_category='park_boundary'`) — Mount
@@ -803,15 +922,17 @@ Investigation questions — answer before any further production write work:
 6. **What would running `materialize` change about ALL unlinked records**,
    not just BC/PC? (Whole-corpus `matchAll` blast radius.)
 
-Priority: medium-high — blocks completion of Phase 1.5 source integrations
-(PC, BC, Alberta) reaching full federation value. Current unlinked state:
+Priority (updated 2026-06-02): execute the validated fix — see the RESOLVED
+note at the top of this item. Until run, still blocks Phase 1.5 source
+integrations (PC, BC, Alberta) from reaching full federation value. Current
+unlinked state:
 
 - 8 BC `source_record`s in production unlinked (this session's ingestion)
 - 5 PC `park_boundary` records in production unlinked
 - Alberta integration not yet executed against production
 
 The 8 BC records are stable and inert in their unlinked state. No urgent
-action needed; the fix is the deliberate materialize investigation above.
+action needed; the fix is the plain additive `materialize` validated above.
 
 ---
 
