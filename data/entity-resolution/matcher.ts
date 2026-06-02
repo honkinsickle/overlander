@@ -463,6 +463,96 @@ export async function paginateLinkedSourceRecords(
 }
 
 /**
+ * URL-budget-safe chunk size for `.in("id", [...])` fetches. ~200 UUIDs keeps
+ * the request URL well under PostgREST's length cap. A single unbatched `.in()`
+ * over a large delta (~3K ids) overruns that cap and returns 400 Bad Request —
+ * the large-delta materialize blocker this batching resolves (see
+ * `fetchUnresolvedByIds` and `pipeline/materialize.ts`).
+ */
+export const ID_FETCH_CHUNK = 200;
+
+/**
+ * Code-unit (UTF-16) string comparison, replacing the server-side
+ * `ORDER BY external_id ASC` once the fetch is split across chunks.
+ *
+ * Code-unit compare is correct for ASCII external_ids and matches Postgres's
+ * byte-order (C collation) exactly. All current sources build external_id as
+ * `<source>:<type>:<id>` from ASCII codes/numeric ids (never free-text names),
+ * so the inputs are ASCII by construction. Deliberately NOT `localeCompare` —
+ * that is locale-aware (case/punctuation folding) and would diverge here.
+ *
+ * Caveat: the `external_id` column has no explicit `COLLATE`, so it inherits
+ * the database's default collation (libc `en_US.UTF-8` on Supabase, not `C`).
+ * Under a libc/ICU collation the server-side order can differ from code-unit
+ * order for ASCII strings in punctuation/case edge cases. This does NOT
+ * threaten determinism (the in-app sort is deterministic), and `external_id`
+ * is only the last-resort tiebreaker after `source_quality_score DESC` — it
+ * ranks same-quality (typically same-source) records. If a future source
+ * introduces non-ASCII external_ids, or exact parity with the DB tiebreak
+ * order ever matters, this ordering must be reconciled with the column's
+ * collation.
+ */
+function compareExternalId(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Row shape for the ID-list fetch — SourceRecordRow plus the quality score
+ *  needed for in-app ordering (server-side ORDER BY is lost once the fetch is
+ *  split across chunks). The extra field is harmless to downstream consumers
+ *  that treat the result as SourceRecordRow. */
+type UnresolvedRow = SourceRecordRow & { source_quality_score: number };
+
+/**
+ * Fetch still-unresolved (`master_place_id IS NULL`) source_records by id,
+ * chunking the `.in("id", …)` filter into `ID_FETCH_CHUNK`-sized batches so the
+ * request URL never exceeds PostgREST's length cap. This is the ID-list
+ * (incremental / large-delta) path of matchAll; the full-corpus path keeps its
+ * server-side, range-paginated ORDER BY untouched.
+ *
+ * Because each chunk is an independent query, the per-chunk DB order cannot
+ * carry the global order matchAll relies on. The concatenated rows are
+ * re-sorted in-app by `(source_quality_score DESC, external_id ASC)` —
+ * reproducing exactly the single-query `ORDER BY` so seed-source assignment and
+ * amenity-rollup distances stay byte-identical to the unbatched path. The
+ * subsequent tier/fedRank sort in matchAll is stable and preserves this order
+ * within each bucket.
+ *
+ * `fetchChunk` is injectable for unit tests; production uses the default
+ * Supabase-backed fetch (which applies the `master_place_id IS NULL` filter per
+ * chunk). Returns `[]` without any fetch for an empty id list.
+ */
+export async function fetchUnresolvedByIds(
+  ids: string[],
+  fetchChunk: (idChunk: string[]) => Promise<UnresolvedRow[]> = defaultFetchUnresolvedChunk,
+): Promise<SourceRecordRow[]> {
+  if (ids.length === 0) return [];
+  const rows: UnresolvedRow[] = [];
+  for (let i = 0; i < ids.length; i += ID_FETCH_CHUNK) {
+    const chunk = ids.slice(i, i + ID_FETCH_CHUNK);
+    rows.push(...(await fetchChunk(chunk)));
+  }
+  rows.sort(
+    (a, b) =>
+      b.source_quality_score - a.source_quality_score ||
+      compareExternalId(a.external_id, b.external_id),
+  );
+  return rows;
+}
+
+async function defaultFetchUnresolvedChunk(idChunk: string[]): Promise<UnresolvedRow[]> {
+  const db = getDb();
+  const { data, error } = await db
+    .from("source_record")
+    .select(
+      "id, source_id, external_id, name, inferred_category, master_place_id, geometry, source_quality_score",
+    )
+    .in("id", idChunk)
+    .is("master_place_id", null);
+  if (error) throw error;
+  return (data ?? []) as UnresolvedRow[];
+}
+
+/**
  * Bulk-load DB linkage state at the start of matchAll. After this, every
  * masterPlaceHasSource call is purely in-memory.
  *
@@ -1025,15 +1115,11 @@ export async function matchAll(sourceRecordIds?: string[]): Promise<MatchOutcome
   // ASC is a last-resort tiebreaker.
   let records: SourceRecordRow[];
   if (sourceRecordIds && sourceRecordIds.length > 0) {
-    const { data, error } = await db
-      .from("source_record")
-      .select("id, source_id, external_id, name, inferred_category, master_place_id, geometry")
-      .in("id", sourceRecordIds)
-      .is("master_place_id", null)
-      .order("source_quality_score", { ascending: false })
-      .order("external_id", { ascending: true });
-    if (error) throw error;
-    records = (data ?? []) as SourceRecordRow[];
+    // ID-list path: chunk the `.in("id", …)` so a large delta doesn't overrun
+    // PostgREST's URL-length cap. fetchUnresolvedByIds re-sorts the
+    // concatenated chunks by (source_quality_score DESC, external_id ASC) to
+    // reproduce the single-query ORDER BY the comment above relies on.
+    records = await fetchUnresolvedByIds(sourceRecordIds);
   } else {
     // Paginate to bypass PostgREST's 1000-row default cap. Corridor scale
     // (~8K records) silently truncated to 1000 with the unpaginated form.

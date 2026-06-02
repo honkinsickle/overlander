@@ -214,9 +214,14 @@ async function runResolution(
 ): Promise<ApplyResult> {
   // After --rematerialize, every source_record is unresolved by
   // construction; call matchAll() with no IDs so it runs its own
-  // server-side query. Passing an explicit ID list at corridor scale
-  // sends ~35KB+ of UUIDs through .in("id", [...]) and PostgREST
-  // returns 400 Bad Request because the URL exceeds the URL-length cap.
+  // server-side full-corpus query.
+  //
+  // Historical note: a single unbatched ID list at corridor scale used to
+  // send ~35KB+ of UUIDs through .in("id", [...]) and PostgREST returned
+  // 400 Bad Request (URL-length cap). The ID-list path (matchAll(ids) below)
+  // now chunks that fetch via fetchUnresolvedByIds, so it no longer 400s on
+  // large deltas. The no-IDs full-corpus path is still the right choice here
+  // regardless — rematerialize unresolves the whole corpus.
   let outcomes: MatchOutcome[];
   if (rematerializeJustRan) {
     // Try the outcome cache first — at corridor scale matchAll takes
