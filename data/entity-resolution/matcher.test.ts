@@ -18,13 +18,22 @@ vi.mock("../ingestion/lib/db.ts", () => ({
 }));
 
 import {
+  circuitBreakerNext,
+  type CircuitBreakerEvent,
   fetchUnresolvedByIds,
   findCandidates,
   ID_FETCH_CHUNK,
+  MatchAllCircuitBreakerError,
   paginateLinkedSourceRecords,
 } from "./matcher.ts";
 
 type Row = { master_place_id: string | null; source_id: string };
+
+// findCandidates now calls `db.rpc(...).abortSignal(signal)` (wrapped in
+// withRetry). Make `rpc` return a builder whose `.abortSignal()` resolves to
+// the desired { data, error }.
+const rpcResolves = (value: unknown) =>
+  mockRpc.mockReturnValue({ abortSignal: () => Promise.resolve(value) });
 
 describe("findCandidates — skipRpcs=false path (populated master_place)", () => {
   beforeEach(() => {
@@ -32,7 +41,7 @@ describe("findCandidates — skipRpcs=false path (populated master_place)", () =
   });
 
   it("invokes find_master_place_candidates with the standard radius + null filter", async () => {
-    mockRpc.mockResolvedValue({
+    rpcResolves({
       data: [
         {
           id: "mp-1",
@@ -62,7 +71,7 @@ describe("findCandidates — skipRpcs=false path (populated master_place)", () =
   });
 
   it("passes radius + category filter through to the RPC", async () => {
-    mockRpc.mockResolvedValue({ data: [], error: null });
+    rpcResolves({ data: [], error: null });
     await findCandidates("sr-test-2", 100, [
       "campground",
       "recreation_area",
@@ -78,7 +87,7 @@ describe("findCandidates — skipRpcs=false path (populated master_place)", () =
   });
 
   it("propagates RPC errors", async () => {
-    mockRpc.mockResolvedValue({
+    rpcResolves({
       data: null,
       error: { message: "boom" },
     });
@@ -258,5 +267,84 @@ describe("fetchUnresolvedByIds — ID-list chunking + ordering", () => {
       ["master_place_id", null],
       ["master_place_id", null],
     ]);
+  });
+});
+
+describe("matchAll circuit breaker — consecutive-failure semantics (K=15)", () => {
+  const K = 15;
+
+  // Fold an event stream through the pure transition, mirroring how matchAll
+  // calls circuitBreakerNext per record.
+  function fold(events: CircuitBreakerEvent[]): {
+    consecutive: number;
+    tripped: boolean;
+    tripIndex: number;
+  } {
+    let consecutive = 0;
+    let tripped = false;
+    let tripIndex = -1;
+    events.forEach((event, i) => {
+      const step = circuitBreakerNext(consecutive, event);
+      consecutive = step.consecutive;
+      if (step.trip && !tripped) {
+        tripped = true;
+        tripIndex = i;
+      }
+    });
+    return { consecutive, tripped, tripIndex };
+  }
+
+  const fail = (n: number): CircuitBreakerEvent[] => Array.from({ length: n }, () => "retry_exhausted");
+
+  it("K-1 failures then a success → counter resets, no trip", () => {
+    const res = fold([...fail(K - 1), "success"]);
+    expect(res.tripped).toBe(false);
+    expect(res.consecutive).toBe(0);
+  });
+
+  it("K consecutive failures → trips exactly at the Kth", () => {
+    const res = fold(fail(K));
+    expect(res.tripped).toBe(true);
+    expect(res.tripIndex).toBe(K - 1); // zero-based: the 15th event
+  });
+
+  it("constructs MatchAllCircuitBreakerError with the correct diagnostics", () => {
+    const lastRpcError = { message: "fetch failed", details: "ENOTFOUND" };
+    const err = new MatchAllCircuitBreakerError({
+      consecutiveFailures: K,
+      lastRpcError,
+      lastRecordId: "rec-123",
+      totalProcessed: 412,
+      totalRecords: 3086,
+    });
+    expect(err).toBeInstanceOf(MatchAllCircuitBreakerError);
+    expect(err.name).toBe("MatchAllCircuitBreakerError");
+    expect(err.diagnostics).toMatchObject({
+      consecutiveFailures: K,
+      lastRecordId: "rec-123",
+      totalProcessed: 412,
+      totalRecords: 3086,
+      lastRpcError,
+    });
+    expect(err.message).toContain("412/3086");
+  });
+
+  it("mixed 5-fail, 1-success, 10-fail → success resets the streak, no abort", () => {
+    const res = fold([...fail(5), "success", ...fail(10)]);
+    expect(res.tripped).toBe(false);
+    expect(res.consecutive).toBe(10); // streak restarted after the success
+  });
+
+  it("a permanent (other_error) does not increment or reset the streak", () => {
+    // 14 transient exhaustions, then a permanent error, then one more transient
+    // → 14 + (unchanged) + 1 = 15 → trips. (other_error leaves the streak.)
+    const res = fold([...fail(14), "other_error", "retry_exhausted"]);
+    expect(res.tripped).toBe(true);
+  });
+
+  it("an all-success run never increments the counter", () => {
+    const res = fold(Array.from({ length: 100 }, () => "success"));
+    expect(res.tripped).toBe(false);
+    expect(res.consecutive).toBe(0);
   });
 });
