@@ -1154,3 +1154,14 @@ USFS↔OSM canonical_name eyeball needs OSM dispersed (PR-B). Both deferred to a
 that a real dispersed site at ~0m + same name as a developed campground lands in
 `manual_review` (not auto-merge, not silently swallowed) — math-only is not
 sufficient sign-off for the safety-critical err-toward-separate decision.
+
+### REQUIRED before national fill: check USFS dispersed points inside Wilderness (2026-06-03)
+
+`usfs.ts` sets every dispersed point to `dispersed_camping='likely_allowed'` (blanket).
+A dispersed point inside a Wilderness area is vehicle-inaccessible, so `likely_allowed`
+there is the same wrong "camp here" the Phase 1 Wilderness gate guards against — now on
+the points layer. Likely empty (EDW "Dispersed Camping" = road-accessible designated
+spots, not deep-Wilderness backpacking), but **CONFIRM, don't assume**: at national fill,
+check whether any of the 367 dispersed recareas fall inside a Wilderness polygon
+(PAD-US Designation `des_tp='WA'`, once that endpoint is wired). If any do, gate their
+flag to `likely_restricted` (restricted-beats-allowed, same rule as the land-status layer).
