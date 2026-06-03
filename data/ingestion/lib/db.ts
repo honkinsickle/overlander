@@ -78,6 +78,25 @@ export async function upsertSourceRecord(args: UpsertSourceRecordArgs): Promise<
 }
 
 /**
+ * Upsert one MVUM route into mvum_roads (Phase 2 PR-C reference data).
+ * `geojson` is a MultiLineString GeoJSON geometry (a route's segments
+ * aggregated). The RPC stamps SRID 4326 and coerces LineString→MultiLineString.
+ * Returns the rte_cn key on success.
+ */
+export async function upsertMvumRoad(rteCn: string, geojson: unknown): Promise<string> {
+  const db = getDb();
+  const { data, error } = await db.rpc("upsert_mvum_road", {
+    p_rte_cn: rteCn,
+    p_geojson: geojson,
+  });
+  if (error) {
+    logger.error({ err: error, rteCn }, "upsert_mvum_road failed");
+    throw error;
+  }
+  return data as string;
+}
+
+/**
  * Defense-in-depth: confirm a point is inside an active corridor buffer.
  * Used to drop API rows that came back outside the bbox we asked for.
  */
