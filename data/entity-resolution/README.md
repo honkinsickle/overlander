@@ -1102,3 +1102,40 @@ items (cwd + `--test`), the `ingest:manual` env-file item, and 4a of the
 The `geometry_polygon promotion` item shipped separately in migration
 `20260601020000` and has been removed from the open items above.
 
+
+### PAD-US Wilderness is a HARD pre-prod gate — Fee-first ships without it (2026-06-02)
+
+The `padus` land-status source (Phase 1) ingests the PAD-US **Fee Managers**
+layer only. The Fee class EXCLUDES Wilderness (`des_tp='WA'` lives in PAD-US's
+separate Designation feature class, whose endpoint was not resolvable during the
+Phase 1 build). Consequence under Fee-first: a point inside a Wilderness inherits
+the enclosing forest's `dispersed_camping='likely_allowed'` — a wrong "camp here",
+the one safety-critical failure mode. Harmless on test (Fee validates
+tuple/dissolve/category-split/containment/dispersed for everything but
+Wilderness). **Must NOT ship to prod without both:**
+
+1. Wiring the PAD-US Designation endpoint (find via the USGS PAD-US web-services
+   page item / the test project's PAD-US web map).
+2. Proving a `WA` record carries `likely_restricted` AND **overrides** the
+   enclosing forest's `likely_allowed` at containment-resolution time
+   (restricted-beats-allowed when a point is `contained_in` multiple land-status
+   polygons — a new multi-parent resolution rule).
+
+`deriveDispersedCamping` in `padus.ts` already returns `likely_restricted` for
+`des_tp='WA'`; the missing pieces are the Designation endpoint + the multi-parent
+resolution rule. Wilderness records are additive (own tuples), no rework.
+
+### PAD-US dispersed_camping calibration + des_tp fail-to-hidden (Phase 1 test, 2026-06-02)
+
+From the JT-corridor test (113 padus units): BLM→`likely_allowed` is correct (3/3 BLM|PUB), but two gaps to fix before prod:
+1. **`NGO` (private conservation) and `DIST` (special-district local parks) leak to `unknown`** — should be `likely_restricted` (the const map only catches `Mang_Type` LOC/PVT). ~28 of 42 "unknown" were really restricted. Add NGO→restricted, DIST(local)→restricted.
+2. **des_tp is fail-to-hidden:** any `des_tp` not in `NAMED_DES_TP` silently becomes `land_status` and drops from search (e.g. a National Monument vanished). Route **unrecognized** des_tp to a review/log path instead of silent exclusion. Pull DISTINCT des_tp for the corridor AND nationally and classify each explicitly before prod. (Corridor distinct set observed: LP, LREC, PCON, LOTH, POTH, SOTH, TRIBL, SCA, PUB, SRMA, LCA, NP, UNK, NWR — only NP/NWR named.)
+3. Validate the `likely_allowed` slice on a genuinely BLM-dense bbox (the JT bbox is NP/local-dominated; Gate A showed 172 BLM + 62 USFS in the lower corridor → all `likely_allowed`).
+
+### PAD-US containment product-direction not yet exercised (Phase 1 test, 2026-06-02)
+
+The product use is point→land-status (a campsite resolving what land it sits on). In the JT test, 20 containment edges formed but only **2 were baseline-POI ⊂ PAD-US**; 18 were PAD-US ⊂ PAD-US. Cause: JTNP (the natural container for the 153 JT points) is stuck in `manual_review`, so its polygon never materialized over them. Before declaring the containment model product-ready: resolve the JTNP federation, or test a BLM-dense bbox that covers existing POIs.
+
+### National-fill prerequisite: federated-park auto-resolution (2026-06-02)
+
+The lone JTNP `manual_review` in the corridor test is the tip of an iceberg: every park present in BOTH PAD-US and an authoritative source (NPS/Parks Canada) queues one `manual_review`, so a national fill floods with federated-park duplicates. Before national fill, add an auto-resolution rule — generalize `findFederalAnchor`/`fed_exact` to link PAD-US `public_land` ↔ the existing authoritative park master_place (the geometry/name come from the authoritative source via field_precedence; PAD-US enriches land-status). National-fill prerequisite, not a corridor blocker.
