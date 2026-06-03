@@ -15,6 +15,8 @@ import {
   haversineMi,
   pointToPolylineMi,
 } from "@/lib/routing/point-to-polyline";
+import { fetchFederatedPois } from "@/lib/trip-browse/federated";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "scenic",
@@ -42,6 +44,17 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
  *  rank above places beyond it. Matches the "within 10 miles of today's
  *  route" Browse-panel spec. */
 const CORRIDOR_MI = 10;
+
+/** Server-side flag (default OFF). When off, this handler is byte-for-byte
+ *  unchanged — the federated master_place corridor read is never invoked
+ *  and no result is tagged. When on, federated POIs from the
+ *  pois_along_corridor RPC are merged ALONGSIDE the live fanout (additive,
+ *  never a replacement). */
+const USE_FEDERATED_POIS = process.env.USE_FEDERATED_POIS === "true";
+
+/** Federated corridor read uses meters (RPC casts ::geography); 16000m ≈
+ *  the 10mi CORRIDOR_MI client-side filter, so federated rows clear it. */
+const FEDERATED_BUFFER_M = 16000;
 
 /** In-process response cache. Browse data is expensive to compute
  *  (~7s single-category, ~13s all-fanout) but identical across requests
@@ -209,6 +222,14 @@ export async function GET(
     return NextResponse.json({ source: "discovery", places: [] });
   }
 
+  // Federated path is opt-in. Create the anon+JWT server client once (only
+  // when flagged) so each category's RPC call reuses it. The day segment
+  // (start→end) is the SAME 2-point line the corridor filter below uses.
+  const federatedClient = USE_FEDERATED_POIS
+    ? await createSupabaseServerClient()
+    : null;
+  const dayEndCoord = day.coords;
+
   // Fan out one discover() call per category in parallel — discover()
   // itself dedupes within each call but not across categories, which is
   // fine since a single place rarely qualifies for two slideKeys.
@@ -229,7 +250,26 @@ export async function GET(
         ],
         signal: req.signal,
       });
-      return places.map<BrowsePlace>((p) => ({ ...p, category: slideKey }));
+      const live = places.map<BrowsePlace>((p) => ({ ...p, category: slideKey }));
+
+      // Flag OFF: byte-for-byte the legacy path — untagged live results.
+      if (!USE_FEDERATED_POIS) return live;
+
+      // Flag ON: tag live origin, then merge federated RPC rows alongside.
+      const liveTagged = live.map<BrowsePlace>((p) => ({
+        ...p,
+        source: "live" as const,
+      }));
+      if (!federatedClient || !dayStart || !dayEndCoord) return liveTagged;
+      const federated = await fetchFederatedPois({
+        supabase: federatedClient,
+        slideKey,
+        start: dayStart,
+        end: dayEndCoord,
+        bufferMeters: FEDERATED_BUFFER_M,
+        signal: req.signal,
+      });
+      return [...liveTagged, ...federated];
     }),
   );
   const merged = perCategory.flat();
