@@ -91,6 +91,17 @@ const TAG_TO_CATEGORY: Array<[tagKey: string, tagValue: RegExp, category: string
 
 function inferCategory(tags: Record<string, string> | undefined): string | null {
   if (!tags) return null;
+  // Phase 2 (PR-B): a camp_site tagged backcountry=yes or informal=yes is a
+  // dispersed/backcountry site, not a developed campground — split it to the
+  // dispersed_camping category (PR-0). caravan_site (RV-oriented) and plain
+  // camp_site stay campground. No new Overpass fetch — camp_site is already
+  // queried; this is a classification refinement on tags we already pull.
+  if (
+    tags.tourism === "camp_site" &&
+    (tags.backcountry === "yes" || tags.informal === "yes")
+  ) {
+    return "dispersed_camping";
+  }
   for (const [key, valuePattern, category] of TAG_TO_CATEGORY) {
     const tagValue = tags[key];
     if (tagValue && valuePattern.test(tagValue)) return category;
@@ -172,11 +183,16 @@ interface NormalizedOsm {
   hours: Record<string, unknown> | null;
   contact: Record<string, unknown> | null;
   access: Record<string, unknown> | null;
+  // Dispersed-camping advisory (only set for category dispersed_camping).
+  dispersed_camping?: string;
+  verify_locally?: boolean;
+  mvum_corridor?: null;
 }
 
 function normalizeOsm(
   tags: Record<string, string> | undefined,
   name: string,
+  category: string | null,
 ): NormalizedOsm {
   const t = tags ?? {};
 
@@ -208,7 +224,7 @@ function normalizeOsm(
   const hours = t.opening_hours ? { raw: t.opening_hours } : null;
   const description = t.description ?? t.note ?? null;
 
-  return {
+  const result: NormalizedOsm = {
     // canonical_name lets field_precedence resolve master_place.canonical_name
     // from OSM at priority 5. OSM names are passed through unchanged — they're
     // already proper-cased by convention, unlike RIDB's screaming caps.
@@ -219,6 +235,17 @@ function normalizeOsm(
     contact: Object.keys(contact).length > 0 ? contact : null,
     access: Object.keys(access).length > 0 ? access : null,
   };
+
+  // Dispersed-camping advisory (mirrors usfs.ts): a backcountry/informal
+  // camp_site offers dispersed camping → likely_allowed, ALWAYS paired with
+  // verify_locally (coarse/advisory). mvum_corridor stubbed until PR-C.
+  if (category === "dispersed_camping") {
+    result.dispersed_camping = "likely_allowed";
+    result.verify_locally = true;
+    result.mvum_corridor = null;
+  }
+
+  return result;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -245,7 +272,7 @@ async function persistElement(el: OverpassElement, dryRun: boolean): Promise<"in
   if (!category) return "skipped"; // Tag combination wasn't overlander-relevant.
 
   const name = inferName(el.tags, category);
-  const normalized = normalizeOsm(el.tags, name);
+  const normalized = normalizeOsm(el.tags, name, category);
   const externalId = `osm:${el.type}:${el.id}`;
 
   if (dryRun) {
@@ -328,6 +355,9 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
 };
 
 export default ingest;
+
+// Test seam: pure helpers exercised without network or DB.
+export const _internals = { inferCategory, normalizeOsm };
 
 // Allow direct execution: `tsx ingestion/sources/osm.ts`
 if (import.meta.url === `file://${process.argv[1]}`) {
