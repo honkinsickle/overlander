@@ -4,7 +4,7 @@ import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 import type { BrowsePlace, SlideCategoryKey } from "./places";
 
 /**
- * Per-card stats for the browse-panel `LocationCard`. Computes detour
+ * Per-card stats for the browse-panel `LocationBrowseCard`. Computes detour
  * distance/time to the place from the day's endpoint, an "Adds X" total
  * (detour out-and-back + a category-typical stop), an entry-cost line,
  * and a recomputed "new ETA at <next anchor>" string.

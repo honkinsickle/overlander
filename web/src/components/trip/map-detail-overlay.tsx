@@ -38,7 +38,7 @@ const NEXT_STATE: Record<Exclude<SheetState, "closed">, Exclude<SheetState, "clo
  *
  * Three states: closed (offscreen) · half (50% of map column) · expanded
  * (top sits 4px below the slideup header). Opens on `trip:openDetail`
- * (dispatched by the LocationCard's DETAILS button) into `half`; tapping
+ * (dispatched by the LocationBrowseCard's DETAILS button) into `half`; tapping
  * the grabber toggles between `half` and `expanded`. Closes on Escape,
  * the X button, or another `trip:openDetail` with `{ place: null }`.
  */
