@@ -185,3 +185,16 @@ OBJECTID-instability problem, worse). **Prefer hashing stable *attributes*
 to a geometry hash only where attributes don't disambiguate.** Resolve this key
 strategy first; it is the cleanest dependency for the corridor-scoped
 land-status ingest.
+
+## Implementation notes — Phase 1 test validation (2026-06-02)
+
+**Apply-path lesson (recompute_master_place is the sole writer of master_place — must not be lost):**
+
+- Apply migrations via `npm run -w data db:push-verify`, NOT raw `supabase db push`. Raw push can report success while silently skipping the body (2026-05-30-class bug); the verifier checks the INSERT rows landed. Phase 1 used raw push and lost time to it.
+- **PostgREST pool staleness.** `getDb` is supabase-js → PostgREST, which holds a long-lived server-side Postgres connection pool. After `CREATE OR REPLACE FUNCTION`, those pooled backends can keep executing the OLD compiled plpgsql plan. A materialize run immediately after the migration ran the old `recompute` → `is_searchable` stayed default-true and `geometry_polygon` didn't promote for every record in that run. A "fresh materialize process" does NOT fix this — it reuses the same PostgREST pool; recycling the pool does.
+
+**Prod runbook (this recompute migration):**
+1. Apply via `db:push-verify` (verified).
+2. **Recycle PostgREST** — `NOTIFY pgrst, 'reload schema'` (or restart) so pooled backends pick up the new function.
+3. Run materialize.
+4. **Verify a sample row's `is_searchable` + `geometry_polygon` before declaring done.**
