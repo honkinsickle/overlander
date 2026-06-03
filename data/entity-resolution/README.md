@@ -1139,3 +1139,18 @@ The product use is point→land-status (a campsite resolving what land it sits o
 ### National-fill prerequisite: federated-park auto-resolution (2026-06-02)
 
 The lone JTNP `manual_review` in the corridor test is the tip of an iceberg: every park present in BOTH PAD-US and an authoritative source (NPS/Parks Canada) queues one `manual_review`, so a national fill floods with federated-park duplicates. Before national fill, add an auto-resolution rule — generalize `findFederalAnchor`/`fed_exact` to link PAD-US `public_land` ↔ the existing authoritative park master_place (the geometry/name come from the authoritative source via field_precedence; PAD-US enriches land-status). National-fill prerequisite, not a corridor blocker.
+
+### REQUIRED before national fill: empirically fire the 0.1 dispersed↔campground lock (2026-06-03)
+
+The `dispersed_camping ↔ campground / recreation_area = 0.1` compat lock (PR-0.1)
+is **math-proven** safe — max blended at 0m + identical (suffix-stripped) name is
+`0.4 + 0.4 + 0.2·0.1 = 0.82 < 0.85`, so it can never auto-merge — and there is no
+alternate merge path (amenity rollup excludes dispersed; `AMENITY_PARENT_CATEGORIES`
+doesn't include it). But it has **not yet fired on real data**: PR-A's isolated
+dispersed-only test has no co-located developed-campground source (RIDB/OSM
+campgrounds and USFS dispersed don't coincide in the test corpus), and the
+USFS↔OSM canonical_name eyeball needs OSM dispersed (PR-B). Both deferred to a
+**combined A+B(+RIDB) corridor check**. **Before national fill, confirm empirically**
+that a real dispersed site at ~0m + same name as a developed campground lands in
+`manual_review` (not auto-merge, not silently swallowed) — math-only is not
+sufficient sign-off for the safety-critical err-toward-separate decision.
