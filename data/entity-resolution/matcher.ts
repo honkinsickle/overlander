@@ -137,6 +137,23 @@ export const AMENITY_PARENT_CATEGORIES = [
  *   gas_station ↔ fuel = 1.0
  *     Google's gas_station == OSM's amenity=fuel. Same place,
  *     different source taxonomies.
+ *
+ *   dispersed_camping ↔ dispersed_camping = 1.0
+ *     Same place across sources — a USFS "Dispersed Camping" activity
+ *     point ↔ an OSM tourism=camp_site+backcountry=yes node. (Phase 2.)
+ *
+ *   dispersed_camping ↔ campground = 0.3
+ *     DISTINCT place types — a dispersed/backcountry site is not a
+ *     developed campground (Phase 2 decision: dispersed_camping does NOT
+ *     subsume campground). Deliberately below the 0.8 name_dominant floor
+ *     so "Pine Flat Dispersed" never auto-links to "Pine Flat Campground"
+ *     on name alone; only a genuine same-site dual-tag clears, via the
+ *     blended distance+name path at near-0m.
+ *
+ *   dispersed_camping ↔ recreation_area = 0.3
+ *     A dispersed area often sits within a rec-area umbrella but is a
+ *     distinct primitive spot; kept low so it stays its own place rather
+ *     than being absorbed into the recarea.
  */
 export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
   campground: {
@@ -169,6 +186,13 @@ export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
   viewpoint: { viewpoint: 1.0 },
   peak: { peak: 1.0 },
   spring: { spring: 1.0, water: 0.5 },
+  // Phase 2 — US dispersed camping. Reverse lookups (campground↔dispersed_camping
+  // etc.) resolve via the symmetric fallback in compat(), like spring↔water.
+  dispersed_camping: {
+    dispersed_camping: 1.0,
+    campground: 0.3,
+    recreation_area: 0.3,
+  },
   // Extend as new categories emerge from corridor expansion.
 };
 

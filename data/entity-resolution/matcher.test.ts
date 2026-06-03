@@ -23,9 +23,29 @@ import {
   fetchUnresolvedByIds,
   findCandidates,
   ID_FETCH_CHUNK,
+  lookupCompatibility,
   MatchAllCircuitBreakerError,
   paginateLinkedSourceRecords,
 } from "./matcher.ts";
+
+describe("lookupCompatibility — dispersed_camping (Phase 2)", () => {
+  it("matches itself at 1.0 (USFS dispersed ↔ OSM backcountry)", () => {
+    expect(lookupCompatibility("dispersed_camping", "dispersed_camping")).toBe(1.0);
+  });
+  it("is weakly compatible with campground (0.3), symmetric, below the 0.8 name_dominant floor", () => {
+    expect(lookupCompatibility("dispersed_camping", "campground")).toBe(0.3);
+    expect(lookupCompatibility("campground", "dispersed_camping")).toBe(0.3); // symmetric fallback
+    expect(lookupCompatibility("dispersed_camping", "campground")).toBeLessThan(0.8);
+  });
+  it("is weakly compatible with recreation_area (0.3), symmetric", () => {
+    expect(lookupCompatibility("dispersed_camping", "recreation_area")).toBe(0.3);
+    expect(lookupCompatibility("recreation_area", "dispersed_camping")).toBe(0.3);
+  });
+  it("is incompatible (0) with unrelated categories", () => {
+    expect(lookupCompatibility("dispersed_camping", "peak")).toBe(0);
+    expect(lookupCompatibility("dispersed_camping", "gas_station")).toBe(0);
+  });
+});
 
 type Row = { master_place_id: string | null; source_id: string };
 
