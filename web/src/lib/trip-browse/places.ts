@@ -42,6 +42,17 @@ export type BrowsePlace = {
     website?: { display: string; href: string };
   };
   cta: string;
+  /** Origin of this result: 'live' = external-API discovery fanout,
+   *  'master_place' = federated corridor RPC. Set only when the
+   *  USE_FEDERATED_POIS flag is on; absent in the legacy live-only path,
+   *  so flag-off responses are byte-for-byte unchanged. */
+  source?: "live" | "master_place";
+  /** Federated-only enrichment, carried through the response for
+   *  verification even though the card UI doesn't render them yet. NULL
+   *  for non-applicable rows; absent on live results. */
+  mvumCorridor?: boolean | null;
+  attribution?: Record<string, string> | null;
+  overlanderTags?: string[] | null;
 };
 
 const BASE_PILLS = {
