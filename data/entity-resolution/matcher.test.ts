@@ -32,14 +32,16 @@ describe("lookupCompatibility — dispersed_camping (Phase 2)", () => {
   it("matches itself at 1.0 (USFS dispersed ↔ OSM backcountry)", () => {
     expect(lookupCompatibility("dispersed_camping", "dispersed_camping")).toBe(1.0);
   });
-  it("is weakly compatible with campground (0.3), symmetric, below the 0.8 name_dominant floor", () => {
-    expect(lookupCompatibility("dispersed_camping", "campground")).toBe(0.3);
-    expect(lookupCompatibility("campground", "dispersed_camping")).toBe(0.3); // symmetric fallback
-    expect(lookupCompatibility("dispersed_camping", "campground")).toBeLessThan(0.8);
+  it("is weakly compatible with campground (0.1), symmetric — too low to ever auto-merge", () => {
+    expect(lookupCompatibility("dispersed_camping", "campground")).toBe(0.1);
+    expect(lookupCompatibility("campground", "dispersed_camping")).toBe(0.1); // symmetric fallback
+    // err-toward-separate: max blended (0m + identical name) = 0.4+0.4+0.2*0.1 = 0.82 < 0.85 auto-link
+    const maxBlended = 0.4 * 1.0 + 0.4 * 1.0 + 0.2 * lookupCompatibility("dispersed_camping", "campground");
+    expect(maxBlended).toBeLessThan(0.85);
   });
-  it("is weakly compatible with recreation_area (0.3), symmetric", () => {
-    expect(lookupCompatibility("dispersed_camping", "recreation_area")).toBe(0.3);
-    expect(lookupCompatibility("recreation_area", "dispersed_camping")).toBe(0.3);
+  it("is weakly compatible with recreation_area (0.1), symmetric", () => {
+    expect(lookupCompatibility("dispersed_camping", "recreation_area")).toBe(0.1);
+    expect(lookupCompatibility("recreation_area", "dispersed_camping")).toBe(0.1);
   });
   it("is incompatible (0) with unrelated categories", () => {
     expect(lookupCompatibility("dispersed_camping", "peak")).toBe(0);
