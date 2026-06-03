@@ -1165,3 +1165,7 @@ spots, not deep-Wilderness backpacking), but **CONFIRM, don't assume**: at natio
 check whether any of the 367 dispersed recareas fall inside a Wilderness polygon
 (PAD-US Designation `des_tp='WA'`, once that endpoint is wired). If any do, gate their
 flag to `likely_restricted` (restricted-beats-allowed, same rule as the land-status layer).
+
+### PR-B result: USFS↔OSM dispersed dedup ran combined but didn't fire — needs co-locating data (2026-06-03)
+
+Combined A+B materialized in the SB-NF bbox (6 USFS dispersed + 47 OSM dispersed, from 1898 OSM nodes; 110 OSM campground). The dispersed split works (backcountry/informal → dispersed_camping). But the USFS↔OSM 1.0 dedup **did not fire**: 0 OSM dispersed within 500m of any USFS dispersed (ER: 0 auto_link; the 8 manual_review were all within-OSM near-duplicates, cross-USFS=0). The OSM-mapped backcountry sites and the USFS designated yellow-post/OHV sites are in the same forest but at distinct points. So the deferral refines: it's NOT "need A+B together" (we have that) but "need A+B where dispersed sources co-locate" — a denser bbox or national fill. The canonical_name eyeball (USFS-bureaucratic vs OSM-colloquial) likewise can't run until a real USFS↔OSM dispersed merge exists. Both still REQUIRED before national fill, alongside the 0.1 dispersed↔campground fire.
