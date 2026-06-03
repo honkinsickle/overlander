@@ -1,5 +1,3 @@
-import type { Category } from "@/components/primitives/detail-card";
-
 export type SlideCategoryKey =
   | "oddity"
   | "food"
@@ -7,14 +5,6 @@ export type SlideCategoryKey =
   | "camping"
   | "overnight"
   | "fuel";
-
-export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>> = {
-  mountain: "scenic",
-  food: "food",
-  oddity: "oddity",
-  camping: "camping",
-  fuel: "fuel",
-};
 
 export type BrowsePlace = {
   id: string;

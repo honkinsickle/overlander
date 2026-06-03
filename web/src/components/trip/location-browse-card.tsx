@@ -13,6 +13,13 @@ import {
 } from "@/components/icons/category-icons-v2";
 
 /**
+ * CANONICAL Location Card. This is the single reusable card for browse /
+ * suggested surfaces — driven by `category` (palette), `width`, and a
+ * `BrowsePlace` + `CardStats`. The older emoji-badge primitive
+ * (`primitives/location-card.tsx`) was retired in favor of this; do not
+ * reintroduce a parallel card. `suggestion-card-v2.tsx` is a separate
+ * design (Browse-the-day suggestion card), not a duplicate of this.
+ *
  * Location Browse Card — v2 chrome (Paper "Location Card · 300w /
  * 354w / 410w · category variants (v2)"). Renders 300×455 (2-up panel
  * default), 354×455 (3-up expanded), or 410×455 (day-detail suggested

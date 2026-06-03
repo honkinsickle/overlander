@@ -137,6 +137,27 @@ export const AMENITY_PARENT_CATEGORIES = [
  *   gas_station ↔ fuel = 1.0
  *     Google's gas_station == OSM's amenity=fuel. Same place,
  *     different source taxonomies.
+ *
+ *   dispersed_camping ↔ dispersed_camping = 1.0
+ *     Same place across sources — a USFS "Dispersed Camping" activity
+ *     point ↔ an OSM tourism=camp_site+backcountry=yes node. (Phase 2.)
+ *
+ *   dispersed_camping ↔ campground = 0.1   (locked against PR-A sample)
+ *     DISTINCT place types — a dispersed/backcountry site is not a
+ *     developed campground (Phase 2: dispersed_camping does NOT subsume
+ *     campground). Err-toward-SEPARATE here (inverse of Phase 1's
+ *     err-toward-merge): false-merging a dispersed site into a campground
+ *     silently swallows the exact distinction that's the product moat,
+ *     while a duplicate is recoverable. PR-A data: 94/367 USFS dispersed
+ *     recareas are named "…Campground" and can coincide with an RIDB/OSM
+ *     developed campground at ~0m + identical (suffix-stripped) name. At
+ *     0.1 the max blended score for that case is 0.4(dist) + 0.4(name) +
+ *     0.2·0.1 = 0.82 < 0.85 → it can NEVER auto-merge; worst case it queues
+ *     for manual_review. (At 0.3 it hit 0.86 and auto-swallowed.)
+ *
+ *   dispersed_camping ↔ recreation_area = 0.1
+ *     Same reasoning — a dispersed area sits within a rec-area umbrella but
+ *     is a distinct primitive spot; 0.1 keeps it from being absorbed.
  */
 export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
   campground: {
@@ -169,6 +190,13 @@ export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
   viewpoint: { viewpoint: 1.0 },
   peak: { peak: 1.0 },
   spring: { spring: 1.0, water: 0.5 },
+  // Phase 2 — US dispersed camping. Reverse lookups (campground↔dispersed_camping
+  // etc.) resolve via the symmetric fallback in compat(), like spring↔water.
+  dispersed_camping: {
+    dispersed_camping: 1.0,
+    campground: 0.1,
+    recreation_area: 0.1,
+  },
   // Extend as new categories emerge from corridor expansion.
 };
 

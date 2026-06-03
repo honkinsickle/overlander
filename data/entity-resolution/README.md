@@ -1102,3 +1102,81 @@ items (cwd + `--test`), the `ingest:manual` env-file item, and 4a of the
 The `geometry_polygon promotion` item shipped separately in migration
 `20260601020000` and has been removed from the open items above.
 
+
+### PAD-US Wilderness is a HARD pre-prod gate — Fee-first ships without it (2026-06-02)
+
+The `padus` land-status source (Phase 1) ingests the PAD-US **Fee Managers**
+layer only. The Fee class EXCLUDES Wilderness (`des_tp='WA'` lives in PAD-US's
+separate Designation feature class, whose endpoint was not resolvable during the
+Phase 1 build). Consequence under Fee-first: a point inside a Wilderness inherits
+the enclosing forest's `dispersed_camping='likely_allowed'` — a wrong "camp here",
+the one safety-critical failure mode. Harmless on test (Fee validates
+tuple/dissolve/category-split/containment/dispersed for everything but
+Wilderness). **Must NOT ship to prod without both:**
+
+1. Wiring the PAD-US Designation endpoint (find via the USGS PAD-US web-services
+   page item / the test project's PAD-US web map).
+2. Proving a `WA` record carries `likely_restricted` AND **overrides** the
+   enclosing forest's `likely_allowed` at containment-resolution time
+   (restricted-beats-allowed when a point is `contained_in` multiple land-status
+   polygons — a new multi-parent resolution rule).
+
+`deriveDispersedCamping` in `padus.ts` already returns `likely_restricted` for
+`des_tp='WA'`; the missing pieces are the Designation endpoint + the multi-parent
+resolution rule. Wilderness records are additive (own tuples), no rework.
+
+### PAD-US dispersed_camping calibration + des_tp fail-to-hidden (Phase 1 test, 2026-06-02)
+
+From the JT-corridor test (113 padus units): BLM→`likely_allowed` is correct (3/3 BLM|PUB), but two gaps to fix before prod:
+1. **`NGO` (private conservation) and `DIST` (special-district local parks) leak to `unknown`** — should be `likely_restricted` (the const map only catches `Mang_Type` LOC/PVT). ~28 of 42 "unknown" were really restricted. Add NGO→restricted, DIST(local)→restricted.
+2. **des_tp is fail-to-hidden:** any `des_tp` not in `NAMED_DES_TP` silently becomes `land_status` and drops from search (e.g. a National Monument vanished). Route **unrecognized** des_tp to a review/log path instead of silent exclusion. Pull DISTINCT des_tp for the corridor AND nationally and classify each explicitly before prod. (Corridor distinct set observed: LP, LREC, PCON, LOTH, POTH, SOTH, TRIBL, SCA, PUB, SRMA, LCA, NP, UNK, NWR — only NP/NWR named.)
+3. Validate the `likely_allowed` slice on a genuinely BLM-dense bbox (the JT bbox is NP/local-dominated; Gate A showed 172 BLM + 62 USFS in the lower corridor → all `likely_allowed`).
+
+### PAD-US containment product-direction not yet exercised (Phase 1 test, 2026-06-02)
+
+The product use is point→land-status (a campsite resolving what land it sits on). In the JT test, 20 containment edges formed but only **2 were baseline-POI ⊂ PAD-US**; 18 were PAD-US ⊂ PAD-US. Cause: JTNP (the natural container for the 153 JT points) is stuck in `manual_review`, so its polygon never materialized over them. Before declaring the containment model product-ready: resolve the JTNP federation, or test a BLM-dense bbox that covers existing POIs.
+
+### National-fill prerequisite: federated-park auto-resolution (2026-06-02)
+
+The lone JTNP `manual_review` in the corridor test is the tip of an iceberg: every park present in BOTH PAD-US and an authoritative source (NPS/Parks Canada) queues one `manual_review`, so a national fill floods with federated-park duplicates. Before national fill, add an auto-resolution rule — generalize `findFederalAnchor`/`fed_exact` to link PAD-US `public_land` ↔ the existing authoritative park master_place (the geometry/name come from the authoritative source via field_precedence; PAD-US enriches land-status). National-fill prerequisite, not a corridor blocker.
+
+### REQUIRED before national fill: empirically fire the 0.1 dispersed↔campground lock (2026-06-03)
+
+The `dispersed_camping ↔ campground / recreation_area = 0.1` compat lock (PR-0.1)
+is **math-proven** safe — max blended at 0m + identical (suffix-stripped) name is
+`0.4 + 0.4 + 0.2·0.1 = 0.82 < 0.85`, so it can never auto-merge — and there is no
+alternate merge path (amenity rollup excludes dispersed; `AMENITY_PARENT_CATEGORIES`
+doesn't include it). But it has **not yet fired on real data**: PR-A's isolated
+dispersed-only test has no co-located developed-campground source (RIDB/OSM
+campgrounds and USFS dispersed don't coincide in the test corpus), and the
+USFS↔OSM canonical_name eyeball needs OSM dispersed (PR-B). Both deferred to a
+**combined A+B(+RIDB) corridor check**. **Before national fill, confirm empirically**
+that a real dispersed site at ~0m + same name as a developed campground lands in
+`manual_review` (not auto-merge, not silently swallowed) — math-only is not
+sufficient sign-off for the safety-critical err-toward-separate decision.
+
+### REQUIRED before national fill: check USFS dispersed points inside Wilderness (2026-06-03)
+
+`usfs.ts` sets every dispersed point to `dispersed_camping='likely_allowed'` (blanket).
+A dispersed point inside a Wilderness area is vehicle-inaccessible, so `likely_allowed`
+there is the same wrong "camp here" the Phase 1 Wilderness gate guards against — now on
+the points layer. Likely empty (EDW "Dispersed Camping" = road-accessible designated
+spots, not deep-Wilderness backpacking), but **CONFIRM, don't assume**: at national fill,
+check whether any of the 367 dispersed recareas fall inside a Wilderness polygon
+(PAD-US Designation `des_tp='WA'`, once that endpoint is wired). If any do, gate their
+flag to `likely_restricted` (restricted-beats-allowed, same rule as the land-status layer).
+
+### PR-B result: USFS↔OSM dispersed dedup ran combined but didn't fire — needs co-locating data (2026-06-03)
+
+Combined A+B materialized in the SB-NF bbox (6 USFS dispersed + 47 OSM dispersed, from 1898 OSM nodes; 110 OSM campground). The dispersed split works (backcountry/informal → dispersed_camping). But the USFS↔OSM 1.0 dedup **did not fire**: 0 OSM dispersed within 500m of any USFS dispersed (ER: 0 auto_link; the 8 manual_review were all within-OSM near-duplicates, cross-USFS=0). The OSM-mapped backcountry sites and the USFS designated yellow-post/OHV sites are in the same forest but at distinct points. So the deferral refines: it's NOT "need A+B together" (we have that) but "need A+B where dispersed sources co-locate" — a denser bbox or national fill. The canonical_name eyeball (USFS-bureaucratic vs OSM-colloquial) likewise can't run until a real USFS↔OSM dispersed merge exists.
+
+**Reframe (2026-06-03): the two deferred proofs are NOT equal risk.** USFS dispersed (designated yellow-post/OHV) and OSM dispersed (community backcountry) are **largely disjoint** — same forest, different points — so this layer is *additive* across them and the USFS↔OSM 1.0 dedup is inherently rare:
+- **1.0 USFS↔OSM dedup = LOW-RISK / may rarely fire.** Just the standard cross-source dedup path at compat 1.0 — confirm if a genuinely co-located pair ever appears, but not a novel risk. (canonical_name eyeball rides along — only relevant when such a merge exists.)
+- **0.1 dispersed↔campground fire = STILL REQUIRED.** The *novel* err-toward-separate behavior (a swallowed dispersed site is invisible loss); must fire on real data before national fill. Math-proven (max 0.82 < 0.85), not yet empirically fired.
+
+### National-fill review-queue strategy must cover THREE scaling manual_review sources (2026-06-03)
+
+National fill generates `manual_review` from three distinct, all-scaling sources — the human-vs-auto-rule strategy must cover all three, not just fed_exact:
+1. **Federated-park** (PAD-US `public_land` ↔ authoritative NPS/PC park) — the `findFederalAnchor`/`fed_exact` generalization item; one review per dual-listed park.
+2. **PAD-US dispersed-named-"Campground"** — the ~94 records named like campgrounds that hit the 0.1 lock → manual_review near a developed campground.
+3. **Within-OSM near-duplicates** — clusters of nearby OSM dispersed nodes (same-source guard → blended_residual); PR-B's SB-NF run already produced 8 (4 clusters). Scales with OSM density.

@@ -13,5 +13,7 @@ export const limits: Record<string, LimitFunction> = {
   parks_canada: pLimit(4), // ESRI REST endpoints; no documented rate limit, be polite.
   bc_parks: pLimit(5), // DataBC WFS + BC Parks REST API; ~5 req/sec courtesy limit.
   alberta_parks: pLimit(5), // GeoDiscover Alberta ESRI REST; no documented limit, be polite.
+  padus: pLimit(4), // USGS PAD-US ArcGIS Online FeatureServer; no documented limit, be polite.
+  usfs: pLimit(4), // USFS EDW ArcGIS REST (apps.fs.usda.gov); no documented limit, be polite.
   ioverlander: pLimit(1), // No public API. Be polite.
 };
