@@ -15,6 +15,7 @@
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",
     "materialize": "tsx --env-file=.env pipeline/materialize.ts",
     "backfill:polygon-containment": "tsx --env-file=.env scripts/backfill-polygon-containment.ts",
+    "mvum:load": "tsx --env-file=.env scripts/load-mvum-roads.ts",
     "db:push-verify": "tsx --env-file=.env scripts/verify-migration.ts --push",
     "test:seed": "tsx --env-file=.env --env-file=.env.test scripts/seed-test-fixtures.ts",
     "test": "NODE_ENV=production vitest run",
