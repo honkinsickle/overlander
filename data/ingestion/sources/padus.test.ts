@@ -41,12 +41,27 @@ describe("tupleKey + externalIdFor", () => {
   });
 });
 
-describe("inferCategory (named public_land vs generic land_status)", () => {
-  it("named designations → public_land (case-insensitive)", () => {
-    for (const d of ["NF", "nf", "NM", "NCA", "NWR", "SP", "WA"]) expect(inferCategory(d)).toBe("public_land");
+describe("inferCategory (exhaustive des_tp classification)", () => {
+  it("federal named → public_land", () => {
+    for (const d of ["NF", "nf", "NG", "NLS", "NM", "NP", "NRA", "NCA", "NWR", "NT", "WSR", "WA", "WPA", "REA", "REC", "ACC", "FORE"])
+      expect(inferCategory(d)).toBe("public_land");
   });
-  it("generic / ownership / null → land_status", () => {
-    for (const d of ["PUB", "UNK", "LP", "MIL", null]) expect(inferCategory(d)).toBe("land_status");
+  it("state named → public_land", () => {
+    for (const d of ["SP", "SW", "SDA", "SREC"])
+      expect(inferCategory(d)).toBe("public_land");
+  });
+  it("private/NGO named public-access parks → public_land", () => {
+    for (const d of ["PPRK", "PROC"])
+      expect(inferCategory(d)).toBe("public_land");
+  });
+  it("generic / ownership / jurisdiction → land_status", () => {
+    for (const d of ["PUB", "ND", "UNK", "RMA", "SRMA", "LRMA", "MIL", "MIT", "FOTH", "HCA",
+      "PHCA", "SHCA", "LHCA", "SCA", "SOTH", "PAGR", "PCON", "PFOR", "POTH", "PRAN",
+      "LP", "LREC", "LOTH", "LCA", "TRIBL", "CONE", null])
+      expect(inferCategory(d)).toBe("land_status");
+  });
+  it("National Monument variant and NSBV → public_land", () => {
+    expect(inferCategory("NSBV")).toBe("public_land");
   });
 });
 
@@ -65,13 +80,26 @@ describe("deriveDispersedCamping (const map; restricted-beats-allowed)", () => {
     expect(d("Private", "PVT", "PCON")).toBe("likely_restricted");
     expect(d("City", "LOC", "LP")).toBe("likely_restricted");
   });
+  it("NGO → likely_restricted (conservancy, land trust — no dispersed camping)", () => {
+    expect(d("Nature Conservancy", "NGO", "PCON")).toBe("likely_restricted");
+    expect(d("Land Trust", "NGO", "POTH")).toBe("likely_restricted");
+  });
+  it("DIST (special district) → likely_restricted", () => {
+    expect(d("REG", "DIST", "LP")).toBe("likely_restricted");
+    expect(d("Regional Parks", "DIST", "LREC")).toBe("likely_restricted");
+  });
+  it("TRIB (tribal land) → likely_restricted (no permission assumed)", () => {
+    expect(d("TRIB", "TRIB", "TRIBL")).toBe("likely_restricted");
+  });
   it("Wilderness overrides an otherwise-allowed manager (restricted beats allowed)", () => {
     expect(d("USFS", "FED", "WA")).toBe("likely_restricted"); // forest manager but Wilderness designation
     expect(d("BLM", "FED", "WA")).toBe("likely_restricted");
   });
-  it("closed public access → likely_restricted; unknown manager → unknown", () => {
+  it("closed public access → likely_restricted; truly-unknown manager type → unknown", () => {
     expect(d("BLM", "FED", "PUB", "XA")).toBe("likely_restricted");
-    expect(d("Weird Agency", "DIST", "RMA")).toBe("unknown");
+    // JNT (joint/interagency) has no Mang_Name match and type is not in the
+    // caught set — genuinely ambiguous, should be unknown
+    expect(d("JNT", "JNT", "UNK")).toBe("unknown");
   });
   it("always carries verify_locally:true and a null mvum_corridor stub", () => {
     const r = deriveDispersedCamping({ mangName: "BLM", mangType: "FED", desTp: "PUB", pubAccess: "OA" });

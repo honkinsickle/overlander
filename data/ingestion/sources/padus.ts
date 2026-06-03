@@ -85,21 +85,80 @@ type FeeProps = z.infer<typeof FeePropsSchema>;
 
 // ───── Category split: named public_land vs generic land_status ─────────
 //
-// Named, destination-worthy designations a user would search → public_land
-// (searchable). Everything else (generic ownership / jurisdiction parcels,
-// e.g. BLM 'PUB', 'UNK', local 'LP') → land_status (search-excluded).
-// 'WA' (Wilderness) is named too — it only arrives once the Designation
-// endpoint is wired (see the pre-prod gate above).
+// Exhaustive classification of the 49 distinct des_tp values observed in the
+// PAD-US 4.1 national Fee service (pulled 2026-06-02). Every code is explicit;
+// only truly novel/malformed codes fall through to the review log. This kills
+// the fail-to-hidden class: an unmapped code is logged and lands as land_status
+// (search-excluded) but the logger.warn surfaces it so it's not silent.
+//
+// 'WA' (Wilderness) is named — it only arrives from the Designation endpoint
+// (see the pre-prod gate above). Listed here so the type-check survives.
+
+/** Named, destination-worthy units a user would search → public_land (searchable). */
 const NAMED_DES_TP = new Set<string>([
-  "NF", // National Forest
-  "NG", // National Grassland
-  "NM", // National Monument
-  "NP", // National Park
-  "NRA", // National Recreation Area
-  "NCA", // National Conservation Area
-  "NWR", // National Wildlife Refuge
-  "WA", // Wilderness (Designation class — pre-prod)
-  "SP", // State Park
+  // Federal — named destinations
+  "NF",   // National Forest
+  "NG",   // National Grassland
+  "NLS",  // National Lakeshore / Seashore
+  "NM",   // National Monument
+  "NP",   // National Park
+  "NRA",  // National Recreation Area
+  "NCA",  // National Conservation Area
+  "NWR",  // National Wildlife Refuge
+  "NSBV", // National Scenic Byway / Scenic-Byway-related area
+  "NT",   // National Trail (corridor)
+  "WSR",  // Wild & Scenic River
+  "WA",   // Wilderness Area (Designation class — pre-prod gate)
+  "WPA",  // Waterfowl Production Area (FWS)
+  "REA",  // Research Natural Area / Experimental Area (searchable federal unit)
+  "REC",  // National Recreation Area (alternate code)
+  "ACC",  // Area of Critical Environmental Concern (BLM ACEC — named federal mgmt area)
+  "FORE", // National Forest / Forest Reserve (variant)
+  // State — named destinations
+  "SP",   // State Park
+  "SW",   // State Wilderness
+  "SDA",  // State Desert / Natural Area (named state unit)
+  "SREC", // State Recreation Area
+  // Private/NGO — named destination parks open to the public
+  "PPRK", // Private Park (public-access named recreation area)
+  "PROC", // Private Recreation / Open-access Conservation
+]);
+
+/** Generic ownership, management, or jurisdiction parcels → land_status (search-excluded). */
+const GENERIC_DES_TP = new Set<string>([
+  // BLM / USFS generic management designations
+  "PUB",  // Public Land (generic BLM multiple-use)
+  "ND",   // Not Designated / no special designation
+  "UNK",  // Unknown / unclassified
+  "RMA",  // Resource Management Area (generic)
+  "SRMA", // Special Recreation Management Area
+  "LRMA", // Local Recreation Management Area
+  // Federal agency overlay / admin units
+  "MIL",  // Military
+  "MIT",  // Military Installation / Test Range
+  "FOTH", // Federal Other (USBR, TVA, USACE generic parcels)
+  "HCA",  // Hardwood Conservation Area / Habitat Conservation Area (overlay)
+  "PHCA", // Private Hardwood / Habitat Conservation Area
+  "SHCA", // State Hardwood / Habitat Conservation Area
+  "LHCA", // Local Hardwood / Habitat Conservation Area
+  // State generic
+  "SCA",  // State Conservation Area (generic state land)
+  "SOTH", // State Other
+  "PAGR", // Private Agricultural Easement / Working Lands
+  // Private / NGO conservation (no dispersed camping; not destination-searchable)
+  "PCON", // Private Conservation (NGO — Nature Conservancy, land trusts, etc.)
+  "PFOR", // Private Forest
+  "POTH", // Private Other
+  "PRAN", // Private Ranch / Working Lands
+  // Local / regional (parks, rec, open space — not dispersed-camping land)
+  "LP",   // Local Park
+  "LREC", // Local Recreation Area
+  "LOTH", // Local Other
+  "LCA",  // Local Conservation Area
+  // Tribal (trust land — restricted by definition)
+  "TRIBL", // Tribal / American Indian trust or fee land
+  // Easements / special designations
+  "CONE", // Conservation Easement (overlay, not a standalone place)
 ]);
 
 function trimOrNull(v: unknown): string | null {
@@ -107,7 +166,14 @@ function trimOrNull(v: unknown): string | null {
 }
 
 function inferCategory(desTp: string | null): "public_land" | "land_status" {
-  if (desTp && NAMED_DES_TP.has(desTp.toUpperCase())) return "public_land";
+  if (!desTp) return "land_status";
+  const code = desTp.toUpperCase();
+  if (NAMED_DES_TP.has(code)) return "public_land";
+  if (GENERIC_DES_TP.has(code)) return "land_status";
+  // Novel/malformed code not in either set. Log it so it's never silent, then
+  // default to land_status (search-excluded) — safer than promoting unknown
+  // codes into search. Surface in the ingestion run log for classification.
+  logger.warn({ des_tp: desTp }, "padus: unrecognized des_tp — defaulting to land_status; add to NAMED_DES_TP or GENERIC_DES_TP");
   return "land_status";
 }
 
@@ -138,6 +204,9 @@ function deriveDispersedCamping(p: {
     if (type === "STAT" && des === "SP") return "likely_restricted"; // state parks
     if (type === "PVT") return "likely_restricted"; // private land
     if (type === "LOC") return "likely_restricted"; // local/city parks
+    if (type === "NGO") return "likely_restricted"; // NGO/conservancy — no dispersed camping
+    if (type === "DIST") return "likely_restricted"; // special-district parks
+    if (type === "TRIB") return "likely_restricted"; // tribal land — restricted by definition (no permission assumed)
     return "unknown";
   })();
   return { dispersed_camping: flag, verify_locally: true, mvum_corridor: null };
