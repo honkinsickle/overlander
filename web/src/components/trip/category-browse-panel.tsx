@@ -6,7 +6,6 @@ import { type Category } from "@/components/primitives/detail-card";
 import {
   type BrowsePlace,
   type SlideCategoryKey,
-  TRIP_CATEGORY_TO_SLIDE,
 } from "@/lib/trip-browse/places";
 import {
   browsePlaceToWaypoint,
@@ -20,6 +19,7 @@ import {
   browseCardPalette,
   browseCategoryToSlide,
   slideCategoryToBrowseCategory,
+  toBrowseCardCategory,
 } from "@/lib/trip-browse/palette";
 import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
 
@@ -114,9 +114,8 @@ function initialFiltersFor(
   category: Category | undefined,
 ): Set<BrowseCardCategory> {
   if (!category) return new Set();
-  const slideKey = TRIP_CATEGORY_TO_SLIDE[category];
-  if (!slideKey) return new Set();
-  return new Set([slideCategoryToBrowseCategory(slideKey)]);
+  const c = toBrowseCardCategory(category);
+  return c ? new Set([c]) : new Set();
 }
 
 export function CategoryBrowsePanel({

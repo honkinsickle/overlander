@@ -1,3 +1,4 @@
+import type { Category } from "@/components/primitives/detail-card";
 import type { SlideCategoryKey } from "./places";
 
 // Browse Location Card v2 palette — Paper-aligned tokens for the new
@@ -100,6 +101,31 @@ export function browseCategoryToSlide(
   if (c === "hotel") return "overnight";
   if (c === "urban") return null;
   return c;
+}
+
+/** Domain `Category` → card palette key. Returns null for members with
+ *  no card home (attraction/neutral). Exhaustive switch, no default — so
+ *  adding a `Category` member is a compile error, not a silent drop.
+ *  `hotel` never arises here: it has no `Category` member and is reached
+ *  only via the `overnight → hotel` slide path. */
+export function toBrowseCardCategory(c: Category): BrowseCardCategory | null {
+  switch (c) {
+    case "camping":
+      return "camping";
+    case "urban":
+      return "urban";
+    case "mountain":
+      return "scenic";
+    case "food":
+      return "food";
+    case "oddity":
+      return "oddity";
+    case "fuel":
+      return "fuel";
+    case "attraction":
+    case "neutral":
+      return null;
+  }
 }
 
 /** The 7 chips, in the order the Paper filter row renders them. */
