@@ -1102,3 +1102,25 @@ items (cwd + `--test`), the `ingest:manual` env-file item, and 4a of the
 The `geometry_polygon promotion` item shipped separately in migration
 `20260601020000` and has been removed from the open items above.
 
+
+### PAD-US Wilderness is a HARD pre-prod gate — Fee-first ships without it (2026-06-02)
+
+The `padus` land-status source (Phase 1) ingests the PAD-US **Fee Managers**
+layer only. The Fee class EXCLUDES Wilderness (`des_tp='WA'` lives in PAD-US's
+separate Designation feature class, whose endpoint was not resolvable during the
+Phase 1 build). Consequence under Fee-first: a point inside a Wilderness inherits
+the enclosing forest's `dispersed_camping='likely_allowed'` — a wrong "camp here",
+the one safety-critical failure mode. Harmless on test (Fee validates
+tuple/dissolve/category-split/containment/dispersed for everything but
+Wilderness). **Must NOT ship to prod without both:**
+
+1. Wiring the PAD-US Designation endpoint (find via the USGS PAD-US web-services
+   page item / the test project's PAD-US web map).
+2. Proving a `WA` record carries `likely_restricted` AND **overrides** the
+   enclosing forest's `likely_allowed` at containment-resolution time
+   (restricted-beats-allowed when a point is `contained_in` multiple land-status
+   polygons — a new multi-parent resolution rule).
+
+`deriveDispersedCamping` in `padus.ts` already returns `likely_restricted` for
+`des_tp='WA'`; the missing pieces are the Designation endpoint + the multi-parent
+resolution rule. Wilderness records are additive (own tuples), no rework.
