@@ -22,18 +22,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { search, type SearchResult } from "@/lib/search";
+import { useUserLocation } from "@/lib/location/use-user-location";
 
-const JT_CENTER = { lat: 33.92, lng: -115.97 } as const;
 const DEBOUNCE_MS = 200;
 const LIMIT = 20;
 
 function formatDistanceKm(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`;
   return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
-}
-
-function formatCoord(value: number): string {
-  return value.toFixed(3);
 }
 
 export default function SearchPage(): React.ReactElement {
@@ -43,6 +39,26 @@ export default function SearchPage(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const reqIdRef = useRef(0);
+
+  // Reuse the app's existing geolocation hook (same one the trip map's
+  // user-location layer and Find Nearby use) — no parallel plumbing. It
+  // never auto-prompts; `request()` is wired to the "use my location"
+  // control in the header. `position` is [lng, lat] per the codebase.
+  const { status: locStatus, position, request: requestLocation } = useUserLocation();
+  const lat = position ? position[1] : null;
+  const lng = position ? position[0] : null;
+  const hasFix = position !== null;
+
+  // Snapshot the latest position so a query reads it at fire time. The
+  // search effect depends on `hasFix` (not lat/lng): it re-fires exactly
+  // once when a fix first arrives — re-ranking the current query so the
+  // results match the "ranked by proximity" header — and stays stable as
+  // position updates tick to tick while watching, so movement doesn't
+  // continuously re-rank.
+  const positionRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   useEffect(() => {
     const q = query.trim();
@@ -57,7 +73,12 @@ export default function SearchPage(): React.ReactElement {
       setLoading(true);
       setError(null);
       const start = performance.now();
-      search({ query: q, center: JT_CENTER, limit: LIMIT })
+      // Snapshot the proximity center at fire time. When a live position is
+      // available, rank by proximity; otherwise pass no center so search()
+      // drops the geo term (text match + prominence only). No fixed point.
+      const snapshot = positionRef.current;
+      const center = snapshot ? { lat: snapshot[1], lng: snapshot[0] } : undefined;
+      search({ query: q, center, limit: LIMIT })
         .then((r) => {
           // Drop responses that arrive after a newer request was issued.
           if (reqId !== reqIdRef.current) return;
@@ -74,7 +95,7 @@ export default function SearchPage(): React.ReactElement {
         });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, hasFix]);
 
   return (
     <main
@@ -118,10 +139,34 @@ export default function SearchPage(): React.ReactElement {
               color: "var(--text-muted)",
             }}
           >
-            Indexed corpus: Joshua Tree corridor.{" "}
-            <span style={{ fontFamily: "var(--ff-mono)" }}>
-              center {formatCoord(JT_CENTER.lat)},{formatCoord(JT_CENTER.lng)}
-            </span>
+            Federated POI corpus spanning the US and Canada.{" "}
+            {locStatus === "watching" && lat !== null && lng !== null ? (
+              <span style={{ fontFamily: "var(--ff-mono)" }}>
+                ranked by proximity to your location
+              </span>
+            ) : locStatus === "idle" ? (
+              <button
+                type="button"
+                onClick={requestLocation}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "inherit",
+                  color: "var(--amber)",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                use my location
+              </button>
+            ) : (
+              <span>
+                {locStatus === "denied"
+                  ? "location denied — ranked by text match + prominence"
+                  : "ranked by text match + prominence"}
+              </span>
+            )}
             .
           </p>
         </header>
@@ -148,7 +193,7 @@ export default function SearchPage(): React.ReactElement {
           spellCheck={false}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder='Try "campground", "Ryan", or "water"…'
+          placeholder='Try "campground", "national park", or "water"…'
           aria-label="Search query"
           style={{
             width: "100%",
