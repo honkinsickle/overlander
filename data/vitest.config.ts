@@ -10,6 +10,18 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 300_000,
     include: ["**/*.test.ts"],
+    // BELT: the destructive ER suites call reset_phase3a_test_state(), which
+    // DELETEs all master_place + place_match and UNLINKs source_records on
+    // whatever DB is targeted — a bare `npm run -w data test` once wiped the
+    // working corpus because these files load by default. Exclude them from the
+    // default run so routine tests never touch working data. Run them
+    // deliberately via `npm run -w data test:er` (which arms the reset and
+    // preflights that the test ref isn't the working ref).
+    exclude: [
+      "**/entity-resolution/phase3a.test.ts",
+      "**/entity-resolution/phase3b-federation.test.ts",
+      "**/entity-resolution/phase3b-containment.test.ts",
+    ],
     // pino-pretty has a known memory accumulation issue when stdio is
     // piped (e.g., npm scripts). NODE_ENV=production disables the
     // pino-pretty transport entirely. The data/package.json `test` script
