@@ -19,6 +19,7 @@
     "db:push-verify": "tsx --env-file=.env scripts/verify-migration.ts --push",
     "test:seed": "tsx --env-file=.env --env-file=.env.test scripts/seed-test-fixtures.ts",
     "test": "NODE_ENV=production vitest run",
+    "test:er": "tsx --env-file=.env --env-file=.env.test scripts/preflight-er-test.ts && ALLOW_DESTRUCTIVE_TEST_RESET=true NODE_ENV=production vitest run entity-resolution/phase3a.test.ts entity-resolution/phase3b-federation.test.ts entity-resolution/phase3b-containment.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

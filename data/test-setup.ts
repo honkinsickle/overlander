@@ -7,13 +7,17 @@
  *
  *   - Overrides SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY so every
  *     `getDb()` call in the test process points at the test project.
- *   - Sets ALLOW_DESTRUCTIVE_TEST_RESET=true, which the suite's own
- *     describe.skip check uses to gate destructive operations.
+ *
+ * BELT: this setup does NOT arm the destructive reset. Routing the
+ * client at the test project must not also unlock
+ * reset_phase3a_test_state(). ALLOW_DESTRUCTIVE_TEST_RESET is set ONLY
+ * by the explicit `npm run -w data test:er` opt-in, never here — so the
+ * destructive ER suites stay `describe.skip` under a routine test run
+ * (and they're excluded from the default run in vitest.config.ts too).
  *
  * If SUPABASE_TEST_* is missing (e.g. CI without a provisioned test
  * project, or a contributor who hasn't set up data/.env.test), the
- * setup leaves env alone and the suite-level guard skips all tests
- * with a clear warning.
+ * setup leaves env alone.
  *
  * Belt-and-suspenders: even with this override in place, the
  * reset_phase3a_test_state() RPC itself refuses unless a row exists
@@ -85,10 +89,12 @@ const testKey = process.env.SUPABASE_TEST_SERVICE_ROLE_KEY;
 if (testUrl !== undefined && testKey !== undefined && testUrl.length > 0 && testKey.length > 0) {
   process.env.SUPABASE_URL = testUrl;
   process.env.SUPABASE_SERVICE_ROLE_KEY = testKey;
-  process.env.ALLOW_DESTRUCTIVE_TEST_RESET = "true";
+  // BELT: do NOT auto-arm the destructive reset here. ALLOW_DESTRUCTIVE_TEST_RESET
+  // is set ONLY by the explicit `test:er` opt-in script, so a routine test run
+  // can never fire reset_phase3a_test_state().
   // eslint-disable-next-line no-console
   console.log(
-    "[test-setup] routed Supabase client at SUPABASE_TEST_URL; destructive reset allowed.",
+    "[test-setup] routed Supabase client at SUPABASE_TEST_URL.",
   );
 } else {
   // eslint-disable-next-line no-console
