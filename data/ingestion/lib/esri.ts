@@ -35,6 +35,115 @@ export interface EsriFetchOptions {
   userAgent: string;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Spatial filter — bbox envelope OR corridor buffer polygon
+// ──────────────────────────────────────────────────────────────────────
+//
+// Corridor-buffer clipping: the bbox envelope (a rectangle) over-pulls dense
+// layers (PAD-US, MVUM) far beyond the actual route. Filtering by the corridor
+// BUFFER POLYGON cuts that volume substantially. ESRI accepts an
+// esriGeometryPolygon as the spatial filter; it is too large for a GET query
+// string, so polygon filters are POSTed.
+
+/** ESRI polygon geometry JSON. Exterior ring MUST be clockwise (ESRI reads a
+ *  CCW outer ring as a hole → ~0 results). */
+export interface EsriPolygon {
+  rings: number[][][];
+  spatialReference: { wkid: number };
+}
+
+/** Spatial filter for an ESRI `/query`: either a bbox envelope or a polygon. */
+export type EsriSpatialFilter =
+  | { kind: "envelope"; bbox: BoundingBox }
+  | { kind: "polygon"; polygon: EsriPolygon };
+
+/** Wrap a bbox as an envelope filter. */
+export function envelopeFilter(bbox: BoundingBox): EsriSpatialFilter {
+  return { kind: "envelope", bbox };
+}
+
+/**
+ * Signed-area (shoelace) test: true if a linear ring is wound clockwise in
+ * ESRI/screen terms. Pure; used to orient rings for ESRI and unit-tested.
+ */
+export function ringIsClockwise(ring: ReadonlyArray<readonly number[]>): boolean {
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const a = ring[i];
+    const b = ring[i + 1];
+    sum += (b[0] - a[0]) * (b[1] + a[1]);
+  }
+  // Positive shoelace sum over (x2-x1)(y2+y1) ⇒ clockwise.
+  return sum > 0;
+}
+
+function reversedRing(ring: number[][]): number[][] {
+  return [...ring].reverse();
+}
+
+/**
+ * Build an ESRI polygon from a GeoJSON Polygon, enforcing ESRI ring winding:
+ * exterior ring CLOCKWISE, interior rings COUNTER-clockwise. The active
+ * corridor buffer arrives already CW from the `active_corridor_buffer_cw_geojson`
+ * RPC (ST_ForcePolygonCW); this is defense-in-depth so the JS path is correct
+ * (and testable) regardless of input winding.
+ */
+export function esriPolygonFromGeoJson(
+  geojson: { type?: string; coordinates?: unknown },
+  wkid = 4326,
+): EsriPolygon {
+  if (geojson?.type !== "Polygon" || !Array.isArray(geojson.coordinates)) {
+    throw new Error(`esriPolygonFromGeoJson: expected a GeoJSON Polygon, got ${String(geojson?.type)}`);
+  }
+  const rings = (geojson.coordinates as number[][][]).map((ring, idx) => {
+    const cw = ringIsClockwise(ring);
+    if (idx === 0) return cw ? ring : reversedRing(ring); // exterior → CW
+    return cw ? reversedRing(ring) : ring; // interior holes → CCW
+  });
+  return { rings, spatialReference: { wkid } };
+}
+
+/** Apply a spatial filter to an ESRI query param bag. Returns whether the
+ *  request must be POSTed (polygon geometry is too large for a GET). */
+function applySpatialFilter(params: URLSearchParams, filter: EsriSpatialFilter): { mustPost: boolean } {
+  params.set("spatialRel", "esriSpatialRelIntersects");
+  params.set("inSR", "4326");
+  if (filter.kind === "envelope") {
+    params.set("geometry", filter.bbox.join(","));
+    params.set("geometryType", "esriGeometryEnvelope");
+    return { mustPost: false };
+  }
+  params.set("geometry", JSON.stringify(filter.polygon));
+  params.set("geometryType", "esriGeometryPolygon");
+  return { mustPost: true };
+}
+
+/** Issue an ESRI `/query` request — GET for envelope, POST (form body) for a
+ *  polygon filter (too large for a query string). Returns the raw Response. */
+async function esriRequest(
+  serviceUrl: string,
+  params: URLSearchParams,
+  mustPost: boolean,
+  userAgent: string,
+): Promise<Response> {
+  if (mustPost) {
+    return fetch(`${serviceUrl}/query`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": userAgent,
+      },
+      body: params.toString(),
+    });
+  }
+  // GET for the envelope path — pass a URL object so callers/tests can read
+  // searchParams directly.
+  return fetch(new URL(`${serviceUrl}/query?${params.toString()}`), {
+    headers: { Accept: "application/json", "User-Agent": userAgent },
+  });
+}
+
 /**
  * Query an ESRI REST layer for all features intersecting `bbox`, merging
  * paginated GeoJSON pages.
@@ -50,7 +159,7 @@ export interface EsriFetchOptions {
  */
 export async function fetchEsriFeatures(
   serviceUrl: string,
-  bbox: BoundingBox,
+  filter: EsriSpatialFilter,
   opts: EsriFetchOptions,
 ): Promise<GeoJsonFeature[]> {
   const { where, outFields = "*", pageSize = 1000, label, userAgent } = opts;
@@ -58,22 +167,17 @@ export async function fetchEsriFeatures(
   let offset = 0;
 
   while (true) {
-    const url = new URL(`${serviceUrl}/query`);
-    url.searchParams.set("where", where);
-    url.searchParams.set("geometry", bbox.join(","));
-    url.searchParams.set("geometryType", "esriGeometryEnvelope");
-    url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-    url.searchParams.set("inSR", "4326");
-    url.searchParams.set("outSR", "4326");
-    url.searchParams.set("outFields", outFields);
-    url.searchParams.set("f", "geojson");
-    url.searchParams.set("resultOffset", String(offset));
-    url.searchParams.set("resultRecordCount", String(pageSize));
+    const params = new URLSearchParams();
+    params.set("where", where);
+    const { mustPost } = applySpatialFilter(params, filter);
+    params.set("outSR", "4326");
+    params.set("outFields", outFields);
+    params.set("f", "geojson");
+    params.set("resultOffset", String(offset));
+    params.set("resultRecordCount", String(pageSize));
 
     const page = await defaultRetry(async () => {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", "User-Agent": userAgent },
-      });
+      const res = await esriRequest(serviceUrl, params, mustPost, userAgent);
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`${label} ${res.status}: ${body.slice(0, 200)}`);
@@ -113,22 +217,17 @@ export async function fetchEsriFeatures(
  */
 export async function fetchEsriCount(
   serviceUrl: string,
-  bbox: BoundingBox,
+  filter: EsriSpatialFilter,
   opts: { where: string; label: string; userAgent: string },
 ): Promise<number> {
-  const url = new URL(`${serviceUrl}/query`);
-  url.searchParams.set("where", opts.where);
-  url.searchParams.set("geometry", bbox.join(","));
-  url.searchParams.set("geometryType", "esriGeometryEnvelope");
-  url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-  url.searchParams.set("inSR", "4326");
-  url.searchParams.set("returnCountOnly", "true");
-  url.searchParams.set("f", "json");
+  const params = new URLSearchParams();
+  params.set("where", opts.where);
+  const { mustPost } = applySpatialFilter(params, filter);
+  params.set("returnCountOnly", "true");
+  params.set("f", "json");
 
   const json = await defaultRetry(async () => {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": opts.userAgent },
-    });
+    const res = await esriRequest(serviceUrl, params, mustPost, opts.userAgent);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`${opts.label} count ${res.status}: ${body.slice(0, 200)}`);

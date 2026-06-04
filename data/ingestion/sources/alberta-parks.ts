@@ -66,7 +66,7 @@
 import { z } from "zod";
 
 import { upsertSourceRecord } from "../lib/db.ts";
-import { fetchEsriFeatures } from "../lib/esri.ts";
+import { envelopeFilter, fetchEsriFeatures } from "../lib/esri.ts";
 import { bboxCentroid, extractPolygon, type GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { limits } from "../lib/rate-limit.ts";
@@ -331,7 +331,7 @@ export const ingest: IngestFn = async (
   const dryRun = opts.dryRun ?? false;
 
   await limit(async () => {
-    const features = await fetchEsriFeatures(ENDPOINT, bbox, {
+    const features = await fetchEsriFeatures(ENDPOINT, envelopeFilter(bbox), {
       where: TYPE_WHERE,
       label: SOURCE_ID,
       userAgent: USER_AGENT,
