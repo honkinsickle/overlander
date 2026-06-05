@@ -59,6 +59,11 @@ export function LocationBrowseCard({
   const ctaLabel =
     category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`;
   const status = statusForCategory(category);
+  // Federated (master_place) rows carry real provenance pills (incl. the
+  // "MVUM corridor" status pill) and a "Federated from <sources>" mention,
+  // but no photo and no review stats. Surface those instead of the
+  // hardcoded category status + fabricated rating that live cards use.
+  const isFederated = place.source === "master_place";
   // stats.cost.eta is "to your day. You'd arrive at {anchor} at {time}".
   // The v2 card surfaces just the "You'd arrive..." portion.
   const arrivesAt = stats.cost.eta.replace(/^to your day\.\s*/i, "");
@@ -82,7 +87,11 @@ export function LocationBrowseCard({
       >
         <div style={{ flexShrink: 0 }}>
           <Title text={place.title} color={palette.titleColor} />
-          <StatusRow status={status} rating={stats.rating} />
+          {isFederated ? (
+            <FederatedMeta pills={place.pills} mention={place.mention} />
+          ) : (
+            <StatusRow status={status} rating={stats.rating} />
+          )}
         </div>
         <Divider marginBottom={9} />
         <div
@@ -249,6 +258,63 @@ function StatusRow({
           {rating.count}
         </span>
       </div>
+    </div>
+  );
+}
+
+/** Provenance row for federated (master_place) cards. Renders the place's
+ *  pills — the legality/category chips like "Dispersed Camping" and the
+ *  highlighted "MVUM corridor" status pill — plus the "Federated from
+ *  <sources>" mention. Replaces the live card's StatusRow (hardcoded
+ *  category status + fabricated star rating), neither of which applies to
+ *  a federated row that has empty stats[]. */
+function FederatedMeta({
+  pills,
+  mention,
+}: {
+  pills: { label: string; status?: boolean }[];
+  mention: { primary: string; secondary: string };
+}) {
+  return (
+    <div className="flex flex-col" style={{ marginTop: 6, gap: 6 }}>
+      {pills.length > 0 && (
+        <div className="flex flex-wrap items-center" style={{ gap: 6 }}>
+          {pills.map((p, i) => (
+            <span
+              key={`${p.label}-${i}`}
+              className="inline-flex items-center"
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontSize: 11,
+                lineHeight: "14px",
+                letterSpacing: "0.04em",
+                padding: "2px 7px",
+                borderRadius: 4,
+                color: p.status ? "#0F1410" : "#A8B0B6",
+                backgroundColor: p.status ? "#6BE26F" : "#FFFFFF14",
+                border: p.status ? "none" : "1px solid #FFFFFF1F",
+                fontWeight: p.status ? 700 : 400,
+              }}
+            >
+              {p.label}
+            </span>
+          ))}
+        </div>
+      )}
+      {mention.secondary && (
+        <span
+          className="truncate"
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontWeight: 400,
+            fontSize: 12,
+            lineHeight: "16px",
+            color: "#888888",
+          }}
+        >
+          {mention.primary} {mention.secondary}
+        </span>
+      )}
     </div>
   );
 }
