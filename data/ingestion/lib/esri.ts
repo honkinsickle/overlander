@@ -145,6 +145,36 @@ async function esriRequest(
 }
 
 /**
+ * Resolve a layer's Object ID field from its service metadata
+ * (`{serviceUrl}?f=json` exposes `objectIdField`). Used as the stable
+ * `orderByFields` so `resultOffset` pages are deterministic and
+ * non-overlapping — without a stable sort, ESRI may return overlapping pages
+ * and duplicate features (observed: ~35,618 fetched vs ~10,123 real). Falls
+ * back to "OBJECTID" (the ArcGIS default) if metadata is unavailable.
+ */
+export async function resolveObjectIdField(
+  serviceUrl: string,
+  userAgent: string,
+  label: string,
+): Promise<string> {
+  // Best-effort, single attempt: OBJECTID is the near-universal ArcGIS default,
+  // so a metadata miss is a safe fallback — not worth a retry storm.
+  try {
+    const res = await fetch(new URL(`${serviceUrl}?f=json`), {
+      headers: { Accept: "application/json", "User-Agent": userAgent },
+    });
+    if (!res.ok) throw new Error(`${label} metadata ${res.status}`);
+    const json = (await res.json()) as { objectIdField?: unknown };
+    return typeof json.objectIdField === "string" && json.objectIdField.length > 0
+      ? json.objectIdField
+      : "OBJECTID";
+  } catch {
+    // Metadata unavailable → fall back to the ArcGIS default OID field.
+    return "OBJECTID";
+  }
+}
+
+/**
  * Query an ESRI REST layer for all features intersecting `bbox`, merging
  * paginated GeoJSON pages.
  *
@@ -166,12 +196,16 @@ export async function fetchEsriFeatures(
   const features: GeoJsonFeature[] = [];
   let offset = 0;
 
+  // Stable sort key → deterministic, non-overlapping resultOffset pages.
+  const orderByField = await resolveObjectIdField(serviceUrl, userAgent, label);
+
   while (true) {
     const params = new URLSearchParams();
     params.set("where", where);
     const { mustPost } = applySpatialFilter(params, filter);
     params.set("outSR", "4326");
     params.set("outFields", outFields);
+    params.set("orderByFields", orderByField);
     params.set("f", "geojson");
     params.set("resultOffset", String(offset));
     params.set("resultRecordCount", String(pageSize));
