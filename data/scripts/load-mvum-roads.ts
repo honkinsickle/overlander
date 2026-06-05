@@ -30,8 +30,10 @@
 
 import { Command } from "commander";
 
-import { upsertMvumRoad } from "../ingestion/lib/db.ts";
+import { resolveCorridorFilter } from "../ingestion/lib/corridor.ts";
+import { batchUpsert } from "../ingestion/lib/db.ts";
 import { fetchEsriFeatures } from "../ingestion/lib/esri.ts";
+import { multiLineStringEwkt } from "../ingestion/lib/ewkt.ts";
 import type { GeoJsonFeature } from "../ingestion/lib/geojson.ts";
 import { parseBboxString } from "../ingestion/lib/geometry.ts";
 import { logger } from "../ingestion/lib/logger.ts";
@@ -115,14 +117,15 @@ async function main(): Promise<void> {
   const program = new Command();
   program
     .name("mvum:load")
-    .description("Load USFS MVUM open routes into mvum_roads for a corridor bbox")
-    .requiredOption("--bbox <w,s,e,n>", "corridor bbox: west,south,east,north")
+    .description("Load USFS MVUM open routes into mvum_roads (default: active corridor buffer)")
+    .option("--bbox <w,s,e,n>", "override: bbox envelope west,south,east,north (default: corridor buffer polygon)")
     .option("--dry-run", "fetch + group + log, but write nothing", false)
     .option("--confirm", "required when the target project is PRODUCTION", false)
     .parse(process.argv);
 
-  const opts = program.opts<{ bbox: string; dryRun: boolean; confirm: boolean }>();
-  const bbox = parseBboxString(opts.bbox);
+  const opts = program.opts<{ bbox?: string; dryRun: boolean; confirm: boolean }>();
+  // Default to the active corridor BUFFER POLYGON; --bbox is an explicit override.
+  const filter = await resolveCorridorFilter(opts.bbox ? parseBboxString(opts.bbox) : null);
   const ref = targetRef();
 
   if (ref === PROD_REF && !opts.confirm) {
@@ -130,13 +133,13 @@ async function main(): Promise<void> {
       `Target is PRODUCTION (${ref}). Re-run with --confirm to load MVUM into prod.`,
     );
   }
-  logger.info({ bbox, ref, dryRun: opts.dryRun }, "mvum:load: start");
+  logger.info({ filter: filter.kind, ref, dryRun: opts.dryRun }, "mvum:load: start");
 
   const limit = limits.usfs; // same host (apps.fs.usda.gov); reuse the USFS limiter.
   if (!limit) throw new Error("mvum:load: rate limiter missing — check lib/rate-limit.ts");
 
   const features = await limit(() =>
-    fetchEsriFeatures(ENDPOINT, bbox, {
+    fetchEsriFeatures(ENDPOINT, filter, {
       where: "1=1",
       label: "mvum",
       userAgent: USER_AGENT,
@@ -160,20 +163,29 @@ async function main(): Promise<void> {
   if (opts.dryRun) {
     logger.info(stats, "mvum:load: dry-run complete (no writes)");
   } else {
-    for (const [rteCn, group] of routes) {
-      try {
-        await upsertMvumRoad(rteCn, group.geojson);
-        stats.upserted += 1;
-      } catch (err) {
-        logger.error({ err, rteCn }, "mvum:load: upsert failed");
-        stats.errors += 1;
-      }
+    // Build batched rows (geom as EWKT MultiLineString), then FAIL-LOUD upsert:
+    // a chunk that fails after retries throws → non-zero exit, not a silent drop.
+    const nowIso = new Date().toISOString();
+    const rows = [...routes.entries()].map(([rteCn, group]) => ({
+      rte_cn: rteCn,
+      geom: multiLineStringEwkt(group.geojson.coordinates),
+      loaded_at: nowIso,
+    }));
+    const { written } = await batchUpsert({
+      table: "mvum_roads",
+      rows,
+      onConflict: "rte_cn",
+      label: "mvum:load",
+    });
+    stats.upserted = written;
+    if (written !== routes.size) {
+      throw new Error(`mvum:load: wrote ${written} of ${routes.size} routes`);
     }
     logger.info(stats, "mvum:load: complete");
   }
 
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ ref, bbox, dryRun: opts.dryRun, ...stats }, null, 2));
+  console.log(JSON.stringify({ ref, filter: filter.kind, dryRun: opts.dryRun, ...stats }, null, 2));
   process.exit(stats.errors > 0 ? 1 : 0);
 }
 

@@ -27,8 +27,10 @@
 
 import { z } from "zod";
 
-import { upsertSourceRecord } from "../lib/db.ts";
+import { batchUpsert } from "../lib/db.ts";
+import { resolveCorridorFilter } from "../lib/corridor.ts";
 import { fetchEsriFeatures } from "../lib/esri.ts";
+import { pointEwkt } from "../lib/ewkt.ts";
 import type { GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
@@ -138,63 +140,55 @@ function normalize(props: RecOppProps, name: string): Record<string, unknown> {
   };
 }
 
-type PersistOutcome = "inserted" | "skipped" | "error";
-
-async function persist(feature: GeoJsonFeature, dryRun: boolean): Promise<PersistOutcome> {
+/**
+ * Build a source_record upsert row from one feature, or null to skip
+ * (schema mismatch / non-dispersed / no geometry / no key). Geometry is
+ * serialized to EWKT for client-side batched upsert (see ewkt.ts). Pure
+ * except for skip logging — no DB writes here.
+ */
+function buildRow(feature: GeoJsonFeature): Record<string, unknown> | null {
   const parsed = RecOppPropsSchema.safeParse(feature.properties);
   if (!parsed.success) {
     logger.warn({ err: parsed.error.flatten() }, "usfs: props schema mismatch — skipped");
-    return "skipped";
+    return null;
   }
   const props = parsed.data;
   // Defensive: the where clause already filters, but never persist a
   // non-dispersed row even if the service returns one.
-  if (trimOrNull(props.markeractivity) !== "Dispersed Camping") return "skipped";
+  if (trimOrNull(props.markeractivity) !== "Dispersed Camping") return null;
 
   const point = extractPoint(feature.geometry, props);
-  if (!point) return "skipped";
+  if (!point) return null;
 
   const recareaid = props.recareaid;
   if (recareaid === null || recareaid === undefined || String(recareaid).trim() === "") {
     logger.warn({ name: props.recareaname }, "usfs: dispersed row missing recareaid — skipped");
-    return "skipped";
+    return null;
   }
   const externalId = `usfs:recarea:${recareaid}`;
   const name = trimOrNull(props.recareaname) ?? `USFS dispersed camping ${recareaid}`;
 
-  if (dryRun) {
-    logger.debug({ externalId, name }, "usfs: dry-run dispersed");
-    return "inserted";
-  }
-  try {
-    await upsertSourceRecord({
-      sourceId: SOURCE_ID,
-      externalId,
-      name,
-      inferredCategory: "dispersed_camping",
-      point,
-      rawPayload: { props, fetched_at: new Date().toISOString() },
-      normalizedPayload: normalize(props, name),
-      sourceQualityScore: SOURCE_QUALITY_SCORE,
-    });
-    return "inserted";
-  } catch (err) {
-    logger.error({ err, externalId }, "usfs: dispersed upsert failed");
-    return "error";
-  }
+  return {
+    source_id: SOURCE_ID,
+    external_id: externalId,
+    name,
+    inferred_category: "dispersed_camping",
+    geometry: pointEwkt(point),
+    raw_payload: { props, fetched_at: new Date().toISOString() },
+    normalized_payload: normalize(props, name),
+    source_quality_score: SOURCE_QUALITY_SCORE,
+    fetch_timestamp: new Date().toISOString(),
+  };
 }
 
 export const ingest: IngestFn = async (
   opts: IngestOptions,
 ): Promise<IngestResult> => {
   const startedAt = Date.now();
-  const bbox = opts.bbox;
-  if (!bbox) {
-    throw new Error(
-      "usfs: --bbox is required. EDW Recreation Opportunities is queried by geographic envelope.",
-    );
-  }
-  logger.info({ bbox }, "usfs: ingest start (dispersed camping only)");
+  // Default to the active corridor BUFFER POLYGON; --bbox is an explicit
+  // override/fallback when no corridor is active.
+  const filter = await resolveCorridorFilter(opts.bbox);
+  logger.info({ filter: filter.kind }, "usfs: ingest start (dispersed camping only)");
 
   const stats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
   const limit = limits.usfs;
@@ -202,19 +196,42 @@ export const ingest: IngestFn = async (
   const dryRun = opts.dryRun ?? false;
 
   await limit(async () => {
-    const features = await fetchEsriFeatures(ENDPOINT, bbox, {
+    const features = await fetchEsriFeatures(ENDPOINT, filter, {
       where: DISPERSED_WHERE,
       label: "usfs.dispersed",
       userAgent: USER_AGENT,
     });
     stats.fetched += features.length;
     logger.info({ fetched: features.length }, "usfs: dispersed features fetched");
+
+    // Build rows (skips are non-writes), then batch-upsert FAIL-LOUD: a chunk
+    // that fails after retries throws → the run errors instead of silently
+    // dropping rows.
+    const rows: Record<string, unknown>[] = [];
     for (const feature of features) {
-      const outcome = await persist(feature, dryRun);
-      if (outcome === "inserted") stats.inserted += 1;
-      else if (outcome === "skipped") stats.skipped += 1;
-      else stats.errors += 1;
+      const row = buildRow(feature);
+      if (row) rows.push(row);
+      else stats.skipped += 1;
     }
+
+    if (dryRun) {
+      logger.info({ wouldWrite: rows.length, skipped: stats.skipped }, "usfs: dry-run (no writes)");
+      stats.inserted = rows.length;
+      return;
+    }
+
+    const { written } = await batchUpsert({
+      table: "source_record",
+      rows,
+      onConflict: "source_id,external_id",
+      label: "usfs.dispersed",
+    });
+    stats.inserted = written;
+    if (written !== rows.length) {
+      // batchUpsert already throws on shortfall; assert here too.
+      throw new Error(`usfs: wrote ${written} of ${rows.length} prepared rows`);
+    }
+    logger.info({ fetched: stats.fetched, skipped: stats.skipped, written }, "usfs: write complete");
   });
 
   const duration_ms = Date.now() - startedAt;

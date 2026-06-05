@@ -15,6 +15,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "./logger.ts";
+import { defaultRetry } from "./retry.ts";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -94,6 +95,76 @@ export async function upsertMvumRoad(rteCn: string, geojson: unknown): Promise<s
     throw error;
   }
   return data as string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Batched, fail-loud writes
+// ──────────────────────────────────────────────────────────────────────
+
+/** Split an array into fixed-size chunks. Pure; unit-tested. */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  if (size <= 0) throw new Error("chunk: size must be > 0");
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+export interface BatchUpsertOptions {
+  /** Target table, e.g. "source_record" or "mvum_roads". */
+  table: string;
+  /** Rows to upsert (geometry columns serialized to EWKT — see ewkt.ts). */
+  rows: ReadonlyArray<Record<string, unknown>>;
+  /** PostgREST conflict target, e.g. "source_id,external_id" or "rte_cn". */
+  onConflict: string;
+  /** Chunk size. Default 500. */
+  chunkSize?: number;
+  /** Label for logs / errors. */
+  label: string;
+  /**
+   * Retry wrapper. Defaults to defaultRetry (5 retries, 1s→16s backoff).
+   * Injectable so tests can pass a no-retry passthrough.
+   */
+  retry?: <T>(fn: () => Promise<T>, label?: string) => Promise<T>;
+  /** Supabase client. Defaults to the shared getDb() client; injectable for tests. */
+  db?: SupabaseClient;
+}
+
+export interface BatchUpsertResult {
+  written: number;
+  chunks: number;
+}
+
+/**
+ * Chunked multi-row upsert with retry-on-transient and FAIL-LOUD semantics.
+ *
+ * Replaces the one-row-per-call write pattern (which both overwhelmed small
+ * instances and, on a transient blip, silently dropped rows via catch-and-
+ * continue). Here: each chunk is retried; if a chunk still fails after retries,
+ * this THROWS — the caller must exit non-zero rather than continue. On success
+ * it asserts `written === rows.length` so a partial write can never look clean.
+ */
+export async function batchUpsert(opts: BatchUpsertOptions): Promise<BatchUpsertResult> {
+  const { table, rows, onConflict, chunkSize = 500, label, retry = defaultRetry } = opts;
+  if (rows.length === 0) return { written: 0, chunks: 0 };
+  const db = opts.db ?? getDb();
+  const chunks = chunk(rows, chunkSize);
+  let written = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const batch = chunks[i];
+    await retry(async () => {
+      const { error } = await db.from(table).upsert(batch as Record<string, unknown>[], { onConflict });
+      if (error) {
+        throw new Error(`${label}: batch ${i + 1}/${chunks.length} upsert failed: ${error.message}`);
+      }
+    }, `${label}.batch`);
+    written += batch.length;
+    logger.debug({ label, batch: i + 1, of: chunks.length, written }, "batchUpsert: chunk written");
+  }
+  if (written !== rows.length) {
+    // Unreachable given the throw above, but make a silent shortfall impossible.
+    throw new Error(`${label}: wrote ${written} of ${rows.length} prepared rows — count mismatch`);
+  }
+  return { written, chunks: chunks.length };
 }
 
 /**

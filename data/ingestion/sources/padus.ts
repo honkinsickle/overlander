@@ -45,8 +45,10 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-import { upsertSourceRecord } from "../lib/db.ts";
+import { batchUpsert } from "../lib/db.ts";
+import { resolveCorridorFilter } from "../lib/corridor.ts";
 import { fetchEsriCount, fetchEsriFeatures } from "../lib/esri.ts";
+import { pointEwkt } from "../lib/ewkt.ts";
 import { bboxCentroid, extractPolygon, type GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
@@ -308,40 +310,32 @@ function normalizeUnit(
 
 // ───── Persistence ─────────────────────────────────────────────────────
 
-type PersistOutcome = "inserted" | "skipped" | "error";
-
-async function persistUnit(
-  unit: DissolvedUnit,
-  dryRun: boolean,
-): Promise<PersistOutcome> {
+/**
+ * Build a source_record upsert row from a dissolved unit, or null to skip
+ * (degenerate geometry with no centroid). The unit's MultiPolygon stays in
+ * normalized_payload.geometry_polygon; the source_record.geometry column is the
+ * centroid POINT (EWKT). No DB writes here.
+ */
+function buildRow(unit: DissolvedUnit): Record<string, unknown> | null {
   const multiPolygon = { type: "MultiPolygon" as const, coordinates: unit.members };
   const centroid = bboxCentroid({ type: "MultiPolygon", coordinates: unit.members });
-  if (!centroid) return "skipped";
+  if (!centroid) return null;
 
   const name = trimOrNull(unit.props.Unit_Nm) ?? `PAD-US ${unit.props.Des_Tp ?? "land"} unit`;
   const externalId = externalIdFor(unit.key);
   const inferredCategory = inferCategory(trimOrNull(unit.props.Des_Tp));
 
-  if (dryRun) {
-    logger.debug({ externalId, name, inferredCategory }, "padus: dry-run unit");
-    return "inserted";
-  }
-  try {
-    await upsertSourceRecord({
-      sourceId: SOURCE_ID,
-      externalId,
-      name,
-      inferredCategory,
-      point: centroid,
-      rawPayload: { props: unit.props, source_paids: [...unit.sourcePaids], fetched_at: new Date().toISOString() },
-      normalizedPayload: normalizeUnit(unit, name, multiPolygon),
-      sourceQualityScore: SOURCE_QUALITY_SCORE,
-    });
-    return "inserted";
-  } catch (err) {
-    logger.error({ err, externalId }, "padus: unit upsert failed");
-    return "error";
-  }
+  return {
+    source_id: SOURCE_ID,
+    external_id: externalId,
+    name,
+    inferred_category: inferredCategory,
+    geometry: pointEwkt(centroid),
+    raw_payload: { props: unit.props, source_paids: [...unit.sourcePaids], fetched_at: new Date().toISOString() },
+    normalized_payload: normalizeUnit(unit, name, multiPolygon),
+    source_quality_score: SOURCE_QUALITY_SCORE,
+    fetch_timestamp: new Date().toISOString(),
+  };
 }
 
 // ───── Entry ───────────────────────────────────────────────────────────
@@ -350,13 +344,9 @@ export const ingest: IngestFn = async (
   opts: IngestOptions,
 ): Promise<IngestResult> => {
   const startedAt = Date.now();
-  const bbox = opts.bbox;
-  if (!bbox) {
-    throw new Error(
-      "padus: --bbox is required. PAD-US is queried by geographic envelope; there is no unit-code filter.",
-    );
-  }
-  logger.info({ bbox }, "padus: ingest start");
+  // Default to the active corridor BUFFER POLYGON; --bbox is an explicit override.
+  const filter = await resolveCorridorFilter(opts.bbox);
+  logger.info({ filter: filter.kind }, "padus: ingest start");
 
   const stats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
   const limit = limits.padus;
@@ -365,14 +355,14 @@ export const ingest: IngestFn = async (
 
   await limit(async () => {
     // Pre-flight count — size the corridor before pulling geometry.
-    const count = await fetchEsriCount(ENDPOINTS.fee, bbox, {
+    const count = await fetchEsriCount(ENDPOINTS.fee, filter, {
       where: "1=1",
       label: "padus.fee",
       userAgent: USER_AGENT,
     });
     logger.info({ count }, "padus: fee feature count (pre-flight)");
 
-    const features = await fetchEsriFeatures(ENDPOINTS.fee, bbox, {
+    const features = await fetchEsriFeatures(ENDPOINTS.fee, filter, {
       where: "1=1",
       label: "padus.fee",
       userAgent: USER_AGENT,
@@ -384,12 +374,32 @@ export const ingest: IngestFn = async (
       { features: features.length, units: units.length },
       "padus: dissolved fee shards into units",
     );
+
+    // Build rows (skips are non-writes), then batch-upsert FAIL-LOUD.
+    const rows: Record<string, unknown>[] = [];
     for (const unit of units) {
-      const outcome = await persistUnit(unit, dryRun);
-      if (outcome === "inserted") stats.inserted += 1;
-      else if (outcome === "skipped") stats.skipped += 1;
-      else stats.errors += 1;
+      const row = buildRow(unit);
+      if (row) rows.push(row);
+      else stats.skipped += 1;
     }
+
+    if (dryRun) {
+      logger.info({ wouldWrite: rows.length, skipped: stats.skipped }, "padus: dry-run (no writes)");
+      stats.inserted = rows.length;
+      return;
+    }
+
+    const { written } = await batchUpsert({
+      table: "source_record",
+      rows,
+      onConflict: "source_id,external_id",
+      label: "padus.fee",
+    });
+    stats.inserted = written;
+    if (written !== rows.length) {
+      throw new Error(`padus: wrote ${written} of ${rows.length} prepared rows`);
+    }
+    logger.info({ fetched: stats.fetched, skipped: stats.skipped, written }, "padus: write complete");
   });
 
   const duration_ms = Date.now() - startedAt;

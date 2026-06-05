@@ -39,7 +39,7 @@
 import { z } from "zod";
 
 import { upsertSourceRecord } from "../lib/db.ts";
-import { fetchEsriFeatures } from "../lib/esri.ts";
+import { envelopeFilter, fetchEsriFeatures } from "../lib/esri.ts";
 import { bboxCentroid, extractPolygon, type GeoJsonFeature } from "../lib/geojson.ts";
 import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
@@ -504,7 +504,7 @@ export const ingest: IngestFn = async (
 
   await Promise.all([
     limit(async () => {
-      const features = await fetchEsriFeatures(ENDPOINTS.boundaries, bbox, {
+      const features = await fetchEsriFeatures(ENDPOINTS.boundaries, envelopeFilter(bbox), {
         where: "1=1",
         label: "parks_canada.boundaries",
         userAgent: USER_AGENT,
@@ -522,7 +522,7 @@ export const ingest: IngestFn = async (
       }
     }),
     limit(async () => {
-      const features = await fetchEsriFeatures(ENDPOINTS.accommodation, bbox, {
+      const features = await fetchEsriFeatures(ENDPOINTS.accommodation, envelopeFilter(bbox), {
         where: "1=1",
         label: "parks_canada.accommodation",
         userAgent: USER_AGENT,
@@ -540,7 +540,7 @@ export const ingest: IngestFn = async (
       }
     }),
     limit(async () => {
-      const features = await fetchEsriFeatures(ENDPOINTS.interestPoints, bbox, {
+      const features = await fetchEsriFeatures(ENDPOINTS.interestPoints, envelopeFilter(bbox), {
         where: "1=1",
         label: "parks_canada.interest_points",
         userAgent: USER_AGENT,

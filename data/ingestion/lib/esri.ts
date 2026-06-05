@@ -35,45 +35,223 @@ export interface EsriFetchOptions {
   userAgent: string;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Spatial filter — bbox envelope OR corridor buffer polygon
+// ──────────────────────────────────────────────────────────────────────
+//
+// Corridor-buffer clipping: the bbox envelope (a rectangle) over-pulls dense
+// layers (PAD-US, MVUM) far beyond the actual route. Filtering by the corridor
+// BUFFER POLYGON cuts that volume substantially. ESRI accepts an
+// esriGeometryPolygon as the spatial filter; it is too large for a GET query
+// string, so polygon filters are POSTed.
+
+/** ESRI polygon geometry JSON. Exterior ring MUST be clockwise (ESRI reads a
+ *  CCW outer ring as a hole → ~0 results). */
+export interface EsriPolygon {
+  rings: number[][][];
+  spatialReference: { wkid: number };
+}
+
+/** Spatial filter for an ESRI `/query`: either a bbox envelope or a polygon. */
+export type EsriSpatialFilter =
+  | { kind: "envelope"; bbox: BoundingBox }
+  | { kind: "polygon"; polygon: EsriPolygon };
+
+/** Wrap a bbox as an envelope filter. */
+export function envelopeFilter(bbox: BoundingBox): EsriSpatialFilter {
+  return { kind: "envelope", bbox };
+}
+
 /**
- * Query an ESRI REST layer for all features intersecting `bbox`, merging
+ * Signed-area (shoelace) test: true if a linear ring is wound clockwise in
+ * ESRI/screen terms. Pure; used to orient rings for ESRI and unit-tested.
+ */
+export function ringIsClockwise(ring: ReadonlyArray<readonly number[]>): boolean {
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const a = ring[i];
+    const b = ring[i + 1];
+    sum += (b[0] - a[0]) * (b[1] + a[1]);
+  }
+  // Positive shoelace sum over (x2-x1)(y2+y1) ⇒ clockwise.
+  return sum > 0;
+}
+
+function reversedRing(ring: number[][]): number[][] {
+  return [...ring].reverse();
+}
+
+/**
+ * Build an ESRI polygon from a GeoJSON Polygon, enforcing ESRI ring winding:
+ * exterior ring CLOCKWISE, interior rings COUNTER-clockwise. The active
+ * corridor buffer arrives already CW from the `active_corridor_buffer_cw_geojson`
+ * RPC (ST_ForcePolygonCW); this is defense-in-depth so the JS path is correct
+ * (and testable) regardless of input winding.
+ */
+export function esriPolygonFromGeoJson(
+  geojson: { type?: string; coordinates?: unknown },
+  wkid = 4326,
+): EsriPolygon {
+  if (geojson?.type !== "Polygon" || !Array.isArray(geojson.coordinates)) {
+    throw new Error(`esriPolygonFromGeoJson: expected a GeoJSON Polygon, got ${String(geojson?.type)}`);
+  }
+  const rings = (geojson.coordinates as number[][][]).map((ring, idx) => {
+    const cw = ringIsClockwise(ring);
+    if (idx === 0) return cw ? ring : reversedRing(ring); // exterior → CW
+    return cw ? reversedRing(ring) : ring; // interior holes → CCW
+  });
+  return { rings, spatialReference: { wkid } };
+}
+
+/** Apply a spatial filter to an ESRI query param bag. Returns whether the
+ *  request must be POSTed (polygon geometry is too large for a GET). */
+function applySpatialFilter(params: URLSearchParams, filter: EsriSpatialFilter): { mustPost: boolean } {
+  params.set("spatialRel", "esriSpatialRelIntersects");
+  params.set("inSR", "4326");
+  if (filter.kind === "envelope") {
+    params.set("geometry", filter.bbox.join(","));
+    params.set("geometryType", "esriGeometryEnvelope");
+    return { mustPost: false };
+  }
+  params.set("geometry", JSON.stringify(filter.polygon));
+  params.set("geometryType", "esriGeometryPolygon");
+  return { mustPost: true };
+}
+
+/** Issue an ESRI `/query` request — GET for envelope, POST (form body) for a
+ *  polygon filter (too large for a query string). Returns the raw Response. */
+async function esriRequest(
+  serviceUrl: string,
+  params: URLSearchParams,
+  mustPost: boolean,
+  userAgent: string,
+): Promise<Response> {
+  if (mustPost) {
+    return fetch(`${serviceUrl}/query`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": userAgent,
+      },
+      body: params.toString(),
+    });
+  }
+  // GET for the envelope path — pass a URL object so callers/tests can read
+  // searchParams directly.
+  return fetch(new URL(`${serviceUrl}/query?${params.toString()}`), {
+    headers: { Accept: "application/json", "User-Agent": userAgent },
+  });
+}
+
+/**
+ * Resolve a layer's Object ID field from its service metadata
+ * (`{serviceUrl}?f=json`). Used as the stable `orderByFields` so `resultOffset`
+ * pages are deterministic and non-overlapping — without a CORRECT stable sort,
+ * ESRI returns overlapping pages and duplicate features (observed on EDW MVUM:
+ * ~35,618 fetched vs ~10,123 real). The field NAME is case-sensitive for
+ * orderByFields on some servers (fs.usda.gov's OID field is lowercase
+ * `objectid`, and a wrong-case `OBJECTID` is silently ignored), so resolve the
+ * exact name. Resolution order:
+ *   1. top-level `objectIdField` (modern services),
+ *   2. the `fields[]` entry of type `esriFieldTypeOID` (older services that
+ *      omit the top-level property — e.g. EDW),
+ *   3. fall back to "OBJECTID" (the ArcGIS default) if metadata is unavailable.
+ */
+export async function resolveObjectIdField(
+  serviceUrl: string,
+  userAgent: string,
+  label: string,
+): Promise<string> {
+  // Best-effort, single attempt: OBJECTID is the near-universal default, so a
+  // metadata miss is a safe fallback — not worth a retry storm.
+  try {
+    const res = await fetch(new URL(`${serviceUrl}?f=json`), {
+      headers: { Accept: "application/json", "User-Agent": userAgent },
+    });
+    if (!res.ok) throw new Error(`${label} metadata ${res.status}`);
+    const json = (await res.json()) as {
+      objectIdField?: unknown;
+      fields?: Array<{ name?: unknown; type?: unknown }>;
+    };
+    if (typeof json.objectIdField === "string" && json.objectIdField.length > 0) {
+      return json.objectIdField;
+    }
+    const oid = Array.isArray(json.fields)
+      ? json.fields.find((f) => f?.type === "esriFieldTypeOID")
+      : undefined;
+    if (oid && typeof oid.name === "string" && oid.name.length > 0) {
+      return oid.name;
+    }
+    return "OBJECTID";
+  } catch {
+    return "OBJECTID";
+  }
+}
+
+/** Read a feature's Object ID as a number (case-insensitive on the field name,
+ *  since GeoJSON property casing can differ from the metadata field name). */
+function readOid(feature: GeoJsonFeature, oidField: string): number | null {
+  const props = feature.properties as Record<string, unknown> | undefined;
+  if (!props) return null;
+  const target = oidField.toLowerCase();
+  for (const k of Object.keys(props)) {
+    if (k.toLowerCase() === target) {
+      const n = Number(props[k]);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Query an ESRI REST layer for all features intersecting `filter`, merging
  * paginated GeoJSON pages.
  *
- * Coercion: `inSR=4326` interprets the bbox as WGS84; `outSR=4326` forces
- * WGS84 output (layers native to 3857 / 3400 reproject server-side);
- * `f=geojson` bypasses ESRI JSON encoding. The ESRI Envelope is
- * xmin,ymin,xmax,ymax — matching the [W,S,E,N] BoundingBox tuple directly.
+ * Pagination uses OID **keyset cursoring** (`where <oid> > <lastMax> order by
+ * <oid>`), NOT `resultOffset`. The EDW layers apply a SIZE-based transfer
+ * limit — a page of large geometries comes back short with
+ * `exceededTransferLimit=true` — and under `resultOffset` those windows
+ * misalign so the same features repeat across pages (observed ~3.5x
+ * duplication on EDW MVUM, even with `orderByFields`). Keyset cursoring
+ * advances strictly past the last OID, so pages can neither overlap nor gap
+ * regardless of size caps. The OID field is resolved from layer metadata
+ * (`resolveObjectIdField`).
  *
- * Pagination terminates on a short page that did NOT also set
- * `exceededTransferLimit` (which would mean "more remain"); a zero-length
- * page always breaks as an infinite-loop guard.
+ * `inSR=4326` interprets coordinates as WGS84; `outSR=4326` forces WGS84
+ * output (3857/3400 layers reproject server-side); `f=geojson` bypasses ESRI
+ * JSON encoding.
  */
 export async function fetchEsriFeatures(
   serviceUrl: string,
-  bbox: BoundingBox,
+  filter: EsriSpatialFilter,
   opts: EsriFetchOptions,
 ): Promise<GeoJsonFeature[]> {
   const { where, outFields = "*", pageSize = 1000, label, userAgent } = opts;
+  const oidField = await resolveObjectIdField(serviceUrl, userAgent, label);
+  // The OID must be in the response so we can advance the keyset cursor.
+  const requestedFields =
+    outFields === "*" ||
+    outFields.split(",").map((s) => s.trim().toLowerCase()).includes(oidField.toLowerCase())
+      ? outFields
+      : `${outFields},${oidField}`;
+
   const features: GeoJsonFeature[] = [];
-  let offset = 0;
+  let lastOid: number | null = null;
 
   while (true) {
-    const url = new URL(`${serviceUrl}/query`);
-    url.searchParams.set("where", where);
-    url.searchParams.set("geometry", bbox.join(","));
-    url.searchParams.set("geometryType", "esriGeometryEnvelope");
-    url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-    url.searchParams.set("inSR", "4326");
-    url.searchParams.set("outSR", "4326");
-    url.searchParams.set("outFields", outFields);
-    url.searchParams.set("f", "geojson");
-    url.searchParams.set("resultOffset", String(offset));
-    url.searchParams.set("resultRecordCount", String(pageSize));
+    const params = new URLSearchParams();
+    const pageWhere = lastOid === null ? where : `(${where}) AND ${oidField} > ${lastOid}`;
+    params.set("where", pageWhere);
+    const { mustPost } = applySpatialFilter(params, filter);
+    params.set("outSR", "4326");
+    params.set("outFields", requestedFields);
+    params.set("orderByFields", `${oidField} ASC`);
+    params.set("f", "geojson");
+    params.set("resultRecordCount", String(pageSize));
 
     const page = await defaultRetry(async () => {
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", "User-Agent": userAgent },
-      });
+      const res = await esriRequest(serviceUrl, params, mustPost, userAgent);
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`${label} ${res.status}: ${body.slice(0, 200)}`);
@@ -90,17 +268,32 @@ export async function fetchEsriFeatures(
       return parsed.data;
     }, `${label}.fetch`);
 
-    features.push(...page.features);
+    if (page.features.length === 0) break; // cursor exhausted
+
+    let maxOid: number | null = lastOid;
+    for (const f of page.features) {
+      features.push(f);
+      const oid = readOid(f, oidField);
+      if (oid !== null && (maxOid === null || oid > maxOid)) maxOid = oid;
+    }
     logger.debug(
-      { label, offset, pageSize: page.features.length, total: features.length },
+      { label, lastOid, pageSize: page.features.length, total: features.length },
       "esri: page",
     );
 
-    const shortPage = page.features.length < pageSize;
-    const transferLimitHit = page.exceededTransferLimit === true;
-    if (shortPage && !transferLimitHit) break;
-    offset += page.features.length;
-    if (page.features.length === 0) break; // safety: never infinite-loop
+    // Cursor didn't advance (no readable OID this page) → keyset can't continue.
+    // Break loudly rather than loop forever or silently truncate undetected.
+    if (maxOid === null || maxOid === lastOid) {
+      logger.warn(
+        { label, oidField, lastOid, fetched: features.length },
+        "esri: keyset cursor could not advance (OID unreadable) — stopping pagination",
+      );
+      break;
+    }
+    lastOid = maxOid;
+
+    // A short page the server did NOT flag as size-capped is genuinely the last.
+    if (page.features.length < pageSize && page.exceededTransferLimit !== true) break;
   }
 
   return features;
@@ -113,22 +306,17 @@ export async function fetchEsriFeatures(
  */
 export async function fetchEsriCount(
   serviceUrl: string,
-  bbox: BoundingBox,
+  filter: EsriSpatialFilter,
   opts: { where: string; label: string; userAgent: string },
 ): Promise<number> {
-  const url = new URL(`${serviceUrl}/query`);
-  url.searchParams.set("where", opts.where);
-  url.searchParams.set("geometry", bbox.join(","));
-  url.searchParams.set("geometryType", "esriGeometryEnvelope");
-  url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
-  url.searchParams.set("inSR", "4326");
-  url.searchParams.set("returnCountOnly", "true");
-  url.searchParams.set("f", "json");
+  const params = new URLSearchParams();
+  params.set("where", opts.where);
+  const { mustPost } = applySpatialFilter(params, filter);
+  params.set("returnCountOnly", "true");
+  params.set("f", "json");
 
   const json = await defaultRetry(async () => {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": opts.userAgent },
-    });
+    const res = await esriRequest(serviceUrl, params, mustPost, opts.userAgent);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`${opts.label} count ${res.status}: ${body.slice(0, 200)}`);
