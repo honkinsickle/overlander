@@ -146,46 +146,81 @@ async function esriRequest(
 
 /**
  * Resolve a layer's Object ID field from its service metadata
- * (`{serviceUrl}?f=json` exposes `objectIdField`). Used as the stable
- * `orderByFields` so `resultOffset` pages are deterministic and
- * non-overlapping — without a stable sort, ESRI may return overlapping pages
- * and duplicate features (observed: ~35,618 fetched vs ~10,123 real). Falls
- * back to "OBJECTID" (the ArcGIS default) if metadata is unavailable.
+ * (`{serviceUrl}?f=json`). Used as the stable `orderByFields` so `resultOffset`
+ * pages are deterministic and non-overlapping — without a CORRECT stable sort,
+ * ESRI returns overlapping pages and duplicate features (observed on EDW MVUM:
+ * ~35,618 fetched vs ~10,123 real). The field NAME is case-sensitive for
+ * orderByFields on some servers (fs.usda.gov's OID field is lowercase
+ * `objectid`, and a wrong-case `OBJECTID` is silently ignored), so resolve the
+ * exact name. Resolution order:
+ *   1. top-level `objectIdField` (modern services),
+ *   2. the `fields[]` entry of type `esriFieldTypeOID` (older services that
+ *      omit the top-level property — e.g. EDW),
+ *   3. fall back to "OBJECTID" (the ArcGIS default) if metadata is unavailable.
  */
 export async function resolveObjectIdField(
   serviceUrl: string,
   userAgent: string,
   label: string,
 ): Promise<string> {
-  // Best-effort, single attempt: OBJECTID is the near-universal ArcGIS default,
-  // so a metadata miss is a safe fallback — not worth a retry storm.
+  // Best-effort, single attempt: OBJECTID is the near-universal default, so a
+  // metadata miss is a safe fallback — not worth a retry storm.
   try {
     const res = await fetch(new URL(`${serviceUrl}?f=json`), {
       headers: { Accept: "application/json", "User-Agent": userAgent },
     });
     if (!res.ok) throw new Error(`${label} metadata ${res.status}`);
-    const json = (await res.json()) as { objectIdField?: unknown };
-    return typeof json.objectIdField === "string" && json.objectIdField.length > 0
-      ? json.objectIdField
-      : "OBJECTID";
+    const json = (await res.json()) as {
+      objectIdField?: unknown;
+      fields?: Array<{ name?: unknown; type?: unknown }>;
+    };
+    if (typeof json.objectIdField === "string" && json.objectIdField.length > 0) {
+      return json.objectIdField;
+    }
+    const oid = Array.isArray(json.fields)
+      ? json.fields.find((f) => f?.type === "esriFieldTypeOID")
+      : undefined;
+    if (oid && typeof oid.name === "string" && oid.name.length > 0) {
+      return oid.name;
+    }
+    return "OBJECTID";
   } catch {
-    // Metadata unavailable → fall back to the ArcGIS default OID field.
     return "OBJECTID";
   }
 }
 
+/** Read a feature's Object ID as a number (case-insensitive on the field name,
+ *  since GeoJSON property casing can differ from the metadata field name). */
+function readOid(feature: GeoJsonFeature, oidField: string): number | null {
+  const props = feature.properties as Record<string, unknown> | undefined;
+  if (!props) return null;
+  const target = oidField.toLowerCase();
+  for (const k of Object.keys(props)) {
+    if (k.toLowerCase() === target) {
+      const n = Number(props[k]);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
+}
+
 /**
- * Query an ESRI REST layer for all features intersecting `bbox`, merging
+ * Query an ESRI REST layer for all features intersecting `filter`, merging
  * paginated GeoJSON pages.
  *
- * Coercion: `inSR=4326` interprets the bbox as WGS84; `outSR=4326` forces
- * WGS84 output (layers native to 3857 / 3400 reproject server-side);
- * `f=geojson` bypasses ESRI JSON encoding. The ESRI Envelope is
- * xmin,ymin,xmax,ymax — matching the [W,S,E,N] BoundingBox tuple directly.
+ * Pagination uses OID **keyset cursoring** (`where <oid> > <lastMax> order by
+ * <oid>`), NOT `resultOffset`. The EDW layers apply a SIZE-based transfer
+ * limit — a page of large geometries comes back short with
+ * `exceededTransferLimit=true` — and under `resultOffset` those windows
+ * misalign so the same features repeat across pages (observed ~3.5x
+ * duplication on EDW MVUM, even with `orderByFields`). Keyset cursoring
+ * advances strictly past the last OID, so pages can neither overlap nor gap
+ * regardless of size caps. The OID field is resolved from layer metadata
+ * (`resolveObjectIdField`).
  *
- * Pagination terminates on a short page that did NOT also set
- * `exceededTransferLimit` (which would mean "more remain"); a zero-length
- * page always breaks as an infinite-loop guard.
+ * `inSR=4326` interprets coordinates as WGS84; `outSR=4326` forces WGS84
+ * output (3857/3400 layers reproject server-side); `f=geojson` bypasses ESRI
+ * JSON encoding.
  */
 export async function fetchEsriFeatures(
   serviceUrl: string,
@@ -193,21 +228,26 @@ export async function fetchEsriFeatures(
   opts: EsriFetchOptions,
 ): Promise<GeoJsonFeature[]> {
   const { where, outFields = "*", pageSize = 1000, label, userAgent } = opts;
-  const features: GeoJsonFeature[] = [];
-  let offset = 0;
+  const oidField = await resolveObjectIdField(serviceUrl, userAgent, label);
+  // The OID must be in the response so we can advance the keyset cursor.
+  const requestedFields =
+    outFields === "*" ||
+    outFields.split(",").map((s) => s.trim().toLowerCase()).includes(oidField.toLowerCase())
+      ? outFields
+      : `${outFields},${oidField}`;
 
-  // Stable sort key → deterministic, non-overlapping resultOffset pages.
-  const orderByField = await resolveObjectIdField(serviceUrl, userAgent, label);
+  const features: GeoJsonFeature[] = [];
+  let lastOid: number | null = null;
 
   while (true) {
     const params = new URLSearchParams();
-    params.set("where", where);
+    const pageWhere = lastOid === null ? where : `(${where}) AND ${oidField} > ${lastOid}`;
+    params.set("where", pageWhere);
     const { mustPost } = applySpatialFilter(params, filter);
     params.set("outSR", "4326");
-    params.set("outFields", outFields);
-    params.set("orderByFields", orderByField);
+    params.set("outFields", requestedFields);
+    params.set("orderByFields", `${oidField} ASC`);
     params.set("f", "geojson");
-    params.set("resultOffset", String(offset));
     params.set("resultRecordCount", String(pageSize));
 
     const page = await defaultRetry(async () => {
@@ -228,17 +268,32 @@ export async function fetchEsriFeatures(
       return parsed.data;
     }, `${label}.fetch`);
 
-    features.push(...page.features);
+    if (page.features.length === 0) break; // cursor exhausted
+
+    let maxOid: number | null = lastOid;
+    for (const f of page.features) {
+      features.push(f);
+      const oid = readOid(f, oidField);
+      if (oid !== null && (maxOid === null || oid > maxOid)) maxOid = oid;
+    }
     logger.debug(
-      { label, offset, pageSize: page.features.length, total: features.length },
+      { label, lastOid, pageSize: page.features.length, total: features.length },
       "esri: page",
     );
 
-    const shortPage = page.features.length < pageSize;
-    const transferLimitHit = page.exceededTransferLimit === true;
-    if (shortPage && !transferLimitHit) break;
-    offset += page.features.length;
-    if (page.features.length === 0) break; // safety: never infinite-loop
+    // Cursor didn't advance (no readable OID this page) → keyset can't continue.
+    // Break loudly rather than loop forever or silently truncate undetected.
+    if (maxOid === null || maxOid === lastOid) {
+      logger.warn(
+        { label, oidField, lastOid, fetched: features.length },
+        "esri: keyset cursor could not advance (OID unreadable) — stopping pagination",
+      );
+      break;
+    }
+    lastOid = maxOid;
+
+    // A short page the server did NOT flag as size-capped is genuinely the last.
+    if (page.features.length < pageSize && page.exceededTransferLimit !== true) break;
   }
 
   return features;
