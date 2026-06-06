@@ -52,10 +52,10 @@ interface SegmentDef {
 }
 
 const SEGMENTS: readonly SegmentDef[] = [
-  // Segment A — Adam's 2026-05-28 call: LA → Whitefish, MT (Days 1–3).
-  // Bounded "all-US, federal-data-heavy" slice that validates the pipeline
-  // on a meaningful but cap-safe corridor before the Canada crossing.
-  { name: "segment_a_la_pnw", startDay: 1, endDay: 3, includeStartCoords: true },
+  // Full LA → Deadhorse corridor (Days 1–66, the final day in alaska.ts).
+  // Supersedes the Segment-A-only (Days 1–3) bootstrap now that the
+  // Canada/Arctic legs are being ingested.
+  { name: "la_to_deadhorse_full", startDay: 1, endDay: 66, includeStartCoords: true },
 ] as const;
 
 interface DayCoord {

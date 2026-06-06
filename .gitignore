@@ -29,3 +29,4 @@ supabase/.temp/
 # between runs for idempotency but contains nothing portable across machines.
 data/.cache/
 .session-logs/
+backups/
