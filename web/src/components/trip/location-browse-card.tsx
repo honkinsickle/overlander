@@ -64,15 +64,22 @@ export function LocationBrowseCard({
   const palette = browseCardPalette[category];
   const ctaLabel =
     category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`;
-  const status = statusForCategory(category);
   // Federated (master_place) rows carry real provenance pills (incl. the
-  // "MVUM corridor" status pill) and a "Federated from <sources>" mention,
-  // but no photo and no review stats. Surface those instead of the
-  // hardcoded category status + fabricated rating that live cards use.
+  // "MVUM corridor" status pill) and a "Federated from <sources>" mention.
   const isFederated = place.source === "master_place";
+  // Live-card status: the place's real opening-hours string when a source
+  // provided one, else undefined → the status line is omitted. Never a
+  // hardcoded "Open · 8a–7p" / "Reserved · $25/night" placeholder.
+  const realStatus = place.stats.find((s) => s.label === "HOURS")?.value;
   // stats.cost.eta is "to your day. You'd arrive at {anchor} at {time}".
-  // The v2 card surfaces just the "You'd arrive..." portion.
+  // Only the federated card surfaces the "You'd arrive..." portion; live
+  // cards omit it (the arrival time is a fixed-5pm placeholder, not real).
   const arrivesAt = stats.cost.eta.replace(/^to your day\.\s*/i, "");
+  // Detour is a real distance-based estimate — kept, but labeled as such on
+  // live cards ("Adds ~Xm est"). Federated cards keep their existing label.
+  const addsLabel = isFederated
+    ? stats.cost.hero
+    : `${stats.cost.hero.replace(/^Adds\s+/, "Adds ~")} est`;
 
   return (
     <div
@@ -96,7 +103,7 @@ export function LocationBrowseCard({
           {isFederated ? (
             <FederatedMeta pills={place.pills} mention={place.mention} />
           ) : (
-            <StatusRow status={status} rating={stats.rating} />
+            <StatusRow status={realStatus} rating={stats.rating} />
           )}
         </div>
         <Divider marginBottom={9} />
@@ -104,10 +111,10 @@ export function LocationBrowseCard({
           <>
             <div
               className="flex flex-col"
-              style={{ height: 55, flexShrink: 0, gap: 2 }}
+              style={{ minHeight: 24, flexShrink: 0, gap: 2 }}
             >
-              <AddsRow addsText={stats.cost.hero} onOpen={onOpen} />
-              <ArrivesAt text={arrivesAt} />
+              <AddsRow addsText={addsLabel} onOpen={onOpen} />
+              {isFederated && <ArrivesAt text={arrivesAt} />}
             </div>
             <Divider />
           </>
@@ -210,64 +217,73 @@ function Title({ text, color }: { text: string; color: string }) {
   );
 }
 
+/** Live-card status + rating row. Both halves are optional and only
+ *  rendered when a REAL value is present — no fabricated status string or
+ *  star rating. Renders nothing (no empty row, no dangling divider) when
+ *  neither is available. */
 function StatusRow({
   status,
   rating,
 }: {
-  status: string;
-  rating: { value: string; count: string };
+  status?: string;
+  rating?: { value: string; count: string };
 }) {
+  if (!status && !rating) return null;
   return (
     <div
       className="flex items-center justify-between"
       style={{ marginTop: 6, gap: 12 }}
     >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span
-          aria-hidden
-          className="size-1.5 rounded-full shrink-0"
-          style={{ backgroundColor: "#6BE26F" }}
-        />
-        <span
-          className="truncate"
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 14,
-            lineHeight: "16px",
-            color: "#A8B0B6",
-          }}
-        >
-          {status}
-        </span>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <StarIcon />
-        <span
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 14,
-            lineHeight: "16px",
-            letterSpacing: "0.04em",
-            color: "#A8B0B6",
-          }}
-        >
-          {rating.value}
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 11,
-            lineHeight: "12px",
-            letterSpacing: "0.04em",
-            color: "#888888",
-          }}
-        >
-          {rating.count}
-        </span>
-      </div>
+      {status ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            aria-hidden
+            className="size-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: "#6BE26F" }}
+          />
+          <span
+            className="truncate"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "16px",
+              color: "#A8B0B6",
+            }}
+          >
+            {status}
+          </span>
+        </div>
+      ) : null}
+      {rating ? (
+        <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
+          <StarIcon />
+          <span
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "16px",
+              letterSpacing: "0.04em",
+              color: "#A8B0B6",
+            }}
+          >
+            {rating.value}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 11,
+              lineHeight: "12px",
+              letterSpacing: "0.04em",
+              color: "#888888",
+            }}
+          >
+            {rating.count}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -442,27 +458,6 @@ function Cta({
       {label}
     </button>
   );
-}
-
-// Category-typical placeholder status strings used when the place has
-// no real hours data. Matches the Paper composition exactly.
-function statusForCategory(c: BrowseCardCategory): string {
-  switch (c) {
-    case "camping":
-      return "Reserved · $25/night";
-    case "urban":
-      return "Open · 9a–11p";
-    case "scenic":
-      return "Open · 8a–7p";
-    case "food":
-      return "Open · 7a–10p";
-    case "fuel":
-      return "Open · 24/7";
-    case "hotel":
-      return "Check in · 3 PM";
-    case "oddity":
-      return "Open · 9a–5p";
-  }
 }
 
 function StarIcon() {

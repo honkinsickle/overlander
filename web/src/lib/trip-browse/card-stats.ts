@@ -38,14 +38,16 @@ export type CardCtx = {
 export type CardStats = {
   /** Pre-formatted "Day N / X.X mi off" eyebrow. */
   dayTag: string;
-  reliability: { score: number; label: string };
+  /** Omitted when no real reliability signal exists. Never fabricated. */
+  reliability?: { score: number; label: string };
   cost: {
     primary: string;
     secondary: string;
     hero: string;
     eta: string;
   };
-  rating: { value: string; count: string };
+  /** Omitted when no real rating exists. Never fabricated. */
+  rating?: { value: string; count: string };
 };
 
 const STOP_MINUTES_BY_CATEGORY: Record<SlideCategoryKey, number> = {
@@ -71,16 +73,6 @@ const ENTRY_BY_CATEGORY: Record<SlideCategoryKey, string> = {
 const AVG_MPH = 42;
 /** Stretch straight-line distance to account for actual road routing. */
 const ROAD_FACTOR = 1.4;
-
-/** Stable hash for deterministic randomness from a string. */
-function hash(s: string, max: number): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = (h * 16777619) >>> 0;
-  }
-  return h % max;
-}
 
 /** Haversine distance in miles. */
 function distanceMi(a: [number, number], b: [number, number]): number {
@@ -109,12 +101,6 @@ function nextAnchorFromLabel(label: string | undefined): string {
   const parts = label.split(/—|→|·/).map((s) => s.trim()).filter(Boolean);
   const last = parts[parts.length - 1];
   return last.split(",")[0].trim();
-}
-
-/** Format reviewCount as "1.2k" / "320" for compact display. */
-function compactCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
 }
 
 /** Add minutes to a "h:MM AM/PM" string. Accepts both "5:00pm" and
@@ -165,8 +151,6 @@ export function computeCardStats(
   place: BrowsePlace,
   ctx: CardCtx,
 ): CardStats {
-  const id = place.id;
-
   // Detour: perpendicular distance from the day's route segment ×
   // ROAD_FACTOR. Falls back to haversine-to-dayEnd if start coords
   // are unavailable; 0 if neither.
@@ -176,14 +160,10 @@ export function computeCardStats(
   // Out-and-back detour + stop time.
   const addsMin = Math.max(stopMin + detourMin * 2, stopMin);
 
-  // Reliability score in [75, 95] seeded by id.
-  const reliabilityScore = 75 + hash(id + "rel", 21);
-  const reliabilityLabel =
-    reliabilityScore >= 90 ? "High reliability" : "Good reliability";
-
-  // Rating in [3.8, 4.9], reviewCount in [80, 8000].
-  const ratingValue = (3.8 + hash(id + "rate", 12) * 0.1).toFixed(1);
-  const reviewCount = 80 + hash(id + "rev", 7920);
+  // Reliability and rating are NOT fabricated. BrowsePlace carries no real
+  // rating/review/reliability signal today, so both are omitted (undefined)
+  // — never a hashed placeholder. They flow through if/when a real value is
+  // plumbed onto the place.
 
   // Day's planned arrival assumed to be 5pm (typical trip-end). With
   // detour added, push it out by addsMin. Real planned ETA would come
@@ -198,16 +178,11 @@ export function computeCardStats(
 
   return {
     dayTag: `Day ${ctx.dayNumber} / ${detourMiDisplay} mi off`,
-    reliability: { score: reliabilityScore, label: reliabilityLabel },
     cost: {
       primary: `Detour: ${formatMinutes(detourMin)}`,
       secondary: ENTRY_BY_CATEGORY[ctx.category],
       hero: `Adds ${formatMinutes(addsMin)}`,
       eta: `to your day. You'd arrive at ${anchor} at ${newEta}`,
-    },
-    rating: {
-      value: ratingValue,
-      count: `(${compactCount(reviewCount)})`,
     },
   };
 }
@@ -337,11 +312,17 @@ export function browsePlaceToWaypoint(
     stats: [],
     photoUrl: place.photoUrl,
     tags: TAGS_BY_SLIDE[ctx.category],
-    reliability: {
-      score: stats.reliability.score,
-      label: stats.reliability.label,
-      sourceCount: 3,
-    },
+    // Reliability flows through only when computeCardStats supplies a real
+    // one (it doesn't fabricate); omitted otherwise.
+    ...(stats.reliability
+      ? {
+          reliability: {
+            score: stats.reliability.score,
+            label: stats.reliability.label,
+            sourceCount: 3,
+          },
+        }
+      : {}),
     routeOffsetMi,
     simulator: {
       stopTime: formatMinutes(stopMin),
@@ -360,15 +341,23 @@ export function browsePlaceToWaypoint(
       phone: place.placeInfo?.phone?.display,
       website: place.placeInfo?.website?.display,
     },
-    community: {
-      rating: parseFloat(stats.rating.value),
-      reviewCount: parseInt(
-        stats.rating.count.replace(/[^\d]/g, "") || "0",
-        10,
-      ),
-      tips: TIPS_BY_SLIDE[ctx.category],
-      lastVerified: "Live",
-    },
+    // Community rating/reviewCount are never fabricated; the section is
+    // omitted until a real rating is plumbed onto the place. (Slide-up only;
+    // its remaining canned tips/lastVerified are deferred to the slide-up
+    // pass — they can't carry without a required rating number.)
+    ...(stats.rating
+      ? {
+          community: {
+            rating: parseFloat(stats.rating.value),
+            reviewCount: parseInt(
+              stats.rating.count.replace(/[^\d]/g, "") || "0",
+              10,
+            ),
+            tips: TIPS_BY_SLIDE[ctx.category],
+            lastVerified: "Live",
+          },
+        }
+      : {}),
     amenities: AMENITIES_BY_SLIDE[ctx.category],
     dataSources: sourcesForBrowsePlace(place),
   };
