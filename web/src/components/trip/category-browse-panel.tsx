@@ -14,6 +14,7 @@ import {
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import { PlaceSearch } from "@/components/trip/place-search";
 import {
   type BrowseCardCategory,
   BROWSE_CARD_CATEGORIES,
@@ -132,6 +133,15 @@ export function CategoryBrowsePanel({
 
   useEffect(() => {
     if (!open) setExpanded(false);
+  }, [open]);
+
+  // Broadcast open/closed so the slideup body can suppress its standalone
+  // Find Nearby panel (the top-bar search drives THIS panel instead) and
+  // the top-bar can reset its query when the panel closes.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("trip:browseOpen", { detail: { open } }),
+    );
   }, [open]);
 
   useEffect(() => {
@@ -298,6 +308,19 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
   );
   const [state, setState] = useState<FetchState>({ status: "loading" });
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
+  // Federated corpus-search query, fed by the top-bar via `trip:search`.
+  // Empty → category-browse (unchanged). Non-empty → <PlaceSearch>.
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      const q = (e as CustomEvent<{ query: string }>).detail?.query ?? "";
+      setQuery(q);
+    };
+    window.addEventListener("trip:search", onSearch);
+    return () => window.removeEventListener("trip:search", onSearch);
+  }, []);
+  const searching = query.trim().length > 0;
 
   // Reset filter selection when switching to a different day's Browse.
   useEffect(() => {
@@ -380,6 +403,52 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     });
   };
 
+  // <PlaceSearch> facets on a single SlideCategoryKey. The chip row stays
+  // multi-select; map it to one facet only when exactly one chip is active
+  // (0 or 2+ → corpus-wide, matching the "All" feel).
+  const searchFacet = useMemo<SlideCategoryKey | null>(() => {
+    if (filters.size !== 1) return null;
+    return browseCategoryToSlide(Array.from(filters)[0]);
+  }, [filters]);
+
+  // Add-to-day for a search result. <PlaceSearch>.onAdd yields only the
+  // master_place id (its API is fixed), so re-hydrate that single id into
+  // a full BrowsePlace and dispatch the SAME `trip:toggleAdded` event the
+  // browse cards use — search and browse adds go through one path.
+  const handleSearchAdd = (masterPlaceId: string) => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/places/hydrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [masterPlaceId] }),
+        });
+        if (!res.ok) return;
+        const { places } = (await res.json()) as { places: BrowsePlace[] };
+        const place = places[0];
+        if (!place) return;
+        window.dispatchEvent(
+          new CustomEvent("trip:toggleAdded", {
+            detail: {
+              placeId: place.id,
+              dayId: target.dayId,
+              dayNumber: target.dayNumber,
+              place: {
+                id: place.id,
+                title: place.title,
+                description: place.description,
+                photoUrl: place.photoUrl,
+                coords: place.coords,
+              },
+            },
+          }),
+        );
+      } catch {
+        // Best-effort; the browse add path is equally tolerant.
+      }
+    })();
+  };
+
   const empty = (msg: string) => (
     <div
       className="flex items-center justify-center"
@@ -419,7 +488,16 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
         className="flex-1 overflow-y-auto no-scrollbar"
         style={{ backgroundColor: "var(--bg-base)" }}
       >
-        {state.status === "loading"
+        {searching ? (
+          <div style={{ padding: 16 }}>
+            <PlaceSearch
+              query={query}
+              center={target.dayCoords ?? target.dayStartCoords}
+              categoryFilter={searchFacet}
+              onAdd={handleSearchAdd}
+            />
+          </div>
+        ) : state.status === "loading"
           ? empty("Loading nearby places…")
           : state.status === "error"
             ? empty(`Couldn't load places — ${state.message}`)

@@ -32,6 +32,11 @@ export function TripSlideupBody({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  // True while the Add-Waypoints panel (CategoryBrowsePanel) is open. When
+  // it is, the top-bar search drives THAT panel's search mode, so the
+  // standalone Find Nearby zero-state must not also mount (it would peek
+  // out to the right of the narrower 2-up browse panel).
+  const [browseOpen, setBrowseOpen] = useState(false);
   const toggleCollapsed = () => setCollapsed((c) => !c);
 
   useEffect(() => {
@@ -42,6 +47,15 @@ export function TripSlideupBody({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [searchActive]);
+
+  useEffect(() => {
+    const onBrowseOpen = (e: Event) => {
+      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      if (typeof open === "boolean") setBrowseOpen(open);
+    };
+    window.addEventListener("trip:browseOpen", onBrowseOpen);
+    return () => window.removeEventListener("trip:browseOpen", onBrowseOpen);
+  }, []);
 
   return (
     <div className="relative w-full h-full">
@@ -74,8 +88,10 @@ export function TripSlideupBody({
       />
 
       {/* Find Nearby panel — Search Active state. Overlays the day column +
-       *  day detail area below the Top Bar (per Paper frame 5WK-0). */}
-      {searchActive && (
+       *  day detail area below the Top Bar (per Paper frame 5WK-0).
+       *  Suppressed while the Add-Waypoints panel is open — there the
+       *  top-bar search drives the panel's in-place <PlaceSearch>. */}
+      {searchActive && !browseOpen && (
         <div
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid rgba(255,255,255,0.07)" }}
