@@ -53,61 +53,6 @@ const PANEL_WIDTH_3UP = 1113;
 const CARD_W_3UP = 354;
 const TRANSITION_MS = 280;
 
-const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
-
-/** Extra demo cards appended to the fetched results so the grid feels
- *  populated while the discovery layer is still thin. */
-const EXTRA_DEMO_PLACES: BrowsePlace[] = [
-  {
-    id: "demo-crater-lake",
-    coords: [-122.108, 42.945],
-    category: "scenic",
-    title: "Crater Lake National Park",
-    photoUrl: `${PAPER_CDN}/78R7DE7V2NKT3G0EDJFF24TDKZ.png`,
-    photoAlt: "Crater Lake at golden hour",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Caldera lake formed when Mount Mazama collapsed 7,700 years ago — the deepest in the U.S. at 1,949 ft. Rim Drive loops the rim with 30+ overlooks.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-  {
-    id: "demo-diamond-lake",
-    coords: [-122.135, 43.165],
-    category: "scenic",
-    title: "Diamond Lake Overlook",
-    photoUrl: `${PAPER_CDN}/01KQXV7RGFDADF3EDNVB4THDV5.png`,
-    photoAlt: "Diamond Lake reflection",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Mile-wide alpine lake with Mount Bailey to the west and Mount Thielsen to the east. Ringed by the Rim Trail and a paved bike path.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-  {
-    id: "demo-klamath-falls",
-    coords: [-121.78, 42.225],
-    category: "scenic",
-    title: "Klamath Falls Vista",
-    photoUrl: `${PAPER_CDN}/01KQXWN6ZC3T2VGR430QM8EHYH.png`,
-    photoAlt: "Klamath Falls autumn street",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Birding capital of the Pacific Flyway — Upper Klamath Lake and the surrounding refuges host bald eagles in winter and white pelicans in summer.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-];
-
 /** Initial active-filter set: if the panel was opened from a per-category
  *  Browse button (e.g. "Browse Sights"), pre-select that chip so the
  *  user lands on the filtered view they asked for. Empty Set = "All". */
@@ -468,18 +413,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     </div>
   );
 
-  // For the "scenic-only" demo augment we just append the demo cards
-  // unconditionally when scenic is in the active set (or filters are
-  // empty = "all"). Keeps the grid feeling populated while discovery
-  // remains thin on this category.
-  const showScenicDemo =
-    filters.size === 0 || filters.has("scenic");
-  const placesWithExtras =
-    state.status === "success"
-      ? showScenicDemo
-        ? [...state.places, ...EXTRA_DEMO_PLACES]
-        : state.places
-      : [];
+  const places = state.status === "success" ? state.places : [];
 
   return (
     <>
@@ -502,7 +436,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
           ? empty("Loading nearby places…")
           : state.status === "error"
             ? empty(`Couldn't load places — ${state.message}`)
-            : placesWithExtras.length === 0
+            : places.length === 0
               ? empty("No places match the selected filters")
               : (
                   <div
@@ -516,7 +450,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
                       padding: expanded ? 8 : 16,
                     }}
                   >
-                    {placesWithExtras.map((p) => (
+                    {places.map((p) => (
                       <BrowseCardCell
                         key={p.id}
                         place={p}
