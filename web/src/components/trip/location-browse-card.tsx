@@ -36,6 +36,11 @@ type Props = {
   /** 300 = 2-up default; 354 = 3-up expanded. */
   width?: CardWidth;
   stats: CardStats;
+  /** Show the "Adds <detour>" + "You'd arrive at…" block. Detour/ETA are
+   *  corridor concepts — true for browse cards (a place near today's
+   *  route). Pass false for corpus-wide search hits, where any detour
+   *  number would be fabricated; the row is omitted instead of faked. */
+  showDetour?: boolean;
   onAdd?: (e?: React.MouseEvent) => void;
   onOpen?: (e?: React.MouseEvent) => void;
   onMore?: (e?: React.MouseEvent) => void;
@@ -51,6 +56,7 @@ export function LocationBrowseCard({
   dayNumber,
   width = 300,
   stats,
+  showDetour = true,
   onAdd,
   onOpen,
   onMore,
@@ -94,14 +100,18 @@ export function LocationBrowseCard({
           )}
         </div>
         <Divider marginBottom={9} />
-        <div
-          className="flex flex-col"
-          style={{ height: 55, flexShrink: 0, gap: 2 }}
-        >
-          <AddsRow addsText={stats.cost.hero} onOpen={onOpen} />
-          <ArrivesAt text={arrivesAt} />
-        </div>
-        <Divider />
+        {showDetour && (
+          <>
+            <div
+              className="flex flex-col"
+              style={{ height: 55, flexShrink: 0, gap: 2 }}
+            >
+              <AddsRow addsText={stats.cost.hero} onOpen={onOpen} />
+              <ArrivesAt text={arrivesAt} />
+            </div>
+            <Divider />
+          </>
+        )}
         <Cta
           label={ctaLabel}
           bg={palette.ctaBg}

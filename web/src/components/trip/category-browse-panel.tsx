@@ -494,6 +494,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
               query={query}
               center={target.dayCoords ?? target.dayStartCoords}
               categoryFilter={searchFacet}
+              dayNumber={target.dayNumber}
               onAdd={handleSearchAdd}
             />
           </div>

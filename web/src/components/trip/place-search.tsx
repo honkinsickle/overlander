@@ -38,6 +38,10 @@ export type PlaceSearchProps = {
   /** Optional slide-pill facet. Maps to primary_category filter on
    *  Typesense. `null`/absent = no facet (corpus-wide). */
   categoryFilter?: SlideCategoryKey | null;
+  /** Day the results would be added to — drives each card's "Add to Day N"
+   *  label. Defaults to 1 for the standalone host; the panel passes the
+   *  real target day. */
+  dayNumber?: number;
   /** Reports the master_place id of an added result. */
   onAdd: (id: string) => void;
 };
@@ -50,6 +54,7 @@ export function PlaceSearch({
   query,
   center,
   categoryFilter,
+  dayNumber = 1,
   onAdd,
 }: PlaceSearchProps): React.ReactElement {
   const [places, setPlaces] = useState<BrowsePlace[]>([]);
@@ -175,16 +180,19 @@ export function PlaceSearch({
       >
         {shownPlaces.map((place) => {
           const slideKey: SlideCategoryKey = place.category ?? "scenic";
-          const ctx: CardCtx = { category: slideKey, dayNumber: 1 };
+          const ctx: CardCtx = { category: slideKey, dayNumber };
           const stats = computeCardStats(place, ctx);
           return (
             <LocationBrowseCard
               key={place.id}
               place={place}
               category={slideCategoryToBrowseCategory(slideKey)}
-              dayNumber={1}
+              dayNumber={dayNumber}
               width={CARD_WIDTH}
               stats={stats}
+              // Corpus-wide hits have no real corridor detour — omit the
+              // "Adds <time>" row rather than show a fabricated estimate.
+              showDetour={false}
               onAdd={(e) => {
                 e?.stopPropagation();
                 onAdd(place.id.replace(/^mp:/, ""));
