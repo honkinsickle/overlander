@@ -20,6 +20,28 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Partial<
   scenic: ["viewpoint", "peak"],
 };
 
+/** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer
+ *  primary_category back to the slide pill it belongs to. Built once from
+ *  the forward map so the two never drift. Used by the corpus-wide search
+ *  hydrate path (which gets arbitrary primary_category values, not a known
+ *  pill) to choose each card's palette/icon. Categories with no pill
+ *  mapping (e.g. park_feature) fall back to `scenic` — the same default
+ *  the browse panel uses for un-categorized rows (CategoryBrowsePanel's
+ *  `place.category ?? "scenic"`). The real category name still surfaces as
+ *  a pill via prettyCategory(), so the fallback only affects accent color. */
+const PRIMARY_CATEGORY_TO_SLIDE: Record<string, SlideCategoryKey> =
+  Object.entries(SLIDE_TO_PRIMARY_CATEGORY).reduce(
+    (acc, [slide, primaries]) => {
+      for (const p of primaries ?? []) acc[p] = slide as SlideCategoryKey;
+      return acc;
+    },
+    {} as Record<string, SlideCategoryKey>,
+  );
+
+export function primaryCategoryToSlideKey(primary: string): SlideCategoryKey {
+  return PRIMARY_CATEGORY_TO_SLIDE[primary] ?? "scenic";
+}
+
 /** One row from public.pois_along_corridor (SECURITY DEFINER RPC). */
 export type MasterPlaceRow = {
   id: string;
