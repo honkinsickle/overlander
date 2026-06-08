@@ -95,7 +95,15 @@ const BUCKETS: Bucket[] = [
         label: "Campgrounds",
         icon: Tent,
         isNew: true,
-        primaryCategories: ["campground", "rv_park", "camping_cabin"],
+        // Mirrors the broad "camping" chip set (BROAD_PRIMARY_BY_CATEGORY.camping)
+        // together with the Dispersed tile: dispersed_camping (Dispersed) +
+        // campground/rv_park/camping_cabin/recreation_area (here).
+        primaryCategories: [
+          "campground",
+          "rv_park",
+          "camping_cabin",
+          "recreation_area",
+        ],
       },
       {
         id: "trailheads",
