@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
-import { Locate, LocateFixed } from "lucide-react";
 import { useUserLocation } from "@/lib/location/use-user-location";
 import { snapToRoute } from "@/lib/location/snap-to-route";
 
@@ -231,61 +230,27 @@ export function UserLocationLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, position, map, request]);
 
-  if (status === "unsupported" || status === "denied") return null;
-
-  const onFollowClick = () => {
-    if (status === "idle") {
-      // First-time opt-in: trigger the browser prompt. Once granted, the
-      // watchPosition callback flips status → "watching" and the marker
-      // mounts. User taps again to engage camera-follow.
-      request();
-      return;
-    }
-    if (status !== "watching") return;
-    if (following) {
-      setFollowing(false);
-      return;
-    }
-    if (position) {
-      const snap = snapToRoute(
-        position,
-        routePathRef.current,
-        SNAP_THRESHOLD_MI,
+  // Broadcast status + follow state so the Right-Edge Toolbar's Locate control
+  // can drive this engine (via trip:setFollow) and reflect an HONEST state
+  // (denied / unavailable). Also answers an on-mount status request so the
+  // toolbar syncs regardless of mount order.
+  useEffect(() => {
+    const broadcast = () =>
+      window.dispatchEvent(
+        new CustomEvent("trip:locationStatus", {
+          detail: { status, following },
+        }),
       );
-      panelAwareFly(
-        map,
-        snap.coord,
-        Math.max(map.getZoom(), FOLLOW_ZOOM),
-        700,
-        "fly",
-      );
-    }
-    setFollowing(true);
-  };
+    broadcast();
+    window.addEventListener("trip:requestLocationStatus", broadcast);
+    return () =>
+      window.removeEventListener("trip:requestLocationStatus", broadcast);
+  }, [status, following]);
 
-  const Icon = following ? LocateFixed : Locate;
-  const label =
-    status === "idle"
-      ? "Enable location"
-      : following
-        ? "Stop following location"
-        : "Follow my location";
-
-  return (
-    <div className="absolute top-4 right-4 z-10 pointer-events-auto">
-      <button
-        type="button"
-        onClick={onFollowClick}
-        aria-label={label}
-        title={label}
-        className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-colors ${
-          following
-            ? "bg-[#4285F4] text-white border border-[#4285F4]"
-            : "bg-bg-nav-btn/90 border border-button-primary-border text-input-border-focus hover:text-text-main"
-        }`}
-      >
-        <Icon className="w-5 h-5" />
-      </button>
-    </div>
-  );
+  // Headless engine: renders no button of its own. The visible "center on my
+  // location" control is the Right-Edge Toolbar's Locate button, which drives
+  // this engine through `trip:setFollow`. (The old top-right button was
+  // obscured by the slideup chrome and hid entirely on `denied`, leaving no
+  // honest state.) `request` stays referenced via the trip:setFollow handler.
+  return null;
 }
