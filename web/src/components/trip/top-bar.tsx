@@ -94,6 +94,19 @@ export function TopBar({
     return () => window.removeEventListener("trip:browseOpen", onBrowseOpen);
   }, []);
 
+  // Find Nearby's "← Categories" clears the text query here so the top-bar
+  // and the panel reset together.
+  useEffect(() => {
+    const onClear = () => {
+      setValue("");
+      window.dispatchEvent(
+        new CustomEvent("trip:search", { detail: { query: "" } }),
+      );
+    };
+    window.addEventListener("trip:clearSearch", onClear);
+    return () => window.removeEventListener("trip:clearSearch", onClear);
+  }, []);
+
   const exitSearch = () => {
     updateValue("");
     // Blur any focused element inside the top bar (i.e. the input)

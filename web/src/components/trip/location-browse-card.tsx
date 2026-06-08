@@ -39,6 +39,9 @@ type Props = {
   /** 300 = 2-up default; 354 = 3-up expanded. */
   width?: CardWidth;
   stats: CardStats;
+  /** Overrides the CTA label (default "Add to Day N" / "Book for tonight").
+   *  Top-level search passes "Add to a day" since ADD opens a day picker. */
+  addLabel?: string;
   /** Show the "Adds <detour>" + "You'd arrive at…" block. Detour/ETA are
    *  corridor concepts — true for browse cards (a place near today's
    *  route). Pass false for corpus-wide search hits, where any detour
@@ -122,6 +125,7 @@ export function LocationBrowseCard({
   dayDate,
   width = 300,
   stats,
+  addLabel,
   showDetour = true,
   onAdd,
   onOpen,
@@ -129,7 +133,8 @@ export function LocationBrowseCard({
 }: Props) {
   const palette = browseCardPalette[category];
   const ctaLabel =
-    category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`;
+    addLabel ??
+    (category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`);
   // Federated (master_place) rows carry real provenance pills (incl. the
   // "MVUM corridor" status pill) and a "Federated from <sources>" mention.
   const isFederated = place.source === "master_place";
@@ -157,10 +162,6 @@ export function LocationBrowseCard({
               : undefined,
         }
       : undefined;
-  // stats.cost.eta is "to your day. You'd arrive at {anchor} at {time}".
-  // Only the federated card surfaces the "You'd arrive..." portion; live
-  // cards omit it (the arrival time is a fixed-5pm placeholder, not real).
-  const arrivesAt = stats.cost.eta.replace(/^to your day\.\s*/i, "");
   // Detour is a real distance-based estimate — the "~" marks it approximate
   // on live cards ("Adds ~32m"). Federated cards keep their existing label.
   const addsLabel = isFederated
@@ -208,7 +209,6 @@ export function LocationBrowseCard({
               style={{ minHeight: 24, flexShrink: 0, gap: 2 }}
             >
               <AddsRow addsText={addsLabel} onOpen={onOpen} />
-              {isFederated && <ArrivesAt text={arrivesAt} />}
             </div>
             <Divider />
           </>
@@ -550,23 +550,6 @@ function AddsRow({
         <ArrowRight />
       </button>
     </div>
-  );
-}
-
-function ArrivesAt({ text }: { text: string }) {
-  return (
-    <p
-      className="line-clamp-2"
-      style={{
-        fontFamily: "var(--ff-sans)",
-        fontWeight: 400,
-        fontSize: 16,
-        lineHeight: "20px",
-        color: "#98AC64",
-      }}
-    >
-      {text}
-    </p>
   );
 }
 

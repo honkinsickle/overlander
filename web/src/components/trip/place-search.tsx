@@ -38,6 +38,14 @@ export type PlaceSearchProps = {
   /** Optional slide-pill facet. Maps to primary_category filter on
    *  Typesense. `null`/absent = no facet (corpus-wide). */
   categoryFilter?: SlideCategoryKey | null;
+  /** Explicit primary_category values to filter on (e.g. a Find-Nearby
+   *  tile → ["campground","rv_park"]). Takes precedence over
+   *  `categoryFilter` when provided. `null`/absent = no facet. */
+  primaryCategories?: string[] | null;
+  /** Overrides the card's CTA label (default "Add to Day N"). Used by the
+   *  top-level search where ADD opens a day picker rather than targeting a
+   *  preselected day, so the label reads e.g. "Add to a day". */
+  addLabel?: string;
   /** Day the results would be added to — drives each card's "Add to Day N"
    *  label. Defaults to 1 for the standalone host; the panel passes the
    *  real target day. */
@@ -57,6 +65,8 @@ export function PlaceSearch({
   query,
   center,
   categoryFilter,
+  primaryCategories,
+  addLabel,
   dayNumber = 1,
   dayDate,
   onAdd,
@@ -70,6 +80,9 @@ export function PlaceSearch({
   // them. center is stringified so a new array identity each render doesn't
   // refire (the host stubs a stable center today, but be defensive).
   const centerKey = center ? `${center[0]},${center[1]}` : "";
+  // Stable key for the primary_category array so a new array identity each
+  // render doesn't refire the effect.
+  const primaryKey = primaryCategories ? primaryCategories.join(",") : "";
 
   useEffect(() => {
     const q = query.trim();
@@ -83,9 +96,13 @@ export function PlaceSearch({
       setLoading(true);
       setError(null);
 
-      const facet = categoryFilter
-        ? SLIDE_TO_PRIMARY_CATEGORY[categoryFilter]
-        : undefined;
+      // Explicit primary_category list (Find-Nearby tile) wins; otherwise
+      // fall back to the coarse slide-pill → primary_category mapping.
+      const facet = primaryCategories
+        ? primaryCategories
+        : categoryFilter
+          ? SLIDE_TO_PRIMARY_CATEGORY[categoryFilter]
+          : undefined;
 
       (async () => {
         // 1. Typesense match → ranked master_place IDs.
@@ -130,7 +147,7 @@ export function PlaceSearch({
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query, centerKey, categoryFilter, center]);
+  }, [query, centerKey, categoryFilter, primaryKey, primaryCategories, center]);
 
   const hasQuery = query.trim().length > 0;
   // Gate everything on hasQuery: when the input is empty, the stale results
@@ -193,6 +210,7 @@ export function PlaceSearch({
               category={slideCategoryToBrowseCategory(slideKey)}
               dayNumber={dayNumber}
               dayDate={dayDate}
+              addLabel={addLabel}
               width={CARD_WIDTH}
               stats={stats}
               // Corpus-wide hits have no real corridor detour — omit the

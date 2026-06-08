@@ -534,9 +534,8 @@ function BrowseCardCell({
   expanded: boolean;
   isAdded: boolean;
 }) {
-  // Each card renders with its OWN category palette (set by the API,
-  // falling back to scenic for demo-augmented entries that bypassed the
-  // pipeline).
+  // Each card renders with its OWN category palette (set by the API);
+  // falls back to scenic for any result that arrived without a category.
   const placeCategory: SlideCategoryKey = place.category ?? "scenic";
   const ctx: CardCtx = {
     category: placeCategory,

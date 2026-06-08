@@ -96,7 +96,7 @@ export function TripSlideupBody({
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid rgba(255,255,255,0.07)" }}
         >
-          <FindNearbyPanel onClose={() => setSearchActive(false)} />
+          <FindNearbyPanel trip={trip} onClose={() => setSearchActive(false)} />
         </div>
       )}
 
