@@ -255,6 +255,9 @@ export function FindNearbyPanel({
   // When set, the day-picker overlay is open for this place.
   const [pending, setPending] = useState<BrowsePlace | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  // Bumped when the user presses Enter in the search box — forces a refetch
+  // against the current viewport even when the query/tile is unchanged.
+  const [submitNonce, setSubmitNonce] = useState(0);
 
   useEffect(() => {
     const onSearch = (e: Event) => {
@@ -263,6 +266,12 @@ export function FindNearbyPanel({
     };
     window.addEventListener("trip:search", onSearch);
     return () => window.removeEventListener("trip:search", onSearch);
+  }, []);
+
+  useEffect(() => {
+    const onSubmit = () => setSubmitNonce((n) => n + 1);
+    window.addEventListener("trip:searchSubmit", onSubmit);
+    return () => window.removeEventListener("trip:searchSubmit", onSubmit);
   }, []);
 
   useEffect(() => {
@@ -371,6 +380,7 @@ export function FindNearbyPanel({
               query={query}
               primaryCategories={activeTile?.primaryCategories ?? null}
               getViewportBbox={getViewportBbox}
+              submitNonce={submitNonce}
               dayNumber={activeDay?.dayNumber ?? 1}
               dayDate={activeDay?.date}
               dayId={activeDay?.id}
@@ -433,6 +443,7 @@ function SearchAreaResults({
   query,
   primaryCategories,
   getViewportBbox,
+  submitNonce,
   dayNumber,
   dayDate,
   dayId,
@@ -444,6 +455,9 @@ function SearchAreaResults({
   query: string;
   primaryCategories: string[] | null;
   getViewportBbox: () => [number, number, number, number] | null;
+  /** Incremented on Enter — forces a refetch against the current viewport
+   *  even when query/tile is unchanged (re-search after a map pan). */
+  submitNonce: number;
   dayNumber: number;
   dayDate?: string;
   /** Active day context — drives the detour ("Adds ~Xm" vs this day's route)
@@ -509,8 +523,9 @@ function SearchAreaResults({
 
     return () => clearTimeout(timer);
     // getViewportBbox is a stable getter; bbox is read at fetch time.
+    // submitNonce re-runs the fetch on Enter against the current viewport.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, primaryKey, hasInput]);
+  }, [q, primaryKey, hasInput, submitNonce]);
 
   const shownPlaces = hasInput ? places : [];
   const shownError = hasInput ? error : null;

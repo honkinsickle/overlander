@@ -183,6 +183,11 @@ export function TopBar({
               if (e.key === "Escape") {
                 updateValue("");
                 (e.currentTarget as HTMLInputElement).blur();
+              } else if (e.key === "Enter") {
+                // Send the query: re-run the search against the CURRENT map
+                // viewport (also the "search this area" trigger after a pan).
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent("trip:searchSubmit"));
               }
             }}
             className={`flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-white ${expanded ? "placeholder:text-white" : "placeholder:text-[#B3B3B3]"}`}
