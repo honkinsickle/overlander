@@ -561,6 +561,10 @@ function SearchAreaResults({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqIdRef = useRef(0);
+  // The result currently linked from the map (marker tap) or tapped in the
+  // list — gets the active-POI ring-glow.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const q = query.trim();
   const primaryKey = primaryCategories ? primaryCategories.join(",") : "";
@@ -631,6 +635,8 @@ function SearchAreaResults({
       new CustomEvent("trip:browseResults", {
         detail: {
           category: null,
+          // Area-search markers link to their card on click (no fly).
+          interact: "link",
           places: visible.map((p) => ({
             coords: p.coords,
             title: p.title,
@@ -652,6 +658,25 @@ function SearchAreaResults({
         }),
       );
     };
+  }, []);
+
+  // Marker → card: a result-marker tap highlights its card and scrolls it into
+  // view. No camera move, no re-query — just the link.
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      setFocusedId(id);
+      const el = gridRef.current?.querySelector(`[data-place-id="${id}"]`);
+      if (el) {
+        (el as HTMLElement).scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    };
+    window.addEventListener("trip:areaResultFocus", onFocus);
+    return () => window.removeEventListener("trip:areaResultFocus", onFocus);
   }, []);
 
   return (
@@ -691,7 +716,7 @@ function SearchAreaResults({
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+      <div ref={gridRef} style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         {shownPlaces.map((place) => {
           const slideKey: SlideCategoryKey = place.category ?? "scenic";
           const ctx: CardCtx = {
@@ -729,25 +754,49 @@ function SearchAreaResults({
               }),
             );
           };
+          const focused = place.id === focusedId;
           return (
-            <LocationBrowseCard
+            // Card → marker: tapping the card body (not the ADD/DETAILS
+            // buttons, which stopPropagation) pulses the matching marker and
+            // highlights this card. No camera move.
+            <div
               key={place.id}
-              place={place}
-              category={slideCategoryToBrowseCategory(slideKey)}
-              dayNumber={dayNumber}
-              dayDate={dayDate}
-              addLabel="Add to a day"
-              width={CARD_WIDTH}
-              stats={stats}
-              onAdd={(e) => {
-                e?.stopPropagation();
-                onAdd(place);
+              data-place-id={place.id}
+              onClick={() => {
+                setFocusedId(place.id);
+                window.dispatchEvent(
+                  new CustomEvent("trip:areaCardFocus", {
+                    detail: { id: place.id },
+                  }),
+                );
               }}
-              onOpen={(e) => {
-                e?.stopPropagation();
-                openDetail();
+              style={{
+                borderRadius: 8,
+                cursor: "pointer",
+                transition: "box-shadow 160ms ease",
+                boxShadow: focused
+                  ? "0 0 0 2px #c8a96e, 0 0 18px 2px rgba(200,169,110,0.55)"
+                  : "none",
               }}
-            />
+            >
+              <LocationBrowseCard
+                place={place}
+                category={slideCategoryToBrowseCategory(slideKey)}
+                dayNumber={dayNumber}
+                dayDate={dayDate}
+                addLabel="Add to a day"
+                width={CARD_WIDTH}
+                stats={stats}
+                onAdd={(e) => {
+                  e?.stopPropagation();
+                  onAdd(place);
+                }}
+                onOpen={(e) => {
+                  e?.stopPropagation();
+                  openDetail();
+                }}
+              />
+            </div>
           );
         })}
       </div>
