@@ -44,6 +44,7 @@ type HydrateRow = {
   contact: Record<string, unknown> | null;
   description: string | null;
   attribution: Record<string, string> | null;
+  hours: Record<string, unknown> | null;
 };
 
 function parseIds(body: unknown): string[] | null {
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
   const baseQuery = supabase
     .from("master_place")
     .select(
-      "id,canonical_name,primary_category,prominence_score,mvum_corridor,overlander_tags,contact,description,attribution",
+      "id,canonical_name,primary_category,prominence_score,mvum_corridor,overlander_tags,contact,description,attribution,hours",
     )
     .in("id", ids)
     .eq("is_searchable", true)
@@ -141,9 +142,10 @@ export async function POST(req: Request) {
       contact: base.contact,
       description: base.description,
       attribution: base.attribution,
+      // Real opening-hours (projector emits a HOURS stat when it's a string).
+      hours: base.hours,
       // Card projector doesn't read these; hydrate doesn't fetch them.
       amenities: null,
-      hours: null,
       access: null,
       services: null,
       capacity: null,

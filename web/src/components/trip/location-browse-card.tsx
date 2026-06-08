@@ -71,6 +71,18 @@ export function LocationBrowseCard({
   // provided one, else undefined → the status line is omitted. Never a
   // hardcoded "Open · 8a–7p" / "Reserved · $25/night" placeholder.
   const realStatus = place.stats.find((s) => s.label === "HOURS")?.value;
+  // Real rating + price from the source (Google live results). Both omitted
+  // when the place carries none — shown only when real, never fabricated.
+  const rating =
+    typeof place.rating === "number"
+      ? {
+          value: place.rating.toFixed(1),
+          count:
+            typeof place.reviewCount === "number"
+              ? place.reviewCount
+              : undefined,
+        }
+      : undefined;
   // stats.cost.eta is "to your day. You'd arrive at {anchor} at {time}".
   // Only the federated card surfaces the "You'd arrive..." portion; live
   // cards omit it (the arrival time is a fixed-5pm placeholder, not real).
@@ -101,9 +113,17 @@ export function LocationBrowseCard({
         <div style={{ flexShrink: 0 }}>
           <Title text={place.title} color={palette.titleColor} />
           {isFederated ? (
-            <FederatedMeta pills={place.pills} mention={place.mention} />
+            <FederatedMeta
+              pills={place.pills}
+              mention={place.mention}
+              hours={realStatus}
+            />
           ) : (
-            <StatusRow status={realStatus} rating={stats.rating} />
+            <StatusRow
+              status={realStatus}
+              rating={rating}
+              priceTier={place.priceTier}
+            />
           )}
         </div>
         <Divider marginBottom={9} />
@@ -217,18 +237,20 @@ function Title({ text, color }: { text: string; color: string }) {
   );
 }
 
-/** Live-card status + rating row. Both halves are optional and only
- *  rendered when a REAL value is present — no fabricated status string or
- *  star rating. Renders nothing (no empty row, no dangling divider) when
- *  neither is available. */
+/** Live-card status + rating + price row. Every part is optional and only
+ *  rendered when a REAL value is present — no fabricated status string,
+ *  star rating, or price. Renders nothing (no empty row, no dangling
+ *  divider) when all are absent. */
 function StatusRow({
   status,
   rating,
+  priceTier,
 }: {
   status?: string;
-  rating?: { value: string; count: string };
+  rating?: { value: string; count?: number };
+  priceTier?: 1 | 2 | 3 | 4;
 }) {
-  if (!status && !rating) return null;
+  if (!status && !rating && !priceTier) return null;
   return (
     <div
       className="flex items-center justify-between"
@@ -255,33 +277,57 @@ function StatusRow({
           </span>
         </div>
       ) : null}
-      {rating ? (
-        <div className="flex items-center gap-1 shrink-0" style={{ marginLeft: "auto" }}>
-          <StarIcon />
-          <span
-            style={{
-              fontFamily: "var(--ff-display)",
-              fontWeight: 400,
-              fontSize: 14,
-              lineHeight: "16px",
-              letterSpacing: "0.04em",
-              color: "#A8B0B6",
-            }}
-          >
-            {rating.value}
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--ff-display)",
-              fontWeight: 400,
-              fontSize: 11,
-              lineHeight: "12px",
-              letterSpacing: "0.04em",
-              color: "#888888",
-            }}
-          >
-            {rating.count}
-          </span>
+      {rating || priceTier ? (
+        <div
+          className="flex items-center gap-2 shrink-0"
+          style={{ marginLeft: "auto" }}
+        >
+          {rating ? (
+            <div className="flex items-center gap-1">
+              <StarIcon />
+              <span
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "16px",
+                  letterSpacing: "0.04em",
+                  color: "#A8B0B6",
+                }}
+              >
+                {rating.value}
+              </span>
+              {rating.count !== undefined ? (
+                <span
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontWeight: 400,
+                    fontSize: 11,
+                    lineHeight: "12px",
+                    letterSpacing: "0.04em",
+                    color: "#888888",
+                  }}
+                >
+                  ({rating.count})
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {priceTier ? (
+            <span
+              aria-label={`Price level ${priceTier} of 4`}
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontWeight: 600,
+                fontSize: 13,
+                lineHeight: "16px",
+                letterSpacing: "0.06em",
+                color: "#98AC64",
+              }}
+            >
+              {"$".repeat(priceTier)}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -297,9 +343,14 @@ function StatusRow({
 function FederatedMeta({
   pills,
   mention,
+  hours,
 }: {
   pills: { label: string; status?: boolean }[];
   mention: { primary: string; secondary: string };
+  /** Real opening-hours string from master_place.hours. Federated rows
+   *  carry no rating/price, so hours is the only metric shown — and only
+   *  when present. */
+  hours?: string;
 }) {
   return (
     <div className="flex flex-col" style={{ marginTop: 6, gap: 6 }}>
@@ -327,6 +378,27 @@ function FederatedMeta({
           ))}
         </div>
       )}
+      {hours ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            aria-hidden
+            className="size-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: "#6BE26F" }}
+          />
+          <span
+            className="truncate"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "16px",
+              color: "#A8B0B6",
+            }}
+          >
+            {hours}
+          </span>
+        </div>
+      ) : null}
       {mention.secondary && (
         <span
           className="truncate"

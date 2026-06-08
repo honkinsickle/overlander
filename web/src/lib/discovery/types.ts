@@ -34,6 +34,14 @@ export type SourceResult = {
   /** OSM-style `opening_hours` string (e.g. "Mo-Su 09:00-17:00").
    *  Surfaced as a stat on the planning slide when present. */
   openingHours?: string;
+  /** Real average rating (1.0–5.0) from a source that provides one
+   *  (Google). Omitted when the source has no rating — never fabricated. */
+  rating?: number;
+  /** Total user ratings backing `rating`. */
+  reviewCount?: number;
+  /** Price tier 1–4 ($–$$$$), mapped from the source's price signal
+   *  (Google `priceLevel`). Omitted when unknown. */
+  priceTier?: 1 | 2 | 3 | 4;
   /** Pre-mapped source fields — kept around so the dedup layer can
    *  look at tags/attributes the normalised shape doesn't carry. */
   raw?: Record<string, unknown>;

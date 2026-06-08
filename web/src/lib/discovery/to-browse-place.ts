@@ -42,6 +42,10 @@ export function toBrowsePlace(results: SourceResult[]): BrowsePlace {
       website: acc.website ?? r.website,
       phone: acc.phone ?? r.phone,
       openingHours: acc.openingHours ?? r.openingHours,
+      // Real rating/price come from whichever source carries them (Google).
+      rating: acc.rating ?? r.rating,
+      reviewCount: acc.reviewCount ?? r.reviewCount,
+      priceTier: acc.priceTier ?? r.priceTier,
     }),
     head,
   );
@@ -64,6 +68,12 @@ export function toBrowsePlace(results: SourceResult[]): BrowsePlace {
     title: merged.title,
     pills: PILLS_BY_CATEGORY[head.category],
     stats,
+    // Carried only when a source actually provided them; never fabricated.
+    ...(typeof merged.rating === "number" ? { rating: merged.rating } : {}),
+    ...(typeof merged.reviewCount === "number"
+      ? { reviewCount: merged.reviewCount }
+      : {}),
+    ...(merged.priceTier ? { priceTier: merged.priceTier } : {}),
     mention: {
       primary: results.length > 1 ? "Cross-referenced from" : "Sourced from",
       secondary: sourceLabels.join(" · "),

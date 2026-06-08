@@ -42,6 +42,13 @@ export type BrowsePlace = {
     website?: { display: string; href: string };
   };
   cta: string;
+  /** Real average rating (1.0–5.0) and review count from a source that
+   *  provides them (Google live results). Omitted when absent — the card
+   *  shows a rating only when one is real, never fabricated. */
+  rating?: number;
+  reviewCount?: number;
+  /** Real price tier 1–4 ($–$$$$) from the source. Omitted when unknown. */
+  priceTier?: 1 | 2 | 3 | 4;
   /** Origin of this result: 'live' = external-API discovery fanout,
    *  'master_place' = federated corridor RPC. Set only when the
    *  USE_FEDERATED_POIS flag is on; absent in the legacy live-only path,

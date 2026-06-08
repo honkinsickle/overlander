@@ -35,8 +35,9 @@ const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
 };
 
 /** Pre-joined FieldMask. Google charges by tier based on which fields
- *  are requested; this set covers card render needs without pulling
- *  in the priciest atomic fields (reviews, contact verifications). */
+ *  are requested; rating/userRatingCount/priceLevel are Pro-tier fields
+ *  (a deliberate SKU bump) so the card can show REAL ratings/price
+ *  instead of fabricated ones. */
 const FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -47,7 +48,25 @@ const FIELD_MASK = [
   "places.websiteUri",
   "places.nationalPhoneNumber",
   "places.regularOpeningHours.weekdayDescriptions",
+  "places.rating",
+  "places.userRatingCount",
+  "places.priceLevel",
 ].join(",");
+
+/** Places API v1 `priceLevel` is an enum string. Map the four paid tiers
+ *  to a 1–4 scale ($–$$$$). PRICE_LEVEL_FREE and PRICE_LEVEL_UNSPECIFIED
+ *  (and absent) → undefined: the card shows a $-tier only for a real paid
+ *  signal, never a fabricated one. */
+const PRICE_LEVEL_TIER: Record<string, 1 | 2 | 3 | 4> = {
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
+
+function priceLevelToTier(level?: string): 1 | 2 | 3 | 4 | undefined {
+  return level ? PRICE_LEVEL_TIER[level] : undefined;
+}
 
 let warnedMissingKey = false;
 
@@ -125,6 +144,13 @@ type GooglePlace = {
   websiteUri?: string;
   nationalPhoneNumber?: string;
   regularOpeningHours?: { weekdayDescriptions?: string[] };
+  /** Average rating 1.0–5.0. */
+  rating?: number;
+  /** Total number of user ratings backing `rating`. */
+  userRatingCount?: number;
+  /** Enum string: PRICE_LEVEL_FREE / _INEXPENSIVE / _MODERATE /
+   *  _EXPENSIVE / _VERY_EXPENSIVE / _UNSPECIFIED. */
+  priceLevel?: string;
 };
 
 function placeToSourceResult(
@@ -156,6 +182,15 @@ function placeToSourceResult(
       website: p.websiteUri,
       phone: p.nationalPhoneNumber,
       openingHours: p.regularOpeningHours?.weekdayDescriptions?.join("; "),
+      // Real Google ratings/price — only set when Google actually returned
+      // them (a place with no ratings yet omits both).
+      ...(typeof p.rating === "number" ? { rating: p.rating } : {}),
+      ...(typeof p.userRatingCount === "number"
+        ? { reviewCount: p.userRatingCount }
+        : {}),
+      ...(priceLevelToTier(p.priceLevel)
+        ? { priceTier: priceLevelToTier(p.priceLevel) }
+        : {}),
       raw: p as unknown as Record<string, unknown>,
     },
   ];
