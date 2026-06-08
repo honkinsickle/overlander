@@ -619,6 +619,41 @@ function SearchAreaResults({
   const shownPlaces = hasInput ? places : [];
   const shownError = hasInput ? error : null;
 
+  // Plot the visible results on the map by reusing the in-day browse marker
+  // layer: trip:browseResults → MapColumn renders one 22px category-colored
+  // dot per place (no camera move). Re-emits whenever the result set changes
+  // (pan / category switch / new query) so markers stay in sync with the
+  // cards. `places`/`hasInput` are stable refs, so this doesn't fire per
+  // render. An empty set (0 results) clears the dots.
+  useEffect(() => {
+    const visible = hasInput ? places : [];
+    window.dispatchEvent(
+      new CustomEvent("trip:browseResults", {
+        detail: {
+          category: null,
+          places: visible.map((p) => ({
+            coords: p.coords,
+            title: p.title,
+            id: p.id,
+            category: p.category,
+          })),
+        },
+      }),
+    );
+  }, [places, hasInput]);
+
+  // Clear the result markers when the results view goes away (back to the idle
+  // palette, or the panel closes) — MapColumn restores the trip-day pins.
+  useEffect(() => {
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("trip:browseResults", {
+          detail: { category: null, places: [] },
+        }),
+      );
+    };
+  }, []);
+
   return (
     <div>
       <div
