@@ -22,7 +22,11 @@ import {
 import type { Trip, Day } from "@/lib/trips/types";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
-import { computeCardStats, type CardCtx } from "@/lib/trip-browse/card-stats";
+import {
+  browsePlaceToWaypoint,
+  computeCardStats,
+  type CardCtx,
+} from "@/lib/trip-browse/card-stats";
 import { slideCategoryToBrowseCategory } from "@/lib/trip-browse/palette";
 import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 
@@ -369,6 +373,13 @@ export function FindNearbyPanel({
               getViewportBbox={getViewportBbox}
               dayNumber={activeDay?.dayNumber ?? 1}
               dayDate={activeDay?.date}
+              dayId={activeDay?.id}
+              dayLabel={activeDay?.label}
+              dayCoords={activeDay?.coords}
+              dayStartCoords={
+                activeDay?.startCoord ??
+                (activeDay?.dayNumber === 1 ? trip.startCoords : undefined)
+              }
               onAdd={handleAdd}
             />
           </div>
@@ -424,6 +435,10 @@ function SearchAreaResults({
   getViewportBbox,
   dayNumber,
   dayDate,
+  dayId,
+  dayLabel,
+  dayCoords,
+  dayStartCoords,
   onAdd,
 }: {
   query: string;
@@ -431,6 +446,13 @@ function SearchAreaResults({
   getViewportBbox: () => [number, number, number, number] | null;
   dayNumber: number;
   dayDate?: string;
+  /** Active day context — drives the detour ("Adds ~Xm" vs this day's route)
+   *  and the DETAILS overlay, mirroring the in-panel slide browse. The active
+   *  day is the proximity reference; ADD still lets you pick the real day. */
+  dayId?: string;
+  dayLabel?: string;
+  dayCoords?: [number, number];
+  dayStartCoords?: [number, number];
   onAdd: (place: BrowsePlace) => void;
 }) {
   const [places, setPlaces] = useState<BrowsePlace[]>([]);
@@ -533,8 +555,41 @@ function SearchAreaResults({
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         {shownPlaces.map((place) => {
           const slideKey: SlideCategoryKey = place.category ?? "scenic";
-          const ctx: CardCtx = { category: slideKey, dayNumber };
+          const ctx: CardCtx = {
+            category: slideKey,
+            dayNumber,
+            dayDate,
+            dayLabel,
+            dayCoords,
+            dayStartCoords,
+          };
           const stats = computeCardStats(place, ctx);
+          const synthWaypoint = browsePlaceToWaypoint(place, ctx, stats);
+          // Open the shared detail overlay — same dispatch the in-panel
+          // slide cards use, so DETAILS behaves identically here.
+          const openDetail = () => {
+            window.dispatchEvent(
+              new CustomEvent("trip:flyTo", {
+                detail: { coords: place.coords, name: place.title },
+              }),
+            );
+            window.dispatchEvent(
+              new CustomEvent("trip:openDetail", {
+                detail: {
+                  place: {
+                    id: place.id,
+                    title: place.title,
+                    photoUrl: place.photoUrl,
+                    dayNumber,
+                    dayId,
+                    coords: place.coords,
+                    description: place.description,
+                    waypoint: synthWaypoint,
+                  },
+                },
+              }),
+            );
+          };
           return (
             <LocationBrowseCard
               key={place.id}
@@ -545,12 +600,13 @@ function SearchAreaResults({
               addLabel="Add to a day"
               width={CARD_WIDTH}
               stats={stats}
-              // Viewport hits have no day-corridor detour — omit the
-              // "Adds <time>" row rather than show a fabricated estimate.
-              showDetour={false}
               onAdd={(e) => {
                 e?.stopPropagation();
                 onAdd(place);
+              }}
+              onOpen={(e) => {
+                e?.stopPropagation();
+                openDetail();
               }}
             />
           );
