@@ -17,12 +17,10 @@ import { LocationBrowseCard } from "@/components/trip/location-browse-card";
 import { PlaceSearch } from "@/components/trip/place-search";
 import {
   type BrowseCardCategory,
-  BROWSE_CARD_CATEGORIES,
-  browseCardPalette,
   browseCategoryToSlide,
   slideCategoryToBrowseCategory,
 } from "@/lib/trip-browse/palette";
-import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
+import { CategoryFilterRow } from "@/components/trip/category-filter-row";
 
 export type BrowseTarget = {
   category: Category;
@@ -420,7 +418,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
 
   return (
     <>
-      <FilterChipRow active={filters} onToggle={toggleFilter} />
+      <CategoryFilterRow active={filters} onToggle={toggleFilter} />
       <div
         className="flex-1 overflow-y-auto no-scrollbar"
         style={{ backgroundColor: "var(--bg-base)" }}
@@ -467,59 +465,6 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
                 )}
       </div>
     </>
-  );
-}
-
-function FilterChipRow({
-  active,
-  onToggle,
-}: {
-  active: Set<BrowseCardCategory>;
-  onToggle: (c: BrowseCardCategory) => void;
-}) {
-  return (
-    <div
-      className="flex items-center justify-center shrink-0"
-      role="toolbar"
-      aria-label="Filter by category"
-      style={{
-        gap: 12,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        backgroundColor: "var(--bg-base)",
-        borderBottom: "1px solid var(--border-subtle)",
-      }}
-    >
-      {BROWSE_CARD_CATEGORIES.map((c) => {
-        const palette = browseCardPalette[c];
-        const isActive = active.has(c);
-        return (
-          <button
-            key={c}
-            type="button"
-            aria-pressed={isActive}
-            aria-label={`Filter: ${palette.label}`}
-            onClick={() => onToggle(c)}
-            className="flex items-center justify-center transition-all"
-            style={{
-              width: 54,
-              height: 54,
-              borderRadius: 6,
-              backgroundColor: palette.badgeBg,
-              border: `1px solid ${palette.badgeBorder}`,
-              opacity: active.size === 0 || isActive ? 1 : 0.4,
-              boxShadow: isActive
-                ? `0 0 0 1px ${palette.badgeBorder}`
-                : "none",
-            }}
-          >
-            <CategoryIconV2 category={c} size={28} />
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

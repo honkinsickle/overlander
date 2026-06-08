@@ -79,6 +79,13 @@ const LIVE_SLIDE_FOR_PRIMARY: Record<string, SlideCategoryKey> = {
   peak: "scenic",
   mountain_peak: "scenic",
   scenic_spot: "scenic",
+  // ODDITY — Google: museum / art_gallery / historical_landmark. Enables the
+  // broad "oddity" category chip (the Find-Nearby filter row) to pull live
+  // museums/galleries; the corpus carries no oddity rows, so federated is
+  // empty here by design.
+  museum: "oddity",
+  art_gallery: "oddity",
+  historical_landmark: "oddity",
 };
 
 const LIMIT = 24;

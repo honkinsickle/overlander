@@ -27,7 +27,11 @@ import {
   computeCardStats,
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
-import { slideCategoryToBrowseCategory } from "@/lib/trip-browse/palette";
+import {
+  slideCategoryToBrowseCategory,
+  type BrowseCardCategory,
+} from "@/lib/trip-browse/palette";
+import { CategoryFilterRow } from "@/components/trip/category-filter-row";
 import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 
 /**
@@ -227,6 +231,27 @@ const BUCKETS: Bucket[] = [
   },
 ];
 
+/** The 7 broad filter-row categories → the corpus `primary_category` set each
+ *  one searches. Lets an icon tap reuse the SAME /api/search-area call the
+ *  palette tiles make (via the `primaryCategories` arg). The route maps these
+ *  back to a live slide bucket for the Google fanout; `urban` has no data
+ *  backing (empty), matching the Add-Waypoints panel where urban drops out. */
+const BROAD_PRIMARY_BY_CATEGORY: Record<BrowseCardCategory, string[]> = {
+  camping: [
+    "dispersed_camping",
+    "campground",
+    "rv_park",
+    "camping_cabin",
+    "recreation_area",
+  ],
+  urban: [],
+  scenic: ["viewpoint", "peak", "mountain_peak", "scenic_spot", "trailhead", "hiking_area"],
+  food: ["restaurant", "cafe", "grocery", "grocery_store"],
+  fuel: ["gas_station", "truck_stop", "ev_charging"],
+  hotel: ["hotel", "motel", "resort_hotel"],
+  oddity: ["museum", "art_gallery", "historical_landmark"],
+};
+
 export function FindNearbyPanel({
   trip,
   getViewportBbox,
@@ -242,6 +267,9 @@ export function FindNearbyPanel({
   // Query mirrors the top-bar "Search for anything" input via `trip:search`.
   const [query, setQuery] = useState("");
   const [activeTile, setActiveTile] = useState<Tile | null>(null);
+  // Active broad-category chip from the inline filter row (single-select).
+  // Supersedes an active palette tile; cleared when free-text takes over.
+  const [activeIcon, setActiveIcon] = useState<BrowseCardCategory | null>(null);
   // The day used for "today's hours" on cards + the day-picker proximity
   // seed. From the URL (?day=), falling back to the first day. Search is
   // bounded by viewport, not by day.
@@ -263,6 +291,12 @@ export function FindNearbyPanel({
     const onSearch = (e: Event) => {
       const q = (e as CustomEvent<{ query: string }>).detail?.query ?? "";
       setQuery(q);
+      // Free-text supersedes a category selection. (Empty query, e.g. from
+      // clearSearch, leaves an active chip/tile alone.)
+      if (q.trim() !== "") {
+        setActiveTile(null);
+        setActiveIcon(null);
+      }
     };
     window.addEventListener("trip:search", onSearch);
     return () => window.removeEventListener("trip:search", onSearch);
@@ -288,13 +322,30 @@ export function FindNearbyPanel({
     [trip.days, activeDayId],
   );
 
-  const showResults = query.trim() !== "" || activeTile !== null;
+  const showResults =
+    query.trim() !== "" || activeTile !== null || activeIcon !== null;
 
   const backToPalette = () => {
     setActiveTile(null);
+    setActiveIcon(null);
     // Clears the top-bar text too so query + tile reset together.
     window.dispatchEvent(new CustomEvent("trip:clearSearch"));
   };
+
+  // Inline category switch (filter row). Single-select: tap to switch, tap the
+  // active one again to clear back to the palette. Clears the text query and
+  // any palette tile so the chip drives the search.
+  const handleIconToggle = (c: BrowseCardCategory) => {
+    setActiveIcon((prev) => (prev === c ? null : c));
+    setActiveTile(null);
+    window.dispatchEvent(new CustomEvent("trip:clearSearch"));
+  };
+
+  // What the results fetch filters on: the active chip wins, else the palette
+  // tile, else none (free-text path).
+  const resultPrimaryCategories: string[] | null = activeIcon
+    ? BROAD_PRIMARY_BY_CATEGORY[activeIcon]
+    : (activeTile?.primaryCategories ?? null);
 
   // ADD with no preselected day → open the day picker. The full BrowsePlace
   // is already in hand from /api/search-area (live or federated), so no
@@ -352,6 +403,13 @@ export function FindNearbyPanel({
         />
       ) : showResults ? (
         <div className="flex flex-col flex-1 min-h-0">
+          {/* Inline category switcher — same icon row as the Add-Waypoints
+           *  panel. Tap to switch category in the current viewport without
+           *  returning to the palette. */}
+          <CategoryFilterRow
+            active={activeIcon ? new Set([activeIcon]) : new Set()}
+            onToggle={handleIconToggle}
+          />
           <button
             type="button"
             onClick={backToPalette}
@@ -378,7 +436,7 @@ export function FindNearbyPanel({
           >
             <SearchAreaResults
               query={query}
-              primaryCategories={activeTile?.primaryCategories ?? null}
+              primaryCategories={resultPrimaryCategories}
               getViewportBbox={getViewportBbox}
               submitNonce={submitNonce}
               dayNumber={activeDay?.dayNumber ?? 1}
