@@ -42,6 +42,9 @@ export type PlaceSearchProps = {
    *  label. Defaults to 1 for the standalone host; the panel passes the
    *  real target day. */
   dayNumber?: number;
+  /** ISO date of the day being browsed — lets each card show TODAY's
+   *  opening hours. Absent on the standalone host (no day context). */
+  dayDate?: string;
   /** Reports the master_place id of an added result. */
   onAdd: (id: string) => void;
 };
@@ -55,6 +58,7 @@ export function PlaceSearch({
   center,
   categoryFilter,
   dayNumber = 1,
+  dayDate,
   onAdd,
 }: PlaceSearchProps): React.ReactElement {
   const [places, setPlaces] = useState<BrowsePlace[]>([]);
@@ -188,6 +192,7 @@ export function PlaceSearch({
               place={place}
               category={slideCategoryToBrowseCategory(slideKey)}
               dayNumber={dayNumber}
+              dayDate={dayDate}
               width={CARD_WIDTH}
               stats={stats}
               // Corpus-wide hits have no real corridor detour — omit the

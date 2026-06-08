@@ -33,6 +33,9 @@ type Props = {
   place: BrowsePlace;
   category: BrowseCardCategory;
   dayNumber: number;
+  /** ISO date of the day this card is browsed for. Used to show TODAY's
+   *  opening hours (this weekday) rather than the full weekly schedule. */
+  dayDate?: string;
   /** 300 = 2-up default; 354 = 3-up expanded. */
   width?: CardWidth;
   stats: CardStats;
@@ -50,10 +53,73 @@ const HERO_H = 212;
 const CARD_H = 455;
 const BODY_PAD_X = 14;
 
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/** Weekday name (e.g. "Monday") for an ISO date, in UTC to match how the
+ *  rest of the app formats `Day.date`. undefined for missing/invalid. */
+function weekdayFromISO(iso?: string): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return WEEKDAYS[d.getUTCDay()];
+}
+
+/** Compact a Google time-range portion ("9:00 AM – 11:00 PM") to the card
+ *  form ("9a–11p"): drop ":00", AM/PM → lowercase a/p, normalize the dash.
+ *  Leaves tokens it doesn't recognize untouched (e.g. a bare "12:30" in a
+ *  multi-range day). */
+function compactHourText(text: string): string {
+  return text
+    .replace(/(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?/g, (_m, h, min, ap) =>
+      min === "00" ? `${h}${ap.toLowerCase()}` : `${h}:${min}${ap.toLowerCase()}`,
+    )
+    .replace(/\s*[–—-]\s*/g, "–")
+    .trim();
+}
+
+/** Derive the card status line — TODAY's opening hours — from a real hours
+ *  value. Returns "Open {range}" / "Closed" / "Open 24/7", or undefined
+ *  when the shape can't be parsed safely (omit, never guess).
+ *
+ *  Handles the two real shapes that reach the card:
+ *   - federated raw "24/7" → "Open 24/7"
+ *   - Google `regularOpeningHours.weekdayDescriptions` joined with "; "
+ *     ("Monday: 9:00 AM – 11:00 PM; Tuesday: Closed; …") → today's entry.
+ *  Anything else (arbitrary OSM `opening_hours` strings; NPS arrays, which
+ *  are already dropped upstream) → undefined. Uses the regular weekly
+ *  schedule only (we don't fetch holiday/special hours). */
+function todaysHours(value: string, weekday?: string): string | undefined {
+  const v = value.trim();
+  if (/^(open\s+)?24\s*\/\s*7$/i.test(v) || /^open 24 hours$/i.test(v)) {
+    return "Open 24/7";
+  }
+  if (weekday && new RegExp(`\\b${weekday}\\s*:`, "i").test(v)) {
+    const entry = v
+      .split(/;\s*/)
+      .find((e) => new RegExp(`^${weekday}\\s*:`, "i").test(e.trim()));
+    if (!entry) return undefined;
+    const portion = entry.slice(entry.indexOf(":") + 1).trim();
+    if (/closed/i.test(portion)) return "Closed";
+    if (/open 24 hours|24\s*\/\s*7/i.test(portion)) return "Open 24/7";
+    const compact = compactHourText(portion);
+    return compact ? `Open ${compact}` : undefined;
+  }
+  return undefined;
+}
+
 export function LocationBrowseCard({
   place,
   category,
   dayNumber,
+  dayDate,
   width = 300,
   stats,
   showDetour = true,
@@ -67,10 +133,18 @@ export function LocationBrowseCard({
   // Federated (master_place) rows carry real provenance pills (incl. the
   // "MVUM corridor" status pill) and a "Federated from <sources>" mention.
   const isFederated = place.source === "master_place";
-  // Live-card status: the place's real opening-hours string when a source
-  // provided one, else undefined → the status line is omitted. Never a
-  // hardcoded "Open · 8a–7p" / "Reserved · $25/night" placeholder.
-  const realStatus = place.stats.find((s) => s.label === "HOURS")?.value;
+  // Status line = TODAY's opening hours (the browsed day's weekday), never
+  // the full week and never a hardcoded placeholder:
+  //   - real hours present → "Open 9a–11p" / "Closed" / "Open 24/7", or
+  //     omitted if the shape can't be parsed safely (no guess).
+  //   - no hours + lodging category → "Open 24/7" (the one safe default;
+  //     NOT applied to camp/viewpoint/fuel, where it would be false).
+  const rawHours = place.stats.find((s) => s.label === "HOURS")?.value;
+  const hoursStatus = rawHours
+    ? todaysHours(rawHours, weekdayFromISO(dayDate))
+    : category === "hotel"
+      ? "Open 24/7"
+      : undefined;
   // Real rating + price from the source (Google live results). Both omitted
   // when the place carries none — shown only when real, never fabricated.
   const rating =
@@ -87,11 +161,11 @@ export function LocationBrowseCard({
   // Only the federated card surfaces the "You'd arrive..." portion; live
   // cards omit it (the arrival time is a fixed-5pm placeholder, not real).
   const arrivesAt = stats.cost.eta.replace(/^to your day\.\s*/i, "");
-  // Detour is a real distance-based estimate — kept, but labeled as such on
-  // live cards ("Adds ~Xm est"). Federated cards keep their existing label.
+  // Detour is a real distance-based estimate — the "~" marks it approximate
+  // on live cards ("Adds ~32m"). Federated cards keep their existing label.
   const addsLabel = isFederated
     ? stats.cost.hero
-    : `${stats.cost.hero.replace(/^Adds\s+/, "Adds ~")} est`;
+    : stats.cost.hero.replace(/^Adds\s+/, "Adds ~");
 
   return (
     <div
@@ -116,11 +190,11 @@ export function LocationBrowseCard({
             <FederatedMeta
               pills={place.pills}
               mention={place.mention}
-              hours={realStatus}
+              hours={hoursStatus}
             />
           ) : (
             <StatusRow
-              status={realStatus}
+              status={hoursStatus}
               rating={rating}
               priceTier={place.priceTier}
             />

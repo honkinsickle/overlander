@@ -43,6 +43,9 @@ export type BrowseTarget = {
   /** Day label like "Whitefish, MT — Banff, AB" — used to derive the
    *  next-anchor name for the "new ETA at X" line. */
   dayLabel?: string;
+  /** ISO date of the day being browsed (Day.date). Lets each card show
+   *  TODAY's opening hours (this weekday) instead of the full week. */
+  dayDate?: string;
 };
 
 // 2-up: 16 + 300 + 16 + 300 + 16 = 648 of content + a few px slack centered.
@@ -429,6 +432,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
               center={target.dayCoords ?? target.dayStartCoords}
               categoryFilter={searchFacet}
               dayNumber={target.dayNumber}
+              dayDate={target.dayDate}
               onAdd={handleSearchAdd}
             />
           </div>
@@ -589,6 +593,7 @@ function BrowseCardCell({
         place={place}
         category={slideCategoryToBrowseCategory(placeCategory)}
         dayNumber={target.dayNumber}
+        dayDate={target.dayDate}
         width={expanded ? 354 : 300}
         stats={stats}
         onAdd={(e?: MouseEvent) => {
