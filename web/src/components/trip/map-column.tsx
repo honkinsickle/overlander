@@ -232,6 +232,7 @@ export function MapColumn({
   days,
   startCoords,
   routePolyline,
+  onMoveEnd,
 }: {
   tripId: string;
   days: Day[];
@@ -240,9 +241,19 @@ export function MapColumn({
    *  5). When present, MapColumn decodes and draws this directly instead
    *  of calling the Mapbox Directions API. */
   routePolyline?: string;
+  /** Fires on map load and after every pan/zoom with the current viewport
+   *  bbox `[west, south, east, north]`. Lets a sibling (the top-level
+   *  search) bound its query to what's on screen — "search this area". */
+  onMoveEnd?: (bbox: [number, number, number, number]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  /** Latest onMoveEnd from props, read inside the []-dep init effect so the
+   *  handler never goes stale without re-running map setup. */
+  const onMoveEndRef = useRef(onMoveEnd);
+  useEffect(() => {
+    onMoveEndRef.current = onMoveEnd;
+  }, [onMoveEnd]);
   /** Trip-day pins, shared across the marker-init and browse-results
    *  effects so the latter can hide/show them when the panel toggles. */
   const tripDayMarkersRef = useRef<mapboxgl.Marker[]>([]);
@@ -362,6 +373,22 @@ export function MapColumn({
     });
     mapRef.current = map;
     setMapInstance(map);
+
+    // Publish the viewport bbox on load + after every move so the top-level
+    // search can bound a query to what's on screen. `getBounds()` is
+    // [west,south,east,north] in lng/lat.
+    const emitBounds = () => {
+      const b = map.getBounds();
+      if (!b) return;
+      onMoveEndRef.current?.([
+        b.getWest(),
+        b.getSouth(),
+        b.getEast(),
+        b.getNorth(),
+      ]);
+    };
+    map.on("load", emitBounds);
+    map.on("moveend", emitBounds);
 
     const dayCoords = days
       .map((d) => d.coords)

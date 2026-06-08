@@ -29,11 +29,19 @@ export async function discover(args: {
   categories: SlideCategoryKey[];
   sources: WaypointSource[];
   signal?: AbortSignal;
+  /** Free-text path: when set, text-capable sources match this string
+   *  within each bbox and ignore `categories`. */
+  textQuery?: string;
 }): Promise<BrowsePlace[]> {
   const queries = args.sources.flatMap((s) =>
     args.bboxes.map((bbox) =>
       s
-        .query({ bbox, categories: args.categories, signal: args.signal })
+        .query({
+          bbox,
+          categories: args.categories,
+          signal: args.signal,
+          textQuery: args.textQuery,
+        })
         .catch((err) => {
           console.warn(`[discovery] source ${s.id} failed:`, err);
           return [] as SourceResult[];

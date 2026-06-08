@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   BedDouble,
   Coffee,
   Droplet,
@@ -14,25 +16,37 @@ import {
   Triangle,
   UtensilsCrossed,
   Wrench,
+  X,
   type LucideIcon,
 } from "lucide-react";
+import type { Trip, Day } from "@/lib/trips/types";
+import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
+import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import { computeCardStats, type CardCtx } from "@/lib/trip-browse/card-stats";
+import { slideCategoryToBrowseCategory } from "@/lib/trip-browse/palette";
+import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 
 /**
  * Find Nearby — the top-level "Search for anything" surface, shown when no
  * day panel is open (Search Active slideup state, Paper frame 5WK-0).
  *
- * Renders the clean category-tile palette only — the launcher / zero state.
- * It deliberately does NOT render result cards: the corpus-only top-level
- * results were structurally thin (no photos / location / ratings) and read
- * as broken next to the rich in-panel slide browse. Until the top-level
- * search is rebuilt on the live-Google + federated merged pipeline (the
- * "search this area" viewport task), this surface stays a launcher and
- * never paints bare cards.
+ * RICH "search this area": the top-bar text query and the category tiles both
+ * hit GET /api/search-area bounded to the CURRENT MAP VIEWPORT (read at query
+ * time via `getViewportBbox`). That route merges the same live Google +
+ * federated corpus pipeline the in-panel slide browse uses, so results render
+ * through the identical LocationBrowseCard (photos / ratings / hours where the
+ * source has them; honest-absent otherwise).
  *
- * The rich search still lives in the in-panel slide browse (CategoryBrowsePanel,
- * day-scoped) — untouched. The top-bar "Search for anything" input also feeds
- * that panel when a day's browse is open; here, with no day open, it has no
- * results surface to drive.
+ * States:
+ *   - empty query AND no active tile → tile palette (launcher / zero-state)
+ *   - typed query OR active tile      → viewport-bounded results
+ *
+ * ADD has no preselected day, so it opens a route-proximity-sorted day picker
+ * and adds via the existing `trip:toggleAdded` mechanism. The full BrowsePlace
+ * is already in hand from /api/search-area — no re-hydrate needed.
+ *
+ * The in-panel slide browse (CategoryBrowsePanel) is a separate, day-scoped
+ * surface and stays untouched.
  */
 
 type Tile = {
@@ -209,7 +223,104 @@ const BUCKETS: Bucket[] = [
   },
 ];
 
-export function FindNearbyPanel() {
+export function FindNearbyPanel({
+  trip,
+  getViewportBbox,
+}: {
+  trip: Trip;
+  /** Reads the live map viewport bbox [W,S,E,N] at query time, so a search
+   *  is bounded to "this area". Null until the map has emitted bounds. */
+  getViewportBbox: () => [number, number, number, number] | null;
+  /** Reserved — panel dismissal is owned by the parent (Escape + the Top
+   *  Bar's exit ✕). */
+  onClose?: () => void;
+}) {
+  // Query mirrors the top-bar "Search for anything" input via `trip:search`.
+  const [query, setQuery] = useState("");
+  const [activeTile, setActiveTile] = useState<Tile | null>(null);
+  // The day used for "today's hours" on cards + the day-picker proximity
+  // seed. From the URL (?day=), falling back to the first day. Search is
+  // bounded by viewport, not by day.
+  const [activeDayId, setActiveDayId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const fromUrl = new URLSearchParams(window.location.search).get("day");
+      if (fromUrl) return fromUrl;
+    }
+    return trip.days[0]?.id ?? "";
+  });
+  // When set, the day-picker overlay is open for this place.
+  const [pending, setPending] = useState<BrowsePlace | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      const q = (e as CustomEvent<{ query: string }>).detail?.query ?? "";
+      setQuery(q);
+    };
+    window.addEventListener("trip:search", onSearch);
+    return () => window.removeEventListener("trip:search", onSearch);
+  }, []);
+
+  useEffect(() => {
+    const onActiveDay = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (id) setActiveDayId(id);
+    };
+    window.addEventListener("trip:activeDay", onActiveDay);
+    return () => window.removeEventListener("trip:activeDay", onActiveDay);
+  }, []);
+
+  const activeDay = useMemo(
+    () => trip.days.find((d) => d.id === activeDayId) ?? trip.days[0],
+    [trip.days, activeDayId],
+  );
+
+  const showResults = query.trim() !== "" || activeTile !== null;
+
+  const backToPalette = () => {
+    setActiveTile(null);
+    // Clears the top-bar text too so query + tile reset together.
+    window.dispatchEvent(new CustomEvent("trip:clearSearch"));
+  };
+
+  // ADD with no preselected day → open the day picker. The full BrowsePlace
+  // is already in hand from /api/search-area (live or federated), so no
+  // re-hydrate is needed.
+  const handleAdd = (place: BrowsePlace) => {
+    setPending(place);
+  };
+
+  const addToDay = (day: Day) => {
+    if (!pending) return;
+    const place = pending;
+    // Paint the confirmation + close the picker first, then dispatch the
+    // add on the next tick. The add triggers an RSC refresh (revalidatePath
+    // in addWaypointAction) that would otherwise race the toast render.
+    setConfirmation(`Added to Day ${day.dayNumber}`);
+    setPending(null);
+    window.setTimeout(() => setConfirmation(null), 2600);
+    // Reuse the existing add-to-day mechanism, parameterized by the chosen
+    // day (DayDetail listens for trip:toggleAdded → addWaypointAction).
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("trip:toggleAdded", {
+          detail: {
+            placeId: place.id,
+            dayId: day.id,
+            dayNumber: day.dayNumber,
+            place: {
+              id: place.id,
+              title: place.title,
+              description: place.description,
+              photoUrl: place.photoUrl,
+              coords: place.coords,
+            },
+          },
+        }),
+      );
+    }, 0);
+  };
+
   return (
     <div
       role="region"
@@ -219,16 +330,231 @@ export function FindNearbyPanel() {
     >
       <FindScopeHeader />
 
+      {pending ? (
+        <DayPicker
+          place={pending}
+          trip={trip}
+          onPick={addToDay}
+          onCancel={() => setPending(null)}
+        />
+      ) : showResults ? (
+        <div className="flex flex-col flex-1 min-h-0">
+          <button
+            type="button"
+            onClick={backToPalette}
+            className="flex items-center shrink-0"
+            style={{
+              gap: 8,
+              paddingLeft: 20,
+              paddingRight: 20,
+              paddingTop: 4,
+              paddingBottom: 12,
+              fontFamily: "var(--ff-display)",
+              fontSize: 12,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--amber)",
+            }}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2} />
+            {activeTile ? `Categories · ${activeTile.label}` : "Categories"}
+          </button>
+          <div
+            className="flex-1 overflow-y-auto no-scrollbar"
+            style={{ paddingLeft: 16, paddingRight: 16, paddingBottom: 24 }}
+          >
+            <SearchAreaResults
+              query={query}
+              primaryCategories={activeTile?.primaryCategories ?? null}
+              getViewportBbox={getViewportBbox}
+              dayNumber={activeDay?.dayNumber ?? 1}
+              dayDate={activeDay?.date}
+              onAdd={handleAdd}
+            />
+          </div>
+        </div>
+      ) : (
+        <div
+          className="flex-1 overflow-y-auto no-scrollbar"
+          style={{ paddingLeft: 20, paddingRight: 20, paddingBottom: 24 }}
+        >
+          {BUCKETS.map((bucket) => (
+            <BucketSection
+              key={bucket.id}
+              bucket={bucket}
+              onPick={setActiveTile}
+            />
+          ))}
+        </div>
+      )}
+
+      {confirmation ? (
+        <div
+          role="status"
+          className="shrink-0 flex items-center justify-center"
+          style={{
+            margin: 12,
+            padding: "10px 14px",
+            borderRadius: 8,
+            backgroundColor: "rgba(77,154,110,0.18)",
+            border: "1px solid #4D9A6E",
+            color: "#9CD4B0",
+            fontFamily: "var(--ff-display)",
+            fontSize: 13,
+            letterSpacing: "0.04em",
+          }}
+        >
+          {confirmation}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const CARD_WIDTH = 300;
+const DEBOUNCE_MS = 200;
+
+/** Fetches the merged live + federated result set from /api/search-area,
+ *  bounded to the current viewport bbox (read at fetch time), and renders it
+ *  through the shared LocationBrowseCard — identical to the in-panel slide
+ *  browse cards. Free-text query takes precedence over an active tile. */
+function SearchAreaResults({
+  query,
+  primaryCategories,
+  getViewportBbox,
+  dayNumber,
+  dayDate,
+  onAdd,
+}: {
+  query: string;
+  primaryCategories: string[] | null;
+  getViewportBbox: () => [number, number, number, number] | null;
+  dayNumber: number;
+  dayDate?: string;
+  onAdd: (place: BrowsePlace) => void;
+}) {
+  const [places, setPlaces] = useState<BrowsePlace[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reqIdRef = useRef(0);
+
+  const q = query.trim();
+  const primaryKey = primaryCategories ? primaryCategories.join(",") : "";
+  const hasInput = q.length > 0 || primaryKey.length > 0;
+
+  useEffect(() => {
+    if (!hasInput) return;
+
+    const timer = setTimeout(() => {
+      const bbox = getViewportBbox();
+      const reqId = ++reqIdRef.current;
+      setLoading(true);
+      setError(null);
+
+      // Free-text wins; otherwise the tile's corpus primary_category set.
+      const params = new URLSearchParams();
+      if (!bbox) {
+        setError("Map isn't ready yet — pan the map, then search.");
+        setLoading(false);
+        return;
+      }
+      params.set("bbox", bbox.join(","));
+      if (q.length > 0) params.set("q", q);
+      else params.set("categories", primaryKey);
+
+      (async () => {
+        const res = await fetch(`/api/search-area?${params.toString()}`);
+        if (!res.ok) {
+          const detail = await res.json().catch(() => null);
+          throw new Error(detail?.error ?? `search failed (${res.status})`);
+        }
+        const { places: found } = (await res.json()) as {
+          places: BrowsePlace[];
+        };
+        if (reqId !== reqIdRef.current) return;
+        setPlaces(found);
+      })()
+        .catch((e: unknown) => {
+          if (reqId !== reqIdRef.current) return;
+          setError(e instanceof Error ? e.message : "search failed");
+          setPlaces([]);
+        })
+        .finally(() => {
+          if (reqId !== reqIdRef.current) return;
+          setLoading(false);
+        });
+    }, DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+    // getViewportBbox is a stable getter; bbox is read at fetch time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, primaryKey, hasInput]);
+
+  const shownPlaces = hasInput ? places : [];
+  const shownError = hasInput ? error : null;
+
+  return (
+    <div>
       <div
-        className="flex-1 overflow-y-auto no-scrollbar"
-        style={{ paddingLeft: 20, paddingRight: 20, paddingBottom: 24 }}
+        style={{
+          fontFamily: "var(--ff-mono)",
+          fontSize: 12,
+          color: "var(--text-muted)",
+          minHeight: 16,
+          marginBottom: 16,
+        }}
       >
-        {BUCKETS.map((bucket) => (
-          // Tiles are inert launchers for now — the corpus-only result path
-          // was removed (bare cards). Re-wired to the rich viewport search
-          // when that task lands.
-          <BucketSection key={bucket.id} bucket={bucket} onPick={() => {}} />
-        ))}
+        {!hasInput
+          ? "type to search"
+          : loading
+            ? "searching this area…"
+            : shownError
+              ? null
+              : `${shownPlaces.length} result${shownPlaces.length === 1 ? "" : "s"} in view`}
+      </div>
+
+      {shownError !== null && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 16,
+            padding: "10px 14px",
+            border: "1px solid var(--input-error)",
+            borderRadius: 6,
+            color: "var(--input-error)",
+            fontFamily: "var(--ff-mono)",
+            fontSize: 13,
+          }}
+        >
+          {shownError}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+        {shownPlaces.map((place) => {
+          const slideKey: SlideCategoryKey = place.category ?? "scenic";
+          const ctx: CardCtx = { category: slideKey, dayNumber };
+          const stats = computeCardStats(place, ctx);
+          return (
+            <LocationBrowseCard
+              key={place.id}
+              place={place}
+              category={slideCategoryToBrowseCategory(slideKey)}
+              dayNumber={dayNumber}
+              dayDate={dayDate}
+              addLabel="Add to a day"
+              width={CARD_WIDTH}
+              stats={stats}
+              // Viewport hits have no day-corridor detour — omit the
+              // "Adds <time>" row rather than show a fabricated estimate.
+              showDetour={false}
+              onAdd={(e) => {
+                e?.stopPropagation();
+                onAdd(place);
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -415,5 +741,165 @@ function TileButton({
       )}
     </button>
   );
+}
+
+/** Day picker for the top-level ADD action. Lists every trip day, sorted by
+ *  route proximity to the place so the likely targets float to the top —
+ *  essential when the trip spans dozens of days. */
+function DayPicker({
+  place,
+  trip,
+  onPick,
+  onCancel,
+}: {
+  place: BrowsePlace;
+  trip: Trip;
+  onPick: (day: Day) => void;
+  onCancel: () => void;
+}) {
+  const ranked = useMemo(() => {
+    return trip.days
+      .map((day, i) => {
+        const prev = trip.days[i - 1];
+        const start: [number, number] | undefined =
+          prev?.coords ?? (i === 0 ? trip.startCoords : undefined);
+        const end = day.coords;
+        const segment: [number, number][] =
+          start && end ? [start, end] : end ? [end] : start ? [start] : [];
+        const milesOff =
+          segment.length > 0
+            ? pointToPolylineMi(place.coords, segment)
+            : Infinity;
+        return { day, milesOff };
+      })
+      .sort((a, b) => a.milesOff - b.milesOff);
+  }, [trip.days, trip.startCoords, place.coords]);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div
+        className="flex items-center shrink-0"
+        style={{
+          gap: 10,
+          paddingLeft: 20,
+          paddingRight: 16,
+          paddingBottom: 12,
+        }}
+      >
+        <div className="flex flex-col min-w-0 flex-1">
+          <span
+            className="uppercase"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontSize: 11,
+              letterSpacing: "0.16em",
+              color: "var(--text-muted)",
+            }}
+          >
+            Add to which day?
+          </span>
+          <span
+            className="truncate"
+            style={{
+              fontFamily: "var(--ff-sans)",
+              fontSize: 18,
+              fontWeight: 700,
+              color: "var(--text-primary)",
+            }}
+          >
+            {place.title}
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="Cancel"
+          onClick={onCancel}
+          className="flex items-center justify-center shrink-0"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 6,
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "var(--text-muted)",
+          }}
+        >
+          <X className="w-4 h-4" strokeWidth={2} />
+        </button>
+      </div>
+      <div
+        className="flex-1 overflow-y-auto no-scrollbar"
+        style={{ paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}
+      >
+        {ranked.map(({ day, milesOff }) => (
+          <button
+            key={day.id}
+            type="button"
+            onClick={() => onPick(day)}
+            className="flex items-center w-full transition-colors hover:bg-white/[0.06]"
+            style={{
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.06)",
+              marginBottom: 8,
+              textAlign: "left",
+            }}
+          >
+            <span
+              className="flex items-center justify-center shrink-0"
+              style={{
+                width: 44,
+                height: 36,
+                borderRadius: 6,
+                backgroundColor: "rgba(255,255,255,0.05)",
+                fontFamily: "var(--ff-display)",
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+              }}
+            >
+              D{day.dayNumber}
+            </span>
+            <span className="flex flex-col min-w-0 flex-1">
+              <span
+                className="truncate"
+                style={{
+                  fontFamily: "var(--ff-sans)",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "var(--text-primary)",
+                }}
+              >
+                {day.label || `Day ${day.dayNumber}`}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--ff-mono)",
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                }}
+              >
+                {formatShortDate(day.date)}
+                {Number.isFinite(milesOff)
+                  ? ` · ${milesOff < 10 ? milesOff.toFixed(1) : Math.round(milesOff)} mi off route`
+                  : ""}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 

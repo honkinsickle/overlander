@@ -50,10 +50,17 @@ export type SourceResult = {
 export interface WaypointSource {
   id: SourceId;
   /** Returns places inside the bounding box matching any of the given
-   *  categories. Implementations should respect `signal` for cancel. */
+   *  categories. Implementations should respect `signal` for cancel.
+   *
+   *  `textQuery` is the optional free-text path: when present, a source
+   *  that supports text search (Google `searchText`) matches the text
+   *  within `bbox` and ignores `categories`. Sources without text support
+   *  ignore `textQuery` (and typically return [] when called on a text
+   *  query with no categories). */
   query(args: {
     bbox: [west: number, south: number, east: number, north: number];
     categories: SlideCategoryKey[];
     signal?: AbortSignal;
+    textQuery?: string;
   }): Promise<SourceResult[]>;
 }

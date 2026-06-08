@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetail } from "@/components/trip/day-detail";
 import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
@@ -39,6 +39,11 @@ export function TripSlideupBody({
   const [browseOpen, setBrowseOpen] = useState(false);
   const toggleCollapsed = () => setCollapsed((c) => !c);
 
+  // Latest map viewport bbox [W,S,E,N], updated on every pan/zoom via the
+  // MapColumn callback. Held in a ref so map moves don't re-render the body;
+  // the top-level search reads it at query time ("search this area").
+  const viewportBboxRef = useRef<[number, number, number, number] | null>(null);
+
   useEffect(() => {
     if (!searchActive) return;
     const onKey = (e: KeyboardEvent) => {
@@ -66,6 +71,9 @@ export function TripSlideupBody({
           days={trip.days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
+          onMoveEnd={(bbox) => {
+            viewportBboxRef.current = bbox;
+          }}
         />
         <MapDetailOverlay />
         {isReference && (
@@ -96,7 +104,10 @@ export function TripSlideupBody({
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid rgba(255,255,255,0.07)" }}
         >
-          <FindNearbyPanel />
+          <FindNearbyPanel
+            trip={trip}
+            getViewportBbox={() => viewportBboxRef.current}
+          />
         </div>
       )}
 
