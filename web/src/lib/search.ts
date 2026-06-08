@@ -47,6 +47,10 @@ export interface SearchParams {
   categories?: string[];
   /** Facet filter on `overlander_tags`. */
   overlanderTags?: string[];
+  /** Optional viewport bounding box `[west, south, east, north]` (lng/lat).
+   *  When set, results are geo-filtered to inside the box — the corpus half
+   *  of the top-level "search this area". */
+  bbox?: [number, number, number, number];
   /** Default 20; max 100 per Typesense limits. */
   limit?: number;
 }
@@ -141,6 +145,15 @@ function buildFilter(params: SearchParams): string | undefined {
   if (params.overlanderTags && params.overlanderTags.length > 0) {
     const list = params.overlanderTags.map((t) => `\`${t}\``).join(",");
     clauses.push(`overlander_tags:=[${list}]`);
+  }
+  if (params.bbox) {
+    // Typesense geo-filter on the `location` geopoint takes a polygon as a
+    // flat lat,lng list (min 3 vertices). Express the bbox as its 4 corners
+    // (CCW). Note the field stores [lat,lng], so each pair is lat THEN lng.
+    const [w, s, e, n] = params.bbox;
+    clauses.push(
+      `location:(${s}, ${w}, ${s}, ${e}, ${n}, ${e}, ${n}, ${w})`,
+    );
   }
   return clauses.length > 0 ? clauses.join(" && ") : undefined;
 }

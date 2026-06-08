@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetail } from "@/components/trip/day-detail";
 import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
@@ -32,7 +32,17 @@ export function TripSlideupBody({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  // True while the Add-Waypoints panel (CategoryBrowsePanel) is open. When
+  // it is, the top-bar search drives THAT panel's search mode, so the
+  // standalone Find Nearby zero-state must not also mount (it would peek
+  // out to the right of the narrower 2-up browse panel).
+  const [browseOpen, setBrowseOpen] = useState(false);
   const toggleCollapsed = () => setCollapsed((c) => !c);
+
+  // Latest map viewport bbox [W,S,E,N], updated on every pan/zoom via the
+  // MapColumn callback. Held in a ref so map moves don't re-render the body;
+  // the top-level search reads it at query time ("search this area").
+  const viewportBboxRef = useRef<[number, number, number, number] | null>(null);
 
   useEffect(() => {
     if (!searchActive) return;
@@ -43,6 +53,15 @@ export function TripSlideupBody({
     return () => window.removeEventListener("keydown", onKey);
   }, [searchActive]);
 
+  useEffect(() => {
+    const onBrowseOpen = (e: Event) => {
+      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      if (typeof open === "boolean") setBrowseOpen(open);
+    };
+    window.addEventListener("trip:browseOpen", onBrowseOpen);
+    return () => window.removeEventListener("trip:browseOpen", onBrowseOpen);
+  }, []);
+
   return (
     <div className="relative w-full h-full">
       {/* Map canvas — fills the slideup */}
@@ -52,6 +71,12 @@ export function TripSlideupBody({
           days={trip.days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
+          onMoveEnd={(bbox) => {
+            viewportBboxRef.current = bbox;
+            // Let the top-level search refresh against the new viewport. Only
+            // the search results consume this; the idle palette ignores it.
+            window.dispatchEvent(new CustomEvent("trip:viewportMoved"));
+          }}
         />
         <MapDetailOverlay />
         {isReference && (
@@ -74,13 +99,18 @@ export function TripSlideupBody({
       />
 
       {/* Find Nearby panel — Search Active state. Overlays the day column +
-       *  day detail area below the Top Bar (per Paper frame 5WK-0). */}
-      {searchActive && (
+       *  day detail area below the Top Bar (per Paper frame 5WK-0).
+       *  Suppressed while the Add-Waypoints panel is open — there the
+       *  top-bar search drives the panel's in-place <PlaceSearch>. */}
+      {searchActive && !browseOpen && (
         <div
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid rgba(255,255,255,0.07)" }}
         >
-          <FindNearbyPanel onClose={() => setSearchActive(false)} />
+          <FindNearbyPanel
+            trip={trip}
+            getViewportBbox={() => viewportBboxRef.current}
+          />
         </div>
       )}
 

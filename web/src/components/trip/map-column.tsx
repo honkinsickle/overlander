@@ -132,9 +132,24 @@ const DOT_BADGE_DEFAULT: DotBadge = {
  *  square badge with the v2 icon, hover-revealed label, click flies the
  *  map). Caller is responsible for adding it to a map and pushing it
  *  onto whichever array tracks it for cleanup/resize. */
+/** Transient amber ring-glow on a dot — the active-POI highlight shown when a
+ *  marker and its card are linked (area search). Reverts after ~1.4s. */
+function pulseDot(dot: HTMLElement): void {
+  dot.style.transition = "box-shadow 150ms ease";
+  dot.style.boxShadow =
+    "0 0 0 2px #c8a96e, 0 0 14px 3px rgba(200,169,110,0.7), 0 2px 6px rgba(0,0,0,0.45)";
+  window.setTimeout(() => {
+    dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.45)";
+  }, 1400);
+}
+
 function buildDotMarker(
-  p: { coords: [number, number]; title: string; category?: string },
+  p: { coords: [number, number]; title: string; category?: string; id?: string },
   initialSize: number,
+  /** "fly" (default, in-day browse + suggested): click flies the camera.
+   *  "link" (area search): click links to the card instead — a fly would
+   *  moveEnd → re-query → collapse the result set. */
+  interact: "fly" | "link" = "fly",
 ): mapboxgl.Marker {
   const badge =
     (p.category && DOT_BADGE_BY_CATEGORY[p.category]) || DOT_BADGE_DEFAULT;
@@ -145,6 +160,7 @@ function buildDotMarker(
   // positioning and dots stack in document flow instead of plotting at
   // their lat/lng.
   wrapper.style.cssText = `display:flex;align-items:center;cursor:pointer;`;
+  if (p.id) wrapper.dataset.placeId = p.id;
   const dot = document.createElement("div");
   dot.style.cssText =
     `width:${initialSize}px;height:${initialSize}px;` +
@@ -186,6 +202,15 @@ function buildDotMarker(
     wrapper.parentElement!.style.zIndex = "";
   });
   wrapper.addEventListener("click", () => {
+    if (interact === "link") {
+      // Area search: pulse this dot and tell the panel to highlight + scroll
+      // the matching card. No camera move, so no moveEnd → re-query collapse.
+      pulseDot(dot);
+      window.dispatchEvent(
+        new CustomEvent("trip:areaResultFocus", { detail: { id: p.id } }),
+      );
+      return;
+    }
     window.dispatchEvent(
       new CustomEvent("trip:flyTo", {
         detail: { coords: p.coords, name: p.title },
@@ -232,6 +257,7 @@ export function MapColumn({
   days,
   startCoords,
   routePolyline,
+  onMoveEnd,
 }: {
   tripId: string;
   days: Day[];
@@ -240,9 +266,19 @@ export function MapColumn({
    *  5). When present, MapColumn decodes and draws this directly instead
    *  of calling the Mapbox Directions API. */
   routePolyline?: string;
+  /** Fires on map load and after every pan/zoom with the current viewport
+   *  bbox `[west, south, east, north]`. Lets a sibling (the top-level
+   *  search) bound its query to what's on screen — "search this area". */
+  onMoveEnd?: (bbox: [number, number, number, number]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  /** Latest onMoveEnd from props, read inside the []-dep init effect so the
+   *  handler never goes stale without re-running map setup. */
+  const onMoveEndRef = useRef(onMoveEnd);
+  useEffect(() => {
+    onMoveEndRef.current = onMoveEnd;
+  }, [onMoveEnd]);
   /** Trip-day pins, shared across the marker-init and browse-results
    *  effects so the latter can hide/show them when the panel toggles. */
   const tripDayMarkersRef = useRef<mapboxgl.Marker[]>([]);
@@ -362,6 +398,22 @@ export function MapColumn({
     });
     mapRef.current = map;
     setMapInstance(map);
+
+    // Publish the viewport bbox on load + after every move so the top-level
+    // search can bound a query to what's on screen. `getBounds()` is
+    // [west,south,east,north] in lng/lat.
+    const emitBounds = () => {
+      const b = map.getBounds();
+      if (!b) return;
+      onMoveEndRef.current?.([
+        b.getWest(),
+        b.getSouth(),
+        b.getEast(),
+        b.getNorth(),
+      ]);
+    };
+    map.on("load", emitBounds);
+    map.on("moveend", emitBounds);
 
     const dayCoords = days
       .map((d) => d.coords)
@@ -900,6 +952,9 @@ export function MapColumn({
             id: string;
             category?: string;
           }>;
+          /** "link" = area-search markers link to their card on click
+           *  instead of flying the camera. Absent = in-day browse (fly). */
+          interact?: "fly" | "link";
         }>
       ).detail;
       browseOpenRef.current = !!detail?.places?.length;
@@ -916,16 +971,33 @@ export function MapColumn({
       // without competing for attention.
       setTripPinsVisible(false);
       setSuggestedVisible(false);
+      const interact = detail.interact === "link" ? "link" : "fly";
       const initialSize = dotSize(map.getZoom());
       for (const p of detail.places) {
-        const marker = buildDotMarker(p, initialSize).addTo(map);
+        const marker = buildDotMarker(p, initialSize, interact).addTo(map);
         browseMarkersRef.current.push(marker);
       }
       map.on("zoom", applyDotSize);
     };
+    // Card → marker: pulse the result marker whose card was tapped (area
+    // search). Matches by the data-place-id set in buildDotMarker.
+    const onCardFocus = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      for (const m of browseMarkersRef.current) {
+        const el = m.getElement();
+        if (el.dataset.placeId === id) {
+          const dot = el.children[0] as HTMLElement | undefined;
+          if (dot) pulseDot(dot);
+          break;
+        }
+      }
+    };
     window.addEventListener("trip:browseResults", onResults);
+    window.addEventListener("trip:areaCardFocus", onCardFocus);
     return () => {
       window.removeEventListener("trip:browseResults", onResults);
+      window.removeEventListener("trip:areaCardFocus", onCardFocus);
       clear();
     };
   }, []);

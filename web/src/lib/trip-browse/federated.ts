@@ -20,6 +20,28 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Partial<
   scenic: ["viewpoint", "peak"],
 };
 
+/** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer
+ *  primary_category back to the slide pill it belongs to. Built once from
+ *  the forward map so the two never drift. Used by the corpus-wide search
+ *  hydrate path (which gets arbitrary primary_category values, not a known
+ *  pill) to choose each card's palette/icon. Categories with no pill
+ *  mapping (e.g. park_feature) fall back to `scenic` — the same default
+ *  the browse panel uses for un-categorized rows (CategoryBrowsePanel's
+ *  `place.category ?? "scenic"`). The real category name still surfaces as
+ *  a pill via prettyCategory(), so the fallback only affects accent color. */
+const PRIMARY_CATEGORY_TO_SLIDE: Record<string, SlideCategoryKey> =
+  Object.entries(SLIDE_TO_PRIMARY_CATEGORY).reduce(
+    (acc, [slide, primaries]) => {
+      for (const p of primaries ?? []) acc[p] = slide as SlideCategoryKey;
+      return acc;
+    },
+    {} as Record<string, SlideCategoryKey>,
+  );
+
+export function primaryCategoryToSlideKey(primary: string): SlideCategoryKey {
+  return PRIMARY_CATEGORY_TO_SLIDE[primary] ?? "scenic";
+}
+
 /** One row from public.pois_along_corridor (SECURITY DEFINER RPC). */
 export type MasterPlaceRow = {
   id: string;
@@ -65,6 +87,16 @@ export function mapMasterPlaceRow(
     website?: string;
     address?: string;
   };
+  // master_place.hours is `{ raw: <value> }`. Surface a HOURS stat — the
+  // same shape the live path emits — ONLY when raw is a clean string
+  // (OSM `opening_hours`, "24/7", etc). The NPS array shape (per-day
+  // standardHours + exceptions) needs a dedicated formatter to render
+  // without misrepresenting closures, so it's omitted here, not garbled.
+  const hoursRaw = (row.hours as { raw?: unknown } | null)?.raw;
+  const hoursStat =
+    typeof hoursRaw === "string" && hoursRaw.trim().length > 0
+      ? [{ label: "HOURS", value: hoursRaw.trim() }]
+      : [];
   return {
     // Prefix avoids any id collision with live (OSM/RIDB) results so the
     // additive merge never dedupes a federated row against a live one.
@@ -77,7 +109,7 @@ export function mapMasterPlaceRow(
       { label: prettyCategory(row.primary_category) },
       ...(row.mvum_corridor ? [{ label: "MVUM corridor", status: true }] : []),
     ],
-    stats: [],
+    stats: hoursStat,
     mention: {
       primary: sources.length > 0 ? "Federated from" : "Federated",
       secondary: sources.join(" · "),

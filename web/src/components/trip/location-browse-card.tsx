@@ -33,9 +33,20 @@ type Props = {
   place: BrowsePlace;
   category: BrowseCardCategory;
   dayNumber: number;
+  /** ISO date of the day this card is browsed for. Used to show TODAY's
+   *  opening hours (this weekday) rather than the full weekly schedule. */
+  dayDate?: string;
   /** 300 = 2-up default; 354 = 3-up expanded. */
   width?: CardWidth;
   stats: CardStats;
+  /** Overrides the CTA label (default "Add to Day N" / "Book for tonight").
+   *  Top-level search passes "Add to a day" since ADD opens a day picker. */
+  addLabel?: string;
+  /** Show the "Adds <detour>" + "You'd arrive at…" block. Detour/ETA are
+   *  corridor concepts — true for browse cards (a place near today's
+   *  route). Pass false for corpus-wide search hits, where any detour
+   *  number would be fabricated; the row is omitted instead of faked. */
+  showDetour?: boolean;
   onAdd?: (e?: React.MouseEvent) => void;
   onOpen?: (e?: React.MouseEvent) => void;
   onMore?: (e?: React.MouseEvent) => void;
@@ -45,28 +56,117 @@ const HERO_H = 212;
 const CARD_H = 455;
 const BODY_PAD_X = 14;
 
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/** Weekday name (e.g. "Monday") for an ISO date, in UTC to match how the
+ *  rest of the app formats `Day.date`. undefined for missing/invalid. */
+function weekdayFromISO(iso?: string): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return WEEKDAYS[d.getUTCDay()];
+}
+
+/** Compact a Google time-range portion ("9:00 AM – 11:00 PM") to the card
+ *  form ("9a–11p"): drop ":00", AM/PM → lowercase a/p, normalize the dash.
+ *  Leaves tokens it doesn't recognize untouched (e.g. a bare "12:30" in a
+ *  multi-range day). */
+function compactHourText(text: string): string {
+  return text
+    .replace(/(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?/g, (_m, h, min, ap) =>
+      min === "00" ? `${h}${ap.toLowerCase()}` : `${h}:${min}${ap.toLowerCase()}`,
+    )
+    .replace(/\s*[–—-]\s*/g, "–")
+    .trim();
+}
+
+/** Derive the card status line — TODAY's opening hours — from a real hours
+ *  value. Returns "Open {range}" / "Closed" / "Open 24/7", or undefined
+ *  when the shape can't be parsed safely (omit, never guess).
+ *
+ *  Handles the two real shapes that reach the card:
+ *   - federated raw "24/7" → "Open 24/7"
+ *   - Google `regularOpeningHours.weekdayDescriptions` joined with "; "
+ *     ("Monday: 9:00 AM – 11:00 PM; Tuesday: Closed; …") → today's entry.
+ *  Anything else (arbitrary OSM `opening_hours` strings; NPS arrays, which
+ *  are already dropped upstream) → undefined. Uses the regular weekly
+ *  schedule only (we don't fetch holiday/special hours). */
+function todaysHours(value: string, weekday?: string): string | undefined {
+  const v = value.trim();
+  if (/^(open\s+)?24\s*\/\s*7$/i.test(v) || /^open 24 hours$/i.test(v)) {
+    return "Open 24/7";
+  }
+  if (weekday && new RegExp(`\\b${weekday}\\s*:`, "i").test(v)) {
+    const entry = v
+      .split(/;\s*/)
+      .find((e) => new RegExp(`^${weekday}\\s*:`, "i").test(e.trim()));
+    if (!entry) return undefined;
+    const portion = entry.slice(entry.indexOf(":") + 1).trim();
+    if (/closed/i.test(portion)) return "Closed";
+    if (/open 24 hours|24\s*\/\s*7/i.test(portion)) return "Open 24/7";
+    const compact = compactHourText(portion);
+    return compact ? `Open ${compact}` : undefined;
+  }
+  return undefined;
+}
+
 export function LocationBrowseCard({
   place,
   category,
   dayNumber,
+  dayDate,
   width = 300,
   stats,
+  addLabel,
+  showDetour = true,
   onAdd,
   onOpen,
   onMore,
 }: Props) {
   const palette = browseCardPalette[category];
   const ctaLabel =
-    category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`;
-  const status = statusForCategory(category);
+    addLabel ??
+    (category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`);
   // Federated (master_place) rows carry real provenance pills (incl. the
-  // "MVUM corridor" status pill) and a "Federated from <sources>" mention,
-  // but no photo and no review stats. Surface those instead of the
-  // hardcoded category status + fabricated rating that live cards use.
+  // "MVUM corridor" status pill) and a "Federated from <sources>" mention.
   const isFederated = place.source === "master_place";
-  // stats.cost.eta is "to your day. You'd arrive at {anchor} at {time}".
-  // The v2 card surfaces just the "You'd arrive..." portion.
-  const arrivesAt = stats.cost.eta.replace(/^to your day\.\s*/i, "");
+  // Status line = TODAY's opening hours (the browsed day's weekday), never
+  // the full week and never a hardcoded placeholder:
+  //   - real hours present → "Open 9a–11p" / "Closed" / "Open 24/7", or
+  //     omitted if the shape can't be parsed safely (no guess).
+  //   - no hours + lodging category → "Open 24/7" (the one safe default;
+  //     NOT applied to camp/viewpoint/fuel, where it would be false).
+  const rawHours = place.stats.find((s) => s.label === "HOURS")?.value;
+  const hoursStatus = rawHours
+    ? todaysHours(rawHours, weekdayFromISO(dayDate))
+    : category === "hotel"
+      ? "Open 24/7"
+      : undefined;
+  // Real rating + price from the source (Google live results). Both omitted
+  // when the place carries none — shown only when real, never fabricated.
+  const rating =
+    typeof place.rating === "number"
+      ? {
+          value: place.rating.toFixed(1),
+          count:
+            typeof place.reviewCount === "number"
+              ? place.reviewCount
+              : undefined,
+        }
+      : undefined;
+  // Detour is a real distance-based estimate — the "~" marks it approximate
+  // on live cards ("Adds ~32m"). Federated cards keep their existing label.
+  const addsLabel = isFederated
+    ? stats.cost.hero
+    : stats.cost.hero.replace(/^Adds\s+/, "Adds ~");
 
   return (
     <div
@@ -88,20 +188,31 @@ export function LocationBrowseCard({
         <div style={{ flexShrink: 0 }}>
           <Title text={place.title} color={palette.titleColor} />
           {isFederated ? (
-            <FederatedMeta pills={place.pills} mention={place.mention} />
+            <FederatedMeta
+              pills={place.pills}
+              mention={place.mention}
+              hours={hoursStatus}
+            />
           ) : (
-            <StatusRow status={status} rating={stats.rating} />
+            <StatusRow
+              status={hoursStatus}
+              rating={rating}
+              priceTier={place.priceTier}
+            />
           )}
         </div>
         <Divider marginBottom={9} />
-        <div
-          className="flex flex-col"
-          style={{ height: 55, flexShrink: 0, gap: 2 }}
-        >
-          <AddsRow addsText={stats.cost.hero} onOpen={onOpen} />
-          <ArrivesAt text={arrivesAt} />
-        </div>
-        <Divider />
+        {showDetour && (
+          <>
+            <div
+              className="flex flex-col"
+              style={{ minHeight: 24, flexShrink: 0, gap: 2 }}
+            >
+              <AddsRow addsText={addsLabel} onOpen={onOpen} />
+            </div>
+            <Divider />
+          </>
+        )}
         <Cta
           label={ctaLabel}
           bg={palette.ctaBg}
@@ -200,64 +311,99 @@ function Title({ text, color }: { text: string; color: string }) {
   );
 }
 
+/** Live-card status + rating + price row. Every part is optional and only
+ *  rendered when a REAL value is present — no fabricated status string,
+ *  star rating, or price. Renders nothing (no empty row, no dangling
+ *  divider) when all are absent. */
 function StatusRow({
   status,
   rating,
+  priceTier,
 }: {
-  status: string;
-  rating: { value: string; count: string };
+  status?: string;
+  rating?: { value: string; count?: number };
+  priceTier?: 1 | 2 | 3 | 4;
 }) {
+  if (!status && !rating && !priceTier) return null;
   return (
     <div
       className="flex items-center justify-between"
       style={{ marginTop: 6, gap: 12 }}
     >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span
-          aria-hidden
-          className="size-1.5 rounded-full shrink-0"
-          style={{ backgroundColor: "#6BE26F" }}
-        />
-        <span
-          className="truncate"
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 14,
-            lineHeight: "16px",
-            color: "#A8B0B6",
-          }}
+      {status ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            aria-hidden
+            className="size-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: "#6BE26F" }}
+          />
+          <span
+            className="truncate"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "16px",
+              color: "#A8B0B6",
+            }}
+          >
+            {status}
+          </span>
+        </div>
+      ) : null}
+      {rating || priceTier ? (
+        <div
+          className="flex items-center gap-2 shrink-0"
+          style={{ marginLeft: "auto" }}
         >
-          {status}
-        </span>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <StarIcon />
-        <span
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 14,
-            lineHeight: "16px",
-            letterSpacing: "0.04em",
-            color: "#A8B0B6",
-          }}
-        >
-          {rating.value}
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--ff-display)",
-            fontWeight: 400,
-            fontSize: 11,
-            lineHeight: "12px",
-            letterSpacing: "0.04em",
-            color: "#888888",
-          }}
-        >
-          {rating.count}
-        </span>
-      </div>
+          {rating ? (
+            <div className="flex items-center gap-1">
+              <StarIcon />
+              <span
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  lineHeight: "16px",
+                  letterSpacing: "0.04em",
+                  color: "#A8B0B6",
+                }}
+              >
+                {rating.value}
+              </span>
+              {rating.count !== undefined ? (
+                <span
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontWeight: 400,
+                    fontSize: 11,
+                    lineHeight: "12px",
+                    letterSpacing: "0.04em",
+                    color: "#888888",
+                  }}
+                >
+                  ({rating.count})
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {priceTier ? (
+            <span
+              aria-label={`Price level ${priceTier} of 4`}
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontWeight: 600,
+                fontSize: 13,
+                lineHeight: "16px",
+                letterSpacing: "0.06em",
+                color: "#98AC64",
+              }}
+            >
+              {"$".repeat(priceTier)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -271,9 +417,14 @@ function StatusRow({
 function FederatedMeta({
   pills,
   mention,
+  hours,
 }: {
   pills: { label: string; status?: boolean }[];
   mention: { primary: string; secondary: string };
+  /** Real opening-hours string from master_place.hours. Federated rows
+   *  carry no rating/price, so hours is the only metric shown — and only
+   *  when present. */
+  hours?: string;
 }) {
   return (
     <div className="flex flex-col" style={{ marginTop: 6, gap: 6 }}>
@@ -301,6 +452,27 @@ function FederatedMeta({
           ))}
         </div>
       )}
+      {hours ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            aria-hidden
+            className="size-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: "#6BE26F" }}
+          />
+          <span
+            className="truncate"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontWeight: 400,
+              fontSize: 14,
+              lineHeight: "16px",
+              color: "#A8B0B6",
+            }}
+          >
+            {hours}
+          </span>
+        </div>
+      ) : null}
       {mention.secondary && (
         <span
           className="truncate"
@@ -381,23 +553,6 @@ function AddsRow({
   );
 }
 
-function ArrivesAt({ text }: { text: string }) {
-  return (
-    <p
-      className="line-clamp-2"
-      style={{
-        fontFamily: "var(--ff-sans)",
-        fontWeight: 400,
-        fontSize: 16,
-        lineHeight: "20px",
-        color: "#98AC64",
-      }}
-    >
-      {text}
-    </p>
-  );
-}
-
 function Cta({
   label,
   bg,
@@ -432,27 +587,6 @@ function Cta({
       {label}
     </button>
   );
-}
-
-// Category-typical placeholder status strings used when the place has
-// no real hours data. Matches the Paper composition exactly.
-function statusForCategory(c: BrowseCardCategory): string {
-  switch (c) {
-    case "camping":
-      return "Reserved · $25/night";
-    case "urban":
-      return "Open · 9a–11p";
-    case "scenic":
-      return "Open · 8a–7p";
-    case "food":
-      return "Open · 7a–10p";
-    case "fuel":
-      return "Open · 24/7";
-    case "hotel":
-      return "Check in · 3 PM";
-    case "oddity":
-      return "Open · 9a–5p";
-  }
 }
 
 function StarIcon() {

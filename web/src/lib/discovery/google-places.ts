@@ -17,8 +17,20 @@ import type { SourceResult, WaypointSource } from "./types";
  */
 
 const ENDPOINT = "https://places.googleapis.com/v1/places:searchNearby";
+const TEXT_ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
 const MAX_RESULTS = 20;
 const MAX_RADIUS_M = 50_000;
+
+/** Every slide bucket — the `wanted` set the text-search mapper uses so a
+ *  free-text result lands in whatever bucket its Google types imply. */
+const ALL_SLIDE_CATEGORIES: SlideCategoryKey[] = [
+  "food",
+  "scenic",
+  "oddity",
+  "camping",
+  "overnight",
+  "fuel",
+];
 
 /** Google "type" → our slide bucket. Pulled from
  *  https://developers.google.com/maps/documentation/places/web-service/place-types
@@ -35,8 +47,9 @@ const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
 };
 
 /** Pre-joined FieldMask. Google charges by tier based on which fields
- *  are requested; this set covers card render needs without pulling
- *  in the priciest atomic fields (reviews, contact verifications). */
+ *  are requested; rating/userRatingCount/priceLevel are Pro-tier fields
+ *  (a deliberate SKU bump) so the card can show REAL ratings/price
+ *  instead of fabricated ones. */
 const FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -47,7 +60,25 @@ const FIELD_MASK = [
   "places.websiteUri",
   "places.nationalPhoneNumber",
   "places.regularOpeningHours.weekdayDescriptions",
+  "places.rating",
+  "places.userRatingCount",
+  "places.priceLevel",
 ].join(",");
+
+/** Places API v1 `priceLevel` is an enum string. Map the four paid tiers
+ *  to a 1–4 scale ($–$$$$). PRICE_LEVEL_FREE and PRICE_LEVEL_UNSPECIFIED
+ *  (and absent) → undefined: the card shows a $-tier only for a real paid
+ *  signal, never a fabricated one. */
+const PRICE_LEVEL_TIER: Record<string, 1 | 2 | 3 | 4> = {
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
+
+function priceLevelToTier(level?: string): 1 | 2 | 3 | 4 | undefined {
+  return level ? PRICE_LEVEL_TIER[level] : undefined;
+}
 
 let warnedMissingKey = false;
 
@@ -111,6 +142,74 @@ export const googlePlacesSource: WaypointSource = {
   },
 };
 
+/**
+ * Google Places `searchText` (v1) — the free-text path for the top-level
+ * "search for anything". Same auth, same FieldMask, same response shape as
+ * `searchNearby` (so results render through the identical card), but driven
+ * by a `textQuery` and bounded to the viewport via
+ * `locationRestriction.rectangle`. Ignores `categories`; activates ONLY when
+ * `textQuery` is present, so it's inert in the category-tile fanout.
+ *
+ * Docs: https://developers.google.com/maps/documentation/places/web-service/text-search
+ */
+export const googleTextSearchSource: WaypointSource = {
+  id: "google",
+  async query({ bbox, textQuery, signal }) {
+    const q = textQuery?.trim();
+    if (!q) return [];
+
+    const key = process.env.GOOGLE_PLACES_API_KEY;
+    if (!key) {
+      if (!warnedMissingKey) {
+        console.warn(
+          "[google-places] GOOGLE_PLACES_API_KEY not set in web/.env.local — " +
+            "skipping Google text search.",
+        );
+        warnedMissingKey = true;
+      }
+      return [];
+    }
+
+    const [w, s, e, n] = bbox;
+    const res = await fetch(TEXT_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": FIELD_MASK,
+      },
+      body: JSON.stringify({
+        textQuery: q,
+        maxResultCount: MAX_RESULTS,
+        locationRestriction: {
+          rectangle: {
+            low: { latitude: s, longitude: w },
+            high: { latitude: n, longitude: e },
+          },
+        },
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(
+        `[google-places] searchText HTTP ${res.status} ${body.slice(0, 200)}`,
+      );
+      return [];
+    }
+
+    const json = (await res.json()) as { places?: GooglePlace[] };
+    // Free-text wants any bucket — pass ALL slide categories so the mapper
+    // assigns each result whatever its Google types imply (falling back to
+    // a neutral bucket below rather than dropping unbucketed businesses).
+    const wanted = new Set(ALL_SLIDE_CATEGORIES);
+    return (json.places ?? []).flatMap((p) =>
+      placeToSourceResult(p, wanted, "scenic"),
+    );
+  },
+};
+
 // ── helpers ───────────────────────────────────────────────────────────
 
 type GooglePlace = {
@@ -125,18 +224,30 @@ type GooglePlace = {
   websiteUri?: string;
   nationalPhoneNumber?: string;
   regularOpeningHours?: { weekdayDescriptions?: string[] };
+  /** Average rating 1.0–5.0. */
+  rating?: number;
+  /** Total number of user ratings backing `rating`. */
+  userRatingCount?: number;
+  /** Enum string: PRICE_LEVEL_FREE / _INEXPENSIVE / _MODERATE /
+   *  _EXPENSIVE / _VERY_EXPENSIVE / _UNSPECIFIED. */
+  priceLevel?: string;
 };
 
 function placeToSourceResult(
   p: GooglePlace,
   wanted: Set<SlideCategoryKey>,
+  /** Free-text path only: bucket to assign when the Google types match no
+   *  `wanted` category, so a real business isn't dropped for lacking a
+   *  bucketable type. Omitted on the category fanout (drop = correct there,
+   *  the place didn't match the requested category). */
+  fallback?: SlideCategoryKey,
 ): SourceResult[] {
   const lat = p.location?.latitude;
   const lng = p.location?.longitude;
   const title = p.displayName?.text?.trim();
   if (typeof lat !== "number" || typeof lng !== "number" || !title) return [];
 
-  const category = categoryForGoogleTypes(p.types ?? [], wanted);
+  const category = categoryForGoogleTypes(p.types ?? [], wanted) ?? fallback;
   if (!category) return [];
 
   const photoRef = p.photos?.[0]?.name;
@@ -156,6 +267,15 @@ function placeToSourceResult(
       website: p.websiteUri,
       phone: p.nationalPhoneNumber,
       openingHours: p.regularOpeningHours?.weekdayDescriptions?.join("; "),
+      // Real Google ratings/price — only set when Google actually returned
+      // them (a place with no ratings yet omits both).
+      ...(typeof p.rating === "number" ? { rating: p.rating } : {}),
+      ...(typeof p.userRatingCount === "number"
+        ? { reviewCount: p.userRatingCount }
+        : {}),
+      ...(priceLevelToTier(p.priceLevel)
+        ? { priceTier: priceLevelToTier(p.priceLevel) }
+        : {}),
       raw: p as unknown as Record<string, unknown>,
     },
   ];

@@ -236,6 +236,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
         dayCoords: day.coords,
         dayStartCoords,
         dayLabel: day.label,
+        dayDate: day.date,
       });
     };
 

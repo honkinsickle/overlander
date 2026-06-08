@@ -14,14 +14,13 @@ import {
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import { PlaceSearch } from "@/components/trip/place-search";
 import {
   type BrowseCardCategory,
-  BROWSE_CARD_CATEGORIES,
-  browseCardPalette,
   browseCategoryToSlide,
   slideCategoryToBrowseCategory,
 } from "@/lib/trip-browse/palette";
-import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
+import { CategoryFilterRow } from "@/components/trip/category-filter-row";
 
 export type BrowseTarget = {
   category: Category;
@@ -42,6 +41,9 @@ export type BrowseTarget = {
   /** Day label like "Whitefish, MT — Banff, AB" — used to derive the
    *  next-anchor name for the "new ETA at X" line. */
   dayLabel?: string;
+  /** ISO date of the day being browsed (Day.date). Lets each card show
+   *  TODAY's opening hours (this weekday) instead of the full week. */
+  dayDate?: string;
 };
 
 // 2-up: 16 + 300 + 16 + 300 + 16 = 648 of content + a few px slack centered.
@@ -51,61 +53,6 @@ const PANEL_WIDTH_2UP = 655;
 const PANEL_WIDTH_3UP = 1113;
 const CARD_W_3UP = 354;
 const TRANSITION_MS = 280;
-
-const PAPER_CDN = "https://app.paper.design/file-assets/01KNTTXWMR13F0Y99G08SQM12D";
-
-/** Extra demo cards appended to the fetched results so the grid feels
- *  populated while the discovery layer is still thin. */
-const EXTRA_DEMO_PLACES: BrowsePlace[] = [
-  {
-    id: "demo-crater-lake",
-    coords: [-122.108, 42.945],
-    category: "scenic",
-    title: "Crater Lake National Park",
-    photoUrl: `${PAPER_CDN}/78R7DE7V2NKT3G0EDJFF24TDKZ.png`,
-    photoAlt: "Crater Lake at golden hour",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Caldera lake formed when Mount Mazama collapsed 7,700 years ago — the deepest in the U.S. at 1,949 ft. Rim Drive loops the rim with 30+ overlooks.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-  {
-    id: "demo-diamond-lake",
-    coords: [-122.135, 43.165],
-    category: "scenic",
-    title: "Diamond Lake Overlook",
-    photoUrl: `${PAPER_CDN}/01KQXV7RGFDADF3EDNVB4THDV5.png`,
-    photoAlt: "Diamond Lake reflection",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Mile-wide alpine lake with Mount Bailey to the west and Mount Thielsen to the east. Ringed by the Rim Trail and a paved bike path.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-  {
-    id: "demo-klamath-falls",
-    coords: [-121.78, 42.225],
-    category: "scenic",
-    title: "Klamath Falls Vista",
-    photoUrl: `${PAPER_CDN}/01KQXWN6ZC3T2VGR430QM8EHYH.png`,
-    photoAlt: "Klamath Falls autumn street",
-    pills: [],
-    stats: [],
-    mention: { primary: "", secondary: "" },
-    description:
-      "Birding capital of the Pacific Flyway — Upper Klamath Lake and the surrounding refuges host bald eagles in winter and white pelicans in summer.",
-    pullquote: { text: "", name: "", meta: "" },
-    placeInfo: { address: "" },
-    cta: "",
-  },
-];
 
 /** Initial active-filter set: if the panel was opened from a per-category
  *  Browse button (e.g. "Browse Sights"), pre-select that chip so the
@@ -132,6 +79,15 @@ export function CategoryBrowsePanel({
 
   useEffect(() => {
     if (!open) setExpanded(false);
+  }, [open]);
+
+  // Broadcast open/closed so the slideup body can suppress its standalone
+  // Find Nearby panel (the top-bar search drives THIS panel instead) and
+  // the top-bar can reset its query when the panel closes.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("trip:browseOpen", { detail: { open } }),
+    );
   }, [open]);
 
   useEffect(() => {
@@ -298,6 +254,19 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
   );
   const [state, setState] = useState<FetchState>({ status: "loading" });
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
+  // Federated corpus-search query, fed by the top-bar via `trip:search`.
+  // Empty → category-browse (unchanged). Non-empty → <PlaceSearch>.
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      const q = (e as CustomEvent<{ query: string }>).detail?.query ?? "";
+      setQuery(q);
+    };
+    window.addEventListener("trip:search", onSearch);
+    return () => window.removeEventListener("trip:search", onSearch);
+  }, []);
+  const searching = query.trim().length > 0;
 
   // Reset filter selection when switching to a different day's Browse.
   useEffect(() => {
@@ -380,6 +349,52 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     });
   };
 
+  // <PlaceSearch> facets on a single SlideCategoryKey. The chip row stays
+  // multi-select; map it to one facet only when exactly one chip is active
+  // (0 or 2+ → corpus-wide, matching the "All" feel).
+  const searchFacet = useMemo<SlideCategoryKey | null>(() => {
+    if (filters.size !== 1) return null;
+    return browseCategoryToSlide(Array.from(filters)[0]);
+  }, [filters]);
+
+  // Add-to-day for a search result. <PlaceSearch>.onAdd yields only the
+  // master_place id (its API is fixed), so re-hydrate that single id into
+  // a full BrowsePlace and dispatch the SAME `trip:toggleAdded` event the
+  // browse cards use — search and browse adds go through one path.
+  const handleSearchAdd = (masterPlaceId: string) => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/places/hydrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [masterPlaceId] }),
+        });
+        if (!res.ok) return;
+        const { places } = (await res.json()) as { places: BrowsePlace[] };
+        const place = places[0];
+        if (!place) return;
+        window.dispatchEvent(
+          new CustomEvent("trip:toggleAdded", {
+            detail: {
+              placeId: place.id,
+              dayId: target.dayId,
+              dayNumber: target.dayNumber,
+              place: {
+                id: place.id,
+                title: place.title,
+                description: place.description,
+                photoUrl: place.photoUrl,
+                coords: place.coords,
+              },
+            },
+          }),
+        );
+      } catch {
+        // Best-effort; the browse add path is equally tolerant.
+      }
+    })();
+  };
+
   const empty = (msg: string) => (
     <div
       className="flex items-center justify-center"
@@ -399,31 +414,31 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
     </div>
   );
 
-  // For the "scenic-only" demo augment we just append the demo cards
-  // unconditionally when scenic is in the active set (or filters are
-  // empty = "all"). Keeps the grid feeling populated while discovery
-  // remains thin on this category.
-  const showScenicDemo =
-    filters.size === 0 || filters.has("scenic");
-  const placesWithExtras =
-    state.status === "success"
-      ? showScenicDemo
-        ? [...state.places, ...EXTRA_DEMO_PLACES]
-        : state.places
-      : [];
+  const places = state.status === "success" ? state.places : [];
 
   return (
     <>
-      <FilterChipRow active={filters} onToggle={toggleFilter} />
+      <CategoryFilterRow active={filters} onToggle={toggleFilter} />
       <div
         className="flex-1 overflow-y-auto no-scrollbar"
         style={{ backgroundColor: "var(--bg-base)" }}
       >
-        {state.status === "loading"
+        {searching ? (
+          <div style={{ padding: 16 }}>
+            <PlaceSearch
+              query={query}
+              center={target.dayCoords ?? target.dayStartCoords}
+              categoryFilter={searchFacet}
+              dayNumber={target.dayNumber}
+              dayDate={target.dayDate}
+              onAdd={handleSearchAdd}
+            />
+          </div>
+        ) : state.status === "loading"
           ? empty("Loading nearby places…")
           : state.status === "error"
             ? empty(`Couldn't load places — ${state.message}`)
-            : placesWithExtras.length === 0
+            : places.length === 0
               ? empty("No places match the selected filters")
               : (
                   <div
@@ -437,7 +452,7 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
                       padding: expanded ? 8 : 16,
                     }}
                   >
-                    {placesWithExtras.map((p) => (
+                    {places.map((p) => (
                       <BrowseCardCell
                         key={p.id}
                         place={p}
@@ -453,59 +468,6 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
   );
 }
 
-function FilterChipRow({
-  active,
-  onToggle,
-}: {
-  active: Set<BrowseCardCategory>;
-  onToggle: (c: BrowseCardCategory) => void;
-}) {
-  return (
-    <div
-      className="flex items-center justify-center shrink-0"
-      role="toolbar"
-      aria-label="Filter by category"
-      style={{
-        gap: 12,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        backgroundColor: "var(--bg-base)",
-        borderBottom: "1px solid var(--border-subtle)",
-      }}
-    >
-      {BROWSE_CARD_CATEGORIES.map((c) => {
-        const palette = browseCardPalette[c];
-        const isActive = active.has(c);
-        return (
-          <button
-            key={c}
-            type="button"
-            aria-pressed={isActive}
-            aria-label={`Filter: ${palette.label}`}
-            onClick={() => onToggle(c)}
-            className="flex items-center justify-center transition-all"
-            style={{
-              width: 54,
-              height: 54,
-              borderRadius: 6,
-              backgroundColor: palette.badgeBg,
-              border: `1px solid ${palette.badgeBorder}`,
-              opacity: active.size === 0 || isActive ? 1 : 0.4,
-              boxShadow: isActive
-                ? `0 0 0 1px ${palette.badgeBorder}`
-                : "none",
-            }}
-          >
-            <CategoryIconV2 category={c} size={28} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function BrowseCardCell({
   place,
   target,
@@ -517,9 +479,8 @@ function BrowseCardCell({
   expanded: boolean;
   isAdded: boolean;
 }) {
-  // Each card renders with its OWN category palette (set by the API,
-  // falling back to scenic for demo-augmented entries that bypassed the
-  // pipeline).
+  // Each card renders with its OWN category palette (set by the API);
+  // falls back to scenic for any result that arrived without a category.
   const placeCategory: SlideCategoryKey = place.category ?? "scenic";
   const ctx: CardCtx = {
     category: placeCategory,
@@ -576,6 +537,7 @@ function BrowseCardCell({
         place={place}
         category={slideCategoryToBrowseCategory(placeCategory)}
         dayNumber={target.dayNumber}
+        dayDate={target.dayDate}
         width={expanded ? 354 : 300}
         stats={stats}
         onAdd={(e?: MouseEvent) => {

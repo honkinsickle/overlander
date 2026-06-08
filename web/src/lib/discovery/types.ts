@@ -34,6 +34,14 @@ export type SourceResult = {
   /** OSM-style `opening_hours` string (e.g. "Mo-Su 09:00-17:00").
    *  Surfaced as a stat on the planning slide when present. */
   openingHours?: string;
+  /** Real average rating (1.0–5.0) from a source that provides one
+   *  (Google). Omitted when the source has no rating — never fabricated. */
+  rating?: number;
+  /** Total user ratings backing `rating`. */
+  reviewCount?: number;
+  /** Price tier 1–4 ($–$$$$), mapped from the source's price signal
+   *  (Google `priceLevel`). Omitted when unknown. */
+  priceTier?: 1 | 2 | 3 | 4;
   /** Pre-mapped source fields — kept around so the dedup layer can
    *  look at tags/attributes the normalised shape doesn't carry. */
   raw?: Record<string, unknown>;
@@ -42,10 +50,17 @@ export type SourceResult = {
 export interface WaypointSource {
   id: SourceId;
   /** Returns places inside the bounding box matching any of the given
-   *  categories. Implementations should respect `signal` for cancel. */
+   *  categories. Implementations should respect `signal` for cancel.
+   *
+   *  `textQuery` is the optional free-text path: when present, a source
+   *  that supports text search (Google `searchText`) matches the text
+   *  within `bbox` and ignores `categories`. Sources without text support
+   *  ignore `textQuery` (and typically return [] when called on a text
+   *  query with no categories). */
   query(args: {
     bbox: [west: number, south: number, east: number, north: number];
     categories: SlideCategoryKey[];
     signal?: AbortSignal;
+    textQuery?: string;
   }): Promise<SourceResult[]>;
 }

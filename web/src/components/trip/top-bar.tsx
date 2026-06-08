@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
 
@@ -65,8 +65,50 @@ export function TopBar({
   // guard for any path that opens with text already in the input.
   const expanded = searchActive || value.length > 0;
 
+  // The search box is the single source of truth for the federated
+  // search query. Broadcast every change on `trip:search` so the open
+  // Add-Waypoints panel (CategoryBrowsePanel) can switch into search
+  // mode and feed the text to <PlaceSearch>. When no panel is open the
+  // event has no listener — current top-bar behavior is unchanged.
+  const updateValue = (next: string) => {
+    setValue(next);
+    window.dispatchEvent(
+      new CustomEvent("trip:search", { detail: { query: next } }),
+    );
+  };
+
+  // Closing the Add-Waypoints panel resets the search box so reopening it
+  // always lands on category-browse (empty query), keeping the top-bar and
+  // panel coherent.
+  useEffect(() => {
+    const onBrowseOpen = (e: Event) => {
+      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      if (open === false) {
+        setValue("");
+        window.dispatchEvent(
+          new CustomEvent("trip:search", { detail: { query: "" } }),
+        );
+      }
+    };
+    window.addEventListener("trip:browseOpen", onBrowseOpen);
+    return () => window.removeEventListener("trip:browseOpen", onBrowseOpen);
+  }, []);
+
+  // Find Nearby's "← Categories" clears the text query here so the top-bar
+  // and the panel reset together.
+  useEffect(() => {
+    const onClear = () => {
+      setValue("");
+      window.dispatchEvent(
+        new CustomEvent("trip:search", { detail: { query: "" } }),
+      );
+    };
+    window.addEventListener("trip:clearSearch", onClear);
+    return () => window.removeEventListener("trip:clearSearch", onClear);
+  }, []);
+
   const exitSearch = () => {
-    setValue("");
+    updateValue("");
     // Blur any focused element inside the top bar (i.e. the input)
     if (typeof document !== "undefined") {
       const active = document.activeElement;
@@ -135,12 +177,17 @@ export function TopBar({
             value={value}
             placeholder="Search for anything"
             aria-label="Search"
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => updateValue(e.target.value)}
             onFocus={() => onOpenSearch?.()}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
-                setValue("");
+                updateValue("");
                 (e.currentTarget as HTMLInputElement).blur();
+              } else if (e.key === "Enter") {
+                // Send the query: re-run the search against the CURRENT map
+                // viewport (also the "search this area" trigger after a pan).
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent("trip:searchSubmit"));
               }
             }}
             className={`flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-white ${expanded ? "placeholder:text-white" : "placeholder:text-[#B3B3B3]"}`}
@@ -153,7 +200,7 @@ export function TopBar({
                 // Prevent the input from blurring before our click handler.
                 e.preventDefault();
               }}
-              onClick={() => setValue("")}
+              onClick={() => updateValue("")}
               className="shrink-0 flex items-center justify-center w-[20px] h-[20px] text-[#888888] hover:text-[#E9E9E7] transition-colors"
             >
               <X className="w-[14px] h-[14px]" strokeWidth={2} />
