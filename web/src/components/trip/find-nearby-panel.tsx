@@ -294,6 +294,9 @@ export function FindNearbyPanel({
   // Bumped when the user presses Enter in the search box — forces a refetch
   // against the current viewport even when the query/tile is unchanged.
   const [submitNonce, setSubmitNonce] = useState(0);
+  // Bumped on map moveEnd (only while results are showing) — refreshes the
+  // active query against the new viewport as the user pans/zooms.
+  const [moveNonce, setMoveNonce] = useState(0);
 
   useEffect(() => {
     const onSearch = (e: Event) => {
@@ -332,6 +335,20 @@ export function FindNearbyPanel({
 
   const showResults =
     query.trim() !== "" || activeTile !== null || activeIcon !== null;
+
+  // Refresh on map move ONLY while results are showing (never the idle
+  // palette). A ref keeps the window listener current without re-subscribing.
+  const showResultsRef = useRef(showResults);
+  useEffect(() => {
+    showResultsRef.current = showResults;
+  }, [showResults]);
+  useEffect(() => {
+    const onMoved = () => {
+      if (showResultsRef.current) setMoveNonce((n) => n + 1);
+    };
+    window.addEventListener("trip:viewportMoved", onMoved);
+    return () => window.removeEventListener("trip:viewportMoved", onMoved);
+  }, []);
 
   const backToPalette = () => {
     setActiveTile(null);
@@ -447,6 +464,7 @@ export function FindNearbyPanel({
               primaryCategories={resultPrimaryCategories}
               getViewportBbox={getViewportBbox}
               submitNonce={submitNonce}
+              moveNonce={moveNonce}
               dayNumber={activeDay?.dayNumber ?? 1}
               dayDate={activeDay?.date}
               dayId={activeDay?.id}
@@ -510,6 +528,7 @@ function SearchAreaResults({
   primaryCategories,
   getViewportBbox,
   submitNonce,
+  moveNonce,
   dayNumber,
   dayDate,
   dayId,
@@ -524,6 +543,9 @@ function SearchAreaResults({
   /** Incremented on Enter — forces a refetch against the current viewport
    *  even when query/tile is unchanged (re-search after a map pan). */
   submitNonce: number;
+  /** Incremented on map moveEnd while results show — refetches against the
+   *  new viewport, keeping the active query/category. */
+  moveNonce: number;
   dayNumber: number;
   dayDate?: string;
   /** Active day context — drives the detour ("Adds ~Xm" vs this day's route)
@@ -589,9 +611,10 @@ function SearchAreaResults({
 
     return () => clearTimeout(timer);
     // getViewportBbox is a stable getter; bbox is read at fetch time.
-    // submitNonce re-runs the fetch on Enter against the current viewport.
+    // submitNonce (Enter) and moveNonce (map move) both re-run the fetch
+    // against the current viewport, keeping the active query/category.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, primaryKey, hasInput, submitNonce]);
+  }, [q, primaryKey, hasInput, submitNonce, moveNonce]);
 
   const shownPlaces = hasInput ? places : [];
   const shownError = hasInput ? error : null;
@@ -698,9 +721,9 @@ function SearchAreaResults({
 }
 
 function FindScopeHeader() {
-  // NOTE: "Current Leg" is intentionally inert. Legs are not search scopes
-  // yet (the leg model doesn't exist), so search stays corpus-wide. Real
-  // leg-scoping is pending that model; don't wire fake scoping here.
+  // Scope label: search is bounded to the current map viewport (the visible
+  // area), refreshed as the user pans/zooms. Not GPS, not a route leg — the
+  // leg concept was dropped here.
   return (
     <div
       className="flex items-center shrink-0"
@@ -725,8 +748,8 @@ function FindScopeHeader() {
       </span>
       <span
         role="status"
-        aria-label="Scope: Current Leg (corpus-wide; leg-scoping pending)"
-        title="Leg-scoped search is coming; results are currently trip-wide"
+        aria-label="Scope: Current Location (the visible map area)"
+        title="Search is scoped to the current map viewport"
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -744,7 +767,7 @@ function FindScopeHeader() {
           fontWeight: 500,
         }}
       >
-        Current Leg
+        Current Location
       </span>
     </div>
   );

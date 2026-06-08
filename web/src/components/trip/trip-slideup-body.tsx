@@ -73,6 +73,9 @@ export function TripSlideupBody({
           routePolyline={trip.routePolyline}
           onMoveEnd={(bbox) => {
             viewportBboxRef.current = bbox;
+            // Let the top-level search refresh against the new viewport. Only
+            // the search results consume this; the idle palette ignores it.
+            window.dispatchEvent(new CustomEvent("trip:viewportMoved"));
           }}
         />
         <MapDetailOverlay />
