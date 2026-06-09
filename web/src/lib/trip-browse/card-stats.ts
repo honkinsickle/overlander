@@ -179,9 +179,11 @@ export function browsePlaceToWaypoint(
     ctx.dayRelative && detourMatch ? parseFloat(detourMatch[1]) : undefined;
   const addsMatch = stats.cost.hero.match(/Adds\s+(\S+)/);
   const entry = priceTierToEntry(place.priceTier);
-  // Federated rows carry real overland tags; live Google/OSM results have
-  // none. The same real list backs both the Tags and Amenities chip rows —
-  // there is no separate real amenities signal to draw from.
+  // Federated rows carry real overland tags (land status / managing agency /
+  // camping policy — e.g. "federal_land", "dispersed_camping_likely"); live
+  // Google/OSM results have none. These read as descriptors, so they home in
+  // the Tags pills only. There is no real amenities (facilities) signal, so
+  // the Amenities section is left unset and simply does not render.
   const realTags =
     place.overlanderTags && place.overlanderTags.length > 0
       ? place.overlanderTags
@@ -231,7 +233,6 @@ export function browsePlaceToWaypoint(
           },
         }
       : {}),
-    ...(realTags ? { amenities: realTags } : {}),
     ...(dataSources.length > 0 ? { dataSources } : {}),
   };
 }
