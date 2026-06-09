@@ -150,16 +150,48 @@ function priceTierToEntry(tier?: 1 | 2 | 3 | 4): string | undefined {
   return tier ? "$".repeat(tier) : undefined;
 }
 
+/** Display labels for known provenance source identifiers. Keyed by the
+ *  lowercased token so it normalizes BOTH the federated path's raw pipeline
+ *  ids (attribution values: "ridb", "osm", "nps", …) AND the live discovery
+ *  path's acronym labels ("NPS", "USFS", "BLM"), so both render the same
+ *  readable product name. Display-only — the underlying provenance values are
+ *  untouched. An unknown token is shown as-is; we never invent a label. */
+const SOURCE_DISPLAY_LABELS: Record<string, string> = {
+  ridb: "Recreation.gov",
+  "recreation.gov": "Recreation.gov",
+  osm: "OpenStreetMap",
+  openstreetmap: "OpenStreetMap",
+  nps: "National Park Service",
+  usfs: "U.S. Forest Service",
+  blm: "Bureau of Land Management",
+  padus: "Protected Areas Database (PAD-US)",
+  parks_canada: "Parks Canada",
+  bc_parks: "BC Parks",
+  alberta_parks: "Alberta Parks",
+  google: "Google",
+  foursquare: "Foursquare",
+  wikipedia: "Wikipedia",
+  ioverlander: "iOverlander",
+};
+
+/** Map a single provenance token to its readable label, or return it
+ *  unchanged when unknown (honest passthrough — never a fabricated name). */
+function prettySourceLabel(token: string): string {
+  return SOURCE_DISPLAY_LABELS[token.toLowerCase()] ?? token;
+}
+
 /** Real provenance chips from the place's source labels. `mention.secondary`
  *  is the actual joined source list the discovery/federated pipeline already
- *  computed ("Google · OpenStreetMap", "Recreation.gov · OSM", …). Splits it
- *  back into chips and drops any "+N more" tail; returns [] when absent. */
+ *  computed ("Google · OpenStreetMap", "ridb · osm", …). Splits it back into
+ *  chips, drops any "+N more" tail, and maps known source ids to readable
+ *  labels (display-only); returns [] when absent. */
 function realDataSources(place: BrowsePlace): string[] {
   const raw = place.mention?.secondary ?? "";
   return raw
     .split(/\s*·\s*/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !/^\+\d+\s+more$/i.test(s));
+    .filter((s) => s.length > 0 && !/^\+\d+\s+more$/i.test(s))
+    .map(prettySourceLabel);
 }
 
 /** Build a slide-up-ready Waypoint from a BrowsePlace + the stats we
