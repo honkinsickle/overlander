@@ -484,18 +484,6 @@ async function itemsFor(src: Src, corridorGeom: any, filter: EsriSpatialFilter):
   return esriItems(src, filter);
 }
 
-async function writeWfs(src: Src, corridorGeom: any, table: string): Promise<number> {
-  const rows = assembleRows(await wfsItems(src, corridorGeom), src);
-  await flushBatch(table, rows, src.id); // batchUpsert chunks at 500
-  return rows.length;
-}
-
-async function writeEsri(src: Src, filter: EsriSpatialFilter, table: string): Promise<number> {
-  const rows = assembleRows(await esriItems(src, filter), src);
-  await flushBatch(table, rows, src.id);
-  return rows.length;
-}
-
 /** No-write emit pass: build the rows a real run WOULD upsert, without
  *  writing. Returns input-feature count, emitted row count (post-rollup),
  *  and the category distribution. Used by --emit-report (STEP 3 validate). */
