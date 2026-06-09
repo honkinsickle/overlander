@@ -488,6 +488,8 @@ function BrowseCardCell({
     dayStartCoords: target.dayStartCoords,
     dayLabel: target.dayLabel,
     dayNumber: target.dayNumber,
+    // In-day browse: this ctx day IS the result's day, so the detour is real.
+    dayRelative: true,
   };
   const stats = computeCardStats(place, ctx);
   const synthWaypoint = browsePlaceToWaypoint(place, ctx, stats);

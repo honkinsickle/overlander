@@ -159,14 +159,17 @@ export type Waypoint = {
   reliability?: { score: number; label: string; sourceCount: number };
   /** Distance from the route line (e.g. 0.4 = "0.4 mi on route"). */
   routeOffsetMi?: number;
-  /** "If you stop here" simulator block. */
+  /** "If you stop here" simulator block. Every field is optional: the
+   *  browse/search path supplies only the real detour (`addsTime`), while
+   *  the trip-waypoint path fills the rest. The detail panel renders each
+   *  field only when present, so absent = hidden, never fabricated. */
   simulator?: {
-    stopTime: string;
+    stopTime?: string;
     entryCost?: string;
-    addsTime: string;
-    newEtaPlace: string;
-    plannedEta: string;
-    withStopEta: string;
+    addsTime?: string;
+    newEtaPlace?: string;
+    plannedEta?: string;
+    withStopEta?: string;
     sunset?: string;
     /** "Day N unaffected" footer (omit to hide). */
     unaffectedNote?: string;
@@ -182,12 +185,14 @@ export type Waypoint = {
     phone?: string;
     website?: string;
   };
-  /** Community section — rating + review count + tip bullets. */
+  /** Community section — rating + review count + tip bullets. `tips` and
+   *  `lastVerified` are optional: the browse/search path surfaces only a
+   *  real rating/review count and omits them (no real source to back them). */
   community?: {
     rating: number;
     reviewCount: number;
-    tips: string[];
-    lastVerified: string;
+    tips?: string[];
+    lastVerified?: string;
   };
   /** Amenity tag chips. */
   amenities?: string[];

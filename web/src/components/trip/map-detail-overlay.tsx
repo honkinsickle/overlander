@@ -430,20 +430,22 @@ function TrappersDetailPanel({
               If you stop here
             </span>
 
-            <div className="flex items-center gap-1.5">
-              <span
-                style={{
-                  fontFamily: "var(--ff-sans)",
-                  fontSize: 13,
-                  lineHeight: "16px",
-                  letterSpacing: "0.06em",
-                  color: "var(--amber)",
-                }}
-              >
-                Stop time: {sim.stopTime}
-              </span>
-              {sim.entryCost && (
-                <>
+            {(sim.stopTime || sim.entryCost) && (
+              <div className="flex items-center gap-1.5">
+                {sim.stopTime && (
+                  <span
+                    style={{
+                      fontFamily: "var(--ff-sans)",
+                      fontSize: 13,
+                      lineHeight: "16px",
+                      letterSpacing: "0.06em",
+                      color: "var(--amber)",
+                    }}
+                  >
+                    Stop time: {sim.stopTime}
+                  </span>
+                )}
+                {sim.stopTime && sim.entryCost && (
                   <span
                     style={{
                       fontFamily: "var(--ff-display)",
@@ -455,6 +457,8 @@ function TrappersDetailPanel({
                   >
                     |
                   </span>
+                )}
+                {sim.entryCost && (
                   <span
                     style={{
                       fontFamily: "var(--ff-sans)",
@@ -466,55 +470,66 @@ function TrappersDetailPanel({
                   >
                     {sim.entryCost}
                   </span>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Hero "Adds X" + eta eyebrow read as one unit — wrap them
              *  in a tight inner column so the parent's gap-2 doesn't
-             *  open a gap between the two. */}
-            <div className="flex flex-col gap-0">
-              <span
-                style={{
-                  fontFamily: "var(--ff-display)",
-                  fontSize: 24,
-                  lineHeight: "30px",
-                  fontWeight: 600,
-                  letterSpacing: "0.02em",
-                  color: "#FFFFFF",
-                }}
-              >
-                Adds {sim.addsTime}
-              </span>
+             *  open a gap between the two. The arrival clause renders only
+             *  when a real arrival time exists (trip-waypoint path); browse
+             *  results have only the detour, so they show "to your day". */}
+            {sim.addsTime && (
+              <div className="flex flex-col gap-0">
+                <span
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 24,
+                    lineHeight: "30px",
+                    fontWeight: 600,
+                    letterSpacing: "0.02em",
+                    color: "#FFFFFF",
+                  }}
+                >
+                  Adds {sim.addsTime}
+                </span>
 
-              <span
-                className="uppercase"
-                style={{
-                  fontFamily: "var(--ff-display)",
-                  fontSize: 13,
-                  lineHeight: "16px",
-                  letterSpacing: "0.06em",
-                  color: "#98AC65",
-                }}
-              >
-                to your day. You&apos;d arrive at {sim.newEtaPlace} at {sim.withStopEta}
-              </span>
-            </div>
+                <span
+                  className="uppercase"
+                  style={{
+                    fontFamily: "var(--ff-display)",
+                    fontSize: 13,
+                    lineHeight: "16px",
+                    letterSpacing: "0.06em",
+                    color: "#98AC65",
+                  }}
+                >
+                  to your day
+                  {sim.newEtaPlace && sim.withStopEta
+                    ? `. You'd arrive at ${sim.newEtaPlace} at ${sim.withStopEta}`
+                    : ""}
+                </span>
+              </div>
+            )}
 
-            <ScheduleRow
-              label="Planned"
-              value={sim.plannedEta}
-              barColor="#A89C90"
-              textColor="#A89C90"
-              fillPct={78}
-            />
-            <ScheduleRow
-              label="With stop"
-              value={sim.withStopEta}
-              barColor="var(--amber)"
-              textColor="var(--amber)"
-              fillPct={100}
-            />
+            {sim.plannedEta && (
+              <ScheduleRow
+                label="Planned"
+                value={sim.plannedEta}
+                barColor="#A89C90"
+                textColor="#A89C90"
+                fillPct={78}
+              />
+            )}
+            {sim.withStopEta && (
+              <ScheduleRow
+                label="With stop"
+                value={sim.withStopEta}
+                barColor="var(--amber)"
+                textColor="var(--amber)"
+                fillPct={100}
+              />
+            )}
             {sim.sunset && (
               <div className="flex items-center">
                 <span
@@ -767,7 +782,7 @@ function TrappersDetailPanel({
                   ({community.reviewCount.toLocaleString()})
                 </span>
               </div>
-              {community.tips.map((tip) => (
+              {community.tips?.map((tip) => (
                 <div key={tip} className="flex gap-2 mt-1.5">
                   <span
                     className="shrink-0"
@@ -792,17 +807,19 @@ function TrappersDetailPanel({
                   </span>
                 </div>
               ))}
-              <span
-                className="mt-2.5 block"
-                style={{
-                  fontFamily: "var(--ff-mono)",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Last verified: {community.lastVerified}
-              </span>
+              {community.lastVerified && (
+                <span
+                  className="mt-2.5 block"
+                  style={{
+                    fontFamily: "var(--ff-mono)",
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Last verified: {community.lastVerified}
+                </span>
+              )}
             </Section>
           </>
         )}
