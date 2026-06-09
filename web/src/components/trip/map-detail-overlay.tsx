@@ -6,29 +6,31 @@ import type { Waypoint } from "@/lib/trips/types";
 
 const TRANSITION_MS = 280;
 
-/** Build a maps directions URL to the REAL place, origin defaulting to the
- *  device's current location (we omit `origin`, so Google fills in "Your
- *  location"). The destination is always the place's real coordinates; for
- *  live Google results (id `gpl/<placeId>`) we also pass the Google
- *  `place_id` so the pin snaps to the exact listing rather than a bare point.
- *  Never fabricates a destination — returns null when the place has no
- *  coordinates (in practice every place has them, so the button is always
- *  actionable). */
-function buildDirectionsUrl(place: DetailPlace): string | null {
-  const coord = place.waypoint?.coords ?? place.coords;
-  if (!coord) return null;
-  const [lng, lat] = coord;
-  const params = new URLSearchParams({
-    api: "1",
-    destination: `${lat},${lng}`,
-  });
-  // `gpl/<placeId>` = live Google result → add the precise Google place_id.
-  // Federated / other ids carry no Google place_id, so they route by the
-  // real lat/lng alone.
-  if (place.id.startsWith("gpl/")) {
-    params.set("destination_place_id", place.id.slice("gpl/".length));
-  }
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+/** Shared inner content (icon + label) for the Directions action, used by
+ *  both the in-app-panel <button> and the external-maps <a> variants. */
+function DirectionsButtonContent() {
+  return (
+    <>
+      <Navigation
+        className="w-[18px] h-[18px]"
+        strokeWidth={2}
+        style={{ color: "var(--text-primary)" }}
+      />
+      <span
+        className="uppercase"
+        style={{
+          fontFamily: "var(--ff-display)",
+          fontSize: 14,
+          lineHeight: "16px",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          color: "var(--text-primary)",
+        }}
+      >
+        Directions
+      </span>
+    </>
+  );
 }
 
 /** The slide-up's source-of-truth shape. Browse-panel cards only carry
@@ -46,6 +48,12 @@ type DetailPlace = {
   /** When opened from a trip waypoint, the full enriched record is
    *  passed through so all the rich detail sections can render. */
   waypoint?: Waypoint;
+  /** Whether this place is on the active day's route. `false` only for
+   *  top-level area-search results (which run against the active day, not
+   *  the result's). Gates the Directions button: in-day/on-route opens the
+   *  in-app day-directions panel; a search result routes externally to the
+   *  place. Absent → treated as on-route. */
+  dayRelative?: boolean;
 };
 
 type SheetState = "closed" | "peek" | "half" | "expanded";
@@ -231,7 +239,15 @@ function TrappersDetailPanel({
   const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
   const routeOffset = wp?.routeOffsetMi;
   const bookingStatus = wp?.bookingStatus ?? [];
-  const directionsUrl = buildDirectionsUrl(place);
+  // Directions always opens the in-app panel; what it routes is chosen by
+  // whether the place is on the active day's route:
+  //  - on-route / in-day → the day's leg, scrolled to the step nearest this
+  //    place (the route passes through it);
+  //  - top-level search result (dayRelative === false) → a route TO this
+  //    place (the day route never reaches it).
+  // Absent flag → treated as on-route (trip waypoints, suggestions, etc.).
+  const directionsCoord = place.waypoint?.coords ?? place.coords;
+  const routeToPlace = place.dayRelative === false;
 
   return (
     <article className="flex flex-col items-center bg-[#1A1A1A]">
@@ -431,16 +447,25 @@ function TrappersDetailPanel({
           )}
         </div>
 
-        {/* Primary action — Directions to the real place. Always present
-         *  (every place has coordinates), so it stays prominent even on
-         *  search results where the "If you stop here" card is hidden.
-         *  Opens the device maps app with the place as destination and the
-         *  user's current location as origin. */}
-        {directionsUrl && (
-          <a
-            href={directionsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Primary action — Directions. Opens the in-app panel either along
+         *  the day's leg (scrolled to this place) or routed TO this place for
+         *  off-route search results. Context-gated above. Always present
+         *  (every place has coordinates). */}
+        {directionsCoord && (
+          <button
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("trip:openDirections", {
+                  detail: routeToPlace
+                    ? {
+                        destinationCoord: directionsCoord,
+                        destinationLabel: place.title,
+                      }
+                    : { waypointCoord: directionsCoord },
+                }),
+              )
+            }
             className="flex items-center justify-center gap-2 self-stretch rounded-sm h-12 mb-4"
             style={{
               backgroundColor: "var(--button-primary)",
@@ -448,25 +473,8 @@ function TrappersDetailPanel({
               cursor: "pointer",
             }}
           >
-            <Navigation
-              className="w-[18px] h-[18px]"
-              strokeWidth={2}
-              style={{ color: "var(--text-primary)" }}
-            />
-            <span
-              className="uppercase"
-              style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 14,
-                lineHeight: "16px",
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                color: "var(--text-primary)",
-              }}
-            >
-              Directions
-            </span>
-          </a>
+            <DirectionsButtonContent />
+          </button>
         )}
 
         {/* Simulator card — IF YOU STOP HERE. Hidden when no simulator

@@ -512,6 +512,9 @@ function BrowseCardCell({
             coords: place.coords,
             description: place.description,
             waypoint: synthWaypoint,
+            // In-day browse: the place is on this day's route, so Directions
+            // opens the in-app day-directions panel scrolled to it.
+            dayRelative: true,
           },
         },
       }),
