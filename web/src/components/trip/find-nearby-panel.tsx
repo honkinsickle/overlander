@@ -787,6 +787,10 @@ function SearchAreaResults({
                 addLabel="Add to a day"
                 width={CARD_WIDTH}
                 stats={stats}
+                // Area search runs against the active day, not the result's
+                // day, so any "Adds <time>" detour would be fabricated —
+                // omit it (DETAILS still opens the panel).
+                showDetour={false}
                 onAdd={(e) => {
                   e?.stopPropagation();
                   onAdd(place);

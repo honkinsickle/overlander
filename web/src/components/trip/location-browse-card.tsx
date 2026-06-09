@@ -202,13 +202,20 @@ export function LocationBrowseCard({
           )}
         </div>
         <Divider marginBottom={9} />
-        {showDetour && (
+        {(showDetour || onOpen) && (
           <>
             <div
               className="flex flex-col"
               style={{ minHeight: 24, flexShrink: 0, gap: 2 }}
             >
-              <AddsRow addsText={addsLabel} onOpen={onOpen} />
+              {/* The "Adds <detour>" text is day-relative — shown only on
+               *  near-route browse cards (showDetour). On corpus-wide search
+               *  it would be fabricated, so it is omitted; the DETAILS link
+               *  stays so the detail panel is still reachable. */}
+              <AddsRow
+                addsText={showDetour ? addsLabel : undefined}
+                onOpen={onOpen}
+              />
             </div>
             <Divider />
           </>
@@ -516,39 +523,45 @@ function AddsRow({
   addsText,
   onOpen,
 }: {
-  addsText: string;
+  addsText?: string;
   onOpen?: (e?: React.MouseEvent) => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span
-        style={{
-          fontFamily: "var(--ff-display)",
-          fontWeight: 400,
-          fontSize: 18,
-          lineHeight: "24px",
-          color: "#FFFFFF",
-        }}
-      >
-        {addsText}
-      </span>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex items-center gap-1.5 shrink-0"
-        style={{
-          fontFamily: "var(--ff-display)",
-          fontWeight: 500,
-          fontSize: 12,
-          lineHeight: "16px",
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: "#C8A96E",
-        }}
-      >
-        Details
-        <ArrowRight />
-      </button>
+      {addsText ? (
+        <span
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontWeight: 400,
+            fontSize: 18,
+            lineHeight: "24px",
+            color: "#FFFFFF",
+          }}
+        >
+          {addsText}
+        </span>
+      ) : (
+        <span />
+      )}
+      {onOpen && (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex items-center gap-1.5 shrink-0"
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontWeight: 500,
+            fontSize: 12,
+            lineHeight: "16px",
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            color: "#C8A96E",
+          }}
+        >
+          Details
+          <ArrowRight />
+        </button>
+      )}
     </div>
   );
 }

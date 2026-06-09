@@ -154,6 +154,8 @@ function BrowseDayCard({
     dayCoords: day.coords,
     dayLabel: day.label,
     dayNumber: day.dayNumber,
+    // In-day browse: this ctx day IS the result's day, so the detour is real.
+    dayRelative: true,
   };
 
   const onAdd = () => {

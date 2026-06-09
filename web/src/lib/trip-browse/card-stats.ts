@@ -33,39 +33,22 @@ export type CardCtx = {
   dayNumber: number;
   /** ISO date for the day, used for sunset/eta sanity. Optional. */
   dayDate?: string;
+  /** True only when the ctx day IS the day this result belongs to (in-day
+   *  browse). The detour/"Adds X" simulator is a day-relative concept, so it
+   *  renders only when this holds. Top-level area search runs against the
+   *  ACTIVE day (not the result's), so it leaves this false and the detour is
+   *  suppressed rather than shown against the wrong route. */
+  dayRelative?: boolean;
 };
 
 export type CardStats = {
   /** Pre-formatted "Day N / X.X mi off" eyebrow. */
   dayTag: string;
-  /** Omitted when no real reliability signal exists. Never fabricated. */
-  reliability?: { score: number; label: string };
   cost: {
-    primary: string;
-    secondary: string;
+    /** "Adds <time>" — the real out-and-back detour driving time. Shown on
+     *  near-route browse cards; suppressed on corpus-wide search. */
     hero: string;
-    eta: string;
   };
-  /** Omitted when no real rating exists. Never fabricated. */
-  rating?: { value: string; count: string };
-};
-
-const STOP_MINUTES_BY_CATEGORY: Record<SlideCategoryKey, number> = {
-  scenic: 45,
-  food: 60,
-  oddity: 30,
-  camping: 30,
-  overnight: 30,
-  fuel: 10,
-};
-
-const ENTRY_BY_CATEGORY: Record<SlideCategoryKey, string> = {
-  scenic: "Free entry",
-  food: "$10–25 entrée",
-  oddity: "Free · donation",
-  camping: "$15–25 / night",
-  overnight: "$25 / night",
-  fuel: "Pump price",
 };
 
 /** Drive speed assumption for converting detour miles → minutes. Real
@@ -93,33 +76,6 @@ export function formatMinutes(min: number): string {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h${String(m).padStart(2, "0")}m`;
-}
-
-/** Pull the next anchor name from a day label like "X — Y" → "Y". */
-function nextAnchorFromLabel(label: string | undefined): string {
-  if (!label) return "next stop";
-  const parts = label.split(/—|→|·/).map((s) => s.trim()).filter(Boolean);
-  const last = parts[parts.length - 1];
-  return last.split(",")[0].trim();
-}
-
-/** Add minutes to a "h:MM AM/PM" string. Accepts both "5:00pm" and
- *  "5:00 PM" inputs; output is always uppercase with a space ("5:00 PM"),
- *  matching the canonical Paper copy. Wraps within 24h. */
-function addMinutesToTime(time: string, minutes: number): string {
-  const m = time.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
-  if (!m) return time;
-  let hr = parseInt(m[1], 10) % 12;
-  const min = parseInt(m[2], 10);
-  if (m[3].toLowerCase() === "pm") hr += 12;
-  let total = hr * 60 + min + minutes;
-  total = ((total % 1440) + 1440) % 1440;
-  const h24 = Math.floor(total / 60);
-  const newMin = total % 60;
-  const isPm = h24 >= 12;
-  let h12 = h24 % 12;
-  if (h12 === 0) h12 = 12;
-  return `${h12}:${String(newMin).padStart(2, "0")} ${isPm ? "PM" : "AM"}`;
 }
 
 /** Perpendicular distance (mi) from a place to the day's route segment.
@@ -156,21 +112,10 @@ export function computeCardStats(
   // are unavailable; 0 if neither.
   const detourMi = offRouteMi(place.coords, ctx) * ROAD_FACTOR;
   const detourMin = Math.round((detourMi / AVG_MPH) * 60);
-  const stopMin = STOP_MINUTES_BY_CATEGORY[ctx.category];
-  // Out-and-back detour + stop time.
-  const addsMin = Math.max(stopMin + detourMin * 2, stopMin);
-
-  // Reliability and rating are NOT fabricated. BrowsePlace carries no real
-  // rating/review/reliability signal today, so both are omitted (undefined)
-  // — never a hashed placeholder. They flow through if/when a real value is
-  // plumbed onto the place.
-
-  // Day's planned arrival assumed to be 5pm (typical trip-end). With
-  // detour added, push it out by addsMin. Real planned ETA would come
-  // from upstream routing — this is a placeholder driven by ctx.
-  const plannedEta = "5:00 PM";
-  const newEta = addMinutesToTime(plannedEta, addsMin);
-  const anchor = nextAnchorFromLabel(ctx.dayLabel);
+  // "Adds X" = the real out-and-back detour driving time only. No heuristic
+  // stop minutes are added on top — we surface only the geometry we can
+  // actually compute, never an invented visit duration.
+  const addsMin = detourMin * 2;
 
   // Detour mile display: 1 decimal under 10mi, integer otherwise.
   const detourMiDisplay =
@@ -179,19 +124,17 @@ export function computeCardStats(
   return {
     dayTag: `Day ${ctx.dayNumber} / ${detourMiDisplay} mi off`,
     cost: {
-      primary: `Detour: ${formatMinutes(detourMin)}`,
-      secondary: ENTRY_BY_CATEGORY[ctx.category],
       hero: `Adds ${formatMinutes(addsMin)}`,
-      eta: `to your day. You'd arrive at ${anchor} at ${newEta}`,
     },
   };
 }
 
 // ── Slide-up synth ────────────────────────────────────────────────
 // The browse-panel slide-up overlay reads its rich sections from a
-// `Waypoint` shape. Browse results aren't trip waypoints, so we
-// synthesize one from the BrowsePlace + computed stats. Keeps the
-// overlay rendering identical to the trip-waypoint path.
+// `Waypoint` shape. Browse results aren't trip waypoints, so we project the
+// BrowsePlace onto that shape. Every field here is REAL data off the source
+// result or computed geometry — never a category-canned placeholder. Fields
+// with no real backing are simply omitted, so the panel renders them empty.
 
 const SLIDE_TO_TRIP_CATEGORY: Record<SlideCategoryKey, Category> = {
   scenic: "mountain",
@@ -202,89 +145,27 @@ const SLIDE_TO_TRIP_CATEGORY: Record<SlideCategoryKey, Category> = {
   fuel: "fuel",
 };
 
-const TAGS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
-  scenic: ["Scenic", "Photo Spot", "Trail"],
-  food: ["Local Eats", "Casual", "Open Late"],
-  oddity: ["Roadside", "Quirky", "Quick Stop"],
-  camping: ["Tent + RV", "Reservable", "Pit toilets"],
-  overnight: ["Lodging", "Reservable", "Quick Reset"],
-  fuel: ["Gas", "Diesel"],
-};
+/** Real price tier ($–$$$$) from the source (Google live), or undefined. */
+function priceTierToEntry(tier?: 1 | 2 | 3 | 4): string | undefined {
+  return tier ? "$".repeat(tier) : undefined;
+}
 
-const FACTUAL_BY_SLIDE: Record<SlideCategoryKey, { label: string; text: string }> = {
-  scenic: {
-    label: "Field Notes",
-    text: "Discoverable terrain feature drawn from public data sources. Confirm trail status and seasonal access at the visitor center before committing to the detour.",
-  },
-  food: {
-    label: "House Notes",
-    text: "Counter-and-table service spot pulled from local data. Hours and menu shift with the season — call ahead if you're tight on time.",
-  },
-  oddity: {
-    label: "Backstory",
-    text: "Roadside curiosity logged by community contributors. Worth the photo stop; verify access via the operator before trusting the listed hours.",
-  },
-  camping: {
-    label: "Site Notes",
-    text: "Campsite pulled from public datasets (BLM / NFS / Recreation.gov). Check the relevant agency for current fees, fire restrictions, and reservability.",
-  },
-  overnight: {
-    label: "Stay Notes",
-    text: "Lodging option from public listings. Rates and availability vary by season — verify directly before relying on the stop.",
-  },
-  fuel: {
-    label: "Fuel Notes",
-    text: "Gas station pulled from public data sources. Rural pumps can be card-only or seasonal — check posted hours and brand reviews before relying on a single stop in a long stretch.",
-  },
-};
-
-const AMENITIES_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
-  scenic: ["Trailhead", "Photo overlook", "Parking"],
-  food: ["Dine in", "Takeout", "Cards accepted"],
-  oddity: ["Free entry", "Photo op", "Restrooms"],
-  camping: ["Pit toilets", "Picnic tables", "Fire rings"],
-  overnight: ["Wifi", "Parking", "Pet-friendly"],
-  fuel: ["Restrooms", "Snacks", "ATM"],
-};
-
-const TIPS_BY_SLIDE: Record<SlideCategoryKey, string[]> = {
-  scenic: [
-    "First two hours after sunrise gives the cleanest light here.",
-    "Cell signal is unreliable past the trailhead — download maps offline.",
-  ],
-  food: [
-    "Aim for the shoulder hour (11:30 or 1:45) to skip the lunch rush.",
-    "Specials change daily — ask, don't trust the posted menu.",
-  ],
-  oddity: [
-    "Worth the detour even if it sounds dubious from the listing.",
-    "Bring small bills — cards rarely accepted.",
-  ],
-  camping: [
-    "Sites along the back loop tend to be quieter and better-shaded.",
-    "Pack out everything; leave-no-trace ethics expected here.",
-  ],
-  overnight: [
-    "Confirm the latest cancellation window before booking peak nights.",
-  ],
-  fuel: [
-    "Top off here if the next stretch is long — rural pumps can be unreliable or seasonal.",
-  ],
-};
-
-/** Compact source-attribution chips. The browse pipeline tags every
- *  result with its data-source already; we surface that here so the
- *  panel can show "OSM" / "Recreation.gov" / "Foursquare" provenance. */
-function sourcesForBrowsePlace(_place: BrowsePlace): string[] {
-  // BrowsePlace doesn't carry a discrete source field today; the
-  // discovery pipeline merges across OSM / Recreation.gov / Foursquare.
-  // Default to OSM since the bulk of results come from there.
-  return ["OpenStreetMap", "Wikipedia", "Mapillary"];
+/** Real provenance chips from the place's source labels. `mention.secondary`
+ *  is the actual joined source list the discovery/federated pipeline already
+ *  computed ("Google · OpenStreetMap", "Recreation.gov · OSM", …). Splits it
+ *  back into chips and drops any "+N more" tail; returns [] when absent. */
+function realDataSources(place: BrowsePlace): string[] {
+  const raw = place.mention?.secondary ?? "";
+  return raw
+    .split(/\s*·\s*/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !/^\+\d+\s+more$/i.test(s));
 }
 
 /** Build a slide-up-ready Waypoint from a BrowsePlace + the stats we
  *  already compute for its card. Lets the slide-up render identically
- *  whether opened from a trip waypoint or a browse result. */
+ *  whether opened from a trip waypoint or a browse result — but carries only
+ *  real, source-backed fields; everything unbacked is omitted (hidden). */
 export function browsePlaceToWaypoint(
   place: BrowsePlace,
   ctx: CardCtx,
@@ -292,16 +173,21 @@ export function browsePlaceToWaypoint(
 ): Waypoint {
   const tripCategory = SLIDE_TO_TRIP_CATEGORY[ctx.category];
   const detourMatch = stats.dayTag.match(/([\d.]+)\s+mi/);
-  const routeOffsetMi = detourMatch ? parseFloat(detourMatch[1]) : undefined;
-  // "Stop time" = time spent AT the stop, per-category heuristic. Was
-  // previously parsed out of `cost.primary` ("Detour: …") which is the
-  // *drive* time to the stop, not the visit duration — that produced
-  // absurd labels like "Stop time: 6h47m" for a museum 285mi off-route.
-  const stopMin = STOP_MINUTES_BY_CATEGORY[ctx.category];
+  // Detour / route-offset are day-relative — only meaningful when the ctx day
+  // IS the result's day (in-day browse). Suppressed on top-level area search.
+  const routeOffsetMi =
+    ctx.dayRelative && detourMatch ? parseFloat(detourMatch[1]) : undefined;
   const addsMatch = stats.cost.hero.match(/Adds\s+(\S+)/);
-  // Pull "{anchor}" and "{time}" out of the new copy format:
-  // "to your day. You'd arrive at {anchor} at {time}"
-  const newEtaMatch = stats.cost.eta.match(/at\s+(.+?)\s+at\s+([\d:]+\s+[AP]M)$/);
+  const entry = priceTierToEntry(place.priceTier);
+  // Federated rows carry real overland tags; live Google/OSM results have
+  // none. The same real list backs both the Tags and Amenities chip rows —
+  // there is no separate real amenities signal to draw from.
+  const realTags =
+    place.overlanderTags && place.overlanderTags.length > 0
+      ? place.overlanderTags
+      : undefined;
+  const dataSources = realDataSources(place);
+
   return {
     id: place.id,
     slug: place.id,
@@ -311,54 +197,41 @@ export function browsePlaceToWaypoint(
     description: place.description,
     stats: [],
     photoUrl: place.photoUrl,
-    tags: TAGS_BY_SLIDE[ctx.category],
-    // Reliability flows through only when computeCardStats supplies a real
-    // one (it doesn't fabricate); omitted otherwise.
-    ...(stats.reliability
+    ...(realTags ? { tags: realTags } : {}),
+    routeOffsetMi,
+    // "If you stop here" simulator = the real out-and-back detour. It is a
+    // day-relative concept, so it carries ONLY on in-day browse; on area
+    // search (active-day ctx, not the result's) the whole card is omitted
+    // rather than show a detour against the wrong route. No arrival times /
+    // schedule rows / "Day N unaffected" — those had no real routing source.
+    ...(ctx.dayRelative && addsMatch
       ? {
-          reliability: {
-            score: stats.reliability.score,
-            label: stats.reliability.label,
-            sourceCount: 3,
+          simulator: {
+            addsTime: addsMatch[1],
+            ...(entry ? { entryCost: entry } : {}),
           },
         }
       : {}),
-    routeOffsetMi,
-    simulator: {
-      stopTime: formatMinutes(stopMin),
-      entryCost: stats.cost.secondary,
-      addsTime: addsMatch?.[1] ?? "—",
-      newEtaPlace: newEtaMatch?.[1] ?? "next stop",
-      plannedEta: "5:00 PM",
-      withStopEta: newEtaMatch?.[2] ?? "—",
-      unaffectedNote: `Day ${ctx.dayNumber + 1} unaffected`,
-    },
-    factualNote: FACTUAL_BY_SLIDE[ctx.category],
     logistics: {
       hours: place.stats.find((s) => s.label === "HOURS")?.value,
-      entry: stats.cost.secondary,
+      ...(entry ? { entry } : {}),
       address: place.placeInfo?.address || undefined,
       phone: place.placeInfo?.phone?.display,
       website: place.placeInfo?.website?.display,
     },
-    // Community rating/reviewCount are never fabricated; the section is
-    // omitted until a real rating is plumbed onto the place. (Slide-up only;
-    // its remaining canned tips/lastVerified are deferred to the slide-up
-    // pass — they can't carry without a required rating number.)
-    ...(stats.rating
+    // Community renders only with a REAL rating from the source (Google live).
+    // Review count flows through when present; tips and "last verified" are
+    // dropped entirely — no real source backs them.
+    ...(typeof place.rating === "number"
       ? {
           community: {
-            rating: parseFloat(stats.rating.value),
-            reviewCount: parseInt(
-              stats.rating.count.replace(/[^\d]/g, "") || "0",
-              10,
-            ),
-            tips: TIPS_BY_SLIDE[ctx.category],
-            lastVerified: "Live",
+            rating: place.rating,
+            reviewCount:
+              typeof place.reviewCount === "number" ? place.reviewCount : 0,
           },
         }
       : {}),
-    amenities: AMENITIES_BY_SLIDE[ctx.category],
-    dataSources: sourcesForBrowsePlace(place),
+    ...(realTags ? { amenities: realTags } : {}),
+    ...(dataSources.length > 0 ? { dataSources } : {}),
   };
 }
