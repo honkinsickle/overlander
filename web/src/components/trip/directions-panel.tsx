@@ -25,10 +25,17 @@ const OFF_ROUTE_THRESHOLD_MI = 0.25;
  *  Paper "Slideup · Directions Active" frame. */
 const PANEL_WIDTH = 660;
 
-/** Custom-event detail shape for `trip:openDirections`. Optional
- *  `waypointCoord` lets a WaypointDetail's Directions button open the
- *  panel and scroll to the step closest to that waypoint. */
-type OpenDetail = { waypointCoord?: [number, number] };
+/** Custom-event detail shape for `trip:openDirections`.
+ *  - `waypointCoord` (on-route place): open the day's leg and scroll to the
+ *    step closest to that waypoint.
+ *  - `destinationCoord` (off-route search result): route TO this place
+ *    instead of along the day's leg; `destinationLabel` names it in the
+ *    header / arrive row. */
+type OpenDetail = {
+  waypointCoord?: [number, number];
+  destinationCoord?: [number, number];
+  destinationLabel?: string;
+};
 
 /** "1530" sec → "25:30"; "24" sec → "0:24". Minutes:seconds for the
  *  short "to turn" countdown on the active maneuver. */
@@ -104,16 +111,26 @@ export function DirectionsPanel({
     null,
   );
   // Time captured when the panel opens — the basis for the live arrival
-  // ETA. Stamped in the open handler (not during render) so the render
-  // stays pure.
+  // ETA. Stamped in the open handler (not during render) so render stays pure.
   const [openedAtMs, setOpenedAtMs] = useState<number | null>(null);
-  // Only request directions while the panel is open — saves a Mapbox call
-  // on every page load for users who never tap the directions icon. Cache
-  // inside the hook makes reopen-instant either way.
-  const fetchStart = open ? legStart : null;
-  const fetchEnd = open ? legEnd : null;
-  const status = useLegDirections(fetchStart, fetchEnd);
+  // Set when opened for an off-route place (a top-level search result): route
+  // TO this place instead of along the active day's leg. Origin is the live
+  // GPS fix when available, else the day's start.
+  const [routeTo, setRouteTo] = useState<{
+    coord: [number, number];
+    label?: string;
+  } | null>(null);
+
   const { position } = useUserLocation();
+
+  const routeStart = routeTo ? position ?? legStart : legStart;
+  const routeEnd = routeTo ? routeTo.coord : legEnd;
+  // Only request directions while the panel is open — saves a Mapbox call on
+  // every page load for users who never tap the directions icon. Cache inside
+  // the hook makes reopen-instant either way.
+  const fetchStart = open ? routeStart : null;
+  const fetchEnd = open ? routeEnd : null;
+  const status = useLegDirections(fetchStart, fetchEnd);
 
   const listRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -135,6 +152,7 @@ export function DirectionsPanel({
   const closePanel = () => {
     setOpen(false);
     setScrollToCoord(null);
+    setRouteTo(null);
     lastScrolledRef.current = null;
   };
 
@@ -144,6 +162,11 @@ export function DirectionsPanel({
       const detail = (e as CustomEvent<OpenDetail>).detail ?? {};
       setOpen(true);
       setScrollToCoord(detail.waypointCoord ?? null);
+      setRouteTo(
+        detail.destinationCoord
+          ? { coord: detail.destinationCoord, label: detail.destinationLabel }
+          : null,
+      );
       setOpenedAtMs(Date.now());
     };
     const onClose = () => closePanel();
@@ -208,7 +231,13 @@ export function DirectionsPanel({
     ready && openedAtMs != null
       ? formatClock(new Date(openedAtMs + remainingSec * 1000))
       : null;
-  const dest = destFromLabel(legLabel);
+  // Header + arrive-row labels. In route-to-place mode the day leg is
+  // replaced by the destination place, so there is no "Day N".
+  const headerDay = routeTo ? undefined : dayNumber;
+  const headerLabel = routeTo
+    ? routeTo.label ?? "This place"
+    : legLabel ?? "Directions";
+  const dest = routeTo ? routeTo.label ?? null : destFromLabel(legLabel);
 
   // UP NEXT rows = steps after the active one. Cumulative distance from the
   // active position to each maneuver, with the per-step length on the
@@ -261,7 +290,7 @@ export function DirectionsPanel({
                 color: "var(--amber)",
               }}
             >
-              {dayNumber != null ? `Directions · Day ${dayNumber}` : "Directions"}
+              {headerDay != null ? `Directions · Day ${headerDay}` : "Directions"}
               {ready
                 ? ` · ${formatStepDistance(ready.totalDistanceMeters)} · ${formatLegDuration(ready.totalDurationSec)}${eta ? ` · arrives ${eta}` : ""}`
                 : ""}
@@ -277,7 +306,7 @@ export function DirectionsPanel({
                 marginTop: 2,
               }}
             >
-              {legLabel ?? "Directions"}
+              {headerLabel}
             </div>
             {offRoute && (
               <div
@@ -452,7 +481,7 @@ export function DirectionsPanel({
                         }}
                       >
                         {isArrive
-                          ? `In ${formatStepDistance(cumMeters)}${dayNumber != null ? ` · Day ${dayNumber} end` : ""}`
+                          ? `In ${formatStepDistance(cumMeters)}${headerDay != null ? ` · Day ${headerDay} end` : ""}`
                           : `In ${formatStepDistance(cumMeters)}`}
                       </div>
                       <div
