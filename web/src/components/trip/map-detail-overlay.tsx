@@ -1,10 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Navigation, X } from "lucide-react";
 import type { Waypoint } from "@/lib/trips/types";
 
 const TRANSITION_MS = 280;
+
+/** Build a maps directions URL to the REAL place, origin defaulting to the
+ *  device's current location (we omit `origin`, so Google fills in "Your
+ *  location"). The destination is always the place's real coordinates; for
+ *  live Google results (id `gpl/<placeId>`) we also pass the Google
+ *  `place_id` so the pin snaps to the exact listing rather than a bare point.
+ *  Never fabricates a destination — returns null when the place has no
+ *  coordinates (in practice every place has them, so the button is always
+ *  actionable). */
+function buildDirectionsUrl(place: DetailPlace): string | null {
+  const coord = place.waypoint?.coords ?? place.coords;
+  if (!coord) return null;
+  const [lng, lat] = coord;
+  const params = new URLSearchParams({
+    api: "1",
+    destination: `${lat},${lng}`,
+  });
+  // `gpl/<placeId>` = live Google result → add the precise Google place_id.
+  // Federated / other ids carry no Google place_id, so they route by the
+  // real lat/lng alone.
+  if (place.id.startsWith("gpl/")) {
+    params.set("destination_place_id", place.id.slice("gpl/".length));
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
 
 /** The slide-up's source-of-truth shape. Browse-panel cards only carry
  *  a subset (id/title/photoUrl/description); trip waypoints carry the
@@ -206,6 +231,7 @@ function TrappersDetailPanel({
   const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
   const routeOffset = wp?.routeOffsetMi;
   const bookingStatus = wp?.bookingStatus ?? [];
+  const directionsUrl = buildDirectionsUrl(place);
 
   return (
     <article className="flex flex-col items-center bg-[#1A1A1A]">
@@ -405,6 +431,44 @@ function TrappersDetailPanel({
           )}
         </div>
 
+        {/* Primary action — Directions to the real place. Always present
+         *  (every place has coordinates), so it stays prominent even on
+         *  search results where the "If you stop here" card is hidden.
+         *  Opens the device maps app with the place as destination and the
+         *  user's current location as origin. */}
+        {directionsUrl && (
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 self-stretch rounded-sm h-12 mb-4"
+            style={{
+              backgroundColor: "var(--button-primary)",
+              border: "1px solid var(--button-primary-border)",
+              cursor: "pointer",
+            }}
+          >
+            <Navigation
+              className="w-[18px] h-[18px]"
+              strokeWidth={2}
+              style={{ color: "var(--text-primary)" }}
+            />
+            <span
+              className="uppercase"
+              style={{
+                fontFamily: "var(--ff-display)",
+                fontSize: 14,
+                lineHeight: "16px",
+                fontWeight: 600,
+                letterSpacing: "0.1em",
+                color: "var(--text-primary)",
+              }}
+            >
+              Directions
+            </span>
+          </a>
+        )}
+
         {/* Simulator card — IF YOU STOP HERE. Hidden when no simulator
          *  data is available (browse-panel BrowsePlace path). */}
         {sim && (
@@ -581,37 +645,8 @@ function TrappersDetailPanel({
               className="flex justify-center gap-2 pt-[19px]"
               style={{ borderTop: "1px solid rgba(255,255,255,0.25)" }}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  const coord = place.waypoint?.coords ?? place.coords;
-                  window.dispatchEvent(
-                    new CustomEvent("trip:openDirections", {
-                      detail: { waypointCoord: coord },
-                    }),
-                  );
-                }}
-                className="flex items-center justify-center h-10 rounded-sm px-6"
-                style={{
-                  backgroundColor: "transparent",
-                  border: "1px solid rgba(166,201,249,0.4)",
-                  cursor: "pointer",
-                }}
-              >
-                <span
-                  className="uppercase"
-                  style={{
-                    fontFamily: "var(--ff-display)",
-                    fontSize: 14,
-                    lineHeight: "16px",
-                    fontWeight: 600,
-                    letterSpacing: "0.08em",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  Directions
-                </span>
-              </button>
+              {/* Directions moved to the always-present primary button at the
+               *  top of the panel; this row keeps the contextual Add action. */}
               <button
                 type="button"
                 onClick={onToggleAdded}
