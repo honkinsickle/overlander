@@ -200,6 +200,8 @@ function BrowseDayCard({
             coords: place.coords,
             description: place.description,
             waypoint: synthWaypoint,
+            // In-day browse: on this day's route → in-app day-directions.
+            dayRelative: true,
           },
         },
       }),

@@ -6,6 +6,53 @@ import type { Waypoint } from "@/lib/trips/types";
 
 const TRANSITION_MS = 280;
 
+/** Maps directions URL to the REAL place, origin defaulting to the device's
+ *  current location (we omit `origin`, so Google fills in "Your location").
+ *  Destination is the place's real coordinates; for live Google results
+ *  (id `gpl/<placeId>`) we also pass the Google `place_id` so the pin snaps
+ *  to the exact listing. Used only for top-level search results, where the
+ *  day route never reaches the place. Returns null when there are no coords. */
+function buildDirectionsUrl(place: DetailPlace): string | null {
+  const coord = place.waypoint?.coords ?? place.coords;
+  if (!coord) return null;
+  const [lng, lat] = coord;
+  const params = new URLSearchParams({
+    api: "1",
+    destination: `${lat},${lng}`,
+  });
+  if (place.id.startsWith("gpl/")) {
+    params.set("destination_place_id", place.id.slice("gpl/".length));
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+/** Shared inner content (icon + label) for the Directions action, used by
+ *  both the in-app-panel <button> and the external-maps <a> variants. */
+function DirectionsButtonContent() {
+  return (
+    <>
+      <Navigation
+        className="w-[18px] h-[18px]"
+        strokeWidth={2}
+        style={{ color: "var(--text-primary)" }}
+      />
+      <span
+        className="uppercase"
+        style={{
+          fontFamily: "var(--ff-display)",
+          fontSize: 14,
+          lineHeight: "16px",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          color: "var(--text-primary)",
+        }}
+      >
+        Directions
+      </span>
+    </>
+  );
+}
+
 /** The slide-up's source-of-truth shape. Browse-panel cards only carry
  *  a subset (id/title/photoUrl/description); trip waypoints carry the
  *  full enriched Waypoint shape via `waypoint`. The panel renders
@@ -21,6 +68,12 @@ type DetailPlace = {
   /** When opened from a trip waypoint, the full enriched record is
    *  passed through so all the rich detail sections can render. */
   waypoint?: Waypoint;
+  /** Whether this place is on the active day's route. `false` only for
+   *  top-level area-search results (which run against the active day, not
+   *  the result's). Gates the Directions button: in-day/on-route opens the
+   *  in-app day-directions panel; a search result routes externally to the
+   *  place. Absent → treated as on-route. */
+  dayRelative?: boolean;
 };
 
 type SheetState = "closed" | "peek" | "half" | "expanded";
@@ -206,10 +259,16 @@ function TrappersDetailPanel({
   const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
   const routeOffset = wp?.routeOffsetMi;
   const bookingStatus = wp?.bookingStatus ?? [];
-  // Coords for the in-app day-directions panel — the panel opens scrolled
-  // to the step nearest this place. Every place carries coords, so the
-  // Directions button is always actionable.
+  // Directions button behavior is chosen by whether the place is on the
+  // active day's route:
+  //  - on-route / in-day  → open the in-app day-directions panel, scrolled
+  //    to the step nearest this place (the day route passes through it);
+  //  - top-level search result (dayRelative === false) → route externally to
+  //    the real place, since the day route never reaches it.
+  // Absent flag → treated as on-route (trip waypoints, suggestions, etc.).
   const directionsCoord = place.waypoint?.coords ?? place.coords;
+  const directionsToPlaceUrl =
+    place.dayRelative === false ? buildDirectionsUrl(place) : null;
 
   return (
     <article className="flex flex-col items-center bg-[#1A1A1A]">
@@ -409,20 +468,15 @@ function TrappersDetailPanel({
           )}
         </div>
 
-        {/* Primary action — opens the in-app day-directions panel, scrolled
-         *  to the step nearest this place. Always present (every place has
-         *  coordinates), so it stays prominent even on search results where
-         *  the "If you stop here" card is hidden. */}
-        {directionsCoord && (
-          <button
-            type="button"
-            onClick={() =>
-              window.dispatchEvent(
-                new CustomEvent("trip:openDirections", {
-                  detail: { waypointCoord: directionsCoord },
-                }),
-              )
-            }
+        {/* Primary action — Directions. Behavior is context-gated above:
+         *  search results route externally to the place; on-route places open
+         *  the in-app day-directions panel scrolled to this place. Always
+         *  present (every place has coordinates). */}
+        {directionsToPlaceUrl ? (
+          <a
+            href={directionsToPlaceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 self-stretch rounded-sm h-12 mb-4"
             style={{
               backgroundColor: "var(--button-primary)",
@@ -430,25 +484,29 @@ function TrappersDetailPanel({
               cursor: "pointer",
             }}
           >
-            <Navigation
-              className="w-[18px] h-[18px]"
-              strokeWidth={2}
-              style={{ color: "var(--text-primary)" }}
-            />
-            <span
-              className="uppercase"
+            <DirectionsButtonContent />
+          </a>
+        ) : (
+          directionsCoord && (
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("trip:openDirections", {
+                    detail: { waypointCoord: directionsCoord },
+                  }),
+                )
+              }
+              className="flex items-center justify-center gap-2 self-stretch rounded-sm h-12 mb-4"
               style={{
-                fontFamily: "var(--ff-display)",
-                fontSize: 14,
-                lineHeight: "16px",
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                color: "var(--text-primary)",
+                backgroundColor: "var(--button-primary)",
+                border: "1px solid var(--button-primary-border)",
+                cursor: "pointer",
               }}
             >
-              Directions
-            </span>
-          </button>
+              <DirectionsButtonContent />
+            </button>
+          )
         )}
 
         {/* Simulator card — IF YOU STOP HERE. Hidden when no simulator

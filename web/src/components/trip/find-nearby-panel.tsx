@@ -749,6 +749,10 @@ function SearchAreaResults({
                     coords: place.coords,
                     description: place.description,
                     waypoint: synthWaypoint,
+                    // Top-level search runs against the active day, not the
+                    // result's — the day route never reaches this place, so
+                    // the Directions button routes externally to the place.
+                    dayRelative: false,
                   },
                 },
               }),
