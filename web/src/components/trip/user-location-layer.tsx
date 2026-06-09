@@ -119,6 +119,11 @@ export function UserLocationLayer({
   const markerRef = useRef<ReturnType<typeof makeUserLocationMarker> | null>(
     null,
   );
+  // Set when a locate tap arrives before a GPS fix exists. The next fix then
+  // zoom-centers (to FOLLOW_ZOOM) instead of easing in at the current zoom, so
+  // a single tap ends at the "you are here" level even on a cold permission
+  // grant. Cleared after that first zoom; later follow updates keep the zoom.
+  const pendingCenterZoomRef = useRef(false);
 
   // Single effect handles mount, position updates, heading updates, and
   // follow-mode camera pan. Marker is created the first time we have a
@@ -155,7 +160,21 @@ export function UserLocationLayer({
       .style.setProperty("pointer-events", "none", "important");
     markerRef.current.setHeading(heading);
     if (following) {
-      panelAwareFly(map, snap.coord, map.getZoom(), 500, "ease");
+      if (pendingCenterZoomRef.current) {
+        // First fix after a locate tap: zoom straight to the location level
+        // in one step (no second tap needed), then resume follow at the
+        // user's zoom on subsequent updates.
+        pendingCenterZoomRef.current = false;
+        panelAwareFly(
+          map,
+          snap.coord,
+          Math.max(map.getZoom(), FOLLOW_ZOOM),
+          700,
+          "fly",
+        );
+      } else {
+        panelAwareFly(map, snap.coord, map.getZoom(), 500, "ease");
+      }
     }
     // routePathRef is a ref — stable identity, doesn't need to be in deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,20 +224,13 @@ export function UserLocationLayer({
         // watchPosition on denied so a user who clears the URL-bar denial
         // mid-session can re-engage without a reload.
         request();
-        if (position) {
-          const snap = snapToRoute(
-            position,
-            routePathRef.current,
-            SNAP_THRESHOLD_MI,
-          );
-          panelAwareFly(
-            map,
-            snap.coord,
-            Math.max(map.getZoom(), FOLLOW_ZOOM),
-            700,
-            "fly",
-          );
-        }
+        // Zoom-center on the next fix. Both paths route through the effect's
+        // pending branch so there is a single fly: the cold path (no fix yet)
+        // flies when the first fix lands; the warm path (already watching)
+        // flies on the following-change render. Doing the fly here instead is
+        // stomped by the follow effect's current-zoom ease that runs right
+        // after — which is what made a single tap only center, not zoom.
+        pendingCenterZoomRef.current = true;
         setFollowing(true);
       } else {
         setFollowing(false);
@@ -226,9 +238,7 @@ export function UserLocationLayer({
     };
     window.addEventListener("trip:setFollow", onSetFollow);
     return () => window.removeEventListener("trip:setFollow", onSetFollow);
-    // routePathRef is a ref — stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, position, map, request]);
+  }, [request]);
 
   // Broadcast status + follow state so the Right-Edge Toolbar's Locate control
   // can drive this engine (via trip:setFollow) and reflect an HONEST state
