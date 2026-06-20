@@ -3,10 +3,7 @@
 import type { CSSProperties } from "react";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import type { CardStats } from "@/lib/trip-browse/card-stats";
-import {
-  browseCardPalette,
-  type BrowseCardCategory,
-} from "@/lib/trip-browse/palette";
+import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
 import {
   CategoryIconV2,
   type CategoryIconV2Name,
@@ -131,7 +128,6 @@ export function LocationBrowseCard({
   onOpen,
   onMore,
 }: Props) {
-  const palette = browseCardPalette[category];
   const ctaLabel =
     addLabel ??
     (category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`);
@@ -177,8 +173,8 @@ export function LocationBrowseCard({
         photoUrl={place.photoUrl}
         alt={place.photoAlt}
         category={category}
-        badgeBg={palette.badgeBg}
-        badgeBorder={palette.badgeBorder}
+        badgeBg={`var(--cat-${category}-badge-bg)`}
+        badgeBorder={`var(--cat-${category}-badge-border)`}
         onMore={onMore}
       />
       <div
@@ -186,7 +182,7 @@ export function LocationBrowseCard({
         style={{ paddingInline: BODY_PAD_X, paddingTop: 14, paddingBottom: 14 }}
       >
         <div style={{ flexShrink: 0 }}>
-          <Title text={place.title} color={palette.titleColor} />
+          <Title text={place.title} color={`var(--cat-${category}-title)`} />
           {isFederated ? (
             <FederatedMeta
               pills={place.pills}
@@ -222,8 +218,8 @@ export function LocationBrowseCard({
         )}
         <Cta
           label={ctaLabel}
-          bg={palette.ctaBg}
-          border={palette.ctaBorder}
+          bg={`var(--cat-${category}-cta-bg)`}
+          border={`var(--cat-${category}-cta-border)`}
           onClick={onAdd}
         />
       </div>
