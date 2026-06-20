@@ -779,7 +779,7 @@ function SearchAreaResults({
                 cursor: "pointer",
                 transition: "box-shadow 160ms ease",
                 boxShadow: focused
-                  ? "0 0 0 2px #c8a96e, 0 0 18px 2px rgba(200,169,110,0.55)"
+                  ? "0 0 0 2px var(--amber), 0 0 18px 2px color-mix(in srgb, var(--amber) 55%, transparent)"
                   : "none",
               }}
             >
@@ -982,8 +982,8 @@ function TileButton({
             fontWeight: 700,
             letterSpacing: "0.14em",
             color: "var(--amber)",
-            backgroundColor: "rgba(200,169,110,0.12)",
-            border: "1px solid rgba(200,169,110,0.28)",
+            backgroundColor: "color-mix(in srgb, var(--amber) 12%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--amber) 28%, transparent)",
             padding: "2px 6px",
             borderRadius: 3,
           }}
