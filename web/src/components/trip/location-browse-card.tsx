@@ -170,7 +170,7 @@ export function LocationBrowseCard({
 
   return (
     <div
-      className="flex flex-col overflow-clip rounded-md bg-[#161819] border border-solid"
+      className="flex flex-col overflow-clip rounded-md bg-bg-card border border-solid"
       style={{ width, height: CARD_H, borderColor: "#FFFFFF12" }}
     >
       <Hero
@@ -305,7 +305,7 @@ function Title({ text, color }: { text: string; color: string }) {
       style={{
         color,
         fontFamily:
-          "var(--font-barlow-condensed), system-ui, sans-serif",
+          "var(--ff-display-condensed)",
         fontWeight: 700,
         fontStretch: "condensed",
         fontSize: 24,
@@ -386,7 +386,7 @@ function StatusRow({
                     fontSize: 11,
                     lineHeight: "12px",
                     letterSpacing: "0.04em",
-                    color: "#888888",
+                    color: "var(--text-muted)",
                   }}
                 >
                   ({rating.count})
@@ -488,7 +488,7 @@ function FederatedMeta({
             fontWeight: 400,
             fontSize: 12,
             lineHeight: "16px",
-            color: "#888888",
+            color: "var(--text-muted)",
           }}
         >
           {mention.primary} {mention.secondary}
@@ -555,7 +555,7 @@ function AddsRow({
             lineHeight: "16px",
             letterSpacing: "0.16em",
             textTransform: "uppercase",
-            color: "#C8A96E",
+            color: "var(--amber)",
           }}
         >
           Details
@@ -587,7 +587,7 @@ function Cta({
         height: 44,
         backgroundColor: bg,
         border: `1px solid ${border}`,
-        color: "#ECEAE4",
+        color: "var(--text-primary)",
         fontFamily: "var(--ff-display)",
         fontWeight: 600,
         fontSize: 13,
@@ -608,8 +608,8 @@ function StarIcon() {
       width="12"
       height="12"
       viewBox="0 0 24 24"
-      fill="#C8A96E"
-      stroke="#C8A96E"
+      fill="var(--amber)"
+      stroke="var(--amber)"
       strokeWidth={1}
       strokeLinejoin="round"
     >
@@ -625,7 +625,7 @@ function ArrowRight() {
       height="10"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#C8A96E"
+      stroke="var(--amber)"
       strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -643,7 +643,7 @@ function PlusIcon() {
       height="12"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#ECEAE4"
+      stroke="var(--text-primary)"
       strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
