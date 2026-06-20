@@ -59,20 +59,23 @@ export type Category =
   | "attraction"
   | "neutral";
 
-/** Maps a category to the --cat-* accent + --cat-*-bg pair. Inline styles
- *  rather than Tailwind utilities so the category can be driven by data. */
+/** Maps a category to its canonical Category Type tokens: accent → the
+ *  `title` role, bg → the `cta-bg` role (per the design-system role map).
+ *  Inline styles rather than Tailwind utilities so the category can be
+ *  driven by data. Keys keep the data taxonomy (`mountain`/`neutral`); the
+ *  artboard's `scenic`/`interest` token *names* are used for their values. */
 export const categoryStyle: Record<
   Category,
   { accent: string; bg: string; label: string }
 > = {
-  fuel:       { accent: "var(--cat-fuel)",       bg: "var(--cat-fuel-bg)",       label: "FUEL" },
-  camping:    { accent: "var(--cat-camping)",    bg: "var(--cat-camping-bg)",    label: "CAMPING" },
-  mountain:   { accent: "var(--cat-mountain)",   bg: "var(--cat-mountain-bg)",   label: "SIGHTS & LANDMARKS" },
-  urban:      { accent: "var(--cat-urban)",      bg: "var(--cat-urban-bg)",      label: "URBAN" },
-  food:       { accent: "var(--cat-food)",       bg: "var(--cat-food-bg)",       label: "FOOD" },
-  oddity:     { accent: "var(--cat-oddity)",     bg: "var(--cat-oddity-bg)",     label: "ODDITY" },
-  attraction: { accent: "var(--cat-attraction)", bg: "var(--cat-attraction-bg)", label: "ATTRACTION" },
-  neutral:    { accent: "var(--cat-neutral)",    bg: "var(--cat-neutral-bg)",    label: "NEUTRAL" },
+  fuel:       { accent: "var(--cat-fuel-title)",       bg: "var(--cat-fuel-cta-bg)",       label: "FUEL" },
+  camping:    { accent: "var(--cat-camping-title)",    bg: "var(--cat-camping-cta-bg)",    label: "CAMPING" },
+  mountain:   { accent: "var(--cat-scenic-title)",     bg: "var(--cat-scenic-cta-bg)",     label: "SIGHTS & LANDMARKS" },
+  urban:      { accent: "var(--cat-urban-title)",      bg: "var(--cat-urban-cta-bg)",      label: "URBAN" },
+  food:       { accent: "var(--cat-food-title)",       bg: "var(--cat-food-cta-bg)",       label: "FOOD" },
+  oddity:     { accent: "var(--cat-oddity-title)",     bg: "var(--cat-oddity-cta-bg)",     label: "ODDITY" },
+  attraction: { accent: "var(--cat-attraction-title)", bg: "var(--cat-attraction-cta-bg)", label: "ATTRACTION" },
+  neutral:    { accent: "var(--cat-interest-title)",   bg: "var(--cat-interest-cta-bg)",   label: "NEUTRAL" },
 };
 
 /** Lucide icon per category — used in the Waypoint Card badge (Paper ALI-0).
