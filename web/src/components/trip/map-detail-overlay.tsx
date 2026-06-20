@@ -282,7 +282,7 @@ function TrappersDetailPanel({
         <div className="flex flex-col gap-3 mb-4">
           <h2
             style={{
-              fontFamily: "var(--font-barlow-condensed), var(--ff-sans)",
+              fontFamily: "var(--ff-display-condensed)",
               fontSize: 26,
               lineHeight: "26px",
               fontWeight: 700,
