@@ -89,6 +89,64 @@
   --cat-neutral:       #888888;
   --cat-neutral-bg:    #26292B;
 
+  /* Category Type — canonical per-role category palette (source of truth:
+     Paper "Category Type" artboard). 9 categories × 5 roles: title /
+     badge-bg / badge-border / cta-bg / cta-border. Additive — coexists with
+     the legacy --cat-{name} / --cat-{name}-bg tokens above. */
+  --cat-camping-title:         #6ECECE;
+  --cat-camping-badge-bg:      #0F2E1F;
+  --cat-camping-badge-border:  #4D9A6E;
+  --cat-camping-cta-bg:        #304C4B;
+  --cat-camping-cta-border:    #6ECECE;
+
+  --cat-urban-title:           #E8CF4D;
+  --cat-urban-badge-bg:        #3A2F14;
+  --cat-urban-badge-border:    #E5BD3D;
+  --cat-urban-cta-bg:          #67562A;
+  --cat-urban-cta-border:      #E8CF4D;
+
+  --cat-scenic-title:          #A6C9F9;
+  --cat-scenic-badge-bg:       #24354F;
+  --cat-scenic-badge-border:   #A6C9F9;
+  --cat-scenic-cta-bg:         #24354F;
+  --cat-scenic-cta-border:     #A6C9F9;
+
+  --cat-food-title:            #F38666;
+  --cat-food-badge-bg:         #773D2C;
+  --cat-food-badge-border:     #F38666;
+  --cat-food-cta-bg:           #773D2C;
+  --cat-food-cta-border:       #F38666;
+
+  --cat-fuel-title:            #FA9D9D;
+  --cat-fuel-badge-bg:         #2E1414;
+  --cat-fuel-badge-border:     #E26F6F;
+  --cat-fuel-cta-bg:           #4E252F;
+  --cat-fuel-cta-border:       #FA9D9D;
+
+  --cat-hotel-title:           #6ECECE;
+  --cat-hotel-badge-bg:        #304C4B;
+  --cat-hotel-badge-border:    #6ECECE;
+  --cat-hotel-cta-bg:          #304C4B;
+  --cat-hotel-cta-border:      #6ECECE;
+
+  --cat-oddity-title:          #BC97F0;
+  --cat-oddity-badge-bg:       #2A1A3E;
+  --cat-oddity-badge-border:   #B589F0;
+  --cat-oddity-cta-bg:         #2D2039;
+  --cat-oddity-cta-border:     #BC97EF;
+
+  --cat-attraction-title:        #DEA2DF;
+  --cat-attraction-badge-bg:     #412A5D;
+  --cat-attraction-badge-border: #DEA2DF;
+  --cat-attraction-cta-bg:       #412A5D;
+  --cat-attraction-cta-border:   #DEA2DF;
+
+  --cat-interest-title:        #BAB0AF;
+  --cat-interest-badge-bg:     #262A2B;
+  --cat-interest-badge-border: #888888;
+  --cat-interest-cta-bg:       #262A2B;
+  --cat-interest-cta-border:   #888888;
+
   /* Typography — families set by next/font via layout.tsx */
   --ff-sans:              var(--font-barlow),           sans-serif;
   --ff-display:           var(--font-space-grotesk),    system-ui, sans-serif;
