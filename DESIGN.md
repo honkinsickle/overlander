@@ -72,28 +72,15 @@ saturated interactive blues are semantic roles in §1.4, not ramp members.
 | `--type-300` | `#B3B3B3` | 179 | `--input-placeholder` |
 | `--type-500` | `#888888` | 136 | `--text-muted` / `--text-dim` |
 
-### 1.2 Category palette (own 8×2 dimension — not part of the ramps)
+### 1.2 Category Type (canonical per-role palette)
 
-Waypoint categories. **`--cat-fuel` (red) and `--cat-oddity` (purple) are intentional outliers**
-outside the five ramps. `--cat-attraction` deliberately reuses Amber.
-
-| Category | FG | BG |
-|---|---|---|
-| `--cat-fuel` | `#FA9C9D` | `--cat-fuel-bg` `#4E252F` |
-| `--cat-camping` | `#6ECECE` | `--cat-camping-bg` `#304B4B` |
-| `--cat-mountain` | `#2CB5FF` | `--cat-mountain-bg` `#1A4A42` |
-| `--cat-urban` | `#A7CCFD` | `--cat-urban-bg` `#24354F` |
-| `--cat-food` | `#FDBA74` | `--cat-food-bg` `#3A2A1E` |
-| `--cat-oddity` | `#D8B4FE` | `--cat-oddity-bg` `#2A1A3E` |
-| `--cat-attraction` | `#c8a96e` (= `--amber-300`) | `--cat-attraction-bg` `#3A2E17` |
-| `--cat-neutral` | `#888888` | `--cat-neutral-bg` `#26292B` |
-
-### 1.2b Category Type (canonical per-role palette)
-
-The full per-role category palette — **source of truth: the Paper "Category Type" artboard.**
+The category color system — **source of truth: the Paper "Category Type" artboard.**
 9 categories × 5 roles: `title` / `badge-bg` / `badge-border` / `cta-bg` / `cta-border`, named
-`--cat-{name}-{role}`. This is **additive** alongside the legacy `--cat-{name}` / `--cat-{name}-bg`
-2-role tokens above (no consumer has been re-pointed yet).
+`--cat-{name}-{role}`. This is the **only** category palette: the legacy flat `--cat-{name}` /
+`--cat-{name}-bg` 2-role tokens were retired in design-system pass 2c (all consumers read the
+role tokens). Note the taxonomy keys here are the artboard's (`scenic`, `interest`); the data
+layer's `Category`/waypoint keys (`mountain`, `neutral`) map onto them and stay until a separate
+data migration.
 
 | Category | title | badge-bg | badge-border | cta-bg | cta-border |
 |---|---|---|---|---|---|

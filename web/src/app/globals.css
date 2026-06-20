@@ -70,29 +70,11 @@
   --marker:         var(--pin);
   --pin-border:     #F68A0D;
 
-  /* Category palette — waypoint categories (own dimension, not a ramp).
-     --cat-fuel (red) and --cat-oddity (purple) are intentional outliers. */
-  --cat-fuel:          #FA9C9D;
-  --cat-fuel-bg:       #4E252F;
-  --cat-camping:       #6ECECE;
-  --cat-camping-bg:    #304B4B;
-  --cat-mountain:      #2CB5FF;
-  --cat-mountain-bg:   #1A4A42;
-  --cat-urban:         #A7CCFD;
-  --cat-urban-bg:      #24354F;
-  --cat-food:          #FDBA74;
-  --cat-food-bg:       #3A2A1E;
-  --cat-oddity:        #D8B4FE;
-  --cat-oddity-bg:     #2A1A3E;
-  --cat-attraction:    var(--amber-300); /* = amber */
-  --cat-attraction-bg: #3A2E17;
-  --cat-neutral:       #888888;
-  --cat-neutral-bg:    #26292B;
-
   /* Category Type — canonical per-role category palette (source of truth:
      Paper "Category Type" artboard). 9 categories × 5 roles: title /
-     badge-bg / badge-border / cta-bg / cta-border. Additive — coexists with
-     the legacy --cat-{name} / --cat-{name}-bg tokens above. */
+     badge-bg / badge-border / cta-bg / cta-border. This is the only
+     category color system; the legacy flat --cat-{name} / --cat-{name}-bg
+     tokens were retired in design-system pass 2c. */
   --cat-camping-title:         #6ECECE;
   --cat-camping-badge-bg:      #0F2E1F;
   --cat-camping-badge-border:  #4D9A6E;
@@ -383,23 +365,6 @@
   --color-input-disabled-text:    var(--input-disabled-text);
   --color-input-error:            var(--input-error);
   --color-input-success:          var(--input-success);
-
-  --color-cat-fuel:          var(--cat-fuel);
-  --color-cat-fuel-bg:       var(--cat-fuel-bg);
-  --color-cat-camping:       var(--cat-camping);
-  --color-cat-camping-bg:    var(--cat-camping-bg);
-  --color-cat-mountain:      var(--cat-mountain);
-  --color-cat-mountain-bg:   var(--cat-mountain-bg);
-  --color-cat-urban:         var(--cat-urban);
-  --color-cat-urban-bg:      var(--cat-urban-bg);
-  --color-cat-food:          var(--cat-food);
-  --color-cat-food-bg:       var(--cat-food-bg);
-  --color-cat-oddity:        var(--cat-oddity);
-  --color-cat-oddity-bg:     var(--cat-oddity-bg);
-  --color-cat-attraction:    var(--cat-attraction);
-  --color-cat-attraction-bg: var(--cat-attraction-bg);
-  --color-cat-neutral:       var(--cat-neutral);
-  --color-cat-neutral-bg:    var(--cat-neutral-bg);
 
   /* Category Type — canonical per-role mirror (see :root). */
   --color-cat-camping-title:         var(--cat-camping-title);
