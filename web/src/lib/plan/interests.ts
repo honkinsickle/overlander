@@ -31,7 +31,7 @@ export const INTEREST_CATEGORIES: InterestCategory[] = [
     id: "nature",
     title: "Nature & Parks",
     subtitle: "Protected wilderness, trails, viewpoints",
-    category: "mountain",
+    category: "scenic",
     icon: TreePine,
     chips: [
       { id: "national-parks",      label: "National Parks" },

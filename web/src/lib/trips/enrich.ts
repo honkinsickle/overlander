@@ -12,7 +12,7 @@ import type { Day, Trip, Waypoint } from "./types";
  */
 
 const TAGS_BY_CATEGORY: Record<Category, string[][]> = {
-  mountain: [
+  scenic: [
     ["National Park", "Scenic Vista", "Hiking"],
     ["Wilderness", "Photography", "Day Hike"],
     ["Backcountry", "Alpine", "Lookout"],
@@ -47,25 +47,25 @@ const TAGS_BY_CATEGORY: Record<Category, string[][]> = {
     ["Downtown", "Galleries", "Pedestrian"],
     ["Local", "Eats", "Lodging"],
   ],
-  neutral: [
+  interest: [
     ["Quick Stop", "Restrooms", "Walk-around"],
     ["Pull-off", "Photo Op", "Free"],
   ],
 };
 
 const FACTUAL_LABEL_BY_CATEGORY: Record<Category, string> = {
-  mountain: "Geology Notes",
+  scenic: "Geology Notes",
   attraction: "History",
   food: "House Notes",
   fuel: "Station Notes",
   camping: "Site Notes",
   oddity: "Backstory",
   urban: "Neighborhood",
-  neutral: "Local Notes",
+  interest: "Local Notes",
 };
 
 const FACTUAL_TEMPLATES: Record<Category, string[]> = {
-  mountain: [
+  scenic: [
     "Glacial geology dating to the last ice age — moraines, kettle ponds, and erratic boulders define the landscape. Public-land status protects the visible terrain from new development.",
     "Volcanic origin from successive flow events. The exposed rock is mostly basalt with intrusions of rhyolite where the cooling was slower. Most accessible features are on a designated trail.",
     "Carved by retreating ice ~10,000 years ago. The U-shaped valley and polished bedrock are signatures of glacial action. Local interpretive signage covers the formation timeline.",
@@ -100,14 +100,14 @@ const FACTUAL_TEMPLATES: Record<Category, string[]> = {
     "Recently revitalized historic district. Streets are pedestrian-friendly; parking is metered on weekdays and free on Sundays.",
     "Lively neighborhood that anchors the wider area. Best explored on foot — the side streets hold most of the character.",
   ],
-  neutral: [
+  interest: [
     "Marked pull-off with picnic tables and basic information panels. No services beyond a vault toilet.",
     "Open year-round. Maintained by the local highway department; expect minimal facilities but reliable access.",
   ],
 };
 
 const AMENITIES_BY_CATEGORY: Record<Category, string[][]> = {
-  mountain: [
+  scenic: [
     ["Hiking trails", "Visitor center", "Restrooms"],
     ["Backcountry permits", "Photo overlooks", "Picnic area"],
     ["Trailhead parking", "Pit toilets", "Bear-safe storage"],
@@ -142,13 +142,13 @@ const AMENITIES_BY_CATEGORY: Record<Category, string[][]> = {
     ["Public parking", "Galleries", "Restaurants"],
     ["Wifi", "ATM", "Lodging"],
   ],
-  neutral: [
+  interest: [
     ["Restrooms", "Picnic table", "Free parking"],
   ],
 };
 
 const DATA_SOURCES_BY_CATEGORY: Record<Category, string[][]> = {
-  mountain: [
+  scenic: [
     ["NPS.gov", "AllTrails", "OSM"],
     ["USGS", "AllTrails", "OSM"],
     ["BLM.gov", "Gaia GPS", "OSM"],
@@ -180,13 +180,13 @@ const DATA_SOURCES_BY_CATEGORY: Record<Category, string[][]> = {
     ["TripAdvisor", "Google", "OSM"],
     ["Local tourism", "OSM", "Wikipedia"],
   ],
-  neutral: [
+  interest: [
     ["OSM", "Google", "Wikipedia"],
   ],
 };
 
 const TIPS_BY_CATEGORY: Record<Category, string[][]> = {
-  mountain: [
+  scenic: [
     [
       "Best light is the first two hours after sunrise — golden side-lighting on the peaks.",
       "Trail conditions change quickly; check the visitor center board before committing.",
@@ -248,7 +248,7 @@ const TIPS_BY_CATEGORY: Record<Category, string[][]> = {
       "Sundays are quieter; weekday afternoons hum.",
     ],
   ],
-  neutral: [
+  interest: [
     [
       "Quick stretch break — 10 minutes is plenty.",
     ],
@@ -256,25 +256,25 @@ const TIPS_BY_CATEGORY: Record<Category, string[][]> = {
 };
 
 const HOURS_BY_CATEGORY: Record<Category, string[]> = {
-  mountain: ["Daily · sunrise to sunset", "24 hours · self-access"],
+  scenic: ["Daily · sunrise to sunset", "24 hours · self-access"],
   attraction: ["Daily · 9am – 5pm", "Wed–Sun · 10am – 6pm"],
   food: ["Daily · 7am – 9pm", "Tue–Sun · 11am – 8pm"],
   fuel: ["24 hours · card-at-pump", "Daily · 6am – 11pm"],
   camping: ["Open year-round", "May – Oct · season"],
   oddity: ["Daily · daylight only", "Sat–Sun · 10am – 4pm"],
   urban: ["Varies by venue"],
-  neutral: ["Open year-round"],
+  interest: ["Open year-round"],
 };
 
 const ENTRY_BY_CATEGORY: Record<Category, string[]> = {
-  mountain: ["$30 / vehicle · 7-day pass", "$15 / person", "Free"],
+  scenic: ["$30 / vehicle · 7-day pass", "$15 / person", "Free"],
   attraction: ["$12 / adult", "$8 / vehicle", "Free entry · donations"],
   food: ["Cash + card · ~$15–25 entrée"],
   fuel: ["Pump price · varies"],
   camping: ["$25 / night", "Free · 14-day stay limit", "$15 / night"],
   oddity: ["Free · donation box"],
   urban: ["Free to enter"],
-  neutral: ["Free"],
+  interest: ["Free"],
 };
 
 /** Stable hash → number in [0, max). Lets us seed enrichment per-slug
@@ -440,10 +440,10 @@ export function enrichWaypoint(
     logistics: wp.logistics ?? {
       hours: pick(HOURS_BY_CATEGORY[cat], slug, "hours"),
       entry: pick(ENTRY_BY_CATEGORY[cat], slug, "entry"),
-      phone: cat === "fuel" || cat === "neutral"
+      phone: cat === "fuel" || cat === "interest"
         ? undefined
         : `(${200 + hash(slug + "p1", 700)}) ${100 + hash(slug + "p2", 900)}-${1000 + hash(slug + "p3", 9000)}`,
-      website: cat === "neutral"
+      website: cat === "interest"
         ? undefined
         : `${slug.replace(/-/g, "")}.com`.slice(0, 28),
     },

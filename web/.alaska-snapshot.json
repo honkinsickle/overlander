@@ -278,7 +278,7 @@
         {
           "id": "wp-mojave-viewpoint",
           "slug": "mojave-preserve-viewpoint",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Mojave Preserve Viewpoint",
           "subtitle": "Day 1 · Scenic break on I-15",
           "description": "Pull-out east of Baker offering long views into Mojave National Preserve. Quick leg-stretch on the longest stretch of the day.",
@@ -355,7 +355,7 @@
         {
           "id": "wp-virgin-river-gorge",
           "slug": "virgin-river-gorge",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Virgin River Gorge",
           "subtitle": "Day 1 · Last 20 mi into UT",
           "description": "I-15 threads through near-vertical walls cut by the Virgin River for the final stretch before St. George. Stop at the Cedar Pocket interpretive site.",
@@ -798,7 +798,7 @@
         {
           "id": "wp-lost-trail-pass",
           "slug": "lost-trail-pass",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Lost Trail Pass · MT/ID Border",
           "subtitle": "Day 3 · Midday leg-stretch",
           "description": "7,014-ft pass on the Continental Divide marking the MT/ID border. Pull-out with interpretive signs about the Lewis & Clark route. Critical break on the longest drive day.",
@@ -1166,7 +1166,7 @@
         {
           "id": "wp-sweetgrass",
           "slug": "sweetgrass-coutts-border",
-          "category": "neutral",
+          "category": "interest",
           "title": "Sweetgrass / Coutts Border Crossing",
           "subtitle": "Day 4 · USA → Canada",
           "description": "Open 24 hrs. Standard land crossing. Need passport, vehicle registration, insurance, and Canadian Parks Pass purchased ahead.",
@@ -1366,7 +1366,7 @@
         {
           "id": "wp-moraine-lake",
           "slug": "moraine-lake",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Moraine Lake · Valley of Ten Peaks",
           "subtitle": "Day 5 · Vehicle reservation required",
           "description": "Turquoise glacial lake reflected against the Valley of Ten Peaks. Vehicle access requires a Parks Canada reservation booked 3-4 months ahead — no walk-up in peak season.",
@@ -1630,7 +1630,7 @@
         {
           "id": "wp-peyto",
           "slug": "peyto-lake",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Peyto Lake Overlook",
           "subtitle": "Day 6 · Wolf-head turquoise lake",
           "description": "Wolf-head shaped glacial lake from the Bow Summit overlook. One of the most photographed views in the Canadian Rockies.",
@@ -1703,7 +1703,7 @@
         {
           "id": "wp-athabasca",
           "slug": "athabasca-glacier",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Athabasca Glacier · Columbia Icefield",
           "subtitle": "Day 6 · Terminal moraine walk",
           "description": "Glacier face from the Toe of the Athabasca trail. Walk the terminal moraine to feel the scale.",
@@ -2357,7 +2357,7 @@
         {
           "id": "wp-muncho-lake",
           "slug": "muncho-lake",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Muncho Lake",
           "subtitle": "Day 10 · Northern Rockies overlook",
           "description": "12-mile-long jade-green lake along the highway. Bighorn sheep on the shoulder are common. Stretch the legs.",
@@ -2936,7 +2936,7 @@
         {
           "id": "wp-kluane-overlook",
           "slug": "kluane-overlook",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Kluane NP Overlook",
           "subtitle": "Day 13 · St. Elias Range",
           "description": "First views of the St. Elias mountains and Kluane Icefield from the Tachal Dhal viewpoint south of Haines Junction.",
@@ -3163,7 +3163,7 @@
         {
           "id": "wp-kluane-lake",
           "slug": "kluane-lake",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Kluane Lake Shoreline",
           "subtitle": "Day 14 · Largest lake in YT",
           "description": "60-mile-long alpine lake mirroring the Ruby Range. Pull-outs along the highway for stretches.",
@@ -3284,7 +3284,7 @@
         {
           "id": "wp-beaver-creek-border",
           "slug": "beaver-creek-border",
-          "category": "neutral",
+          "category": "interest",
           "title": "Beaver Creek / Tok Border Crossing",
           "subtitle": "Day 15 · Canada → USA",
           "description": "Open 24 hrs. Standard US CBP re-entry. Have passport and vehicle registration ready.",
@@ -3402,7 +3402,7 @@
         {
           "id": "wp-matanuska",
           "slug": "matanuska-glacier",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Matanuska Glacier Pullouts",
           "subtitle": "Day 16 · Glenn Hwy ~mile 100",
           "description": "Accessible glacier face from the highway pullouts. Morning eastern light is best; evening throws golden hour on the Chugach peaks.",
@@ -3958,7 +3958,7 @@
         {
           "id": "wp-turnagain-arm",
           "slug": "turnagain-arm",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Turnagain Arm pullouts",
           "subtitle": "Day 18 · Bore tide & beluga watch",
           "description": "Mudflats and tidal bore between Anchorage and the Kenai. Beluga whales feed here on incoming tides.",
@@ -4077,7 +4077,7 @@
         {
           "id": "wp-russian-river",
           "slug": "russian-river-falls",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Russian River Falls",
           "subtitle": "Day 19 · Salmon viewing",
           "description": "5-mile round-trip walk to the falls and the salmon ladder. Bears working the run mid-summer.",
@@ -4201,7 +4201,7 @@
         {
           "id": "wp-exit-glacier",
           "slug": "exit-glacier",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Exit Glacier · Kenai Fjords NP",
           "subtitle": "Day 20 · Glacier Overlook trail",
           "description": "1-mile easy walk to the Glacier Overlook trail viewpoint. Year-marker signs along the road show the glacier's retreat — sobering.",
@@ -4914,7 +4914,7 @@
         {
           "id": "wp-kachemak-bay-photo",
           "slug": "kachemak-bay-photo",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Kachemak Bay from Homer Spit",
           "subtitle": "Day 23 · Evening golden hour",
           "description": "Kenai Mountains across the bay; fishing boats on the spit. Evening golden hour looking southeast.",
@@ -5555,7 +5555,7 @@
         {
           "id": "wp-denali-viewpoint",
           "slug": "denali-viewpoint-south",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Denali South Viewpoint · Mile 135",
           "subtitle": "Day 27 · Parks Hwy weather-dependent",
           "description": "On a clear day Denali fills the sky. 30% of summer visitors actually see it — keep eyes on the cloud line.",
@@ -6208,7 +6208,7 @@
         {
           "id": "wp-atigun-pass",
           "slug": "atigun-pass",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Atigun Pass · Brooks Range Crossing",
           "subtitle": "Day 30 · 4,800 ft alpine pass",
           "description": "The Brooks Range surrounds the road in every direction. Late-evening 9-11pm low Arctic sun is unreal in July.",
@@ -6281,7 +6281,7 @@
         {
           "id": "wp-gates-arctic",
           "slug": "gates-of-the-arctic",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Gates of the Arctic Approach",
           "subtitle": "Day 30 · Wiseman backdrop",
           "description": "Arctic wilderness from the Dalton Hwy corridor. Midnight sun July 11pm-1am throws warm low-angle light on the peaks.",
@@ -6465,7 +6465,7 @@
         {
           "id": "wp-midnight-sun-photo",
           "slug": "midnight-sun-deadhorse",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Midnight Sun Photography",
           "subtitle": "Day 31 · 11pm-1am",
           "description": "Late June: the sun never sets. Best low-angle light for photography is 11pm-1am in the oilfield's far edges.",
@@ -7191,7 +7191,7 @@
         {
           "id": "wp-talkeetna-overlook",
           "slug": "talkeetna-river-overlook",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Talkeetna River Overlook · Denali View",
           "subtitle": "Day 38 · End of Main St",
           "description": "Confluence of three rivers and a head-on view of Denali on a clear day. Townie spot but the view is real.",
@@ -7292,7 +7292,7 @@
         {
           "id": "wp-denali-park",
           "slug": "denali-np-entrance",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Denali NP Entrance",
           "subtitle": "Day 39 · Quick visit",
           "description": "Denali NP entrance and visitor center. Park road is closed past Mile 43 indefinitely (Pretty Rocks landslide), so a short stop only.",
@@ -7681,7 +7681,7 @@
         {
           "id": "wp-top-of-the-world",
           "slug": "top-of-the-world-hwy",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Top of the World Highway",
           "subtitle": "Day 42 · 200-mile horizon views",
           "description": "Exposed alpine tundra ridge with 200-mile horizon views. Almost no trees. Golden hour is extraordinary; any time is good.",
@@ -7754,7 +7754,7 @@
         {
           "id": "wp-poker-creek",
           "slug": "poker-creek-border",
-          "category": "neutral",
+          "category": "interest",
           "title": "Poker Creek / Little Gold Border",
           "subtitle": "Day 42 · USA → Canada (seasonal)",
           "description": "Highest border crossing in North America. Open seasonally May-Sept, typically 8am-8pm only. Verify hours before departing Chicken.",
@@ -8229,7 +8229,7 @@
         {
           "id": "wp-cassiar-begins",
           "slug": "cassiar-hwy-begins",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Cassiar Highway · Mile 0",
           "subtitle": "Day 47 · BC-37 begins",
           "description": "The quieter, narrower, more scenic alternative to the Alaska Hwy. Long service gaps; wildlife on the road.",
@@ -8822,7 +8822,7 @@
         {
           "id": "wp-sea-to-sky",
           "slug": "sea-to-sky",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Sea-to-Sky Highway · Whistler approach",
           "subtitle": "Day 53 · Howe Sound + Coast Mountains",
           "description": "Cliffs above Howe Sound and the Coast Mountains rising abruptly from the fjord. Pull-outs at Britannia Beach and Shannon Falls.",
@@ -9062,7 +9062,7 @@
         {
           "id": "wp-bc-ferries",
           "slug": "bc-ferries-tsawwassen",
-          "category": "neutral",
+          "category": "interest",
           "title": "BC Ferries · Tsawwassen → Swartz Bay",
           "subtitle": "Day 55 · Vehicle ferry",
           "description": "1.5-hour crossing through the Gulf Islands. Reservable but walk-on vehicle space available off-peak.",
@@ -9264,7 +9264,7 @@
         {
           "id": "wp-coho-ferry",
           "slug": "coho-ferry",
-          "category": "neutral",
+          "category": "interest",
           "title": "MV Coho Ferry · Victoria → Port Angeles",
           "subtitle": "Day 57 · Vehicle ferry · Canada → USA",
           "description": "1.5-hour crossing of the Strait of Juan de Fuca. Vehicle ferry only — book vehicle space 4-6 weeks ahead. US CBP at Port Angeles dock.",
@@ -9448,7 +9448,7 @@
         {
           "id": "wp-hurricane-ridge",
           "slug": "hurricane-ridge",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Hurricane Ridge",
           "subtitle": "Day 58 · Olympic NP day drive",
           "description": "5,200-ft alpine ridge with views over the Olympics and the Strait of Juan de Fuca. Wildflowers in late July; black bears on the meadows.",
@@ -9820,7 +9820,7 @@
         {
           "id": "wp-hoh",
           "slug": "hoh-rainforest",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Hoh Rainforest",
           "subtitle": "Day 60 · Hall of Mosses",
           "description": "Temperate rainforest with old-growth Sitka spruce and big-leaf maples draped in club moss. Easy 0.8-mi loop.",
@@ -10634,7 +10634,7 @@
         {
           "id": "wp-multnomah",
           "slug": "multnomah-falls",
-          "category": "mountain",
+          "category": "scenic",
           "title": "Multnomah Falls",
           "subtitle": "Day 64 · 620-ft cascade",
           "description": "The classic Columbia Gorge waterfall. Stone bridge across the falls; permits often required for parking in summer.",

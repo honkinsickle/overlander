@@ -28,7 +28,7 @@ const cards: LocationCardProps[] = [
     ctaLabel: "Add to Day 14",
   },
   {
-    category: "mountain",
+    category: "scenic",
     title: "Crater Lake National Park",
     titleColor: "#A6C9F9",
     badgeBg: "#24354F",

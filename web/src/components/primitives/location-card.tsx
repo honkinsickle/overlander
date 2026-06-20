@@ -8,12 +8,12 @@ import { categoryStyle, type Category } from "./detail-card";
 const CATEGORY_EMOJI: Record<Category, string> = {
   fuel: "⛽",
   camping: "⛺",
-  mountain: "🏔️",
+  scenic: "🏔️",
   urban: "🏙️",
   food: "🍔",
   oddity: "👁️",
   attraction: "⭐",
-  neutral: "📍",
+  interest: "📍",
 };
 
 export type LocationCardProps = {
