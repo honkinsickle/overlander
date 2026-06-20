@@ -124,7 +124,7 @@ const BUCKETS: Bucket[] = [
   {
     id: "fuel-repair",
     label: "FUEL & REPAIR",
-    color: "var(--cat-mountain)",
+    color: "var(--cat-scenic-title)",
     tiles: [
       {
         id: "gas",
@@ -144,7 +144,7 @@ const BUCKETS: Bucket[] = [
   {
     id: "food",
     label: "FOOD",
-    color: "var(--cat-food)",
+    color: "var(--cat-food-title)",
     tiles: [
       {
         id: "coffee",
@@ -186,7 +186,7 @@ const BUCKETS: Bucket[] = [
   {
     id: "supply",
     label: "SUPPLY",
-    color: "var(--cat-attraction)",
+    color: "var(--cat-attraction-title)",
     tiles: [
       {
         id: "groceries",
@@ -206,7 +206,7 @@ const BUCKETS: Bucket[] = [
   {
     id: "service",
     label: "SERVICE",
-    color: "var(--cat-camping)",
+    color: "var(--cat-camping-title)",
     tiles: [
       {
         id: "showers",
@@ -227,7 +227,7 @@ const BUCKETS: Bucket[] = [
   {
     id: "stay",
     label: "STAY",
-    color: "var(--cat-oddity)",
+    color: "var(--cat-oddity-title)",
     tiles: [
       {
         id: "hotels",

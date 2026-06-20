@@ -633,8 +633,8 @@ function DaySection({
               height: 36,
               width: "80%",
               transform: "translateY(-20%)",
-              backgroundColor: "var(--cat-urban-bg)",
-              borderColor: "var(--cat-urban)",
+              backgroundColor: "var(--cat-urban-badge-bg)",
+              borderColor: "var(--cat-urban-badge-border)",
               cursor: onAddWaypoints ? "pointer" : "default",
             }}
           >
