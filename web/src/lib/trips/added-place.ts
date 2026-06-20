@@ -13,14 +13,14 @@ export type AddedPlace = {
 };
 
 /** Materialize an added BrowsePlace into a `Waypoint` shape. Category
- *  is pinned to "mountain" because `CategoryBrowsePanel` always renders
+ *  is pinned to "scenic" because `CategoryBrowsePanel` always renders
  *  results in the Scenic palette regardless of which slot the user
  *  opened it from. */
 export function addedPlaceToWaypoint(place: AddedPlace): Waypoint {
   return {
     id: place.id,
     slug: place.id,
-    category: "mountain",
+    category: "scenic",
     title: place.title,
     subtitle: "Added stop",
     description: place.description ?? "",

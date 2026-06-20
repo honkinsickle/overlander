@@ -389,7 +389,7 @@ export function DayDetail({ trip }: { trip: Trip }) {
             // The browse panel always renders results in the Scenic palette
             // (see CategoryBrowsePanel.style override) regardless of opening
             // category, so the generic "Add Waypoints" CTA defaults to it.
-            onAddWaypoints={() => openBrowse(i + 1, day)("mountain")}
+            onAddWaypoints={() => openBrowse(i + 1, day)("scenic")}
             extra={
               <SuggestedSection
                 tripId={trip.id}

@@ -41,7 +41,7 @@ export const RESULTS_SUGGESTIONS: PlanSuggestion[] = [
   {
     id: "sugg-columbia-icefield",
     slug: "columbia-icefield",
-    category: "mountain",
+    category: "scenic",
     title: "Columbia Icefield",
     description:
       "Walk onto a 10,000-year-old glacier — tour departs hourly from the Skywalk center.",

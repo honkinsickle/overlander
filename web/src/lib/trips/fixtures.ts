@@ -112,7 +112,7 @@ const seed = (): Record<string, Trip> => ({
           {
             id: "wp-umpqua",
             slug: "umpqua-hot-springs",
-            category: "mountain",
+            category: "scenic",
             title: "Umpqua Hot Springs",
             subtitle: "Day 2 · +14 mi detour",
             description:
@@ -171,7 +171,7 @@ const seed = (): Record<string, Trip> => ({
           {
             id: "wp-mckenzie",
             slug: "mckenzie-pass",
-            category: "mountain",
+            category: "scenic",
             title: "McKenzie Pass",
             subtitle: "Day 3 · OR-242",
             description:
@@ -231,7 +231,7 @@ const seed = (): Record<string, Trip> => ({
           {
             id: "wp-fern-canyon",
             slug: "fern-canyon",
-            category: "mountain",
+            category: "scenic",
             title: "Fern Canyon",
             subtitle: "Day 4 · Prairie Creek",
             description:
@@ -277,7 +277,7 @@ const seed = (): Record<string, Trip> => ({
           {
             id: "wp-timberline",
             slug: "timberline-lodge",
-            category: "mountain",
+            category: "scenic",
             title: "Timberline Lodge",
             subtitle: "Day 5 · Mt Hood",
             description:
@@ -307,7 +307,7 @@ const seed = (): Record<string, Trip> => ({
           {
             id: "wp-smith-rock",
             slug: "smith-rock",
-            category: "mountain",
+            category: "scenic",
             title: "Smith Rock State Park",
             subtitle: "Day 6 · Terrebonne, OR",
             description:

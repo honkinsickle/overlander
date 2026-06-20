@@ -153,7 +153,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-mojave-viewpoint",
           slug: "mojave-preserve-viewpoint",
-          category: "mountain",
+          category: "scenic",
           title: "Mojave Preserve Viewpoint",
           subtitle: "Day 1 · Scenic break on I-15",
           description:
@@ -170,7 +170,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-virgin-river-gorge",
           slug: "virgin-river-gorge",
-          category: "mountain",
+          category: "scenic",
           title: "Virgin River Gorge",
           subtitle: "Day 1 · Last 20 mi into UT",
           description:
@@ -352,7 +352,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-lost-trail-pass",
           slug: "lost-trail-pass",
-          category: "mountain",
+          category: "scenic",
           title: "Lost Trail Pass · MT/ID Border",
           subtitle: "Day 3 · Midday leg-stretch",
           description:
@@ -476,7 +476,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-sweetgrass",
           slug: "sweetgrass-coutts-border",
-          category: "neutral",
+          category: "interest",
           title: "Sweetgrass / Coutts Border Crossing",
           subtitle: "Day 4 · USA → Canada",
           description:
@@ -558,7 +558,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-moraine-lake",
           slug: "moraine-lake",
-          category: "mountain",
+          category: "scenic",
           title: "Moraine Lake · Valley of Ten Peaks",
           subtitle: "Day 5 · Vehicle reservation required",
           description:
@@ -643,7 +643,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-peyto",
           slug: "peyto-lake",
-          category: "mountain",
+          category: "scenic",
           title: "Peyto Lake Overlook",
           subtitle: "Day 6 · Wolf-head turquoise lake",
           description:
@@ -658,7 +658,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-athabasca",
           slug: "athabasca-glacier",
-          category: "mountain",
+          category: "scenic",
           title: "Athabasca Glacier · Columbia Icefield",
           subtitle: "Day 6 · Terminal moraine walk",
           description:
@@ -912,7 +912,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-muncho-lake",
           slug: "muncho-lake",
-          category: "mountain",
+          category: "scenic",
           title: "Muncho Lake",
           subtitle: "Day 10 · Northern Rockies overlook",
           description:
@@ -1128,7 +1128,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-kluane-overlook",
           slug: "kluane-overlook",
-          category: "mountain",
+          category: "scenic",
           title: "Kluane NP Overlook",
           subtitle: "Day 13 · St. Elias Range",
           description:
@@ -1201,7 +1201,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-kluane-lake",
           slug: "kluane-lake",
-          category: "mountain",
+          category: "scenic",
           title: "Kluane Lake Shoreline",
           subtitle: "Day 14 · Largest lake in YT",
           description:
@@ -1259,7 +1259,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-beaver-creek-border",
           slug: "beaver-creek-border",
-          category: "neutral",
+          category: "interest",
           title: "Beaver Creek / Tok Border Crossing",
           subtitle: "Day 15 · Canada → USA",
           description:
@@ -1317,7 +1317,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-matanuska",
           slug: "matanuska-glacier",
-          category: "mountain",
+          category: "scenic",
           title: "Matanuska Glacier Pullouts",
           subtitle: "Day 16 · Glenn Hwy ~mile 100",
           description:
@@ -1459,7 +1459,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-turnagain-arm",
           slug: "turnagain-arm",
-          category: "mountain",
+          category: "scenic",
           title: "Turnagain Arm pullouts",
           subtitle: "Day 18 · Bore tide & beluga watch",
           description:
@@ -1515,7 +1515,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-russian-river",
           slug: "russian-river-falls",
-          category: "mountain",
+          category: "scenic",
           title: "Russian River Falls",
           subtitle: "Day 19 · Salmon viewing",
           description:
@@ -1565,7 +1565,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-exit-glacier",
           slug: "exit-glacier",
-          category: "mountain",
+          category: "scenic",
           title: "Exit Glacier · Kenai Fjords NP",
           subtitle: "Day 20 · Glacier Overlook trail",
           description:
@@ -1745,7 +1745,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-kachemak-bay-photo",
           slug: "kachemak-bay-photo",
-          category: "mountain",
+          category: "scenic",
           title: "Kachemak Bay from Homer Spit",
           subtitle: "Day 23 · Evening golden hour",
           description:
@@ -1914,7 +1914,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-denali-viewpoint",
           slug: "denali-viewpoint-south",
-          category: "mountain",
+          category: "scenic",
           title: "Denali South Viewpoint · Mile 135",
           subtitle: "Day 27 · Parks Hwy weather-dependent",
           description:
@@ -2108,7 +2108,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-atigun-pass",
           slug: "atigun-pass",
-          category: "mountain",
+          category: "scenic",
           title: "Atigun Pass · Brooks Range Crossing",
           subtitle: "Day 30 · 4,800 ft alpine pass",
           description:
@@ -2123,7 +2123,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-gates-arctic",
           slug: "gates-of-the-arctic",
-          category: "mountain",
+          category: "scenic",
           title: "Gates of the Arctic Approach",
           subtitle: "Day 30 · Wiseman backdrop",
           description:
@@ -2187,7 +2187,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-midnight-sun-photo",
           slug: "midnight-sun-deadhorse",
-          category: "mountain",
+          category: "scenic",
           title: "Midnight Sun Photography",
           subtitle: "Day 31 · 11pm-1am",
           description:
@@ -2467,7 +2467,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-talkeetna-overlook",
           slug: "talkeetna-river-overlook",
-          category: "mountain",
+          category: "scenic",
           title: "Talkeetna River Overlook · Denali View",
           subtitle: "Day 38 · End of Main St",
           description:
@@ -2506,7 +2506,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-denali-park",
           slug: "denali-np-entrance",
-          category: "mountain",
+          category: "scenic",
           title: "Denali NP Entrance",
           subtitle: "Day 39 · Quick visit",
           description:
@@ -2633,7 +2633,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-top-of-the-world",
           slug: "top-of-the-world-hwy",
-          category: "mountain",
+          category: "scenic",
           title: "Top of the World Highway",
           subtitle: "Day 42 · 200-mile horizon views",
           description:
@@ -2648,7 +2648,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-poker-creek",
           slug: "poker-creek-border",
-          category: "neutral",
+          category: "interest",
           title: "Poker Creek / Little Gold Border",
           subtitle: "Day 42 · USA → Canada (seasonal)",
           description:
@@ -2836,7 +2836,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-cassiar-begins",
           slug: "cassiar-hwy-begins",
-          category: "mountain",
+          category: "scenic",
           title: "Cassiar Highway · Mile 0",
           subtitle: "Day 47 · BC-37 begins",
           description:
@@ -3083,7 +3083,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-sea-to-sky",
           slug: "sea-to-sky",
-          category: "mountain",
+          category: "scenic",
           title: "Sea-to-Sky Highway · Whistler approach",
           subtitle: "Day 53 · Howe Sound + Coast Mountains",
           description:
@@ -3156,7 +3156,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-bc-ferries",
           slug: "bc-ferries-tsawwassen",
-          category: "neutral",
+          category: "interest",
           title: "BC Ferries · Tsawwassen → Swartz Bay",
           subtitle: "Day 55 · Vehicle ferry",
           description:
@@ -3228,7 +3228,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-coho-ferry",
           slug: "coho-ferry",
-          category: "neutral",
+          category: "interest",
           title: "MV Coho Ferry · Victoria → Port Angeles",
           subtitle: "Day 57 · Vehicle ferry · Canada → USA",
           description:
@@ -3277,7 +3277,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-hurricane-ridge",
           slug: "hurricane-ridge",
-          category: "mountain",
+          category: "scenic",
           title: "Hurricane Ridge",
           subtitle: "Day 58 · Olympic NP day drive",
           description:
@@ -3354,7 +3354,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-hoh",
           slug: "hoh-rainforest",
-          category: "mountain",
+          category: "scenic",
           title: "Hoh Rainforest",
           subtitle: "Day 60 · Hall of Mosses",
           description:
@@ -3569,7 +3569,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         {
           id: "wp-multnomah",
           slug: "multnomah-falls",
-          category: "mountain",
+          category: "scenic",
           title: "Multnomah Falls",
           subtitle: "Day 64 · 620-ft cascade",
           description:

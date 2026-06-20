@@ -52,31 +52,30 @@ function MountainEmojiIcon({
 export type Category =
   | "fuel"
   | "camping"
-  | "mountain"
+  | "scenic"
   | "urban"
   | "food"
   | "oddity"
   | "attraction"
-  | "neutral";
+  | "interest";
 
 /** Maps a category to its canonical Category Type tokens: accent → the
  *  `title` role, bg → the `cta-bg` role, and badgeBg/badgeBorder → the
  *  `badge-bg`/`badge-border` roles (for the category icon badge). Inline
  *  styles rather than Tailwind utilities so the category can be driven by
- *  data. Keys keep the data taxonomy (`mountain`/`neutral`); the artboard's
- *  `scenic`/`interest` token *names* are used for their values. */
+ *  data. Keys match the artboard token names directly. */
 export const categoryStyle: Record<
   Category,
   { accent: string; bg: string; badgeBg: string; badgeBorder: string; label: string }
 > = {
   fuel:       { accent: "var(--cat-fuel-title)",       bg: "var(--cat-fuel-cta-bg)",       badgeBg: "var(--cat-fuel-badge-bg)",       badgeBorder: "var(--cat-fuel-badge-border)",       label: "FUEL" },
   camping:    { accent: "var(--cat-camping-title)",    bg: "var(--cat-camping-cta-bg)",    badgeBg: "var(--cat-camping-badge-bg)",    badgeBorder: "var(--cat-camping-badge-border)",    label: "CAMPING" },
-  mountain:   { accent: "var(--cat-scenic-title)",     bg: "var(--cat-scenic-cta-bg)",     badgeBg: "var(--cat-scenic-badge-bg)",     badgeBorder: "var(--cat-scenic-badge-border)",     label: "SIGHTS & LANDMARKS" },
+  scenic:     { accent: "var(--cat-scenic-title)",     bg: "var(--cat-scenic-cta-bg)",     badgeBg: "var(--cat-scenic-badge-bg)",     badgeBorder: "var(--cat-scenic-badge-border)",     label: "SCENIC" },
   urban:      { accent: "var(--cat-urban-title)",      bg: "var(--cat-urban-cta-bg)",      badgeBg: "var(--cat-urban-badge-bg)",      badgeBorder: "var(--cat-urban-badge-border)",      label: "URBAN" },
   food:       { accent: "var(--cat-food-title)",       bg: "var(--cat-food-cta-bg)",       badgeBg: "var(--cat-food-badge-bg)",       badgeBorder: "var(--cat-food-badge-border)",       label: "FOOD" },
   oddity:     { accent: "var(--cat-oddity-title)",     bg: "var(--cat-oddity-cta-bg)",     badgeBg: "var(--cat-oddity-badge-bg)",     badgeBorder: "var(--cat-oddity-badge-border)",     label: "ODDITY" },
   attraction: { accent: "var(--cat-attraction-title)", bg: "var(--cat-attraction-cta-bg)", badgeBg: "var(--cat-attraction-badge-bg)", badgeBorder: "var(--cat-attraction-badge-border)", label: "ATTRACTION" },
-  neutral:    { accent: "var(--cat-interest-title)",   bg: "var(--cat-interest-cta-bg)",   badgeBg: "var(--cat-interest-badge-bg)",   badgeBorder: "var(--cat-interest-badge-border)",   label: "NEUTRAL" },
+  interest:   { accent: "var(--cat-interest-title)",   bg: "var(--cat-interest-cta-bg)",   badgeBg: "var(--cat-interest-badge-bg)",   badgeBorder: "var(--cat-interest-badge-border)",   label: "POINT OF INTEREST" },
 };
 
 /** Lucide icon per category — used in the Waypoint Card badge (Paper ALI-0).
@@ -87,12 +86,12 @@ export const categoryIcon: Record<
 > = {
   fuel:       Fuel,
   camping:    Tent,
-  mountain:   MountainEmojiIcon,
+  scenic:     MountainEmojiIcon,
   urban:      Building2,
   food:       UtensilsCrossed,
   oddity:     Eye,
   attraction: Star,
-  neutral:    MapPin,
+  interest:   MapPin,
 };
 
 export type DetailCardProps = {

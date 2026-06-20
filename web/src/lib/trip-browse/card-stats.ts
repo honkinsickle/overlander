@@ -137,11 +137,11 @@ export function computeCardStats(
 // with no real backing are simply omitted, so the panel renders them empty.
 
 const SLIDE_TO_TRIP_CATEGORY: Record<SlideCategoryKey, Category> = {
-  scenic: "mountain",
+  scenic: "scenic",
   food: "food",
   oddity: "oddity",
   camping: "camping",
-  overnight: "neutral",
+  overnight: "interest",
   fuel: "fuel",
 };
 

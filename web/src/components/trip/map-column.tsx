@@ -462,7 +462,7 @@ export function MapColumn({
         '<rect x="4" y="3" width="10" height="18" rx="1"/><line x1="6" y1="7" x2="12" y2="7"/><path d="M14 9 h4 v9 a2 2 0 0 1 -2 2 a2 2 0 0 1 -2 -2 V9z"/><path d="M16 4 v3"/>',
       camping:
         '<path d="M3 20 L12 4 L21 20 Z"/><path d="M10 20 L12 14 L14 20"/>',
-      mountain:
+      scenic:
         '<polygon points="3 20 9 9 13 15 16 11 21 20"/><circle cx="17" cy="6" r="1.5"/>',
       urban:
         '<rect x="3" y="3" width="7" height="18"/><rect x="14" y="8" width="7" height="13"/><line x1="6" y1="7" x2="7" y2="7"/><line x1="6" y1="11" x2="7" y2="11"/><line x1="6" y1="15" x2="7" y2="15"/><line x1="17" y1="12" x2="18" y2="12"/><line x1="17" y1="16" x2="18" y2="16"/>',
@@ -472,20 +472,12 @@ export function MapColumn({
         '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
       attraction:
         '<polygon points="12 2 14.39 8.26 21 8.27 15.45 12.14 17.82 18.4 12 14.77 6.18 18.4 8.55 12.14 3 8.27 9.61 8.26"/>',
-      neutral: '<circle cx="12" cy="12" r="5"/>',
-    };
-    // Map the data category onto its canonical token name (artboard taxonomy:
-    // mountain→scenic, neutral→interest; others identity) so stored
-    // "mountain"/"neutral" waypoints resolve to a real --cat-{name}-title token.
-    const CAT_TOKEN: Record<string, string> = {
-      fuel: "fuel", camping: "camping", mountain: "scenic", urban: "urban",
-      food: "food", oddity: "oddity", attraction: "attraction", neutral: "interest",
+      interest: '<circle cx="12" cy="12" r="5"/>',
     };
     days.forEach((d) => {
       for (const wp of d.waypoints) {
         if (!wp.coords) continue;
-        const iconPaths = CAT_SVG[wp.category] ?? CAT_SVG.neutral;
-        const catToken = CAT_TOKEN[wp.category] ?? wp.category;
+        const iconPaths = CAT_SVG[wp.category] ?? CAT_SVG.interest;
         const el = document.createElement("div");
         el.setAttribute("aria-label", wp.title);
         el.style.cssText =
@@ -494,7 +486,7 @@ export function MapColumn({
         const head = document.createElement("div");
         head.style.cssText =
           "position:absolute;top:0;left:0;width:32px;height:32px;" +
-          `background:var(--cat-${catToken}-title);` +
+          `background:var(--cat-${wp.category}-title);` +
           "border:2px solid #1A1A1A;border-radius:50%;" +
           "display:flex;align-items:center;justify-content:center;" +
           "box-shadow:0 2px 6px rgba(0,0,0,0.5);";
@@ -507,7 +499,7 @@ export function MapColumn({
         tip.style.cssText =
           "position:absolute;top:28px;left:11px;width:0;height:0;" +
           "border-left:5px solid transparent;border-right:5px solid transparent;" +
-          `border-top:10px solid var(--cat-${catToken}-title);` +
+          `border-top:10px solid var(--cat-${wp.category}-title);` +
           "filter:drop-shadow(0 1px 0 #1A1A1A);";
 
         el.appendChild(head);

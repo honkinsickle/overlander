@@ -9,7 +9,7 @@ export type SlideCategoryKey =
   | "fuel";
 
 export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>> = {
-  mountain: "scenic",
+  scenic: "scenic",
   food: "food",
   oddity: "oddity",
   camping: "camping",
