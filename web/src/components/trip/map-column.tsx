@@ -473,6 +473,10 @@ export function MapColumn({
       attraction:
         '<polygon points="12 2 14.39 8.26 21 8.27 15.45 12.14 17.82 18.4 12 14.77 6.18 18.4 8.55 12.14 3 8.27 9.61 8.26"/>',
       interest: '<circle cx="12" cy="12" r="5"/>',
+      // hotel is browse-chip-only (no waypoint is ever `hotel`); included for
+      // parity with the canonical Category so the legend stays exhaustive.
+      hotel:
+        '<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>',
     };
     days.forEach((d) => {
       for (const wp of d.waypoints) {

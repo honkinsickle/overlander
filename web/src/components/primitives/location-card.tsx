@@ -14,6 +14,7 @@ const CATEGORY_EMOJI: Record<Category, string> = {
   oddity: "👁️",
   attraction: "⭐",
   interest: "📍",
+  hotel: "🏨",
 };
 
 export type LocationCardProps = {

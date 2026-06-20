@@ -8,6 +8,7 @@ import {
   Eye,
   Star,
   MapPin,
+  Hotel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,11 @@ function MountainEmojiIcon({
   );
 }
 
+// Canonical category type spanning both domains: waypoint categories (the 8
+// values a `Waypoint.category` can take) and the browse-card filter taxonomy.
+// `hotel` is browse-only (the `overnight` slide chip) — no waypoint is ever
+// `hotel` — but it lives here so `BrowseCardCategory` can derive as a subset
+// (see lib/trip-browse/palette.ts) instead of a parallel hand-maintained union.
 export type Category =
   | "fuel"
   | "camping"
@@ -57,7 +63,8 @@ export type Category =
   | "food"
   | "oddity"
   | "attraction"
-  | "interest";
+  | "interest"
+  | "hotel";
 
 /** Maps a category to its canonical Category Type tokens: accent → the
  *  `title` role, bg → the `cta-bg` role, and badgeBg/badgeBorder → the
@@ -76,6 +83,7 @@ export const categoryStyle: Record<
   oddity:     { accent: "var(--cat-oddity-title)",     bg: "var(--cat-oddity-cta-bg)",     badgeBg: "var(--cat-oddity-badge-bg)",     badgeBorder: "var(--cat-oddity-badge-border)",     label: "ODDITY" },
   attraction: { accent: "var(--cat-attraction-title)", bg: "var(--cat-attraction-cta-bg)", badgeBg: "var(--cat-attraction-badge-bg)", badgeBorder: "var(--cat-attraction-badge-border)", label: "ATTRACTION" },
   interest:   { accent: "var(--cat-interest-title)",   bg: "var(--cat-interest-cta-bg)",   badgeBg: "var(--cat-interest-badge-bg)",   badgeBorder: "var(--cat-interest-badge-border)",   label: "POINT OF INTEREST" },
+  hotel:      { accent: "var(--cat-hotel-title)",      bg: "var(--cat-hotel-cta-bg)",      badgeBg: "var(--cat-hotel-badge-bg)",      badgeBorder: "var(--cat-hotel-badge-border)",      label: "HOTEL" },
 };
 
 /** Lucide icon per category — used in the Waypoint Card badge (Paper ALI-0).
@@ -92,6 +100,7 @@ export const categoryIcon: Record<
   oddity:     Eye,
   attraction: Star,
   interest:   MapPin,
+  hotel:      Hotel,
 };
 
 export type DetailCardProps = {
