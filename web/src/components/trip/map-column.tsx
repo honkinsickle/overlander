@@ -124,7 +124,7 @@ const DOT_BADGE_BY_CATEGORY: Record<string, DotBadge> = {
 };
 const DOT_BADGE_DEFAULT: DotBadge = {
   bg: "#26292B",
-  border: "#c8a96e",
+  border: "var(--amber)",
   svg: "",
 };
 
@@ -137,7 +137,7 @@ const DOT_BADGE_DEFAULT: DotBadge = {
 function pulseDot(dot: HTMLElement): void {
   dot.style.transition = "box-shadow 150ms ease";
   dot.style.boxShadow =
-    "0 0 0 2px #c8a96e, 0 0 14px 3px rgba(200,169,110,0.7), 0 2px 6px rgba(0,0,0,0.45)";
+    "0 0 0 2px var(--amber), 0 0 14px 3px color-mix(in srgb, var(--amber) 70%, transparent), 0 2px 6px rgba(0,0,0,0.45)";
   window.setTimeout(() => {
     dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.45)";
   }, 1400);
