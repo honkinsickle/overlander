@@ -88,6 +88,28 @@ outside the five ramps. `--cat-attraction` deliberately reuses Amber.
 | `--cat-attraction` | `#c8a96e` (= `--amber-300`) | `--cat-attraction-bg` `#3A2E17` |
 | `--cat-neutral` | `#888888` | `--cat-neutral-bg` `#26292B` |
 
+### 1.2b Category Type (canonical per-role palette)
+
+The full per-role category palette — **source of truth: the Paper "Category Type" artboard.**
+9 categories × 5 roles: `title` / `badge-bg` / `badge-border` / `cta-bg` / `cta-border`, named
+`--cat-{name}-{role}`. This is **additive** alongside the legacy `--cat-{name}` / `--cat-{name}-bg`
+2-role tokens above (no consumer has been re-pointed yet).
+
+| Category | title | badge-bg | badge-border | cta-bg | cta-border |
+|---|---|---|---|---|---|
+| `camping` | `#6ECECE` | `#0F2E1F` | `#4D9A6E` | `#304C4B` | `#6ECECE` |
+| `urban` | `#E8CF4D` | `#3A2F14` | `#E5BD3D` | `#67562A` | `#E8CF4D` |
+| `scenic` | `#A6C9F9` | `#24354F` | `#A6C9F9` | `#24354F` | `#A6C9F9` |
+| `food` | `#F38666` | `#773D2C` | `#F38666` | `#773D2C` | `#F38666` |
+| `fuel` | `#FA9D9D` | `#2E1414` | `#E26F6F` | `#4E252F` | `#FA9D9D` |
+| `hotel` | `#6ECECE` | `#304C4B` | `#6ECECE` | `#304C4B` | `#6ECECE` |
+| `oddity` | `#BC97F0` | `#2A1A3E` | `#B589F0` | `#2D2039` | `#BC97EF` |
+| `attraction` | `#DEA2DF` | `#412A5D` | `#DEA2DF` | `#412A5D` | `#DEA2DF` |
+| `interest` | `#BAB0AF` | `#262A2B` | `#888888` | `#262A2B` | `#888888` |
+
+Mirrored to Tailwind as `--color-cat-{name}-{role}` in the `@theme` block (e.g. `text-cat-camping-title`,
+`bg-cat-camping-badge-bg`, `border-cat-camping-cta-border`).
+
 ### 1.3 Alpha overlays (kept literal — alpha, not ramp steps)
 
 | Token | Value | Role |
