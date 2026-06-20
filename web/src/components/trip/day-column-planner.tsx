@@ -119,7 +119,7 @@ export function DayColumnPlanner({
         overlay
           ? undefined
           : {
-              backgroundColor: "#0C0D0F",
+              backgroundColor: "var(--bg-base)",
               boxShadow: "8px 0 24px rgba(0,0,0,0.45)",
             }
       }
