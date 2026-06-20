@@ -1,9 +1,10 @@
 import type { SlideCategoryKey } from "./places";
 
-// Browse Location Card v2 palette — Paper-aligned tokens for the new
-// card chrome (artboards "Location Card · 300w / 354w · category
-// variants (v2)", page "Browse Slide In"). Source of truth in Paper;
-// hex values copied via get_computed_styles.
+// Browse Location Card v2 — category metadata (labels + slide-key bridges).
+// Per-role COLOR now lives in the canonical design tokens
+// (`--cat-{name}-{role}` in web/src/app/globals.css; source of truth = the
+// Paper "Category Type" artboard). Consumers read those tokens directly via
+// `var(--cat-${category}-title|badge-bg|badge-border|cta-bg|cta-border)`.
 
 export type BrowseCardCategory =
   | "camping"
@@ -15,72 +16,18 @@ export type BrowseCardCategory =
   | "oddity";
 
 export type BrowseCardPalette = {
-  titleColor: string;
-  badgeBg: string;
-  badgeBorder: string;
-  ctaBg: string;
-  ctaBorder: string;
   /** Uppercase label used in aria-labels and tooltips. */
   label: string;
 };
 
 export const browseCardPalette: Record<BrowseCardCategory, BrowseCardPalette> = {
-  camping: {
-    titleColor: "#6ECECE",
-    badgeBg: "#0F2E1F",
-    badgeBorder: "#4D9A6E",
-    ctaBg: "#304C4B",
-    ctaBorder: "#6ECECE",
-    label: "CAMPING",
-  },
-  urban: {
-    titleColor: "#E8CF4D",
-    badgeBg: "#3A2F14",
-    badgeBorder: "#E5BD3D",
-    ctaBg: "#67562A",
-    ctaBorder: "#E8CF4D",
-    label: "URBAN",
-  },
-  scenic: {
-    titleColor: "#A6C9F9",
-    badgeBg: "#24354F",
-    badgeBorder: "#A6C9F9",
-    ctaBg: "#24354F",
-    ctaBorder: "#A6C9F9",
-    label: "SCENIC",
-  },
-  food: {
-    titleColor: "#F38666",
-    badgeBg: "#773D2C",
-    badgeBorder: "#F38666",
-    ctaBg: "#773D2C",
-    ctaBorder: "#F38666",
-    label: "FOOD",
-  },
-  fuel: {
-    titleColor: "#FA9D9D",
-    badgeBg: "#2E1414",
-    badgeBorder: "#E26F6F",
-    ctaBg: "#4E252F",
-    ctaBorder: "#FA9D9D",
-    label: "FUEL",
-  },
-  hotel: {
-    titleColor: "#6ECECE",
-    badgeBg: "#304C4B",
-    badgeBorder: "#6ECECE",
-    ctaBg: "#304C4B",
-    ctaBorder: "#6ECECE",
-    label: "HOTEL",
-  },
-  oddity: {
-    titleColor: "#BC97F0",
-    badgeBg: "#2A1A3E",
-    badgeBorder: "#B589F0",
-    ctaBg: "#2D2039",
-    ctaBorder: "#BC97EF",
-    label: "ODDITY",
-  },
+  camping: { label: "CAMPING" },
+  urban: { label: "URBAN" },
+  scenic: { label: "SCENIC" },
+  food: { label: "FOOD" },
+  fuel: { label: "FUEL" },
+  hotel: { label: "HOTEL" },
+  oddity: { label: "ODDITY" },
 };
 
 /** `overnight` slide-category key maps to `hotel` palette (bed icon). */
