@@ -377,7 +377,7 @@ function TrappersDetailPanel({
                 className="flex items-center justify-center rounded-sm w-8 h-8 shrink-0"
                 style={{
                   backgroundColor: "rgba(255,255,255,0.10)",
-                  border: "0.5px solid #F68A0D",
+                  border: "0.5px solid var(--pin-border)",
                 }}
               >
                 <span
@@ -386,7 +386,7 @@ function TrappersDetailPanel({
                     fontSize: 14,
                     lineHeight: "16px",
                     fontWeight: 700,
-                    color: "#FF8E05",
+                    color: "var(--pin)",
                   }}
                 >
                   {reliability.score}
@@ -399,7 +399,7 @@ function TrappersDetailPanel({
                   fontSize: 12,
                   lineHeight: "16px",
                   letterSpacing: "0.08em",
-                  color: "#FF8E05",
+                  color: "var(--pin)",
                 }}
               >
                 {reliability.label} /
