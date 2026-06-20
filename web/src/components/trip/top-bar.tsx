@@ -122,8 +122,8 @@ export function TopBar({
       className={`absolute ${collapsed ? "bottom-3" : "top-3"} left-[10px] z-30 w-[660px] h-[60px] rounded-tl-[15px] rounded-tr-[15px] overflow-hidden`}
       style={{
         background: "#162029",
-        borderBottom: collapsed ? undefined : "1px solid rgba(255,255,255,0.14)",
-        borderTop: collapsed ? "1px solid rgba(255,255,255,0.14)" : undefined,
+        borderBottom: collapsed ? undefined : "1px solid var(--border-mid)",
+        borderTop: collapsed ? "1px solid var(--border-mid)" : undefined,
       }}
     >
       {/* Title (line 1) + dates · days · miles meta (line 2).
@@ -190,7 +190,7 @@ export function TopBar({
                 window.dispatchEvent(new CustomEvent("trip:searchSubmit"));
               }
             }}
-            className={`flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-white ${expanded ? "placeholder:text-white" : "placeholder:text-[#B3B3B3]"}`}
+            className={`flex-1 min-w-0 bg-transparent border-0 outline-none font-sans text-[14px] text-white ${expanded ? "placeholder:text-white" : "placeholder:text-input-placeholder"}`}
           />
           {value.length > 0 && (
             <button
@@ -201,7 +201,7 @@ export function TopBar({
                 e.preventDefault();
               }}
               onClick={() => updateValue("")}
-              className="shrink-0 flex items-center justify-center w-[20px] h-[20px] text-[#888888] hover:text-[#E9E9E7] transition-colors"
+              className="shrink-0 flex items-center justify-center w-[20px] h-[20px] text-text-muted hover:text-[#E9E9E7] transition-colors"
             >
               <X className="w-[14px] h-[14px]" strokeWidth={2} />
             </button>
@@ -230,7 +230,7 @@ export function TopBar({
           if (expanded) e.preventDefault();
         }}
         onClick={expanded ? exitSearch : onToggleCollapsed}
-        className="absolute top-0 right-0 flex items-center justify-center w-[53px] h-full border-l border-white/[0.05] text-[#888888] hover:text-[#E9E9E7] transition-colors"
+        className="absolute top-0 right-0 flex items-center justify-center w-[53px] h-full border-l border-white/[0.05] text-text-muted hover:text-[#E9E9E7] transition-colors"
       >
         {expanded ? (
           <X className="w-5 h-5" strokeWidth={1.75} />
