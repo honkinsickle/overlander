@@ -474,10 +474,18 @@ export function MapColumn({
         '<polygon points="12 2 14.39 8.26 21 8.27 15.45 12.14 17.82 18.4 12 14.77 6.18 18.4 8.55 12.14 3 8.27 9.61 8.26"/>',
       neutral: '<circle cx="12" cy="12" r="5"/>',
     };
+    // Map the data category onto its canonical token name (artboard taxonomy:
+    // mountain→scenic, neutral→interest; others identity) so stored
+    // "mountain"/"neutral" waypoints resolve to a real --cat-{name}-title token.
+    const CAT_TOKEN: Record<string, string> = {
+      fuel: "fuel", camping: "camping", mountain: "scenic", urban: "urban",
+      food: "food", oddity: "oddity", attraction: "attraction", neutral: "interest",
+    };
     days.forEach((d) => {
       for (const wp of d.waypoints) {
         if (!wp.coords) continue;
         const iconPaths = CAT_SVG[wp.category] ?? CAT_SVG.neutral;
+        const catToken = CAT_TOKEN[wp.category] ?? wp.category;
         const el = document.createElement("div");
         el.setAttribute("aria-label", wp.title);
         el.style.cssText =
@@ -486,7 +494,7 @@ export function MapColumn({
         const head = document.createElement("div");
         head.style.cssText =
           "position:absolute;top:0;left:0;width:32px;height:32px;" +
-          `background:var(--cat-${wp.category});` +
+          `background:var(--cat-${catToken}-title);` +
           "border:2px solid #1A1A1A;border-radius:50%;" +
           "display:flex;align-items:center;justify-content:center;" +
           "box-shadow:0 2px 6px rgba(0,0,0,0.5);";
@@ -499,7 +507,7 @@ export function MapColumn({
         tip.style.cssText =
           "position:absolute;top:28px;left:11px;width:0;height:0;" +
           "border-left:5px solid transparent;border-right:5px solid transparent;" +
-          `border-top:10px solid var(--cat-${wp.category});` +
+          `border-top:10px solid var(--cat-${catToken}-title);` +
           "filter:drop-shadow(0 1px 0 #1A1A1A);";
 
         el.appendChild(head);

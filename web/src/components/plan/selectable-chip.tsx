@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
  * to collect selections natively.
  *
  * `accent` drives the selected-state border + text color. Callers should
- * pass the category's `--cat-*` token (e.g. `var(--cat-mountain)`).
+ * pass the category's accent token (e.g. `var(--cat-scenic-title)`).
  */
 export function SelectableChip({
   id,

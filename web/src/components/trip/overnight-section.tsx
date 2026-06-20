@@ -96,7 +96,7 @@ function OvernightRow({
               {overnight.name}
             </span>
             {picked && (
-              <span className="px-1.5 py-0.5 rounded-sm bg-cat-camping text-[9px] font-mono tracking-[0.06em] text-[#051814]">
+              <span className="px-1.5 py-0.5 rounded-sm bg-cat-camping-cta-bg text-[9px] font-mono tracking-[0.06em] text-[#051814]">
                 PICKED
               </span>
             )}

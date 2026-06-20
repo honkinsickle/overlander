@@ -102,15 +102,15 @@ export function WaypointCard({
       <div
         className="w-[60px] h-[60px] shrink-0 flex items-center justify-center rounded-full"
         style={{
-          backgroundColor: cat.bg,
-          border: `1px solid ${cat.accent}`,
+          backgroundColor: cat.badgeBg,
+          border: `1px solid ${cat.badgeBorder}`,
           boxShadow: "0 2px 3px rgba(0,0,0,0.25)",
         }}
       >
         <Icon
           aria-hidden
           className="w-7 h-7"
-          style={{ color: cat.accent }}
+          style={{ color: cat.badgeBorder }}
           strokeWidth={2}
         />
       </div>

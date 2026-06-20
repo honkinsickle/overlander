@@ -54,10 +54,10 @@ export function CategoryFilterRow({
               width: 54,
               height: 54,
               borderRadius: 6,
-              backgroundColor: palette.badgeBg,
-              border: `1px solid ${palette.badgeBorder}`,
+              backgroundColor: `var(--cat-${c}-badge-bg)`,
+              border: `1px solid var(--cat-${c}-badge-border)`,
               opacity: active.size === 0 || isActive ? 1 : 0.4,
-              boxShadow: isActive ? `0 0 0 1px ${palette.badgeBorder}` : "none",
+              boxShadow: isActive ? `0 0 0 1px var(--cat-${c}-badge-border)` : "none",
             }}
           >
             <CategoryIconV2 category={c} size={28} />

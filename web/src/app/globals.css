@@ -70,24 +70,64 @@
   --marker:         var(--pin);
   --pin-border:     #F68A0D;
 
-  /* Category palette — waypoint categories (own dimension, not a ramp).
-     --cat-fuel (red) and --cat-oddity (purple) are intentional outliers. */
-  --cat-fuel:          #FA9C9D;
-  --cat-fuel-bg:       #4E252F;
-  --cat-camping:       #6ECECE;
-  --cat-camping-bg:    #304B4B;
-  --cat-mountain:      #2CB5FF;
-  --cat-mountain-bg:   #1A4A42;
-  --cat-urban:         #A7CCFD;
-  --cat-urban-bg:      #24354F;
-  --cat-food:          #FDBA74;
-  --cat-food-bg:       #3A2A1E;
-  --cat-oddity:        #D8B4FE;
-  --cat-oddity-bg:     #2A1A3E;
-  --cat-attraction:    var(--amber-300); /* = amber */
-  --cat-attraction-bg: #3A2E17;
-  --cat-neutral:       #888888;
-  --cat-neutral-bg:    #26292B;
+  /* Category Type — canonical per-role category palette (source of truth:
+     Paper "Category Type" artboard). 9 categories × 5 roles: title /
+     badge-bg / badge-border / cta-bg / cta-border. This is the only
+     category color system; the legacy flat --cat-{name} / --cat-{name}-bg
+     tokens were retired in design-system pass 2c. */
+  --cat-camping-title:         #6ECECE;
+  --cat-camping-badge-bg:      #0F2E1F;
+  --cat-camping-badge-border:  #4D9A6E;
+  --cat-camping-cta-bg:        #304C4B;
+  --cat-camping-cta-border:    #6ECECE;
+
+  --cat-urban-title:           #E8CF4D;
+  --cat-urban-badge-bg:        #3A2F14;
+  --cat-urban-badge-border:    #E5BD3D;
+  --cat-urban-cta-bg:          #67562A;
+  --cat-urban-cta-border:      #E8CF4D;
+
+  --cat-scenic-title:          #A6C9F9;
+  --cat-scenic-badge-bg:       #24354F;
+  --cat-scenic-badge-border:   #A6C9F9;
+  --cat-scenic-cta-bg:         #24354F;
+  --cat-scenic-cta-border:     #A6C9F9;
+
+  --cat-food-title:            #F38666;
+  --cat-food-badge-bg:         #773D2C;
+  --cat-food-badge-border:     #F38666;
+  --cat-food-cta-bg:           #773D2C;
+  --cat-food-cta-border:       #F38666;
+
+  --cat-fuel-title:            #FA9D9D;
+  --cat-fuel-badge-bg:         #2E1414;
+  --cat-fuel-badge-border:     #E26F6F;
+  --cat-fuel-cta-bg:           #4E252F;
+  --cat-fuel-cta-border:       #FA9D9D;
+
+  --cat-hotel-title:           #6ECECE;
+  --cat-hotel-badge-bg:        #304C4B;
+  --cat-hotel-badge-border:    #6ECECE;
+  --cat-hotel-cta-bg:          #304C4B;
+  --cat-hotel-cta-border:      #6ECECE;
+
+  --cat-oddity-title:          #BC97F0;
+  --cat-oddity-badge-bg:       #2A1A3E;
+  --cat-oddity-badge-border:   #B589F0;
+  --cat-oddity-cta-bg:         #2D2039;
+  --cat-oddity-cta-border:     #BC97EF;
+
+  --cat-attraction-title:        #DEA2DF;
+  --cat-attraction-badge-bg:     #412A5D;
+  --cat-attraction-badge-border: #DEA2DF;
+  --cat-attraction-cta-bg:       #412A5D;
+  --cat-attraction-cta-border:   #DEA2DF;
+
+  --cat-interest-title:        #BAB0AF;
+  --cat-interest-badge-bg:     #262A2B;
+  --cat-interest-badge-border: #888888;
+  --cat-interest-cta-bg:       #262A2B;
+  --cat-interest-cta-border:   #888888;
 
   /* Typography — families set by next/font via layout.tsx */
   --ff-sans:              var(--font-barlow),           sans-serif;
@@ -326,22 +366,52 @@
   --color-input-error:            var(--input-error);
   --color-input-success:          var(--input-success);
 
-  --color-cat-fuel:          var(--cat-fuel);
-  --color-cat-fuel-bg:       var(--cat-fuel-bg);
-  --color-cat-camping:       var(--cat-camping);
-  --color-cat-camping-bg:    var(--cat-camping-bg);
-  --color-cat-mountain:      var(--cat-mountain);
-  --color-cat-mountain-bg:   var(--cat-mountain-bg);
-  --color-cat-urban:         var(--cat-urban);
-  --color-cat-urban-bg:      var(--cat-urban-bg);
-  --color-cat-food:          var(--cat-food);
-  --color-cat-food-bg:       var(--cat-food-bg);
-  --color-cat-oddity:        var(--cat-oddity);
-  --color-cat-oddity-bg:     var(--cat-oddity-bg);
-  --color-cat-attraction:    var(--cat-attraction);
-  --color-cat-attraction-bg: var(--cat-attraction-bg);
-  --color-cat-neutral:       var(--cat-neutral);
-  --color-cat-neutral-bg:    var(--cat-neutral-bg);
+  /* Category Type — canonical per-role mirror (see :root). */
+  --color-cat-camping-title:         var(--cat-camping-title);
+  --color-cat-camping-badge-bg:      var(--cat-camping-badge-bg);
+  --color-cat-camping-badge-border:  var(--cat-camping-badge-border);
+  --color-cat-camping-cta-bg:        var(--cat-camping-cta-bg);
+  --color-cat-camping-cta-border:    var(--cat-camping-cta-border);
+  --color-cat-urban-title:           var(--cat-urban-title);
+  --color-cat-urban-badge-bg:        var(--cat-urban-badge-bg);
+  --color-cat-urban-badge-border:    var(--cat-urban-badge-border);
+  --color-cat-urban-cta-bg:          var(--cat-urban-cta-bg);
+  --color-cat-urban-cta-border:      var(--cat-urban-cta-border);
+  --color-cat-scenic-title:          var(--cat-scenic-title);
+  --color-cat-scenic-badge-bg:       var(--cat-scenic-badge-bg);
+  --color-cat-scenic-badge-border:   var(--cat-scenic-badge-border);
+  --color-cat-scenic-cta-bg:         var(--cat-scenic-cta-bg);
+  --color-cat-scenic-cta-border:     var(--cat-scenic-cta-border);
+  --color-cat-food-title:            var(--cat-food-title);
+  --color-cat-food-badge-bg:         var(--cat-food-badge-bg);
+  --color-cat-food-badge-border:     var(--cat-food-badge-border);
+  --color-cat-food-cta-bg:           var(--cat-food-cta-bg);
+  --color-cat-food-cta-border:       var(--cat-food-cta-border);
+  --color-cat-fuel-title:            var(--cat-fuel-title);
+  --color-cat-fuel-badge-bg:         var(--cat-fuel-badge-bg);
+  --color-cat-fuel-badge-border:     var(--cat-fuel-badge-border);
+  --color-cat-fuel-cta-bg:           var(--cat-fuel-cta-bg);
+  --color-cat-fuel-cta-border:       var(--cat-fuel-cta-border);
+  --color-cat-hotel-title:           var(--cat-hotel-title);
+  --color-cat-hotel-badge-bg:        var(--cat-hotel-badge-bg);
+  --color-cat-hotel-badge-border:    var(--cat-hotel-badge-border);
+  --color-cat-hotel-cta-bg:          var(--cat-hotel-cta-bg);
+  --color-cat-hotel-cta-border:      var(--cat-hotel-cta-border);
+  --color-cat-oddity-title:          var(--cat-oddity-title);
+  --color-cat-oddity-badge-bg:       var(--cat-oddity-badge-bg);
+  --color-cat-oddity-badge-border:   var(--cat-oddity-badge-border);
+  --color-cat-oddity-cta-bg:         var(--cat-oddity-cta-bg);
+  --color-cat-oddity-cta-border:     var(--cat-oddity-cta-border);
+  --color-cat-attraction-title:        var(--cat-attraction-title);
+  --color-cat-attraction-badge-bg:     var(--cat-attraction-badge-bg);
+  --color-cat-attraction-badge-border: var(--cat-attraction-badge-border);
+  --color-cat-attraction-cta-bg:       var(--cat-attraction-cta-bg);
+  --color-cat-attraction-cta-border:   var(--cat-attraction-cta-border);
+  --color-cat-interest-title:        var(--cat-interest-title);
+  --color-cat-interest-badge-bg:     var(--cat-interest-badge-bg);
+  --color-cat-interest-badge-border: var(--cat-interest-badge-border);
+  --color-cat-interest-cta-bg:       var(--cat-interest-cta-bg);
+  --color-cat-interest-cta-border:   var(--cat-interest-cta-border);
 
   --font-sans:              var(--ff-sans);
   --font-display:           var(--ff-display);
