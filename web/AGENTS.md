@@ -64,3 +64,9 @@ Phase priming (`OfflinePanel` → kebab → "Offline maps") writes per-phase til
 
 **SW fall-through `postMessage` is wired but unconsumed.** The SW emits `{ type: "MAPBOX_FALLTHROUGH", url, key }` whenever a /v4 phase tile (z=6..13) misses every cache and falls through to network. Reserved for future telemetry / UX (e.g. "we noticed you've been driving in uncached territory for 10 minutes — want to prime?"). Don't drive the banner from this stream — it fires per-tile during an active prime and would flicker.
 
+
+# Styling
+
+All styling derives from `/DESIGN.md` / `globals.css` tokens. Reference `/DESIGN.md` as the only style source. Never hardcode colors, type, spacing, or radii — use `var(--token)`.
+
+The no-raw-hex rule applies to UI styling only. Raw hex is permitted in `lib/trips/` data and route fixtures (map/route colors are data, not theme).

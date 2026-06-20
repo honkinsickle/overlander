@@ -49,7 +49,7 @@ export function GroupCard({
   return (
     <div
       className="flex flex-col w-[410px] rounded-[4px] overflow-clip border border-border-subtle"
-      style={{ backgroundColor: "#161819BF" }}
+      style={{ backgroundColor: "color-mix(in srgb, var(--bg-card) 75%, transparent)" }}
     >
       <div
         className="uppercase"
@@ -89,7 +89,7 @@ export function GroupCard({
               lineHeight: "22px",
               fontFamily: "var(--ff-sans)",
               fontWeight: 700,
-              color: "#ECEAE4",
+              color: "var(--text-primary)",
             }}
           >
             {groupTitle}

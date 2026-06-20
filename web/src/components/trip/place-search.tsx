@@ -160,10 +160,10 @@ export function PlaceSearch({
       <div
         style={{
           fontFamily: "var(--ff-mono)",
-          fontSize: 12,
+          fontSize: "var(--text-xs)",
           color: "var(--text-muted)",
           minHeight: 16,
-          marginBottom: 16,
+          marginBottom: "var(--space-4)",
         }}
       >
         {!hasQuery
@@ -179,13 +179,13 @@ export function PlaceSearch({
         <div
           role="alert"
           style={{
-            marginBottom: 16,
+            marginBottom: "var(--space-4)",
             padding: "10px 14px",
             border: "1px solid var(--input-error)",
             borderRadius: 6,
             color: "var(--input-error)",
             fontFamily: "var(--ff-mono)",
-            fontSize: 13,
+            fontSize: "var(--text-sm)",
           }}
         >
           {shownError}
@@ -196,7 +196,7 @@ export function PlaceSearch({
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 16,
+          gap: "var(--space-4)",
         }}
       >
         {shownPlaces.map((place) => {

@@ -3,63 +3,75 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Canonical design tokens — mirror of index.html :root.
-   Source of truth: /index.html lines 27–91.
-   Update both together. */
+/* Canonical design tokens. Single editable value source.
+   Reference: /DESIGN.md (the only style doc) — regenerate it when these change.
+   Structure: primitive ramps → semantic aliases → added scales. Steps are
+   numbered 50 (lightest) → 950 (darkest) by measured relative luminance. */
 :root {
-  /* Backgrounds */
-  --bg-base:       #0a0b0c;
-  --bg-panel:      #111214;
-  --bg-card:       #161819;
-  --bg-topbar:     #161819;
-  --bg-nav-btn:    #1b2c3e;
-  --bg-tab-active: #59472e;
-  --bg-tab-idle:   #1b2c3e;
-  --bg-day-active: rgb(28,58,32);
-  --bg-detail:     rgba(65,65,65,0.80);
-  --bg-map:        #1e2a1e;
+  /* ============================================================
+     PRIMITIVE RAMPS — edit values here.
+     ============================================================ */
 
-  /* Borders */
+  /* Grounds — achromatic neutral structure */
+  --grounds-850: #161819;
+  --grounds-900: #111214;
+  --grounds-950: #0a0b0c;
+
+  /* Steel — cool blue-grey chrome (grey progression only;
+     saturated interactive blues are roles below, not ramp members) */
+  --steel-50:  #8AA2C4;
+  --steel-100: #7E98BF;
+  --steel-200: #556984;
+  --steel-300: #475C78;
+  --steel-400: #46586a;
+  --steel-500: #3E516C;
+  --steel-600: #32455F;
+  --steel-700: #2B3B52;
+  --steel-800: #242F42;
+  --steel-850: #1b2c3e;
+  --steel-900: #1A1F28;
+
+  /* Forest — greens (map, active day, success) */
+  --forest-300: #7ACEA1;
+  --forest-900: rgb(28,58,32);
+  --forest-950: #1e2a1e;
+
+  /* Amber — warm brand / active identity (accent only) */
+  --amber-100: #e8c98e;
+  --amber-300: #c8a96e;
+  --amber-500: #c77429;
+  --amber-900: #59472e;
+
+  /* Type — ink / foreground */
+  --type-50:  #EDF1F6;
+  --type-100: #eceae4;
+  --type-300: #B3B3B3;
+  --type-500: #888888;
+
+  /* Alpha overlays — kept literal (alpha, not ramp steps) */
   --border-subtle: rgba(255,255,255,0.07);
   --border-mid:    rgba(255,255,255,0.14);
-  --nav-border:    #46586a;
+  --bg-detail:     rgba(65,65,65,0.80);
 
-  /* Amber — brand/active identity only */
-  --amber:         #c8a96e;
-  --amber-dark:    #c77429;
-  --amber-light:   #e8c98e;
+  /* Interactive & semantic roles — saturated blues pulled out of Steel */
+  --focus:          #A7CCFD;
+  --action:         rgba(61,162,221,0.70);
+  --action-hover:   rgba(61,162,221,0.88);
+  --action-pressed: #2A6D94;
+  --action-border:  #4DAAFF;
+  --action-ring:    rgba(77,170,255,0.25);
+  --input-accent:   #92BEFD;
+  --success:        var(--forest-300);
+  --error:          #E08872;
+  --warning:        var(--amber-500);
+  --link:           var(--action-border);
+  --link-hover:     var(--focus);
+  --pin:            #FF8E05;
+  --marker:         var(--pin);
+  --pin-border:     #F68A0D;
 
-  /* Text */
-  --text-primary:  #eceae4;
-  --text-muted:    #888888;
-  --text-dim:      #888888;
-
-  /* CTA (Primary Button) — blue */
-  --button-primary:         rgba(61,162,221,0.70);
-  --button-primary-hover:   rgba(61,162,221,0.88);
-  --button-primary-pressed: #2A6D94;
-  --button-primary-border:  #4DAAFF;
-  --button-primary-ring:    rgba(77,170,255,0.25);
-
-  /* Form fields — blue family */
-  --input-surface:          #1A1F28;
-  --input-surface-filled:   #2B3B52;
-  --input-surface-hover:    #32455F;
-  --input-surface-disabled: #242F42;
-  --input-border:           #475C78;
-  --input-border-filled:    #7E98BF;
-  --input-border-hover:     #8AA2C4;
-  --input-border-focus:     #A7CCFD;
-  --input-border-disabled:  #3E516C;
-  --input-focus-ring:       rgba(167,204,253,0.18);
-  --input-accent:           #92BEFD;
-  --input-placeholder:      #B3B3B3;
-  --input-value:            #EDF1F6;
-  --input-disabled-text:    #556984;
-  --input-error:            #E08872;
-  --input-success:          #7ACEA1;
-
-  /* Category palette — waypoint categories */
+  /* Category palette — waypoint categories (own dimension, not a ramp).
+     --cat-fuel (red) and --cat-oddity (purple) are intentional outliers. */
   --cat-fuel:          #FA9C9D;
   --cat-fuel-bg:       #4E252F;
   --cat-camping:       #6ECECE;
@@ -72,20 +84,132 @@
   --cat-food-bg:       #3A2A1E;
   --cat-oddity:        #D8B4FE;
   --cat-oddity-bg:     #2A1A3E;
-  --cat-attraction:    #c8a96e;   /* = --amber */
+  --cat-attraction:    var(--amber-300); /* = amber */
   --cat-attraction-bg: #3A2E17;
   --cat-neutral:       #888888;
   --cat-neutral-bg:    #26292B;
 
   /* Typography — families set by next/font via layout.tsx */
-  --ff-sans:    var(--font-barlow),        sans-serif;
-  --ff-display: var(--font-space-grotesk), system-ui, sans-serif;
-  --ff-mono:    var(--font-space-mono),    monospace;
-  --ff-serif:   var(--font-crimson-text),  Georgia, serif;
+  --ff-sans:              var(--font-barlow),           sans-serif;
+  --ff-display:           var(--font-space-grotesk),    system-ui, sans-serif;
+  --ff-display-condensed: var(--font-barlow-condensed), "Barlow Condensed", system-ui, sans-serif;
+  --ff-mono:              var(--font-space-mono),        monospace;
+  --ff-serif:             var(--font-crimson-text),      Georgia, serif;
 
-  /* shadcn theme slots — remapped to our dark palette so shadcn
+  /* ============================================================
+     SEMANTIC ALIASES — legacy names → ramp steps / roles.
+     Names are stable; only their right-hand side maps to a ramp.
+     ============================================================ */
+
+  /* Backgrounds */
+  --bg-base:       var(--grounds-950);
+  --bg-panel:      var(--grounds-900);
+  --bg-card:       var(--grounds-850);
+  --bg-topbar:     var(--grounds-850);
+  --bg-nav-btn:    var(--steel-850);
+  --bg-tab-idle:   var(--steel-850);
+  --bg-tab-active: var(--amber-900);
+  --bg-day-active: var(--forest-900);
+  --bg-map:        var(--forest-950);
+
+  /* Borders */
+  --nav-border:    var(--steel-400);
+
+  /* Amber (brand) */
+  --amber:         var(--amber-300);
+  --amber-light:   var(--amber-100);
+  --amber-dark:    var(--amber-500);
+
+  /* Text */
+  --text-primary:  var(--type-100);
+  --text-muted:    var(--type-500);
+  --text-dim:      var(--type-500); /* legacy alias of muted */
+
+  /* CTA (Primary Button) */
+  --button-primary:         var(--action);
+  --button-primary-hover:   var(--action-hover);
+  --button-primary-pressed: var(--action-pressed);
+  --button-primary-border:  var(--action-border);
+  --button-primary-ring:    var(--action-ring);
+
+  /* Form fields */
+  --input-surface:          var(--steel-900);
+  --input-surface-filled:   var(--steel-700);
+  --input-surface-hover:    var(--steel-600);
+  --input-surface-disabled: var(--steel-800);
+  --input-border:           var(--steel-300);
+  --input-border-filled:    var(--steel-100);
+  --input-border-hover:     var(--steel-50);
+  --input-border-focus:     var(--focus);
+  --input-border-disabled:  var(--steel-500);
+  --input-focus-ring:       rgba(167,204,253,0.18);
+  --input-placeholder:      var(--type-300);
+  --input-value:            var(--type-50);
+  --input-disabled-text:    var(--steel-200);
+  --input-error:            var(--error);
+  --input-success:          var(--success);
+
+  /* ============================================================
+     ADDED SCALES — not from Paper (introduced to fill gaps).
+     ============================================================ */
+
+  /* Spacing — base-4 */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border width */
+  --border-width-1: 1px;
+  --border-width-2: 2px;
+
+  /* Shadows / elevation (dark theme) */
+  --shadow-sm:    0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md:    0 4px 12px rgba(0,0,0,0.45);
+  --shadow-lg:    0 12px 32px rgba(0,0,0,0.55);
+  --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.04);
+
+  /* Type scale — sizes */
+  --text-2xs:  10px;
+  --text-xs:   12px;
+  --text-sm:   13px;
+  --text-base: 14px; /* app body default */
+  --text-md:   16px;
+  --text-lg:   18px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  30px;
+  --text-4xl:  40px;
+
+  /* Type scale — weights */
+  --font-weight-light:    300;
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* Type scale — line-height */
+  --leading-tight:  1.1;
+  --leading-snug:   1.3;
+  --leading-normal: 1.5;
+
+  /* Type scale — tracking */
+  --tracking-tight:  -0.02em;
+  --tracking-normal: 0em;
+  --tracking-wide:   0.06em;
+  --tracking-wider:  0.08em;
+
+  /* ============================================================
+     shadcn theme slots — remapped to our palette so shadcn
      components (Popover, Dialog, Drawer, Button, etc.) inherit
-     our theme without us maintaining a parallel token system. */
+     our theme without a parallel token system.
+     ============================================================ */
   --background:           var(--bg-base);
   --foreground:           var(--text-primary);
   --card:                 var(--bg-card);
@@ -100,18 +224,62 @@
   --muted-foreground:     var(--text-muted);
   --accent:               var(--bg-nav-btn);
   --accent-foreground:    var(--text-primary);
-  --destructive:          var(--input-error);
+  --destructive:          var(--error);
   --border:               var(--border-subtle);
   --input:                var(--input-surface);
   --ring:                 var(--input-border-focus);
   --radius:               0.25rem; /* 4px — matches Form Fields primitive */
 }
 
-/* Expose tokens to Tailwind v4 as utilities.
-   Color tokens named `--color-X` become `bg-X`, `text-X`, `border-X`, `ring-X`.
-   Font tokens named `--font-X` become `font-X`. */
+/* GENERATED MIRROR — do not hand-edit. Derived from the :root primitives above.
+   Exposes tokens to Tailwind v4 as utilities: `--color-X` → `bg-X`/`text-X`/
+   `border-X`/`ring-X`; `--font-X` → `font-X`. To change a value, edit the
+   primitive in :root, not here. See /DESIGN.md §3. */
 @theme inline {
-  /* Our tokens */
+  /* Ramps (primitive) */
+  --color-grounds-850: var(--grounds-850);
+  --color-grounds-900: var(--grounds-900);
+  --color-grounds-950: var(--grounds-950);
+  --color-steel-50:    var(--steel-50);
+  --color-steel-100:   var(--steel-100);
+  --color-steel-200:   var(--steel-200);
+  --color-steel-300:   var(--steel-300);
+  --color-steel-400:   var(--steel-400);
+  --color-steel-500:   var(--steel-500);
+  --color-steel-600:   var(--steel-600);
+  --color-steel-700:   var(--steel-700);
+  --color-steel-800:   var(--steel-800);
+  --color-steel-850:   var(--steel-850);
+  --color-steel-900:   var(--steel-900);
+  --color-forest-300:  var(--forest-300);
+  --color-forest-900:  var(--forest-900);
+  --color-forest-950:  var(--forest-950);
+  --color-amber-100:   var(--amber-100);
+  --color-amber-300:   var(--amber-300);
+  --color-amber-500:   var(--amber-500);
+  --color-amber-900:   var(--amber-900);
+  --color-type-50:     var(--type-50);
+  --color-type-100:    var(--type-100);
+  --color-type-300:    var(--type-300);
+  --color-type-500:    var(--type-500);
+
+  /* Interactive & semantic roles */
+  --color-focus:          var(--focus);
+  --color-action:         var(--action);
+  --color-action-hover:   var(--action-hover);
+  --color-action-pressed: var(--action-pressed);
+  --color-action-border:  var(--action-border);
+  --color-action-ring:    var(--action-ring);
+  --color-success:        var(--success);
+  --color-error:          var(--error);
+  --color-warning:        var(--warning);
+  --color-link:           var(--link);
+  --color-link-hover:     var(--link-hover);
+  --color-pin:            var(--pin);
+  --color-marker:         var(--marker);
+  --color-pin-border:     var(--pin-border);
+
+  /* Legacy aliases */
   --color-bg-base:       var(--bg-base);
   --color-bg-panel:      var(--bg-panel);
   --color-bg-card:       var(--bg-card);
@@ -175,9 +343,10 @@
   --color-cat-neutral:       var(--cat-neutral);
   --color-cat-neutral-bg:    var(--cat-neutral-bg);
 
-  --font-sans:    var(--ff-sans);
-  --font-display: var(--ff-display);
-  --font-mono:    var(--ff-mono);
+  --font-sans:              var(--ff-sans);
+  --font-display:           var(--ff-display);
+  --font-display-condensed: var(--ff-display-condensed);
+  --font-mono:              var(--ff-mono);
 
   /* shadcn theme tokens — expose as Tailwind utilities for shadcn
      components that use `bg-background`, `border-border`, etc. */

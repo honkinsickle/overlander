@@ -105,7 +105,7 @@ export function TripSlideupBody({
       {searchActive && !browseOpen && (
         <div
           className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
-          style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+          style={{ border: "1px solid var(--border-subtle)" }}
         >
           <FindNearbyPanel
             trip={trip}
@@ -137,8 +137,8 @@ export function TripSlideupBody({
           <div
             className="absolute top-[72px] bottom-[10px] left-[227px] w-[445px] z-20 overflow-hidden rounded-br-[15px] [&_.bg-bg-card]:!bg-black/40"
             style={{
-              background: "rgba(22,24,25,0.59)",
-              borderRight: "1px solid rgba(255,255,255,0.07)",
+              background: "color-mix(in srgb, var(--bg-card) 59%, transparent)",
+              borderRight: "1px solid var(--border-subtle)",
             }}
           >
             <DayDetail trip={trip} />

@@ -96,7 +96,7 @@ export function LocationCard({
         width: 300,
         height: 500,
         backgroundColor: "#1A1A1A",
-        border: "1px solid rgba(255,255,255,0.07)",
+        border: "1px solid var(--border-subtle)",
         fontSize: 12,
         lineHeight: "16px",
       }}
@@ -193,7 +193,7 @@ export function LocationCard({
               height="10"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#ECEAE4"
+              stroke="var(--text-primary)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -249,7 +249,7 @@ export function LocationCard({
           <h3
             style={{
               color: titleColor ?? cat.accent,
-              fontFamily: "var(--font-barlow-condensed), \"Barlow Condensed\", system-ui, sans-serif",
+              fontFamily: "var(--ff-display-condensed)",
               fontWeight: 700,
               fontSize: 24,
               lineHeight: "22px",
@@ -265,7 +265,7 @@ export function LocationCard({
               style={{
                 width: 28,
                 height: 28,
-                backgroundColor: "rgba(255,255,255,0.07)",
+                backgroundColor: "var(--border-subtle)",
                 borderRadius: 4,
                 color: "var(--amber-dark, #C77429)",
                 fontFamily: "var(--ff-mono), monospace",
@@ -300,7 +300,7 @@ export function LocationCard({
                 <>
                   <span
                     style={{
-                      color: "#C8A96E",
+                      color: "var(--amber)",
                       fontFamily: "var(--ff-sans), system-ui, sans-serif",
                       fontSize: 13,
                       lineHeight: "16px",
@@ -329,7 +329,7 @@ export function LocationCard({
               )}
               <span
                 style={{
-                  color: "#C8A96E",
+                  color: "var(--amber)",
                   fontFamily: "var(--ff-sans), system-ui, sans-serif",
                   fontSize: 13,
                   lineHeight: "16px",
@@ -372,7 +372,7 @@ export function LocationCard({
         {/* Divider */}
         <div
           className="flex-shrink-0"
-          style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)" }}
+          style={{ height: 1, backgroundColor: "var(--border-subtle)" }}
         />
 
         {/* Trust zone — star + rating */}
@@ -391,7 +391,7 @@ export function LocationCard({
             />
             <span
               className="font-display"
-              style={{ color: "#ECEAE4", fontSize: 12, lineHeight: "16px", letterSpacing: "0.04em" }}
+              style={{ color: "var(--text-primary)", fontSize: 12, lineHeight: "16px", letterSpacing: "0.04em" }}
             >
               {rating.value}
             </span>
@@ -419,7 +419,7 @@ export function LocationCard({
             backgroundColor: ctaBg ?? cat.bg,
             border: `1px solid ${ctaBorder ?? cat.accent}`,
             borderRadius: 4,
-            color: "#ECEAE4",
+            color: "var(--text-primary)",
             fontSize: 13,
             fontWeight: 600,
             lineHeight: "16px",
@@ -428,7 +428,7 @@ export function LocationCard({
             cursor: onCtaClick ? "pointer" : "default",
           }}
         >
-          <Plus width={12} height={12} stroke="#ECEAE4" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
+          <Plus width={12} height={12} stroke="var(--text-primary)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
           {ctaLabel}
         </button>
       </div>

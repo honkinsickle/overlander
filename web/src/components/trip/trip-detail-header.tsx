@@ -101,7 +101,7 @@ function TripHero({
             left: 10,
             top: 205,
             width: 400,
-            backgroundColor: "#111214",
+            backgroundColor: "var(--bg-panel)",
             boxShadow: "0 2px 3px rgba(0,0,0,0.2)",
             gap: 2,
           }}
