@@ -96,7 +96,7 @@ export function LocationCard({
         width: 300,
         height: 500,
         backgroundColor: "#1A1A1A",
-        border: "1px solid rgba(255,255,255,0.07)",
+        border: "1px solid var(--border-subtle)",
         fontSize: 12,
         lineHeight: "16px",
       }}
@@ -265,7 +265,7 @@ export function LocationCard({
               style={{
                 width: 28,
                 height: 28,
-                backgroundColor: "rgba(255,255,255,0.07)",
+                backgroundColor: "var(--border-subtle)",
                 borderRadius: 4,
                 color: "var(--amber-dark, #C77429)",
                 fontFamily: "var(--ff-mono), monospace",
@@ -372,7 +372,7 @@ export function LocationCard({
         {/* Divider */}
         <div
           className="flex-shrink-0"
-          style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)" }}
+          style={{ height: 1, backgroundColor: "var(--border-subtle)" }}
         />
 
         {/* Trust zone — star + rating */}
