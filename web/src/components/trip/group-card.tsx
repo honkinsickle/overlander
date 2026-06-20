@@ -165,11 +165,11 @@ function GroupRow({ item }: { item: GroupItem }) {
         style={{
           width: 44,
           height: 44,
-          backgroundColor: cat.bg,
-          border: `1px solid ${cat.accent}`,
+          backgroundColor: cat.badgeBg,
+          border: `1px solid ${cat.badgeBorder}`,
         }}
       >
-        <Icon className="w-5 h-5" style={{ color: cat.accent }} />
+        <Icon className="w-5 h-5" style={{ color: cat.badgeBorder }} />
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <span
