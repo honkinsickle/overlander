@@ -68,3 +68,5 @@ Phase priming (`OfflinePanel` → kebab → "Offline maps") writes per-phase til
 # Styling
 
 All styling derives from `/DESIGN.md` / `globals.css` tokens. Reference `/DESIGN.md` as the only style source. Never hardcode colors, type, spacing, or radii — use `var(--token)`.
+
+The no-raw-hex rule applies to UI styling only. Raw hex is permitted in `lib/trips/` data and route fixtures (map/route colors are data, not theme).
