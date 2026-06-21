@@ -135,6 +135,36 @@ export function OddityIconV2({ size = 22, ...rest }: IconProps) {
   );
 }
 
+// attraction + interest are not yet in the Paper artboard — simple 2-color
+// stand-ins (gold star / red pin) matching the detail-card lucide intent
+// (Star / MapPin). Replace with Paper-sourced art when available.
+export function AttractionIconV2({ size = 22, ...rest }: IconProps) {
+  return (
+    <svg {...svgProps(size, rest)}>
+      <polygon
+        points="11 2 13.2 8 19.5 8.2 14.6 12 16.4 18 11 14.4 5.6 18 7.4 12 2.5 8.2 8.8 8"
+        fill="#E6B422"
+      />
+      <polygon
+        points="11 5.2 12.3 8.7 16 9 13.1 11.3 14 15 11 12.9 8 15 8.9 11.3 6 9 9.7 8.7"
+        fill="#FFD966"
+      />
+    </svg>
+  );
+}
+
+export function InterestIconV2({ size = 22, ...rest }: IconProps) {
+  return (
+    <svg {...svgProps(size, rest)}>
+      <path
+        d="M11 2c-3.3 0-6 2.6-6 5.9 0 4.2 6 11.1 6 11.1s6-6.9 6-11.1C17 4.6 14.3 2 11 2z"
+        fill="#C2554D"
+      />
+      <circle cx="11" cy="8" r="2.3" fill="#FBE9E7" />
+    </svg>
+  );
+}
+
 export type CategoryIconV2Name =
   | "camping"
   | "urban"
@@ -142,7 +172,9 @@ export type CategoryIconV2Name =
   | "food"
   | "fuel"
   | "hotel"
-  | "oddity";
+  | "oddity"
+  | "attraction"
+  | "interest";
 
 const ICON_BY_NAME: Record<
   CategoryIconV2Name,
@@ -155,6 +187,8 @@ const ICON_BY_NAME: Record<
   fuel: FuelIconV2,
   hotel: HotelIconV2,
   oddity: OddityIconV2,
+  attraction: AttractionIconV2,
+  interest: InterestIconV2,
 };
 
 export function CategoryIconV2({

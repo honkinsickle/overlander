@@ -200,7 +200,7 @@ export function PlaceSearch({
         }}
       >
         {shownPlaces.map((place) => {
-          const slideKey: SlideCategoryKey = place.category ?? "scenic";
+          const slideKey: SlideCategoryKey = place.category ?? "interest";
           const ctx: CardCtx = { category: slideKey, dayNumber };
           const stats = computeCardStats(place, ctx);
           return (

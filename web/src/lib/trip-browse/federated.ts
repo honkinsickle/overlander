@@ -1,34 +1,91 @@
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Maps a browse slide pill to the master_place.primary_category values
- *  the federated corridor RPC filters on.
+/** THE canonical map: browse slide bucket → the master_place.primary_category
+ *  values it owns. Single source of truth for BOTH the federated corridor RPC
+ *  (which filters on these) AND the find-nearby tile fanout (which keys in via
+ *  `browseCategoryToSlide`). The two used to diverge — this map reconciles them.
  *
- *  NOTE: these are the ACTUAL taxonomy values emitted by the data layer
- *  (source_record.inferred_category → resolved primary_category), verified
- *  against the test DB — NOT the placeholder names in the wiring spec. The
- *  real enum uses `gas_station`/`viewpoint`/`peak`/`grocery`, not
- *  `fuel_stop`/`scenic_viewpoint`/`restaurant`/`roadside_attraction`.
- *  `restaurant` is kept as a forward-compat value (no rows yet). Pills with
- *  no federated mapping (oddity, overnight) fall through to the live path. */
-export const SLIDE_TO_PRIMARY_CATEGORY: Partial<
-  Record<SlideCategoryKey, string[]>
-> = {
-  camping: ["dispersed_camping", "campground", "recreation_area"],
-  fuel: ["gas_station", "ev_charging"],
-  food: ["restaurant", "grocery"],
-  scenic: ["viewpoint", "peak"],
+ *  Values are the ACTUAL taxonomy emitted by the data layer
+ *  (source_record.inferred_category → resolved primary_category), assigned by
+ *  best fit across the full 90-value prod vocabulary. `interest` owns the
+ *  residual — anything not cleanly another bucket — and is the same target as
+ *  the `?? "interest"` default for future-unknown values. A handful of
+ *  zero-row forward-compat values (museum/art_gallery/historical_landmark →
+ *  attraction; roadside_attraction → oddity) are kept so those buckets query
+ *  something the moment such rows appear. */
+export const SLIDE_TO_PRIMARY_CATEGORY: Record<SlideCategoryKey, string[]> = {
+  // Real camping place types only. Standalone amenities (dump_station, water,
+  // toilet, …) are NOT here — they're suppressed from browse entirely (see
+  // SUPPRESSED_PRIMARY_CATEGORIES below), not cards in their own right.
+  camping: [
+    "dispersed_camping", "campground", "recreation_area", "facility",
+    "rv_park", "camping_cabin",
+  ],
+  fuel: ["gas_station", "ev_charging", "truck_stop"],
+  food: [
+    "restaurant", "grocery", "grocery_store", "cafe", "diner",
+    "fast_food_restaurant", "italian_restaurant", "mexican_restaurant",
+    "american_restaurant", "bar_and_grill", "breakfast_restaurant",
+    "chicken_restaurant", "hamburger_restaurant", "pizza_restaurant",
+    "steak_house", "brazilian_restaurant", "brewpub", "chinese_restaurant",
+    "family_restaurant", "fine_dining_restaurant", "french_restaurant",
+    "gastropub", "indian_restaurant", "sandwich_shop", "taco_restaurant",
+  ],
+  scenic: [
+    "viewpoint", "peak", "trailhead", "park", "beach", "lake", "hiking_area",
+    "mountain_peak", "natural_feature", "river", "national_park", "state_park",
+    "scenic_spot", "spring",
+    // decision B — park_feature (3168, 24%) is mixed natural/interpretive but
+    // unsplittable by primary_category; → scenic preserves today's behavior.
+    "park_feature",
+  ],
+  overnight: ["hotel", "resort_hotel", "motel"],
+  // attraction: the formal cultural set only.
+  attraction: [
+    "visitor_center", "national_historic_site", "landmark",
+    // forward-compat (0 rows today)
+    "museum", "art_gallery", "historical_landmark",
+  ],
+  urban: ["shopping_mall", "city_park"],
+  // oddity: roadside / generic attractions. `tourist_attraction` (generic POI
+  // attraction) lives here, NOT in the formal-cultural `attraction` bucket.
+  oddity: ["roadside_attraction", "tourist_attraction"],
+  // interest: the residual — every primary_category not cleanly another bucket.
+  interest: [
+    "rest_area", "activity_pass", "unknown", "permit", "hardware",
+    "park_boundary", "outdoor_gear", "ticket_facility", "casino",
+    "timed_entry", "venue_reservations", "car_repair", "car_wash", "marina",
+    "tree_permit", "atm", "bus_stop", "government_office", "kiosk", "library",
+    "national_fish_hatchery", "point_of_interest", "sports_activity_location",
+    "amphitheatre", "mobile_home_park",
+  ],
 };
 
-/** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer
- *  primary_category back to the slide pill it belongs to. Built once from
- *  the forward map so the two never drift. Used by the corpus-wide search
- *  hydrate path (which gets arbitrary primary_category values, not a known
- *  pill) to choose each card's palette/icon. Categories with no pill
- *  mapping (e.g. park_feature) fall back to `scenic` — the same default
- *  the browse panel uses for un-categorized rows (CategoryBrowsePanel's
- *  `place.category ?? "scenic"`). The real category name still surfaces as
- *  a pill via prettyCategory(), so the fallback only affects accent color. */
+/** Standalone amenity primary_categories — infrastructure (dump station,
+ *  potable water, vault toilet, …), not destinations. SUPPRESSED from browse:
+ *  filtered out at the corpus→card boundary (hydratePlacesByIds) so they never
+ *  render as their own cards and never fall to the `interest` default. Kept out
+ *  of SLIDE_TO_PRIMARY_CATEGORY so no pill/RPC queries them. (Returning the
+ *  PARENT campsite for an amenity search is a separate future feature; for now
+ *  amenity search yields nothing.) */
+export const SUPPRESSED_PRIMARY_CATEGORIES: ReadonlySet<string> = new Set([
+  "dump_station", "water", "toilet", "fire_pit", "shower",
+  "picnic_area", "picnic_ground",
+]);
+
+export function isSuppressedCategory(primary: string): boolean {
+  return SUPPRESSED_PRIMARY_CATEGORIES.has(primary);
+}
+
+/** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer primary_category
+ *  back to the slide bucket it belongs to. Built once from the forward map so
+ *  the two never drift. Used by the corpus-wide search hydrate path (arbitrary
+ *  primary_category values) to choose each card's palette/icon. A
+ *  primary_category not in ANY bucket (a future-new value) falls back to
+ *  `interest` — the honest "uncategorized" bucket (was `scenic`). The real
+ *  category name still surfaces as a pill via prettyCategory(), so the
+ *  fallback only affects accent color/icon. */
 const PRIMARY_CATEGORY_TO_SLIDE: Record<string, SlideCategoryKey> =
   Object.entries(SLIDE_TO_PRIMARY_CATEGORY).reduce(
     (acc, [slide, primaries]) => {
@@ -39,7 +96,7 @@ const PRIMARY_CATEGORY_TO_SLIDE: Record<string, SlideCategoryKey> =
   );
 
 export function primaryCategoryToSlideKey(primary: string): SlideCategoryKey {
-  return PRIMARY_CATEGORY_TO_SLIDE[primary] ?? "scenic";
+  return PRIMARY_CATEGORY_TO_SLIDE[primary] ?? "interest";
 }
 
 /** One row from public.pois_along_corridor (SECURITY DEFINER RPC). */

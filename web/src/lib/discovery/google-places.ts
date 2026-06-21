@@ -44,6 +44,10 @@ const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   camping: ["campground", "rv_park"],
   overnight: ["lodging", "hotel"],
   fuel: ["gas_station"],
+  // Corpus-backed (federated) buckets — no live Google Places fanout.
+  attraction: [],
+  interest: [],
+  urban: [],
 };
 
 /** Pre-joined FieldMask. Google charges by tier based on which fields

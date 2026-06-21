@@ -2,6 +2,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import {
   mapMasterPlaceRow,
   primaryCategoryToSlideKey,
+  isSuppressedCategory,
   type MasterPlaceRow,
 } from "@/lib/trip-browse/federated";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -105,6 +106,9 @@ export async function hydratePlacesByIds(
     const base = baseById.get(id);
     const geo = geoById.get(id);
     if (!base || !geo) continue;
+    // Suppress standalone amenities (dump_station, water, toilet, …): they are
+    // infrastructure, not destinations, so they never render as their own card.
+    if (isSuppressedCategory(base.primary_category)) continue;
     const row: MasterPlaceRow = {
       id: base.id,
       canonical_name: base.canonical_name,

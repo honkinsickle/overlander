@@ -7,24 +7,24 @@ import type { Category } from "@/components/primitives/detail-card";
 // Paper "Category Type" artboard). Consumers read those tokens directly via
 // `var(--cat-${category}-title|badge-bg|badge-border|cta-bg|cta-border)`.
 
-/** The 7 browse-filter chips, in the order the Paper filter row renders them.
- *  `as const satisfies readonly Category[]` makes this the single source of
- *  truth for `BrowseCardCategory` while proving every chip is a real
- *  `Category`. Deliberately a SUBSET — excludes `attraction`/`interest`
- *  (waypoint-only) and is the only place `hotel` surfaces as a chip. */
-export const BROWSE_CARD_CATEGORIES = [
+/** Browse-card category === the canonical `Category` (9 members). The browse
+ *  filter row now renders all 9 chips, so the type is the full `Category`, not
+ *  a subset. Kept as a named alias so the browse layer reads intentionally. */
+export type BrowseCardCategory = Category;
+
+/** The 9 browse-filter chips, in the order the filter row renders them:
+ *  outdoors first, then services, then the `interest` catch-all last. */
+export const BROWSE_CARD_CATEGORIES: readonly BrowseCardCategory[] = [
   "camping",
-  "urban",
   "scenic",
+  "attraction",
+  "oddity",
   "food",
   "fuel",
   "hotel",
-  "oddity",
-] as const satisfies readonly Category[];
-
-/** Browse-card category — the 7-member subset of the canonical `Category`,
- *  derived from `BROWSE_CARD_CATEGORIES`. */
-export type BrowseCardCategory = (typeof BROWSE_CARD_CATEGORIES)[number];
+  "urban",
+  "interest",
+];
 
 export type BrowseCardPalette = {
   /** Uppercase label used in aria-labels and tooltips. */
@@ -33,15 +33,18 @@ export type BrowseCardPalette = {
 
 export const browseCardPalette: Record<BrowseCardCategory, BrowseCardPalette> = {
   camping: { label: "CAMPING" },
-  urban: { label: "URBAN" },
   scenic: { label: "SCENIC" },
+  attraction: { label: "ATTRACTION" },
+  oddity: { label: "ODDITY" },
   food: { label: "FOOD" },
   fuel: { label: "FUEL" },
   hotel: { label: "HOTEL" },
-  oddity: { label: "ODDITY" },
+  urban: { label: "URBAN" },
+  interest: { label: "POINT OF INTEREST" },
 };
 
-/** `overnight` slide-category key maps to `hotel` palette (bed icon). */
+/** Slide-fetch key → browse-card category. Isomorphic except `overnight` (the
+ *  data-fetch key) ↔ `hotel` (the display category); all other 8 are identity. */
 export function slideCategoryToBrowseCategory(
   key: SlideCategoryKey,
 ): BrowseCardCategory {
@@ -49,13 +52,12 @@ export function slideCategoryToBrowseCategory(
   return key;
 }
 
-/** Inverse of `slideCategoryToBrowseCategory`. Returns the data-layer key
- *  the API can actually fetch; `urban` has no backing today so returns
- *  null. */
+/** Inverse of `slideCategoryToBrowseCategory`: browse-card category → the
+ *  slide-fetch key. Every chip now maps to a real slide key (`hotel →
+ *  overnight`; all others identity), so this is total — no null. */
 export function browseCategoryToSlide(
   c: BrowseCardCategory,
-): SlideCategoryKey | null {
+): SlideCategoryKey {
   if (c === "hotel") return "overnight";
-  if (c === "urban") return null;
   return c;
 }
