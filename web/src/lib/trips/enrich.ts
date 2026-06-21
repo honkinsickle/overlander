@@ -11,6 +11,10 @@ import type { Day, Trip, Waypoint } from "./types";
  * overrides for hero waypoints (Dalton, Tok, etc.) take priority.
  */
 
+// These maps are keyed by the full canonical `Category`. The `hotel` entries
+// exist only to satisfy the exhaustive `Record<Category>` — `hotel` is a
+// browse-chip-only category; no `Waypoint.category` is ever `hotel`, so these
+// `hotel` values are never reached by `enrichWaypoint`.
 const TAGS_BY_CATEGORY: Record<Category, string[][]> = {
   scenic: [
     ["National Park", "Scenic Vista", "Hiking"],
@@ -51,6 +55,10 @@ const TAGS_BY_CATEGORY: Record<Category, string[][]> = {
     ["Quick Stop", "Restrooms", "Walk-around"],
     ["Pull-off", "Photo Op", "Free"],
   ],
+  hotel: [
+    ["Lodging", "Front desk", "Parking"],
+    ["Pet-friendly", "Wifi", "Breakfast"],
+  ],
 };
 
 const FACTUAL_LABEL_BY_CATEGORY: Record<Category, string> = {
@@ -62,6 +70,7 @@ const FACTUAL_LABEL_BY_CATEGORY: Record<Category, string> = {
   oddity: "Backstory",
   urban: "Neighborhood",
   interest: "Local Notes",
+  hotel: "Property Notes",
 };
 
 const FACTUAL_TEMPLATES: Record<Category, string[]> = {
@@ -104,6 +113,10 @@ const FACTUAL_TEMPLATES: Record<Category, string[]> = {
     "Marked pull-off with picnic tables and basic information panels. No services beyond a vault toilet.",
     "Open year-round. Maintained by the local highway department; expect minimal facilities but reliable access.",
   ],
+  hotel: [
+    "Roadside property with straightforward check-in. Rooms are basic but clean; parking is free and RV-friendly.",
+    "Independently run lodging open year-round. Front desk keeps daytime hours; after-hours arrivals should call ahead.",
+  ],
 };
 
 const AMENITIES_BY_CATEGORY: Record<Category, string[][]> = {
@@ -145,6 +158,10 @@ const AMENITIES_BY_CATEGORY: Record<Category, string[][]> = {
   interest: [
     ["Restrooms", "Picnic table", "Free parking"],
   ],
+  hotel: [
+    ["Free parking", "Wifi", "Pet-friendly"],
+    ["Breakfast", "Laundry", "Restrooms"],
+  ],
 };
 
 const DATA_SOURCES_BY_CATEGORY: Record<Category, string[][]> = {
@@ -182,6 +199,9 @@ const DATA_SOURCES_BY_CATEGORY: Record<Category, string[][]> = {
   ],
   interest: [
     ["OSM", "Google", "Wikipedia"],
+  ],
+  hotel: [
+    ["Booking.com", "Google", "OSM"],
   ],
 };
 
@@ -253,6 +273,12 @@ const TIPS_BY_CATEGORY: Record<Category, string[][]> = {
       "Quick stretch break — 10 minutes is plenty.",
     ],
   ],
+  hotel: [
+    [
+      "Call ahead for after-hours check-in.",
+      "Ask for a room off the road for a quieter night.",
+    ],
+  ],
 };
 
 const HOURS_BY_CATEGORY: Record<Category, string[]> = {
@@ -264,6 +290,7 @@ const HOURS_BY_CATEGORY: Record<Category, string[]> = {
   oddity: ["Daily · daylight only", "Sat–Sun · 10am – 4pm"],
   urban: ["Varies by venue"],
   interest: ["Open year-round"],
+  hotel: ["Front desk · 24 hours", "Check-in 3pm · check-out 11am"],
 };
 
 const ENTRY_BY_CATEGORY: Record<Category, string[]> = {
@@ -275,6 +302,7 @@ const ENTRY_BY_CATEGORY: Record<Category, string[]> = {
   oddity: ["Free · donation box"],
   urban: ["Free to enter"],
   interest: ["Free"],
+  hotel: ["$90–140 / night", "Varies by season"],
 };
 
 /** Stable hash → number in [0, max). Lets us seed enrichment per-slug

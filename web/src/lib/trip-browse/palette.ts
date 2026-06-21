@@ -1,4 +1,5 @@
 import type { SlideCategoryKey } from "./places";
+import type { Category } from "@/components/primitives/detail-card";
 
 // Browse Location Card v2 — category metadata (labels + slide-key bridges).
 // Per-role COLOR now lives in the canonical design tokens
@@ -6,14 +7,24 @@ import type { SlideCategoryKey } from "./places";
 // Paper "Category Type" artboard). Consumers read those tokens directly via
 // `var(--cat-${category}-title|badge-bg|badge-border|cta-bg|cta-border)`.
 
-export type BrowseCardCategory =
-  | "camping"
-  | "urban"
-  | "scenic"
-  | "food"
-  | "fuel"
-  | "hotel"
-  | "oddity";
+/** The 7 browse-filter chips, in the order the Paper filter row renders them.
+ *  `as const satisfies readonly Category[]` makes this the single source of
+ *  truth for `BrowseCardCategory` while proving every chip is a real
+ *  `Category`. Deliberately a SUBSET — excludes `attraction`/`interest`
+ *  (waypoint-only) and is the only place `hotel` surfaces as a chip. */
+export const BROWSE_CARD_CATEGORIES = [
+  "camping",
+  "urban",
+  "scenic",
+  "food",
+  "fuel",
+  "hotel",
+  "oddity",
+] as const satisfies readonly Category[];
+
+/** Browse-card category — the 7-member subset of the canonical `Category`,
+ *  derived from `BROWSE_CARD_CATEGORIES`. */
+export type BrowseCardCategory = (typeof BROWSE_CARD_CATEGORIES)[number];
 
 export type BrowseCardPalette = {
   /** Uppercase label used in aria-labels and tooltips. */
@@ -48,14 +59,3 @@ export function browseCategoryToSlide(
   if (c === "urban") return null;
   return c;
 }
-
-/** The 7 chips, in the order the Paper filter row renders them. */
-export const BROWSE_CARD_CATEGORIES: readonly BrowseCardCategory[] = [
-  "camping",
-  "urban",
-  "scenic",
-  "food",
-  "fuel",
-  "hotel",
-  "oddity",
-];
