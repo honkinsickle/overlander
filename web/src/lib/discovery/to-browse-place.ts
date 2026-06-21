@@ -21,6 +21,9 @@ const PILLS_BY_CATEGORY: Record<SlideCategoryKey, BrowsePlace["pills"]> = {
   camping: [{ label: "Tent sites" }],
   overnight: [{ label: "Hotel" }],
   fuel: [{ label: "Fuel" }],
+  attraction: [{ label: "Attraction" }, { label: "Landmark" }],
+  interest: [{ label: "Point of Interest" }],
+  urban: [{ label: "Urban" }],
 };
 
 /** Build a `BrowsePlace` from one or more source results that have

@@ -46,6 +46,11 @@ export const OSM_TAG_QUERIES: Record<SlideCategoryKey, string[]> = {
     'node["tourism"="hostel"]',
   ],
   fuel: ['node["amenity"="fuel"]'],
+  // attraction/interest/urban surface via the federated master_place corpus,
+  // not the live Overpass fanout — empty short-circuits to [] in query().
+  attraction: [],
+  interest: [],
+  urban: [],
 };
 
 /** Reverse-derive the slide category for an OSM element from its tags.

@@ -43,6 +43,9 @@ const PALETTE: Record<SlideCategoryKey, CategoryPalette> = {
   overnight: { chipBg: "#0F2E1F", accent: "#4D9A6E", title: "#A8D4B7", label: "OVERNIGHT" },
   oddity:    { chipBg: "#2A1A3E", accent: "#B589F0", title: "#D8C4F8", label: "ODDITY" },
   fuel:      { chipBg: "#2E1414", accent: "#E26F6F", title: "#F2B5B5", label: "FUEL" },
+  attraction:{ chipBg: "#3A2E12", accent: "#E6B422", title: "#F2D98C", label: "ATTRACTION" },
+  interest:  { chipBg: "#1C2230", accent: "#8AA0C0", title: "#C4D2E8", label: "POINT OF INTEREST" },
+  urban:     { chipBg: "#15263E", accent: "#5B9BD5", title: "#AED0F0", label: "URBAN" },
 };
 
 /** Yellow (chevron-up, detour) vs green (check, on-route / day-end). */

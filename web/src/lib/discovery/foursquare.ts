@@ -37,6 +37,10 @@ const FSQ_TOP_LEVEL_IDS: Record<SlideCategoryKey, string[]> = {
   // and Foursquare's gas-station data is sparser. Empty array short-
   // circuits in `query()` to return [].
   fuel: [],
+  // Corpus-backed (federated) buckets — no live Foursquare fanout.
+  attraction: [],
+  interest: [],
+  urban: [],
 };
 
 /** Match a place's Foursquare sub-category names back into our

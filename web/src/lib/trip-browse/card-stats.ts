@@ -141,8 +141,11 @@ const SLIDE_TO_TRIP_CATEGORY: Record<SlideCategoryKey, Category> = {
   food: "food",
   oddity: "oddity",
   camping: "camping",
-  overnight: "interest",
+  overnight: "hotel",
   fuel: "fuel",
+  attraction: "attraction",
+  interest: "interest",
+  urban: "urban",
 };
 
 /** Real price tier ($–$$$$) from the source (Google live), or undefined. */

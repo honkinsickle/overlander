@@ -40,6 +40,9 @@ const SECTION_LABEL: Record<SlideCategoryKey, string> = {
   overnight: "Overnights",
   oddity: "Oddities",
   fuel: "Fuel",
+  attraction: "Attractions",
+  interest: "Points of Interest",
+  urban: "Urban",
 };
 
 const SECTION_EMOJI: Record<SlideCategoryKey, string> = {
@@ -49,6 +52,9 @@ const SECTION_EMOJI: Record<SlideCategoryKey, string> = {
   overnight: "🌙",
   oddity: "👁️",
   fuel: "⛽",
+  attraction: "⭐",
+  interest: "📍",
+  urban: "🏙️",
 };
 
 type Props = {

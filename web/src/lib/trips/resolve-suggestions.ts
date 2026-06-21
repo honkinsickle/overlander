@@ -36,6 +36,9 @@ const RADIUS_KM: Record<SlideCategoryKey, number> = {
   overnight: 15,
   camping: 50,
   fuel: 10,
+  attraction: 15,
+  interest: 15,
+  urban: 10,
 };
 
 async function topPhotoBearing(

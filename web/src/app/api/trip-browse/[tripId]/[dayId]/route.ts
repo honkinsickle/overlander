@@ -38,6 +38,9 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
   overnight: 15,
   camping: 50,
   fuel: 10,
+  attraction: 15,
+  interest: 15,
+  urban: 10,
 };
 
 /** Soft corridor — places within this far from today's route polyline
