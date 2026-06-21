@@ -1,12 +1,19 @@
 import type { Category } from "@/components/primitives/detail-card";
 
+// The 9 browse slide buckets. Isomorphic to the canonical `Category`
+// (detail-card.tsx) via `overnight ↔ hotel`: SlideCategoryKey is the
+// data-fetch taxonomy (drives the primary_category corridor query), Category
+// is the display taxonomy. The other 8 members are shared identically.
 export type SlideCategoryKey =
   | "oddity"
   | "food"
   | "scenic"
   | "camping"
   | "overnight"
-  | "fuel";
+  | "fuel"
+  | "attraction"
+  | "interest"
+  | "urban";
 
 export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>> = {
   scenic: "scenic",
@@ -14,6 +21,10 @@ export const TRIP_CATEGORY_TO_SLIDE: Partial<Record<Category, SlideCategoryKey>>
   oddity: "oddity",
   camping: "camping",
   fuel: "fuel",
+  attraction: "attraction",
+  interest: "interest",
+  urban: "urban",
+  hotel: "overnight",
 };
 
 export type BrowsePlace = {

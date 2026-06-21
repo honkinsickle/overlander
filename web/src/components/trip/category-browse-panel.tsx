@@ -480,8 +480,8 @@ function BrowseCardCell({
   isAdded: boolean;
 }) {
   // Each card renders with its OWN category palette (set by the API);
-  // falls back to scenic for any result that arrived without a category.
-  const placeCategory: SlideCategoryKey = place.category ?? "scenic";
+  // falls back to `interest` for any result that arrived without a category.
+  const placeCategory: SlideCategoryKey = place.category ?? "interest";
   const ctx: CardCtx = {
     category: placeCategory,
     dayCoords: target.dayCoords,

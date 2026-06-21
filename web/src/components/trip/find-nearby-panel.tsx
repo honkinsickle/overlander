@@ -29,8 +29,10 @@ import {
 } from "@/lib/trip-browse/card-stats";
 import {
   slideCategoryToBrowseCategory,
+  browseCategoryToSlide,
   type BrowseCardCategory,
 } from "@/lib/trip-browse/palette";
+import { SLIDE_TO_PRIMARY_CATEGORY } from "@/lib/trip-browse/federated";
 import { CategoryFilterRow } from "@/components/trip/category-filter-row";
 import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 
@@ -241,24 +243,9 @@ const BUCKETS: Bucket[] = [
 
 /** The 7 broad filter-row categories → the corpus `primary_category` set each
  *  one searches. Lets an icon tap reuse the SAME /api/search-area call the
- *  palette tiles make (via the `primaryCategories` arg). The route maps these
- *  back to a live slide bucket for the Google fanout; `urban` has no data
- *  backing (empty), matching the Add-Waypoints panel where urban drops out. */
-const BROAD_PRIMARY_BY_CATEGORY: Record<BrowseCardCategory, string[]> = {
-  camping: [
-    "dispersed_camping",
-    "campground",
-    "rv_park",
-    "camping_cabin",
-    "recreation_area",
-  ],
-  urban: [],
-  scenic: ["viewpoint", "peak", "mountain_peak", "scenic_spot", "trailhead", "hiking_area"],
-  food: ["restaurant", "cafe", "grocery", "grocery_store"],
-  fuel: ["gas_station", "truck_stop", "ev_charging"],
-  hotel: ["hotel", "motel", "resort_hotel"],
-  oddity: ["museum", "art_gallery", "historical_landmark"],
-};
+ *  palette tiles make (via the `primaryCategories` arg). The chip → primary
+ *  set is now the canonical `SLIDE_TO_PRIMARY_CATEGORY` (keyed in via
+ *  `browseCategoryToSlide`) — no longer a divergent local copy. */
 
 export function FindNearbyPanel({
   trip,
@@ -369,7 +356,7 @@ export function FindNearbyPanel({
   // What the results fetch filters on: the active chip wins, else the palette
   // tile, else none (free-text path).
   const resultPrimaryCategories: string[] | null = activeIcon
-    ? BROAD_PRIMARY_BY_CATEGORY[activeIcon]
+    ? SLIDE_TO_PRIMARY_CATEGORY[browseCategoryToSlide(activeIcon)]
     : (activeTile?.primaryCategories ?? null);
 
   // ADD with no preselected day → open the day picker. The full BrowsePlace
@@ -718,7 +705,7 @@ function SearchAreaResults({
 
       <div ref={gridRef} style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
         {shownPlaces.map((place) => {
-          const slideKey: SlideCategoryKey = place.category ?? "scenic";
+          const slideKey: SlideCategoryKey = place.category ?? "interest";
           const ctx: CardCtx = {
             category: slideKey,
             dayNumber,
