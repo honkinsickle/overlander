@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { LocationBrowseCard } from "./location-browse-card";
-import { computeCardStats } from "@/lib/trip-browse/card-stats";
+import {
+  computeCardStats,
+  browsePlaceToWaypoint,
+  type CardCtx,
+} from "@/lib/trip-browse/card-stats";
 import { slideCategoryToBrowseCategory } from "@/lib/trip-browse/palette";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import type { Day } from "@/lib/trips/types";
@@ -36,10 +40,17 @@ type SuggestionEntry = { place: BrowsePlace; slideKey: FetchKey };
 export function SuggestedSection({
   tripId,
   day,
+  dayStartCoords,
   isActive,
 }: {
   tripId: string;
   day: Day;
+  /** Resolved start-of-day coords from the parent (prev day's overnight, or
+   *  trip.startCoords for Day 1). Day.startCoord is optional/undefined for
+   *  Day 1, so it must be resolved upstream — same fallback the browse path
+   *  uses. Drives the detour/route-offset geometry for both the card and the
+   *  detail waypoint. */
+  dayStartCoords?: [number, number];
   /** True when this day is the one the user is scrolled to in DayDetail.
    *  Gates the trip:suggestedResults dispatch so only one day's places
    *  are pinned on the map at a time — multiple sections rendering pre-
@@ -149,10 +160,28 @@ export function SuggestedSection({
     };
   }, [isActive, suggestions]);
 
-  const openDetailFor = (place: BrowsePlace) => () => {
-    const hoursStat = place.stats.find(
-      (s) => /hours|open/i.test(s.label) && !/always/i.test(s.value),
-    );
+  // The CardCtx shared by the card stats AND the synthesized detail waypoint,
+  // so both read one source of truth. dayRelative is true because suggestions
+  // belong to THIS day (the detour/route-offset are real). dayStartCoords is
+  // resolved by the parent; without it the detour collapses to a straight line
+  // to the day END — the "Adds 22h28m" bug.
+  const buildCtx = (slideKey: FetchKey): CardCtx => ({
+    category: slideKey,
+    dayCoords: day.coords,
+    dayStartCoords,
+    dayLabel: day.label,
+    dayNumber: day.dayNumber,
+    dayDate: day.date,
+    dayRelative: true,
+  });
+
+  const openDetailFor = (place: BrowsePlace, slideKey: FetchKey) => () => {
+    // Mirror the browse path (category-browse-panel): synthesize a full
+    // Waypoint from the same BrowsePlace + ctx + stats so the detail panel
+    // renders ROUTE / IF YOU STOP HERE / LOGISTICS / COMMUNITY identically.
+    const ctx = buildCtx(slideKey);
+    const stats = computeCardStats(place, ctx);
+    const synthWaypoint = browsePlaceToWaypoint(place, ctx, stats);
     window.dispatchEvent(
       new CustomEvent("trip:flyTo", {
         detail: { coords: place.coords, name: place.title },
@@ -169,12 +198,9 @@ export function SuggestedSection({
             dayId: day.id,
             coords: place.coords,
             description: place.description,
-            pills: place.pills.map((p) => p.label),
-            hours: hoursStat?.value,
-            address: place.placeInfo.address || undefined,
-            phone: place.placeInfo.phone?.display,
-            website: place.placeInfo.website?.display,
-            dataSources: place.mention.secondary,
+            waypoint: synthWaypoint,
+            // Suggestions are on this day's route → in-app day directions.
+            dayRelative: true,
           },
         },
       }),
@@ -252,14 +278,7 @@ export function SuggestedSection({
           {loading && <SuggestionSkeletons />}
           {suggestions &&
             suggestions.map((s) => {
-              const stats = computeCardStats(s.place, {
-                category: s.slideKey,
-                dayCoords: day.coords,
-                dayStartCoords: day.startCoord,
-                dayLabel: day.label,
-                dayNumber: day.dayNumber,
-                dayDate: day.date,
-              });
+              const stats = computeCardStats(s.place, buildCtx(s.slideKey));
               return (
                 <div
                   key={`${s.slideKey}-${s.place.id}`}
@@ -270,11 +289,11 @@ export function SuggestedSection({
                   // slide up the detail panel. openDetailFor dispatches
                   // both trip:flyTo and trip:openDetail, so the click feels
                   // like one action: "show me this place".
-                  onClick={() => openDetailFor(s.place)()}
+                  onClick={() => openDetailFor(s.place, s.slideKey)()}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" && e.key !== " ") return;
                     e.preventDefault();
-                    openDetailFor(s.place)();
+                    openDetailFor(s.place, s.slideKey)();
                   }}
                 >
                   <LocationBrowseCard
@@ -298,7 +317,7 @@ export function SuggestedSection({
                     }}
                     onOpen={(e?: MouseEvent) => {
                       e?.stopPropagation();
-                      openDetailFor(s.place)();
+                      openDetailFor(s.place, s.slideKey)();
                     }}
                     onMore={(e?: MouseEvent) => {
                       e?.stopPropagation();
