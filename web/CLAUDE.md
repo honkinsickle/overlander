@@ -113,9 +113,9 @@ Tokens originate from Adam's Paper style guide (`overlander_1` artboard `7US-0`)
 - **Text:** `--text-primary`, `--text-muted`
 - **Amber accents:** `--amber`, `--amber-dark`, `--amber-light`
 - **Blue/cool for inputs & primary CTAs:** `--input-border-focus`, `--button-primary`
-- **Category palette:** `--cat-fuel`, `--cat-camping`, `--cat-mountain`, `--cat-urban`, `--cat-food`, `--cat-oddity`, `--cat-attraction`, `--cat-neutral` (each with a `*-bg` sibling)
+- **Category palette:** 9 categories × 5 roles (`--cat-{name}-{title|badge-bg|badge-border|cta-bg|cta-border}`). See `/DESIGN.md` §1.2 (Category Type) — the source of truth; don't re-list values here.
 - **Fonts:** `--ff-sans` Barlow (body), `--ff-display` Space Grotesk (section labels, wide-tracked), `--ff-mono` Space Mono (IDs, hex, coordinates, tabular)
-- **Spacing scale:** `4 · 8 · 10 · 12 · 14 · 16 · 24 · 48`
+- **Spacing scale:** `--space-*` = `4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 · 48 · 64`
 
 Color split: **amber for navigation, states, accents, and category emphasis;
 blue for forms, inputs, and primary CTAs.** Ambiguous? Leave a comment and ask.

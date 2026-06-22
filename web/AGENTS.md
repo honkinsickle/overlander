@@ -69,4 +69,4 @@ Phase priming (`OfflinePanel` → kebab → "Offline maps") writes per-phase til
 
 All styling derives from `/DESIGN.md` / `globals.css` tokens. Reference `/DESIGN.md` as the only style source. Never hardcode colors, type, spacing, or radii — use `var(--token)`.
 
-The no-raw-hex rule applies to UI styling only. Raw hex is permitted in `lib/trips/` data and route fixtures (map/route colors are data, not theme).
+The no-raw-hex rule applies to UI styling only. Raw hex is permitted in two cases: (1) `lib/trips/` data and route fixtures (map/route colors are data, not theme); (2) **Mapbox GL layer-paint properties and `mapboxgl.Marker` colors** (e.g. in `map-column.tsx`) — Mapbox's paint API can't read CSS custom properties, so those values must be raw hex by necessity. Everywhere else (DOM/CSS styling), use `var(--token)`.
