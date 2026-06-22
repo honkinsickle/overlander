@@ -27,6 +27,7 @@ const ALL_SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "food",
   "scenic",
   "oddity",
+  "attraction",
   "camping",
   "overnight",
   "fuel",
@@ -40,12 +41,17 @@ const ALL_SLIDE_CATEGORIES: SlideCategoryKey[] = [
 const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   food: ["restaurant", "cafe", "bar", "bakery"],
   scenic: ["tourist_attraction", "park", "national_park"],
-  oddity: ["museum", "art_gallery", "historical_landmark"],
+  // Formal cultural set → attraction (mirrors the federated corpus split).
+  // Moved out of oddity so museums/galleries/landmarks stop rendering as
+  // roadside oddities. Google has no roadside-quirky type of its own, so
+  // oddity is served live by OSM (artwork, arts_centre, historic markers)
+  // and Foursquare instead.
+  attraction: ["museum", "art_gallery", "historical_landmark"],
+  oddity: [],
   camping: ["campground", "rv_park"],
   overnight: ["lodging", "hotel"],
   fuel: ["gas_station"],
   // Corpus-backed (federated) buckets — no live Google Places fanout.
-  attraction: [],
   interest: [],
   urban: [],
 };
@@ -306,10 +312,10 @@ function categoryForGoogleTypes(
     return "food";
   }
   if (
-    wanted.has("oddity") &&
+    wanted.has("attraction") &&
     ["museum", "art_gallery", "historical_landmark"].some((x) => t.has(x))
   ) {
-    return "oddity";
+    return "attraction";
   }
   if (
     wanted.has("scenic") &&
