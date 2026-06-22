@@ -52,6 +52,44 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+/** Grammatical glue + generic STRUCTURAL nouns dropped before the
+ *  name-affinity check. A co-located article sharing only one of these with
+ *  the place (e.g. "… Building", "… Tower") is NOT evidence they're the same
+ *  place — that's exactly the failure mode the 2c guard blocks. */
+const AFFINITY_STOPWORDS: ReadonlySet<string> = new Set([
+  "the", "of", "a", "an", "and", "at", "in", "on",
+  "building", "buildings", "tower", "hall", "center", "centre",
+  "plaza", "house", "block", "complex",
+]);
+
+/** Significant tokens of a title: lowercased alphanumeric words minus the
+ *  AFFINITY_STOPWORDS. */
+function significantTokens(title: string): Set<string> {
+  return new Set(
+    title
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 0 && !AFFINITY_STOPWORDS.has(t)),
+  );
+}
+
+/** Name-affinity guard for the LOW-confidence proximity fallback (2c) only:
+ *  the co-located article must share at least one SIGNIFICANT token with the
+ *  place title. Blocks "Bottega Louie" → "Brockman Building" and "Grand
+ *  Central Market" → "Homer Laughlin Building" (co-located but unrelated)
+ *  while keeping "Bixby Creek Bridge" → "Bixby Bridge". */
+function sharesSignificantToken(
+  placeTitle: string,
+  articleTitle: string,
+): boolean {
+  const placeTokens = significantTokens(placeTitle);
+  if (placeTokens.size === 0) return false;
+  for (const t of significantTokens(articleTitle)) {
+    if (placeTokens.has(t)) return true;
+  }
+  return false;
+}
+
 /** "en:Mount Hollywood" → "Mount Hollywood". Falls back to the input. */
 function stripLangPrefix(raw: string): string {
   const m = raw.match(/^[a-z]{2,3}:(.+)$/i);
@@ -96,10 +134,16 @@ async function geosearchTitle(
     );
     if (partial) return partial.title;
     // Last resort: closest page within the radius, but only if it's
-    // genuinely close (≤100m). Prevents unrelated nearby articles from
-    // attaching wrong photos to obscure features.
+    // genuinely close (≤100m) AND shares a significant token with the place
+    // title. The distance gate alone let co-located but differently-named
+    // articles attach (a restaurant picking up the Wikipedia article for the
+    // historic BUILDING it sits in); the name-affinity guard blocks those
+    // while keeping legitimate wording differences ("Bixby Creek Bridge" →
+    // "Bixby Bridge").
     const closest = hits.reduce((a, b) => (a.dist < b.dist ? a : b));
-    if (closest.dist <= 100) return closest.title;
+    if (closest.dist <= 100 && sharesSignificantToken(result.title, closest.title)) {
+      return closest.title;
+    }
     return null;
   } catch (err) {
     if ((err as Error)?.name === "AbortError") return null;
