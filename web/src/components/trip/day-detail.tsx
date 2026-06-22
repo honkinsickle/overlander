@@ -356,7 +356,14 @@ export function DayDetail({ trip }: { trip: Trip }) {
         >
           Itinerary
         </div>
-        {trip.days.map((day, i) => (
+        {trip.days.map((day, i) => {
+          // Resolve the day's START coord with the same Day-1 fallback the
+          // browse path uses (openBrowse above) — day.startCoord is optional
+          // and undefined for Day 1, where the start is trip.startCoords.
+          const prevDay = i > 0 ? trip.days[i - 1] : undefined;
+          const dayStartCoords: [number, number] | undefined =
+            prevDay?.coords ?? (i === 0 ? trip.startCoords : undefined);
+          return (
           <DaySection
             key={day.id}
             trip={trip}
@@ -394,11 +401,13 @@ export function DayDetail({ trip }: { trip: Trip }) {
               <SuggestedSection
                 tripId={trip.id}
                 day={day}
+                dayStartCoords={dayStartCoords}
                 isActive={day.id === activeDayId}
               />
             }
           />
-        ))}
+          );
+        })}
       </div>
 
       <CategoryBrowsePanel
