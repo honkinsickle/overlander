@@ -78,9 +78,9 @@ The category color system — **source of truth: the Paper "Category Type" artbo
 9 categories × 5 roles: `title` / `badge-bg` / `badge-border` / `cta-bg` / `cta-border`, named
 `--cat-{name}-{role}`. This is the **only** category palette: the legacy flat `--cat-{name}` /
 `--cat-{name}-bg` 2-role tokens were retired in design-system pass 2c (all consumers read the
-role tokens). Note the taxonomy keys here are the artboard's (`scenic`, `interest`); the data
-layer's `Category`/waypoint keys (`mountain`, `neutral`) map onto them and stay until a separate
-data migration.
+role tokens). The taxonomy keys here (`scenic`, `interest`) are now also the data layer's
+canonical `Category`/waypoint keys — the `mountain → scenic` / `neutral → interest` rename
+shipped in code and the prod DB migration, so there is no pending key migration.
 
 | Category | title | badge-bg | badge-border | cta-bg | cta-border |
 |---|---|---|---|---|---|
@@ -127,10 +127,11 @@ Saturated interactive blues, pulled out of the Steel ramp into named roles.
 | `--marker` | `#FF8E05` (= `--pin`) | **NEW** — map location glyphs |
 | `--pin-border` | `#F68A0D` | **NEW** — pin/marker outline |
 
-> **Drift note (pin):** `--pin`/`--marker` collapse the untokenized cluster
-> `#FF8E05 · #F88112 · #F68A0D · #EF8B23 · #E8941F` found hardcoded across the app. Map dots in
-> `map-column.tsx` currently fall back to amber `#c8a96e`; pointing them at `--marker` is part of
-> the conform pass, not this generation step.
+> **Note (pin):** `--pin`/`--marker` collapse the untokenized cluster
+> `#FF8E05 · #F88112 · #F68A0D · #EF8B23 · #E8941F` into named roles for all DOM/CSS consumers.
+> Mapbox layer-paint and `mapboxgl.Marker` colors in `map-column.tsx` (e.g. `#c8a96e`) are a
+> deliberate, permanent exception: Mapbox's GL paint properties can't read CSS custom properties,
+> so those values stay as raw hex by necessity — they are not a pending conform target.
 
 ### 1.5 Added scales — **not from Paper** (introduced here to fill real gaps)
 
@@ -313,7 +314,7 @@ primitive changes, the mirror and this file are regenerated, never edited indepe
 - **Forest** — map/active-day surfaces; `--success` for positive states.
 - **Amber** — brand accent for text, data, and active/selected state **only**. Never links, never pins.
 - **Type** — all foreground text. `--type-100` body, `--type-500` muted/captions, `--type-50` input values.
-- **Category** — waypoint identity (glyph FG + chip BG). One category = one FG/BG pair; never mix pairs.
+- **Category** — waypoint identity. Each category is a 5-role set (`title` / `badge-bg` + `badge-border` / `cta-bg` + `cta-border`); use the role that fits the element and never mix roles across categories.
 - **Interactive roles** — `--action*` for the one primary button; `--link*` for links; `--focus` for focus.
 - **`--pin`/`--marker`** — ranking pins and map glyphs only (orange-red).
 - **Added scales** — use `--space-*`, `--radius-*`, `--shadow-*`, type tokens instead of literals.
@@ -327,7 +328,8 @@ primitive changes, the mirror and this file are regenerated, never edited indepe
   label `--ff-display`, uppercase, `--tracking-wide`. **One spec — no variants.**
 - **Card:** bg `--bg-card`; border `1px var(--border-subtle)`; radius `--radius-lg`;
   optional `--shadow-md` when floating over the map.
-- **Chip / category tag:** FG `--cat-{x}` on BG `--cat-{x}-bg`; radius `--radius-full`;
+- **Chip / category tag:** FG `--cat-{x}-title` (or `--cat-{x}-badge-border`) on BG
+  `--cat-{x}-badge-bg`, border `--cat-{x}-badge-border`; radius `--radius-full`;
   `--ff-display`, `--text-2xs`, uppercase, `--tracking-wider`.
 - **Ranking pin:** circular, fill `--pin`, `2px` border `--pin-border`, `--ff-mono` `700` number,
   radius `--radius-full`. **Orange-red, never amber.**
