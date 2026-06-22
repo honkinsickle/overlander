@@ -18,10 +18,17 @@ import {
 import { fetchFederatedPois } from "@/lib/trip-browse/federated";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+// The buckets the live discovery fanout actually queries for the "all" view.
+// `attraction` is included: the live mappers (OSM/Foursquare/Google) now have
+// scoped query sets for museums + cultural/historic landmarks, so the default
+// feed surfaces them instead of only showing them when the chip is selected.
+// `interest`/`urban` stay OUT — their live query sets are empty and no source
+// derives a result into them; they're corpus-backed via the federated RPC.
 const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "scenic",
   "food",
   "oddity",
+  "attraction",
   "camping",
   "overnight",
   "fuel",

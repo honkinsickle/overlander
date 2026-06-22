@@ -37,8 +37,11 @@ const FSQ_TOP_LEVEL_IDS: Record<SlideCategoryKey, string[]> = {
   // and Foursquare's gas-station data is sparser. Empty array short-
   // circuits in `query()` to return [].
   fuel: [],
+  // Formal cultural set (museums, galleries, landmarks) — same Arts and
+  // Entertainment top-level as oddity; categoryForFsqPlace splits the sub-
+  // categories so museums/landmarks land in attraction, not oddity.
+  attraction: ["4d4b7105d754a06376d81259"], // Arts and Entertainment
   // Corpus-backed (federated) buckets — no live Foursquare fanout.
-  attraction: [],
   interest: [],
   urban: [],
 };
@@ -70,10 +73,18 @@ function categoryForFsqPlace(
   ) {
     return "food";
   }
+  // Formal cultural → attraction (mirrors the federated corpus split).
+  if (
+    wanted.has("attraction") &&
+    /\b(museum|gallery|historic|historical|landmark|monument|memorial|heritage)\b/
+      .test(names)
+  ) {
+    return "attraction";
+  }
+  // Roadside-quirky entertainment stays oddity.
   if (
     wanted.has("oddity") &&
-    /\b(museum|historic|monument|memorial|gallery|theater|theatre|landmark|artwork)\b/
-      .test(names)
+    /\b(theater|theatre|artwork|public art|roadside)\b/.test(names)
   ) {
     return "oddity";
   }
