@@ -30,8 +30,11 @@ export const OSM_TAG_QUERIES: Record<SlideCategoryKey, string[]> = {
     'node["amenity"="ice_cream"]["name"]',
   ],
   oddity: [
+    // Generic roadside markers stay here; the built/cultural historic set and
+    // museums/galleries move to `attraction` (see categoryFromTags). The broad
+    // historic filter is kept so marker subvalues still surface under oddity —
+    // categoryFromTags drops the cultural ones (they derive to attraction).
     'node["historic"]["name"]',
-    'node["tourism"="museum"]',
     'node["amenity"="arts_centre"]',
     'node["tourism"="artwork"]',
   ],
@@ -46,12 +49,28 @@ export const OSM_TAG_QUERIES: Record<SlideCategoryKey, string[]> = {
     'node["tourism"="hostel"]',
   ],
   fuel: ['node["amenity"="fuel"]'],
-  // attraction/interest/urban surface via the federated master_place corpus,
-  // not the live Overpass fanout — empty short-circuits to [] in query().
-  attraction: [],
+  // Formal cultural set — museums, galleries, and built/cultural historic
+  // heritage — mirrors the federated corpus `attraction` bucket so the live
+  // and corpus paths agree. categoryFromTags arbitrates the historic split.
+  attraction: [
+    'node["tourism"="museum"]',
+    'node["tourism"="gallery"]',
+    'node["historic"]["name"]',
+  ],
+  // interest/urban surface via the federated master_place corpus, not the live
+  // Overpass fanout — empty short-circuits to [] in query().
   interest: [],
   urban: [],
 };
+
+/** OSM `historic=*` subvalues that are generic roadside markers rather than
+ *  built/cultural heritage. These stay in `oddity`; every other historic
+ *  value (built heritage, sites, `historic=yes`, and the long tail) derives
+ *  to `attraction`. */
+const ODDITY_HISTORIC: ReadonlySet<string> = new Set([
+  "boundary_stone", "milestone", "marker", "plaque", "cairn",
+  "wayside_cross", "wayside_shrine", "charcoal_pile", "rune_stone", "stone",
+]);
 
 /** Reverse-derive the slide category for an OSM element from its tags.
  *  Order matters — the first match wins, so put more-specific keys
@@ -96,12 +115,18 @@ export function categoryFromTags(
   ) {
     return "scenic";
   }
-  if (
-    tags.historic ||
-    tags.tourism === "museum" ||
-    tags.amenity === "arts_centre" ||
-    tags.tourism === "artwork"
-  ) {
+  // Formal cultural venues → attraction (mirrors the federated corpus split).
+  if (tags.tourism === "museum" || tags.tourism === "gallery") {
+    return "attraction";
+  }
+  // historic=* splits: generic roadside markers (boundary stones, milestones,
+  // plaques) stay oddity; built/cultural heritage (bridges, ruins, memorials,
+  // and the long tail incl. historic=yes) → attraction.
+  if (tags.historic) {
+    return ODDITY_HISTORIC.has(tags.historic) ? "oddity" : "attraction";
+  }
+  // Roadside-quirky cultural → oddity.
+  if (tags.amenity === "arts_centre" || tags.tourism === "artwork") {
     return "oddity";
   }
   return null;
