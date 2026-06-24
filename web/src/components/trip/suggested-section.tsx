@@ -386,7 +386,8 @@ function SuggestionSkeletons() {
 }
 
 function DayBriefingCard({ day }: { day: Day }) {
-  const hasContent = day.description || day.weather || (day.notes && day.notes.length > 0);
+  const hasContent =
+    day.description || day.weather || day.forecast || (day.notes && day.notes.length > 0);
   if (!hasContent) return null;
   const route = [day.miles && `${day.miles} mi`, day.driveHours && `${day.driveHours} hrs`]
     .filter(Boolean)
@@ -448,7 +449,7 @@ function DayBriefingCard({ day }: { day: Day }) {
           </p>
         )}
 
-        {day.weather && (day.weather.departure || day.weather.arrival) && (
+        {(day.weather?.departure || day.weather?.arrival || day.forecast) && (
           <div className="flex flex-col" style={{ gap: 4 }}>
             <span
               className="uppercase"
@@ -462,14 +463,34 @@ function DayBriefingCard({ day }: { day: Day }) {
             >
               Weather
             </span>
-            {day.weather.departure && (
+            {day.weather?.departure && (
               <span style={{ fontFamily: "var(--ff-sans)", fontSize: 13, color: "#CFCFCF" }}>
                 Depart · {day.weather.departure}
               </span>
             )}
-            {day.weather.arrival && (
+            {day.weather?.arrival && (
               <span style={{ fontFamily: "var(--ff-sans)", fontSize: 13, color: "#CFCFCF" }}>
                 Arrive · {day.weather.arrival}
+              </span>
+            )}
+            {day.forecast && (
+              <span
+                style={{
+                  fontFamily: "var(--ff-sans)",
+                  fontSize: 13,
+                  color: "#CFCFCF",
+                }}
+              >
+                <span style={{ color: "#7ACEA1" }}>
+                  {day.forecast.source === "forecast" ? "Forecast" : "Avg"}
+                </span>{" "}
+                · {day.forecast.daily.highF}° / {day.forecast.daily.lowF}° ·{" "}
+                {day.forecast.daily.sky}
+                {day.forecast.source === "forecast" &&
+                day.forecast.daily.precipChance != null &&
+                day.forecast.daily.precipChance > 0
+                  ? ` · ${day.forecast.daily.precipChance}% rain`
+                  : ""}
               </span>
             )}
           </div>
