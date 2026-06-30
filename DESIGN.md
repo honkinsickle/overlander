@@ -103,6 +103,7 @@ Mirrored to Tailwind as `--color-cat-{name}-{role}` in the `@theme` block (e.g. 
 |---|---|---|
 | `--border-subtle` | `rgba(255,255,255,0.07)` | hairline dividers, default border |
 | `--border-mid` | `rgba(255,255,255,0.14)` | stronger separators, scrollbar thumb |
+| `--border-strong` | `rgba(255,255,255,0.20)` | card outline / raised-surface edge |
 | `--bg-detail` | `rgba(65,65,65,0.80)` | detail-panel scrim over map |
 
 ### 1.4 Interactive & semantic roles

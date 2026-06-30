@@ -51,6 +51,7 @@
   /* Alpha overlays — kept literal (alpha, not ramp steps) */
   --border-subtle: rgba(255,255,255,0.07);
   --border-mid:    rgba(255,255,255,0.14);
+  --border-strong: rgba(255,255,255,0.20);
   --bg-detail:     rgba(65,65,65,0.80);
 
   /* Interactive & semantic roles — saturated blues pulled out of Steel */
@@ -333,6 +334,7 @@
 
   --color-border-subtle: var(--border-subtle);
   --color-border-mid:    var(--border-mid);
+  --color-border-strong: var(--border-strong);
   --color-nav-border:    var(--nav-border);
 
   --color-amber:       var(--amber);
