@@ -163,6 +163,8 @@ Everything in §1.5 was absent from both globals.css and the Paper board. Values
 
 **Border width:** `--border-width-1: 1px` (default) · `--border-width-2: 2px` (emphasis/focus).
 
+**Layout widths:** `--rail-card-w: 462px` — day-detail panel width (sits right of the ~182px itinerary nav rail). **NEW.**
+
 **Shadows / elevation** (dark theme):
 
 | Token | Value |

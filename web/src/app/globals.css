@@ -216,6 +216,9 @@
   --space-12: 48px;
   --space-16: 64px;
 
+  /* Layout widths */
+  --rail-card-w: 462px; /* day-detail panel width, right of the ~182px nav rail */
+
   /* Border width */
   --border-width-1: 1px;
   --border-width-2: 2px;
