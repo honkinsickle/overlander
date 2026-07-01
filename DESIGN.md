@@ -163,7 +163,7 @@ Everything in §1.5 was absent from both globals.css and the Paper board. Values
 
 **Border width:** `--border-width-1: 1px` (default) · `--border-width-2: 2px` (emphasis/focus).
 
-**Layout widths:** `--rail-card-w: 462px` — day-detail panel width (sits right of the ~182px itinerary nav rail). **NEW.**
+**Layout widths:** `--rail-card-w: 462px` — day-detail panel (content) width. `--rail-column-w: 478px` — full day-detail column including the ~8px side gutter around the content (Paper EP3-0). Both sit right of the ~182px itinerary nav rail. **NEW.**
 
 **Shadows / elevation** (dark theme):
 
@@ -211,6 +211,7 @@ timeline is white on the active day, warm-grey otherwise.
 | `--border-day-selected` | `#262829` (= `--grounds-800`) | selected day-card hairline divider |
 | `--timeline-active` | `#ffffff` | active day gutter dot + connector |
 | `--timeline-inactive` | `#383736` | inactive day gutter dot + connector |
+| `--rail-column-bg` | `#202A31` | day-detail column surface (Paper EP3-0); steel, shows in the side gutter (border reuses `--border-subtle`) |
 
 ---
 

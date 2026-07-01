@@ -11,8 +11,9 @@ import {
  * Day Detail Overview — visual port of Paper "Day Detail Overview" (`EP3-0`).
  *
  * Pure presentational: takes props, renders the design, knows nothing about
- * the rail or any parent state. One long scrolling column, fixed at
- * `--rail-card-w` (462px), with three anchored sections the rail nav will
+ * the rail or any parent state. One long scrolling column: the full column
+ * is `--rail-column-w` (478px, steel) with an ~8px gutter around
+ * `--rail-card-w` (462px) content — three anchored sections the rail nav will
  * scroll to later:
  *   - #overview  — hero (route-pair over a photo)
  *   - #guides    — banner + two guide tiles + MORE GUIDES
@@ -66,34 +67,38 @@ export function DayDetailOverview({
 }: Props) {
   return (
     <div
-      className="flex flex-col shrink-0 h-full overflow-y-auto no-scrollbar"
-      style={{ width: "var(--rail-card-w)", backgroundColor: "var(--bg-base)" }}
+      className="flex flex-col items-center shrink-0 h-full overflow-y-auto no-scrollbar gap-4 pt-[11px]"
+      style={{
+        width: "var(--rail-column-w)",
+        backgroundColor: "var(--rail-column-bg)",
+        borderRight: "1px solid var(--border-subtle)",
+      }}
     >
       {/* ── Overview (hero) ─────────────────────────────────── */}
-      <section id="overview" className="shrink-0 px-[7px] pt-[11px]">
+      <section id="overview" className="shrink-0 w-[var(--rail-card-w)]">
         <Hero routeLabel={routeLabel} imageUrl={heroImageUrl} alt={heroAlt} />
       </section>
 
       {/* ── Guides ──────────────────────────────────────────── */}
-      <section id="guides" className="shrink-0 flex flex-col pt-3">
+      <section id="guides" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
         <SectionBanner title="Guides" subtitle={guidesSubtitle} />
         <div className="flex gap-[13px] px-[10px] pt-[11px]">
           {guides.map((g) => (
             <GuideTile key={g.title} guide={g} />
           ))}
         </div>
-        <MoreButton label="More guides" />
+        <MoreButton label="More Guides" topGap={19.25} uppercase={false} tracking="0" />
       </section>
 
       {/* ── Places ──────────────────────────────────────────── */}
-      <section id="places" className="shrink-0 flex flex-col pt-3">
+      <section id="places" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
         <SectionBanner title="Top Places to Visit" subtitle={placesSubtitle} />
         <div className="flex flex-col pt-[11px]">
           {places.map((p, i) => (
             <PlaceCard key={p.title} place={p} n={i + 1} dayNumber={dayNumber} />
           ))}
         </div>
-        <MoreButton label="More places to visit" />
+        <MoreButton label="More Places to Visit" uppercase={false} tracking="0" />
       </section>
     </div>
   );
@@ -259,9 +264,19 @@ function GuideTile({ guide }: { guide: OverviewGuide }) {
 
 /* ── MORE … button (shared by Guides + Places) ─────────────── */
 
-function MoreButton({ label }: { label: string }) {
+function MoreButton({
+  label,
+  topGap = 11,
+  uppercase = true,
+  tracking = "0.1em",
+}: {
+  label: string;
+  topGap?: number;
+  uppercase?: boolean;
+  tracking?: string;
+}) {
   return (
-    <div className="flex justify-center pt-[11px]">
+    <div className="flex justify-center" style={{ paddingTop: topGap }}>
       <button
         type="button"
         onClick={noop}
@@ -278,13 +293,13 @@ function MoreButton({ label }: { label: string }) {
       >
         <PinIcon />
         <span
-          className="uppercase"
+          className={uppercase ? "uppercase" : undefined}
           style={{
             color: "var(--text-primary)",
             fontFamily: "var(--ff-display)",
             fontSize: 12,
             lineHeight: "16px",
-            letterSpacing: "0.1em",
+            letterSpacing: tracking,
           }}
         >
           {label}
@@ -331,7 +346,7 @@ function PlaceCard({
         className="flex flex-col overflow-clip"
         style={{
           minHeight: 190,
-          padding: "10px 15px 11px 40px",
+          padding: "10px 15px 11px 28px",
           borderRadius: 6,
           backgroundColor: "color-mix(in srgb, var(--grounds-850) 40%, transparent)",
           border: "1px solid var(--border-strong)",
@@ -352,7 +367,7 @@ function PlaceCard({
           >
             <CategoryIconV2 category={category as CategoryIconV2Name} size={22} />
           </span>
-          <div className="flex flex-col min-w-0" style={{ gap: 2, paddingTop: 1 }}>
+          <div className="flex flex-col min-w-0" style={{ gap: 0 }}>
             <span
               className="line-clamp-1"
               style={{
@@ -367,7 +382,7 @@ function PlaceCard({
             >
               {place.title}
             </span>
-            <div className="flex items-center" style={{ gap: 4, height: 20 }}>
+            <div className="flex items-center" style={{ gap: 4, height: 20, marginTop: -2 }}>
               {(place.verified ?? true) && (
                 <span style={metaMono}>yoTrippin Verified</span>
               )}
@@ -387,7 +402,7 @@ function PlaceCard({
         </div>
 
         {/* Thumbnail + description over CTA. */}
-        <div className="flex" style={{ gap: 6, marginTop: 14 }}>
+        <div className="flex" style={{ gap: 15, marginTop: 12 }}>
           <div
             role="img"
             aria-label={place.photoAlt}
@@ -406,7 +421,7 @@ function PlaceCard({
             <p
               className="line-clamp-3"
               style={{
-                color: "var(--type-300)", // FLAG: board uses #C2C7CB (near --type-300)
+                color: "var(--type-300)", // = #B3B3B3, matches board (all 9 category-420 variants)
                 fontFamily: "var(--ff-sans)",
                 fontSize: 13,
                 lineHeight: "17px",
@@ -422,6 +437,7 @@ function PlaceCard({
               }}
               className="flex items-center justify-center self-start gap-1 rounded shrink-0"
               style={{
+                width: 168,
                 height: 23,
                 padding: "0 17px 0 22px",
                 backgroundColor: ctaBg,
@@ -440,7 +456,7 @@ function PlaceCard({
 
         <span
           style={{
-            marginTop: 12,
+            marginTop: 16,
             color: "var(--amber)",
             fontFamily: "var(--ff-mono)",
             fontSize: 11,

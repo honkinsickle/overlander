@@ -162,6 +162,7 @@
   --border-day-selected: var(--grounds-800);
   --timeline-active:      #ffffff;
   --timeline-inactive:    #383736;
+  --rail-column-bg:       #202A31; /* day-detail column surface (Paper EP3-0); steel, shows in the side gutter */
 
   /* Borders */
   --nav-border:    var(--steel-400);
@@ -217,7 +218,8 @@
   --space-16: 64px;
 
   /* Layout widths */
-  --rail-card-w: 462px; /* day-detail panel width, right of the ~182px nav rail */
+  --rail-card-w: 462px; /* day-detail panel (content) width, right of the ~182px nav rail */
+  --rail-column-w: 478px; /* full day-detail column incl. ~8px side gutter (Paper EP3-0); content is --rail-card-w */
 
   /* Border width */
   --border-width-1: 1px;
@@ -348,6 +350,7 @@
   --color-border-day-selected: var(--border-day-selected);
   --color-timeline-active:     var(--timeline-active);
   --color-timeline-inactive:   var(--timeline-inactive);
+  --color-rail-column-bg:      var(--rail-column-bg);
   --color-bg-detail:     var(--bg-detail);
   --color-bg-map:        var(--bg-map);
 
