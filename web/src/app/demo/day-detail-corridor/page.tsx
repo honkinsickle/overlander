@@ -45,7 +45,7 @@ const CITIES: CorridorCity[] = [
     kind: "start",
     milesFromStart: 0,
     coords: [-118.2437, 34.0522],
-    placeIds: ["la-griffith", "la-gcm", "la-broad"],
+    placeIds: ["la-griffith", "la-gcm"],
   },
   {
     id: "ventura-ca",
@@ -76,7 +76,7 @@ export default function DayDetailCorridorDemo() {
         heroAlt="Los Angeles to Santa Barbara"
         cities={CITIES}
         places={PLACES}
-        mileMarkers={[40]}
+        mileMarkers={[{ mile: 40, placeIds: ["la-broad"] }]}
       />
     </main>
   );
