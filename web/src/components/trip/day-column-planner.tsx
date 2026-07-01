@@ -173,7 +173,7 @@ function DayCard({ day, active }: { day: Day; active: boolean }) {
   const subColor = active ? "var(--type-300)" : "var(--text-muted)";
 
   return (
-    <div className="flex shrink-0" style={{ height: 112 }}>
+    <div className="flex shrink-0" style={{ minHeight: 112 }}>
       {/* Gutter — day code + connector timeline. */}
       <div className="relative shrink-0" style={{ width: 40 }}>
         <span
@@ -201,7 +201,7 @@ function DayCard({ day, active }: { day: Day; active: boolean }) {
           active
             ? {
                 width: 140,
-                height: 112,
+                minHeight: 112,
                 gap: 3,
                 padding: "10px 16px 10px 14px",
                 borderRadius: 4,
@@ -210,7 +210,7 @@ function DayCard({ day, active }: { day: Day; active: boolean }) {
               }
             : {
                 flex: "1 1 auto",
-                height: 112,
+                minHeight: 112,
                 padding: "10px 16px 10px 14px",
                 backgroundColor: "var(--bg-card)",
                 borderBottom: "1px solid var(--border-subtle)",
@@ -242,7 +242,7 @@ function DayCard({ day, active }: { day: Day; active: boolean }) {
           className="font-sans whitespace-pre-line"
           style={{ fontSize: 13, lineHeight: "18px", color: subColor }}
         >
-          {day.label.replace(/\s*—\s*/g, " —\n")}
+          {day.label.replace(/\s*—\s*/g, "\n— ")}
         </span>
       </button>
     </div>
