@@ -57,9 +57,10 @@ type Props = {
   heroAlt?: string;
   cities: CorridorCity[];
   places: CorridorPlace[];
-  /** Bare distance ticks (no city) shown in the gutter between city nodes,
-   *  e.g. [40]. View-only — NOT part of the CorridorCity spec shape. */
-  mileMarkers?: number[];
+  /** Distance ticks (no city header) shown in the gutter between city nodes,
+   *  optionally carrying place tiles that align to the marker, e.g.
+   *  [{ mile: 40, placeIds: ["x"] }]. View-only — NOT part of the spec shape. */
+  mileMarkers?: { mile: number; placeIds?: string[] }[];
 };
 
 const GUTTER_W = 48;
@@ -80,15 +81,21 @@ export function DayDetailCorridor({
   // Interleave bare mile markers between city nodes by mile position.
   type Item =
     | { type: "city"; city: CorridorCity; last: boolean }
-    | { type: "marker"; mile: number };
+    | { type: "marker"; mile: number; tiles: CorridorPlace[] };
   const items: Item[] = [];
   cities.forEach((city, i) => {
     const isLastCity = i === cities.length - 1;
     items.push({ type: "city", city, last: isLastCity });
     const nextMile = isLastCity ? Infinity : cities[i + 1].milesFromStart;
     mileMarkers
-      .filter((m) => m > city.milesFromStart && m < nextMile)
-      .forEach((m) => items.push({ type: "marker", mile: m }));
+      .filter((mk) => mk.mile > city.milesFromStart && mk.mile < nextMile)
+      .forEach((mk) =>
+        items.push({
+          type: "marker",
+          mile: mk.mile,
+          tiles: (mk.placeIds ?? []).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[],
+        }),
+      );
   });
 
   return (
@@ -99,17 +106,17 @@ export function DayDetailCorridor({
         backgroundColor: "color-mix(in srgb, var(--grounds-850) 80%, transparent)",
       }}
     >
-      {/* Content column — 462px, ~8px gutter each side of the 478px column. */}
-      <div className="flex flex-col" style={{ width: "var(--rail-card-w)" }}>
-      {/* ── Day header ─────────────────────────────────────────── */}
-      <div className="flex flex-col" style={{ padding: "14px 15px", gap: 3, backgroundColor: "var(--steel-750)" }}>
+      {/* ── Day header — 464×64 band (Barlow Medium 20 / #ECEAE4) ── */}
+      <div
+        className="flex flex-col justify-center shrink-0"
+        style={{ width: 464, height: 64, paddingInline: 15, gap: 3, backgroundColor: "var(--steel-750)" }}
+      >
         <span
           style={{
-            fontFamily: "var(--ff-display-condensed)",
-            fontWeight: 700,
-            fontStretch: "condensed",
-            fontSize: 24,
-            lineHeight: "28px",
+            fontFamily: "var(--ff-sans)",
+            fontWeight: 500,
+            fontSize: 20,
+            lineHeight: "24px",
             color: "var(--text-primary)",
           }}
         >
@@ -120,14 +127,16 @@ export function DayDetailCorridor({
         </span>
       </div>
 
+      {/* Content column — 462px, ~8px gutter each side of the 478px column. */}
+      <div className="flex flex-col" style={{ width: "var(--rail-card-w)" }}>
       {/* ── Day hero ───────────────────────────────────────────── */}
-      <div style={{ padding: "14px 15px 0" }}>
+      <div style={{ paddingTop: 14 }}>
         <div
           role="img"
           aria-label={heroAlt || routeLabel}
           style={{
             width: "100%",
-            height: 180,
+            height: 211,
             borderRadius: 3,
             border: "1px solid var(--border-subtle)",
             backgroundColor: "var(--bg-card)",
@@ -149,7 +158,7 @@ export function DayDetailCorridor({
               last={item.last && idx === items.length - 1}
             />
           ) : (
-            <MileTick key={`mk-${item.mile}`} mile={item.mile} />
+            <MileTick key={`mk-${item.mile}`} mile={item.mile} tiles={item.tiles} />
           ),
         )}
       </div>
@@ -251,15 +260,17 @@ function CityNode({
   );
 }
 
-/** Bare distance tick in the gutter (no city, no cluster) — e.g. "40mi". */
-function MileTick({ mile }: { mile: number }) {
+/** Distance tick in the gutter (no city header). May carry place tiles that
+ *  align to the marker on the spine (e.g. The Broad at the 40mi mark). */
+function MileTick({ mile, tiles = [] }: { mile: number; tiles?: CorridorPlace[] }) {
+  const hasTiles = tiles.length > 0;
   return (
-    <div className="flex" style={{ height: 30 }}>
+    <div className="flex" style={hasTiles ? { paddingBottom: 22 } : { height: 30 }}>
       <div className="relative shrink-0" style={{ width: GUTTER_W }}>
         <span
           className="absolute"
           style={{
-            top: 0,
+            top: hasTiles ? 1 : 0,
             left: 4,
             fontFamily: "var(--ff-mono)",
             fontSize: 12,
@@ -271,10 +282,14 @@ function MileTick({ mile }: { mile: number }) {
           {mile}mi
         </span>
         {/* Connector line passes through with a small inactive tick. */}
-        <div className="absolute" style={{ left: 12, top: -22, bottom: -22, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
-        <div className="absolute" style={{ left: 10.5, top: 7, width: 4, height: 4, borderRadius: 100, backgroundColor: "var(--timeline-inactive)" }} />
+        <div className="absolute" style={{ left: 12, top: -22, bottom: hasTiles ? 0 : -22, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
+        <div className="absolute" style={{ left: 10.5, top: hasTiles ? 22 : 7, width: 4, height: 4, borderRadius: 100, backgroundColor: "var(--timeline-inactive)" }} />
       </div>
-      <div style={{ flex: 1 }} />
+      <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+        {tiles.map((p) => (
+          <CategoryListCard key={p.id} place={p} category={p.category} onOpen={noop} />
+        ))}
+      </div>
     </div>
   );
 }
