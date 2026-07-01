@@ -1,29 +1,27 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { ChevronDown, Settings } from "lucide-react";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Day Column Planner — Paper `GTM-0` (code-aligned).
+ * Day Column Planner — visual port of Paper "Trip Running — aligned"
+ * (rail `A7M-0` → Planner subtree). Reproduces the board's literal
+ * geometry (183w column, 25px section headers, 112px day cards).
  *
- * 215w column with two collapsible sections:
- *   - Overview (Explore · Places to visit)
- *   - Itinerary (stack of Day Cards)
+ * Static / presentational only. Nav toggles and day-card selection are
+ * stubbed no-ops — navigation, links, and the itinerary/add-to-day data
+ * flow are wired in a separate pass.
  *
- * The Itinerary day list is the same Day Card shape as the original
- * `DaySidebar` (Paper AH0-0): active selection drives `?day=` via
- * `history.replaceState` + a `trip:activeDay` custom event, so no
- * Next router round-trip (see DayDetail / WaypointCard notes).
+ * Structure (top → bottom):
+ *   - Overview · Guides · Places to Visit · Trip Settings nav headers
+ *   - Itinerary header (green/amber, mirrors Overview)
+ *   - Day stack: a gutter timeline (d0N code + connector) beside each card
  */
+
+// TODO: wire — interactions are intentionally inert until the linking pass.
+const noop = () => {};
+
 export function DayColumnPlanner({
   tripId,
   days,
@@ -31,231 +29,149 @@ export function DayColumnPlanner({
 }: {
   tripId: string;
   days: Day[];
-  /** When true, the column omits its own opaque backgrounds and right
-   *  border — the caller (slideup) wraps it in a translucent overlay
-   *  per docs/design/slideup-overlay-states-v2.md. Default false for
+  /** When true, the column omits its own opaque background + right border —
+   *  the slideup caller wraps it in a translucent overlay. Default false for
    *  the legacy /trip/[id] page which provides no wrapper. */
   overlay?: boolean;
 }) {
-  const searchParams = useSearchParams();
-  const queried = searchParams.get("day");
-  const [spyActiveId, setSpyActiveId] = useState<string | null>(null);
-  const activeId =
-    spyActiveId && days.some((d) => d.id === spyActiveId)
-      ? spyActiveId
-      : queried && days.some((d) => d.id === queried)
-        ? queried
-        : days[0]?.id;
-
-  useEffect(() => {
-    const onSpy = (e: Event) => {
-      const id = (e as CustomEvent<{ id: string }>).detail?.id;
-      if (id) setSpyActiveId(id);
-    };
-    window.addEventListener("trip:activeDay", onSpy);
-    return () => window.removeEventListener("trip:activeDay", onSpy);
-  }, []);
-
-  useEffect(() => {
-    setSpyActiveId(null);
-  }, [queried]);
-
-  const [overviewOpen, setOverviewOpen] = useState(true);
-  const [itineraryOpen, setItineraryOpen] = useState(true);
-
-  // Collapse Overview automatically when the user clicks into Itinerary
-  // (picks a day). Re-expand when they return to Explore (spy cleared).
-  useEffect(() => {
-    setOverviewOpen(!(spyActiveId || queried));
-  }, [spyActiveId, queried]);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const didInitial = useRef(false);
-  const [spacerHeight, setSpacerHeight] = useState(0);
-
-  useLayoutEffect(() => {
-    const root = scrollRef.current;
-    if (!root) return;
-    const compute = () => {
-      const cards = root.querySelectorAll<HTMLElement>("a[data-day-id]");
-      const last = cards[cards.length - 1];
-      if (!last) return;
-      const spacerNode = root.lastElementChild as HTMLElement | null;
-      const currentSpacer =
-        spacerNode && spacerNode !== last ? spacerNode.offsetHeight : 0;
-      const contentH = root.scrollHeight - currentSpacer;
-      const needed = Math.max(
-        0,
-        last.offsetTop + root.clientHeight - contentH,
-      );
-      setSpacerHeight((prev) => (prev === needed ? prev : needed));
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(root);
-    return () => ro.disconnect();
-  }, [days, itineraryOpen]);
-
-  useEffect(() => {
-    if (!activeId || !scrollRef.current) return;
-    const el = scrollRef.current.querySelector<HTMLElement>(
-      `a[data-day-id="${activeId}"]`,
-    );
-    if (!el) return;
-    scrollRef.current.scrollTop = el.offsetTop;
-    didInitial.current = true;
-  }, [activeId, spacerHeight]);
-
   return (
     <aside
       aria-label="Days"
+      data-trip-id={tripId}
       className={cn(
         "relative z-20 flex flex-col h-full overflow-hidden",
-        overlay
-          ? "w-full"
-          : "w-[215px] bg-bg-base border-r border-border-subtle",
+        overlay ? "w-full" : "w-[183px] border-r border-border-subtle",
       )}
-      style={
-        overlay
-          ? undefined
-          : {
-              backgroundColor: "var(--bg-base)",
-              boxShadow: "8px 0 24px rgba(0,0,0,0.45)",
-            }
-      }
+      style={overlay ? undefined : { backgroundColor: "var(--bg-base)" }}
     >
-      {/* Overview (collapsible) — Paper GTN-0/GTT-0. Label is amber-light
-       *  while the user is in Overview; drops to muted once they click
-       *  out into the Itinerary / a day card. */}
-      <SectionHeader
-        label="Overview"
-        open={overviewOpen}
-        onToggle={() => setOverviewOpen((v) => !v)}
-        tone={spyActiveId || queried ? "muted" : "active"}
-      />
-      {overviewOpen && (
-        <div
-          className={cn(
-            "flex flex-col border-b border-border-subtle shrink-0 pr-4",
-            !overlay && "bg-bg-card",
-          )}
-        >
-          <OverviewRow
-            label="Explore"
-            active={!spyActiveId && !queried}
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("trip:scrollTo", {
-                  detail: { anchor: "top" },
-                }),
-              );
-              setSpyActiveId(null);
-            }}
-          />
-          <OverviewRow label="Places to visit" />
-        </div>
-      )}
+      {/* Nav — Overview is the primary/active section (green + amber). */}
+      <NavHeader label="Overview" tone="active" height={55} fontSize={25} />
+      <NavHeader label="Guides" tone="idle" height={50} fontSize={20} />
+      <NavHeader label="Places to Visit" tone="idle" height={50} fontSize={20} />
+      <SettingsHeader label="Trip Settings" />
 
-      {/* Itinerary (collapsible) — Paper GUH-0 + day cards GTZ-0..
-       *  Label brightens to `engaged` (#B9B7B7) once the user selects a
-       *  day; still `muted` by default. */}
-      <SectionHeader
-        label="Itinerary"
-        open={itineraryOpen}
-        onToggle={() => setItineraryOpen((v) => !v)}
-        tone={spyActiveId || queried ? "engaged" : "muted"}
-      />
-      {itineraryOpen && (
-        <nav
-          ref={scrollRef}
-          aria-label="Days"
-          className={cn(
-            "relative flex flex-col flex-1 overflow-y-auto no-scrollbar",
-            !overlay && "bg-bg-panel",
-          )}
+      {/* Itinerary header — same green/amber treatment as Overview, no toggle. */}
+      <div
+        className="flex items-center justify-between shrink-0 border-b border-border-subtle"
+        style={{
+          height: 55,
+          padding: "10px 16px 10px 17px",
+          backgroundColor: "var(--bg-day-active)",
+        }}
+      >
+        <span
+          className="font-sans"
+          style={{
+            fontSize: 25,
+            lineHeight: "33px",
+            color: "var(--amber-light)",
+          }}
         >
-          {days.map((day) => (
-            <DayCard
-              key={day.id}
-              tripId={tripId}
-              day={day}
-              isActive={Boolean(
-                (spyActiveId || queried) && day.id === activeId,
-              )}
-            />
-          ))}
-          <div
-            className="shrink-0"
-            style={{ height: spacerHeight }}
-            aria-hidden
-          />
-        </nav>
-      )}
+          Itinerary
+        </span>
+      </div>
 
+      {/* Day stack — gutter timeline + cards. First day renders selected. */}
+      <nav
+        aria-label="Days"
+        className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
+        style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
+      >
+        {days.map((day, i) => (
+          <DayCard key={day.id} day={day} active={i === 0} />
+        ))}
+      </nav>
     </aside>
   );
 }
 
-/** Paper GTN-0 / GUH-0 — 215×55 sticky section header with a label and
- *  a 36×36 toggle affordance. Label colour distinguishes states. */
-function SectionHeader({
+/** Top-level nav header. `active` gets the green surface + amber label
+ *  (Overview); `idle` is the dark card surface + primary-ink label. */
+function NavHeader({
   label,
-  open,
-  onToggle,
   tone,
+  height,
+  fontSize,
 }: {
   label: string;
-  open: boolean;
-  onToggle: () => void;
-  tone: "active" | "engaged" | "muted";
+  tone: "active" | "idle";
+  height: number;
+  fontSize: number;
 }) {
-  const color =
-    tone === "active"
-      ? "var(--amber-light)"
-      : tone === "engaged"
-        ? "#B9B7B7"
-        : "var(--text-muted)";
+  const active = tone === "active";
   return (
     <button
       type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className="flex items-center justify-between w-full h-[55px] py-2.5 pl-5 pr-4 shrink-0 border-b border-border-subtle"
-      style={{ backgroundColor: "#0D0E0F" }}
+      onClick={noop}
+      className="flex items-center justify-between shrink-0 border-b border-border-subtle"
+      style={{
+        height,
+        padding: "10px 16px 10px 20px",
+        backgroundColor: active ? "var(--bg-day-active)" : "var(--bg-card)",
+      }}
     >
       <span
-        className="font-sans font-normal"
-        style={{ fontSize: 30, lineHeight: "33px", color }}
+        className="font-sans"
+        style={{
+          fontSize,
+          lineHeight: "33px",
+          color: active ? "var(--amber-light)" : "var(--text-primary)",
+        }}
       >
         {label}
       </span>
-      <Chevron open={open} tone={tone} />
+      <NavToggle />
     </button>
   );
 }
 
-/** Toggle affordance — Paper GUM-0 (filled, active) / GUS-0 (outlined).
- *  Rotates 0↔180 on open to feel like a disclosure caret. */
-function Chevron({
-  open,
-  tone,
-}: {
-  open: boolean;
-  tone: "active" | "engaged" | "muted";
-}) {
-  const Icon = open ? ChevronDown : ChevronRight;
+/** Trip Settings — gear icon + smaller label, left-packed (per the board). */
+function SettingsHeader({ label }: { label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={noop}
+      className="flex items-center shrink-0 border-b border-border-subtle"
+      style={{
+        height: 50,
+        gap: 5,
+        padding: "10px 16px 10px 20px",
+        backgroundColor: "var(--bg-card)",
+      }}
+    >
+      <Settings
+        size={18}
+        strokeWidth={1.75}
+        className="shrink-0"
+        style={{ color: "var(--text-primary)" }}
+      />
+      <span
+        className="font-sans"
+        style={{ fontSize: 14, lineHeight: "33px", color: "var(--text-primary)" }}
+      >
+        {label}
+      </span>
+      <NavToggle />
+    </button>
+  );
+}
+
+/** 36×36 disclosure affordance — faint focus-blue outline, chevron inside. */
+function NavToggle() {
   return (
     <span
       aria-hidden
-      className={cn(
-        "flex items-center justify-center w-9 h-9 rounded",
-        tone === "active"
-          ? "bg-white/10"
-          : "border border-[rgba(167,204,253,0.12)]",
-      )}
+      className="flex items-center justify-center shrink-0"
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 4,
+        border: "1px solid var(--focus-faint)",
+        rotate: "180deg",
+      }}
     >
-      <Icon
-        className="w-4 h-4"
+      <ChevronDown
+        size={16}
         strokeWidth={1.75}
         style={{ color: "var(--text-muted)" }}
       />
@@ -263,136 +179,122 @@ function Chevron({
   );
 }
 
-/** Paper GUV-0 / GUW-0 — 215×50 row, 20px inline padding. Active row
- *  uses `--bg-day-active` green + `--amber-dark` bottom border + amber
- *  label; inactive rows are muted. */
-function OverviewRow({
-  label,
-  active = false,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-  children?: ReactNode;
-}) {
+/** Day card + its gutter timeline segment. The selected card is an inset,
+ *  rounded steel surface; unselected cards fill to the right edge. */
+function DayCard({ day, active }: { day: Day; active: boolean }) {
+  const at = new Date(`${day.date}T00:00:00`);
+  const weekday = at
+    .toLocaleDateString("en-US", { weekday: "short" })
+    .slice(0, 2);
+  const monthDay = at.toLocaleDateString("en-US", {
+    month: "numeric",
+    day: "numeric",
+  });
+  const meta =
+    day.miles !== undefined && day.driveHours !== undefined
+      ? `${day.miles}mi ~ ${day.driveHours}hrs`
+      : " ";
+  const dcode = `d${String(day.dayNumber).padStart(2, "0")}`;
+  const subColor = active ? "var(--type-300)" : "var(--text-muted)";
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex items-center w-full h-[50px] pl-5 pr-0 text-left",
-        active && "bg-bg-day-active border-b border-amber-dark",
-      )}
-    >
-      <span
-        className="font-sans"
-        style={{
-          fontSize: 21,
-          lineHeight: "41px",
-          color: active ? "var(--amber-light)" : "var(--text-muted)",
-        }}
+    <div className="flex shrink-0" style={{ height: 112 }}>
+      {/* Gutter — day code + connector timeline. */}
+      <div className="relative shrink-0" style={{ width: 40 }}>
+        <span
+          className="font-sans absolute"
+          style={{
+            top: 10,
+            left: 4,
+            fontSize: 18,
+            lineHeight: "16px",
+            color: active ? "var(--timeline-active)" : "var(--text-muted)",
+          }}
+        >
+          {dcode}
+        </span>
+        <Connector active={active} />
+      </div>
+
+      {/* Card body. */}
+      <button
+        type="button"
+        onClick={noop}
+        data-day-id={day.id}
+        className="flex flex-col justify-between text-left shrink-0"
+        style={
+          active
+            ? {
+                width: 140,
+                height: 112,
+                gap: 3,
+                padding: "10px 16px 10px 14px",
+                borderRadius: 4,
+                backgroundColor: "var(--bg-day-selected)",
+                borderBottom: "0.5px solid var(--border-day-selected)",
+              }
+            : {
+                flex: "1 1 auto",
+                height: 112,
+                padding: "10px 16px 10px 14px",
+                backgroundColor: "var(--bg-card)",
+                borderBottom: "1px solid var(--border-subtle)",
+              }
+        }
       >
-        {label}
-      </span>
-      {children}
-    </button>
+        <span
+          className="font-mono"
+          style={{
+            fontSize: 14,
+            lineHeight: "14px",
+            letterSpacing: "-0.05em",
+            color: subColor,
+          }}
+        >
+          {meta}
+        </span>
+        <span
+          className="font-mono"
+          style={{
+            fontSize: 25,
+            lineHeight: active ? "27px" : "33px",
+            color: "var(--text-primary)",
+          }}
+        >
+          {weekday} {monthDay}
+        </span>
+        <span
+          className="font-sans whitespace-pre-line"
+          style={{ fontSize: 13, lineHeight: "18px", color: subColor }}
+        >
+          {day.label.replace(/\s*—\s*/g, " —\n")}
+        </span>
+      </button>
+    </div>
   );
 }
 
-/** Day Card — Paper AH0-0 geometry (same as DaySidebar). Emits a
- *  `trip:activeDay` event on click instead of going through Next's
- *  router to avoid re-triggering the slideup intercept. */
-function DayCard({
-  tripId,
-  day,
-  isActive,
-}: {
-  tripId: string;
-  day: Day;
-  isActive: boolean;
-}) {
-  const weekday = new Date(`${day.date}T00:00:00`).toLocaleDateString("en-US", {
-    weekday: "short",
-  });
-  const monthDay = new Date(`${day.date}T00:00:00`).toLocaleDateString(
-    "en-US",
-    { month: "numeric", day: "numeric" },
-  );
-
-  const select = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("day", day.id);
-    window.history.replaceState(null, "", url);
-    window.dispatchEvent(
-      new CustomEvent("trip:activeDay", {
-        detail: { id: day.id, source: "sidebar" },
-      }),
-    );
-  };
-
+/** Vertical connector for the gutter timeline — a start dot plus a line
+ *  running down the card. White on the active day, warm-grey otherwise. */
+function Connector({ active }: { active: boolean }) {
+  const color = active ? "var(--timeline-active)" : "var(--timeline-inactive)";
   return (
-    <button
-      type="button"
-      onClick={select}
-      aria-current={isActive ? "page" : undefined}
-      data-day-id={day.id}
-      data-trip-id={tripId}
-      className={cn(
-        "group flex flex-col justify-between text-left w-full h-[112px] pt-2.5 pr-4 pb-2.5 pl-5 border-b",
-        isActive
-          ? "bg-bg-day-active border-b-2 border-amber-dark"
-          : "bg-bg-card border-border-subtle hover:border-border-mid",
-      )}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span
-          className={cn(
-            "font-sans text-[14px] leading-[14px]",
-            isActive
-              ? "text-text-primary"
-              : "text-text-muted group-hover:text-text-primary",
-          )}
-        >
-          {day.miles !== undefined && day.driveHours !== undefined
-            ? `${day.miles} mi | ${day.driveHours} hrs`
-            : "\u00A0"}
-        </span>
-        <span
-          className={cn(
-            "font-sans text-[13px] leading-4",
-            isActive
-              ? "text-text-primary"
-              : "text-text-muted group-hover:text-text-primary",
-          )}
-        >
-          Day {String(day.dayNumber).padStart(2, "0")}
-        </span>
-      </div>
-
+    <div className="absolute" style={{ left: 10, top: 32, bottom: 4, width: 4 }}>
       <div
-        className={cn(
-          "font-sans text-[30px] leading-[33px]",
-          isActive
-            ? "text-amber-light"
-            : "text-text-muted group-hover:text-text-primary",
-        )}
-      >
-        {weekday} {monthDay}
-      </div>
-
+        className="absolute"
+        style={{
+          top: 0,
+          left: 0,
+          width: 4,
+          height: 4,
+          borderRadius: 100,
+          backgroundColor: color,
+        }}
+      />
       <div
-        className={cn(
-          "font-sans text-[13px] leading-[18px] whitespace-pre-line",
-          isActive
-            ? "text-text-primary"
-            : "text-text-muted group-hover:text-text-primary",
-        )}
-      >
-        {day.label.replace(/\s*—\s*/g, " —\n")}
-      </div>
-    </button>
+        className="absolute"
+        style={{ top: 2, left: 1.5, bottom: 0, width: 1, backgroundColor: color }}
+      />
+    </div>
   );
 }
