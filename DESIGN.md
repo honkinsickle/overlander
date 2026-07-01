@@ -209,7 +209,6 @@ timeline is white on the active day, warm-grey otherwise.
 | `--border-day-selected` | `#262829` (= `--grounds-800`) | selected day-card hairline divider |
 | `--timeline-active` | `#ffffff` | active day gutter dot + connector |
 | `--timeline-inactive` | `#383736` | inactive day gutter dot + connector |
-| `--focus-faint` | `rgba(167,204,253,0.12)` | chevron toggle outline (faint `--focus`) |
 
 ---
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
 
@@ -120,7 +120,6 @@ function NavHeader({
       >
         {label}
       </span>
-      <NavToggle />
     </button>
   );
 }
@@ -151,31 +150,7 @@ function SettingsHeader({ label }: { label: string }) {
       >
         {label}
       </span>
-      <NavToggle />
     </button>
-  );
-}
-
-/** 36×36 disclosure affordance — faint focus-blue outline, chevron inside. */
-function NavToggle() {
-  return (
-    <span
-      aria-hidden
-      className="flex items-center justify-center shrink-0"
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 4,
-        border: "1px solid var(--focus-faint)",
-        rotate: "180deg",
-      }}
-    >
-      <ChevronDown
-        size={16}
-        strokeWidth={1.75}
-        style={{ color: "var(--text-muted)" }}
-      />
-    </span>
   );
 }
 

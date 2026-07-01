@@ -162,7 +162,6 @@
   --border-day-selected: var(--grounds-800);
   --timeline-active:      #ffffff;
   --timeline-inactive:    #383736;
-  --focus-faint:          rgba(167,204,253,0.12); /* chevron toggle outline */
 
   /* Borders */
   --nav-border:    var(--steel-400);
@@ -346,7 +345,6 @@
   --color-border-day-selected: var(--border-day-selected);
   --color-timeline-active:     var(--timeline-active);
   --color-timeline-inactive:   var(--timeline-inactive);
-  --color-focus-faint:         var(--focus-faint);
   --color-bg-detail:     var(--bg-detail);
   --color-bg-map:        var(--bg-map);
 
