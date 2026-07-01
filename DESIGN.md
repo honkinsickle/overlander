@@ -25,6 +25,7 @@ the interactive/semantic roles + added scales. Ramp steps are numbered **50 (lig
 
 | Token | Value | Luma | Was |
 |---|---|---|---|
+| `--grounds-800` | `#262829` | 40 | **NEW** — rail selected-day card divider |
 | `--grounds-850` | `#161819` | 24 | `--bg-card` / `--bg-topbar` |
 | `--grounds-900` | `#111214` | 18 | `--bg-panel` |
 | `--grounds-950` | `#0a0b0c` | 11 | `--bg-base` |
@@ -42,6 +43,7 @@ saturated interactive blues are semantic roles in §1.4, not ramp members.
 | `--steel-500` | `#3E516C` | 79  | `--input-border-disabled` |
 | `--steel-600` | `#32455F` | 67  | `--input-surface-hover` |
 | `--steel-700` | `#2B3B52` | 57  | `--input-surface-filled` |
+| `--steel-750` | `#263847` | 52  | **NEW** — rail selected-day card surface |
 | `--steel-800` | `#242F42` | 46  | `--input-surface-disabled` |
 | `--steel-850` | `#1b2c3e` | 42  | `--bg-nav-btn` / `--bg-tab-idle` |
 | `--steel-900` | `#1A1F28` | 31  | `--input-surface` |
@@ -103,6 +105,7 @@ Mirrored to Tailwind as `--color-cat-{name}-{role}` in the `@theme` block (e.g. 
 |---|---|---|
 | `--border-subtle` | `rgba(255,255,255,0.07)` | hairline dividers, default border |
 | `--border-mid` | `rgba(255,255,255,0.14)` | stronger separators, scrollbar thumb |
+| `--border-strong` | `rgba(255,255,255,0.20)` | card outline / raised-surface edge |
 | `--bg-detail` | `rgba(65,65,65,0.80)` | detail-panel scrim over map |
 
 ### 1.4 Interactive & semantic roles
@@ -160,6 +163,8 @@ Everything in §1.5 was absent from both globals.css and the Paper board. Values
 
 **Border width:** `--border-width-1: 1px` (default) · `--border-width-2: 2px` (emphasis/focus).
 
+**Layout widths:** `--rail-card-w: 462px` — day-detail panel (content) width. `--rail-column-w: 478px` — full day-detail column including the ~8px side gutter around the content (Paper EP3-0). Both sit right of the ~182px itinerary nav rail. **NEW.**
+
 **Shadows / elevation** (dark theme):
 
 | Token | Value |
@@ -193,6 +198,20 @@ Everything in §1.5 was absent from both globals.css and the Paper board. Values
 | `--text-4xl` 40 |  |  |  |
 
 > Base body size is **14px** (`.form-field`, most UI), not 16px — matches the existing app.
+
+### 1.6 Rail (itinerary nav) — Paper "Trip Running" port
+
+Semantic roles for the day-column rail. The selected day card reads as a cool steel
+surface (distinct from the green `--bg-day-active` used on section headers); the gutter
+timeline is white on the active day, warm-grey otherwise.
+
+| Token | Value | Role |
+|---|---|---|
+| `--bg-day-selected` | `#263847` (= `--steel-750`) | selected day-card surface |
+| `--border-day-selected` | `#262829` (= `--grounds-800`) | selected day-card hairline divider |
+| `--timeline-active` | `#ffffff` | active day gutter dot + connector |
+| `--timeline-inactive` | `#383736` | inactive day gutter dot + connector |
+| `--rail-column-bg` | `#202A31` | day-detail column surface (Paper EP3-0); steel, shows in the side gutter (border reuses `--border-subtle`) |
 
 ---
 

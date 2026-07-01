@@ -119,7 +119,7 @@ export function TripSlideupBody({
         <>
           {/* Day Column Planner — translucent overlay (#0C0D0F @ 59%) */}
           <div
-            className="absolute top-[72px] bottom-[10px] left-[10px] w-[217px] z-20 overflow-hidden rounded-bl-[14px]"
+            className="absolute top-[72px] bottom-[10px] left-[10px] w-[183px] z-20 overflow-hidden rounded-bl-[14px]"
             style={{
               background: "rgba(12,13,15,0.59)",
               borderRight: "0.5px solid rgba(74,72,72,0.83)",

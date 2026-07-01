@@ -13,6 +13,7 @@
      ============================================================ */
 
   /* Grounds — achromatic neutral structure */
+  --grounds-800: #262829;
   --grounds-850: #161819;
   --grounds-900: #111214;
   --grounds-950: #0a0b0c;
@@ -27,6 +28,7 @@
   --steel-500: #3E516C;
   --steel-600: #32455F;
   --steel-700: #2B3B52;
+  --steel-750: #263847;
   --steel-800: #242F42;
   --steel-850: #1b2c3e;
   --steel-900: #1A1F28;
@@ -51,6 +53,7 @@
   /* Alpha overlays — kept literal (alpha, not ramp steps) */
   --border-subtle: rgba(255,255,255,0.07);
   --border-mid:    rgba(255,255,255,0.14);
+  --border-strong: rgba(255,255,255,0.20);
   --bg-detail:     rgba(65,65,65,0.80);
 
   /* Interactive & semantic roles — saturated blues pulled out of Steel */
@@ -152,6 +155,15 @@
   --bg-day-active: var(--forest-900);
   --bg-map:        var(--forest-950);
 
+  /* Rail (itinerary nav) — Paper "Trip Running" port. Selected day card
+     uses a cool steel surface; the gutter timeline reads white when the
+     day is active, warm-grey when not. */
+  --bg-day-selected:     var(--steel-750);
+  --border-day-selected: var(--grounds-800);
+  --timeline-active:      #ffffff;
+  --timeline-inactive:    #383736;
+  --rail-column-bg:       #202A31; /* day-detail column surface (Paper EP3-0); steel, shows in the side gutter */
+
   /* Borders */
   --nav-border:    var(--steel-400);
 
@@ -204,6 +216,10 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+
+  /* Layout widths */
+  --rail-card-w: 462px; /* day-detail panel (content) width, right of the ~182px nav rail */
+  --rail-column-w: 478px; /* full day-detail column incl. ~8px side gutter (Paper EP3-0); content is --rail-card-w */
 
   /* Border width */
   --border-width-1: 1px;
@@ -277,6 +293,7 @@
    primitive in :root, not here. See /DESIGN.md §3. */
 @theme inline {
   /* Ramps (primitive) */
+  --color-grounds-800: var(--grounds-800);
   --color-grounds-850: var(--grounds-850);
   --color-grounds-900: var(--grounds-900);
   --color-grounds-950: var(--grounds-950);
@@ -288,6 +305,7 @@
   --color-steel-500:   var(--steel-500);
   --color-steel-600:   var(--steel-600);
   --color-steel-700:   var(--steel-700);
+  --color-steel-750:   var(--steel-750);
   --color-steel-800:   var(--steel-800);
   --color-steel-850:   var(--steel-850);
   --color-steel-900:   var(--steel-900);
@@ -328,11 +346,17 @@
   --color-bg-tab-active: var(--bg-tab-active);
   --color-bg-tab-idle:   var(--bg-tab-idle);
   --color-bg-day-active: var(--bg-day-active);
+  --color-bg-day-selected:     var(--bg-day-selected);
+  --color-border-day-selected: var(--border-day-selected);
+  --color-timeline-active:     var(--timeline-active);
+  --color-timeline-inactive:   var(--timeline-inactive);
+  --color-rail-column-bg:      var(--rail-column-bg);
   --color-bg-detail:     var(--bg-detail);
   --color-bg-map:        var(--bg-map);
 
   --color-border-subtle: var(--border-subtle);
   --color-border-mid:    var(--border-mid);
+  --color-border-strong: var(--border-strong);
   --color-nav-border:    var(--nav-border);
 
   --color-amber:       var(--amber);
