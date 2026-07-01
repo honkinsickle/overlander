@@ -94,10 +94,13 @@ export function DayDetailCorridor({
   return (
     <div
       className="flex flex-col"
-      style={{ width: "var(--rail-card-w)", backgroundColor: "var(--bg-base)" }}
+      style={{
+        width: "var(--rail-card-w)",
+        backgroundColor: "color-mix(in srgb, var(--grounds-850) 80%, transparent)",
+      }}
     >
       {/* ── Day header ─────────────────────────────────────────── */}
-      <div className="flex flex-col" style={{ paddingInline: 15, paddingTop: 14, gap: 3 }}>
+      <div className="flex flex-col" style={{ padding: "14px 15px", gap: 3, backgroundColor: "var(--steel-750)" }}>
         <span
           style={{
             fontFamily: "var(--ff-display-condensed)",
@@ -186,7 +189,6 @@ function CityNode({
 }) {
   const isStart = city.kind === "start";
   const mileLabel = isStart ? "Start" : `${city.milesFromStart}mi`;
-  const headerText = isStart ? `Start · ${city.name}` : city.name;
 
   return (
     <div className="flex" style={{ paddingBottom: 22 }}>
@@ -219,13 +221,13 @@ function CityNode({
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 10 }}>
         <div className="flex flex-col" style={{ gap: 3 }}>
           <span style={{ fontFamily: "var(--ff-sans)", fontWeight: 600, fontSize: 17, lineHeight: "22px", color: "var(--text-primary)" }}>
-            {headerText}
+            {city.name}
           </span>
           <button
             type="button"
             onClick={noop}
             className="self-start"
-            style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--amber)" }}
+            style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--text-primary)" }}
           >
             Explore more {city.name} →
           </button>
