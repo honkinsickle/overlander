@@ -109,7 +109,7 @@ export function DayDetailCorridor({
       {/* ── Day header — 464×64 band (Barlow Medium 20 / #ECEAE4) ── */}
       <div
         className="flex flex-col justify-center shrink-0"
-        style={{ width: 464, height: 64, paddingInline: 15, gap: 3, backgroundColor: "var(--steel-750)" }}
+        style={{ width: 464, height: 64, gap: 3, backgroundColor: "var(--steel-750)" }}
       >
         <span
           style={{
@@ -130,13 +130,13 @@ export function DayDetailCorridor({
       {/* Content column — 462px, ~8px gutter each side of the 478px column. */}
       <div className="flex flex-col" style={{ width: "var(--rail-card-w)" }}>
       {/* ── Day hero ───────────────────────────────────────────── */}
-      <div style={{ paddingTop: 14 }}>
+      <div>
         <div
           role="img"
           aria-label={heroAlt || routeLabel}
           style={{
             width: "100%",
-            height: 211,
+            height: 148,
             borderRadius: 3,
             border: "1px solid var(--border-subtle)",
             backgroundColor: "var(--bg-card)",
