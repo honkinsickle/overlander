@@ -93,12 +93,14 @@ export function DayDetailCorridor({
 
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col items-center"
       style={{
-        width: "var(--rail-card-w)",
+        width: "var(--rail-column-w)",
         backgroundColor: "color-mix(in srgb, var(--grounds-850) 80%, transparent)",
       }}
     >
+      {/* Content column — 462px, ~8px gutter each side of the 478px column. */}
+      <div className="flex flex-col" style={{ width: "var(--rail-card-w)" }}>
       {/* ── Day header ─────────────────────────────────────────── */}
       <div className="flex flex-col" style={{ padding: "14px 15px", gap: 3, backgroundColor: "var(--steel-750)" }}>
         <span
@@ -171,6 +173,7 @@ export function DayDetailCorridor({
         >
           Explore more of Day {dd}
         </button>
+      </div>
       </div>
     </div>
   );
