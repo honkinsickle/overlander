@@ -109,7 +109,7 @@ export function DayDetailCorridor({
       {/* ── Day header — 464×64 band (Barlow Medium 20 / #ECEAE4) ── */}
       <div
         className="flex flex-col justify-center shrink-0"
-        style={{ width: 464, height: 64, gap: 3, backgroundColor: "var(--steel-750)" }}
+        style={{ width: 464, height: 54, gap: 3, backgroundColor: "var(--steel-750)" }}
       >
         <span
           style={{
