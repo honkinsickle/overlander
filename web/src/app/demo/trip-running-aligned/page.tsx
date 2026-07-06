@@ -4,6 +4,11 @@ import {
   type CorridorCity,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import {
+  DayDetailOverview,
+  type OverviewGuide,
+  type OverviewPlace,
+} from "@/components/trip/day-detail-overview";
 import type { Day } from "@/lib/trips/types";
 
 /**
@@ -63,6 +68,18 @@ const CITIES: CorridorCity[] = [
   { id: "santa-barbara-ca", name: "Santa Barbara, CA", kind: "end", milesFromStart: 95, coords: [-119.6982, 34.4208], placeIds: ["sb-inspiration", "sb-county", "sb-superrica"] },
 ];
 
+// ── Overview fixture — verbatim from the deleted /demo/day-detail-overview ──
+const GUIDES: OverviewGuide[] = [
+  { title: "Foodies Guide to the Coast", description: "Delectable stops — find breakfast, lunch and dinner along the way.", byline: "yoTrippin staff", imageUrl: IMG.food2 },
+  { title: "Places not to miss on-route.", description: "Recommendations from like-minded yoTrippin staff.", byline: "yoTrippin staff", imageUrl: IMG.scenic2 },
+];
+
+const OVERVIEW_PLACES: OverviewPlace[] = [
+  { category: "food", title: "Tartine Bakery", description: "Morning pastries and country bread worth the line and the detour.", photoAlt: "Bakery display case", photoUrl: IMG.food1, rating: 4.9, reviewCount: 12200, detour: { miles: 6, minutes: 12 } },
+  { category: "urban", title: "Pike Place Market", description: "Historic public market — chowder, flowers, and the first Starbucks.", photoAlt: "Woman on dock", photoUrl: IMG.urban, rating: 4.9, reviewCount: 12200, detour: { miles: 6, minutes: 12 } },
+  { category: "scenic", title: "Bixby Creek Bridge", description: "Iconic span over the Pacific — pull off at the north vista for the classic late-afternoon shot.", photoAlt: "Mountain bridge", photoUrl: IMG.scenic1, rating: 4.9, reviewCount: 12200, detour: { miles: 6, minutes: 12 } },
+];
+
 /** Static stand-in for the production TopBar chrome (visual only). */
 function TopBarStandIn() {
   return (
@@ -115,21 +132,44 @@ export default function TripRunningAlignedDemo() {
       <div className="flex flex-col" style={{ width: 661 }}>
         <TopBarStandIn />
 
-        {/* Rail (183px, flush) | corridor (478px). */}
-        <div className="flex">
-          {/* TODO: wire — rail day-card selection drives the right column. */}
-          <DayColumnPlanner tripId="demo-trip-running-aligned" days={DAYS} />
+        {/* Rail (183px, flush) | right column (478px): Overview then corridor.
+            items-start so DayDetailOverview's h-full collapses to content (the
+            page owns the scroll); the rail is stretched separately below. */}
+        <div className="flex items-start">
+          {/* TODO: wire — rail day-card selection + nav (Overview/Guides/Places/
+              Itinerary) scroll-to-anchor drive the right column. */}
+          {/* Wrapper stretches the rail to full column height beside the taller
+              right column. */}
+          <div className="self-stretch flex">
+            <DayColumnPlanner tripId="demo-trip-running-aligned" days={DAYS} />
+          </div>
 
-          <DayDetailCorridor
-            dayLabel="Day 1 — Sat, May 30th"
-            dayNumber={1}
-            routeLabel="Los Angeles, CA — Santa Barbara, CA"
-            heroImageUrl={IMG.hero}
-            heroAlt="Los Angeles to Santa Barbara"
-            cities={CITIES}
-            places={PLACES}
-            mileMarkers={[{ mile: 40, placeIds: ["la-broad"] }]}
-          />
+          <div className="flex flex-col">
+            {/* Overview panel — #overview / #guides / #places (the rail's nav
+                targets). */}
+            <DayDetailOverview
+              routeLabel="Los Angeles, CA → Portland, OR"
+              heroImageUrl={IMG.hero}
+              heroAlt="Los Angeles to Portland"
+              guidesSubtitle="Created by the yoTrippin Staff: Los Angeles,CA - Portland, OR"
+              guides={GUIDES}
+              placesSubtitle="Across your full route: Los Angeles,CA - Portland, OR"
+              places={OVERVIEW_PLACES}
+              dayNumber={2}
+            />
+
+            {/* Itinerary / corridor — #itinerary. */}
+            <DayDetailCorridor
+              dayLabel="Day 1 — Sat, May 30th"
+              dayNumber={1}
+              routeLabel="Los Angeles, CA — Santa Barbara, CA"
+              heroImageUrl={IMG.hero}
+              heroAlt="Los Angeles to Santa Barbara"
+              cities={CITIES}
+              places={PLACES}
+              mileMarkers={[{ mile: 40, placeIds: ["la-broad"] }]}
+            />
+          </div>
         </div>
       </div>
     </main>
