@@ -270,20 +270,23 @@ function MileTick({ mile, tiles = [] }: { mile: number; tiles?: CorridorPlace[] 
         <span
           className="absolute"
           style={{
-            top: hasTiles ? 1 : 0,
+            top: 1,
             left: 4,
             fontFamily: "var(--ff-mono)",
             fontSize: 12,
             lineHeight: "16px",
             letterSpacing: "-0.02em",
-            color: "var(--text-muted)",
+            color: "var(--timeline-active)",
           }}
         >
           {mile}mi
         </span>
-        {/* Connector line passes through with a small inactive tick. */}
-        <div className="absolute" style={{ left: 12, top: -22, bottom: hasTiles ? 0 : -22, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
-        <div className="absolute" style={{ left: 10.5, top: hasTiles ? 22 : 7, width: 4, height: 4, borderRadius: 100, backgroundColor: "var(--timeline-inactive)" }} />
+        {/* Node dot (white 6px) + connector line starting below it — matches a
+         *  city node, so the vertical line has a gap at the marker. */}
+        <div className="absolute" style={{ left: 10, top: 22, bottom: -22, width: 6 }}>
+          <div style={{ width: 6, height: 6, borderRadius: 100, backgroundColor: "var(--timeline-active)" }} />
+          <div className="absolute" style={{ top: 6, left: 2.5, bottom: 0, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
+        </div>
       </div>
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
         {tiles.map((p) => (
