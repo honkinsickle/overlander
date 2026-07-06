@@ -1,7 +1,7 @@
 # Corridor-Cities on `Day` — Data-Model Spec
 
 **Scope:** web client data model (`web/src/lib/trips`) — one additive `Day` field + a finalize-time derivation step. No schema DDL (rides in `trips.payload` jsonb).
-**Status:** Draft — **spec only**. No code, no type change, no schema, no migration in this document. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger) resolved 2026-07-06.
+**Status:** Draft. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger) resolved 2026-07-06. §3.1 revised 2026-07-06 after the build: computed at finalize only; edit-time recompute deferred (gated on server-side rerouting-on-edit). Derivation + finalize hook are now BUILT (`web/src/lib/corridor/derive.ts`, `lib/plan/actions.ts`); reference-trip wire-up pending.
 **Owner:** Adam (ACW Creative)
 **Consumes:** `Trip.routePolyline` (day slice), `Day.startCoord` / `Day.coords` / `Day.label`, the day's place pool (`Day.segmentSuggestions` + `Day.waypoints`).
 **Feeds:** the v4 itinerary view — a day rendered as an ordered corridor of geographic city nodes, each anchoring a cluster of place tiles.
@@ -109,7 +109,7 @@ Inputs: the day's route slice (`DaySegment.coordinates`, or the `Trip.routePolyl
 - **Base extract:** `cities5000` **recommended** — the balance point: small enough to bundle offline, granular enough that small towns on empty stretches are available for the adaptive fallback (§2.1.2 step 6). Flag `cities1000` as the escalation if the fallback needs finer granularity on very empty stretches. This extract choice is itself a decision — see §5-B.
 - **Region filter:** trimmed to the operating region (North America / US + Canada) to keep the bundle small.
 - **Fields consumed per row:** name, lat/lng, population, admin region. **Population drives the prominence filter** (§2.1.2).
-- **Storage: bundled flat FILE, not a DB table — ✅ RESOLVED (2026-07-06).** The extract ships as a processed static reference file (e.g. JSON), loaded in-memory by the derivation (~a few MB region-filtered). Rationale: the gazetteer is reference data consumed **only** by the finalize/derivation step to compute `corridorCities` — it is never queried at runtime; the app reads the persisted `corridorCities` result, not the gazetteer. Consequences: **no new DB table, no migration for the gazetteer, no PostGIS index**, and it does **not** trip the root `CLAUDE.md` new-table sign-off rule. In-memory loading also keeps recompute-on-edit fast enough for interactive edits (§3.1).
+- **Storage: bundled flat FILE, not a DB table — ✅ RESOLVED (2026-07-06).** The extract ships as a processed static reference file (e.g. JSON), loaded in-memory by the derivation (~a few MB region-filtered). Rationale: the gazetteer is reference data consumed **only** by the finalize/derivation step to compute `corridorCities` — it is never queried at runtime; the app reads the persisted `corridorCities` result, not the gazetteer. Consequences: **no new DB table, no migration for the gazetteer, no PostGIS index**, and it does **not** trip the root `CLAUDE.md` new-table sign-off rule. In-memory loading also keeps the derivation fast (§3.1).
   - *Physical location (backend step to confirm):* co-located with the derivation. Since the §3 hook point (`buildDaySuggestions` / the finalize server action) runs in the web workspace, the natural home is e.g. `web/src/lib/corridor/data/`; the `data/` pipeline dir is the alternative if the extract-processing script lives there. Confirm at build time.
 - **Offline, NOT a runtime API.** The intersection runs at finalize (and on route-affecting edits — §3.1) and the result persists on the record (§3), read offline thereafter — the same pattern as the land_agency / coverage / bortle enrichments. Clients never query GeoNames.
 - **Refresh cadence:** static dataset; refresh ~annually (cities don't move).
@@ -181,19 +181,17 @@ The request requires `milesFromStart` to reconcile with "whatever along-route di
 
 Clients (web + iPad) then **read** `Day.corridorCities` straight from the trip payload. v4 does **no** geometry math.
 
-### 3.1 When it's computed & recomputed — trigger: polyline change (✅ RESOLVED 2026-07-06)
+### 3.1 When it's computed — FINALIZE ONLY for now; edit-time recompute DEFERRED (revised 2026-07-06 after the build)
 
-`corridorCities` recomputes for a day **whenever that day's route polyline changes** — at finalize (the first computation) and on any later route-affecting edit.
+**As built:** `corridorCities` is computed at **finalize**, in `buildRouteAwareDays` (`web/src/lib/plan/actions.ts`) — the one place day polylines (`DaySegment.coordinates`) are server-side written, alongside the `Day.miles` / `driveHours` computation. Wired 2026-07-06.
 
-**Why one condition suffices:** waypoints **reroute** the day's polyline in this codebase (confirmed). Therefore *all* route-affecting edits — destination changes, start/end shifts, and waypoint add/remove/reorder — funnel through the single condition "polyline changed." No per-edit-type logic is needed.
+**Build finding — the assumed edit-time choke point does not exist.** This section originally required recompute on any route-affecting edit, reasoning that all edits funnel through a "polyline written" choke point where drive-time/distance already recompute. Recon during the build disproved that: waypoint add/remove/reorder only *clear* `trip.routePolyline` (repository layer), rerouting happens **client-side for display only** (MapColumn), and `Day.miles` / `driveHours` are **not** recomputed on edits — they carry the same pre-existing staleness.
 
-Consequences:
+**Decision (2026-07-06): accept finalize-only.** Edit-time recompute of `corridorCities` is **deferred**, gated on server-side rerouting-on-edit existing — a broader day-model concern than this spec. Post-edit corridor staleness exactly matches the existing drive-time/miles staleness, so corridors are no worse than their sibling day stats. Do not build edit-path rerouting for this feature alone.
 
-- **(a) Per-affected-day, not whole-trip.** Only days whose polyline changed recompute; untouched days keep their persisted `corridorCities` verbatim.
-- **(b) Corridor follows the actual route.** Adding a waypoint that reroutes the day CAN legitimately change the day's corridor cities — that is **correct** behavior, not churn: the corridor anchors the route actually driven.
-- **(c) Fast/synchronous recompute.** The recompute must be quick enough not to lag waypoint-edit interactions. This validates the in-memory flat-file gazetteer (§2.1.1) — a DB round-trip per waypoint edit would be too slow.
+**The polyline-change trigger remains the target model** for when server-side rerouting-on-edit exists. At that point the original consequences apply: (a) recompute per-affected-day, not whole-trip; (b) a rerouting waypoint legitimately changing corridor cities is correct behavior (the corridor anchors the route actually driven); (c) recompute must be fast enough for interactive edits — the in-memory flat-file gazetteer (§2.1.1) supports this, though measured derivation on real ~5k-coord day polylines is 130–440 ms/day (fine for finalize; an interactive edit path would want the cumulative-segment-length optimization in `alongRouteMiles()` consumers).
 
-**Hook location:** wherever the day's polyline is *written* — the common point route edits already funnel through for drive-time/distance recompute. Confirm the exact location during the build (it is the same choke point `Day.miles` updates flow through).
+**Still pending (separate small wire-up):** reference trips (`la-to-deadhorse`) via `resolve-suggestions.ts` — the finalize hook covers wizard-built trips only.
 
 ---
 
