@@ -3,6 +3,7 @@ import { LA_TO_DEADHORSE_POLYLINE } from "./alaska-route";
 import { enrichTrip } from "./enrich";
 import { resolveOvernights } from "./resolve-overnights";
 import { resolveSuggestions } from "./resolve-suggestions";
+import { resolveCorridorCities } from "./resolve-corridor-cities";
 import {
   loadAlaskaDoc,
   findFixedEventByDate,
@@ -3751,7 +3752,11 @@ export async function buildAlaskaTripFromMarkdown(): Promise<Trip> {
   // Same pattern for the SuggestedSection: pre-fetch the top photo-bearing
   // place per slide category per day. Pushes ~264 discovery calls to first
   // trip-load (cached after).
-  const trip = await resolveSuggestions(withOvernights);
+  const withSuggestions = await resolveSuggestions(withOvernights);
+  // Corridor city nodes per day, sliced from the trip routePolyline
+  // (docs/corridor-cities-spec.md §3 — reference trips get the same
+  // derivation the wizard finalize path runs). Synchronous, no network.
+  const trip = resolveCorridorCities(withSuggestions);
   cachedTrip = { version: parsed.version, trip };
   return trip;
 }
