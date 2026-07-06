@@ -1,7 +1,7 @@
 # Corridor-Cities on `Day` — Data-Model Spec
 
 **Scope:** web client data model (`web/src/lib/trips`) — one additive `Day` field + a finalize-time derivation step. No schema DDL (rides in `trips.payload` jsonb).
-**Status:** Draft — **spec only**. No code, no type change, no schema, no migration in this document. §5-B (gazetteer source + prominence filter) resolved 2026-07-06.
+**Status:** Draft — **spec only**. No code, no type change, no schema, no migration in this document. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger) resolved 2026-07-06.
 **Owner:** Adam (ACW Creative)
 **Consumes:** `Trip.routePolyline` (day slice), `Day.startCoord` / `Day.coords` / `Day.label`, the day's place pool (`Day.segmentSuggestions` + `Day.waypoints`).
 **Feeds:** the v4 itinerary view — a day rendered as an ordered corridor of geographic city nodes, each anchoring a cluster of place tiles.
@@ -109,7 +109,9 @@ Inputs: the day's route slice (`DaySegment.coordinates`, or the `Trip.routePolyl
 - **Base extract:** `cities5000` **recommended** — the balance point: small enough to bundle offline, granular enough that small towns on empty stretches are available for the adaptive fallback (§2.1.2 step 6). Flag `cities1000` as the escalation if the fallback needs finer granularity on very empty stretches. This extract choice is itself a decision — see §5-B.
 - **Region filter:** trimmed to the operating region (North America / US + Canada) to keep the bundle small.
 - **Fields consumed per row:** name, lat/lng, population, admin region. **Population drives the prominence filter** (§2.1.2).
-- **Offline-bundled, NOT a runtime API.** The gazetteer is bundled into the app/DB; the intersection runs **once at finalize** and the result persists on the record (§3), read offline thereafter — the same pattern as the land_agency / coverage / bortle enrichments. Clients never query GeoNames.
+- **Storage: bundled flat FILE, not a DB table — ✅ RESOLVED (2026-07-06).** The extract ships as a processed static reference file (e.g. JSON), loaded in-memory by the derivation (~a few MB region-filtered). Rationale: the gazetteer is reference data consumed **only** by the finalize/derivation step to compute `corridorCities` — it is never queried at runtime; the app reads the persisted `corridorCities` result, not the gazetteer. Consequences: **no new DB table, no migration for the gazetteer, no PostGIS index**, and it does **not** trip the root `CLAUDE.md` new-table sign-off rule. In-memory loading also keeps recompute-on-edit fast enough for interactive edits (§3.1).
+  - *Physical location (backend step to confirm):* co-located with the derivation. Since the §3 hook point (`buildDaySuggestions` / the finalize server action) runs in the web workspace, the natural home is e.g. `web/src/lib/corridor/data/`; the `data/` pipeline dir is the alternative if the extract-processing script lives there. Confirm at build time.
+- **Offline, NOT a runtime API.** The intersection runs at finalize (and on route-affecting edits — §3.1) and the result persists on the record (§3), read offline thereafter — the same pattern as the land_agency / coverage / bortle enrichments. Clients never query GeoNames.
 - **Refresh cadence:** static dataset; refresh ~annually (cities don't move).
 
 #### 2.1.2 Prominence filter — top-N with population floor, adaptive fallback, and spacing
@@ -120,8 +122,10 @@ Given a day's route polyline, produce the **ordered intermediate city nodes** be
 2. **Along-route order.** Order candidates by cumulative along-route distance from day start (`alongRouteMiles().miles`).
 3. **Population floor (preferred, not hard).** Prefer cities with population ≥ `pop_floor` (10,000). A preference, not a gate — see step 6.
 4. **Spacing.** No two nodes within `min_spacing_mi` (~50 route-miles) of each other; when candidates cluster, keep the higher-population one.
-5. **Top-N.** Cap intermediate nodes at `max_nodes` (4) per day, selecting by population among spacing-valid candidates.
+5. **Top-N (soft cap).** Cap intermediate nodes at `max_nodes` (4) per day, selecting by population among spacing-valid candidates. Soft — yields to step 6's gap guarantee (see precedence below).
 6. **Adaptive fallback (critical for empty overland stretches).** Guarantee at least one intermediate node per `max_gap_mi` (~150 route-miles): if no city clears `pop_floor` in a segment that long, **relax the floor** and take the most prominent (highest-population) available city — even a small town — so long empty stretches (remote NV, or AK on the LA→Deadhorse run) still get corridor anchors rather than a 300-mile gap with nothing. This is why the base extract must include sub-10k towns (§2.1.1).
+
+**Precedence — ✅ RESOLVED (2026-07-06): `max_gap_mi` WINS over `max_nodes`.** `max_nodes` is a **soft** clutter-prevention cap for normal-length days. On very long days (e.g. 300–900 mi Alaska/Deadhorse legs) where honoring the ≥ 1-node-per-`max_gap_mi` guarantee requires more than `max_nodes` intermediates, the cap **yields** and additional nodes are added. Rationale: leaving a 150+ mi corridor gap with no anchor is worse than exceeding the clutter cap, and long empty days genuinely have more corridor to anchor.
 
 #### 2.1.3 Tunable parameters
 
@@ -132,8 +136,8 @@ Every value below is a starting point, explicitly **TUNABLE** — to be adjusted
 | `buffer_mi` | 15 | Max perpendicular offset from the route polyline for a gazetteer city to be a candidate. |
 | `pop_floor` | 10,000 | Preferred minimum population — soft; relaxed by the adaptive fallback. |
 | `min_spacing_mi` | 50 | Minimum along-route distance between nodes; higher population wins within a cluster. |
-| `max_nodes` | 4 | Cap on intermediate nodes per day. |
-| `max_gap_mi` | 150 | Longest along-route gap allowed without a node before the population floor relaxes. |
+| `max_nodes` | 4 | **Soft** cap on intermediate nodes per day — yields to `max_gap_mi` on very long days (§2.1.2 precedence). |
+| `max_gap_mi` | 150 | Longest along-route gap allowed without a node before the population floor relaxes. **Wins over `max_nodes`.** |
 
 ### 2.2 `milesFromStart` — along-route cumulative distance (MUST)
 
@@ -177,6 +181,20 @@ The request requires `milesFromStart` to reconcile with "whatever along-route di
 
 Clients (web + iPad) then **read** `Day.corridorCities` straight from the trip payload. v4 does **no** geometry math.
 
+### 3.1 When it's computed & recomputed — trigger: polyline change (✅ RESOLVED 2026-07-06)
+
+`corridorCities` recomputes for a day **whenever that day's route polyline changes** — at finalize (the first computation) and on any later route-affecting edit.
+
+**Why one condition suffices:** waypoints **reroute** the day's polyline in this codebase (confirmed). Therefore *all* route-affecting edits — destination changes, start/end shifts, and waypoint add/remove/reorder — funnel through the single condition "polyline changed." No per-edit-type logic is needed.
+
+Consequences:
+
+- **(a) Per-affected-day, not whole-trip.** Only days whose polyline changed recompute; untouched days keep their persisted `corridorCities` verbatim.
+- **(b) Corridor follows the actual route.** Adding a waypoint that reroutes the day CAN legitimately change the day's corridor cities — that is **correct** behavior, not churn: the corridor anchors the route actually driven.
+- **(c) Fast/synchronous recompute.** The recompute must be quick enough not to lag waypoint-edit interactions. This validates the in-memory flat-file gazetteer (§2.1.1) — a DB round-trip per waypoint edit would be too slow.
+
+**Hook location:** wherever the day's polyline is *written* — the common point route edits already funnel through for drive-time/distance recompute. Confirm the exact location during the build (it is the same choke point `Day.miles` updates flow through).
+
 ---
 
 ## 4. Migration path
@@ -200,7 +218,7 @@ Every judgment call this spec makes, for your confirmation:
 - **A. `id` vs name-only.** Spec adds a stable `id` (slug) alongside `name`. Rationale: placeId grouping + city-scoped "Explore more" need a key that survives a name edit. **Confirm** we want the `id`, or accept name-only (simpler, but fragile as a key).
 - **B. Source of intermediate city nodes. ✅ RESOLVED (2026-07-06): GeoNames gazetteer intersection.** GeoNames populated places, offline-bundled, region-filtered to North America (US + Canada), intersected against the day route at finalize with the §2.1.2 prominence filter — top-N (`max_nodes` 4) with a soft population floor (`pop_floor` 10,000), `min_spacing_mi` 50, and an adaptive fallback (`max_gap_mi` 150) that relaxes the floor on empty stretches. All parameters tunable per §2.1.3. NOT a runtime API — precomputed at finalize, stored on the record, read offline (land_agency/coverage/bortle pattern). Refresh ~annually.
   - **Sub-decision — base extract:** `cities5000` **recommended** (small enough to bundle, granular enough for the adaptive fallback); escalate to `cities1000` only if the fallback proves too coarse on very empty stretches.
-  - **New questions raised by this resolution:** (1) **Where the bundle lives** — a DB table (note: new top-level tables need sign-off per root `CLAUDE.md`) vs. a flat file consumed only by the finalize step. (2) **`max_nodes` vs `max_gap_mi` precedence** — on a very long day (≳ 750 route-miles), the ≤ 4-node cap and the ≥ 1-node-per-150-mi guarantee can conflict; decide which yields. (3) **Canadian admin labels** — confirm GeoNames admin-region codes render `name` as expected for Canada (e.g. "Whitehorse, YT").
+  - **Follow-up questions raised by this resolution:** (1) **Where the bundle lives — ✅ RESOLVED (2026-07-06): bundled flat file, NOT a DB table** (§2.1.1). No new table, no migration, no PostGIS index; does not trip the new-table sign-off rule. Physical path confirmed at build time. (2) **`max_nodes` vs `max_gap_mi` precedence — ✅ RESOLVED (2026-07-06): `max_gap_mi` wins**; `max_nodes` is a soft clutter cap that yields on very long days (§2.1.2 precedence). (3) **Canadian admin labels — STILL OPEN:** confirm GeoNames admin-region codes render `name` as expected for Canada (e.g. "Whitehorse, YT"). *(Related resolution, recorded in §3.1: recompute trigger = per-day polyline change.)*
 - **C. Is the END city a node?** Spec says **yes** (`kind:"end"`, so overnight-adjacent places have an anchor and v4 renders a terminal marker). **Confirm**, or make the corridor start-and-intermediates only with the end implied by `Day.coords`.
 - **D. Bucketing rule + off-corridor cutoff.** Spec picks **"last city passed" (upstream anchor)** with **upstream tie-break**, and **excludes** places whose projection offset exceeds a cluster radius (default: reuse the **25-mi** discovery radius). **Confirm** the rule and the radius (25 mi may be too loose for tight city clusters — a tighter 5–10 mi may read better).
 - **E. Shared along-route helper.** Spec mandates a **new shared** `alongRouteMiles()` helper (§2.4) consumed by both this derivation and any future position-based ranking, because ranking today is a scalar `prominence_score` with **no** along-route definition to reuse, and `current-step.ts` is nav-specific. **Confirm** we create the shared helper (vs. inline the math here and refactor later).
