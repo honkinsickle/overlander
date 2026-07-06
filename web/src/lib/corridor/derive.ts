@@ -21,6 +21,11 @@
  */
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";
+import type { CorridorCity } from "@/lib/trips/types";
+
+/** Canonical definition lives in the payload contract (spec §1.1);
+ *  re-exported here for corridor-domain consumers. */
+export type { CorridorCity } from "@/lib/trips/types";
 
 /** One row of the bundled gazetteer (cities-na.json). */
 export type GazetteerCity = {
@@ -30,17 +35,6 @@ export type GazetteerCity = {
   lat: number;
   lng: number;
   pop: number;
-};
-
-/** Spec §1.1 shape. Lives here until the data-model wiring step adds it
- *  to lib/trips/types.ts (the web↔iPad contract). */
-export type CorridorCity = {
-  id: string;
-  name: string;
-  kind: "start" | "corridor" | "end";
-  coords: LngLat;
-  milesFromStart: number;
-  placeIds: string[];
 };
 
 /** Tunables per spec §2.1.3 — all soft defaults, to be tuned on real routes. */
