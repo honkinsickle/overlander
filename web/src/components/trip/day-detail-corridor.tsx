@@ -11,11 +11,11 @@ import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
  * anchoring a cluster of CategoryListCard place tiles in DETAILS mode (Details
  * → action, no Add — these places are already added).
  *
- * The data shape mirrors docs/corridor-cities-spec.md §1 (`CorridorCity`). Those
- * types are defined LOCALLY here — `Day.corridorCities` does NOT exist in the
- * data model yet (this component is fed hardcoded dummy data on a demo route).
- * When the model lands, swap these locals for the canonical types in
- * `lib/trips/types.ts`.
+ * `cities` is the canonical `Day.corridorCities` shape (`CorridorCity` from
+ * lib/trips/types.ts, per docs/corridor-cities-spec.md §1). Until place→node
+ * bucketing ships (spec §2.3, deferred), real data carries empty `placeIds` —
+ * nodes render as a bare corridor spine (city header + explore link, no
+ * tiles), which is the correct current state.
  *
  * Every interaction is stubbed // TODO: wire (Details, both "Explore more
  * [city]" links, and "Explore more of Day 01").
@@ -24,16 +24,9 @@ import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
 // TODO: wire — Details, "Explore more [city]", "Explore more of Day 01".
 const noop = () => {};
 
-/** Mirrors CorridorCity from docs/corridor-cities-spec.md §1.1 (local until the
- *  data model adds `Day.corridorCities`). */
-export type CorridorCity = {
-  id: string;
-  name: string;
-  kind: "start" | "corridor" | "end";
-  milesFromStart: number;
-  coords: [number, number];
-  placeIds: string[];
-};
+/** Canonical payload type, re-exported for existing demo importers. */
+export type { CorridorCity } from "@/lib/trips/types";
+import type { CorridorCity } from "@/lib/trips/types";
 
 /** The subset of BrowsePlace a tile needs, plus its browse category + id. */
 export type CorridorPlace = {
@@ -200,7 +193,9 @@ function CityNode({
   last: boolean;
 }) {
   const isStart = city.kind === "start";
-  const mileLabel = isStart ? "Start" : `${city.milesFromStart}mi`;
+  // Real derivation output is fractional (projected along-route miles);
+  // the gutter shows whole miles.
+  const mileLabel = isStart ? "Start" : `${Math.round(city.milesFromStart)}mi`;
 
   return (
     <div className="flex" style={{ paddingBottom: 22 }}>
