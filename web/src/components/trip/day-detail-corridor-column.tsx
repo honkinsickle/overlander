@@ -1,15 +1,24 @@
 "use client";
 
+import { useEffect, useRef, useState, useTransition } from "react";
 import { TripDetailHeader } from "@/components/trip/trip-detail-header";
 import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import {
+  CategoryBrowsePanel,
+  type BrowseTarget,
+} from "@/components/trip/category-browse-panel";
+import {
+  addWaypointAction,
+  removeWaypointAction,
+} from "@/lib/trips/actions";
+import type { AddedPlace } from "@/lib/trips/added-place";
 import type { CorridorCity, Day, Trip } from "@/lib/trips/types";
 
 /**
- * Slideup center column for the corridor integration (Phase 1) —
- * replaces the old all-days-stacked DayDetail with a SINGLE-DAY model:
+ * Slideup center column for the corridor integration — single-day model:
  *
  *   selectedDayId === null → Overview state: the trip-level hero
  *     (TripDetailHeader), which previously sat at the top of DayDetail's
@@ -18,8 +27,21 @@ import type { CorridorCity, Day, Trip } from "@/lib/trips/types";
  *     Day.corridorCities with the spec-§4 degraded two-node fallback for
  *     trips finalized before the corridor engine.
  *
- * Display-only in Phase 1: v4's interactions stay stubbed; editing +
- * recompute surfacing is Phase 3.
+ * Phase 3 editing (model A1 — an add is a waypoint, reroutes the day):
+ *   - "Explore more of Day NN" opens the re-homed CategoryBrowsePanel
+ *     scoped to the selected day; panel cards dispatch `trip:toggleAdded`.
+ *   - The listener here is the single consumer: add → addWaypointAction,
+ *     re-toggle/✕ → removeWaypointAction — both run Phase 0's decoupled
+ *     recomputeDay (reroute → miles/driveHours → corridor re-derive +
+ *     re-bucket), then revalidate; the corridor re-renders with the place
+ *     under its server-assigned node. NO client-side geometry — during
+ *     the round-trip the column shows a lightweight "Updating route…"
+ *     pending state.
+ *   - Remove controls appear ONLY on waypoint-backed tiles (`removable`,
+ *     set from day.waypoints membership); suggestions stay read-only.
+ *   - The map-overlay / FindNearby add paths stay INERT this phase (their
+ *     events reach this listener only if this column is mounted — they
+ *     are deferred deliberately; see Phase 3 scope).
  */
 export function DayDetailCorridorColumn({
   trip,
@@ -32,21 +54,146 @@ export function DayDetailCorridorColumn({
     ? trip.days.find((d) => d.id === selectedDayId)
     : undefined;
 
+  const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
+  const [isPending, startTransition] = useTransition();
+  // Keep the listener's trip fresh across revalidations without
+  // re-registering (day-detail's tripRef pattern).
+  const tripRef = useRef(trip);
+  tripRef.current = trip;
+
+  // ── Add flow: single listener for the browse panel's toggle events ──
+  useEffect(() => {
+    const onToggle = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          placeId?: string;
+          dayId?: string;
+          place?: AddedPlace;
+        }>
+      ).detail;
+      if (!d?.placeId || !d?.dayId) return;
+      const t = tripRef.current;
+      const targetDay = t.days.find((x) => x.id === d.dayId);
+      if (!targetDay) return;
+      const { placeId, dayId, place } = d;
+      const exists = targetDay.waypoints.some((wp) => wp.id === placeId);
+      startTransition(async () => {
+        if (exists) {
+          await removeWaypointAction(t.id, dayId, placeId);
+        } else if (place) {
+          await addWaypointAction(t.id, dayId, {
+            id: place.id,
+            title: place.title,
+            description: place.description,
+            photoUrl: place.photoUrl,
+            coords: place.coords,
+          });
+        }
+      });
+    };
+    window.addEventListener("trip:toggleAdded", onToggle);
+    return () => window.removeEventListener("trip:toggleAdded", onToggle);
+  }, []);
+
+  // Keep browse-panel cards' "Added ✓" state truthful: broadcast the
+  // selected day's canonical waypoint ids (the old addedByDay's
+  // trip:addedSync contract, now derived from server state).
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("trip:addedSync", {
+        detail: { addedIds: day?.waypoints.map((wp) => wp.id) ?? [] },
+      }),
+    );
+  }, [day]);
+
+  const openBrowse = () => {
+    if (!day) return;
+    const i = trip.days.findIndex((d) => d.id === day.id);
+    const prev = i > 0 ? trip.days[i - 1] : undefined;
+    setBrowseTarget({
+      category: "scenic",
+      dayNumber: day.dayNumber,
+      tripId: trip.id,
+      dayId: day.id,
+      dayCoords: day.coords,
+      dayStartCoords:
+        day.startCoord ?? prev?.coords ?? (i === 0 ? trip.startCoords : undefined),
+      dayLabel: day.label,
+      dayDate: day.date,
+    });
+  };
+
+  const removePlace = (placeId: string) => {
+    if (!day) return;
+    const dayId = day.id;
+    startTransition(async () => {
+      await removeWaypointAction(trip.id, dayId, placeId);
+    });
+  };
+
   return (
-    <div className="h-full overflow-y-auto no-scrollbar">
-      {day ? (
-        <DayDetailCorridor
-          dayLabel={`Day ${day.dayNumber} — ${formatDayDate(day.date)}`}
-          dayNumber={day.dayNumber}
-          routeLabel={day.label}
-          heroImageUrl={day.heroImage}
-          heroAlt={day.label}
-          cities={day.corridorCities ?? fallbackCorridor(day)}
-          places={placePool(day)}
-        />
-      ) : (
-        <TripDetailHeader trip={trip} />
+    <div className="relative h-full">
+      <div
+        className={
+          "h-full overflow-y-auto no-scrollbar" +
+          (isPending ? " opacity-60 pointer-events-none" : "")
+        }
+      >
+        {day ? (
+          <DayDetailCorridor
+            dayLabel={`Day ${day.dayNumber} — ${formatDayDate(day.date)}`}
+            dayNumber={day.dayNumber}
+            routeLabel={day.label}
+            heroImageUrl={day.heroImage}
+            heroAlt={day.label}
+            cities={day.corridorCities ?? fallbackCorridor(day)}
+            places={placePool(day)}
+            onRemovePlace={removePlace}
+            onExploreDay={openBrowse}
+          />
+        ) : (
+          <TripDetailHeader trip={trip} />
+        )}
+      </div>
+
+      {/* Pending strip during the add/remove → reroute → re-derive round
+       *  trip (~1s). No client geometry — the corridor updates when the
+       *  recomputed day revalidates in. */}
+      {isPending && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center"
+          style={{
+            top: 10,
+            gap: 8,
+            padding: "6px 14px",
+            borderRadius: 8,
+            backgroundColor: "var(--bg-card)",
+            border: "1px solid var(--border-subtle)",
+            color: "var(--text-muted)",
+            fontFamily: "var(--ff-display)",
+            fontSize: 13,
+          }}
+        >
+          <span
+            aria-hidden
+            className="animate-pulse rounded-full"
+            style={{ width: 8, height: 8, backgroundColor: "var(--amber)" }}
+          />
+          Updating route…
+        </div>
       )}
+
+      <CategoryBrowsePanel
+        target={browseTarget}
+        onClose={() => {
+          setBrowseTarget(null);
+          // Panel and detail overlay are one flow — closing the panel
+          // tucks the detail away too (old DayDetail contract).
+          window.dispatchEvent(
+            new CustomEvent("trip:openDetail", { detail: { place: null } }),
+          );
+        }}
+      />
     </div>
   );
 }
@@ -101,7 +248,9 @@ function fallbackCorridor(day: Day): CorridorCity[] {
 /** Resolve the day's place pool (spec §1.4: segmentSuggestions ∪
  *  waypoints) into the tile shape v4 renders. BrowsePlace maps by
  *  field-pick; Waypoint shims photoAlt from its title and lifts
- *  rating/reviewCount out of `community`. The one category-union
+ *  rating/reviewCount out of `community`. Waypoint entries are marked
+ *  `removable` and come LAST so the byId map favors them on id overlap
+ *  (an added suggestion's tile becomes removable). The one category-union
  *  mismatch: BrowsePlace's "overnight" slide key has no card palette —
  *  render those tiles with the camping treatment. */
 function placePool(day: Day): CorridorPlace[] {
@@ -125,6 +274,7 @@ function placePool(day: Day): CorridorPlace[] {
     photoAlt: wp.title,
     rating: wp.community?.rating,
     reviewCount: wp.community?.reviewCount,
+    removable: true,
   }));
   return [...fromSuggestions, ...fromWaypoints];
 }
