@@ -22,6 +22,9 @@ dist/
 # Supabase CLI working state (link/db diff/db push scratch)
 supabase/.temp/
 
+# Vercel project link (root-level; web/.gitignore covers web/.vercel)
+.vercel/
+
 # Logs
 *.log
 
