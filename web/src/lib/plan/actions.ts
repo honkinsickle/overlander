@@ -33,6 +33,7 @@ import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
+import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 import {
   mapboxStaticForCoords,
@@ -229,10 +230,24 @@ async function buildRouteAwareDays(args: {
           gazetteer,
         }) ?? undefined,
     }));
+    // Place→node bucketing (spec §2.3) — runs after derivation, over the
+    // same segmentSuggestions pool just written to each day. Waypoints are
+    // always [] at finalize, so the pool is suggestions-only here.
+    for (let i = 0; i < days.length; i++) {
+      const cc = days[i].corridorCities;
+      if (!cc) continue;
+      days[i].corridorCities = bucketPlacesIntoCorridor({
+        cities: cc,
+        places: daySuggestions[i].all,
+        line: segments[i].coordinates,
+      });
+    }
     console.log(
       `[finalize] corridor cities: ${days
         .map((d) => d.corridorCities?.length ?? 0)
-        .join(",")} nodes per day`,
+        .join(",")} nodes per day (${days
+        .map((d) => d.corridorCities?.reduce((n, c) => n + c.placeIds.length, 0) ?? 0)
+        .join(",")} places bucketed)`,
     );
 
     // Simplified polyline for the trip-level hero static image. Mapbox

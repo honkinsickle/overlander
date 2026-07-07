@@ -5,6 +5,7 @@ import {
   haversineMi,
 } from "@/lib/routing/point-to-polyline";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
+import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 
 /**
@@ -85,14 +86,30 @@ export function resolveCorridorCities(trip: Trip): Trip {
     const iB = idxAtMile(b.miles, cursor);
     if (iB - iA < 1) return day;
 
-    const corridorCities = deriveCorridorCities({
-      line: line.slice(iA, iB + 1),
+    const daySlice = line.slice(iA, iB + 1);
+    const spine = deriveCorridorCities({
+      line: daySlice,
       start: { name: startName, coords: startCoord },
       end: { name: endName, coords: day.coords },
       gazetteer,
     });
     cursor = iB;
-    return corridorCities ? { ...day, corridorCities } : day;
+    if (!spine) return day;
+    // Place→node bucketing (spec §2.3) over the day's full place pool —
+    // segmentSuggestions ∪ waypoints (spec §1.4 resolution set). Reference
+    // days typically carry only waypoints; suggestions-era days get both.
+    const pool = [
+      ...(day.segmentSuggestions ?? []),
+      ...day.waypoints,
+    ]
+      .filter((p) => p.coords)
+      .map((p) => ({ id: p.id, coords: p.coords as [number, number] }));
+    const corridorCities = bucketPlacesIntoCorridor({
+      cities: spine,
+      places: pool,
+      line: daySlice,
+    });
+    return { ...day, corridorCities };
   });
   return { ...trip, days };
 }
