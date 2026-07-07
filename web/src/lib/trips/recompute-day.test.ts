@@ -98,7 +98,12 @@ test("stops = start + coord-bearing waypoints in order + end", async () => {
   ]);
 });
 
-test("reorder semantics: waypoint order changes the stop order", async () => {
+test("geography is the order: stops sort by along-chord position, not array order", async () => {
+  // Model A1 (Phase 3): with reorder dropped, routing must be
+  // geographic — an appended add would otherwise route LAST regardless
+  // of position (a downtown-LA add after a Utah-border stop turned the
+  // 385-mi reference Day 1 into 1,136 mi). Array order [b, a] must
+  // still route [a, b] (a is nearer the day start along the chord).
   const { calls, route } = fakeRoute();
   const trip = makeTrip({
     waypoints: [wp("b", [-119.2, 34.3]), wp("a", [-118.7, 34.1])],
@@ -107,10 +112,10 @@ test("reorder semantics: waypoint order changes the stop order", async () => {
   assert.deepEqual(
     calls[0].slice(1, 3),
     [
-      [-119.2, 34.3],
       [-118.7, 34.1],
+      [-119.2, 34.3],
     ],
-    "stops follow waypoint array order",
+    "stops follow along-route order regardless of array order",
   );
 });
 

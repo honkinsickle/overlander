@@ -4,6 +4,7 @@ import {
   type LngLat,
   type Route,
 } from "@/lib/routing/route-between";
+import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
@@ -57,13 +58,23 @@ export async function recomputeDay(
     day.startCoord ?? (i === 0 ? trip.startCoords : trip.days[i - 1].coords);
   if (!startCoord) return null;
 
-  // Start → coord-bearing waypoints in array order → end. Dedupe
-  // consecutive duplicates (Mapbox 422s on them — a waypoint sitting
-  // exactly on a day boundary is legal input here).
+  // Start → coord-bearing waypoints → end. Waypoints are routed in
+  // GEOGRAPHIC order — projected along the direct start→end chord —
+  // not array order ("geography is the order", Phase 3 model A1): adds
+  // append to the array, and insertion-order routing sent a downtown-LA
+  // add AFTER a Utah-border stop (385-mi day → 1,136 mi). The chord is
+  // an API-free ordering proxy; the real polyline doesn't exist until
+  // we route. Dedupe consecutive duplicates (Mapbox 422s on them).
+  const chord: LngLat[] = [startCoord, day.coords];
+  const orderedWaypoints = day.waypoints
+    .filter((wp) => wp.coords)
+    .map((wp) => ({
+      coords: wp.coords as LngLat,
+      mi: alongRouteMiles(wp.coords as LngLat, chord)?.miles ?? 0,
+    }))
+    .sort((a, b) => a.mi - b.mi);
   const stops: LngLat[] = [startCoord];
-  for (const wp of day.waypoints) {
-    if (wp.coords) stops.push(wp.coords);
-  }
+  for (const wp of orderedWaypoints) stops.push(wp.coords);
   stops.push(day.coords);
   const deduped: LngLat[] = [];
   for (const c of stops) {
