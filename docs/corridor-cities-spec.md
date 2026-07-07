@@ -1,7 +1,7 @@
 # Corridor-Cities on `Day` — Data-Model Spec
 
 **Scope:** web client data model (`web/src/lib/trips`) — one additive `Day` field + a finalize-time derivation step. No schema DDL (rides in `trips.payload` jsonb).
-**Status:** Draft. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger, base extract, Canadian labels) all resolved 2026-07-06. §3.1 revised 2026-07-06: computed at finalize only; edit-time recompute deferred (gated on server-side rerouting-on-edit). §3.2 records that townless far-north gaps are correct and close the extract question. BUILT: derivation + gazetteer (`web/src/lib/corridor/*`), finalize hook (`lib/plan/actions.ts`), reference-trip resolver (`lib/trips/resolve-corridor-cities.ts`), v4 view wired to real data. Remaining: place→node bucketing (§2.3), deferred tuning pass, production slideup integration.
+**Status:** Draft. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger, base extract, Canadian labels) all resolved 2026-07-06. §3.1 revised 2026-07-06: computed at finalize only; edit-time recompute deferred (gated on server-side rerouting-on-edit). §3.2 records that townless far-north gaps are correct and close the extract question. BUILT: derivation + gazetteer (`web/src/lib/corridor/*`), finalize hook (`lib/plan/actions.ts`), reference-trip resolver (`lib/trips/resolve-corridor-cities.ts`), v4 view wired to real data, place→node bucketing (§2.3, `web/src/lib/corridor/bucket.ts`, tuned `max_attach_mi=25`). Remaining: deferred tuning items (population-vs-prominence; gap-fill pile-up on townless approaches), production slideup integration.
 **Owner:** Adam (ACW Creative)
 **Consumes:** `Trip.routePolyline` (day slice), `Day.startCoord` / `Day.coords` / `Day.label`, the day's place pool (`Day.segmentSuggestions` + `Day.waypoints`).
 **Feeds:** the v4 itinerary view — a day rendered as an ordered corridor of geographic city nodes, each anchoring a cluster of place tiles.
@@ -139,6 +139,7 @@ Every value below is a starting point, explicitly **TUNABLE** — to be adjusted
 | `max_nodes` | 4 | **Soft** cap on intermediate nodes per day — yields to `max_gap_mi` on very long days (§2.1.2 precedence). |
 | `max_gap_mi` | 150 | Longest along-route gap allowed without a node before the population floor relaxes. **Wins over `max_nodes`.** |
 | `anchor_guard_mi` | 10 | Candidates within this many route-miles of the Start/End anchor are dropped (both ends). Suppresses metro-neighborhood nodes (e.g. Glendale@6 out of LA); tuned 2026-07-06 — margin-safe below legit near-anchor cities at ~16 mi (Sacramento, Kalispell), which 15 clears by only 1 mi and 20 wrongly deletes. |
+| `max_attach_mi` | 25 | Place→node bucketing (§2.3): a place attaches only if within this many along-route miles of its NEAREST node; farther places stay unbucketed (future POI-node candidates — honest-gap behavior, e.g. Mojave Preserve Viewpoint@177 stays out). Tuned 2026-07-06 — 15 orphans 8 legitimately-attachable places across test days; 40 is byte-identical to 25 (nothing sits in the 25–40 mi band), so 25 is the tightest guard with full coverage. |
 
 ### 2.2 `milesFromStart` — along-route cumulative distance (MUST)
 
@@ -153,16 +154,18 @@ Exact method, per node:
 
 Units: store miles (matches `Day.miles`, the v4 label, and `Waypoint.subtitle` mileage). Turf works in configurable units — request miles directly.
 
-### 2.3 Place → node bucketing + edge cases
+### 2.3 Place → node bucketing + edge cases — ✅ BUILT 2026-07-06 (`web/src/lib/corridor/bucket.ts`)
 
-For each place in the pool, compute its own along-route position `placeMi` by the **same §2.2 projection** (project `place.coords` onto `L`). Then assign:
+For each place in the pool, compute its along-route position `placeMi` and offset by the **same §2.2 projection** (`alongRouteMiles(place.coords, L)`). Then assign:
 
-- **Primary rule — "last city passed" (upstream anchor):** attach the place to the node with the greatest `milesFromStart` that is still `≤ placeMi`. Intuition: as you drive, a place clusters under the city you most recently passed. This matches the v4 mental model ("cluster under each city").
-- **Edge — place before the first intermediate / near start** (`placeMi` < first corridor node): attach to the **start** node.
-- **Edge — equidistant / tie** between two candidate nodes: tie-break to the **upstream** (earlier, smaller-mile) node. Deterministic, no coin-flip.
-- **Edge — far off-corridor:** compute the projection **offset** (perpendicular distance from `place.coords` to `P`). If offset > a cluster radius (recommend reusing the discovery **25-mi** segment radius, or a tighter value — §5-D), **exclude** the place from all nodes (it is not really "on" this corridor). Excluded places simply don't appear in v4's clustered view; they remain in `segmentSuggestions`.
-- **Edge — past the end** (`placeMi` > end node mile): attach to the **end** node.
-- **Ordering within a node:** by `placeMi` ascending (then by `prominence_score` desc as a stable tiebreak, if present).
+- **Primary rule — NEAREST node by along-route mile — ✅ DECIDED 2026-07-06, superseding the original "last city passed / upstream anchor" rule below.** Attach the place to the node whose `milesFromStart` is closest to `placeMi`. The originally-specced upstream rule (attach to the greatest node ≤ `placeMi`) would put a place at mile 60 under a start node 60 mi back rather than a corridor node 9 mi ahead; nearest matches the "cluster under the city it's actually by" reading of the v4 model. Upstream is retained **only as the equidistant tie-break**.
+- **Gate 1 — on-corridor:** the place's projection offset must be ≤ `buffer_mi` (the same 15-mi gate the city filter uses — tighter than §5-D's original 25-mi discovery-radius suggestion). A place well off-route doesn't cluster even if its mileage lands near a node.
+- **Gate 2 — max attach distance:** the place must be within `max_attach_mi` (25, §2.1.3) of its nearest node. Places farther than that from EVERY node stay **unbucketed** — consistent with the §3.2 townless-gap philosophy: better honestly unclustered (a future POI-node candidate) than clustered under a distant city. Excluded/unbucketed places simply don't appear in v4's clustered view; they remain in `segmentSuggestions`.
+- **Edge — equidistant / tie** between two candidate nodes: tie-break to the **upstream** (earlier, smaller-mile) node. Deterministic. As built, "tie" means within **0.01 mi (~50 ft)** — summed-haversine cumulative miles carry float noise (~1e-14) that would otherwise flip exact ties downstream.
+- **Edges — before the first intermediate / past the end:** fall out of the nearest rule naturally (nearest node is Start / End respectively), still subject to gate 2.
+- **Ordering within a node:** by `placeMi` ascending. (The original `prominence_score` tiebreak is not implemented — revisit with the POI-layer work if needed.)
+
+Bucketing runs as a **separate pure function after** the §2.1.2 spine filter (`bucketPlacesIntoCorridor` — the filter itself stays city-only), at both hook points: finalize (`buildRouteAwareDays`, pool = the day's `segmentSuggestions`) and the reference resolver (pool = `segmentSuggestions` ∪ `waypoints`, the §1.4 resolution set — reference days typically carry only waypoints).
 
 ### 2.4 Reconciliation with corridor ranking (CRITICAL)
 
@@ -195,8 +198,9 @@ Clients (web + iPad) then **read** `Day.corridorCities` straight from the trip p
 **Reference trips — ✅ BUILT (2026-07-06).** Reference trips have no per-day polylines (days are static `label` / `coords` / `miles` plus one trip-level `routePolyline`), so they can't reuse the finalize path's per-`DaySegment` derivation. Instead, `web/src/lib/trips/resolve-corridor-cities.ts` slices each day's polyline out of the full `routePolyline` and runs the identical `deriveCorridorCities` call, wired into `buildAlaskaTripFromMarkdown` after `resolveSuggestions`. Two behaviors worth recording:
 - **Out-and-back forward-cursor slicing.** The reference route revisits places (LA→Deadhorse→Port Angeles passes Anchorage three times and retraces highways southbound), so global nearest-point projection would snap a day's start/end onto the WRONG pass and produce absurd 1,000–1,500 mi "slices." Because days are route-ordered, each day projects its endpoints only onto the route from the previous day's end vertex FORWARD (a monotonic cursor), pinning every day to its own pass. Any future out-and-back reference trip depends on this; a global-nearest slice does not work.
 - **Skipped days don't advance the cursor.** Layover / buffer days ("Port Angeles, WA · Buffer") and off-route excursions whose labels don't split into a start/end, or whose slice is degenerate, are left without `corridorCities` (clients fall back per decision F) and do not move the cursor.
+- **End-projection bound (fix 2026-07-06, found during §2.3 bucketing verification).** The forward cursor alone doesn't prevent a repeated destination from projecting onto a later pass *ahead* of the cursor — Day 16 (Tok→Anchorage) grabbed the day-27 Anchorage pass, producing a 1,300-mi "slice" and stranding days 17–27. The end projection is therefore bounded by the day's published `miles` × 1.5 + 25 mi slack — the same multi-pass hazard the cursor handles, closed from the other side.
 
-Result on la-to-deadhorse: 35/66 days get corridors (the rest are buffer/excursion days), sliced + derived in ~5 s at snapshot time.
+Result on la-to-deadhorse: 38/66 days get corridors (the rest are buffer/excursion days), sliced + derived in ~5 s at snapshot time.
 
 ### 3.2 Townless gaps are correct — the `max_gap_mi` guarantee is conditional on candidates existing (2026-07-06)
 
