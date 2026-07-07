@@ -7,11 +7,16 @@ import { cn } from "@/lib/utils";
 /**
  * Day Column Planner — visual port of Paper "Trip Running — aligned"
  * (rail `A7M-0` → Planner subtree). Reproduces the board's literal
- * geometry (183w column, 25px section headers, 112px day cards).
+ * geometry (25px section headers, 112px day cards).
  *
- * Static / presentational only. Nav toggles and day-card selection are
- * stubbed no-ops — navigation, links, and the itinerary/add-to-day data
- * flow are wired in a separate pass.
+ * Selection wiring (Phase 1 of the corridor integration): when the
+ * caller passes `activeDayId` + `onSelectDay` / `onSelectOverview`, the
+ * rail is the slideup's day-SELECTOR — clicking a day shows that day's
+ * corridor view; clicking Overview shows the trip-level state
+ * (activeDayId === null). Without those props (legacy /trip/[id]) the
+ * rail stays presentational: first day active, clicks inert.
+ *
+ * Guides / Places to Visit / Trip Settings remain stubbed no-ops.
  *
  * Structure (top → bottom):
  *   - Overview · Guides · Places to Visit · Trip Settings nav headers
@@ -19,13 +24,16 @@ import { cn } from "@/lib/utils";
  *   - Day stack: a gutter timeline (d0N code + connector) beside each card
  */
 
-// TODO: wire — interactions are intentionally inert until the linking pass.
+// TODO: wire — Guides / Places to Visit / Trip Settings still inert.
 const noop = () => {};
 
 export function DayColumnPlanner({
   tripId,
   days,
   overlay = false,
+  activeDayId,
+  onSelectDay,
+  onSelectOverview,
 }: {
   tripId: string;
   days: Day[];
@@ -33,7 +41,13 @@ export function DayColumnPlanner({
    *  the slideup caller wraps it in a translucent overlay. Default false for
    *  the legacy /trip/[id] page which provides no wrapper. */
   overlay?: boolean;
+  /** Selected day id, or null for the Overview state. Omit entirely
+   *  (undefined) for the legacy presentational rendering. */
+  activeDayId?: string | null;
+  onSelectDay?: (dayId: string) => void;
+  onSelectOverview?: () => void;
 }) {
+  const wired = activeDayId !== undefined;
   return (
     <aside
       aria-label="Days"
@@ -44,8 +58,15 @@ export function DayColumnPlanner({
       )}
       style={overlay ? undefined : { backgroundColor: "var(--bg-base)" }}
     >
-      {/* Nav — Overview is the primary/active section (green + amber). */}
-      <NavHeader label="Overview" tone="active" height={55} fontSize={25} />
+      {/* Nav — Overview is active when no day is selected (or always, in
+       *  the legacy presentational rendering). */}
+      <NavHeader
+        label="Overview"
+        tone={!wired || activeDayId === null ? "active" : "idle"}
+        height={55}
+        fontSize={25}
+        onClick={onSelectOverview}
+      />
       <NavHeader label="Guides" tone="idle" height={50} fontSize={20} />
       <NavHeader label="Places to Visit" tone="idle" height={50} fontSize={20} />
       <SettingsHeader label="Trip Settings" />
@@ -71,14 +92,20 @@ export function DayColumnPlanner({
         </span>
       </div>
 
-      {/* Day stack — gutter timeline + cards. First day renders selected. */}
+      {/* Day stack — gutter timeline + cards. Wired: the selected day
+       *  renders active. Legacy: first day renders selected. */}
       <nav
         aria-label="Days"
         className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
         style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
       >
         {days.map((day, i) => (
-          <DayCard key={day.id} day={day} active={i === 0} />
+          <DayCard
+            key={day.id}
+            day={day}
+            active={wired ? activeDayId === day.id : i === 0}
+            onClick={onSelectDay ? () => onSelectDay(day.id) : undefined}
+          />
         ))}
       </nav>
     </aside>
@@ -92,17 +119,19 @@ function NavHeader({
   tone,
   height,
   fontSize,
+  onClick,
 }: {
   label: string;
   tone: "active" | "idle";
   height: number;
   fontSize: number;
+  onClick?: () => void;
 }) {
   const active = tone === "active";
   return (
     <button
       type="button"
-      onClick={noop}
+      onClick={onClick ?? noop}
       className="flex items-center justify-between shrink-0 border-b border-border-subtle"
       style={{
         height,
@@ -156,7 +185,15 @@ function SettingsHeader({ label }: { label: string }) {
 
 /** Day card + its gutter timeline segment. The selected card is an inset,
  *  rounded steel surface; unselected cards fill to the right edge. */
-function DayCard({ day, active }: { day: Day; active: boolean }) {
+function DayCard({
+  day,
+  active,
+  onClick,
+}: {
+  day: Day;
+  active: boolean;
+  onClick?: () => void;
+}) {
   const at = new Date(`${day.date}T00:00:00`);
   const weekday = at
     .toLocaleDateString("en-US", { weekday: "short" })
@@ -194,7 +231,7 @@ function DayCard({ day, active }: { day: Day; active: boolean }) {
       {/* Card body. */}
       <button
         type="button"
-        onClick={noop}
+        onClick={onClick ?? noop}
         data-day-id={day.id}
         className="flex flex-col justify-between text-left shrink-0"
         style={
