@@ -37,6 +37,9 @@ export type CorridorPlace = {
   photoAlt: string;
   rating?: number;
   reviewCount?: number;
+  /** True for waypoint-backed tiles (user/editorial stops) — they get the
+   *  remove control. Suggestion-backed tiles stay read-only. */
+  removable?: boolean;
 };
 
 type Props = {
@@ -54,6 +57,12 @@ type Props = {
    *  optionally carrying place tiles that align to the marker, e.g.
    *  [{ mile: 40, placeIds: ["x"] }]. View-only — NOT part of the spec shape. */
   mileMarkers?: { mile: number; placeIds?: string[] }[];
+  /** Remove a waypoint-backed tile from the day (Phase 3 editing). Only
+   *  invoked for tiles whose place is `removable`. */
+  onRemovePlace?: (placeId: string) => void;
+  /** "Explore more of Day NN" footer CTA — opens the day-scoped browse
+   *  panel (Phase 3 add flow). */
+  onExploreDay?: () => void;
 };
 
 const GUTTER_W = 48;
@@ -67,6 +76,8 @@ export function DayDetailCorridor({
   cities,
   places,
   mileMarkers = [],
+  onRemovePlace,
+  onExploreDay,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   const dd = String(dayNumber).padStart(2, "0");
@@ -149,6 +160,7 @@ export function DayDetailCorridor({
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
               last={item.last && idx === items.length - 1}
+              onRemovePlace={onRemovePlace}
             />
           ) : (
             <MileTick key={`mk-${item.mile}`} mile={item.mile} tiles={item.tiles} />
@@ -160,7 +172,7 @@ export function DayDetailCorridor({
       <div style={{ padding: 15 }}>
         <button
           type="button"
-          onClick={noop}
+          onClick={onExploreDay ?? noop}
           className="w-full uppercase"
           style={{
             height: 44,
@@ -187,10 +199,12 @@ function CityNode({
   city,
   tiles,
   last,
+  onRemovePlace,
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
   last: boolean;
+  onRemovePlace?: (placeId: string) => void;
 }) {
   const isStart = city.kind === "start";
   // Real derivation output is fractional (projected along-route miles);
@@ -247,6 +261,11 @@ function CityNode({
               place={p}
               category={p.category}
               onOpen={noop}
+              onRemove={
+                p.removable && onRemovePlace
+                  ? () => onRemovePlace(p.id)
+                  : undefined
+              }
             />
           ))}
         </div>
