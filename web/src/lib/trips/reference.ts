@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveCorridorCities } from "./resolve-corridor-cities";
 import type { Trip } from "./types";
 
 /** Where the committed snapshot lives. Resolved from the Next.js project
@@ -25,13 +26,31 @@ export async function getReferenceTrip(id: string): Promise<Trip> {
 
   const fromDb = await tryFetchFromDb(id);
   if (fromDb) {
-    cachedReferenceTrip = { id, trip: fromDb };
-    return fromDb;
+    const trip = withCorridors(fromDb);
+    cachedReferenceTrip = { id, trip };
+    return trip;
   }
 
-  const fromSnapshot = await loadSnapshot();
+  const fromSnapshot = withCorridors(await loadSnapshot());
   cachedReferenceTrip = { id, trip: fromSnapshot };
   return fromSnapshot;
+}
+
+/** In-process corridor hydration (Option 1, 2026-07-07): stored
+ *  reference payloads predate the corridor engine, so derive
+ *  Day.corridorCities here — same resolveCorridorCities the seed-time
+ *  build runs — before the result is memoized above. Pays a one-time
+ *  cold cost per server process; skipped entirely once a reseeded
+ *  payload arrives already carrying corridors. */
+function withCorridors(trip: Trip): Trip {
+  if (trip.days.some((d) => d.corridorCities)) return trip;
+  const t0 = performance.now();
+  const resolved = resolveCorridorCities(trip);
+  const withCount = resolved.days.filter((d) => d.corridorCities).length;
+  console.log(
+    `[reference] corridor derivation: ${(performance.now() - t0).toFixed(0)}ms for ${withCount}/${resolved.days.length} days (memoized after first call)`,
+  );
+  return resolved;
 }
 
 async function tryFetchFromDb(id: string): Promise<Trip | null> {
