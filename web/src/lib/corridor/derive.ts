@@ -50,6 +50,11 @@ export type CorridorParams = {
    *  reads as a suburb of it, not a distinct corridor stop). Applied
    *  symmetrically to both ends. */
   anchorGuardMi: number;
+  /** Place→node bucketing (spec §2.3, used by bucket.ts, not the spine
+   *  filter): a place attaches only if within this many along-route miles
+   *  of its nearest node; farther places stay unbucketed. Tunable —
+   *  default pending real-route review. */
+  maxAttachMi: number;
 };
 
 export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
@@ -59,6 +64,7 @@ export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
   maxNodes: 4,
   maxGapMi: 150,
   anchorGuardMi: 10,
+  maxAttachMi: 25,
 };
 
 type Candidate = { city: GazetteerCity; mi: number };
