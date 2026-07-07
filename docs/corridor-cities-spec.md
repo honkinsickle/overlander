@@ -138,6 +138,7 @@ Every value below is a starting point, explicitly **TUNABLE** — to be adjusted
 | `min_spacing_mi` | 50 | Minimum along-route distance between nodes; higher population wins within a cluster. |
 | `max_nodes` | 4 | **Soft** cap on intermediate nodes per day — yields to `max_gap_mi` on very long days (§2.1.2 precedence). |
 | `max_gap_mi` | 150 | Longest along-route gap allowed without a node before the population floor relaxes. **Wins over `max_nodes`.** |
+| `anchor_guard_mi` | 10 | Candidates within this many route-miles of the Start/End anchor are dropped (both ends). Suppresses metro-neighborhood nodes (e.g. Glendale@6 out of LA); tuned 2026-07-06 — margin-safe below legit near-anchor cities at ~16 mi (Sacramento, Kalispell), which 15 clears by only 1 mi and 20 wrongly deletes. |
 
 ### 2.2 `milesFromStart` — along-route cumulative distance (MUST)
 
