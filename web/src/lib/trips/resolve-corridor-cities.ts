@@ -24,7 +24,11 @@ import gazetteer from "@/lib/corridor/data/cities-na.json";
  * start/end coords can be nearest to the WRONG pass of the route.
  * Because days are route-ordered, each day projects its endpoints only
  * onto the route from the previous day's end vertex forward, which pins
- * every day to its own pass.
+ * every day to its own pass. The END projection is additionally bounded
+ * by the day's published `miles` (×1.5 + slack) — a repeated destination
+ * can otherwise still project onto a later pass AHEAD of the cursor
+ * (Day 16 Tok→Anchorage grabbed the day-27 Anchorage pass, a 1,300-mi
+ * "slice", before this bound existed).
  *
  * Pure/synchronous — runs in the buildAlaskaTripFromMarkdown chain at
  * seed/snapshot time, so corridors persist in reference_trips payloads
@@ -80,8 +84,20 @@ export function resolveCorridorCities(trip: Trip): Trip {
     const window = line.slice(cursor);
     if (window.length < 2) return day;
     const a = alongRouteMiles(startCoord, window);
-    const b = alongRouteMiles(day.coords, window);
-    if (!a || !b || b.miles <= a.miles) return day;
+    if (!a) return day;
+    // Bound the END projection by the day's published length: a repeated
+    // destination (Anchorage is visited three times) can otherwise
+    // project onto a LATER pass ahead of the cursor, ballooning the
+    // slice and stranding the cursor downstream. 1.5× + 25 mi absorbs
+    // published-miles vs polyline drift while staying far below any
+    // later-pass distance.
+    const endCapIdx = day.miles
+      ? idxAtMile(a.miles + day.miles * 1.5 + 25, cursor)
+      : line.length - 1;
+    const endWindow = line.slice(cursor, endCapIdx + 1);
+    if (endWindow.length < 2) return day;
+    const b = alongRouteMiles(day.coords, endWindow);
+    if (!b || b.miles <= a.miles) return day;
     const iA = idxAtMile(a.miles, cursor);
     const iB = idxAtMile(b.miles, cursor);
     if (iB - iA < 1) return day;
