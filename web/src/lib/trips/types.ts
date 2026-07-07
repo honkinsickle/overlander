@@ -128,6 +128,40 @@ export type Day = {
    *  on the trip page — until then this is the source of truth that
    *  `suggestions` (one per category) was picked from. */
   segmentSuggestions?: import("@/lib/trip-browse/places").BrowsePlace[];
+  /** Ordered corridor of geographic city nodes for this day (Start →
+   *  intermediates → End), computed at finalize by the corridor
+   *  derivation (docs/corridor-cities-spec.md). Optional per spec
+   *  decision F: trips finalized before this existed lack it, and the
+   *  v4 view falls back to a degraded two-node Start→End corridor. */
+  corridorCities?: CorridorCity[];
+};
+
+/**
+ * One node in a day's corridor spine — a geographic city anchor with an
+ * along-route position and clustered place references. Persisted in
+ * trips.payload under each Day. See docs/corridor-cities-spec.md §1.
+ */
+export type CorridorCity = {
+  /** Stable slug, e.g. "los-angeles-ca". Identity for placeId grouping,
+   *  cross-day references, and city-scoped "Explore more" discovery. */
+  id: string;
+  /** Display label, e.g. "Los Angeles, CA". */
+  name: string;
+  /** Role of this node: the day's origin, an intermediate pass-through
+   *  city, or the overnight/end city. */
+  kind: "start" | "corridor" | "end";
+  /** `[lng, lat]` anchor on/near the day's route slice. */
+  coords: [number, number];
+  /** ALONG-ROUTE cumulative miles from the day's start node (0 for
+   *  start). Projected onto the route polyline — NOT straight-line and
+   *  NOT Waypoint.routeOffsetMi (perpendicular offset). Monotonically
+   *  non-decreasing across the ordered array. */
+  milesFromStart: number;
+  /** Ids of places clustered under this node, in display order.
+   *  References BrowsePlace.id (Day.segmentSuggestions) and/or
+   *  Waypoint.id (Day.waypoints) — reference, not nest; resolve against
+   *  the day's place pool at render. */
+  placeIds: string[];
 };
 
 export type Waypoint = {

@@ -32,6 +32,9 @@ import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
+import { deriveCorridorCities } from "@/lib/corridor/derive";
+import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
+import gazetteer from "@/lib/corridor/data/cities-na.json";
 import {
   mapboxStaticForCoords,
   mapboxStaticForRoute,
@@ -216,7 +219,36 @@ async function buildRouteAwareDays(args: {
       waypoints: [],
       suggestions: daySuggestions[i].byCategory,
       segmentSuggestions: daySuggestions[i].all,
+      // Corridor spine (docs/corridor-cities-spec.md §3): derived from the
+      // day's polyline slice + the bundled gazetteer. null (unusable line)
+      // → undefined, so the client falls back to the two-node corridor.
+      corridorCities:
+        deriveCorridorCities({
+          line: seg.coordinates,
+          start: { name: dayStartCity(i), coords: seg.startCoord },
+          end: { name: dayEndCity(i), coords: seg.endCoord },
+          gazetteer,
+        }) ?? undefined,
     }));
+    // Place→node bucketing (spec §2.3) — runs after derivation, over the
+    // same segmentSuggestions pool just written to each day. Waypoints are
+    // always [] at finalize, so the pool is suggestions-only here.
+    for (let i = 0; i < days.length; i++) {
+      const cc = days[i].corridorCities;
+      if (!cc) continue;
+      days[i].corridorCities = bucketPlacesIntoCorridor({
+        cities: cc,
+        places: daySuggestions[i].all,
+        line: segments[i].coordinates,
+      });
+    }
+    console.log(
+      `[finalize] corridor cities: ${days
+        .map((d) => d.corridorCities?.length ?? 0)
+        .join(",")} nodes per day (${days
+        .map((d) => d.corridorCities?.reduce((n, c) => n + c.placeIds.length, 0) ?? 0)
+        .join(",")} places bucketed)`,
+    );
 
     // Simplified polyline for the trip-level hero static image. Mapbox
     // Static API caps the URL at ~8KB; the full geometry routinely

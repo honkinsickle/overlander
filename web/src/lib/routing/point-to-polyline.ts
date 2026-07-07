@@ -111,6 +111,66 @@ export function haversineMi(
   return haversineKm(a, b) / KM_PER_MI;
 }
 
+/** Along-route projection (docs/corridor-cities-spec.md §2.4): project
+ *  `point` onto its nearest location on `path` and return
+ *  - `miles`: cumulative along-route distance from the path's start to
+ *    that projection (clamped to [0, total length] beyond the endpoints)
+ *  - `offsetMi`: perpendicular distance from `point` to the projection.
+ *  Consumed by the corridor-cities derivation (buffer gate via `offsetMi`,
+ *  node ordering + milesFromStart via `miles`). Returns null for an empty
+ *  or malformed path. */
+export function alongRouteMiles(
+  point: [number, number],
+  path: string | [number, number][],
+): { miles: number; offsetMi: number } | null {
+  if (!path) return null;
+  const coords = typeof path === "string" ? decodePolyline(path) : path;
+  if (coords.length === 0) return null;
+  if (coords.length === 1) {
+    return { miles: 0, offsetMi: haversineKm(point, coords[0]) / KM_PER_MI };
+  }
+
+  // Same equirectangular projection around the query point as the
+  // sibling functions — track WHICH segment (and where along it) won.
+  const p = project(point, point);
+  let minKm = Infinity;
+  let bestSeg = 0;
+  let bestT = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = project(coords[i], point);
+    const b = project(coords[i + 1], point);
+    const abx = b[0] - a[0];
+    const aby = b[1] - a[1];
+    const len2 = abx * abx + aby * aby;
+    let t = 0;
+    if (len2 > 0) {
+      t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+    }
+    const cx = a[0] + t * abx;
+    const cy = a[1] + t * aby;
+    const dx = p[0] - cx;
+    const dy = p[1] - cy;
+    const km = Math.sqrt(dx * dx + dy * dy);
+    if (km < minKm) {
+      minKm = km;
+      bestSeg = i;
+      bestT = t;
+    }
+  }
+
+  // Cumulative distance: full haversine length of every segment before
+  // the winning one, plus the winning segment's partial length.
+  let alongKm = 0;
+  for (let i = 0; i < bestSeg; i++) {
+    alongKm += haversineKm(coords[i], coords[i + 1]);
+  }
+  alongKm += bestT * haversineKm(coords[bestSeg], coords[bestSeg + 1]);
+
+  return { miles: alongKm / KM_PER_MI, offsetMi: minKm / KM_PER_MI };
+}
+
 /** Same projection math as `pointToPolylineMi`, but returns the closest
  *  point on the polyline (back-projected to lng/lat) along with the
  *  distance. Used by snap-to-route for the user-location marker. */
