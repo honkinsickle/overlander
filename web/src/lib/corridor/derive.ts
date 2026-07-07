@@ -35,6 +35,11 @@ export type GazetteerCity = {
   lat: number;
   lng: number;
   pop: number;
+  /** Administrative-significance tier precomputed from the GeoNames
+   *  feature code at gazetteer build time (scripts/build-cities-na.ts):
+   *  5 national capital · 4 admin1 seat · 3 county/borough seat ·
+   *  2 generic populated place · 1 city section/locality. */
+  tier: number;
 };
 
 /** Tunables per spec §2.1.3 — all soft defaults, to be tuned on real routes. */
@@ -135,10 +140,16 @@ export function deriveCorridorCities(input: {
   }
 
   // Steps 3–5: population floor (soft) + spacing + top-N. Greedy by
-  // population, deterministic tiebreaks, spacing enforced between
-  // intermediates only.
+  // PROMINENCE — administrative tier first (a county seat outranks a
+  // bigger raw-population neighborhood; tuned choice, spec §2.1.2),
+  // population within a tier, then deterministic tiebreaks. Spacing is
+  // enforced between intermediates only. Used by the top-N pass, the
+  // spacing cluster winner, and the adaptive gap-fill below.
   const byProminence = (a: Candidate, b: Candidate) =>
-    b.city.pop - a.city.pop || a.mi - b.mi || a.city.name.localeCompare(b.city.name);
+    b.city.tier - a.city.tier ||
+    b.city.pop - a.city.pop ||
+    a.mi - b.mi ||
+    a.city.name.localeCompare(b.city.name);
 
   const selected: Candidate[] = [];
   const preferred = candidates
@@ -155,13 +166,26 @@ export function deriveCorridorCities(input: {
   // most prominent unselected candidate inside it, floor relaxed.
   // Precedence (spec §2.1.2): the gap guarantee WINS over maxNodes.
   // Best-effort: a gap with no candidates at all stays open.
+  //
+  // One-fill-per-gap rule (spec §2.1.2, 2026-07-06): spacing-valid fills
+  // always shrink a gap meaningfully and may recurse (successive spaced
+  // fills legitimately cure a long gap). An UNSPACED fallback fill is a
+  // one-shot: any still-oversized sub-gap it leaves is accepted open —
+  // without this, the fallback walks candidate clusters node by node
+  // (five Anchorage suburbs in 43 mi) while never curing the real gap.
   const inGap = (c: Candidate, a: number, b: number) => c.mi > a && c.mi < b;
+  const acceptedOpen = new Set<string>();
+  const gapKey = (a: number, b: number) => `${a}:${b}`;
   for (;;) {
     const anchors = [0, ...selected.map((s) => s.mi), endMi].sort((x, y) => x - y);
     let fill: Candidate | undefined;
+    let fillWasUnspaced = false;
+    let gapA = 0;
+    let gapB = 0;
     for (let i = 1; i < anchors.length && !fill; i++) {
       const [a, b] = [anchors[i - 1], anchors[i]];
       if (b - a <= p.maxGapMi) continue;
+      if (acceptedOpen.has(gapKey(a, b))) continue;
       const unselected = candidates.filter(
         (c) => !selected.includes(c) && inGap(c, a, b),
       );
@@ -171,9 +195,18 @@ export function deriveCorridorCities(input: {
         (c) => c.mi >= a + p.minSpacingMi && c.mi <= b - p.minSpacingMi,
       );
       fill = (spaced.length ? spaced : unselected).sort(byProminence)[0];
+      if (fill) {
+        fillWasUnspaced = spaced.length === 0;
+        gapA = a;
+        gapB = b;
+      }
     }
     if (!fill) break;
     selected.push(fill);
+    if (fillWasUnspaced) {
+      if (fill.mi - gapA > p.maxGapMi) acceptedOpen.add(gapKey(gapA, fill.mi));
+      if (gapB - fill.mi > p.maxGapMi) acceptedOpen.add(gapKey(fill.mi, gapB));
+    }
   }
 
   selected.sort((a, b) => a.mi - b.mi);

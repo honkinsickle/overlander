@@ -30,8 +30,9 @@ function city(
   lngDeg: number,
   pop: number,
   latDeg = 0,
+  tier = 2,
 ): GazetteerCity {
-  return { name, admin, lat: latDeg, lng: lngDeg, pop };
+  return { name, admin, lat: latDeg, lng: lngDeg, pop, tier };
 }
 
 function derive(
@@ -101,6 +102,54 @@ test("spacing: of two clustered cities, the higher-population one wins", () => {
   const names = r.map((n) => n.name);
   assert.ok(names.includes("Bigger, CA"));
   assert.ok(!names.includes("Smaller, CA"));
+});
+
+test("admin-seat tier beats higher population within a spacing cluster", () => {
+  // The Ventura case: county seat (tier 3, 97k) vs bigger generic
+  // neighbor (tier 2, 200k), 13.8 mi apart — the seat wins the cluster.
+  const r = derive(1.4, [
+    city("Big Generic", "CA", 0.7, 200000, 0, 2),
+    city("County Seat", "CA", 0.5, 97000, 0, 3),
+  ]);
+  assert.ok(r);
+  const names = r.map((n) => n.name);
+  assert.ok(names.includes("County Seat, CA"), "seat selected");
+  assert.ok(!names.includes("Big Generic, CA"), "generic dropped");
+});
+
+test("gap-fill prefers the higher-tier candidate", () => {
+  // ~166 mi day, both candidates sub-floor and mid-gap; one fill
+  // resolves the gap. Tier 3 seat (pop 6.8k) must beat tier 2 (pop 20k).
+  const r = derive(2.4, [
+    city("Generic Town", "AK", 1.15, 9000, 0, 2), // sub-floor
+    city("Borough Seat", "AK", 1.25, 6800, 0, 3),
+  ]);
+  assert.ok(r);
+  const names = r.map((n) => n.name);
+  assert.ok(names.includes("Borough Seat, AK"), "higher tier fills the gap");
+  assert.ok(!names.includes("Generic Town, AK"), "lower tier not chained in");
+});
+
+test("one-fill-per-gap: an uncured unspaced fill does not chain", () => {
+  // Mid-cluster seat geometry that tier ranking ALONE doesn't prevent:
+  // the seat wins the spaced fill, then the unspaced fallback grabs ONE
+  // neighbor — the rule stops the walk upstream through the rest of the
+  // cluster (the gap it can't cure is accepted open).
+  const r = derive(5.8, [
+    city("Outer Suburb", "AK", 4.4, 8000, 0, 2), // ~304 mi
+    city("Near Suburb", "AK", 4.5, 8500, 0, 2), // ~311 mi
+    city("Mid Seat", "AK", 4.55, 6800, 0, 3), // ~314 mi
+    city("Upper Suburb", "AK", 4.6, 9000, 0, 2), // ~318 mi
+  ]);
+  assert.ok(r);
+  const names = r.map((n) => n.name);
+  assert.ok(names.includes("Mid Seat, AK"), "seat selected");
+  assert.ok(!names.includes("Outer Suburb, AK"), "upstream walk stopped");
+  const intermediates = r.filter((n) => n.kind === "corridor");
+  assert.ok(
+    intermediates.length <= 2,
+    `chain capped: got ${intermediates.length} intermediates`,
+  );
 });
 
 test("top-N: caps at max_nodes intermediates when gaps stay legal", () => {
