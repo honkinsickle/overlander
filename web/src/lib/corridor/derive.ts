@@ -52,8 +52,9 @@ export type CorridorParams = {
   anchorGuardMi: number;
   /** Place→node bucketing (spec §2.3, used by bucket.ts, not the spine
    *  filter): a place attaches only if within this many along-route miles
-   *  of its nearest node; farther places stay unbucketed. Tunable —
-   *  default pending real-route review. */
+   *  of its nearest node; farther places stay unbucketed. Tuned
+   *  2026-07-06 on real routes (spec §2.1.3): 15 orphans legit places,
+   *  40 is byte-identical to 25. */
   maxAttachMi: number;
 };
 
