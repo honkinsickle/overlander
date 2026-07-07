@@ -44,6 +44,12 @@ export type CorridorParams = {
   minSpacingMi: number;
   maxNodes: number;
   maxGapMi: number;
+  /** Candidates projecting within this many route-miles of the Start/End
+   *  anchors are dropped — de-dupe tolerance (spec §2.1 step 3) plus
+   *  metro-neighborhood suppression (a node too close to the start city
+   *  reads as a suburb of it, not a distinct corridor stop). Applied
+   *  symmetrically to both ends. */
+  anchorGuardMi: number;
 };
 
 export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
@@ -52,11 +58,8 @@ export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
   minSpacingMi: 50,
   maxNodes: 4,
   maxGapMi: 150,
+  anchorGuardMi: 10,
 };
-
-/** Candidates projecting within this many route-miles of the Start/End
- *  anchors are dropped (spec §2.1 step 3 de-dupe tolerance). */
-const ANCHOR_GUARD_MI = 3;
 
 type Candidate = { city: GazetteerCity; mi: number };
 
@@ -120,7 +123,7 @@ export function deriveCorridorCities(input: {
     }
     const r = alongRouteMiles([city.lng, city.lat], line);
     if (!r || r.offsetMi > p.bufferMi) continue;
-    if (r.miles < ANCHOR_GUARD_MI || r.miles > endMi - ANCHOR_GUARD_MI) continue;
+    if (r.miles < p.anchorGuardMi || r.miles > endMi - p.anchorGuardMi) continue;
     candidates.push({ city, mi: r.miles });
   }
 
