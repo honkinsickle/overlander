@@ -65,6 +65,8 @@ function makeTrip(day: Partial<Day>, extra: Partial<Trip> = {}): Trip {
     startLocation: "Los Angeles, CA",
     endLocation: "Santa Barbara, CA",
     startCoords: [-118.24, 34.05],
+    weatherHiF: 75,
+    weatherLoF: 55,
     days: [
       {
         id: "day-1",
