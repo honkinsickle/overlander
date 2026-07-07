@@ -28,10 +28,37 @@ const COL = {
   lat: 4,
   lng: 5,
   featureClass: 6,
+  featureCode: 7,
   country: 8,
   admin1: 10,
   population: 14,
 } as const;
+
+/** Administrative-significance tier from the GeoNames feature code —
+ *  lets ranking weight a county seat or capital above a raw-population
+ *  neighborhood (spec §2.1.2 prominence). Precomputed here per the
+ *  flat-file philosophy so derive.ts stays mapping-free.
+ *    5 PPLC   national capital
+ *    4 PPLA   admin1 seat (state/province capital)
+ *    3 PPLA2  admin2 seat (county/borough seat)
+ *    2 —      generic populated place (PPL, PPLA3/4, PPLS, …)
+ *    1 PPLX/PPLL/PPLQ  city section / locality / abandoned */
+function tierForFeatureCode(code: string): number {
+  switch (code) {
+    case "PPLC":
+      return 5;
+    case "PPLA":
+      return 4;
+    case "PPLA2":
+      return 3;
+    case "PPLX":
+    case "PPLL":
+    case "PPLQ":
+      return 1;
+    default:
+      return 2;
+  }
+}
 
 /** GeoNames Canadian admin1 codes are numeric (admin1CodesASCII.txt gives
  *  full names only), so postal abbreviations need a static map. US admin1
@@ -58,6 +85,7 @@ type GazetteerCity = {
   lat: number;
   lng: number;
   pop: number;
+  tier: number;
 };
 
 const [citiesPath, admin1Path] = process.argv.slice(2);
@@ -113,7 +141,7 @@ for (const row of rows) {
     console.error(`skipping malformed row: ${f.slice(0, 3).join(" | ")}`);
     continue;
   }
-  cities.push({ name, admin, lat, lng, pop });
+  cities.push({ name, admin, lat, lng, pop, tier: tierForFeatureCode(f[COL.featureCode]) });
   if (country === "US") usCount++;
   else caCount++;
 }
