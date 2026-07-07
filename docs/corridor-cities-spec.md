@@ -209,7 +209,9 @@ Clients (web + iPad) then **read** `Day.corridorCities` straight from the trip p
 - **Skipped days don't advance the cursor.** Layover / buffer days ("Port Angeles, WA · Buffer") and off-route excursions whose labels don't split into a start/end, or whose slice is degenerate, are left without `corridorCities` (clients fall back per decision F) and do not move the cursor.
 - **End-projection bound (fix 2026-07-06, found during §2.3 bucketing verification).** The forward cursor alone doesn't prevent a repeated destination from projecting onto a later pass *ahead* of the cursor — Day 16 (Tok→Anchorage) grabbed the day-27 Anchorage pass, producing a 1,300-mi "slice" and stranding days 17–27. The end projection is therefore bounded by the day's published `miles` × 1.5 + 25 mi slack — the same multi-pass hazard the cursor handles, closed from the other side.
 
-Result on la-to-deadhorse: 38/66 days get corridors (the rest are buffer/excursion days), sliced + derived in ~5 s at snapshot time.
+Result on la-to-deadhorse: 38/66 days get corridors (the rest are buffer/excursion days).
+
+- **Runtime hydration (2026-07-07, "Option 1"):** stored reference payloads (prod `reference_trips` row + committed snapshot) predate the engine, so `getReferenceTrip` (`lib/trips/reference.ts`) runs `resolveCorridorCities` in-process on whatever payload it fetches, before memoizing — 360 ms cold per server process (Next runtime; the ~4 s smoke figure is tsx overhead), zero afterwards, skipped entirely once a payload arrives already carrying corridors. No DB write, no snapshot regeneration; an eventual reseed simply makes the hydration a no-op.
 
 ### 3.2 Townless gaps are correct — the `max_gap_mi` guarantee is conditional on candidates existing (2026-07-06)
 
