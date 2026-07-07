@@ -36,6 +36,10 @@ type Props = {
   /** "yoTrippin Verified" provenance line. Default true (per the board). */
   verified?: boolean;
   onOpen?: (e?: React.MouseEvent) => void;
+  /** When present, renders a small remove (✕) control top-right. Corridor
+   *  passes this only for waypoint-backed tiles — suggestions stay
+   *  read-only (Phase 3 editing model). */
+  onRemove?: () => void;
 };
 
 /** Compact a review count: 9300 → "9.3k", 5000 → "5k", 881 → "881". */
@@ -50,6 +54,7 @@ export function CategoryListCard({
   status,
   verified = true,
   onOpen,
+  onRemove,
 }: Props) {
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
@@ -57,9 +62,29 @@ export function CategoryListCard({
   return (
     <div
       onClick={onOpen}
-      className="flex items-start overflow-clip rounded-md"
+      className="relative flex items-start overflow-clip rounded-md"
       style={{ width: 400, gap: 13, backgroundColor: "var(--bg-card)" }}
     >
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Remove ${place.title} from day`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="absolute flex items-center justify-center"
+          style={{
+            top: 2,
+            right: 2,
+            width: 24,
+            height: 24,
+            color: "var(--text-muted)",
+          }}
+        >
+          <RemoveX />
+        </button>
+      )}
       {/* Hero — photo (category-color fallback) + icon badge. */}
       <div
         role="img"
@@ -233,6 +258,25 @@ function StarIcon() {
       fill="var(--amber-dark)"
     >
       <path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" />
+    </svg>
+  );
+}
+
+/** Small ✕ for the waypoint-tile remove control. */
+function RemoveX() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      className="shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+    >
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
     </svg>
   );
 }
