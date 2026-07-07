@@ -93,9 +93,16 @@ export async function recomputeDay(
       gazetteer,
     });
     if (spine) {
-      const pool = [...(day.segmentSuggestions ?? []), ...day.waypoints]
-        .filter((p) => p.coords)
-        .map((p) => ({ id: p.id, coords: p.coords as LngLat }));
+      // Dedupe by id: adding a suggested place mints a waypoint with the
+      // SAME id while the suggestion stays in segmentSuggestions — without
+      // this the place buckets twice and the corridor renders twin tiles.
+      const pool: { id: string; coords: LngLat }[] = [];
+      const seen = new Set<string>();
+      for (const p of [...(day.segmentSuggestions ?? []), ...day.waypoints]) {
+        if (!p.coords || seen.has(p.id)) continue;
+        seen.add(p.id);
+        pool.push({ id: p.id, coords: p.coords });
+      }
       derived.corridorCities = bucketPlacesIntoCorridor({
         cities: spine,
         places: pool,

@@ -162,6 +162,37 @@ test("waypoints bucket into the recomputed corridor", async () => {
   assert.ok(ventura?.placeIds.includes("ventura-stop"), "waypoint bucketed under Ventura");
 });
 
+test("a place present as BOTH suggestion and waypoint buckets once (added-suggestion overlap)", async () => {
+  // Adding a suggested place mints a waypoint with the SAME id while the
+  // suggestion stays in segmentSuggestions — the bucket pool must dedupe
+  // or the corridor renders a duplicate tile.
+  const { route } = fakeRoute();
+  const trip = makeTrip({
+    waypoints: [wp("shared", [-119.28, 34.27])],
+    segmentSuggestions: [
+      {
+        id: "shared",
+        coords: [-119.28, 34.27],
+        title: "Shared Place",
+        photoAlt: "Shared Place",
+        pills: [],
+        stats: [],
+        mention: { primary: "", secondary: "" },
+        description: "",
+        pullquote: { text: "", name: "", meta: "" },
+        placeInfo: { address: "" },
+        cta: "",
+      },
+    ],
+  });
+  const r = await recomputeDay(trip, "day-1", { route });
+  assert.ok(r?.corridorCities);
+  const hits = r.corridorCities.flatMap((c) =>
+    c.placeIds.filter((id) => id === "shared"),
+  );
+  assert.equal(hits.length, 1, `bucketed once, got ${hits.length}`);
+});
+
 test("unsplittable label: miles recompute, corridor comes back undefined", async () => {
   const { route } = fakeRoute();
   const trip = makeTrip({ label: "Port Angeles Buffer" });
