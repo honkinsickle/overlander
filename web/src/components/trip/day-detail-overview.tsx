@@ -112,7 +112,7 @@ export function DayDetailOverview({
       )}
 
       {/* ── Places ──────────────────────────────────────────── */}
-      <section id="places" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
+      <section id="places" className="shrink-0 flex flex-col w-[var(--rail-card-w)] pb-[20px]">
         <SectionBanner title="Top Places to Visit" subtitle={placesSubtitle} />
         <div className="flex flex-col pt-[11px]">
           {places.slice(0, VISIBLE_PLACES).map((p, i) => (
