@@ -34,6 +34,7 @@ export function DayColumnPlanner({
   activeDayId,
   onSelectDay,
   onSelectOverview,
+  onScrollTo,
 }: {
   tripId: string;
   days: Day[];
@@ -46,6 +47,9 @@ export function DayColumnPlanner({
   activeDayId?: string | null;
   onSelectDay?: (dayId: string) => void;
   onSelectOverview?: () => void;
+  /** Switch to Overview and scroll its column to the named section
+   *  (#guides / #places). Wired to the Guides / Places to Visit nav. */
+  onScrollTo?: (anchor: "guides" | "places") => void;
 }) {
   const wired = activeDayId !== undefined;
   return (
@@ -67,8 +71,20 @@ export function DayColumnPlanner({
         fontSize={25}
         onClick={onSelectOverview}
       />
-      <NavHeader label="Guides" tone="idle" height={50} fontSize={20} />
-      <NavHeader label="Places to Visit" tone="idle" height={50} fontSize={20} />
+      <NavHeader
+        label="Guides"
+        tone="idle"
+        height={50}
+        fontSize={20}
+        onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
+      />
+      <NavHeader
+        label="Places to Visit"
+        tone="idle"
+        height={50}
+        fontSize={20}
+        onClick={onScrollTo ? () => onScrollTo("places") : undefined}
+      />
       <SettingsHeader label="Trip Settings" />
 
       {/* Itinerary header — same green/amber treatment as Overview, no toggle. */}

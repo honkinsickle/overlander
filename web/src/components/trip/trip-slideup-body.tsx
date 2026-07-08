@@ -57,6 +57,22 @@ export function TripSlideupBody({
       );
     }
   }, []);
+  // Rail Guides / Places to Visit → ensure the Overview state, then ask
+  // the column to scroll to that section. selectDay(null) + the bumped
+  // scrollRequest batch into one commit, so the section is mounted by
+  // the time the column's scroll effect fires. The nonce re-triggers the
+  // scroll when the same section is tapped twice.
+  const [scrollRequest, setScrollRequest] = useState<{
+    anchor: "guides" | "places";
+    nonce: number;
+  } | null>(null);
+  const selectSection = useCallback(
+    (anchor: "guides" | "places") => {
+      selectDay(null);
+      setScrollRequest((prev) => ({ anchor, nonce: (prev?.nonce ?? 0) + 1 }));
+    },
+    [selectDay],
+  );
   // True while the Add-Waypoints panel (CategoryBrowsePanel) is open. When
   // it is, the top-bar search drives THAT panel's search mode, so the
   // standalone Find Nearby zero-state must not also mount (it would peek
@@ -161,6 +177,7 @@ export function TripSlideupBody({
               activeDayId={selectedDayId}
               onSelectDay={(id) => selectDay(id)}
               onSelectOverview={() => selectDay(null)}
+              onScrollTo={selectSection}
             />
           </div>
 
@@ -173,7 +190,11 @@ export function TripSlideupBody({
               borderRight: "1px solid var(--border-subtle)",
             }}
           >
-            <DayDetailCorridorColumn trip={trip} selectedDayId={selectedDayId} />
+            <DayDetailCorridorColumn
+              trip={trip}
+              selectedDayId={selectedDayId}
+              scrollRequest={scrollRequest}
+            />
           </div>
         </>
       )}

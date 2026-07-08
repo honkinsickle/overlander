@@ -73,13 +73,27 @@ const OVERVIEW_GUIDES: OverviewGuide[] = [
 export function DayDetailCorridorColumn({
   trip,
   selectedDayId,
+  scrollRequest,
 }: {
   trip: Trip;
   selectedDayId: string | null;
+  /** Bumped by the rail's Guides/Places nav to scroll the Overview to a
+   *  section. `nonce` re-triggers the scroll even on the same anchor. */
+  scrollRequest?: { anchor: "guides" | "places"; nonce: number } | null;
 }) {
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
     : undefined;
+
+  // Rail Guides/Places → scroll the mounted Overview to the section.
+  // Batched with the Overview switch upstream, so by the time this
+  // effect fires (post-commit) the section is in the DOM.
+  useEffect(() => {
+    if (!scrollRequest) return;
+    document
+      .getElementById(scrollRequest.anchor)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [scrollRequest]);
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const [isPending, startTransition] = useTransition();
