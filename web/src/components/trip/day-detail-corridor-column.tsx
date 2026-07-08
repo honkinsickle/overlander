@@ -271,6 +271,7 @@ export function DayDetailCorridorColumn({
             placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
             places={topPlacesForTrip(trip)}
             onOpenPlace={openTripPlaceDetail}
+            addPlaceholder
           />
         )}
       </div>

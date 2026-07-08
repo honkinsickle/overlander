@@ -64,8 +64,11 @@ type Props = {
    *  shared MapDetailOverlay via the caller. */
   onOpenPlace?: (id: string) => void;
   /** Add a place to a day. When omitted, place cards render read-only
-   *  (no Add button) — the Overview default. */
+   *  (no wired Add) — but see `addPlaceholder`. */
   onAddPlace?: (id: string) => void;
+  /** Render an inert "Add to" placeholder button on place cards (no
+   *  target day, tap does nothing). Overview sets this. */
+  addPlaceholder?: boolean;
 };
 
 export function DayDetailOverview({
@@ -79,6 +82,7 @@ export function DayDetailOverview({
   dayNumber,
   onOpenPlace,
   onAddPlace,
+  addPlaceholder = false,
 }: Props) {
   return (
     <div
@@ -119,6 +123,7 @@ export function DayDetailOverview({
               dayNumber={dayNumber}
               onOpen={onOpenPlace ? () => onOpenPlace(p.id) : undefined}
               onAdd={onAddPlace ? () => onAddPlace(p.id) : undefined}
+              addPlaceholder={addPlaceholder}
             />
           ))}
         </div>
@@ -342,12 +347,17 @@ function PlaceCard({
   dayNumber,
   onOpen,
   onAdd,
+  addPlaceholder = false,
 }: {
   place: OverviewPlace;
   n: number;
   dayNumber?: number;
   onOpen?: () => void;
   onAdd?: () => void;
+  /** Render the Add button as an inert visual placeholder (no target
+   *  day → label "Add to", tap does nothing). Overview uses this since
+   *  there's no selected day to add into. */
+  addPlaceholder?: boolean;
 }) {
   const { category } = place;
   const ctaBg = `var(--cat-${category}-cta-bg)`;
@@ -463,12 +473,12 @@ function PlaceCard({
             >
               {place.description}
             </p>
-            {onAdd && (
+            {(onAdd || addPlaceholder) && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAdd();
+                  onAdd?.();
                 }}
                 className="flex items-center justify-center self-start gap-1 rounded shrink-0"
                 style={{
@@ -484,7 +494,7 @@ function PlaceCard({
                 }}
               >
                 <Plus />
-                Add to Day {dayNumber}
+                {dayNumber !== undefined ? `Add to Day ${dayNumber}` : "Add to"}
               </button>
             )}
           </div>
