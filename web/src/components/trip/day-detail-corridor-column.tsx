@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { TripDetailHeader } from "@/components/trip/trip-detail-header";
+import { DayDetailOverview } from "@/components/trip/day-detail-overview";
 import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import { topPlacesForTrip } from "@/lib/trips/top-places";
 import {
   CategoryBrowsePanel,
   type BrowseTarget,
@@ -153,14 +154,13 @@ export function DayDetailCorridorColumn({
     });
   };
 
-  // Corridor tile "Details →" — resolve the placeId to its source
-  // (waypoint or segmentSuggestion) and open the shared MapDetailOverlay
-  // via trip:openDetail, exactly as the browse cards do. Waypoints pass
-  // the full enriched record so all detail sections render; suggestions
-  // pass the id/title/photo/coords/description subset.
-  const openPlaceDetail = (placeId: string) => {
-    if (!day) return;
-    const wp = day.waypoints.find((w) => w.id === placeId);
+  // Resolve a placeId within a given day to its source (waypoint or
+  // segmentSuggestion) and open the shared MapDetailOverlay via
+  // trip:openDetail, exactly as the browse cards do. Waypoints pass the
+  // full enriched record so all detail sections render; suggestions pass
+  // the id/title/photo/coords/description subset. Returns true if found.
+  const dispatchPlaceDetail = (d: Day, placeId: string): boolean => {
+    const wp = d.waypoints.find((w) => w.id === placeId);
     if (wp) {
       window.dispatchEvent(
         new CustomEvent("trip:openDetail", {
@@ -169,8 +169,8 @@ export function DayDetailCorridorColumn({
               id: wp.id,
               title: wp.title,
               photoUrl: wp.photoUrl,
-              dayNumber: day.dayNumber,
-              dayId: day.id,
+              dayNumber: d.dayNumber,
+              dayId: d.id,
               coords: wp.coords,
               description: wp.description,
               waypoint: wp,
@@ -179,10 +179,10 @@ export function DayDetailCorridorColumn({
           },
         }),
       );
-      return;
+      return true;
     }
-    const sug = day.segmentSuggestions?.find((s) => s.id === placeId);
-    if (!sug) return;
+    const sug = d.segmentSuggestions?.find((s) => s.id === placeId);
+    if (!sug) return false;
     window.dispatchEvent(
       new CustomEvent("trip:openDetail", {
         detail: {
@@ -190,8 +190,8 @@ export function DayDetailCorridorColumn({
             id: sug.id,
             title: sug.title,
             photoUrl: sug.photoUrl,
-            dayNumber: day.dayNumber,
-            dayId: day.id,
+            dayNumber: d.dayNumber,
+            dayId: d.id,
             coords: sug.coords,
             description: sug.description,
             dayRelative: true,
@@ -199,6 +199,19 @@ export function DayDetailCorridorColumn({
         },
       }),
     );
+    return true;
+  };
+
+  // Corridor tile Details — resolve within the selected day.
+  const openPlaceDetail = (placeId: string) => {
+    if (day) dispatchPlaceDetail(day, placeId);
+  };
+
+  // Overview place Details — no selected day, so resolve trip-wide.
+  const openTripPlaceDetail = (placeId: string) => {
+    for (const d of trip.days) {
+      if (dispatchPlaceDetail(d, placeId)) return;
+    }
   };
 
   return (
@@ -223,7 +236,14 @@ export function DayDetailCorridorColumn({
             onExploreDay={openBrowse}
           />
         ) : (
-          <TripDetailHeader trip={trip} />
+          <DayDetailOverview
+            routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
+            heroImageUrl={trip.heroImage}
+            heroAlt={trip.title}
+            placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
+            places={topPlacesForTrip(trip)}
+            onOpenPlace={openTripPlaceDetail}
+          />
         )}
       </div>
 
