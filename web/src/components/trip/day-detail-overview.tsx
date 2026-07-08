@@ -35,10 +35,12 @@ export type OverviewGuide = {
 
 export type OverviewPlace = Pick<
   BrowsePlace,
-  "title" | "photoUrl" | "photoAlt" | "description" | "rating" | "reviewCount"
+  "id" | "title" | "photoUrl" | "photoAlt" | "description" | "rating" | "reviewCount"
 > & {
   category: BrowseCardCategory;
-  detour: { miles: number; minutes?: number };
+  /** Leg-relative detour. Optional — omitted for the trip-level Overview
+   *  (no defined leg); the card hides the off-route meta line when absent. */
+  detour?: { miles: number; minutes?: number };
   verified?: boolean;
 };
 
@@ -47,12 +49,20 @@ type Props = {
   routeLabel: string;
   heroImageUrl?: string;
   heroAlt?: string;
-  guidesSubtitle: string;
-  guides: OverviewGuide[];
+  guidesSubtitle?: string;
+  /** Empty (or omitted) → the Guides section is not rendered. */
+  guides?: OverviewGuide[];
   placesSubtitle: string;
   places: OverviewPlace[];
-  /** Drives the "Add to Day N" CTA label on place cards. */
-  dayNumber: number;
+  /** Drives the "Add to Day N" CTA label. Omit for read-only (trip-level)
+   *  Overview — with no `onAddPlace` the Add button is hidden. */
+  dayNumber?: number;
+  /** Open a place's detail (read-only). When set, place cards open the
+   *  shared MapDetailOverlay via the caller. */
+  onOpenPlace?: (id: string) => void;
+  /** Add a place to a day. When omitted, place cards render read-only
+   *  (no Add button) — the Overview default. */
+  onAddPlace?: (id: string) => void;
 };
 
 export function DayDetailOverview({
@@ -60,10 +70,12 @@ export function DayDetailOverview({
   heroImageUrl,
   heroAlt = "",
   guidesSubtitle,
-  guides,
+  guides = [],
   placesSubtitle,
   places,
   dayNumber,
+  onOpenPlace,
+  onAddPlace,
 }: Props) {
   return (
     <div
@@ -79,23 +91,32 @@ export function DayDetailOverview({
         <Hero routeLabel={routeLabel} imageUrl={heroImageUrl} alt={heroAlt} />
       </section>
 
-      {/* ── Guides ──────────────────────────────────────────── */}
-      <section id="guides" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
-        <SectionBanner title="Guides" subtitle={guidesSubtitle} />
-        <div className="flex gap-[13px] px-[10px] pt-[11px]">
-          {guides.map((g) => (
-            <GuideTile key={g.title} guide={g} />
-          ))}
-        </div>
-        <MoreButton label="More Guides" topGap={19.25} uppercase={false} tracking="0" />
-      </section>
+      {/* ── Guides ── rendered only when there are guides to show. ─── */}
+      {guides.length > 0 && (
+        <section id="guides" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
+          <SectionBanner title="Guides" subtitle={guidesSubtitle ?? ""} />
+          <div className="flex gap-[13px] px-[10px] pt-[11px]">
+            {guides.map((g) => (
+              <GuideTile key={g.title} guide={g} />
+            ))}
+          </div>
+          <MoreButton label="More Guides" topGap={19.25} uppercase={false} tracking="0" />
+        </section>
+      )}
 
       {/* ── Places ──────────────────────────────────────────── */}
       <section id="places" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
         <SectionBanner title="Top Places to Visit" subtitle={placesSubtitle} />
         <div className="flex flex-col pt-[11px]">
           {places.map((p, i) => (
-            <PlaceCard key={p.title} place={p} n={i + 1} dayNumber={dayNumber} />
+            <PlaceCard
+              key={p.id}
+              place={p}
+              n={i + 1}
+              dayNumber={dayNumber}
+              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : undefined}
+              onAdd={onAddPlace ? () => onAddPlace(p.id) : undefined}
+            />
           ))}
         </div>
         <MoreButton label="More Places to Visit" uppercase={false} tracking="0" />
@@ -316,23 +337,33 @@ function PlaceCard({
   place,
   n,
   dayNumber,
+  onOpen,
+  onAdd,
 }: {
   place: OverviewPlace;
   n: number;
-  dayNumber: number;
+  dayNumber?: number;
+  onOpen?: () => void;
+  onAdd?: () => void;
 }) {
   const { category } = place;
   const ctaBg = `var(--cat-${category}-cta-bg)`;
   const ctaBorder = `var(--cat-${category}-cta-border)`;
   const meta =
     place.rating !== undefined ? `${place.rating.toFixed(1)}` : undefined;
-  const off = [
-    `+${place.detour.miles} mi`,
-    place.detour.minutes !== undefined ? `+${place.detour.minutes} min off-route` : null,
-    `Day ${dayNumber}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // Off-route meta line — only when a real detour is supplied (omitted for
+  // the trip-level Overview, which has no leg to measure against).
+  const off = place.detour
+    ? [
+        `+${place.detour.miles} mi`,
+        place.detour.minutes !== undefined
+          ? `+${place.detour.minutes} min off-route`
+          : null,
+        dayNumber !== undefined ? `Day ${dayNumber}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
 
   return (
     <div className="relative shrink-0 self-center" style={{ width: 404, paddingBlock: 6 }}>
@@ -342,7 +373,7 @@ function PlaceCard({
       </div>
 
       <article
-        onClick={noop}
+        onClick={onOpen ?? noop}
         className="flex flex-col overflow-clip"
         style={{
           minHeight: 190,
@@ -429,42 +460,46 @@ function PlaceCard({
             >
               {place.description}
             </p>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                noop();
-              }}
-              className="flex items-center justify-center self-start gap-1 rounded shrink-0"
-              style={{
-                width: 168,
-                height: 23,
-                padding: "0 17px 0 22px",
-                backgroundColor: ctaBg,
-                outline: `1px solid ${ctaBorder}`,
-                color: "var(--text-primary)",
-                fontFamily: "var(--ff-display)",
-                fontSize: 12,
-                lineHeight: "16px",
-              }}
-            >
-              <Plus />
-              Add to Day {dayNumber}
-            </button>
+            {onAdd && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdd();
+                }}
+                className="flex items-center justify-center self-start gap-1 rounded shrink-0"
+                style={{
+                  width: 168,
+                  height: 23,
+                  padding: "0 17px 0 22px",
+                  backgroundColor: ctaBg,
+                  outline: `1px solid ${ctaBorder}`,
+                  color: "var(--text-primary)",
+                  fontFamily: "var(--ff-display)",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                }}
+              >
+                <Plus />
+                Add to Day {dayNumber}
+              </button>
+            )}
           </div>
         </div>
 
-        <span
-          style={{
-            marginTop: 16,
-            color: "var(--amber)",
-            fontFamily: "var(--ff-mono)",
-            fontSize: 11,
-            lineHeight: "14px",
-          }}
-        >
-          {off}
-        </span>
+        {off && (
+          <span
+            style={{
+              marginTop: 16,
+              color: "var(--amber)",
+              fontFamily: "var(--ff-mono)",
+              fontSize: 11,
+              lineHeight: "14px",
+            }}
+          >
+            {off}
+          </span>
+        )}
       </article>
     </div>
   );
