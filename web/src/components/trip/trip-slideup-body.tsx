@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
-import { DayDetail } from "@/components/trip/day-detail";
+import { DayDetailCorridorColumn } from "@/components/trip/day-detail-corridor-column";
 import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
 import { MakeItMineCta } from "@/components/trip/make-it-mine-cta";
 import { MapColumn } from "@/components/trip/map-column";
@@ -32,6 +33,30 @@ export function TripSlideupBody({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  // Single-day selection (Phase 1 corridor integration): null = Overview
+  // state, otherwise the day shown in the corridor column. Seeds from the
+  // ?day= deep-link (the old DayDetail's scroll-to contract, now a
+  // selection); updates rewrite the param and re-emit `trip:activeDay`
+  // for the listeners that tracked the old scroll-spy (FindNearbyPanel).
+  const searchParams = useSearchParams();
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(() => {
+    const queried = searchParams.get("day");
+    return queried && trip.days.some((d) => d.id === queried) ? queried : null;
+  });
+  const selectDay = useCallback((dayId: string | null) => {
+    setSelectedDayId(dayId);
+    const url = new URL(window.location.href);
+    if (dayId) url.searchParams.set("day", dayId);
+    else url.searchParams.delete("day");
+    window.history.replaceState(null, "", url.toString());
+    if (dayId) {
+      window.dispatchEvent(
+        new CustomEvent("trip:activeDay", {
+          detail: { id: dayId, source: "column" },
+        }),
+      );
+    }
+  }, []);
   // True while the Add-Waypoints panel (CategoryBrowsePanel) is open. When
   // it is, the top-bar search drives THAT panel's search mode, so the
   // standalone Find Nearby zero-state must not also mount (it would peek
@@ -104,7 +129,7 @@ export function TripSlideupBody({
        *  top-bar search drives the panel's in-place <PlaceSearch>. */}
       {searchActive && !browseOpen && (
         <div
-          className="absolute top-[72px] bottom-[10px] left-[10px] w-[662px] z-30 overflow-hidden rounded-b-[14px]"
+          className="absolute top-[72px] bottom-[10px] left-[10px] w-[660px] z-30 overflow-hidden rounded-b-[14px]"
           style={{ border: "1px solid var(--border-subtle)" }}
         >
           <FindNearbyPanel
@@ -114,34 +139,41 @@ export function TripSlideupBody({
         </div>
       )}
 
-      {/* Body overlays — hidden in Collapsed (fullscreen-map mode) */}
+      {/* Body overlays — hidden in Collapsed (fullscreen-map mode).
+       *  Corridor layout (Phase 1): 660 total = 182 rail + 478 day
+       *  column (--rail-column-w — v4 is tuned to it; the slot fits v4,
+       *  not the reverse). */}
       {!collapsed && (
         <>
-          {/* Day Column Planner — translucent overlay (#0C0D0F @ 59%) */}
+          {/* Day Column Planner — translucent overlay (#0C0D0F @ 59%),
+           *  wired as the day-selector for the corridor column. */}
           <div
-            className="absolute top-[72px] bottom-[10px] left-[10px] w-[183px] z-20 overflow-hidden rounded-bl-[14px]"
+            className="absolute top-[72px] bottom-[10px] left-[10px] w-[182px] z-20 overflow-hidden rounded-bl-[14px]"
             style={{
               background: "rgba(12,13,15,0.59)",
               borderRight: "0.5px solid rgba(74,72,72,0.83)",
             }}
           >
-            <DayColumnPlanner tripId={trip.id} days={trip.days} overlay />
+            <DayColumnPlanner
+              tripId={trip.id}
+              days={trip.days}
+              overlay
+              activeDayId={selectedDayId}
+              onSelectDay={(id) => selectDay(id)}
+              onSelectOverview={() => selectDay(null)}
+            />
           </div>
 
-          {/* Day Detail — translucent overlay matched to Day Column (#161819 @ 59%).
-           *  Interior treatments per design:
-           *    - Day headers (bg-bg-panel) stay opaque #111214 — no override
-           *    - Waypoint cards (article.bg-bg-card) become #000000 @ 40% so the
-           *      wrapper's translucency reads through behind them
-           *    - "ITINERARY" label section (also bg-bg-card) inherits the same */}
+          {/* Day Detail column — single-day corridor view (v4) or the
+           *  Overview state; translucent overlay matched to Day Column. */}
           <div
-            className="absolute top-[72px] bottom-[10px] left-[227px] w-[445px] z-20 overflow-hidden rounded-br-[15px] [&_.bg-bg-card]:!bg-black/40"
+            className="absolute top-[72px] bottom-[10px] left-[192px] w-[478px] z-20 overflow-hidden rounded-br-[15px]"
             style={{
               background: "color-mix(in srgb, var(--bg-card) 59%, transparent)",
               borderRight: "1px solid var(--border-subtle)",
             }}
           >
-            <DayDetail trip={trip} />
+            <DayDetailCorridorColumn trip={trip} selectedDayId={selectedDayId} />
           </div>
         </>
       )}

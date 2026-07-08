@@ -415,14 +415,19 @@ export function MapColumn({
     map.on("load", emitBounds);
     map.on("moveend", emitBounds);
 
-    const dayCoords = days
-      .map((d) => d.coords)
-      .filter((c): c is [number, number] => !!c);
-    // Each day's coords is the day's *end*, so the route line would
-    // start at Day 1's destination instead of the trip origin. Prepend
-    // the trip's startCoords (when provided) so the line begins at the
-    // origin city.
-    const routeCoords = startCoords ? [startCoords, ...dayCoords] : dayCoords;
+    // Route stops in travel order: trip origin, then per day its
+    // waypoints (visit order) followed by the day's end. Waypoints are
+    // included so the drawn line detours through added stops — matching
+    // the server-side through-stops recompute (recompute-day.ts) that
+    // derives miles/driveHours/corridorCities from the same stop list.
+    const routeCoords: [number, number][] = [];
+    if (startCoords) routeCoords.push(startCoords);
+    for (const d of days) {
+      for (const wp of d.waypoints) {
+        if (wp.coords) routeCoords.push(wp.coords);
+      }
+      if (d.coords) routeCoords.push(d.coords);
+    }
 
     // Trip day pins (orange Mapbox defaults). Kept on a ref so the
     // browse-results handler in the sibling effect can hide them while

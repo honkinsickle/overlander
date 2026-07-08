@@ -112,14 +112,15 @@ export function resolveCorridorCities(trip: Trip): Trip {
     cursor = iB;
     if (!spine) return day;
     // Place→node bucketing (spec §2.3) over the day's full place pool —
-    // segmentSuggestions ∪ waypoints (spec §1.4 resolution set). Reference
-    // days typically carry only waypoints; suggestions-era days get both.
-    const pool = [
-      ...(day.segmentSuggestions ?? []),
-      ...day.waypoints,
-    ]
-      .filter((p) => p.coords)
-      .map((p) => ({ id: p.id, coords: p.coords as [number, number] }));
+    // segmentSuggestions ∪ waypoints (spec §1.4 resolution set), deduped
+    // by id (an added suggestion exists in BOTH pools under one id).
+    const pool: { id: string; coords: [number, number] }[] = [];
+    const seen = new Set<string>();
+    for (const p of [...(day.segmentSuggestions ?? []), ...day.waypoints]) {
+      if (!p.coords || seen.has(p.id)) continue;
+      seen.add(p.id);
+      pool.push({ id: p.id, coords: p.coords });
+    }
     const corridorCities = bucketPlacesIntoCorridor({
       cities: spine,
       places: pool,

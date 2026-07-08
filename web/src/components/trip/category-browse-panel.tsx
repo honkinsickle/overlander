@@ -545,6 +545,7 @@ function BrowseCardCell({
         dayDate={target.dayDate}
         width={expanded ? 354 : 300}
         stats={stats}
+        isAdded={isAdded}
         onAdd={(e?: MouseEvent) => {
           e?.stopPropagation();
           window.dispatchEvent(

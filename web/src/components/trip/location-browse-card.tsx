@@ -39,6 +39,10 @@ type Props = {
   /** Overrides the CTA label (default "Add to Day N" / "Book for tonight").
    *  Top-level search passes "Add to a day" since ADD opens a day picker. */
   addLabel?: string;
+  /** True when the place is already a waypoint on the target day. Flips the
+   *  CTA to an "Added ✓" state so the button agrees with the card's dimming.
+   *  Clicking still fires `onAdd` — the toggle listener removes it. */
+  isAdded?: boolean;
   /** Show the "Adds <detour>" + "You'd arrive at…" block. Detour/ETA are
    *  corridor concepts — true for browse cards (a place near today's
    *  route). Pass false for corpus-wide search hits, where any detour
@@ -123,14 +127,16 @@ export function LocationBrowseCard({
   width = 300,
   stats,
   addLabel,
+  isAdded = false,
   showDetour = true,
   onAdd,
   onOpen,
   onMore,
 }: Props) {
-  const ctaLabel =
-    addLabel ??
-    (category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`);
+  const ctaLabel = isAdded
+    ? "Added ✓"
+    : addLabel ??
+      (category === "hotel" ? "Book for tonight" : `Add to Day ${dayNumber}`);
   // Federated (master_place) rows carry real provenance pills (incl. the
   // "MVUM corridor" status pill) and a "Federated from <sources>" mention.
   const isFederated = place.source === "master_place";

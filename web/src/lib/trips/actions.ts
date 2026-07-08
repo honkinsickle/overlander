@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import * as repo from "./repository";
 import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
 import { isUserTripId, updateUserTripPayload } from "./user-trips";
+import { recomputeDay } from "./recompute-day";
 import type { OfflinePhase } from "./types";
 
 /**
@@ -55,6 +56,29 @@ export async function pickOvernightAction(
   return { ok: true };
 }
 
+/** Best-effort day recompute after a route-affecting edit (Phase 0,
+ *  spec §3.1). DECOUPLED by design: the edit has already persisted —
+ *  a Mapbox/derivation failure logs and leaves the day's derived
+ *  values stale rather than failing the user's edit. Applies to both
+ *  user (UUID) and slug/fixture trips. */
+async function recomputeDayBestEffort(
+  tripId: string,
+  dayId: string,
+): Promise<void> {
+  try {
+    const trip = await repo.getTrip(tripId);
+    if (!trip) return;
+    const derived = await recomputeDay(trip, dayId);
+    if (!derived) return;
+    await repo.applyDayDerived(tripId, dayId, derived);
+  } catch (err) {
+    console.warn(
+      `[trips] day recompute failed for ${tripId}/${dayId} (edit persisted, derived values stale):`,
+      err instanceof Error ? `${err.name}: ${err.message}` : err,
+    );
+  }
+}
+
 export async function addWaypointAction(
   tripId: string,
   dayId: string,
@@ -66,6 +90,7 @@ export async function addWaypointAction(
   const waypoint = addedPlaceToWaypoint(place);
   const added = await repo.addWaypoint(tripId, dayId, waypoint);
   if (!added) return { ok: false, error: "Could not add stop." };
+  await recomputeDayBestEffort(tripId, dayId);
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }
@@ -77,6 +102,7 @@ export async function removeWaypointAction(
 ): Promise<ActionResult> {
   const ok = await repo.removeWaypoint(tripId, dayId, waypointId);
   if (!ok) return { ok: false, error: "Could not remove stop." };
+  await recomputeDayBestEffort(tripId, dayId);
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }
@@ -95,6 +121,9 @@ export async function reorderWaypointsAction(
   }
   const ok = await repo.reorderWaypoints(tripId, dayId, fromIdx, toIdx);
   if (!ok) return { ok: false, error: "Could not reorder stops." };
+  // Stop order changes a through-stops route (2026-07-07 ruling:
+  // reorder triggers reroute).
+  await recomputeDayBestEffort(tripId, dayId);
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }

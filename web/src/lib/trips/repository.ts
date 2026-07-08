@@ -5,7 +5,13 @@ import {
   resetUserTripDayToReference,
   updateUserTripPayload,
 } from "./user-trips";
-import type { Trip, Day, Waypoint, OvernightSelection } from "./types";
+import type {
+  CorridorCity,
+  Day,
+  OvernightSelection,
+  Trip,
+  Waypoint,
+} from "./types";
 
 /**
  * Server-side trip repository. Async by design so callers don't
@@ -229,6 +235,41 @@ export async function reorderWaypoints(
   const [moved] = day.waypoints.splice(fromIdx, 1);
   day.waypoints.splice(toIdx, 0, moved);
   trip.routePolyline = undefined;
+  return true;
+}
+
+/** Apply edit-time recomputed derived values to one day (Phase 0 —
+ *  see lib/trips/recompute-day.ts). Sets `miles` / `driveHours` and
+ *  REPLACES `corridorCities` (including with undefined: a stale
+ *  corridor describes the pre-edit route; clients fall back per spec
+ *  decision F). Does not touch `routePolyline` — the edit mutator
+ *  already cleared it. */
+export async function applyDayDerived(
+  tripId: string,
+  dayId: string,
+  derived: {
+    miles: number;
+    driveHours: number;
+    corridorCities?: CorridorCity[];
+  },
+): Promise<boolean> {
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(tripId, (trip) => {
+      const next = structuredClone(trip);
+      const day = next.days.find((d) => d.id === dayId);
+      if (!day) return null;
+      day.miles = derived.miles;
+      day.driveHours = derived.driveHours;
+      day.corridorCities = derived.corridorCities;
+      return next;
+    });
+    return updated !== null;
+  }
+  const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
+  if (!day) return false;
+  day.miles = derived.miles;
+  day.driveHours = derived.driveHours;
+  day.corridorCities = derived.corridorCities;
   return true;
 }
 
