@@ -61,6 +61,26 @@ export function DayDetailCorridorColumn({
   const tripRef = useRef(trip);
   tripRef.current = trip;
 
+  // Optimistic set of the selected day's added place ids. Seeded from
+  // server waypoints and flipped IMMEDIATELY on add/remove so the browse
+  // panel's "Added ✓" state updates without waiting on revalidation — the
+  // decoupled recompute (and, for the modal-intercept slideup, an
+  // unreliable revalidatePath) can't be depended on to re-emit this.
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  // Re-seed from server truth on day switch / revalidation landing.
+  useEffect(() => {
+    setAddedIds(new Set(day?.waypoints.map((wp) => wp.id) ?? []));
+  }, [day]);
+  // Broadcast on every change (seed + optimistic flips) so the panel's
+  // trip:addedSync listener stays in sync.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("trip:addedSync", {
+        detail: { addedIds: [...addedIds] },
+      }),
+    );
+  }, [addedIds]);
+
   // ── Add flow: single listener for the browse panel's toggle events ──
   useEffect(() => {
     const onToggle = (e: Event) => {
@@ -77,6 +97,13 @@ export function DayDetailCorridorColumn({
       if (!targetDay) return;
       const { placeId, dayId, place } = d;
       const exists = targetDay.waypoints.some((wp) => wp.id === placeId);
+      // Optimistic panel flip — immediate, before the server round-trip.
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        if (exists) next.delete(placeId);
+        else next.add(placeId);
+        return next;
+      });
       startTransition(async () => {
         if (exists) {
           await removeWaypointAction(t.id, dayId, placeId);
@@ -94,17 +121,6 @@ export function DayDetailCorridorColumn({
     window.addEventListener("trip:toggleAdded", onToggle);
     return () => window.removeEventListener("trip:toggleAdded", onToggle);
   }, []);
-
-  // Keep browse-panel cards' "Added ✓" state truthful: broadcast the
-  // selected day's canonical waypoint ids (the old addedByDay's
-  // trip:addedSync contract, now derived from server state).
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("trip:addedSync", {
-        detail: { addedIds: day?.waypoints.map((wp) => wp.id) ?? [] },
-      }),
-    );
-  }, [day]);
 
   const openBrowse = () => {
     if (!day) return;
@@ -126,6 +142,12 @@ export function DayDetailCorridorColumn({
   const removePlace = (placeId: string) => {
     if (!day) return;
     const dayId = day.id;
+    // Optimistic flip so a corridor-tile ✕ also reverts the panel card.
+    setAddedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(placeId);
+      return next;
+    });
     startTransition(async () => {
       await removeWaypointAction(trip.id, dayId, placeId);
     });
