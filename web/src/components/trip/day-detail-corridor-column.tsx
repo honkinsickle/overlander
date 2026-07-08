@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { DayDetailOverview } from "@/components/trip/day-detail-overview";
+import {
+  DayDetailOverview,
+  type OverviewGuide,
+} from "@/components/trip/day-detail-overview";
 import {
   DayDetailCorridor,
   type CorridorPlace,
@@ -44,6 +47,29 @@ import type { CorridorCity, Day, Trip } from "@/lib/trips/types";
  *     events reach this listener only if this column is mounted — they
  *     are deferred deliberately; see Phase 3 scope).
  */
+
+/** Static, presentational guides for the Overview (Phase A). NOT tied to
+ *  the trip — the same two cards show on any trip (e.g. "Coast" guides on
+ *  la-to-deadhorse). Real per-trip guides are a deferred Phase B data
+ *  decision. Hero images are the design's Paper-CDN assets (placeholder;
+ *  swap for hosted assets when real guides land). Taps are stubbed. */
+const OVERVIEW_GUIDES_CDN =
+  "https://app.paper.design/file-assets/01KT785MVAVVBE8RGAP9FED33Y";
+const OVERVIEW_GUIDES: OverviewGuide[] = [
+  {
+    title: "Foodies Guide to the Coast",
+    description: "Delectable stops — find breakfast, lunch and dinner along the way.",
+    byline: "yoTrippin staff",
+    imageUrl: `${OVERVIEW_GUIDES_CDN}/01KV6GTWMQCVFS0ZJXB6TBED9B.png`,
+  },
+  {
+    title: "Places not to miss on-route.",
+    description: "Recommendations from like-minded yoTrippin staff.",
+    byline: "yoTrippin staff",
+    imageUrl: `${OVERVIEW_GUIDES_CDN}/5ZBSPM9YYA57R1ENM5ZKSJ4R88.jpg`,
+  },
+];
+
 export function DayDetailCorridorColumn({
   trip,
   selectedDayId,
@@ -240,6 +266,8 @@ export function DayDetailCorridorColumn({
             routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
             heroImageUrl={trip.heroImage}
             heroAlt={trip.title}
+            guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
+            guides={OVERVIEW_GUIDES}
             placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
             places={topPlacesForTrip(trip)}
             onOpenPlace={openTripPlaceDetail}
