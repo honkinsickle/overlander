@@ -22,8 +22,11 @@ import {
  * All interactions are stubbed no-ops (// TODO: wire).
  */
 
-// TODO: wire — Add-to-Day, More Guides, More Places are a later pass.
+// TODO: wire — More Guides, More Places are a later pass.
 const noop = () => {};
+
+/** Places shown inline in the section; the rest sit behind "More Places". */
+const VISIBLE_PLACES = 3;
 
 export type OverviewGuide = {
   title: string;
@@ -108,7 +111,7 @@ export function DayDetailOverview({
       <section id="places" className="shrink-0 flex flex-col w-[var(--rail-card-w)]">
         <SectionBanner title="Top Places to Visit" subtitle={placesSubtitle} />
         <div className="flex flex-col pt-[11px]">
-          {places.map((p, i) => (
+          {places.slice(0, VISIBLE_PLACES).map((p, i) => (
             <PlaceCard
               key={p.id}
               place={p}
