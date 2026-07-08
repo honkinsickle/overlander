@@ -153,6 +153,54 @@ export function DayDetailCorridorColumn({
     });
   };
 
+  // Corridor tile "Details →" — resolve the placeId to its source
+  // (waypoint or segmentSuggestion) and open the shared MapDetailOverlay
+  // via trip:openDetail, exactly as the browse cards do. Waypoints pass
+  // the full enriched record so all detail sections render; suggestions
+  // pass the id/title/photo/coords/description subset.
+  const openPlaceDetail = (placeId: string) => {
+    if (!day) return;
+    const wp = day.waypoints.find((w) => w.id === placeId);
+    if (wp) {
+      window.dispatchEvent(
+        new CustomEvent("trip:openDetail", {
+          detail: {
+            place: {
+              id: wp.id,
+              title: wp.title,
+              photoUrl: wp.photoUrl,
+              dayNumber: day.dayNumber,
+              dayId: day.id,
+              coords: wp.coords,
+              description: wp.description,
+              waypoint: wp,
+              dayRelative: true,
+            },
+          },
+        }),
+      );
+      return;
+    }
+    const sug = day.segmentSuggestions?.find((s) => s.id === placeId);
+    if (!sug) return;
+    window.dispatchEvent(
+      new CustomEvent("trip:openDetail", {
+        detail: {
+          place: {
+            id: sug.id,
+            title: sug.title,
+            photoUrl: sug.photoUrl,
+            dayNumber: day.dayNumber,
+            dayId: day.id,
+            coords: sug.coords,
+            description: sug.description,
+            dayRelative: true,
+          },
+        },
+      }),
+    );
+  };
+
   return (
     <div className="relative h-full">
       <div
@@ -171,6 +219,7 @@ export function DayDetailCorridorColumn({
             cities={day.corridorCities ?? fallbackCorridor(day)}
             places={placePool(day)}
             onRemovePlace={removePlace}
+            onOpenPlace={openPlaceDetail}
             onExploreDay={openBrowse}
           />
         ) : (

@@ -60,6 +60,10 @@ type Props = {
   /** Remove a waypoint-backed tile from the day (Phase 3 editing). Only
    *  invoked for tiles whose place is `removable`. */
   onRemovePlace?: (placeId: string) => void;
+  /** Open a tile's place detail (read-only, all tiles). The caller
+   *  resolves the id to its source (waypoint/suggestion) and opens the
+   *  shared MapDetailOverlay via trip:openDetail. */
+  onOpenPlace?: (placeId: string) => void;
   /** "Explore more of Day NN" footer CTA — opens the day-scoped browse
    *  panel (Phase 3 add flow). */
   onExploreDay?: () => void;
@@ -77,6 +81,7 @@ export function DayDetailCorridor({
   places,
   mileMarkers = [],
   onRemovePlace,
+  onOpenPlace,
   onExploreDay,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
@@ -161,9 +166,15 @@ export function DayDetailCorridor({
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
               last={item.last && idx === items.length - 1}
               onRemovePlace={onRemovePlace}
+              onOpenPlace={onOpenPlace}
             />
           ) : (
-            <MileTick key={`mk-${item.mile}`} mile={item.mile} tiles={item.tiles} />
+            <MileTick
+              key={`mk-${item.mile}`}
+              mile={item.mile}
+              tiles={item.tiles}
+              onOpenPlace={onOpenPlace}
+            />
           ),
         )}
       </div>
@@ -200,11 +211,13 @@ function CityNode({
   tiles,
   last,
   onRemovePlace,
+  onOpenPlace,
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
   last: boolean;
   onRemovePlace?: (placeId: string) => void;
+  onOpenPlace?: (placeId: string) => void;
 }) {
   const isStart = city.kind === "start";
   // Real derivation output is fractional (projected along-route miles);
@@ -260,7 +273,7 @@ function CityNode({
               key={p.id}
               place={p}
               category={p.category}
-              onOpen={noop}
+              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
               onRemove={
                 p.removable && onRemovePlace
                   ? () => onRemovePlace(p.id)
@@ -276,7 +289,15 @@ function CityNode({
 
 /** Distance tick in the gutter (no city header). May carry place tiles that
  *  align to the marker on the spine (e.g. The Broad at the 40mi mark). */
-function MileTick({ mile, tiles = [] }: { mile: number; tiles?: CorridorPlace[] }) {
+function MileTick({
+  mile,
+  tiles = [],
+  onOpenPlace,
+}: {
+  mile: number;
+  tiles?: CorridorPlace[];
+  onOpenPlace?: (placeId: string) => void;
+}) {
   const hasTiles = tiles.length > 0;
   return (
     <div className="flex" style={hasTiles ? { paddingBottom: 22 } : { height: 30 }}>
@@ -304,7 +325,12 @@ function MileTick({ mile, tiles = [] }: { mile: number; tiles?: CorridorPlace[] 
       </div>
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
         {tiles.map((p) => (
-          <CategoryListCard key={p.id} place={p} category={p.category} onOpen={noop} />
+          <CategoryListCard
+            key={p.id}
+            place={p}
+            category={p.category}
+            onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+          />
         ))}
       </div>
     </div>
