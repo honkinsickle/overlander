@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveCorridorCities } from "./resolve-corridor-cities";
+import {
+  mapMasterPlaceRow,
+  primaryCategoryToSlideKey,
+  isSuppressedCategory,
+  type MasterPlaceRow,
+} from "@/lib/trip-browse/federated";
 import type { Trip } from "./types";
 
 /** Where the committed snapshot lives. Resolved from the Next.js project
@@ -26,12 +32,14 @@ export async function getReferenceTrip(id: string): Promise<Trip> {
 
   const fromDb = await tryFetchFromDb(id);
   if (fromDb) {
-    const trip = withCorridors(fromDb);
+    const trip = withCorridors(await withFederatedCorridorSupply(fromDb));
     cachedReferenceTrip = { id, trip };
     return trip;
   }
 
-  const fromSnapshot = withCorridors(await loadSnapshot());
+  const fromSnapshot = withCorridors(
+    await withFederatedCorridorSupply(await loadSnapshot()),
+  );
   cachedReferenceTrip = { id, trip: fromSnapshot };
   return fromSnapshot;
 }
@@ -51,6 +59,63 @@ function withCorridors(trip: Trip): Trip {
     `[reference] corridor derivation: ${(performance.now() - t0).toFixed(0)}ms for ${withCount}/${resolved.days.length} days (memoized after first call)`,
   );
   return resolved;
+}
+
+/** Phase 1 (2026-07-09, flag `USE_FEDERATED_CORRIDOR`): fold federated
+ *  master_place POIs into each day's `segmentSuggestions` BEFORE corridor
+ *  derivation, so corpus places bucket under nodes via the existing
+ *  segmentSuggestions path — both the bucket pool (resolve-corridor-cities)
+ *  and the render pool (placePool) already read that field, so no component
+ *  change. Live at serve, memoized with the trip (one cold fetch per server
+ *  process) — no reseed.
+ *
+ *  Corpus is essentials-only (no ratings/photos), so the resulting tiles
+ *  render name/category/description with a placeholder image and no stars.
+ *
+ *  Deliberately a SEPARATE flag from `USE_FEDERATED_POIS` (browse + map
+ *  search): flipping this on cannot change those surfaces. Fails soft —
+ *  any per-day RPC error leaves that day untouched. */
+async function withFederatedCorridorSupply(trip: Trip): Promise<Trip> {
+  if (process.env.USE_FEDERATED_CORRIDOR !== "true") return trip;
+  if (!isConfigured()) return trip;
+
+  let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return trip;
+  }
+
+  const days = await Promise.all(
+    trip.days.map(async (day, i) => {
+      const start = i === 0 ? trip.startCoords : trip.days[i - 1].coords;
+      const end = day.coords;
+      if (!start || !end) return day;
+      try {
+        const { data, error } = await supabase.rpc("pois_along_corridor", {
+          p_route: { type: "LineString", coordinates: [start, end] },
+          p_buffer_m: 16000,
+          p_categories: null,
+        });
+        if (error || !data) return day;
+        const seen = new Set((day.segmentSuggestions ?? []).map((p) => p.id));
+        const corpus = (data as MasterPlaceRow[])
+          .filter((r) => !isSuppressedCategory(r.primary_category))
+          .map((r) =>
+            mapMasterPlaceRow(r, primaryCategoryToSlideKey(r.primary_category)),
+          )
+          .filter((p) => !seen.has(p.id));
+        if (corpus.length === 0) return day;
+        return {
+          ...day,
+          segmentSuggestions: [...(day.segmentSuggestions ?? []), ...corpus],
+        };
+      } catch {
+        return day;
+      }
+    }),
+  );
+  return { ...trip, days };
 }
 
 async function tryFetchFromDb(id: string): Promise<Trip | null> {
