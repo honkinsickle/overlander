@@ -457,6 +457,10 @@ async function main(): Promise<void> {
     .option("--skip-ridb", "Skip RIDB stage")
     .option("--skip-nps", "Skip NPS stage (e.g. to re-ingest only RIDB after a tiling fix)")
     .option("--skip-google", "Skip Google enrichment + discovery (free sources only)")
+    .option(
+      "--skip-enrichment",
+      "Skip Google enrichment (stage 4a) but still run discovery (stage 4b). Discovery-only: avoids the whole-envelope enrichment candidate scan consuming the budget before the anchors run.",
+    )
     .parse(process.argv);
 
   const opts = program.opts<{
@@ -465,6 +469,7 @@ async function main(): Promise<void> {
     skipRidb?: boolean;
     skipNps?: boolean;
     skipGoogle?: boolean;
+    skipEnrichment?: boolean;
   }>();
   const startedAt = Date.now();
 
@@ -564,9 +569,28 @@ async function main(): Promise<void> {
         cost: getCostLedger().summary(),
       };
     } else {
-      logger.info("ingest-corridor: stage 4a — Google enrichment");
-      const candidates = await fetchEnrichmentCandidates(corridor.bbox, ENRICH_CATEGORIES);
-      const enrichment = await runEnrichment(candidates);
+      // Stage 4a — Google enrichment. Skippable on its own: the candidate
+      // scan covers the WHOLE corridor envelope (thousands of records) and,
+      // running before discovery, can exhaust the budget cap before the
+      // anchors run. --skip-enrichment goes straight to discovery.
+      let enrichment: EnrichmentAggregate = {
+        candidates: 0,
+        cached_hit: 0,
+        cached_miss: 0,
+        enriched: 0,
+        miss: 0,
+        errors: 0,
+        duration_ms: 0,
+      };
+      if (opts.skipEnrichment) {
+        logger.info(
+          "ingest-corridor: --skip-enrichment — skipping stage 4a Google enrichment",
+        );
+      } else {
+        logger.info("ingest-corridor: stage 4a — Google enrichment");
+        const candidates = await fetchEnrichmentCandidates(corridor.bbox, ENRICH_CATEGORIES);
+        enrichment = await runEnrichment(candidates);
+      }
 
       logger.info("ingest-corridor: stage 4b — Google discovery");
       const anchors = SEGMENT_ANCHORS[opts.corridor] ?? [];
