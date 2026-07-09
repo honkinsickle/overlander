@@ -9,6 +9,7 @@ import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import type { PlaceRich } from "@/lib/discovery/google-places";
 import { topPlacesForTrip } from "@/lib/trips/top-places";
 import {
   CategoryBrowsePanel,
@@ -92,6 +93,59 @@ export function DayDetailCorridorColumn({
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
     : undefined;
+
+  // P3 (2026-07-09): hydrate the visible day's corpus tiles with live Google
+  // ratings/photos by place_id. Keyed by place_id, accumulated across days.
+  const [hydrated, setHydrated] = useState<Record<string, PlaceRich>>({});
+
+  // On day-select, fetch Place Details for the mp:* corpus tiles that carry a
+  // placeId and aren't already rich (waypoints + already-rich tiles skipped).
+  // Progressive + non-blocking: tiles render essentials immediately; the rich
+  // fields graft in when this lands. Graceful: any failure/abort leaves the
+  // tiles on essentials (no error UI). The API key never reaches the client —
+  // the /api/places/details route holds it server-side.
+  useEffect(() => {
+    if (!day) return;
+    const placeIds = Array.from(
+      new Set(
+        placePool(day)
+          .filter(
+            (t) =>
+              t.id.startsWith("mp:") &&
+              t.placeId &&
+              !t.rating &&
+              !t.photoUrl &&
+              !hydrated[t.placeId],
+          )
+          .map((t) => t.placeId as string),
+      ),
+    );
+    if (placeIds.length === 0) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch("/api/places/details", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ placeIds }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return;
+        const { details } = (await res.json()) as {
+          details: Record<string, PlaceRich>;
+        };
+        if (details && Object.keys(details).length > 0) {
+          setHydrated((prev) => ({ ...prev, ...details }));
+        }
+      } catch {
+        // network/abort → tiles stay essentials
+      }
+    })();
+    return () => ctrl.abort();
+    // hydrated is intentionally omitted: re-run only on day switch, using the
+    // in-filter guard to skip already-hydrated ids.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDayId]);
 
   // Rail Guides/Places → scroll the mounted Overview to the section.
   // Batched with the Overview switch upstream, so by the time this
@@ -311,7 +365,17 @@ export function DayDetailCorridorColumn({
             heroImageUrl={day.heroImage}
             heroAlt={day.label}
             cities={day.corridorCities ?? fallbackCorridor(day)}
-            places={placePool(day)}
+            places={placePool(day).map((t) => {
+              const rich = t.placeId ? hydrated[t.placeId] : undefined;
+              return rich
+                ? {
+                    ...t,
+                    rating: rich.rating ?? t.rating,
+                    reviewCount: rich.reviewCount ?? t.reviewCount,
+                    photoUrl: rich.photoUrl ?? t.photoUrl,
+                  }
+                : t;
+            })}
             onRemovePlace={removePlace}
             onOpenPlace={openPlaceDetail}
             onExploreDay={openBrowse}
