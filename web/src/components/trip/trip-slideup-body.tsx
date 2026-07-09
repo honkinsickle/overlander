@@ -66,6 +66,12 @@ export function TripSlideupBody({
     anchor: "guides" | "places";
     nonce: number;
   } | null>(null);
+  // Scroll-spy: which Overview section is topmost (written by the column's
+  // IntersectionObserver, read by the rail to highlight the nav item).
+  // Meaningful only in Overview state; ignored while a day is selected.
+  const [activeSection, setActiveSection] = useState<
+    "overview" | "guides" | "places"
+  >("overview");
   const selectSection = useCallback(
     (anchor: "guides" | "places") => {
       selectDay(null);
@@ -175,6 +181,7 @@ export function TripSlideupBody({
               days={trip.days}
               overlay
               activeDayId={selectedDayId}
+              activeSection={selectedDayId === null ? activeSection : null}
               onSelectDay={(id) => selectDay(id)}
               onSelectOverview={() => selectDay(null)}
               onScrollTo={selectSection}
@@ -194,6 +201,7 @@ export function TripSlideupBody({
               trip={trip}
               selectedDayId={selectedDayId}
               scrollRequest={scrollRequest}
+              onActiveSection={setActiveSection}
             />
           </div>
         </>

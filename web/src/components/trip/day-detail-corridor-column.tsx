@@ -74,12 +74,17 @@ export function DayDetailCorridorColumn({
   trip,
   selectedDayId,
   scrollRequest,
+  onActiveSection,
 }: {
   trip: Trip;
   selectedDayId: string | null;
   /** Bumped by the rail's Guides/Places nav to scroll the Overview to a
    *  section. `nonce` re-triggers the scroll even on the same anchor. */
   scrollRequest?: { anchor: "guides" | "places"; nonce: number } | null;
+  /** Scroll-spy callback (Overview only): the topmost visible section
+   *  (#overview / #guides / #places). Lets the rail highlight the
+   *  matching nav item as the user scrolls. */
+  onActiveSection?: (section: "overview" | "guides" | "places") => void;
 }) {
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
@@ -94,6 +99,39 @@ export function DayDetailCorridorColumn({
       .getElementById(scrollRequest.anchor)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [scrollRequest]);
+
+  // Scroll-spy — Overview only. Mirrors the old DayDetail logic: the
+  // active section is the DEEPEST one whose top has scrolled to within
+  // SPY_TRIGGER of the column top ("the section you most recently reached").
+  // (An IntersectionObserver's "topmost intersecting" is too sticky here —
+  // a sliver of the previous section keeps it active.) Passive listener,
+  // three cheap rect reads per scroll → no jank. Disconnects on a day
+  // selection (the rail's day highlight takes over).
+  useEffect(() => {
+    if (selectedDayId !== null || !onActiveSection) return;
+    const ORDER = ["overview", "guides", "places"] as const;
+    const scrollRoot = document
+      .getElementById("overview")
+      ?.closest(".overflow-y-auto");
+    if (!scrollRoot) return;
+
+    const SPY_TRIGGER = 100;
+    const detect = () => {
+      const rootTop = scrollRoot.getBoundingClientRect().top;
+      let active: (typeof ORDER)[number] = "overview";
+      for (const id of ORDER) {
+        const sec = document.getElementById(id);
+        if (sec && sec.getBoundingClientRect().top - rootTop <= SPY_TRIGGER) {
+          active = id;
+        }
+      }
+      onActiveSection(active);
+    };
+
+    detect();
+    scrollRoot.addEventListener("scroll", detect, { passive: true });
+    return () => scrollRoot.removeEventListener("scroll", detect);
+  }, [selectedDayId, onActiveSection]);
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const [isPending, startTransition] = useTransition();

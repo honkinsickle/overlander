@@ -35,6 +35,7 @@ export function DayColumnPlanner({
   onSelectDay,
   onSelectOverview,
   onScrollTo,
+  activeSection,
 }: {
   tripId: string;
   days: Day[];
@@ -50,8 +51,20 @@ export function DayColumnPlanner({
   /** Switch to Overview and scroll its column to the named section
    *  (#guides / #places). Wired to the Guides / Places to Visit nav. */
   onScrollTo?: (anchor: "guides" | "places") => void;
+  /** Scroll-spy: the topmost visible Overview section, or null when a day
+   *  is selected (the day card highlights instead). Drives which of
+   *  Overview / Guides / Places to Visit highlights. */
+  activeSection?: "overview" | "guides" | "places" | null;
 }) {
   const wired = activeDayId !== undefined;
+  // Which nav item highlights: legacy (unwired) always "overview"; a
+  // selected day → null (day card wins); Overview → the scroll-spy
+  // section (default "overview" until the observer reports).
+  const navSection = !wired
+    ? "overview"
+    : activeDayId === null
+      ? (activeSection ?? "overview")
+      : null;
   return (
     <aside
       aria-label="Days"
@@ -66,21 +79,21 @@ export function DayColumnPlanner({
        *  the legacy presentational rendering). */}
       <NavHeader
         label="Overview"
-        tone={!wired || activeDayId === null ? "active" : "idle"}
+        tone={navSection === "overview" ? "active" : "idle"}
         height={55}
         fontSize={25}
         onClick={onSelectOverview}
       />
       <NavHeader
         label="Guides"
-        tone="idle"
+        tone={navSection === "guides" ? "active" : "idle"}
         height={50}
         fontSize={20}
         onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
       />
       <NavHeader
         label="Places to Visit"
-        tone="idle"
+        tone={navSection === "places" ? "active" : "idle"}
         height={50}
         fontSize={20}
         onClick={onScrollTo ? () => onScrollTo("places") : undefined}
