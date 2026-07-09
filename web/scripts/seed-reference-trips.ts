@@ -19,6 +19,21 @@
  *
  * Requires (for --seed): NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
  * in web/.env.local. `--snapshot` alone has no Supabase dependency.
+ *
+ * ── SNAPSHOT CONVENTION (2026-07-09): committed snapshot is COORDS-ONLY ──
+ * The build now bakes each travel day's `corridorCities` spine into the
+ * output (spec §3 precompute-and-persist). We are NOT adopting that yet —
+ * corridor derivation is under active development (node naming, layover
+ * handling, param tuning), and a baked spine goes silently stale on
+ * la-to-deadhorse until someone remembers to re-snapshot. So the committed
+ * `.alaska-snapshot.json` intentionally OMITS `corridorCities`: reference.ts
+ * `withCorridors()` derives them live at serve time, so every derivation
+ * improvement shows automatically.
+ *
+ * Therefore: do NOT blind-commit raw `npm run snapshot` output. Strip
+ * `corridorCities` from every day first (the only intended snapshot deltas
+ * are day/waypoint DATA — e.g. authored `coords`). Adopt baking deliberately
+ * later, once the derivation is stable and the precompute win is wanted.
  */
 
 import { readFile, writeFile } from "node:fs/promises";
