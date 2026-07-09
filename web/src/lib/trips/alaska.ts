@@ -838,6 +838,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-fort-nelson-fuel",
+          coords: [-122.693954, 58.807003],
           slug: "fort-nelson-fuel-prep",
           category: "fuel",
           title: "Fort Nelson · Final Full-Service Stop",
@@ -1186,6 +1187,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-destruction-bay",
+          coords: [-138.80087, 61.252323],
           slug: "destruction-bay-fuel",
           category: "fuel",
           title: "Destruction Bay · Fuel Verify",
@@ -1565,6 +1567,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-exit-glacier",
+          coords: [-149.495808, 60.167029],
           slug: "exit-glacier",
           category: "scenic",
           title: "Exit Glacier · Kenai Fjords NP",
@@ -1668,6 +1671,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-homer-spit-arrive",
+          coords: [-151.459583, 59.619483],
           slug: "homer-spit-arrive",
           category: "attraction",
           title: "Homer Spit",
@@ -1825,6 +1829,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-anchorage-reset",
+          coords: [-149.927904, 61.201394],
           slug: "anchorage-full-reset",
           category: "urban",
           title: "Anchorage Reset",
@@ -2346,6 +2351,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-glacier-view-arrive",
+          coords: [-147.95674, 61.802914],
           slug: "glacier-view-arrive",
           category: "attraction",
           title: "Glacier View Camp Setup",
@@ -2584,6 +2590,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
         },
         {
           id: "wp-chicken",
+          coords: [-141.938333, 64.07318],
           slug: "chicken-alaska",
           category: "oddity",
           title: "Chicken, AK · Population Variable",
@@ -2633,6 +2640,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-top-of-the-world",
+          coords: [-139.538695, 64.086119],
           slug: "top-of-the-world-hwy",
           category: "scenic",
           title: "Top of the World Highway",
@@ -3083,6 +3091,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-sea-to-sky",
+          coords: [-123.273055, 49.36205],
           slug: "sea-to-sky",
           category: "scenic",
           title: "Sea-to-Sky Highway · Whistler approach",
@@ -3156,6 +3165,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-bc-ferries",
+          coords: [-123.388479, 48.488434],
           slug: "bc-ferries-tsawwassen",
           category: "interest",
           title: "BC Ferries · Tsawwassen → Swartz Bay",
@@ -3569,6 +3579,7 @@ const LA_TO_DEADHORSE_RAW: Trip = {
       waypoints: [
         {
           id: "wp-multnomah",
+          coords: [-122.1158, 45.5762],
           slug: "multnomah-falls",
           category: "scenic",
           title: "Multnomah Falls",

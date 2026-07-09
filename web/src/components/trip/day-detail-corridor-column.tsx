@@ -441,6 +441,22 @@ function placePool(day: Day): CorridorPlace[] {
       reviewCount: p.reviewCount,
     }),
   );
+  // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
+  // (legacy per-category discoveries) but never `segmentSuggestions`, so
+  // resolve-corridor-cities now folds those into the bucketed pool too.
+  // Mirror that here so their tiles resolve by id.
+  const fromDaySuggestions: CorridorPlace[] = Object.values(
+    day.suggestions ?? {},
+  ).map((p) => ({
+    id: p.id,
+    title: p.title,
+    category:
+      p.category === "overnight" ? "camping" : (p.category ?? "interest"),
+    photoUrl: p.photoUrl,
+    photoAlt: p.photoAlt,
+    rating: p.rating,
+    reviewCount: p.reviewCount,
+  }));
   const fromWaypoints: CorridorPlace[] = day.waypoints.map((wp) => ({
     id: wp.id,
     title: wp.title,
@@ -451,5 +467,5 @@ function placePool(day: Day): CorridorPlace[] {
     reviewCount: wp.community?.reviewCount,
     removable: true,
   }));
-  return [...fromSuggestions, ...fromWaypoints];
+  return [...fromSuggestions, ...fromDaySuggestions, ...fromWaypoints];
 }
