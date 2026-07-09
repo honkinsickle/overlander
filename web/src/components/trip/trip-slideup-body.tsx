@@ -57,6 +57,28 @@ export function TripSlideupBody({
       );
     }
   }, []);
+  // Rail Guides / Places to Visit → ensure the Overview state, then ask
+  // the column to scroll to that section. selectDay(null) + the bumped
+  // scrollRequest batch into one commit, so the section is mounted by
+  // the time the column's scroll effect fires. The nonce re-triggers the
+  // scroll when the same section is tapped twice.
+  const [scrollRequest, setScrollRequest] = useState<{
+    anchor: "overview" | "guides" | "places";
+    nonce: number;
+  } | null>(null);
+  // Scroll-spy: which Overview section is topmost (written by the column's
+  // IntersectionObserver, read by the rail to highlight the nav item).
+  // Meaningful only in Overview state; ignored while a day is selected.
+  const [activeSection, setActiveSection] = useState<
+    "overview" | "guides" | "places"
+  >("overview");
+  const selectSection = useCallback(
+    (anchor: "overview" | "guides" | "places") => {
+      selectDay(null);
+      setScrollRequest((prev) => ({ anchor, nonce: (prev?.nonce ?? 0) + 1 }));
+    },
+    [selectDay],
+  );
   // True while the Add-Waypoints panel (CategoryBrowsePanel) is open. When
   // it is, the top-bar search drives THAT panel's search mode, so the
   // standalone Find Nearby zero-state must not also mount (it would peek
@@ -159,8 +181,10 @@ export function TripSlideupBody({
               days={trip.days}
               overlay
               activeDayId={selectedDayId}
+              activeSection={selectedDayId === null ? activeSection : null}
               onSelectDay={(id) => selectDay(id)}
               onSelectOverview={() => selectDay(null)}
+              onScrollTo={selectSection}
             />
           </div>
 
@@ -173,7 +197,12 @@ export function TripSlideupBody({
               borderRight: "1px solid var(--border-subtle)",
             }}
           >
-            <DayDetailCorridorColumn trip={trip} selectedDayId={selectedDayId} />
+            <DayDetailCorridorColumn
+              trip={trip}
+              selectedDayId={selectedDayId}
+              scrollRequest={scrollRequest}
+              onActiveSection={setActiveSection}
+            />
           </div>
         </>
       )}

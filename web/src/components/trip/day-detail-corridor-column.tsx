@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { TripDetailHeader } from "@/components/trip/trip-detail-header";
+import {
+  DayDetailOverview,
+  type OverviewGuide,
+} from "@/components/trip/day-detail-overview";
 import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import { topPlacesForTrip } from "@/lib/trips/top-places";
 import {
   CategoryBrowsePanel,
   type BrowseTarget,
@@ -43,16 +47,94 @@ import type { CorridorCity, Day, Trip } from "@/lib/trips/types";
  *     events reach this listener only if this column is mounted — they
  *     are deferred deliberately; see Phase 3 scope).
  */
+
+/** Static, presentational guides for the Overview (Phase A). NOT tied to
+ *  the trip — the same two cards show on any trip (e.g. "Coast" guides on
+ *  la-to-deadhorse). Real per-trip guides are a deferred Phase B data
+ *  decision. Hero images are the design's Paper-CDN assets (placeholder;
+ *  swap for hosted assets when real guides land). Taps are stubbed. */
+const OVERVIEW_GUIDES_CDN =
+  "https://app.paper.design/file-assets/01KT785MVAVVBE8RGAP9FED33Y";
+const OVERVIEW_GUIDES: OverviewGuide[] = [
+  {
+    title: "Foodies Guide to the Coast",
+    description: "Delectable stops — find breakfast, lunch and dinner along the way.",
+    byline: "yoTrippin staff",
+    imageUrl: `${OVERVIEW_GUIDES_CDN}/01KV6GTWMQCVFS0ZJXB6TBED9B.png`,
+  },
+  {
+    title: "Places not to miss on-route.",
+    description: "Recommendations from like-minded yoTrippin staff.",
+    byline: "yoTrippin staff",
+    imageUrl: `${OVERVIEW_GUIDES_CDN}/5ZBSPM9YYA57R1ENM5ZKSJ4R88.jpg`,
+  },
+];
+
 export function DayDetailCorridorColumn({
   trip,
   selectedDayId,
+  scrollRequest,
+  onActiveSection,
 }: {
   trip: Trip;
   selectedDayId: string | null;
+  /** Bumped by the rail's Overview/Guides/Places nav to scroll the
+   *  Overview to a section. `nonce` re-triggers even on the same anchor. */
+  scrollRequest?: {
+    anchor: "overview" | "guides" | "places";
+    nonce: number;
+  } | null;
+  /** Scroll-spy callback (Overview only): the topmost visible section
+   *  (#overview / #guides / #places). Lets the rail highlight the
+   *  matching nav item as the user scrolls. */
+  onActiveSection?: (section: "overview" | "guides" | "places") => void;
 }) {
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
     : undefined;
+
+  // Rail Guides/Places → scroll the mounted Overview to the section.
+  // Batched with the Overview switch upstream, so by the time this
+  // effect fires (post-commit) the section is in the DOM.
+  useEffect(() => {
+    if (!scrollRequest) return;
+    document
+      .getElementById(scrollRequest.anchor)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [scrollRequest]);
+
+  // Scroll-spy — Overview only. Mirrors the old DayDetail logic: the
+  // active section is the DEEPEST one whose top has scrolled to within
+  // SPY_TRIGGER of the column top ("the section you most recently reached").
+  // (An IntersectionObserver's "topmost intersecting" is too sticky here —
+  // a sliver of the previous section keeps it active.) Passive listener,
+  // three cheap rect reads per scroll → no jank. Disconnects on a day
+  // selection (the rail's day highlight takes over).
+  useEffect(() => {
+    if (selectedDayId !== null || !onActiveSection) return;
+    const ORDER = ["overview", "guides", "places"] as const;
+    const scrollRoot = document
+      .getElementById("overview")
+      ?.closest(".overflow-y-auto");
+    if (!scrollRoot) return;
+
+    const SPY_TRIGGER = 100;
+    const detect = () => {
+      const rootTop = scrollRoot.getBoundingClientRect().top;
+      let active: (typeof ORDER)[number] = "overview";
+      for (const id of ORDER) {
+        const sec = document.getElementById(id);
+        if (sec && sec.getBoundingClientRect().top - rootTop <= SPY_TRIGGER) {
+          active = id;
+        }
+      }
+      onActiveSection(active);
+    };
+
+    detect();
+    scrollRoot.addEventListener("scroll", detect, { passive: true });
+    return () => scrollRoot.removeEventListener("scroll", detect);
+  }, [selectedDayId, onActiveSection]);
 
   const [browseTarget, setBrowseTarget] = useState<BrowseTarget | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -153,14 +235,13 @@ export function DayDetailCorridorColumn({
     });
   };
 
-  // Corridor tile "Details →" — resolve the placeId to its source
-  // (waypoint or segmentSuggestion) and open the shared MapDetailOverlay
-  // via trip:openDetail, exactly as the browse cards do. Waypoints pass
-  // the full enriched record so all detail sections render; suggestions
-  // pass the id/title/photo/coords/description subset.
-  const openPlaceDetail = (placeId: string) => {
-    if (!day) return;
-    const wp = day.waypoints.find((w) => w.id === placeId);
+  // Resolve a placeId within a given day to its source (waypoint or
+  // segmentSuggestion) and open the shared MapDetailOverlay via
+  // trip:openDetail, exactly as the browse cards do. Waypoints pass the
+  // full enriched record so all detail sections render; suggestions pass
+  // the id/title/photo/coords/description subset. Returns true if found.
+  const dispatchPlaceDetail = (d: Day, placeId: string): boolean => {
+    const wp = d.waypoints.find((w) => w.id === placeId);
     if (wp) {
       window.dispatchEvent(
         new CustomEvent("trip:openDetail", {
@@ -169,8 +250,8 @@ export function DayDetailCorridorColumn({
               id: wp.id,
               title: wp.title,
               photoUrl: wp.photoUrl,
-              dayNumber: day.dayNumber,
-              dayId: day.id,
+              dayNumber: d.dayNumber,
+              dayId: d.id,
               coords: wp.coords,
               description: wp.description,
               waypoint: wp,
@@ -179,10 +260,10 @@ export function DayDetailCorridorColumn({
           },
         }),
       );
-      return;
+      return true;
     }
-    const sug = day.segmentSuggestions?.find((s) => s.id === placeId);
-    if (!sug) return;
+    const sug = d.segmentSuggestions?.find((s) => s.id === placeId);
+    if (!sug) return false;
     window.dispatchEvent(
       new CustomEvent("trip:openDetail", {
         detail: {
@@ -190,8 +271,8 @@ export function DayDetailCorridorColumn({
             id: sug.id,
             title: sug.title,
             photoUrl: sug.photoUrl,
-            dayNumber: day.dayNumber,
-            dayId: day.id,
+            dayNumber: d.dayNumber,
+            dayId: d.id,
             coords: sug.coords,
             description: sug.description,
             dayRelative: true,
@@ -199,6 +280,19 @@ export function DayDetailCorridorColumn({
         },
       }),
     );
+    return true;
+  };
+
+  // Corridor tile Details — resolve within the selected day.
+  const openPlaceDetail = (placeId: string) => {
+    if (day) dispatchPlaceDetail(day, placeId);
+  };
+
+  // Overview place Details — no selected day, so resolve trip-wide.
+  const openTripPlaceDetail = (placeId: string) => {
+    for (const d of trip.days) {
+      if (dispatchPlaceDetail(d, placeId)) return;
+    }
   };
 
   return (
@@ -223,7 +317,17 @@ export function DayDetailCorridorColumn({
             onExploreDay={openBrowse}
           />
         ) : (
-          <TripDetailHeader trip={trip} />
+          <DayDetailOverview
+            routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
+            heroImageUrl={trip.heroImage}
+            heroAlt={trip.title}
+            guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
+            guides={OVERVIEW_GUIDES}
+            placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
+            places={topPlacesForTrip(trip)}
+            onOpenPlace={openTripPlaceDetail}
+            addPlaceholder
+          />
         )}
       </div>
 

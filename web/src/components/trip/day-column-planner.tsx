@@ -34,6 +34,8 @@ export function DayColumnPlanner({
   activeDayId,
   onSelectDay,
   onSelectOverview,
+  onScrollTo,
+  activeSection,
 }: {
   tripId: string;
   days: Day[];
@@ -46,8 +48,30 @@ export function DayColumnPlanner({
   activeDayId?: string | null;
   onSelectDay?: (dayId: string) => void;
   onSelectOverview?: () => void;
+  /** Switch to Overview and scroll its column to the named section
+   *  (#overview / #guides / #places). Wired to all three nav items —
+   *  Overview scrolls back to the hero/top. */
+  onScrollTo?: (anchor: "overview" | "guides" | "places") => void;
+  /** Scroll-spy: the topmost visible Overview section, or null when a day
+   *  is selected (the day card highlights instead). Drives which of
+   *  Overview / Guides / Places to Visit highlights. */
+  activeSection?: "overview" | "guides" | "places" | null;
 }) {
   const wired = activeDayId !== undefined;
+  // Highlighting has two levels while in the Overview column:
+  //   - Overview stays green the whole time (you're in the Overview
+  //     section), and
+  //   - Guides / Places to Visit additionally light blue when their
+  //     section is the current scroll-spy target.
+  // A selected day turns all three off (the day card highlights instead).
+  const inOverview = !wired || activeDayId === null;
+  const overviewActive = inOverview;
+  const guidesActive = inOverview && activeSection === "guides";
+  const placesActive = inOverview && activeSection === "places";
+  // Itinerary is the day stack's header — green when a day is the active
+  // view (mirroring Overview's green in Overview mode). Legacy (unwired)
+  // always shows a day, so it stays green there.
+  const itineraryActive = !wired || activeDayId !== null;
   return (
     <aside
       aria-label="Days"
@@ -62,22 +86,39 @@ export function DayColumnPlanner({
        *  the legacy presentational rendering). */}
       <NavHeader
         label="Overview"
-        tone={!wired || activeDayId === null ? "active" : "idle"}
+        tone={overviewActive ? "active" : "idle"}
         height={55}
         fontSize={25}
-        onClick={onSelectOverview}
+        onClick={onScrollTo ? () => onScrollTo("overview") : onSelectOverview}
       />
-      <NavHeader label="Guides" tone="idle" height={50} fontSize={20} />
-      <NavHeader label="Places to Visit" tone="idle" height={50} fontSize={20} />
+      <NavHeader
+        label="Guides"
+        tone={guidesActive ? "active" : "idle"}
+        activeColor="blue"
+        height={50}
+        fontSize={20}
+        onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
+      />
+      <NavHeader
+        label="Places to Visit"
+        tone={placesActive ? "active" : "idle"}
+        activeColor="blue"
+        height={50}
+        fontSize={20}
+        onClick={onScrollTo ? () => onScrollTo("places") : undefined}
+      />
       <SettingsHeader label="Trip Settings" />
 
-      {/* Itinerary header — same green/amber treatment as Overview, no toggle. */}
+      {/* Itinerary header — green/amber when the day view is active
+       *  (mirrors Overview's highlight), idle when in Overview. */}
       <div
         className="flex items-center justify-between shrink-0 border-b border-border-subtle"
         style={{
           height: 55,
           padding: "10px 16px 10px 17px",
-          backgroundColor: "var(--bg-day-active)",
+          backgroundColor: itineraryActive
+            ? "var(--bg-day-active)"
+            : "var(--bg-card)",
         }}
       >
         <span
@@ -85,7 +126,9 @@ export function DayColumnPlanner({
           style={{
             fontSize: 25,
             lineHeight: "33px",
-            color: "var(--amber-light)",
+            color: itineraryActive
+              ? "var(--amber-light)"
+              : "var(--text-primary)",
           }}
         >
           Itinerary
@@ -120,14 +163,29 @@ function NavHeader({
   height,
   fontSize,
   onClick,
+  activeColor = "green",
 }: {
   label: string;
   tone: "active" | "idle";
   height: number;
   fontSize: number;
   onClick?: () => void;
+  /** Active-state treatment. "green" = Overview's amber-on-green header;
+   *  "blue" = the day-selected blue (Guides / Places to Visit, so the
+   *  section indicator matches the day highlight). */
+  activeColor?: "green" | "blue";
 }) {
   const active = tone === "active";
+  const bg = !active
+    ? "var(--bg-card)"
+    : activeColor === "blue"
+      ? "var(--bg-day-selected)"
+      : "var(--bg-day-active)";
+  const color = !active
+    ? "var(--text-primary)"
+    : activeColor === "blue"
+      ? "var(--text-primary)"
+      : "var(--amber-light)";
   return (
     <button
       type="button"
@@ -136,17 +194,10 @@ function NavHeader({
       style={{
         height,
         padding: "10px 16px 10px 20px",
-        backgroundColor: active ? "var(--bg-day-active)" : "var(--bg-card)",
+        backgroundColor: bg,
       }}
     >
-      <span
-        className="font-sans"
-        style={{
-          fontSize,
-          lineHeight: "33px",
-          color: active ? "var(--amber-light)" : "var(--text-primary)",
-        }}
-      >
+      <span className="font-sans" style={{ fontSize, lineHeight: "33px", color }}>
         {label}
       </span>
     </button>
@@ -255,7 +306,7 @@ function DayCard({
         }
       >
         <span
-          className="font-mono"
+          className="font-mono whitespace-nowrap"
           style={{
             fontSize: 14,
             lineHeight: "14px",
