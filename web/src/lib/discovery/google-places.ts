@@ -243,6 +243,96 @@ type GooglePlace = {
   priceLevel?: string;
 };
 
+// ── Place Details (v1) — corridor tile hydrate-by-place_id ────────────────
+
+/** The volatile "rich" fields the corridor tile grafts onto an essentials
+ *  tile at day-select. NEVER persisted. */
+export type PlaceRich = {
+  rating?: number;
+  reviewCount?: number;
+  priceTier?: 1 | 2 | 3 | 4;
+  /** Routed through /api/places/photo (key stays server-side). */
+  photoUrl?: string;
+  hours?: string;
+};
+
+/** Single-place RICH field mask — MATCHES the browse discovery field set
+ *  exactly (rating / userRatingCount / photos / hours / priceLevel), no
+ *  broader. No "places." prefix: Place Details returns the place resource
+ *  directly, not a `places[]` wrapper. */
+const DETAILS_FIELD_MASK = [
+  "id",
+  "displayName",
+  "rating",
+  "userRatingCount",
+  "priceLevel",
+  "photos",
+  "regularOpeningHours.weekdayDescriptions",
+].join(",");
+
+/** Live Google Place Details for one place_id — the corridor tile hydrate.
+ *  Same auth + rich field set + photo proxy as the browse discovery path;
+ *  returns ONLY the volatile fields to graft. NEVER persisted (callers hold
+ *  it in a short ephemeral cache, same as browse). Returns null on missing
+ *  key, network error, or non-OK response, so the caller keeps essentials.
+ *
+ *  Docs: https://developers.google.com/maps/documentation/places/web-service/place-details */
+export async function placeDetails(
+  placeId: string,
+  signal?: AbortSignal,
+): Promise<PlaceRich | null> {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) {
+    if (!warnedMissingKey) {
+      console.warn(
+        "[google-places] GOOGLE_PLACES_API_KEY not set — skipping placeDetails.",
+      );
+      warnedMissingKey = true;
+    }
+    return null;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+      {
+        headers: {
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": DETAILS_FIELD_MASK,
+        },
+        signal,
+      },
+    );
+  } catch {
+    return null; // network/abort → caller keeps essentials
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.warn(
+      `[google-places] placeDetails HTTP ${res.status} ${body.slice(0, 160)}`,
+    );
+    return null;
+  }
+
+  const p = (await res.json()) as GooglePlace;
+  const photoRef = p.photos?.[0]?.name;
+  const tier = priceLevelToTier(p.priceLevel);
+  return {
+    ...(typeof p.rating === "number" ? { rating: p.rating } : {}),
+    ...(typeof p.userRatingCount === "number"
+      ? { reviewCount: p.userRatingCount }
+      : {}),
+    ...(tier ? { priceTier: tier } : {}),
+    ...(photoRef
+      ? { photoUrl: `/api/places/photo?ref=${encodeURIComponent(photoRef)}` }
+      : {}),
+    ...(p.regularOpeningHours?.weekdayDescriptions?.length
+      ? { hours: p.regularOpeningHours.weekdayDescriptions.join("; ") }
+      : {}),
+  };
+}
+
 function placeToSourceResult(
   p: GooglePlace,
   wanted: Set<SlideCategoryKey>,
