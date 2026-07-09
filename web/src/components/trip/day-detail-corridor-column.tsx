@@ -78,9 +78,12 @@ export function DayDetailCorridorColumn({
 }: {
   trip: Trip;
   selectedDayId: string | null;
-  /** Bumped by the rail's Guides/Places nav to scroll the Overview to a
-   *  section. `nonce` re-triggers the scroll even on the same anchor. */
-  scrollRequest?: { anchor: "guides" | "places"; nonce: number } | null;
+  /** Bumped by the rail's Overview/Guides/Places nav to scroll the
+   *  Overview to a section. `nonce` re-triggers even on the same anchor. */
+  scrollRequest?: {
+    anchor: "overview" | "guides" | "places";
+    nonce: number;
+  } | null;
   /** Scroll-spy callback (Overview only): the topmost visible section
    *  (#overview / #guides / #places). Lets the rail highlight the
    *  matching nav item as the user scrolls. */

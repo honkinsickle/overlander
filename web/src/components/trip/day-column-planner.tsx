@@ -49,8 +49,9 @@ export function DayColumnPlanner({
   onSelectDay?: (dayId: string) => void;
   onSelectOverview?: () => void;
   /** Switch to Overview and scroll its column to the named section
-   *  (#guides / #places). Wired to the Guides / Places to Visit nav. */
-  onScrollTo?: (anchor: "guides" | "places") => void;
+   *  (#overview / #guides / #places). Wired to all three nav items —
+   *  Overview scrolls back to the hero/top. */
+  onScrollTo?: (anchor: "overview" | "guides" | "places") => void;
   /** Scroll-spy: the topmost visible Overview section, or null when a day
    *  is selected (the day card highlights instead). Drives which of
    *  Overview / Guides / Places to Visit highlights. */
@@ -82,7 +83,7 @@ export function DayColumnPlanner({
         tone={navSection === "overview" ? "active" : "idle"}
         height={55}
         fontSize={25}
-        onClick={onSelectOverview}
+        onClick={onScrollTo ? () => onScrollTo("overview") : onSelectOverview}
       />
       <NavHeader
         label="Guides"

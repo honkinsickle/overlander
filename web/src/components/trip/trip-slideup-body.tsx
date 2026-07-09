@@ -63,7 +63,7 @@ export function TripSlideupBody({
   // the time the column's scroll effect fires. The nonce re-triggers the
   // scroll when the same section is tapped twice.
   const [scrollRequest, setScrollRequest] = useState<{
-    anchor: "guides" | "places";
+    anchor: "overview" | "guides" | "places";
     nonce: number;
   } | null>(null);
   // Scroll-spy: which Overview section is topmost (written by the column's
@@ -73,7 +73,7 @@ export function TripSlideupBody({
     "overview" | "guides" | "places"
   >("overview");
   const selectSection = useCallback(
-    (anchor: "guides" | "places") => {
+    (anchor: "overview" | "guides" | "places") => {
       selectDay(null);
       setScrollRequest((prev) => ({ anchor, nonce: (prev?.nonce ?? 0) + 1 }));
     },
