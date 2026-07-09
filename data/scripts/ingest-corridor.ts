@@ -72,6 +72,10 @@ import type { IngestResult } from "../ingestion/sources/_types.ts";
  */
 const SEGMENT_NPS_STATES: Record<string, readonly string[]> = {
   segment_a_la_pnw: ["CA", "NV", "AZ", "UT", "ID", "MT"],
+  // Northern corridor US units are all Alaska (Denali, Gates of the Arctic,
+  // etc.). Inert on a --skip-nps Google-only run; present so a future full
+  // run discovers AK parkCodes. Canada (YT/BC) legs have no NPS units.
+  la_to_deadhorse_full: ["AK"],
 };
 
 /**
@@ -94,6 +98,26 @@ const SEGMENT_ANCHORS: Record<string, readonly DiscoverAnchor[]> = {
     { label: "Pocatello, ID", centerLng: -112.4455, centerLat: 42.8713 },
     { label: "Missoula, MT", centerLng: -113.994, centerLat: 46.8721 },
     { label: "Whitefish, MT", centerLng: -114.3375, centerLat: 48.411 },
+  ],
+  // Northern core-12: the empty corridor nodes on LA→Deadhorse's northern
+  // half where attractions live (Chicken's giant chicken / Pedro Gold Dredge
+  // / Chicken Saloon, Watson Lake's Sign Post Forest, Dawson City's Klondike).
+  // Coords are the real la-to-deadhorse corridor node centroids (CC-BY-SA via
+  // OSM, 4-dp). 5 AK (US) · 7 Canada (4 YT, 3 BC) — Google discovery covers
+  // all regardless of country.
+  la_to_deadhorse_full: [
+    { label: "Dawson Creek, BC", centerLng: -120.2356, centerLat: 55.7596 },
+    { label: "Fort Nelson, BC", centerLng: -122.697, centerLat: 58.8052 },
+    { label: "Dease Lake, BC", centerLng: -130.0331, centerLat: 58.4308 },
+    { label: "Watson Lake, YT", centerLng: -128.7989, centerLat: 60.0631 },
+    { label: "Whitehorse, YT", centerLng: -135.0568, centerLat: 60.7211 },
+    { label: "Haines Junction, YT", centerLng: -137.5135, centerLat: 60.7521 },
+    { label: "Dawson City, YT", centerLng: -139.4344, centerLat: 64.0601 },
+    { label: "Tok, AK", centerLng: -142.9853, centerLat: 63.3367 },
+    { label: "Chicken, AK", centerLng: -141.9389, centerLat: 64.0708 },
+    { label: "Fairbanks, AK", centerLng: -147.7164, centerLat: 64.8378 },
+    { label: "Coldfoot, AK", centerLng: -150.1751, centerLat: 67.2533 },
+    { label: "Deadhorse, AK", centerLng: -148.4597, centerLat: 70.2002 },
   ],
 };
 
@@ -433,6 +457,10 @@ async function main(): Promise<void> {
     .option("--skip-ridb", "Skip RIDB stage")
     .option("--skip-nps", "Skip NPS stage (e.g. to re-ingest only RIDB after a tiling fix)")
     .option("--skip-google", "Skip Google enrichment + discovery (free sources only)")
+    .option(
+      "--skip-enrichment",
+      "Skip Google enrichment (stage 4a) but still run discovery (stage 4b). Discovery-only: avoids the whole-envelope enrichment candidate scan consuming the budget before the anchors run.",
+    )
     .parse(process.argv);
 
   const opts = program.opts<{
@@ -441,6 +469,7 @@ async function main(): Promise<void> {
     skipRidb?: boolean;
     skipNps?: boolean;
     skipGoogle?: boolean;
+    skipEnrichment?: boolean;
   }>();
   const startedAt = Date.now();
 
@@ -540,9 +569,28 @@ async function main(): Promise<void> {
         cost: getCostLedger().summary(),
       };
     } else {
-      logger.info("ingest-corridor: stage 4a — Google enrichment");
-      const candidates = await fetchEnrichmentCandidates(corridor.bbox, ENRICH_CATEGORIES);
-      const enrichment = await runEnrichment(candidates);
+      // Stage 4a — Google enrichment. Skippable on its own: the candidate
+      // scan covers the WHOLE corridor envelope (thousands of records) and,
+      // running before discovery, can exhaust the budget cap before the
+      // anchors run. --skip-enrichment goes straight to discovery.
+      let enrichment: EnrichmentAggregate = {
+        candidates: 0,
+        cached_hit: 0,
+        cached_miss: 0,
+        enriched: 0,
+        miss: 0,
+        errors: 0,
+        duration_ms: 0,
+      };
+      if (opts.skipEnrichment) {
+        logger.info(
+          "ingest-corridor: --skip-enrichment — skipping stage 4a Google enrichment",
+        );
+      } else {
+        logger.info("ingest-corridor: stage 4a — Google enrichment");
+        const candidates = await fetchEnrichmentCandidates(corridor.bbox, ENRICH_CATEGORIES);
+        enrichment = await runEnrichment(candidates);
+      }
 
       logger.info("ingest-corridor: stage 4b — Google discovery");
       const anchors = SEGMENT_ANCHORS[opts.corridor] ?? [];
