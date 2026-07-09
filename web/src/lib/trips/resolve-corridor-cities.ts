@@ -38,6 +38,27 @@ import gazetteer from "@/lib/corridor/data/cities-na.json";
  * corridorCities and clients fall back per decision F; such days do not
  * advance the cursor.
  */
+/** Admin-stripped, normalized city key for comparing a label's start half
+ *  against the previous day's end half. Drops a trailing ", ST" / ", ST."
+ *  postal suffix ("Chicken, AK" → "chicken") and collapses whitespace so
+ *  via-labels and formatting variance ("Lake Louise " vs "Lake Louise")
+ *  compare equal. */
+function cityKey(name: string): string {
+  return name
+    .replace(/,\s*[A-Za-z]{2}\.?\s*$/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** True when two label halves name the same city (ignoring admin suffix). */
+function sameCity(a: string, b: string): boolean {
+  const ka = cityKey(a);
+  return ka.length > 0 && ka === cityKey(b);
+}
+
 export function resolveCorridorCities(trip: Trip): Trip {
   if (!trip.routePolyline) return trip;
   const line = decodePolyline(trip.routePolyline);
@@ -63,7 +84,35 @@ export function resolveCorridorCities(trip: Trip): Trip {
   };
 
   let cursor = 0;
+  // Carry the previous day's location forward. Destination/location halves
+  // reliably carry the ", ST" admin suffix; start halves often don't
+  // ("Chicken" in "Chicken — Dawson City, YT"). When this day's start names
+  // the same city as the prior day's location, adopt the prior admin-bearing
+  // form so the start node reads "Chicken, AK". Adopted only on a city-name
+  // match, so a genuinely different start (or a name variance like
+  // "Bell 2" vs "Bell 2 Lodge") falls back to the raw label half. The carry
+  // also survives layover days ("Whitehorse, YT · Rest day"), which the next
+  // day resumes from. Parsed BEFORE the geometry guards so a day we can't
+  // slice still advances the chain. (Admin-suffix fix 2026-07-09.)
+  let prevEndName: string | undefined;
   const days = trip.days.map((day, i) => {
+    // Day labels are "Start City, ST — End City, ST" (same format the
+    // finalize path writes; spec §1.3 derives node names from the halves).
+    // Some reference labels carry a via segment ("Lake Louise — Icefields
+    // Pkwy — Jasper, AB") — the end is the LAST part, not the second.
+    const parts = day.label.split(" — ");
+    const startRaw = parts[0];
+    const endName = parts.length > 1 ? parts[parts.length - 1] : undefined;
+    const startName =
+      prevEndName && startRaw && sameCity(prevEndName, startRaw)
+        ? prevEndName
+        : startRaw;
+    // Advance the carry with this day's destination (travel days) or its
+    // resting location (layover days name it before the " · " descriptor,
+    // else the whole single-location label), so a rest day doesn't break
+    // the admin chain for the day that resumes from it.
+    prevEndName = endName ?? day.label.split(" · ")[0].trim();
+
     // Reference days predate Day.startCoord — apply the documented
     // fallback chain (types.ts / spec §1.3): trip.startCoords for
     // Day 1, else the previous day's end coords.
@@ -71,14 +120,6 @@ export function resolveCorridorCities(trip: Trip): Trip {
       day.startCoord ??
       (i === 0 ? trip.startCoords : trip.days[i - 1].coords);
     if (!startCoord || !day.coords) return day;
-
-    // Day labels are "Start City, ST — End City, ST" (same format the
-    // finalize path writes; spec §1.3 derives node names from the halves).
-    // Some reference labels carry a via segment ("Lake Louise — Icefields
-    // Pkwy — Jasper, AB") — the end is the LAST part, not the second.
-    const parts = day.label.split(" — ");
-    const startName = parts[0];
-    const endName = parts.length > 1 ? parts[parts.length - 1] : undefined;
     if (!startName || !endName) return day;
 
     const window = line.slice(cursor);
