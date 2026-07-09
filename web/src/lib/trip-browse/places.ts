@@ -65,6 +65,10 @@ export type BrowsePlace = {
    *  USE_FEDERATED_POIS flag is on; absent in the legacy live-only path,
    *  so flag-off responses are byte-for-byte unchanged. */
   source?: "live" | "master_place";
+  /** Google place_id for corridor tile hydrate-by-place_id (live ratings/
+   *  photos at day-select). Set only for corpus rows backed by a google
+   *  source; absent otherwise. A stable, cache-exempt id — never persisted. */
+  placeId?: string;
   /** Federated-only enrichment, carried through the response for
    *  verification even though the card UI doesn't render them yet. NULL
    *  for non-applicable rows; absent on live results. */

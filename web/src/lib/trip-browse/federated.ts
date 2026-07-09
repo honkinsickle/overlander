@@ -120,6 +120,11 @@ export type MasterPlaceRow = {
   geometry_polygon: Record<string, unknown> | null;
   description: string | null;
   attribution: Record<string, string> | null;
+  /** Linked google source_record place_id (external_id sans 'google:'), or
+   *  null when this master_place has no google source. The hydrate key.
+   *  Optional: the corridor RPC surfaces it (via a join); the by-id search
+   *  hydrate path (hydrate.ts) doesn't, and doesn't need it. */
+  google_place_id?: string | null;
 };
 
 function prettyCategory(c: string): string {
@@ -194,6 +199,8 @@ export function mapMasterPlaceRow(
     mvumCorridor: row.mvum_corridor,
     attribution: row.attribution,
     overlanderTags: row.overlander_tags,
+    // Hydrate key: present only when a google source backs this place.
+    ...(row.google_place_id ? { placeId: row.google_place_id } : {}),
   };
 }
 

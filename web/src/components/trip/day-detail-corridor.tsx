@@ -37,6 +37,10 @@ export type CorridorPlace = {
   photoAlt: string;
   rating?: number;
   reviewCount?: number;
+  /** Google place_id (corpus tiles backed by a google source). The key for
+   *  live hydrate-by-place_id of ratings/photos on day-select. Absent for
+   *  waypoints and non-google corpus rows. */
+  placeId?: string;
   /** True for waypoint-backed tiles (user/editorial stops) — they get the
    *  remove control. Suggestion-backed tiles stay read-only. */
   removable?: boolean;
