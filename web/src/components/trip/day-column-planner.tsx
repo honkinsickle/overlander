@@ -88,6 +88,7 @@ export function DayColumnPlanner({
       <NavHeader
         label="Guides"
         tone={navSection === "guides" ? "active" : "idle"}
+        activeColor="blue"
         height={50}
         fontSize={20}
         onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
@@ -95,6 +96,7 @@ export function DayColumnPlanner({
       <NavHeader
         label="Places to Visit"
         tone={navSection === "places" ? "active" : "idle"}
+        activeColor="blue"
         height={50}
         fontSize={20}
         onClick={onScrollTo ? () => onScrollTo("places") : undefined}
@@ -150,14 +152,29 @@ function NavHeader({
   height,
   fontSize,
   onClick,
+  activeColor = "green",
 }: {
   label: string;
   tone: "active" | "idle";
   height: number;
   fontSize: number;
   onClick?: () => void;
+  /** Active-state treatment. "green" = Overview's amber-on-green header;
+   *  "blue" = the day-selected blue (Guides / Places to Visit, so the
+   *  section indicator matches the day highlight). */
+  activeColor?: "green" | "blue";
 }) {
   const active = tone === "active";
+  const bg = !active
+    ? "var(--bg-card)"
+    : activeColor === "blue"
+      ? "var(--bg-day-selected)"
+      : "var(--bg-day-active)";
+  const color = !active
+    ? "var(--text-primary)"
+    : activeColor === "blue"
+      ? "var(--text-primary)"
+      : "var(--amber-light)";
   return (
     <button
       type="button"
@@ -166,17 +183,10 @@ function NavHeader({
       style={{
         height,
         padding: "10px 16px 10px 20px",
-        backgroundColor: active ? "var(--bg-day-active)" : "var(--bg-card)",
+        backgroundColor: bg,
       }}
     >
-      <span
-        className="font-sans"
-        style={{
-          fontSize,
-          lineHeight: "33px",
-          color: active ? "var(--amber-light)" : "var(--text-primary)",
-        }}
-      >
+      <span className="font-sans" style={{ fontSize, lineHeight: "33px", color }}>
         {label}
       </span>
     </button>
