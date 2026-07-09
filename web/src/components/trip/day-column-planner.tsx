@@ -306,7 +306,7 @@ function DayCard({
         }
       >
         <span
-          className="font-mono"
+          className="font-mono whitespace-nowrap"
           style={{
             fontSize: 14,
             lineHeight: "14px",
