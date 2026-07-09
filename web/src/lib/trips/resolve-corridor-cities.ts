@@ -155,9 +155,20 @@ export function resolveCorridorCities(trip: Trip): Trip {
     // Place→node bucketing (spec §2.3) over the day's full place pool —
     // segmentSuggestions ∪ waypoints (spec §1.4 resolution set), deduped
     // by id (an added suggestion exists in BOTH pools under one id).
+    // Phase 0 (2026-07-09): also fold in `day.suggestions` — the legacy
+    // per-category discoveries the reference build already writes. The
+    // reference trip never populated `segmentSuggestions` (that field is
+    // wizard-finalize-only), so its discovered places were orphaned from
+    // the corridor. Surfacing them here (live-at-serve) puts real places
+    // under nodes without a reseed, until the reference build is taught to
+    // write segmentSuggestions directly.
     const pool: { id: string; coords: [number, number] }[] = [];
     const seen = new Set<string>();
-    for (const p of [...(day.segmentSuggestions ?? []), ...day.waypoints]) {
+    for (const p of [
+      ...(day.segmentSuggestions ?? []),
+      ...Object.values(day.suggestions ?? {}),
+      ...day.waypoints,
+    ]) {
       if (!p.coords || seen.has(p.id)) continue;
       seen.add(p.id);
       pool.push({ id: p.id, coords: p.coords });
