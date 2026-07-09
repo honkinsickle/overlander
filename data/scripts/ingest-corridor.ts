@@ -72,6 +72,10 @@ import type { IngestResult } from "../ingestion/sources/_types.ts";
  */
 const SEGMENT_NPS_STATES: Record<string, readonly string[]> = {
   segment_a_la_pnw: ["CA", "NV", "AZ", "UT", "ID", "MT"],
+  // Northern corridor US units are all Alaska (Denali, Gates of the Arctic,
+  // etc.). Inert on a --skip-nps Google-only run; present so a future full
+  // run discovers AK parkCodes. Canada (YT/BC) legs have no NPS units.
+  la_to_deadhorse_full: ["AK"],
 };
 
 /**
@@ -94,6 +98,26 @@ const SEGMENT_ANCHORS: Record<string, readonly DiscoverAnchor[]> = {
     { label: "Pocatello, ID", centerLng: -112.4455, centerLat: 42.8713 },
     { label: "Missoula, MT", centerLng: -113.994, centerLat: 46.8721 },
     { label: "Whitefish, MT", centerLng: -114.3375, centerLat: 48.411 },
+  ],
+  // Northern core-12: the empty corridor nodes on LA→Deadhorse's northern
+  // half where attractions live (Chicken's giant chicken / Pedro Gold Dredge
+  // / Chicken Saloon, Watson Lake's Sign Post Forest, Dawson City's Klondike).
+  // Coords are the real la-to-deadhorse corridor node centroids (CC-BY-SA via
+  // OSM, 4-dp). 5 AK (US) · 7 Canada (4 YT, 3 BC) — Google discovery covers
+  // all regardless of country.
+  la_to_deadhorse_full: [
+    { label: "Dawson Creek, BC", centerLng: -120.2356, centerLat: 55.7596 },
+    { label: "Fort Nelson, BC", centerLng: -122.697, centerLat: 58.8052 },
+    { label: "Dease Lake, BC", centerLng: -130.0331, centerLat: 58.4308 },
+    { label: "Watson Lake, YT", centerLng: -128.7989, centerLat: 60.0631 },
+    { label: "Whitehorse, YT", centerLng: -135.0568, centerLat: 60.7211 },
+    { label: "Haines Junction, YT", centerLng: -137.5135, centerLat: 60.7521 },
+    { label: "Dawson City, YT", centerLng: -139.4344, centerLat: 64.0601 },
+    { label: "Tok, AK", centerLng: -142.9853, centerLat: 63.3367 },
+    { label: "Chicken, AK", centerLng: -141.9389, centerLat: 64.0708 },
+    { label: "Fairbanks, AK", centerLng: -147.7164, centerLat: 64.8378 },
+    { label: "Coldfoot, AK", centerLng: -150.1751, centerLat: 67.2533 },
+    { label: "Deadhorse, AK", centerLng: -148.4597, centerLat: 70.2002 },
   ],
 };
 
