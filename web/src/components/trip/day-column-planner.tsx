@@ -58,14 +58,16 @@ export function DayColumnPlanner({
   activeSection?: "overview" | "guides" | "places" | null;
 }) {
   const wired = activeDayId !== undefined;
-  // Which nav item highlights: legacy (unwired) always "overview"; a
-  // selected day → null (day card wins); Overview → the scroll-spy
-  // section (default "overview" until the observer reports).
-  const navSection = !wired
-    ? "overview"
-    : activeDayId === null
-      ? (activeSection ?? "overview")
-      : null;
+  // Highlighting has two levels while in the Overview column:
+  //   - Overview stays green the whole time (you're in the Overview
+  //     section), and
+  //   - Guides / Places to Visit additionally light blue when their
+  //     section is the current scroll-spy target.
+  // A selected day turns all three off (the day card highlights instead).
+  const inOverview = !wired || activeDayId === null;
+  const overviewActive = inOverview;
+  const guidesActive = inOverview && activeSection === "guides";
+  const placesActive = inOverview && activeSection === "places";
   return (
     <aside
       aria-label="Days"
@@ -80,14 +82,14 @@ export function DayColumnPlanner({
        *  the legacy presentational rendering). */}
       <NavHeader
         label="Overview"
-        tone={navSection === "overview" ? "active" : "idle"}
+        tone={overviewActive ? "active" : "idle"}
         height={55}
         fontSize={25}
         onClick={onScrollTo ? () => onScrollTo("overview") : onSelectOverview}
       />
       <NavHeader
         label="Guides"
-        tone={navSection === "guides" ? "active" : "idle"}
+        tone={guidesActive ? "active" : "idle"}
         activeColor="blue"
         height={50}
         fontSize={20}
@@ -95,7 +97,7 @@ export function DayColumnPlanner({
       />
       <NavHeader
         label="Places to Visit"
-        tone={navSection === "places" ? "active" : "idle"}
+        tone={placesActive ? "active" : "idle"}
         activeColor="blue"
         height={50}
         fontSize={20}
