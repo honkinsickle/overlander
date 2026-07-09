@@ -68,6 +68,10 @@ export function DayColumnPlanner({
   const overviewActive = inOverview;
   const guidesActive = inOverview && activeSection === "guides";
   const placesActive = inOverview && activeSection === "places";
+  // Itinerary is the day stack's header — green when a day is the active
+  // view (mirroring Overview's green in Overview mode). Legacy (unwired)
+  // always shows a day, so it stays green there.
+  const itineraryActive = !wired || activeDayId !== null;
   return (
     <aside
       aria-label="Days"
@@ -105,13 +109,16 @@ export function DayColumnPlanner({
       />
       <SettingsHeader label="Trip Settings" />
 
-      {/* Itinerary header — same green/amber treatment as Overview, no toggle. */}
+      {/* Itinerary header — green/amber when the day view is active
+       *  (mirrors Overview's highlight), idle when in Overview. */}
       <div
         className="flex items-center justify-between shrink-0 border-b border-border-subtle"
         style={{
           height: 55,
           padding: "10px 16px 10px 17px",
-          backgroundColor: "var(--bg-day-active)",
+          backgroundColor: itineraryActive
+            ? "var(--bg-day-active)"
+            : "var(--bg-card)",
         }}
       >
         <span
@@ -119,7 +126,9 @@ export function DayColumnPlanner({
           style={{
             fontSize: 25,
             lineHeight: "33px",
-            color: "var(--amber-light)",
+            color: itineraryActive
+              ? "var(--amber-light)"
+              : "var(--text-primary)",
           }}
         >
           Itinerary
