@@ -10,6 +10,12 @@ import {
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
 import type { PlaceRich } from "@/lib/discovery/google-places";
+import type { BrowsePlace } from "@/lib/trip-browse/places";
+import {
+  browsePlaceToWaypoint,
+  computeCardStats,
+  type CardCtx,
+} from "@/lib/trip-browse/card-stats";
 import { topPlacesForTrip } from "@/lib/trips/top-places";
 import {
   CategoryBrowsePanel,
@@ -20,7 +26,7 @@ import {
   removeWaypointAction,
 } from "@/lib/trips/actions";
 import type { AddedPlace } from "@/lib/trips/added-place";
-import type { CorridorCity, Day, Trip } from "@/lib/trips/types";
+import type { CorridorCity, Day, Trip, Waypoint } from "@/lib/trips/types";
 
 /**
  * Slideup center column for the corridor integration — single-day model:
@@ -197,6 +203,21 @@ export function DayDetailCorridorColumn({
   const tripRef = useRef(trip);
   tripRef.current = trip;
 
+  // Track which detail (if any) is currently open, so the fetch-on-open
+  // fallback below only re-emits rich fields into a sheet that's still
+  // showing THIS place — never re-opens one the user has since closed or
+  // switched away from. Mirrors the overlay's own open state via the event.
+  const openDetailIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<{ place: { id?: string } | null }>).detail
+        ?.place?.id;
+      openDetailIdRef.current = id ?? null;
+    };
+    window.addEventListener("trip:openDetail", onOpen);
+    return () => window.removeEventListener("trip:openDetail", onOpen);
+  }, []);
+
   // Optimistic set of the selected day's added place ids. Seeded from
   // server waypoints and flipped IMMEDIATELY on add/remove so the browse
   // panel's "Added ✓" state updates without waiting on revalidation — the
@@ -318,22 +339,90 @@ export function DayDetailCorridorColumn({
     }
     const sug = d.segmentSuggestions?.find((s) => s.id === placeId);
     if (!sug) return false;
-    window.dispatchEvent(
-      new CustomEvent("trip:openDetail", {
-        detail: {
-          place: {
-            id: sug.id,
-            title: sug.title,
-            photoUrl: sug.photoUrl,
-            dayNumber: d.dayNumber,
-            dayId: d.id,
-            coords: sug.coords,
-            description: sug.description,
-            dayRelative: true,
+
+    // Build the rich detail waypoint the overlay reads from `place.waypoint`
+    // (same browsePlaceToWaypoint browse uses — a segmentSuggestion IS a
+    // BrowsePlace). Static fields (address/phone/website/description/tags)
+    // come straight off the tile; live fields (rating/reviewCount/hours/
+    // photo) graft from the card hydrate's PlaceRich when present.
+    const i = trip.days.findIndex((x) => x.id === d.id);
+    const prev = i > 0 ? trip.days[i - 1] : undefined;
+    const ctx: CardCtx = {
+      category: sug.category ?? "interest",
+      dayCoords: d.coords,
+      dayStartCoords:
+        d.startCoord ?? prev?.coords ?? (i === 0 ? trip.startCoords : undefined),
+      dayLabel: d.label,
+      dayNumber: d.dayNumber,
+      dayDate: d.date,
+      dayRelative: true,
+    };
+    const synth = (rich?: PlaceRich): Waypoint => {
+      const enriched: BrowsePlace = {
+        ...sug,
+        rating: rich?.rating ?? sug.rating,
+        reviewCount: rich?.reviewCount ?? sug.reviewCount,
+        photoUrl: rich?.photoUrl ?? sug.photoUrl,
+      };
+      const wp = browsePlaceToWaypoint(
+        enriched,
+        ctx,
+        computeCardStats(enriched, ctx),
+      );
+      // browsePlaceToWaypoint sources hours from card stats (absent on the
+      // essentials tile); graft the live hours from PlaceRich when present.
+      return rich?.hours
+        ? { ...wp, logistics: { ...wp.logistics, hours: rich.hours } }
+        : wp;
+    };
+    const emit = (waypoint: Waypoint) => {
+      window.dispatchEvent(
+        new CustomEvent("trip:openDetail", {
+          detail: {
+            place: {
+              id: sug.id,
+              title: sug.title,
+              photoUrl: waypoint.photoUrl ?? sug.photoUrl,
+              dayNumber: d.dayNumber,
+              dayId: d.id,
+              coords: sug.coords,
+              description: sug.description,
+              waypoint,
+              dayRelative: true,
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
+    };
+
+    const cached = sug.placeId ? hydrated[sug.placeId] : undefined;
+    emit(synth(cached));
+
+    // Fetch-on-open fallback: a google-backed tile whose card hydrate hasn't
+    // landed yet. Fetch its rich fields, cache them (updates the card too),
+    // and re-emit into the sheet — but only if it's still open on THIS place.
+    if (sug.placeId && !cached) {
+      const pid = sug.placeId;
+      void (async () => {
+        try {
+          const res = await fetch("/api/places/details", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ placeIds: [pid] }),
+          });
+          if (!res.ok) return;
+          const { details } = (await res.json()) as {
+            details: Record<string, PlaceRich>;
+          };
+          const got = details?.[pid];
+          if (!got) return;
+          setHydrated((h) => ({ ...h, [pid]: got }));
+          if (openDetailIdRef.current === sug.id) emit(synth(got));
+        } catch {
+          // network/abort → sheet stays on static + any cached fields
+        }
+      })();
+    }
     return true;
   };
 
