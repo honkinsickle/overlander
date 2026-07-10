@@ -20,20 +20,22 @@
  * Requires (for --seed): NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
  * in web/.env.local. `--snapshot` alone has no Supabase dependency.
  *
- * ── SNAPSHOT CONVENTION (2026-07-09): committed snapshot is COORDS-ONLY ──
- * The build now bakes each travel day's `corridorCities` spine into the
- * output (spec §3 precompute-and-persist). We are NOT adopting that yet —
- * corridor derivation is under active development (node naming, layover
- * handling, param tuning), and a baked spine goes silently stale on
- * la-to-deadhorse until someone remembers to re-snapshot. So the committed
- * `.alaska-snapshot.json` intentionally OMITS `corridorCities`: reference.ts
- * `withCorridors()` derives them live at serve time, so every derivation
- * improvement shows automatically.
+ * ── BAKING ADOPTED (2026-07-09): DB reference is precompute-and-persisted ──
+ * The build bakes each travel day's `corridorCities` spine (spec §3), and the
+ * derivation has stabilized, so we now ADOPT baking for the DB reference: the
+ * fork-latency win (forks copy the baked payload verbatim instead of
+ * re-deriving ~7s each) is wanted. The DB `reference_trips.payload` is baked
+ * (spine + folded corpus tiles) via `scripts/bake-reference.ts` — reference.ts
+ * `withCorridors()` / the fold then skip when a baked payload is served.
+ * Reversible: re-run `bake-reference.ts` after any derivation change to
+ * refresh (it strips the prior bake first).
  *
- * Therefore: do NOT blind-commit raw `npm run snapshot` output. Strip
- * `corridorCities` from every day first (the only intended snapshot deltas
- * are day/waypoint DATA — e.g. authored `coords`). Adopt baking deliberately
- * later, once the derivation is stable and the precompute win is wanted.
+ * SNAPSHOT (committed `.alaska-snapshot.json`) still lags: it remains the
+ * fallback-only source and this seed path does not yet strip/bake it to match
+ * the DB. Until that's reconciled, do NOT blind-commit raw `npm run snapshot`
+ * output — the intended snapshot deltas are day/waypoint DATA (e.g. authored
+ * `coords`). TODO(snapshot-bake): align the committed snapshot with the baked
+ * DB reference (filed separately; DB is the DB-first source of truth).
  */
 
 import { readFile, writeFile } from "node:fs/promises";
