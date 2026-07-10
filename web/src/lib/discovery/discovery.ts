@@ -75,8 +75,15 @@ function dedupe(results: SourceResult[]): SourceResult[][] {
   return groups;
 }
 
-function sameSpot(a: SourceResult, b: SourceResult): boolean {
-  if (a.category !== b.category) return false;
+/** Same-place heuristic: same category + within ~80m + fuzzy-equal name.
+ *  Typed on the minimal shape so it works for both `SourceResult` (dedup
+ *  within discovery) and `BrowsePlace` (corpus↔live merge in the wizard
+ *  fold) — both carry `category: SlideCategoryKey` / `coords` / `title`. */
+export function sameSpot(
+  a: { category?: SlideCategoryKey; coords: [number, number]; title: string },
+  b: { category?: SlideCategoryKey; coords: [number, number]; title: string },
+): boolean {
+  if (!a.category || !b.category || a.category !== b.category) return false;
   if (haversineMeters(a.coords, b.coords) > 80) return false;
   return normalizeName(a.title) === normalizeName(b.title);
 }
