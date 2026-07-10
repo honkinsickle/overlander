@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/supabase/env";
+import { bakeCorridors, hasBakedCorridors } from "@/lib/trips/bake-corridors";
+import type { Trip } from "@/lib/trips/types";
 
 /** Fork a reference trip into the authed user's trips row.
  *
@@ -49,6 +51,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "reference_not_found" }, { status: 404 });
   }
 
+  // Ensure the stored payload carries corridors so the fork is editable and
+  // renders full (not the degraded two-node fallback). Two paths:
+  //   - Reseeded reference (already baked): copy VERBATIM — no re-derive.
+  //     This is the hot path once the reference is precompute-and-persisted;
+  //     re-baking here would waste ~7-10s AND clobber the baked corridors.
+  //   - Legacy spine-less source (no corridorCities): bake now — the safety
+  //     net for pre-engine payloads (and any lacking routePolyline resolves
+  //     to a no-op, never a throw). Inline + fails soft.
+  // recomputeDay / add-waypoint then operate on the stored corridors, so a
+  // forked trip behaves like a wizard-finalize trip either way.
+  const source = ref.payload as Trip;
+  const baked = hasBakedCorridors(source)
+    ? source
+    : await bakeCorridors(source, supabase);
+
   const { data: inserted, error: insertError } = await supabase
     .from("trips")
     .insert({
@@ -56,7 +73,7 @@ export async function POST(request: NextRequest) {
       reference_id: referenceId,
       title: ref.title,
       state: "active",
-      payload: ref.payload,
+      payload: baked,
     })
     .select("id")
     .single();
