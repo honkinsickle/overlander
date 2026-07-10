@@ -91,6 +91,18 @@ export function DayDetailCorridor({
   const byId = new Map(places.map((p) => [p.id, p]));
   const dd = String(dayNumber).padStart(2, "0");
 
+  // TEMP INSTRUMENTATION (fix/corridor-phantom-spine) — REMOVE before merge.
+  // Logs the in-memory cities array this render received, to distinguish a
+  // reconciliation artifact (in-memory len 2, but 3 DOM nodes) from a
+  // mutation/accumulation bug (in-memory len already 3).
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[corridor-rail] day=${dayNumber} cities.length=${cities.length} :: ` +
+        cities.map((c) => `${c.id}#${c.kind}`).join(" | "),
+    );
+  }
+
   // Interleave bare mile markers between city nodes by mile position.
   type Item =
     | { type: "city"; city: CorridorCity; last: boolean }
