@@ -8,6 +8,7 @@ import {
   isSuppressedCategory,
   type MasterPlaceRow,
 } from "@/lib/trip-browse/federated";
+import type { BrowsePlace } from "@/lib/trip-browse/places";
 
 /** The cookie-backed server client both the reference serve and the fork
  *  route already hold. Typed off `createSupabaseServerClient` so callers
@@ -81,31 +82,46 @@ export async function foldFederatedCorridorSupply(
       const start = i === 0 ? trip.startCoords : trip.days[i - 1].coords;
       const end = day.coords;
       if (!start || !end) return day;
-      try {
-        const { data, error } = await supabase.rpc("pois_along_corridor", {
-          p_route: { type: "LineString", coordinates: [start, end] },
-          p_buffer_m: 16000,
-          p_categories: null,
-        });
-        if (error || !data) return day;
-        const seen = new Set((day.segmentSuggestions ?? []).map((p) => p.id));
-        const corpus = (data as MasterPlaceRow[])
-          .filter((r) => !isSuppressedCategory(r.primary_category))
-          .map((r) =>
-            mapMasterPlaceRow(r, primaryCategoryToSlideKey(r.primary_category)),
-          )
-          .filter((p) => !seen.has(p.id));
-        if (corpus.length === 0) return day;
-        return {
-          ...day,
-          segmentSuggestions: [...(day.segmentSuggestions ?? []), ...corpus],
-        };
-      } catch {
-        return day;
-      }
+      const seen = new Set((day.segmentSuggestions ?? []).map((p) => p.id));
+      const corpus = (await fetchCorpusForSegment(start, end, supabase)).filter(
+        (p) => !seen.has(p.id),
+      );
+      if (corpus.length === 0) return day;
+      return {
+        ...day,
+        segmentSuggestions: [...(day.segmentSuggestions ?? []), ...corpus],
+      };
     }),
   );
   return { ...trip, days };
+}
+
+/**
+ * Fetch the essentials-only master_place corpus within the corridor buffer
+ * of a single [start,end] segment, mapped to BrowsePlace. Shared by the
+ * per-day fold above and the wizard-finalize corpus merge
+ * (buildRouteAwareDays). Fails soft — returns [] on any RPC error.
+ */
+export async function fetchCorpusForSegment(
+  start: [number, number],
+  end: [number, number],
+  supabase: ServerClient,
+): Promise<BrowsePlace[]> {
+  try {
+    const { data, error } = await supabase.rpc("pois_along_corridor", {
+      p_route: { type: "LineString", coordinates: [start, end] },
+      p_buffer_m: 16000,
+      p_categories: null,
+    });
+    if (error || !data) return [];
+    return (data as MasterPlaceRow[])
+      .filter((r) => !isSuppressedCategory(r.primary_category))
+      .map((r) =>
+        mapMasterPlaceRow(r, primaryCategoryToSlideKey(r.primary_category)),
+      );
+  } catch {
+    return [];
+  }
 }
 
 /**

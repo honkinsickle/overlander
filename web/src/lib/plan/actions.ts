@@ -35,6 +35,10 @@ import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
+import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
+import { mergeCorpusIntoPool } from "@/lib/trip-browse/merge-corpus";
+import type { BrowsePlace } from "@/lib/trip-browse/places";
+import { isConfigured } from "@/lib/supabase/env";
 import {
   mapboxStaticForCoords,
   mapboxStaticForRoute,
@@ -100,6 +104,10 @@ async function buildRouteAwareDays(args: {
   startDate: string;
   pace?: Pace;
   roundTrip?: boolean;
+  /** Cookie-backed server client for the corpus fold (wizard trips fold the
+   *  federated master_place corpus into each day's pool, like reference/fork).
+   *  Omitted / flag-off → live-discovery only, unchanged. */
+  supabase?: Awaited<ReturnType<typeof createSupabaseServerClient>>;
 }): Promise<{
   days: Day[];
   startCoords: [number, number];
@@ -203,6 +211,26 @@ async function buildRouteAwareDays(args: {
       `[finalize] day photos: ${dayPhotos.map((p) => (p ? "✓" : "·")).join("")}`,
     );
 
+    // Corpus fold (USE_FEDERATED_CORRIDOR): wizard trips derive spines but
+    // their POIs come from live discovery only, which is sparse in remote
+    // areas. Fold the federated master_place corpus into each day's pool —
+    // per-segment, like reference/fork — and MERGE with live discovery via
+    // sameSpot (corpus-wins + photo backfill), so an overlapping place found
+    // by both sources doesn't twin. Fails soft (fetchCorpusForSegment → []).
+    const corpusPerDay: BrowsePlace[][] =
+      args.supabase &&
+      process.env.USE_FEDERATED_CORRIDOR === "true" &&
+      isConfigured()
+        ? await Promise.all(
+            segments.map((seg) =>
+              fetchCorpusForSegment(seg.startCoord, seg.endCoord, args.supabase!),
+            ),
+          )
+        : segments.map(() => []);
+    const pools: BrowsePlace[][] = segments.map((_, i) =>
+      mergeCorpusIntoPool(daySuggestions[i].all, corpusPerDay[i]),
+    );
+
     const days: Day[] = segments.map((seg, i) => ({
       id: `day-${i + 1}`,
       dayNumber: i + 1,
@@ -218,7 +246,7 @@ async function buildRouteAwareDays(args: {
         dayPhotos[i] ?? mapboxStaticForCoords(seg.endCoord),
       waypoints: [],
       suggestions: daySuggestions[i].byCategory,
-      segmentSuggestions: daySuggestions[i].all,
+      segmentSuggestions: pools[i],
       // Corridor spine (docs/corridor-cities-spec.md §3): derived from the
       // day's polyline slice + the bundled gazetteer. null (unusable line)
       // → undefined, so the client falls back to the two-node corridor.
@@ -238,7 +266,7 @@ async function buildRouteAwareDays(args: {
       if (!cc) continue;
       days[i].corridorCities = bucketPlacesIntoCorridor({
         cities: cc,
-        places: daySuggestions[i].all,
+        places: pools[i],
         line: segments[i].coordinates,
       });
     }
@@ -567,12 +595,17 @@ export async function finalizeTripAction(
     const end = destination.label;
     const startDate = wizard.going?.startDate || trip.startDate;
 
+    // One client for the corpus fold (below) and the trips update (further
+    // down) — same request context.
+    const supabase = await createSupabaseServerClient();
+
     const routed = await buildRouteAwareDays({
       startLocation,
       destination,
       startDate,
       pace: wizard.going?.pace,
       roundTrip: wizard.going?.roundTrip,
+      supabase,
     });
 
     // Fallback for when geocoding/routing can't produce a real
@@ -641,7 +674,6 @@ export async function finalizeTripAction(
           ],
         };
 
-    const supabase = await createSupabaseServerClient();
     const { error } = await supabase
       .from("trips")
       .update({ title: newTitle, state: "active", payload: updatedPayload })
@@ -687,6 +719,8 @@ export async function finalizeTripAction(
     startDate,
     pace: draft.going?.pace,
     roundTrip: draft.going?.roundTrip,
+    // Anon draft trips fold the corpus too (RPC is anon-granted); fails soft.
+    supabase: await createSupabaseServerClient(),
   });
 
   // Single-day skeleton if routing fails — preserves the prior anon
