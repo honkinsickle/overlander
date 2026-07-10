@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/supabase/env";
+import { bakeCorridors } from "@/lib/trips/bake-corridors";
+import type { Trip } from "@/lib/trips/types";
 
 /** Fork a reference trip into the authed user's trips row.
  *
@@ -49,6 +51,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "reference_not_found" }, { status: 404 });
   }
 
+  // Bake corridors into the stored payload at fork time (spine + corpus
+  // fold), rather than serve-deriving like the reference. The reference
+  // payload carries `routePolyline` but no corridorCities (it derives them
+  // at serve), so a verbatim copy would render the degraded two-node
+  // fallback on every un-edited day. Baking makes the fork editable: the
+  // recomputeDay / add-waypoint machinery operates on stored corridors, so
+  // a baked fork behaves like a wizard-finalize trip. Inline + fails soft —
+  // a fold/derive miss leaves that surface on its pre-bake state, never
+  // blocks the fork.
+  const baked = await bakeCorridors(ref.payload as Trip, supabase);
+
   const { data: inserted, error: insertError } = await supabase
     .from("trips")
     .insert({
@@ -56,7 +69,7 @@ export async function POST(request: NextRequest) {
       reference_id: referenceId,
       title: ref.title,
       state: "active",
-      payload: ref.payload,
+      payload: baked,
     })
     .select("id")
     .single();
