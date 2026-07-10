@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/supabase/env";
-import { bakeCorridors } from "@/lib/trips/bake-corridors";
+import { bakeCorridors, hasBakedCorridors } from "@/lib/trips/bake-corridors";
 import type { Trip } from "@/lib/trips/types";
 
 /** Fork a reference trip into the authed user's trips row.
@@ -51,16 +51,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "reference_not_found" }, { status: 404 });
   }
 
-  // Bake corridors into the stored payload at fork time (spine + corpus
-  // fold), rather than serve-deriving like the reference. The reference
-  // payload carries `routePolyline` but no corridorCities (it derives them
-  // at serve), so a verbatim copy would render the degraded two-node
-  // fallback on every un-edited day. Baking makes the fork editable: the
-  // recomputeDay / add-waypoint machinery operates on stored corridors, so
-  // a baked fork behaves like a wizard-finalize trip. Inline + fails soft —
-  // a fold/derive miss leaves that surface on its pre-bake state, never
-  // blocks the fork.
-  const baked = await bakeCorridors(ref.payload as Trip, supabase);
+  // Ensure the stored payload carries corridors so the fork is editable and
+  // renders full (not the degraded two-node fallback). Two paths:
+  //   - Reseeded reference (already baked): copy VERBATIM — no re-derive.
+  //     This is the hot path once the reference is precompute-and-persisted;
+  //     re-baking here would waste ~7-10s AND clobber the baked corridors.
+  //   - Legacy spine-less source (no corridorCities): bake now — the safety
+  //     net for pre-engine payloads (and any lacking routePolyline resolves
+  //     to a no-op, never a throw). Inline + fails soft.
+  // recomputeDay / add-waypoint then operate on the stored corridors, so a
+  // forked trip behaves like a wizard-finalize trip either way.
+  const source = ref.payload as Trip;
+  const baked = hasBakedCorridors(source)
+    ? source
+    : await bakeCorridors(source, supabase);
 
   const { data: inserted, error: insertError } = await supabase
     .from("trips")
