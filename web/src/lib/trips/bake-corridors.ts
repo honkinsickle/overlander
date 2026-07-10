@@ -14,6 +14,42 @@ import {
  *  pass exactly what they have — no @supabase/supabase-js generic drift. */
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
+/** True when a payload already carries a derived spine. The fork route
+ *  copies such a source VERBATIM (no re-derive); only spine-less legacy
+ *  sources get baked. Mirrors reference.ts `withCorridors`'s serve guard. */
+export function hasBakedCorridors(trip: Trip): boolean {
+  return trip.days.some((d) => d.corridorCities != null);
+}
+
+/** True when the corpus fold already ran — `segmentSuggestions` carries
+ *  `mp:` corpus tiles. Lets the serve path skip re-folding a reseeded
+ *  reference (the fold would fire ~66 RPCs to add nothing, deduped). */
+function hasBakedCorpusTiles(trip: Trip): boolean {
+  return trip.days.some((d) =>
+    (d.segmentSuggestions ?? []).some(
+      (p) => typeof p.id === "string" && p.id.startsWith("mp:"),
+    ),
+  );
+}
+
+/** Strip baked corridor artifacts so a reseed re-bakes from clean input
+ *  (re-runnable after a derivation change — the fold/serve skip-guards key
+ *  off these markers, so a reseed must clear them first). Drops
+ *  `corridorCities` and the folded `mp:` corpus; preserves authored data. */
+export function stripBakedCorridors(trip: Trip): Trip {
+  return {
+    ...trip,
+    days: trip.days.map((d) => {
+      const next = { ...d };
+      delete next.corridorCities;
+      next.segmentSuggestions = (d.segmentSuggestions ?? []).filter(
+        (p) => !(typeof p.id === "string" && p.id.startsWith("mp:")),
+      );
+      return next;
+    }),
+  };
+}
+
 /**
  * Fold federated master_place POIs into each day's `segmentSuggestions`
  * (flag `USE_FEDERATED_CORRIDOR`). Extracted verbatim from reference.ts's
@@ -34,6 +70,11 @@ export async function foldFederatedCorridorSupply(
 ): Promise<Trip> {
   if (process.env.USE_FEDERATED_CORRIDOR !== "true") return trip;
   if (!isConfigured()) return trip;
+  // Serve fold-skip: a reseeded (baked) reference already carries the folded
+  // mp: corpus. Re-folding would fire ~66 RPCs to add nothing (deduped), so
+  // skip. A reseed strips these markers first (stripBakedCorridors), so the
+  // bake-time fold still runs.
+  if (hasBakedCorpusTiles(trip)) return trip;
 
   const days = await Promise.all(
     trip.days.map(async (day, i) => {
