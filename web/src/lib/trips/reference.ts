@@ -3,12 +3,7 @@ import { join } from "node:path";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveCorridorCities } from "./resolve-corridor-cities";
-import {
-  mapMasterPlaceRow,
-  primaryCategoryToSlideKey,
-  isSuppressedCategory,
-  type MasterPlaceRow,
-} from "@/lib/trip-browse/federated";
+import { foldFederatedCorridorSupply } from "./bake-corridors";
 import type { Trip } from "./types";
 
 /** Where the committed snapshot lives. Resolved from the Next.js project
@@ -86,36 +81,9 @@ async function withFederatedCorridorSupply(trip: Trip): Promise<Trip> {
     return trip;
   }
 
-  const days = await Promise.all(
-    trip.days.map(async (day, i) => {
-      const start = i === 0 ? trip.startCoords : trip.days[i - 1].coords;
-      const end = day.coords;
-      if (!start || !end) return day;
-      try {
-        const { data, error } = await supabase.rpc("pois_along_corridor", {
-          p_route: { type: "LineString", coordinates: [start, end] },
-          p_buffer_m: 16000,
-          p_categories: null,
-        });
-        if (error || !data) return day;
-        const seen = new Set((day.segmentSuggestions ?? []).map((p) => p.id));
-        const corpus = (data as MasterPlaceRow[])
-          .filter((r) => !isSuppressedCategory(r.primary_category))
-          .map((r) =>
-            mapMasterPlaceRow(r, primaryCategoryToSlideKey(r.primary_category)),
-          )
-          .filter((p) => !seen.has(p.id));
-        if (corpus.length === 0) return day;
-        return {
-          ...day,
-          segmentSuggestions: [...(day.segmentSuggestions ?? []), ...corpus],
-        };
-      } catch {
-        return day;
-      }
-    }),
-  );
-  return { ...trip, days };
+  // Shared with the fork route's bake-at-create path (bake-corridors.ts):
+  // the reference serve news up its own client and folds live-at-serve.
+  return foldFederatedCorridorSupply(trip, supabase);
 }
 
 async function tryFetchFromDb(id: string): Promise<Trip | null> {
