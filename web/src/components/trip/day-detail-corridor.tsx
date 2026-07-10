@@ -165,7 +165,13 @@ export function DayDetailCorridor({
         {items.map((item, idx) =>
           item.type === "city" ? (
             <CityNode
-              key={item.city.id}
+              // Unique among siblings: a same-city day (rest day, or a
+              // round-trip passing one city twice) yields nodes whose slug
+              // `id` collides; keying on id alone produced duplicate React
+              // keys → reconciliation left a phantom node across day switches.
+              // kind disambiguates start/end; idx covers two same-kind
+              // through-cities with the same slug.
+              key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
               last={item.last && idx === items.length - 1}
