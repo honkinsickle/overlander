@@ -469,7 +469,7 @@ export function DayDetailCorridorColumn({
             onRemovePlace={removePlace}
             onOpenPlace={openPlaceDetail}
             onExploreDay={openBrowse}
-            briefing={<DayBriefingCard day={day} />}
+            briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
           />
         ) : (
           <DayDetailOverview

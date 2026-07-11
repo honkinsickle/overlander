@@ -133,6 +133,7 @@ export function itineraryToTrip(
     endLocation: last.place,
     startCoords: first.coords,
     kicker: "YoTrippin · generated expedition",
+    generated: true,
     weatherHiF: 70,
     weatherLoF: 45,
     days,
