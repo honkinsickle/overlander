@@ -9,6 +9,7 @@ import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import { DayBriefingCard } from "@/components/trip/day-briefing-card";
 import type { PlaceRich } from "@/lib/discovery/google-places";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import {
@@ -468,6 +469,7 @@ export function DayDetailCorridorColumn({
             onRemovePlace={removePlace}
             onOpenPlace={openPlaceDetail}
             onExploreDay={openBrowse}
+            briefing={<DayBriefingCard day={day} />}
           />
         ) : (
           <DayDetailOverview

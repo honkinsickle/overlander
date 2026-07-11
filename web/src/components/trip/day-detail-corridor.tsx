@@ -71,6 +71,11 @@ type Props = {
   /** "Explore more of Day NN" footer CTA — opens the day-scoped browse
    *  panel (Phase 3 add flow). */
   onExploreDay?: () => void;
+  /** Day-level reasoned fill (briefing/weather/overnight/logistics/
+   *  obligations), rendered between the hero and the spine so a generated
+   *  day reads as one cohesive corridor day. Absent on reference/fork trips
+   *  that carry no LLM reasoning. */
+  briefing?: React.ReactNode;
 };
 
 const GUTTER_W = 48;
@@ -87,6 +92,7 @@ export function DayDetailCorridor({
   onRemovePlace,
   onOpenPlace,
   onExploreDay,
+  briefing,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   const dd = String(dayNumber).padStart(2, "0");
@@ -159,6 +165,10 @@ export function DayDetailCorridor({
           }}
         />
       </div>
+
+      {/* ── Day-level reasoned fill (LLM briefing/weather/overnight/
+           logistics/obligations) — the day's context, above the route ── */}
+      {briefing && <div style={{ paddingTop: 16 }}>{briefing}</div>}
 
       {/* ── Corridor of city nodes ─────────────────────────────── */}
       <div className="flex flex-col" style={{ paddingTop: 16 }}>
