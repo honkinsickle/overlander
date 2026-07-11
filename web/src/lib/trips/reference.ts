@@ -22,6 +22,19 @@ export async function getAlaskaTrip(): Promise<Trip> {
   return getReferenceTrip("la-to-deadhorse");
 }
 
+/** Serve a persisted reference trip by arbitrary id (e.g. a generated
+ *  YoTrippin itinerary upserted into `reference_trips`). Unlike
+ *  `getReferenceTrip`, returns null on a DB miss instead of falling back to
+ *  the la-to-deadhorse snapshot — so an unknown id 404s rather than silently
+ *  rendering the wrong trip. */
+export async function getPersistedReferenceTrip(
+  id: string,
+): Promise<Trip | null> {
+  const fromDb = await tryFetchFromDb(id);
+  if (!fromDb) return null;
+  return withCorridors(await withFederatedCorridorSupply(fromDb));
+}
+
 export async function getReferenceTrip(id: string): Promise<Trip> {
   if (cachedReferenceTrip?.id === id) return cachedReferenceTrip.trip;
 

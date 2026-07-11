@@ -18,7 +18,7 @@
  * repo's scratch dir so the results can be inspected / rendered.
  */
 
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { preComputeFacts, type GenerationInput } from "../src/lib/itinerary/facts";
 import {
@@ -30,6 +30,10 @@ import { itineraryToTrip } from "../src/lib/itinerary/to-trip";
 import type { ItineraryOutput } from "../src/lib/itinerary/schema";
 
 const PERSIST = process.argv.includes("--persist");
+// Persist the ALREADY-generated itinerary (from scratchpad) without a fresh
+// LLM call — so the exact reviewed plan is what renders, and no ANTHROPIC key
+// is needed (safe to run against the TEST env file).
+const PERSIST_SAVED = process.argv.includes("--persist-saved");
 const DEMO_TRIP_ID = "yotrippin-demo";
 const KNOWN_PROJECTS: Record<string, string> = {
   nqzeywzcowujzyegxbsr: "PROD",
@@ -97,6 +101,21 @@ const SCRATCH =
   "/private/tmp/claude-501/-Users-adamwagner/414eac7e-5fb8-40f0-9c1f-17f6c4a5ac38/scratchpad";
 
 async function main() {
+  if (PERSIST_SAVED) {
+    console.log("[gen] --persist-saved: loading the reviewed itinerary from scratchpad…");
+    const facts = JSON.parse(
+      readFileSync(`${SCRATCH}/engine-facts.json`, "utf8"),
+    ) as Awaited<ReturnType<typeof preComputeFacts>>;
+    const itinerary = JSON.parse(
+      readFileSync(`${SCRATCH}/itinerary-output.json`, "utf8"),
+    ) as ItineraryOutput;
+    console.log(
+      `[gen] loaded ${itinerary.days.length}-day itinerary + ${facts.poolPOIs.length}-POI facts`,
+    );
+    await persist(itinerary, facts);
+    return;
+  }
+
   console.log("[gen] pre-computing engine facts…");
   const facts = await preComputeFacts(DEMO);
 
