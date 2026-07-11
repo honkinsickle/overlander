@@ -33,9 +33,19 @@ function obligationLine(o: Obligation): string {
   return `${SEVERITY_MARK[o.severity]} ${o.action.toUpperCase()}${when}: ${o.reason}`;
 }
 
-/** Build the per-day notes list the Day Detail column renders. */
+const FLAG_MARK = { info: "ℹ", warning: "⚠", critical: "‼" } as const;
+
+/** Build the per-day notes list the Day Detail column renders. Audit flags
+ *  lead (so dropped POIs / corrected distances are the first thing seen),
+ *  then the reasoned overnight, logistics, and obligations. */
 function dayNotes(dp: DayPlan): string[] {
   const notes: string[] = [];
+
+  // Audit flags first — these are the trust surface (spec §8.3).
+  for (const f of dp.audit?.flags ?? []) {
+    notes.push(`${FLAG_MARK[f.severity]} ${f.message}`);
+  }
+
   const overnightRef = dp.overnight.poiId
     ? `overnight #${dp.overnight.poiId}`
     : dp.overnight.desc ?? "overnight (TBD)";

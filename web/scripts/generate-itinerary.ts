@@ -18,14 +18,15 @@
  * repo's scratch dir so the results can be inspected / rendered.
  */
 
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { preComputeFacts, type GenerationInput } from "../src/lib/itinerary/facts";
 import {
-  generateItinerary,
+  generateAndAudit,
   isAnthropicConfigured,
   ItineraryGenerationError,
 } from "../src/lib/itinerary/generate";
+import { auditItinerary } from "../src/lib/itinerary/audit";
 import { itineraryToTrip } from "../src/lib/itinerary/to-trip";
 import type { ItineraryOutput } from "../src/lib/itinerary/schema";
 
@@ -34,6 +35,9 @@ const PERSIST = process.argv.includes("--persist");
 // LLM call — so the exact reviewed plan is what renders, and no ANTHROPIC key
 // is needed (safe to run against the TEST env file).
 const PERSIST_SAVED = process.argv.includes("--persist-saved");
+// Run the Stage-2 audit against the saved itinerary-output.json (known-answer
+// proof) and print the report. Add --persist to store the AUDITED version.
+const AUDIT_SAVED = process.argv.includes("--audit-saved");
 const DEMO_TRIP_ID = "yotrippin-demo";
 const KNOWN_PROJECTS: Record<string, string> = {
   nqzeywzcowujzyegxbsr: "PROD",
@@ -101,16 +105,93 @@ const SCRATCH =
   "/private/tmp/claude-501/-Users-adamwagner/414eac7e-5fb8-40f0-9c1f-17f6c4a5ac38/scratchpad";
 
 async function main() {
+  if (AUDIT_SAVED) {
+    console.log("[audit] loading saved facts + itinerary for known-answer audit…");
+    const facts = JSON.parse(
+      readFileSync(`${SCRATCH}/engine-facts.json`, "utf8"),
+    ) as Awaited<ReturnType<typeof preComputeFacts>>;
+    const raw = JSON.parse(
+      readFileSync(`${SCRATCH}/itinerary-output.json`, "utf8"),
+    ) as ItineraryOutput;
+
+    const { audited, report, structural } = await auditItinerary(
+      DEMO,
+      facts,
+      raw,
+    );
+
+    console.log(`\n[audit] ${report.summary}\n`);
+
+    console.log("── TIER 2 · dropped fabricated POIs ──");
+    if (report.droppedPois.length === 0) console.log("  (none)");
+    for (const d of report.droppedPois) {
+      console.log(`  day ${d.day}: ${d.where} ${d.poiId} — NOT in corpus pool → DROPPED`);
+    }
+
+    console.log("\n── TIER 1 · distance re-measurement (stated → measured) ──");
+    console.log(
+      `  trip total: ${Math.round(report.totalStatedMi)} mi stated → ${Math.round(report.totalMeasuredMi)} mi measured`,
+    );
+    for (const s of report.distanceSnaps.filter((x) => x.snapped).slice(0, 8)) {
+      console.log(
+        `  day ${s.day}: ${s.statedMi} mi → ${s.measuredMi} mi  (${s.statedHrs}h → ${s.measuredHrs}h)  [snapped]`,
+      );
+    }
+
+    console.log("\n── TIER 1 · fuel gaps (computed from real fuel POIs) ──");
+    console.log(
+      `  LLM's flagged gaps corroborated by computation: ${report.fuel.claimedGapsCorroborated ? "YES" : "no"}`,
+    );
+    for (const g of report.fuel.computed) {
+      console.log(
+        `  ${g.exceedsRange ? "‼" : "⚠"} ${g.gapMi} mi · ${g.segment}`,
+      );
+    }
+
+    console.log("\n── TIER 3 · structural issues (→ bounded regen) ──");
+    if (structural.length === 0) console.log("  (none — no regen needed)");
+    for (const s of structural) console.log(`  ${JSON.stringify(s)}`);
+
+    // Day-by-day after-audit view for the day(s) that had a dropped POI.
+    const affectedDays = new Set(report.droppedPois.map((d) => d.day));
+    for (const n of affectedDays) {
+      const day = audited.days.find((d) => d.n === n)!;
+      console.log(`\n── AFTER AUDIT · Day ${n} (${day.date}) ${day.startPlace} → ${day.endPlace} ──`);
+      console.log(`  distance: ${day.distanceMi} mi / ${day.driveHours} h [${day.audit?.distanceConfidence}]`);
+      console.log(`  keyStops: ${day.keyStops.length ? day.keyStops.join(", ") : "(none survived)"}`);
+      console.log(
+        `  overnight: poiId=${day.overnight.poiId ?? "null"} — ${day.overnight.desc ?? day.overnight.rationale}`,
+      );
+      for (const f of day.audit?.flags ?? []) {
+        console.log(`  flag [${f.severity}/${f.kind}]: ${f.message}`);
+      }
+    }
+
+    writeFileSync(
+      `${SCRATCH}/itinerary-audited.json`,
+      JSON.stringify(audited, null, 2),
+    );
+    console.log(`\n[audit] wrote ${SCRATCH}/itinerary-audited.json`);
+
+    if (PERSIST) await persist(audited, facts);
+    return;
+  }
+
   if (PERSIST_SAVED) {
     console.log("[gen] --persist-saved: loading the reviewed itinerary from scratchpad…");
     const facts = JSON.parse(
       readFileSync(`${SCRATCH}/engine-facts.json`, "utf8"),
     ) as Awaited<ReturnType<typeof preComputeFacts>>;
+    // Prefer the AUDITED itinerary — the audit runs before persist/render, so
+    // what we store must be the audited version, never the raw LLM output.
+    const auditedPath = `${SCRATCH}/itinerary-audited.json`;
+    const rawPath = `${SCRATCH}/itinerary-output.json`;
+    const useAudited = existsSync(auditedPath);
     const itinerary = JSON.parse(
-      readFileSync(`${SCRATCH}/itinerary-output.json`, "utf8"),
+      readFileSync(useAudited ? auditedPath : rawPath, "utf8"),
     ) as ItineraryOutput;
     console.log(
-      `[gen] loaded ${itinerary.days.length}-day itinerary + ${facts.poolPOIs.length}-POI facts`,
+      `[gen] loaded ${useAudited ? "AUDITED" : "raw"} ${itinerary.days.length}-day itinerary + ${facts.poolPOIs.length}-POI facts`,
     );
     await persist(itinerary, facts);
     return;
@@ -149,33 +230,33 @@ async function main() {
     return;
   }
 
-  console.log("\n[gen] generating itinerary (master prompt → structured Section-C)…");
+  console.log("\n[gen] generating + auditing (master prompt → Section-C → Stage-2 audit)…");
   try {
-    const { itinerary, usage } = await generateItinerary(DEMO, facts);
+    const { audited, report, regenAttempts, unresolved } =
+      await generateAndAudit(DEMO, facts);
     console.log(
-      `[gen] done · ${usage.inputTokens} in / ${usage.outputTokens} out tokens · ` +
-        `${itinerary.days.length} days`,
+      `[gen] ${report.summary} · regen attempts: ${regenAttempts}` +
+        (unresolved ? ` · UNRESOLVED: ${JSON.stringify(unresolved)}` : ""),
     );
     writeFileSync(
       `${SCRATCH}/itinerary-output.json`,
-      JSON.stringify(itinerary, null, 2),
+      JSON.stringify(audited, null, 2),
     );
-    console.log(`[gen] wrote ${SCRATCH}/itinerary-output.json`);
+    console.log(`[gen] wrote ${SCRATCH}/itinerary-output.json (audited)`);
 
-    console.log(`\n─── ${itinerary.routeSummary}\n`);
-    for (const d of itinerary.days) {
+    console.log(`\n─── ${audited.routeSummary}\n`);
+    for (const d of audited.days) {
       console.log(
         `Day ${d.n} (${d.date}) ${d.startPlace} → ${d.endPlace} · ` +
-          `${d.distanceMi.toFixed(0)}mi/${d.driveHours.toFixed(1)}h [${d.type}]`,
+          `${d.distanceMi.toFixed(0)}mi/${d.driveHours.toFixed(1)}h [${d.type}] ` +
+          `[${d.audit?.distanceConfidence}]`,
       );
-      console.log(`  ${d.rationale}`);
-      console.log(
-        `  overnight: ${d.overnight.poiId ?? d.overnight.desc} — ${d.overnight.rationale}`,
-      );
-      if (d.logistics) console.log(`  logistics: ${d.logistics}`);
+      for (const f of d.audit?.flags ?? []) {
+        console.log(`  ${f.severity === "critical" ? "‼" : f.severity === "warning" ? "⚠" : "ℹ"} ${f.message}`);
+      }
     }
 
-    if (PERSIST) await persist(itinerary, facts);
+    if (PERSIST) await persist(audited, facts);
   } catch (err) {
     if (err instanceof ItineraryGenerationError) {
       console.error(`[gen] generation failed (${err.code}): ${err.message}`);

@@ -51,6 +51,9 @@ export type GenerationResult = {
 export async function generateItinerary(
   input: GenerationInput,
   facts: EngineFacts,
+  /** Optional constraint appended to the user turn — used by the Tier-3
+   *  regen loop to feed structural violations back to the model. */
+  regenFeedback?: string,
 ): Promise<GenerationResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new ItineraryGenerationError(
@@ -77,7 +80,9 @@ export async function generateItinerary(
   }
 
   const client = new Anthropic();
-  const userMessage = buildFactsMessage(input, facts);
+  const userMessage = regenFeedback
+    ? `${buildFactsMessage(input, facts)}\n\n---\nREGENERATION — the previous attempt violated hard constraints. Fix these and regenerate the FULL itinerary:\n${regenFeedback}`
+    : buildFactsMessage(input, facts);
 
   let message;
   try {
@@ -137,5 +142,55 @@ export async function generateItinerary(
       inputTokens: message.usage.input_tokens,
       outputTokens: message.usage.output_tokens,
     },
+  };
+}
+
+/** Tier-3 regen budget: how many times to regenerate when the audit finds a
+ *  structural violation (leg over cap / anchor off date) before giving up. */
+export const REGEN_BUDGET = 2;
+
+export type GenerateAndAuditResult = {
+  audited: import("./schema").ItineraryOutput;
+  report: import("./audit").AuditReport;
+  regenAttempts: number;
+  /** Set when the structural tier couldn't be satisfied within the budget —
+   *  surface this honestly rather than shipping a plan that violates a hard
+   *  constraint. */
+  unresolved: import("./audit").StructuralIssue[] | null;
+};
+
+/**
+ * The wired path (spec §8.2): generate → audit → bounded Tier-3 regen.
+ * Returns the AUDITED itinerary; the caller persists/renders THIS, never the
+ * raw LLM output.
+ */
+export async function generateAndAudit(
+  input: GenerationInput,
+  facts: EngineFacts,
+): Promise<GenerateAndAuditResult> {
+  const { auditItinerary } = await import("./audit");
+
+  let output = (await generateItinerary(input, facts)).itinerary;
+  let outcome = await auditItinerary(input, facts, output);
+  let attempts = 0;
+
+  while (outcome.structural.length > 0 && attempts < REGEN_BUDGET) {
+    attempts++;
+    const feedback = outcome.structural
+      .map((s) =>
+        s.kind === "leg-over-cap"
+          ? `- Day ${s.day}: leg is ${s.measuredMi} mi, over the ${s.capMi} mi/day cap. Re-split so no driving day exceeds the cap.`
+          : `- FIXED anchor "${s.anchor}" must land on ${s.expectedDate} (was ${s.actualDate ?? "unplaced"}). Adjust the schedule to honor it.`,
+      )
+      .join("\n");
+    output = (await generateItinerary(input, facts, feedback)).itinerary;
+    outcome = await auditItinerary(input, facts, output);
+  }
+
+  return {
+    audited: outcome.audited,
+    report: outcome.report,
+    regenAttempts: attempts,
+    unresolved: outcome.structural.length > 0 ? outcome.structural : null,
   };
 }

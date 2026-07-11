@@ -38,6 +38,35 @@ export type Obligation = {
 
 export type DayType = "drive" | "layover" | "sidetrip";
 
+// ── Audit provenance (Stage 2, spec §8.3) ────────────────────────────
+// Every navigable fact carries a confidence tag so the render can show
+// where it came from. `measured` = re-routed by the engine; `corpus-backed`
+// = a real POI in the fed pool; `advisory` = a knowledge claim to verify.
+export type FactConfidence = "measured" | "corpus-backed" | "advisory";
+
+export type AuditFlag = {
+  kind:
+    | "distance-snapped"
+    | "dropped-poi"
+    | "dropped-overnight"
+    | "seasonal-advisory"
+    | "structural";
+  severity: "info" | "warning" | "critical";
+  /** User-facing message shown on the day. */
+  message: string;
+};
+
+/** Per-day audit result, attached by `auditItinerary`. Absent on raw
+ *  (unaudited) LLM output; the generation schema never produces it. */
+export type DayAudit = {
+  /** Confidence in this day's distance/drive after the audit. */
+  distanceConfidence: FactConfidence;
+  /** What the LLM originally claimed, kept for provenance/display. */
+  statedDistanceMi: number;
+  statedDriveHours: number;
+  flags: AuditFlag[];
+};
+
 export type DayPlan = {
   /** 1-based day number. */
   n: number;
@@ -69,6 +98,8 @@ export type DayPlan = {
   /** Per-day logistics ("cross the border by 6pm AK; top off in Tok"). */
   logistics: string;
   obligations: Obligation[];
+  /** Populated by the Stage-2 audit (spec §8.3). Absent on raw LLM output. */
+  audit?: DayAudit;
 };
 
 export type Phase = {
