@@ -22,13 +22,58 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { preComputeFacts, type GenerationInput } from "../src/lib/itinerary/facts";
 import {
+  generateItinerary,
   generateAndAudit,
   isAnthropicConfigured,
   ItineraryGenerationError,
 } from "../src/lib/itinerary/generate";
 import { auditItinerary } from "../src/lib/itinerary/audit";
+import { bakeGeneratedDays, type BakedDay } from "../src/lib/itinerary/bake";
 import { itineraryToTrip } from "../src/lib/itinerary/to-trip";
 import type { ItineraryOutput } from "../src/lib/itinerary/schema";
+
+/** Service-role Supabase client from env (Mapbox + corpus reads for the bake). */
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Bake corridors onto the audited days, log spine/tile stats, save the
+ *  baked artifacts to scratchpad, and return them. */
+async function bakeAndReport(
+  audited: ItineraryOutput,
+  dayRoutes: import("../src/lib/itinerary/audit").DayRoute[],
+): Promise<BakedDay[] | undefined> {
+  const sb = serviceClient();
+  if (!sb) {
+    console.log("[bake] no supabase client — skipping corridor bake");
+    return undefined;
+  }
+  console.log("\n[bake] baking corridors onto generated days…");
+  const baked = await bakeGeneratedDays(audited, DEMO, sb, dayRoutes);
+  const withSpine = baked.filter((b) => (b.corridorCities?.length ?? 0) > 2).length;
+  const tiles = baked.reduce((s, b) => s + b.segmentSuggestions.length, 0);
+  const bucketed = baked.reduce(
+    (s, b) => s + (b.corridorCities?.reduce((n, c) => n + (c.placeIds?.length ?? 0), 0) ?? 0),
+    0,
+  );
+  console.log(
+    `[bake] ${withSpine}/${baked.length} days with a full spine (>2 nodes) · ` +
+      `${tiles} tiles · ${bucketed} bucketed under nodes`,
+  );
+  for (const b of baked.slice(0, 4)) {
+    const nodes = (b.corridorCities ?? []).map((c) => c.name.split(",")[0]).join(" → ");
+    console.log(`  day ${b.n}: ${b.corridorCities?.length ?? 0} nodes [${nodes}] · ${b.segmentSuggestions.length} tiles`);
+  }
+  const SC = "/private/tmp/claude-501/-Users-adamwagner/414eac7e-5fb8-40f0-9c1f-17f6c4a5ac38/scratchpad";
+  writeFileSync(`${SC}/baked-days.json`, JSON.stringify(baked, null, 2));
+  console.log(`[bake] wrote ${SC}/baked-days.json`);
+  return baked;
+}
 
 const PERSIST = process.argv.includes("--persist");
 // Persist the ALREADY-generated itinerary (from scratchpad) without a fresh
@@ -38,6 +83,9 @@ const PERSIST_SAVED = process.argv.includes("--persist-saved");
 // Run the Stage-2 audit against the saved itinerary-output.json (known-answer
 // proof) and print the report. Add --persist to store the AUDITED version.
 const AUDIT_SAVED = process.argv.includes("--audit-saved");
+// Generate raw (no audit) and save it — decoupled from the audit so each
+// phase is observable. Proves the prompt contract (LLM emits NAMES, not ids).
+const GENERATE_ONLY = process.argv.includes("--generate-only");
 const DEMO_TRIP_ID = "yotrippin-demo";
 const KNOWN_PROJECTS: Record<string, string> = {
   nqzeywzcowujzyegxbsr: "PROD",
@@ -114,7 +162,7 @@ async function main() {
       readFileSync(`${SCRATCH}/itinerary-output.json`, "utf8"),
     ) as ItineraryOutput;
 
-    const { audited, report, structural } = await auditItinerary(
+    const { audited, report, structural, dayRoutes } = await auditItinerary(
       DEMO,
       facts,
       raw,
@@ -173,7 +221,8 @@ async function main() {
     );
     console.log(`\n[audit] wrote ${SCRATCH}/itinerary-audited.json`);
 
-    if (PERSIST) await persist(audited, facts);
+    const baked = await bakeAndReport(audited, dayRoutes);
+    if (PERSIST) await persist(audited, facts, baked);
     return;
   }
 
@@ -190,10 +239,16 @@ async function main() {
     const itinerary = JSON.parse(
       readFileSync(useAudited ? auditedPath : rawPath, "utf8"),
     ) as ItineraryOutput;
+    // Load the baked corridors computed by --audit-saved (if present), so the
+    // persisted trip carries full spines + bucketed tiles.
+    const bakedPath = `${SCRATCH}/baked-days.json`;
+    const baked = existsSync(bakedPath)
+      ? (JSON.parse(readFileSync(bakedPath, "utf8")) as BakedDay[])
+      : undefined;
     console.log(
-      `[gen] loaded ${useAudited ? "AUDITED" : "raw"} ${itinerary.days.length}-day itinerary + ${facts.poolPOIs.length}-POI facts`,
+      `[gen] loaded ${useAudited ? "AUDITED" : "raw"} ${itinerary.days.length}-day itinerary + ${facts.poolPOIs.length}-POI facts${baked ? ` + ${baked.length} baked days` : " (no bake)"}`,
     );
-    await persist(itinerary, facts);
+    await persist(itinerary, facts, baked);
     return;
   }
 
@@ -230,9 +285,28 @@ async function main() {
     return;
   }
 
+  if (GENERATE_ONLY) {
+    console.log("\n[gen] generating RAW (no audit)…");
+    const { itinerary, usage } = await generateItinerary(DEMO, facts);
+    console.log(`[gen] done · ${usage.inputTokens} in / ${usage.outputTokens} out · ${itinerary.days.length} days`);
+    writeFileSync(`${SCRATCH}/itinerary-output.json`, JSON.stringify(itinerary, null, 2));
+    console.log(`[gen] wrote itinerary-output.json (RAW)`);
+    // Prove the prompt contract: which refs are corpus ids vs plain NAMES?
+    const idRefs: string[] = [], nameRefs: string[] = [];
+    for (const d of itinerary.days) {
+      for (const k of d.keyStops) (k.startsWith("mp:") ? idRefs : nameRefs).push(`d${d.n}:${k}`);
+      if (d.overnight.name) nameRefs.push(`d${d.n}:overnight="${d.overnight.name}"`);
+      if (d.overnight.poiId) idRefs.push(`d${d.n}:overnight=${d.overnight.poiId}`);
+    }
+    console.log(`\n[contract] corpus-id refs: ${idRefs.length} · plain-NAME refs: ${nameRefs.length}`);
+    console.log("[contract] NAMES the LLM emitted (→ audit will resolve+guard):");
+    for (const n of nameRefs) console.log(`  ${n}`);
+    return;
+  }
+
   console.log("\n[gen] generating + auditing (master prompt → Section-C → Stage-2 audit)…");
   try {
-    const { audited, report, regenAttempts, unresolved } =
+    const { audited, report, regenAttempts, unresolved, dayRoutes } =
       await generateAndAudit(DEMO, facts);
     console.log(
       `[gen] ${report.summary} · regen attempts: ${regenAttempts}` +
@@ -243,6 +317,22 @@ async function main() {
       JSON.stringify(audited, null, 2),
     );
     console.log(`[gen] wrote ${SCRATCH}/itinerary-output.json (audited)`);
+
+    console.log(`\n── TIER 2 · names resolved live + on-corridor (→ ingest) ──`);
+    if (report.resolved.length === 0) console.log("  (none)");
+    for (const r of report.resolved) {
+      const rp = audited.days
+        .find((d) => d.n === r.day)
+        ?.audit?.resolvedPlaces.find((x) => x.name === r.name && x.where === r.where);
+      console.log(
+        `  day ${r.day} ${r.where}: "${r.name}" → ${rp?.displayName} | ${rp?.placeId} | [${rp?.coords.map((c) => c.toFixed(3)).join(",")}]`,
+      );
+    }
+    console.log(`\n── TIER 3 · dropped (fabricated id / unresolvable / off-corridor) ──`);
+    if (report.droppedPois.length === 0) console.log("  (none)");
+    for (const d of report.droppedPois) {
+      console.log(`  day ${d.day} ${d.where}: "${d.poiId}" — ${d.reason}`);
+    }
 
     console.log(`\n─── ${audited.routeSummary}\n`);
     for (const d of audited.days) {
@@ -256,7 +346,8 @@ async function main() {
       }
     }
 
-    if (PERSIST) await persist(audited, facts);
+    const baked = await bakeAndReport(audited, dayRoutes);
+    if (PERSIST) await persist(audited, facts, baked);
   } catch (err) {
     if (err instanceof ItineraryGenerationError) {
       console.error(`[gen] generation failed (${err.code}): ${err.message}`);
@@ -276,6 +367,7 @@ async function main() {
 async function persist(
   itinerary: ItineraryOutput,
   facts: Awaited<ReturnType<typeof preComputeFacts>>,
+  bakedDays?: BakedDay[],
 ) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -298,7 +390,7 @@ async function persist(
     return;
   }
 
-  const trip = itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary);
+  const trip = itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary, bakedDays);
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

@@ -48,7 +48,9 @@ function dayNotes(dp: DayPlan): string[] {
 
   const overnightRef = dp.overnight.poiId
     ? `overnight #${dp.overnight.poiId}`
-    : dp.overnight.desc ?? "overnight (TBD)";
+    : dp.overnight.name
+      ? dp.overnight.name
+      : dp.overnight.desc ?? "overnight (TBD)";
   notes.push(
     `Overnight — ${dp.overnight.type}: ${overnightRef}. ${dp.overnight.rationale}`,
   );
@@ -67,11 +69,17 @@ export function itineraryToTrip(
   input: GenerationInput,
   facts: EngineFacts,
   output: ItineraryOutput,
+  /** Baked corridors (spine + bucketed tiles) per day from bakeGeneratedDays.
+   *  When present, each day renders as a full corridor day; when absent, the
+   *  whole pool travels unbucketed (degraded 2-node fallback). */
+  bakedDays?: import("./bake").BakedDay[],
 ): Trip {
   const first = facts.anchorsResolved[0];
   const last = facts.anchorsResolved[facts.anchorsResolved.length - 1];
+  const bakedByN = new Map((bakedDays ?? []).map((b) => [b.n, b]));
 
   const days: Day[] = output.days.map((dp, i) => {
+    const baked = bakedByN.get(dp.n);
     // Chain coords across days: day i ends where day i+1 starts. Fall back
     // to the anchor endpoints for the first/last day.
     const startCoord =
@@ -92,24 +100,27 @@ export function itineraryToTrip(
       weather: dp.weather ? { arrival: dp.weather } : undefined,
       notes: dayNotes(dp),
       waypoints: [],
-      // Attach the day's slice of the corpus pool as browsable tiles.
-      // (A finer per-day bucketing is the audit/bake step; here the whole
-      // pool travels with the trip so the tiles are populated.)
-      segmentSuggestions: facts.poolPOIs.map((p) => ({
-        id: p.id,
-        coords: p.coords,
-        title: p.name,
-        photoAlt: p.name,
-        pills: [],
-        stats: [],
-        mention: { primary: "", secondary: "" },
-        description: "",
-        pullquote: { text: "", name: "", meta: "" },
-        placeInfo: { address: "" },
-        cta: "",
-        rating: p.rating ?? undefined,
-        priceTier: (p.priceTier as 1 | 2 | 3 | 4 | undefined) ?? undefined,
-      })),
+      // Baked corridor: the day's derived spine + per-day bucketed tiles
+      // (spec §3). Falls back to the whole unbucketed pool only when the bake
+      // is absent (degraded 2-node view).
+      corridorCities: baked?.corridorCities,
+      segmentSuggestions: baked
+        ? baked.segmentSuggestions
+        : facts.poolPOIs.map((p) => ({
+            id: p.id,
+            coords: p.coords,
+            title: p.name,
+            photoAlt: p.name,
+            pills: [],
+            stats: [],
+            mention: { primary: "", secondary: "" },
+            description: "",
+            pullquote: { text: "", name: "", meta: "" },
+            placeInfo: { address: "" },
+            cta: "",
+            rating: p.rating ?? undefined,
+            priceTier: (p.priceTier as 1 | 2 | 3 | 4 | undefined) ?? undefined,
+          })),
     };
   });
 

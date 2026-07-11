@@ -27,12 +27,21 @@ strand the traveler in the wilderness. Therefore:
   invent or contradict them. When you state a day's distanceMi / driveHours,
   derive it from the given segments — it will be audited against a
   re-measurement and snapped to ground truth.
-• Every key stop and every pooled overnight MUST reference a POI by its
-  corpus id from poolPOIs. Put those ids in keyStops[] and overnight.poiId.
-  NEVER invent a POI, a coordinate, or a gas station that is not in the pool.
-  If no pooled POI fits an overnight, set overnight.poiId = null and describe
-  it in overnight.desc as a TYPICAL option ("informal boondock; scout via
-  iOverlander"), clearly marked as assumed.
+• Reference places TWO ways:
+  (a) A place that IS in poolPOIs → use its corpus id (mp:…). Put those ids
+      in keyStops[] and in overnight.poiId.
+  (b) Any OTHER real, specific place you know that is NOT in poolPOIs — a
+      named glacier, hot spring, campground, viewpoint, town fuel stop — →
+      use its plain NAME, never an id. Put a named key stop as its name
+      string in keyStops[] (e.g. "Salmon Glacier"); put a named overnight in
+      overnight.name. We resolve names against live map data and verify they
+      sit on your route before showing them.
+• NEVER emit a corpus-style id (mp:…) for a place that is not in poolPOIs. If
+  you know a real place that isn't in the pool, give its NAME — a made-up id
+  is a fabrication and will be dropped. Never invent coordinates.
+• If no real place fits an overnight, set overnight.poiId = null AND
+  overnight.name = null and describe a TYPICAL option in overnight.desc
+  ("informal boondock; scout via iOverlander"), clearly marked as assumed.
 • Knowledge-based claims you cannot ground in the facts (seasonal windows,
   border hours, permit lead times, event dates) are ADVISORY. Phrase them so
   the traveler verifies before relying on them ("typically open to ~8pm —
@@ -51,10 +60,13 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
      - distanceMi, driveHours (grounded in the segments)
      - weather (typical/climate, advisory)
      - rationale (the day's drive: road, transitions, why this pacing)
-     - keyStops[] (1–3 corpus ids from the pool)
-     - overnight { poiId|null, desc|null, type, rationale } — the rationale
-       MUST say why it fits the rig + style (e.g. "level gravel pads, good
-       for a GX470 + RTT; pit toilets, rely on onboard power")
+     - keyStops[] (1–3 entries: corpus mp: ids for pooled places, plain
+       NAMES for other real places)
+     - overnight { poiId|null, name|null, desc|null, type, rationale } —
+       poiId for a pooled place, name for another real place, desc for a
+       typical/assumed spot; the rationale MUST say why it fits the rig +
+       style (e.g. "level gravel pads, good for a GX470 + RTT; pit toilets,
+       rely on onboard power")
      - logistics (fuel cadence, border timing, resupply — the actionable
        per-day notes)
      - obligations[] — book/permit/ticket/fuel/resupply/reserve actions this
@@ -109,9 +121,9 @@ export function buildFactsMessage(
     "Generate the full day-by-day expedition itinerary for the trip below.",
     "",
     "The ENGINE FACTS are ground truth (route, distances, city spine, POI",
-    "pool). Reason over them per the GROUNDING CONTRACT — reference every",
-    "stop and pooled overnight by its poolPOIs id, and honor every FIXED",
-    "anchor on its date.",
+    "pool). Reason over them per the GROUNDING CONTRACT — reference pooled",
+    "places by their poolPOIs id (mp:…) and any OTHER real place by its plain",
+    "NAME (never a made-up id), and honor every FIXED anchor on its date.",
     "",
     "```json",
     JSON.stringify(payload, null, 2),

@@ -41,8 +41,26 @@ export type DayType = "drive" | "layover" | "sidetrip";
 // ── Audit provenance (Stage 2, spec §8.3) ────────────────────────────
 // Every navigable fact carries a confidence tag so the render can show
 // where it came from. `measured` = re-routed by the engine; `corpus-backed`
-// = a real POI in the fed pool; `advisory` = a knowledge claim to verify.
-export type FactConfidence = "measured" | "corpus-backed" | "advisory";
+// = a real POI in the fed pool (tier 1); `google-resolved` = a name the LLM
+// gave, resolved live to a real place_id + on-corridor coords (tier 2);
+// `advisory` = a knowledge claim to verify.
+export type FactConfidence =
+  | "measured"
+  | "corpus-backed"
+  | "google-resolved"
+  | "advisory";
+
+/** A place the LLM referenced by NAME, resolved live to a real Google
+ *  place_id whose coords were verified to sit on the day's route (tier 2). */
+export type ResolvedPlace = {
+  /** The name the LLM emitted. */
+  name: string;
+  /** Google's canonical display name. */
+  displayName: string;
+  placeId: string;
+  coords: [number, number];
+  where: "keyStop" | "overnight" | "endpoint";
+};
 
 export type AuditFlag = {
   kind:
@@ -65,6 +83,8 @@ export type DayAudit = {
   statedDistanceMi: number;
   statedDriveHours: number;
   flags: AuditFlag[];
+  /** Tier-2 names that resolved live + passed the corridor guard. */
+  resolvedPlaces: ResolvedPlace[];
 };
 
 export type DayPlan = {
@@ -86,9 +106,12 @@ export type DayPlan = {
   /** Corpus ids of key stops — MUST be from the fed pool. */
   keyStops: string[];
   overnight: {
-    /** Corpus id when the overnight is a real pooled POI; null if described. */
+    /** Corpus id when the overnight is a pooled POI; null otherwise. */
     poiId: string | null;
-    /** Free-text fallback when no pooled POI fits ("informal boondock…"). */
+    /** A real place NAME when it isn't pooled (resolved live by the audit);
+     *  null when pooled or free-text. */
+    name: string | null;
+    /** Free-text fallback when no real place fits ("informal boondock…"). */
     desc: string | null;
     /** camp | dispersed | motel | lodge … */
     type: string;
@@ -202,7 +225,8 @@ const DAY_PLAN_SCHEMA = {
     keyStops: {
       type: "array",
       items: { type: "string" },
-      description: "Corpus POI ids from the fed pool ONLY.",
+      description:
+        "1–3 entries: a corpus id (mp:…) for a pooled place, OR a plain place NAME for another real place. Never a made-up mp: id.",
     },
     overnight: {
       type: "object",
@@ -210,13 +234,18 @@ const DAY_PLAN_SCHEMA = {
       properties: {
         poiId: {
           type: ["string", "null"],
-          description: "Pooled corpus id, or null when described free-text.",
+          description: "Pooled corpus id (mp:…), or null.",
+        },
+        name: {
+          type: ["string", "null"],
+          description:
+            "A real place NAME when the overnight isn't a pooled id; null otherwise. Never a made-up id.",
         },
         desc: { type: ["string", "null"] },
         type: { type: "string" },
         rationale: { type: "string" },
       },
-      required: ["poiId", "desc", "type", "rationale"],
+      required: ["poiId", "name", "desc", "type", "rationale"],
     },
     logistics: { type: "string" },
     obligations: { type: "array", items: OBLIGATION_SCHEMA },

@@ -157,6 +157,8 @@ export type GenerateAndAuditResult = {
    *  surface this honestly rather than shipping a plan that violates a hard
    *  constraint. */
   unresolved: import("./audit").StructuralIssue[] | null;
+  /** Per-day routes from the final audit — feed bakeGeneratedDays (no re-route). */
+  dayRoutes: import("./audit").DayRoute[];
 };
 
 /**
@@ -192,5 +194,6 @@ export async function generateAndAudit(
     report: outcome.report,
     regenAttempts: attempts,
     unresolved: outcome.structural.length > 0 ? outcome.structural : null,
+    dayRoutes: outcome.dayRoutes,
   };
 }
