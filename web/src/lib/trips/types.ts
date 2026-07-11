@@ -24,6 +24,10 @@ export type Trip = {
   weatherLoF: number;
   /** Editorial kicker rendered above the title, Crimson Text italic. */
   kicker?: string;
+  /** True for trips produced by the itinerary generator (YoTrippin). Gates
+   *  generated-only UI — e.g. the day-level reasoned briefing card in the
+   *  corridor view — so reference/fork trips stay unchanged. */
+  generated?: boolean;
   days: Day[];
   /** Slug or null. Populated by `getUserTrip` from the DB column on
    *  public.trips. Slug-keyed reference trips (la-to-deadhorse) have

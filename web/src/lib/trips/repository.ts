@@ -1,4 +1,5 @@
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
+import { getPersistedReferenceTrip } from "./reference";
 import {
   getUserTrip,
   isUserTripId,
@@ -25,7 +26,9 @@ export async function getTrip(id: string): Promise<Trip | null> {
   if (id === "la-to-deadhorse") await ensureAlaskaUpgraded();
   if (TRIPS[id]) return TRIPS[id];
   if (isUserTripId(id)) return getUserTrip(id);
-  return null;
+  // Generated/persisted reference trips (e.g. a YoTrippin itinerary upserted
+  // into reference_trips). Null on miss — unknown ids still 404.
+  return getPersistedReferenceTrip(id);
 }
 
 /** Look up a waypoint anywhere in a trip by slug. */
