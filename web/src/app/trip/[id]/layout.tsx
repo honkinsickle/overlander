@@ -1,84 +1,17 @@
-import { notFound } from "next/navigation";
-import { VerticalNav } from "@/components/chrome/vertical-nav";
-import { FullPageDayRail } from "@/components/trip/full-page-day-rail";
-import { MapColumn } from "@/components/trip/map-column";
-import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
-import { MakeItMineCta } from "@/components/trip/make-it-mine-cta";
-import { getTrip } from "@/lib/trips/repository";
-import { isConfigured } from "@/lib/supabase/env";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const REFERENCE_TRIP_IDS = new Set(["la-to-deadhorse"]);
-
 /**
- * Active-trip layout — vnav + 3-column body (day sidebar · detail · map).
+ * Bare passthrough layout for /trip/[id].
  *
- * Target widths at 1113w body (per styleguide.md "Itinerary slide-up"):
- *   Day Sidebar 215 · Detail Panel 440 · Map Area 458
- *
- * Container-driven: fills whatever parent gives it (viewport for the
- * full-page route, future slideup shell for the modal-intercepted route,
- * future full-screen map if that ships).
- *
- * Children rely on the parent's `align-items: stretch` (flex default) for
- * full-height sizing; `h-full` would be unreliable here because the
- * parent's height is flex-derived rather than explicit.
- *
- * The day sidebar and map column live in the layout so they persist
- * across center-column navigation (e.g. opening /trip/:id/ask only
- * swaps the children slot).
+ * The trip surface (page.tsx) now mounts the full-viewport slideup
+ * (`SlideupShell`, `fixed inset-0`), and the day rail + map live inside
+ * `TripSlideupBody` — so this layout no longer owns the 3-column chrome it
+ * used to (that would double the map and cover it with the sheet). Kept as
+ * a thin segment boundary for the `/trip/[id]/ask` child, which brings its
+ * own `ChatLayout`.
  */
-export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
-  const { id } = await props.params;
-  const trip = await getTrip(id);
-  if (!trip) notFound();
-
-  const isReference = REFERENCE_TRIP_IDS.has(trip.id);
-  const isAuthed = isReference ? await checkAuthed() : false;
-
-  return (
-    <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
-      <VerticalNav />
-      <FullPageDayRail trip={trip} />
-      {/* Center column width matches --rail-column-w (478px): the corridor
-       *  renderer (DayDetailCorridorColumn) is fixed to that width, and it
-       *  owns its own vertical scroll — so the section clips (overflow-hidden)
-       *  rather than adding a second scrollbar. */}
-      <section
-        className="bg-bg-panel border-r border-border-subtle overflow-hidden shrink-0"
-        style={{ width: "var(--rail-column-w)" }}
-      >
-        {props.children}
-      </section>
-      <section className="flex-1 min-w-0 relative overflow-hidden z-[15]" aria-label="Map">
-        <MapColumn
-          tripId={trip.id}
-          days={trip.days}
-          startCoords={trip.startCoords}
-          routePolyline={trip.routePolyline}
-        />
-        <MapDetailOverlay />
-        {isReference && (
-          <MakeItMineCta
-            referenceId={trip.id}
-            isAuthed={isAuthed}
-            returnPath={`/trip/${trip.id}`}
-          />
-        )}
-      </section>
-    </div>
-  );
-}
-
-async function checkAuthed(): Promise<boolean> {
-  if (!isConfigured()) return false;
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return Boolean(user);
-  } catch {
-    return false;
-  }
+export default function TripLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <>{children}</>;
 }
