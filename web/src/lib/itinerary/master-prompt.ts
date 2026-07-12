@@ -117,9 +117,18 @@ export function buildFactsMessage(
     })),
   };
 
+  const objectiveLine = input.objective?.trim()
+    ? [
+        `TRIP INTENT (the traveler's own words — use as tone/priority context, ` +
+          `NOT as a fact source): ${input.objective.trim()}`,
+        "",
+      ]
+    : [];
+
   return [
     "Generate the full day-by-day expedition itinerary for the trip below.",
     "",
+    ...objectiveLine,
     "The ENGINE FACTS are ground truth (route, distances, city spine, POI",
     "pool). Reason over them per the GROUNDING CONTRACT — reference pooled",
     "places by their poolPOIs id (mp:…) and any OTHER real place by its plain",

@@ -75,6 +75,10 @@ export type GenerationInput = {
   anchors: Anchor[];
   params: TripParams;
   rig: RigProfile;
+  /** Optional free-text trip intent/vibe (reference-doc §01 Objective).
+   *  Prompt CONTEXT only — the engine never consumes it, so it is not a
+   *  preComputeFacts input; it rides along to buildFactsMessage. */
+  objective?: string;
 };
 
 /** A pooled POI, trimmed to what the LLM needs to reason + reference. */

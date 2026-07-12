@@ -15,6 +15,14 @@ const seed = (): Record<string, Vehicle> => ({
     make: "Lexus",
     model: "GX 470",
     capabilities: ["OFF-ROAD", "V8", "4WD"],
+    rig: {
+      build: ["lift", "tires", "armor", "winch", "fridge", "dual-battery", "solar", "RTT"],
+      fuelRangeMi: 400,
+      capability: "moderate",
+      groupSize: "1–2 travelers",
+      skill: "intermediate",
+      preferences: ["solitude", "scenic", "photography", "simple-camp", "local-food"],
+    },
   },
   "veh-tacoma-trd": {
     id: "veh-tacoma-trd",
@@ -22,6 +30,14 @@ const seed = (): Record<string, Vehicle> => ({
     make: "Toyota",
     model: "Tacoma TRD Off-Road",
     capabilities: ["OFF-ROAD", "V6", "4WD"],
+    rig: {
+      build: ["tires", "armor", "fridge", "RTT"],
+      fuelRangeMi: 350,
+      capability: "moderate",
+      groupSize: "1–2 travelers",
+      skill: "intermediate",
+      preferences: ["scenic", "local-food"],
+    },
   },
   "veh-rivian-r1t": {
     id: "veh-rivian-r1t",
@@ -29,6 +45,14 @@ const seed = (): Record<string, Vehicle> => ({
     make: "Rivian",
     model: "R1T",
     capabilities: ["OFF-ROAD", "ELECTRIC", "AWD"],
+    rig: {
+      build: ["fridge", "solar"],
+      fuelRangeMi: 280,
+      capability: "mild",
+      groupSize: "2 travelers",
+      skill: "intermediate",
+      preferences: ["scenic", "photography"],
+    },
   },
 });
 
