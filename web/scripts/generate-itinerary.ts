@@ -30,6 +30,7 @@ import {
 import { auditItinerary } from "../src/lib/itinerary/audit";
 import { bakeGeneratedDays, type BakedDay } from "../src/lib/itinerary/bake";
 import { itineraryToTrip } from "../src/lib/itinerary/to-trip";
+import { attachHeroPhotos } from "../src/lib/imagery/destination-photo";
 import type { ItineraryOutput } from "../src/lib/itinerary/schema";
 
 /** Service-role Supabase client from env (Mapbox + corpus reads for the bake). */
@@ -390,7 +391,9 @@ async function persist(
     return;
   }
 
-  const trip = itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary, bakedDays);
+  const trip = await attachHeroPhotos(
+    itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary, bakedDays),
+  );
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

@@ -16,6 +16,7 @@ import { preComputeFacts } from "@/lib/itinerary/facts";
 import { generateAndAudit, ItineraryGenerationError } from "@/lib/itinerary/generate";
 import { bakeGeneratedDays } from "@/lib/itinerary/bake";
 import { itineraryToTrip } from "@/lib/itinerary/to-trip";
+import { attachHeroPhotos } from "@/lib/imagery/destination-photo";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import {
   currentProjectRef,
@@ -60,7 +61,11 @@ export async function generateExpeditionTripAction(
 
     // Unique id per generation so the operator can compare runs in TEST.
     const tripId = `expedition-${Date.now().toString(36)}`;
-    const trip = itineraryToTrip(tripId, input, facts, audited, baked);
+    // Real per-day + trip hero photos (Wikipedia/Commons by destination
+    // name) so a generated trip renders place photos, not blank heroes.
+    const trip = await attachHeroPhotos(
+      itineraryToTrip(tripId, input, facts, audited, baked),
+    );
 
     const { error } = await supabase.from("reference_trips").upsert({
       id: tripId,
