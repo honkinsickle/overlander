@@ -45,6 +45,11 @@ export type Anchor = {
   dwell: number;
   /** Short note ("wildlife centerpiece"). */
   note: string | null;
+  /** `[lng,lat]` when the user PICKED a real place in the wizard's
+   *  autocomplete — used verbatim so an ambiguous label ("Boya Lake, BC")
+   *  can't fuzzy-geocode to the wrong place. Falls back to geocode(place)
+   *  when absent. */
+  coords?: [number, number];
 };
 
 /** Trip params (spec §01 / §8.1). */
@@ -150,9 +155,11 @@ export async function preComputeFacts(
     throw new Error("preComputeFacts needs at least 2 anchors (start + end)");
   }
 
-  // 1. Geocode the anchor chain in order.
+  // 1. Resolve the anchor chain: use the coords the user PICKED in the
+  //    autocomplete verbatim; geocode the label only as a fallback.
   const coords = await Promise.all(
     anchors.map(async (a) => {
+      if (a.coords) return a.coords;
       const [lng, lat] = await geocode(a.place);
       return [lng, lat] as [number, number];
     }),

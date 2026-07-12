@@ -21,6 +21,9 @@ import type { RigProfile } from "@/lib/vehicles/types";
 export type ExpeditionDestination = {
   /** Geocodable city/destination text. */
   place: string;
+  /** `[lng,lat]` bound when the user PICKED a suggestion — null when the
+   *  field holds unresolved freeform text. */
+  coords: [number, number] | null;
   /** FIXED = hard schedule anchor; flexible = the planner may place it. */
   datePin: "fixed" | "flexible";
   /** ISO date; used only when datePin === "fixed". */
@@ -92,6 +95,7 @@ export function expeditionToGenerationInput(
     date: d.datePin === "fixed" ? d.date : null,
     dwell: d.dwell,
     note: d.note?.trim() ? d.note.trim() : null,
+    ...(d.coords ? { coords: d.coords } : {}),
   }));
 
   const params: TripParams = {
@@ -122,15 +126,19 @@ export function expeditionToGenerationInput(
   };
 }
 
-/** Validation — surfaced to the user before a (paid) generation runs. */
+/** Validation — surfaced to the user before a (paid) generation runs.
+ *  The unresolved-destination check is CORRECTNESS: a freeform label the user
+ *  didn't pick from the list can fuzzy-geocode to the wrong place. */
 export function validateExpeditionForm(form: ExpeditionForm): string | null {
   if (form.destinations.length < 2) return "Add at least a start and an end destination.";
   if (form.destinations.some((d) => !d.place.trim())) return "Every destination needs a place.";
+  if (form.destinations.some((d) => !d.coords))
+    return "Pick each destination from the suggestions so it resolves to a real place.";
   if (form.destinations.some((d) => d.datePin === "fixed" && !d.date))
     return "A FIXED destination needs a date.";
   if (!form.startDate) return "Set a start date.";
   if (!form.endDate) return "Set an end date.";
-  if (form.startDate > form.endDate) return "End date must be after the start date.";
+  if (form.startDate > form.endDate) return "End date must be on or after the start date.";
   if (!(form.maxDailyDriveMi > 0)) return "Max daily drive must be positive.";
   if (!form.vehicleId) return "Pick a vehicle.";
   return null;

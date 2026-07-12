@@ -42,6 +42,9 @@ export function LocationAutocomplete({
   defaultLat,
   defaultLng,
   required,
+  onSelect,
+  onTextChange,
+  invalid,
 }: {
   name: string;
   placeholder: string;
@@ -49,6 +52,14 @@ export function LocationAutocomplete({
   defaultLat?: number;
   defaultLng?: number;
   required?: boolean;
+  /** Fired when the user picks a real suggestion — gives the controlled
+   *  caller the resolved label + `[lng,lat]` so it can bind them (the going-
+   *  form ignores this and reads the hidden fields instead). */
+  onSelect?: (label: string, coords: [number, number]) => void;
+  /** Fired on freeform typing (coords are now stale/cleared). */
+  onTextChange?: (text: string) => void;
+  /** Error ring (controlled validation). */
+  invalid?: boolean;
 }) {
   const [text, setText] = useState(defaultValue ?? "");
   const [coords, setCoords] = useState<[number, number] | null>(
@@ -147,6 +158,7 @@ export function LocationAutocomplete({
     setCoords(s.coords);
     setOpen(false);
     setActiveIndex(-1);
+    onSelect?.(s.label, s.coords);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -155,6 +167,7 @@ export function LocationAutocomplete({
     // Clear stale coords when the user edits the text — otherwise
     // hidden fields would still hold the previous selection.
     if (coords) setCoords(null);
+    onTextChange?.(e.target.value);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -226,7 +239,7 @@ export function LocationAutocomplete({
           open && activeIndex >= 0 ? optionIdFor(activeIndex) : undefined
         }
         role="combobox"
-        className="form-field w-full pl-10!"
+        className={`form-field w-full pl-10! ${invalid ? "border-input-error!" : ""}`}
       />
       <input
         type="hidden"

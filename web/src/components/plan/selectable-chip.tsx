@@ -14,13 +14,22 @@ export function SelectableChip({
   label,
   accent,
   defaultChecked,
+  checked,
   onChange,
+  name = "chipIds",
 }: {
   id: string;
   label: string;
   accent: string;
   defaultChecked?: boolean;
+  /** Controlled selection — pass with `onChange` when the checked state is
+   *  driven by parent state (e.g. rig chips that change on vehicle switch).
+   *  Omit to use `defaultChecked` (native/uncontrolled, formData reads). */
+  checked?: boolean;
   onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  /** Checkbox `name` — defaults to "chipIds" for the interests-form's
+   *  formData collection; override per group when using multiple groups. */
+  name?: string;
 }) {
   return (
     <label
@@ -29,9 +38,9 @@ export function SelectableChip({
     >
       <input
         type="checkbox"
-        name="chipIds"
+        name={name}
         value={id}
-        defaultChecked={defaultChecked}
+        {...(checked === undefined ? { defaultChecked } : { checked })}
         onChange={onChange}
         className="peer sr-only"
       />
