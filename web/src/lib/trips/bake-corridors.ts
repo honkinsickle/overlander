@@ -107,9 +107,23 @@ export async function fetchCorpusForSegment(
   end: [number, number],
   supabase: ServerClient,
 ): Promise<BrowsePlace[]> {
+  return fetchCorpusForPolyline([start, end], supabase);
+}
+
+/**
+ * Same corridor query as {@link fetchCorpusForSegment} but along an arbitrary
+ * polyline. A straight 2-point chord's 16 km buffer misses POIs where the
+ * road curves away from it by >16 km (the Cassiar fuel pumps are the canonical
+ * case). Passing the ACTUAL route geometry (even downsampled) buffers the road
+ * itself, so on-corridor POIs are caught. Fails soft → [] on any RPC error.
+ */
+export async function fetchCorpusForPolyline(
+  coordinates: [number, number][],
+  supabase: ServerClient,
+): Promise<BrowsePlace[]> {
   try {
     const { data, error } = await supabase.rpc("pois_along_corridor", {
-      p_route: { type: "LineString", coordinates: [start, end] },
+      p_route: { type: "LineString", coordinates },
       p_buffer_m: 16000,
       p_categories: null,
     });

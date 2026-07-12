@@ -21,7 +21,7 @@ import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
-import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
+import { fetchCorpusForSegment, fetchCorpusForPolyline } from "@/lib/trips/bake-corridors";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 import type { GazetteerCity } from "@/lib/corridor/derive";
 import type { CorridorCity } from "@/lib/trips/types";
@@ -185,20 +185,32 @@ export async function preComputeFacts(
       gazetteer: gazetteer as GazetteerCity[],
     }) ?? [];
 
-  // 5. Fold the corpus per baseline segment (same 2-point corridor query the
-  //    shipped bake/wizard paths use), dedupe into a single pool.
+  // 5. Fold the corpus into a single deduped pool. Two folds, merged:
+  //    (a) per baseline segment (2-point chord) — the shipped path; and
+  //    (b) along the ACTUAL route polyline (downsampled) — catches POIs the
+  //    chord misses where the road curves away from it by >16 km (the Cassiar
+  //    fuel pumps are the canonical case: on Hwy 37 but 14–24 mi off the
+  //    straight chord). Additive: (b) can only add, never remove.
   const supabase = createSupabaseServiceClient();
+  const byId = new Map<string, PoolPOI>();
+  const addAll = (places: BrowsePlace[]) => {
+    for (const p of places) if (!byId.has(p.id)) byId.set(p.id, toPoolPOI(p));
+  };
+
   const perSegment = await Promise.all(
     segments.map((seg) =>
       fetchCorpusForSegment(seg.startCoord, seg.endCoord, supabase),
     ),
   );
-  const byId = new Map<string, PoolPOI>();
-  for (const seg of perSegment) {
-    for (const p of seg) {
-      if (!byId.has(p.id)) byId.set(p.id, toPoolPOI(p));
-    }
-  }
+  perSegment.forEach(addAll);
+
+  // Route-following fold: downsample the full geometry to a sane point count
+  // (the RPC LineString stays small) that still traces the road.
+  const step = Math.max(1, Math.floor(route.coordinates.length / 250));
+  const routeLine = route.coordinates.filter((_, i) => i % step === 0);
+  const lastCoord = route.coordinates[route.coordinates.length - 1];
+  if (routeLine[routeLine.length - 1] !== lastCoord) routeLine.push(lastCoord);
+  addAll(await fetchCorpusForPolyline(routeLine, supabase));
 
   return {
     anchorsResolved: anchors.map((a, i) => ({
