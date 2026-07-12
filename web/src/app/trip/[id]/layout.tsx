@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { VerticalNav } from "@/components/chrome/vertical-nav";
-import { DayColumnPlanner } from "@/components/trip/day-column-planner";
+import { FullPageDayRail } from "@/components/trip/full-page-day-rail";
 import { MapColumn } from "@/components/trip/map-column";
 import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
 import { MakeItMineCta } from "@/components/trip/make-it-mine-cta";
@@ -39,8 +39,15 @@ export default async function TripLayout(props: LayoutProps<"/trip/[id]">) {
   return (
     <div className="flex w-full h-[100dvh] bg-bg-base text-text-primary overflow-hidden">
       <VerticalNav />
-      <DayColumnPlanner tripId={trip.id} days={trip.days} />
-      <section className="w-[444px] bg-bg-panel border-r border-border-subtle overflow-y-auto shrink-0">
+      <FullPageDayRail trip={trip} />
+      {/* Center column width matches --rail-column-w (478px): the corridor
+       *  renderer (DayDetailCorridorColumn) is fixed to that width, and it
+       *  owns its own vertical scroll — so the section clips (overflow-hidden)
+       *  rather than adding a second scrollbar. */}
+      <section
+        className="bg-bg-panel border-r border-border-subtle overflow-hidden shrink-0"
+        style={{ width: "var(--rail-column-w)" }}
+      >
         {props.children}
       </section>
       <section className="flex-1 min-w-0 relative overflow-hidden z-[15]" aria-label="Map">

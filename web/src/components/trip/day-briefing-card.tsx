@@ -2,10 +2,12 @@ import type { Day } from "@/lib/trips/types";
 
 /**
  * Day-level reasoned fill — the LLM's briefing, weather, overnight, and
- * notes (logistics + obligations) for one day. Rendered both in the legacy
- * full-page `SuggestedSection` and, as the day-level header, in the slideup's
- * `DayDetailCorridor` above the spine + tiles — so a generated day reads as
- * one cohesive corridor day (route + reasoning) on the canonical surface.
+ * notes (logistics + obligations) for one day. Rendered as the day-level
+ * header in `DayDetailCorridor`, above the spine + tiles — so a generated
+ * day reads as one cohesive corridor day (route + reasoning). Both trip
+ * surfaces (slideup + full page) mount that one corridor renderer, so this
+ * card's title and the corridor route label always source the same
+ * `day.label` and can't disagree.
  *
  * Style: Space Grotesk (`--ff-display`) section labels, Barlow (`--ff-sans`)
  * body, Space Mono (`--ff-mono`) route stat, amber accents.

@@ -21,7 +21,7 @@ import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
-import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
+import { fetchCorpusForSegment, fetchCorpusForPolyline } from "@/lib/trips/bake-corridors";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 import type { GazetteerCity } from "@/lib/corridor/derive";
 import type { CorridorCity } from "@/lib/trips/types";
@@ -45,6 +45,11 @@ export type Anchor = {
   dwell: number;
   /** Short note ("wildlife centerpiece"). */
   note: string | null;
+  /** `[lng,lat]` when the user PICKED a real place in the wizard's
+   *  autocomplete — used verbatim so an ambiguous label ("Boya Lake, BC")
+   *  can't fuzzy-geocode to the wrong place. Falls back to geocode(place)
+   *  when absent. */
+  coords?: [number, number];
 };
 
 /** Trip params (spec §01 / §8.1). */
@@ -75,6 +80,10 @@ export type GenerationInput = {
   anchors: Anchor[];
   params: TripParams;
   rig: RigProfile;
+  /** Optional free-text trip intent/vibe (reference-doc §01 Objective).
+   *  Prompt CONTEXT only — the engine never consumes it, so it is not a
+   *  preComputeFacts input; it rides along to buildFactsMessage. */
+  objective?: string;
 };
 
 /** A pooled POI, trimmed to what the LLM needs to reason + reference. */
@@ -146,9 +155,11 @@ export async function preComputeFacts(
     throw new Error("preComputeFacts needs at least 2 anchors (start + end)");
   }
 
-  // 1. Geocode the anchor chain in order.
+  // 1. Resolve the anchor chain: use the coords the user PICKED in the
+  //    autocomplete verbatim; geocode the label only as a fallback.
   const coords = await Promise.all(
     anchors.map(async (a) => {
+      if (a.coords) return a.coords;
       const [lng, lat] = await geocode(a.place);
       return [lng, lat] as [number, number];
     }),
@@ -174,20 +185,32 @@ export async function preComputeFacts(
       gazetteer: gazetteer as GazetteerCity[],
     }) ?? [];
 
-  // 5. Fold the corpus per baseline segment (same 2-point corridor query the
-  //    shipped bake/wizard paths use), dedupe into a single pool.
+  // 5. Fold the corpus into a single deduped pool. Two folds, merged:
+  //    (a) per baseline segment (2-point chord) — the shipped path; and
+  //    (b) along the ACTUAL route polyline (downsampled) — catches POIs the
+  //    chord misses where the road curves away from it by >16 km (the Cassiar
+  //    fuel pumps are the canonical case: on Hwy 37 but 14–24 mi off the
+  //    straight chord). Additive: (b) can only add, never remove.
   const supabase = createSupabaseServiceClient();
+  const byId = new Map<string, PoolPOI>();
+  const addAll = (places: BrowsePlace[]) => {
+    for (const p of places) if (!byId.has(p.id)) byId.set(p.id, toPoolPOI(p));
+  };
+
   const perSegment = await Promise.all(
     segments.map((seg) =>
       fetchCorpusForSegment(seg.startCoord, seg.endCoord, supabase),
     ),
   );
-  const byId = new Map<string, PoolPOI>();
-  for (const seg of perSegment) {
-    for (const p of seg) {
-      if (!byId.has(p.id)) byId.set(p.id, toPoolPOI(p));
-    }
-  }
+  perSegment.forEach(addAll);
+
+  // Route-following fold: downsample the full geometry to a sane point count
+  // (the RPC LineString stays small) that still traces the road.
+  const step = Math.max(1, Math.floor(route.coordinates.length / 250));
+  const routeLine = route.coordinates.filter((_, i) => i % step === 0);
+  const lastCoord = route.coordinates[route.coordinates.length - 1];
+  if (routeLine[routeLine.length - 1] !== lastCoord) routeLine.push(lastCoord);
+  addAll(await fetchCorpusForPolyline(routeLine, supabase));
 
   return {
     anchorsResolved: anchors.map((a, i) => ({

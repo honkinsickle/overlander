@@ -397,6 +397,23 @@ export async function auditItinerary(
           message: `This leg (${Math.round(measuredMi)} mi) exceeds your ${capMi} mi/day cap — needs a re-split.`,
         });
       }
+    } else if (!isLayover && statedMi > capMi + DISTANCE_SNAP_TOLERANCE_MI) {
+      // Advisory day — the audit couldn't re-measure it (endpoint didn't
+      // resolve, or an out-and-back), so it fell out of the measured
+      // structural check above. Enforce the cap on the LLM's STATED distance
+      // anyway, so a large unmeasured leg can't silently escape the
+      // structural tier (→ triggers regen / surfaces honestly).
+      report.structural.push({
+        kind: "leg-over-cap",
+        day: day.n,
+        measuredMi: Math.round(statedMi),
+        capMi,
+      });
+      flags.push({
+        kind: "structural",
+        severity: "critical",
+        message: `This leg (~${Math.round(statedMi)} mi, unverified) exceeds your ${capMi} mi/day cap — needs a re-split.`,
+      });
     }
 
     report.distanceSnaps.push({

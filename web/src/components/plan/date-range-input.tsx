@@ -22,19 +22,30 @@ export function DateRangeInput({
   name,
   defaultStart,
   defaultEnd,
+  onChange,
 }: {
   /** Field stem — emits `<name>Start` and `<name>End` as hidden inputs. */
   name: string;
   defaultStart?: string;
   defaultEnd?: string;
+  /** Fired with ISO `yyyy-MM-dd` (or "" when cleared) for controlled callers
+   *  — the going-form ignores this and reads the hidden fields. */
+  onChange?: (start: string, end: string) => void;
 }) {
-  const [range, setRange] = useState<DateRange | undefined>(() => {
+  const [range, setRangeState] = useState<DateRange | undefined>(() => {
     if (!defaultStart && !defaultEnd) return undefined;
     return {
       from: defaultStart ? parseISO(`${defaultStart}T00:00:00`) : undefined,
       to: defaultEnd ? parseISO(`${defaultEnd}T00:00:00`) : undefined,
     };
   });
+  const setRange = (r: DateRange | undefined) => {
+    setRangeState(r);
+    onChange?.(
+      r?.from ? format(r.from, "yyyy-MM-dd") : "",
+      r?.to ? format(r.to, "yyyy-MM-dd") : "",
+    );
+  };
 
   const startLabel = range?.from ? format(range.from, "MMM d, yyyy") : null;
   const endLabel = range?.to ? format(range.to, "MMM d, yyyy") : null;
