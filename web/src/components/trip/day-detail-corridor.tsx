@@ -61,6 +61,9 @@ export type CorridorPlace = {
   /** [lng, lat] — carried for anchor-matching (a pick that IS the day's
    *  start/end anchor renders under that node, not as a separate tile). */
   coords?: [number, number];
+  /** Inline context for a curated key stop ("fuel + lunch, hot tub") — rendered
+   *  as the tile's status line. Absent on pool tiles. */
+  keyStopNote?: string;
 };
 
 type Props = {
@@ -305,6 +308,7 @@ export function DayDetailCorridor({
                 key={p.id}
                 place={p}
                 category={p.category}
+                status={p.keyStopNote}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
               />
             ))}
@@ -485,6 +489,7 @@ function CityNode({
                 key={p.id}
                 place={p}
                 category={p.category}
+                status={p.keyStopNote}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                 onRemove={
                   p.removable && onRemovePlace
@@ -503,6 +508,7 @@ function CityNode({
                 key={p.id}
                 place={p}
                 category={p.category}
+                status={p.keyStopNote}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                 onRemove={
                   p.removable && onRemovePlace
@@ -579,6 +585,7 @@ function KeyStopNode({
         <CategoryListCard
           place={place}
           category={place.category}
+          status={place.keyStopNote}
           onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
         />
       </div>
@@ -632,6 +639,7 @@ function MileTick({
             key={p.id}
             place={p}
             category={p.category}
+            status={p.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
           />
         ))}

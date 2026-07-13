@@ -28,6 +28,7 @@ import type {
   DayPlan,
   FuelGap,
   ItineraryOutput,
+  KeyStop,
   ResolvedPlace,
 } from "./schema";
 
@@ -98,6 +99,39 @@ async function groundReference(
       message: `The planner suggested "${ref}" but it ${reasonText} — dropped it; find your own.`,
     },
   };
+}
+
+export type GroundedKeyStop =
+  | { kind: "kept"; kept: KeyStop; resolved: ResolvedPlace | null }
+  | { kind: "dropped"; poiId: string; reason: string; flag: AuditFlag };
+
+/** Ground ONE key stop: resolve its NAME (pool-first → live → drop) and carry
+ *  its `note` through untouched. On a pool-hit `kept.name` becomes the corpus
+ *  id (downstream treats it as a pool POI); on a live-resolve it stays the name
+ *  (+ a ResolvedPlace). The note NEVER resolves — it's descriptive context,
+ *  threaded so the tile can show it. Exported so a test can lock the invariant
+ *  that a {name,note} key stop grounds AND its note survives the ref-swap. */
+export async function groundKeyStop(
+  ks: KeyStop,
+  ctx: {
+    poolByName: Map<string, PoolPOI>;
+    resolver: PlaceResolver;
+    biasCoord: [number, number];
+    onCorridor: (c: [number, number]) => boolean;
+  },
+): Promise<GroundedKeyStop> {
+  const outcome = await groundReference(ks.name, "keyStop", ctx);
+  if (outcome.kind === "pool-hit") {
+    return { kind: "kept", kept: { name: outcome.poi.id, note: ks.note }, resolved: null };
+  }
+  if (outcome.kind === "resolved") {
+    return {
+      kind: "kept",
+      kept: { name: ks.name, note: ks.note },
+      resolved: { ...outcome.place, name: ks.name, where: "keyStop" },
+    };
+  }
+  return { kind: "dropped", poiId: ks.name, reason: outcome.reason, flag: outcome.flag };
 }
 
 /** Normalize a place name for pool matching: lowercase, strip diacritics +
@@ -349,25 +383,22 @@ export async function auditItinerary(
       dayAnchorCoord ?? facts.anchorsResolved[0]?.coords ?? [0, 0];
 
     // ── Ground every named place: pool-first → live-resolve → drop ──────
-    const keptStops: string[] = [];
-    for (const ref of day.keyStops) {
-      const outcome = await groundReference(ref, "keyStop", {
-        poolByName,
-        resolver,
-        biasCoord,
-        onCorridor,
-      });
-      if (outcome.kind === "pool-hit") {
-        // Named a pooled place — keep it by its corpus id so downstream treats
-        // it as a pool POI (rating/tiles arrive via the federated fold).
-        keptStops.push(outcome.poi.id);
-      } else if (outcome.kind === "resolved") {
-        keptStops.push(ref);
-        resolvedPlaces.push({ ...outcome.place, name: ref, where: "keyStop" });
-        report.resolved.push({ day: day.n, name: ref, where: "keyStop" });
+    // Grounding operates on the NAME (ks.name); the note never resolves — it's
+    // descriptive context, carried through so the tile can show it. After the
+    // audit `name` holds the resolved ref (corpus id on pool-hit, name on
+    // resolve), mirroring the pre-object string[].
+    const keptStops: KeyStop[] = [];
+    for (const ks of day.keyStops) {
+      const g = await groundKeyStop(ks, { poolByName, resolver, biasCoord, onCorridor });
+      if (g.kind === "kept") {
+        keptStops.push(g.kept);
+        if (g.resolved) {
+          resolvedPlaces.push(g.resolved);
+          report.resolved.push({ day: day.n, name: ks.name, where: "keyStop" });
+        }
       } else {
-        report.droppedPois.push({ day: day.n, poiId: ref, where: "keyStop", reason: outcome.reason });
-        flags.push(outcome.flag);
+        report.droppedPois.push({ day: day.n, poiId: g.poiId, where: "keyStop", reason: g.reason });
+        flags.push(g.flag);
       }
     }
 

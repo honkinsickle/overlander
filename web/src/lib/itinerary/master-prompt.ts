@@ -62,8 +62,15 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
      - distanceMi, driveHours (grounded in the segments)
      - weather (typical/climate, advisory)
      - rationale (the day's drive: road, transitions, why this pacing)
-     - keyStops[] (1–3 entries: plain place NAMES — pooled or not, always by
-       name, never an id)
+     - keyStops[] (2–4 entries, each { name, note }). name = a plain real-place
+       NAME (pooled or not, always by name, never an id). note = short inline
+       context — what the stop is FOR: fuel / food / view / a caveat / optional
+       (e.g. "fuel + lunch, hot tub", "rough gravel — fine for GX470, not RVs",
+       "optional, ~1.5 hr each way"). INCLUDE 1–2 FOOD stops per day where the
+       route offers them — a real named cafe/lodge/bakery with a food note
+       ("Braeburn Lodge — cinnamon buns worth the stop", "Glacier Inn — get
+       Hyderized") — the way a great guide weaves food into the day. Food stops
+       are grounded like every other name.
      - overnight { name|null, desc|null, type, rationale } — the real place
        NAME (pooled or not), or desc for a typical/assumed spot; the
        rationale MUST say why it fits the rig +

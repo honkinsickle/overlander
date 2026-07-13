@@ -88,6 +88,14 @@ export type DayAudit = {
   resolvedPlaces: ResolvedPlace[];
 };
 
+/** One key stop: a grounded place NAME + inline context note (purpose / caveat
+ *  / food). Gold weaves per-stop context and food into the key-stops cell; this
+ *  is where both live. */
+export type KeyStop = {
+  name: string;
+  note: string;
+};
+
 export type DayPlan = {
   /** 1-based day number. */
   n: number;
@@ -104,10 +112,14 @@ export type DayPlan = {
   weather: string;
   /** Short narrative of the day's drive (road, transitions, why this pacing). */
   rationale: string;
-  /** Real place NAMES of the day's key stops — always names, never ids.
-   *  The audit matches each name to the pool (keeping corpus data) or
-   *  resolves it live. */
-  keyStops: string[];
+  /** The day's key stops. `name` is a real place NAME (always a name, never an
+   *  id — the audit matches it to the pool or resolves it live); `note` is the
+   *  inline context gold weaves in ("fuel + lunch, hot tub"; "rough gravel —
+   *  fine for GX470, not RVs"; "cinnamon buns worth the stop"). Per-day food
+   *  rides here, as food stops with food notes. After the audit, `name` holds
+   *  the RESOLVED ref (corpus id on a pool-hit, the name on a live-resolve) —
+   *  same reuse the pre-object `string[]` had; `note` is carried through. */
+  keyStops: KeyStop[];
   overnight: {
     /** The overnight's real place NAME — the audit matches it to the pool or
      *  resolves it live. null only when no real place fits (use `desc`). */
@@ -225,9 +237,25 @@ const DAY_PLAN_SCHEMA = {
     rationale: { type: "string" },
     keyStops: {
       type: "array",
-      items: { type: "string" },
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: {
+            type: "string",
+            description:
+              "A plain real-place NAME (e.g. \"Boya Lake Provincial Park\", \"Salmon Glacier\", \"Braeburn Lodge\"). NEVER an id or code — just the name, as you'd say it out loud.",
+          },
+          note: {
+            type: "string",
+            description:
+              "Short inline context: what this stop is FOR — fuel / food / view / a caveat / optional. E.g. \"fuel + lunch, hot tub\", \"rough gravel — fine for GX470, not RVs\", \"cinnamon buns worth the stop\", \"optional, ~1.5 hr each way\".",
+          },
+        },
+        required: ["name", "note"],
+      },
       description:
-        "1–3 entries, each a plain real-place NAME (e.g. \"Boya Lake Provincial Park\", \"Salmon Glacier\"). NEVER an id or code — just the name, as you'd say it out loud.",
+        "2–4 entries. Include 1–2 FOOD stops where the route offers them (a real named cafe/lodge/bakery, with a food note), the way a great guide weaves food into the day. Every name is grounded like everything else.",
     },
     overnight: {
       type: "object",

@@ -629,6 +629,7 @@ function placePool(day: Day): CorridorPlace[] {
       curated: p.curated,
       milesFromStart: p.milesFromStart,
       coords: p.coords,
+      keyStopNote: p.keyStopNote,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`

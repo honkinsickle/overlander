@@ -151,16 +151,18 @@ export function CategoryListCard({
           reviewCount={place.reviewCount}
         />
 
-        <div className="flex items-center justify-between" style={{ gap: 8 }}>
+        <div className="flex items-start justify-between" style={{ gap: 8 }}>
           {status ? (
-            <div className="flex items-center min-w-0" style={{ gap: 7 }}>
+            <div className="flex items-start min-w-0" style={{ gap: 7 }}>
               <span
                 aria-hidden
                 className="shrink-0 rounded-full"
-                style={{ width: 6, height: 6, backgroundColor: "#6BE26F" }}
+                style={{ width: 6, height: 6, marginTop: 5, backgroundColor: "#6BE26F" }}
               />
+              {/* Full note — wraps so the inline context reads (gold shows it in
+                 full: "fine for GX470, not RVs", "cinnamon buns worth the stop").
+                 Short browse statuses ("Open · 6a–10p") stay one line. */}
               <span
-                className="truncate"
                 style={{
                   color: "#A8B0B6",
                   fontFamily: "var(--ff-display)",

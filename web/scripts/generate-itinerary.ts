@@ -207,7 +207,7 @@ async function main() {
       const day = audited.days.find((d) => d.n === n)!;
       console.log(`\n── AFTER AUDIT · Day ${n} (${day.date}) ${day.startPlace} → ${day.endPlace} ──`);
       console.log(`  distance: ${day.distanceMi} mi / ${day.driveHours} h [${day.audit?.distanceConfidence}]`);
-      console.log(`  keyStops: ${day.keyStops.length ? day.keyStops.join(", ") : "(none survived)"}`);
+      console.log(`  keyStops: ${day.keyStops.length ? day.keyStops.map((k) => `${k.name}${k.note ? ` (${k.note})` : ""}`).join(", ") : "(none survived)"}`);
       console.log(
         `  overnight: ${day.overnight.name ?? day.overnight.desc ?? "(none)"} — ${day.overnight.rationale}`,
       );
@@ -296,7 +296,7 @@ async function main() {
     // refs (a leftover "mp:" token) should be ZERO — there's no id field.
     const idLike: string[] = [], nameRefs: string[] = [];
     for (const d of itinerary.days) {
-      for (const k of d.keyStops) (k.startsWith("mp:") ? idLike : nameRefs).push(`d${d.n}:${k}`);
+      for (const k of d.keyStops) (k.name.startsWith("mp:") ? idLike : nameRefs).push(`d${d.n}:${k.name}`);
       if (d.overnight.name) nameRefs.push(`d${d.n}:overnight="${d.overnight.name}"`);
     }
     console.log(`\n[contract] plain-NAME refs: ${nameRefs.length} · id-like refs (should be 0): ${idLike.length}`);

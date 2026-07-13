@@ -73,6 +73,10 @@ export type BrowsePlace = {
    *  (not just a corridor-pool member) — set by the generated-day bake so the
    *  Day Detail column can feature the guide's picks and demote the pool. */
   curated?: boolean;
+  /** Inline context for a curated key stop — the "fuel + lunch, hot tub" /
+   *  "cinnamon buns worth the stop" note the LLM attaches to the stop. Rendered
+   *  as the tile's status line. Set by the bake for curated tiles only. */
+  keyStopNote?: string;
   /** Along-route distance-from-day-start (miles), projected onto the day's
    *  polyline at bake time. Set by the generated-day bake for curated key
    *  stops so they render IN their spine position (ordered, with mileage)

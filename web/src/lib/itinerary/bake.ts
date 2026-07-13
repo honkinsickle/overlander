@@ -108,14 +108,21 @@ export async function bakeGeneratedDays(
       // not flagged here.)
       const corpus =
         start && end ? await fetchCorpusForSegment(start, end, supabase) : [];
-      const keyStopIds = new Set(day.keyStops);
+      // Post-audit each keyStop's `name` holds the resolved ref (corpus id on a
+      // pool-hit, the place name on a live-resolve); `note` is the inline
+      // context. Key the note by that ref so it reaches the matching tile.
+      const noteByRef = new Map(day.keyStops.map((k) => [k.name, k.note]));
       const tiles: BrowsePlace[] = [
         ...corpus.map((t) =>
-          keyStopIds.has(t.id) ? { ...t, curated: true } : t,
+          noteByRef.has(t.id)
+            ? { ...t, curated: true, keyStopNote: noteByRef.get(t.id) }
+            : t,
         ),
         ...resolved.map((r) => {
           const tile = resolvedToTile(r);
-          return r.where === "keyStop" ? { ...tile, curated: true } : tile;
+          return r.where === "keyStop"
+            ? { ...tile, curated: true, keyStopNote: noteByRef.get(r.name) }
+            : tile;
         }),
       ];
 
