@@ -35,16 +35,21 @@ function obligationLine(o: Obligation): string {
 
 const FLAG_MARK = { info: "ℹ", warning: "⚠", critical: "‼" } as const;
 
-/** Build the per-day notes list the Day Detail column renders. Audit flags
- *  lead (so dropped POIs / corrected distances are the first thing seen),
- *  then the reasoned overnight, logistics, and obligations. */
+/** Build the per-day notes list the Day Detail column renders. The REASONED
+ *  notes lead (overnight, logistics, obligations) — the gold standard never
+ *  shows sausage-making. The audit DROPS silently for the reader: a dropped
+ *  POI/overnight or a corrected distance is kept in the structured audit
+ *  report for the operator, never surfaced as reader-facing apology text.
+ *  Only genuinely reader-relevant advisories (a seasonal window, a leg that
+ *  needs re-splitting) are shown, and they follow the reasoned notes. */
+const SILENT_FLAG_KINDS = new Set([
+  "dropped-poi",
+  "dropped-overnight",
+  "distance-snapped",
+]);
+
 function dayNotes(dp: DayPlan): string[] {
   const notes: string[] = [];
-
-  // Audit flags first — these are the trust surface (spec §8.3).
-  for (const f of dp.audit?.flags ?? []) {
-    notes.push(`${FLAG_MARK[f.severity]} ${f.message}`);
-  }
 
   const overnightRef = dp.overnight.name
     ? dp.overnight.name
@@ -54,6 +59,12 @@ function dayNotes(dp: DayPlan): string[] {
   );
   if (dp.logistics) notes.push(`Logistics — ${dp.logistics}`);
   for (const o of dp.obligations) notes.push(obligationLine(o));
+
+  // Reader-relevant audit flags only, after the reasoned notes.
+  for (const f of dp.audit?.flags ?? []) {
+    if (SILENT_FLAG_KINDS.has(f.kind)) continue;
+    notes.push(`${FLAG_MARK[f.severity]} ${f.message}`);
+  }
   return notes;
 }
 
