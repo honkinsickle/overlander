@@ -55,6 +55,9 @@ type Props = {
   guidesSubtitle?: string;
   /** Empty (or omitted) → the Guides section is not rendered. */
   guides?: OverviewGuide[];
+  /** The regional-eats narrative woven through the trip (generated trips).
+   *  Omitted → the Food section is not rendered. */
+  foodThread?: string;
   placesSubtitle: string;
   places: OverviewPlace[];
   /** Drives the "Add to Day N" CTA label. Omit for read-only (trip-level)
@@ -77,6 +80,7 @@ export function DayDetailOverview({
   heroAlt = "",
   guidesSubtitle,
   guides = [],
+  foodThread,
   placesSubtitle,
   places,
   dayNumber,
@@ -108,6 +112,30 @@ export function DayDetailOverview({
             ))}
           </div>
           <MoreButton label="More Guides" topGap={19.25} uppercase={false} tracking="0" />
+        </section>
+      )}
+
+      {/* ── Food thread ── the regional-eats narrative (generated trips). ── */}
+      {foodThread && (
+        <section
+          id="food"
+          className="shrink-0 flex flex-col w-[var(--rail-card-w)]"
+        >
+          <SectionBanner
+            title="Food Along the Way"
+            subtitle="The regional-eats thread, woven through the route"
+          />
+          <p
+            className="px-[17px] pt-[12px]"
+            style={{
+              fontFamily: "var(--ff-sans)",
+              fontSize: 14,
+              lineHeight: "22px",
+              color: "var(--type-300)",
+            }}
+          >
+            {foodThread}
+          </p>
         </section>
       )}
 

@@ -24,6 +24,9 @@ export type Trip = {
   weatherLoF: number;
   /** Editorial kicker rendered above the title, Crimson Text italic. */
   kicker?: string;
+  /** The regional-eats narrative woven through the trip (generated trips).
+   *  Surfaced in the Overview's Food section. */
+  foodThread?: string;
   /** True for trips produced by the itinerary generator (YoTrippin). Gates
    *  generated-only UI — e.g. the day-level reasoned briefing card in the
    *  corridor view — so reference/fork trips stay unchanged. */

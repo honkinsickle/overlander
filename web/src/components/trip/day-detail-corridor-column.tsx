@@ -478,6 +478,7 @@ export function DayDetailCorridorColumn({
             heroAlt={trip.title}
             guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
             guides={OVERVIEW_GUIDES}
+            foodThread={trip.foodThread}
             placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
             places={topPlacesForTrip(trip)}
             onOpenPlace={openTripPlaceDetail}

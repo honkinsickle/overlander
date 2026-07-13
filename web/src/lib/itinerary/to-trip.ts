@@ -132,6 +132,7 @@ export function itineraryToTrip(
     startCoords: first.coords,
     kicker: "YoTrippin · generated expedition",
     generated: true,
+    foodThread: output.foodThread,
     weatherHiF: 70,
     weatherLoF: 45,
     days,
