@@ -28,6 +28,7 @@ import {
 } from "@/lib/trips/actions";
 import type { AddedPlace } from "@/lib/trips/added-place";
 import type { CorridorCity, Day, Trip, Waypoint } from "@/lib/trips/types";
+import { isSameAnchorPlace } from "@/lib/corridor/anchor-match";
 
 /**
  * Slideup center column for the corridor integration — single-day model:
@@ -441,6 +442,26 @@ export function DayDetailCorridorColumn({
     }
   };
 
+  // Day hero: prefer the persisted (Wikipedia) image; if absent (remote parks
+  // have no wiki image), REUSE the tile hydration already fetched for this day —
+  // the destination place's Google photo sits in `hydrated`, so one fetch feeds
+  // both tiles and the hero. Degrades to blank when the destination has no
+  // placeId or hasn't hydrated yet (no flash/crash — fills on the next render).
+  const heroCities = day ? day.corridorCities ?? fallbackCorridor(day) : [];
+  const heroEndCity = heroCities[heroCities.length - 1];
+  const destTile =
+    day && heroEndCity
+      ? placePool(day).find((t) =>
+          isSameAnchorPlace(
+            { id: t.id, name: t.title, coords: t.coords },
+            { id: heroEndCity.id, name: heroEndCity.name, coords: heroEndCity.coords },
+          ),
+        )
+      : undefined;
+  const dayHeroImage =
+    day?.heroImage ??
+    (destTile?.placeId ? hydrated[destTile.placeId]?.photoUrl : undefined);
+
   return (
     <div className="relative h-full">
       <div
@@ -454,7 +475,7 @@ export function DayDetailCorridorColumn({
             dayLabel={`Day ${day.dayNumber} — ${formatDayDate(day.date)}`}
             dayNumber={day.dayNumber}
             routeLabel={day.label}
-            heroImageUrl={day.heroImage}
+            heroImageUrl={dayHeroImage}
             heroAlt={day.label}
             cities={day.corridorCities ?? fallbackCorridor(day)}
             places={placePool(day).map((t) => {
