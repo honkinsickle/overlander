@@ -153,14 +153,16 @@ export function AttractionIconV2({ size = 22, ...rest }: IconProps) {
   );
 }
 
+// Generic "point of interest" default — the fallback for any place whose
+// Google types the mapper doesn't cover. A clean warm-sand DIAMOND waypoint
+// (not the old red MapPin placeholder, not the gold attraction star), so an
+// unmapped type reads as an intentional generic stop, never a broken pin.
 export function InterestIconV2({ size = 22, ...rest }: IconProps) {
   return (
     <svg {...svgProps(size, rest)}>
-      <path
-        d="M11 2c-3.3 0-6 2.6-6 5.9 0 4.2 6 11.1 6 11.1s6-6.9 6-11.1C17 4.6 14.3 2 11 2z"
-        fill="#C2554D"
-      />
-      <circle cx="11" cy="8" r="2.3" fill="#FBE9E7" />
+      <path d="M11 3l7.6 8-7.6 8-7.6-8z" fill="#CBBE9C" />
+      <path d="M11 6.4l4.4 4.6-4.4 4.6-4.4-4.6z" fill="#3A3324" />
+      <circle cx="11" cy="11" r="2" fill="#CBBE9C" />
     </svg>
   );
 }

@@ -391,7 +391,7 @@ function placeToSourceResult(
 
 /** Most specific first — "park" overlaps with "campground" on Google,
  *  and we want a campground site to land in camping not scenic. */
-function categoryForGoogleTypes(
+export function categoryForGoogleTypes(
   types: string[],
   wanted: Set<SlideCategoryKey>,
 ): SlideCategoryKey | null {
@@ -420,6 +420,22 @@ function categoryForGoogleTypes(
     ["tourist_attraction", "park", "national_park"].some((x) => t.has(x))
   ) {
     return "scenic";
+  }
+  // A town/city stop (locality) — checked LAST so a town that's ALSO a specific
+  // venue keeps the venue category above. Without this, towns resolve to
+  // [locality, political] → no match → the "interest" grey/pin default.
+  if (
+    wanted.has("urban") &&
+    [
+      "locality",
+      "political",
+      "sublocality",
+      "administrative_area_level_1",
+      "administrative_area_level_2",
+      "administrative_area_level_3",
+    ].some((x) => t.has(x))
+  ) {
+    return "urban";
   }
   return null;
 }
