@@ -27,19 +27,21 @@ strand the traveler in the wilderness. Therefore:
   invent or contradict them. When you state a day's distanceMi / driveHours,
   derive it from the given segments — it will be audited against a
   re-measurement and snapped to ground truth.
-• Reference places TWO ways:
-  (a) A place that IS in poolPOIs → use its corpus id (mp:…). Put those ids
-      in keyStops[] and in overnight.poiId.
-  (b) Any OTHER real, specific place you know that is NOT in poolPOIs — a
-      named glacier, hot spring, campground, viewpoint, town fuel stop — →
-      use its plain NAME, never an id. Put a named key stop as its name
-      string in keyStops[] (e.g. "Salmon Glacier"); put a named overnight in
-      overnight.name. We resolve names against live map data and verify they
-      sit on your route before showing them.
-• NEVER emit a corpus-style id (mp:…) for a place that is not in poolPOIs. If
-  you know a real place that isn't in the pool, give its NAME — a made-up id
-  is a fabrication and will be dropped. Never invent coordinates.
-• If no real place fits an overnight, set overnight.poiId = null AND
+• Reference every place by its plain NAME — the way you'd say it out loud
+  ("Boya Lake Provincial Park", "Salmon Glacier", "Dease Lake"). Put named
+  key stops in keyStops[] and the named overnight in overnight.name. There is
+  NO id field and no id syntax — a NAME is the only way to reference a place,
+  and a real, specific name is all we need. Never emit an "mp:"-style token or
+  any code.
+• The poolPOIs list is your PALETTE of places we already have rich data for —
+  prefer them when they fit, and refer to them by the exact name shown. But
+  you are NOT limited to the pool: any real, specific place you know that fits
+  the route — a provincial park, glacier, hot spring, campground, viewpoint,
+  town fuel stop — belongs in keyStops/overnight by NAME too. We resolve every
+  name against live map data and verify it sits on your route before showing
+  it, so give the real, specific name (a well-known park/town resolves far
+  better than a vague description) and we'll ground it.
+• Never invent coordinates. If no real place fits an overnight, set
   overnight.name = null and describe a TYPICAL option in overnight.desc
   ("informal boondock; scout via iOverlander"), clearly marked as assumed.
 • Knowledge-based claims you cannot ground in the facts (seasonal windows,
@@ -60,11 +62,11 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
      - distanceMi, driveHours (grounded in the segments)
      - weather (typical/climate, advisory)
      - rationale (the day's drive: road, transitions, why this pacing)
-     - keyStops[] (1–3 entries: corpus mp: ids for pooled places, plain
-       NAMES for other real places)
-     - overnight { poiId|null, name|null, desc|null, type, rationale } —
-       poiId for a pooled place, name for another real place, desc for a
-       typical/assumed spot; the rationale MUST say why it fits the rig +
+     - keyStops[] (1–3 entries: plain place NAMES — pooled or not, always by
+       name, never an id)
+     - overnight { name|null, desc|null, type, rationale } — the real place
+       NAME (pooled or not), or desc for a typical/assumed spot; the
+       rationale MUST say why it fits the rig +
        style (e.g. "level gravel pads, good for a GX470 + RTT; pit toilets,
        rely on onboard power")
      - logistics (fuel cadence, border timing, resupply — the actionable
@@ -107,8 +109,10 @@ export function buildFactsMessage(
       kind: c.kind,
       milesFromStart: Math.round(c.milesFromStart),
     })),
+    // Pool is presented NAME-ONLY on purpose: the model references places by
+    // name (the audit matches names back to the pool), so it never sees an
+    // id format to imitate/fabricate.
     poolPOIs: facts.poolPOIs.map((p) => ({
-      id: p.id,
       name: p.name,
       category: p.category,
       rating: p.rating,
@@ -130,9 +134,9 @@ export function buildFactsMessage(
     "",
     ...objectiveLine,
     "The ENGINE FACTS are ground truth (route, distances, city spine, POI",
-    "pool). Reason over them per the GROUNDING CONTRACT — reference pooled",
-    "places by their poolPOIs id (mp:…) and any OTHER real place by its plain",
-    "NAME (never a made-up id), and honor every FIXED anchor on its date.",
+    "pool). Reason over them per the GROUNDING CONTRACT — reference every",
+    "place by its plain NAME (pooled or not; there is no id field), and honor",
+    "every FIXED anchor on its date.",
     "",
     "```json",
     JSON.stringify(payload, null, 2),

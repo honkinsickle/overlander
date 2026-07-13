@@ -20,7 +20,7 @@
 import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { pointToPolylineMi, haversineMi } from "@/lib/routing/point-to-polyline";
-import type { EngineFacts, GenerationInput } from "./facts";
+import type { EngineFacts, GenerationInput, PoolPOI } from "./facts";
 import { computeFuelGaps, type ComputedFuelGap } from "./fuel-gaps";
 import { PlaceResolver, type ResolvedName } from "./resolve";
 import type {
@@ -34,9 +34,17 @@ import type {
 const METERS_PER_MILE = 1609.34;
 // A stated distance within this of the measurement isn't worth flagging.
 const DISTANCE_SNAP_TOLERANCE_MI = 15;
-// A tier-2 resolved place must sit within this of the day's route/base to be
-// grounded — the hard corridor guard (locationBias alone is too soft).
+// A resolved place must sit within this of the day's route to be grounded —
+// the hard corridor guard (locationBias alone is too soft). This is
+// PERPENDICULAR distance to the actual driven polyline, so 60mi is a generous
+// berth (a park up a spur, a town just off the line all pass).
 const GUARD_MI = 60;
+// On dwell / out-and-back days there is NO forward polyline, so the guard
+// degrades to straight-line distance from the base town. Use a wider radius
+// there so legitimate rest-day excursions clear it (Ancient Forest is ~63mi
+// straight-line from Prince George — just over the 60mi line; a Tombstone run
+// ~47mi). Mis-resolutions to the wrong region are ~1000mi+ off and still fail.
+const DWELL_GUARD_MI = 120;
 
 const UNVERIFIED_OVERNIGHT_DESC =
   "Unverified overnight removed by the audit — find and confirm your own.";
@@ -47,41 +55,29 @@ const DROPPED_OVERNIGHT_FLAG: AuditFlag = {
     "The planner's suggested overnight couldn't be verified and was removed — this day has NO confirmed overnight; plan your own before you go.",
 };
 
-/** Three-tier grounding for one place reference (spec §8.3). A token that
- *  looks like a corpus id (mp:…) must be in the pool; anything else is a real
- *  place NAME to resolve live + guard on-corridor. */
+/** Ground one place NAME (the model never emits ids — nothing to fabricate).
+ *  POOL-FIRST: match the name to a pooled POI by name (keeping its corpus
+ *  id/rating/coords, no Google spend); else resolve the name live and GUARD
+ *  it on-corridor; else drop. */
 async function groundReference(
   ref: string,
   where: "keyStop" | "overnight",
   ctx: {
-    poolIds: Set<string>;
+    poolByName: Map<string, PoolPOI>;
     resolver: PlaceResolver;
     biasCoord: [number, number];
     onCorridor: (c: [number, number]) => boolean;
   },
 ): Promise<
-  | { kind: "keep-id" }
+  | { kind: "pool-hit"; poi: PoolPOI }
   | { kind: "resolved"; place: ResolvedName }
   | { kind: "drop"; reason: string; reasonText: string; flag: AuditFlag }
 > {
-  const isCorpusId = ref.startsWith("mp:");
-  if (isCorpusId) {
-    // Tier 1 (in pool) or Tier 3 (fabricated id — the mp:4163b117 case).
-    if (ctx.poolIds.has(ref)) return { kind: "keep-id" };
-    return {
-      kind: "drop",
-      reason: "fabricated-id",
-      reasonText: "is a corpus id that doesn't exist in the pool (fabricated)",
-      flag: {
-        kind: "dropped-poi",
-        severity: "warning",
-        message:
-          "The planner referenced a corpus id we couldn't find — dropped it (a fabricated place is never shown).",
-      },
-    };
-  }
+  // Pool-first: the model named a place we already have — keep its corpus data.
+  const hit = matchPool(ref, ctx.poolByName);
+  if (hit) return { kind: "pool-hit", poi: hit };
 
-  // Tier 2: a real place NAME → resolve live, then GUARD on-corridor.
+  // Not in the pool → resolve the NAME live, then GUARD on-corridor.
   const r = await ctx.resolver.resolve(ref, ctx.biasCoord);
   if (r.status === "resolved" && ctx.onCorridor(r.place.coords)) {
     return { kind: "resolved", place: r.place };
@@ -102,6 +98,32 @@ async function groundReference(
       message: `The planner suggested "${ref}" but it ${reasonText} — dropped it; find your own.`,
     },
   };
+}
+
+/** Normalize a place name for pool matching: lowercase, strip diacritics +
+ *  punctuation, collapse whitespace. */
+function normalizePlaceName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Match a model-named place to a pooled POI by EXACT normalized name only.
+ *  Fuzzy/token-subset matching was tried and removed — it mis-bound
+ *  "Cedar City" → "Cedar City Field Office" and "Green River" → "Green River
+ *  Gap" (a town name grabbing a more-specific POI in the same locality).
+ *  Exact-only has zero mis-bind surface; any non-exact name falls through to
+ *  live Google resolution, which resolves those correctly (Cedar City → the
+ *  town). An exact match keeps the pooled place's corpus id/rating/coords. */
+function matchPool(
+  ref: string,
+  poolByName: Map<string, PoolPOI>,
+): PoolPOI | null {
+  return poolByName.get(normalizePlaceName(ref)) ?? null;
 }
 
 export type StructuralIssue =
@@ -178,7 +200,11 @@ export async function auditItinerary(
   facts: EngineFacts,
   output: ItineraryOutput,
 ): Promise<AuditOutcome> {
-  const poolIds = new Set(facts.poolPOIs.map((p) => p.id));
+  // Pool indexed by normalized name — the model references places by name, so
+  // we match names back to the pool (keeping corpus id/rating/coords).
+  const poolByName = new Map<string, PoolPOI>(
+    facts.poolPOIs.map((p) => [normalizePlaceName(p.name), p]),
+  );
   const capMi = input.params.maxDailyDriveMi;
 
   const report: AuditReport = {
@@ -210,7 +236,7 @@ export async function auditItinerary(
   // Cap is a runaway guard, not a budget throttle — scale it so it never
   // clips a legitimate trip's names (a 19-day trip emits ~60). Dedup does the
   // real cost control; the corpus-feedback loop drives cost DOWN over time.
-  const resolver = new PlaceResolver(Math.max(50, output.days.length * 5));
+  const resolver = new PlaceResolver(Math.max(80, output.days.length * 8));
 
   // Endpoints chain: day N starts where day N-1 ended. Seed at the start
   // anchor's known coord so the first hop is grounded.
@@ -306,29 +332,36 @@ export async function auditItinerary(
     currentPos = dayEndCoord ?? currentPos;
     const dayAnchorCoord = dayEndCoord ?? dayStartCoord;
 
-    // Corridor guard: a tier-2 resolved place must sit within GUARD_MI of the
-    // day's route (or its base coord on a stationary/loop day). `locationBias`
-    // is soft, so this HARD check is what rejects far-off ambiguous matches
-    // (e.g. bare "Bear Glacier" → the Alaska one, ~1400 mi off-route).
+    // Corridor guard: a resolved place must sit within GUARD_MI of the day's
+    // route. `locationBias` is soft, so this HARD check is what rejects far-off
+    // ambiguous matches (e.g. bare "Bear Glacier" → the Alaska one, ~1400 mi
+    // off-route). On a dwell / out-and-back day there's no forward polyline, so
+    // it degrades to straight-line from the base town — use the wider
+    // DWELL_GUARD_MI there so legit rest-day excursions (Ancient Forest ~63mi)
+    // aren't wrongly dropped, while wrong-region junk (~1000mi+) still fails.
     const onCorridor = (coord: [number, number]): boolean => {
       if (dayPolyline) return pointToPolylineMi(coord, dayPolyline) <= GUARD_MI;
-      if (dayAnchorCoord) return haversineMi(coord, dayAnchorCoord) <= GUARD_MI;
+      if (dayAnchorCoord)
+        return haversineMi(coord, dayAnchorCoord) <= DWELL_GUARD_MI;
       return false; // can't establish the day's location → can't verify → reject
     };
     const biasCoord =
       dayAnchorCoord ?? facts.anchorsResolved[0]?.coords ?? [0, 0];
 
-    // ── TIER 1/2/3: ground every referenced place ────────────────────
+    // ── Ground every named place: pool-first → live-resolve → drop ──────
     const keptStops: string[] = [];
     for (const ref of day.keyStops) {
       const outcome = await groundReference(ref, "keyStop", {
-        poolIds,
+        poolByName,
         resolver,
         biasCoord,
         onCorridor,
       });
-      if (outcome.kind === "keep-id") keptStops.push(ref);
-      else if (outcome.kind === "resolved") {
+      if (outcome.kind === "pool-hit") {
+        // Named a pooled place — keep it by its corpus id so downstream treats
+        // it as a pool POI (rating/tiles arrive via the federated fold).
+        keptStops.push(outcome.poi.id);
+      } else if (outcome.kind === "resolved") {
         keptStops.push(ref);
         resolvedPlaces.push({ ...outcome.place, name: ref, where: "keyStop" });
         report.resolved.push({ day: day.n, name: ref, where: "keyStop" });
@@ -338,25 +371,22 @@ export async function auditItinerary(
       }
     }
 
-    // Overnight: pooled id → corpus check; name → resolve+guard; else desc.
+    // Overnight: always a NAME → pool-first, else resolve+guard, else desc.
     let overnight = { ...day.overnight };
-    if (overnight.poiId) {
-      if (!poolIds.has(overnight.poiId)) {
-        report.droppedPois.push({ day: day.n, poiId: overnight.poiId, where: "overnight", reason: "fabricated-id" });
-        flags.push(DROPPED_OVERNIGHT_FLAG);
-        overnight = { ...overnight, poiId: null, desc: overnight.desc ?? UNVERIFIED_OVERNIGHT_DESC };
-      }
-    } else if (overnight.name) {
+    if (overnight.name) {
       const outcome = await groundReference(overnight.name, "overnight", {
-        poolIds,
+        poolByName,
         resolver,
         biasCoord,
         onCorridor,
       });
-      if (outcome.kind === "resolved") {
+      if (outcome.kind === "pool-hit") {
+        // Pooled overnight — keep the name (the note shows it); its corpus tile
+        // arrives via the federated fold. Nothing to strip.
+      } else if (outcome.kind === "resolved") {
         resolvedPlaces.push({ ...outcome.place, name: overnight.name, where: "overnight" });
         report.resolved.push({ day: day.n, name: overnight.name, where: "overnight" });
-      } else if (outcome.kind === "drop") {
+      } else {
         report.droppedPois.push({ day: day.n, poiId: overnight.name, where: "overnight", reason: outcome.reason });
         flags.push({ ...DROPPED_OVERNIGHT_FLAG, message: `Overnight "${overnight.name}" ${outcome.reasonText} — this day has NO confirmed overnight; plan your own before you go.` });
         overnight = { ...overnight, name: null, desc: overnight.desc ?? UNVERIFIED_OVERNIGHT_DESC };

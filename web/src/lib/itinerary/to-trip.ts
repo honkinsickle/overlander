@@ -46,11 +46,9 @@ function dayNotes(dp: DayPlan): string[] {
     notes.push(`${FLAG_MARK[f.severity]} ${f.message}`);
   }
 
-  const overnightRef = dp.overnight.poiId
-    ? `overnight #${dp.overnight.poiId}`
-    : dp.overnight.name
-      ? dp.overnight.name
-      : dp.overnight.desc ?? "overnight (TBD)";
+  const overnightRef = dp.overnight.name
+    ? dp.overnight.name
+    : dp.overnight.desc ?? "overnight (TBD)";
   notes.push(
     `Overnight — ${dp.overnight.type}: ${overnightRef}. ${dp.overnight.rationale}`,
   );

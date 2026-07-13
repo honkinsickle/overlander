@@ -8,7 +8,8 @@
  *   3. Day Detail render — maps DayPlan → the reasoned fill on each Day.
  *
  * The LLM REASONS but NEVER ORIGINATES facts (spec §4): `keyStops` and
- * `overnight.poiId` reference corpus ids from the fed pool; `distanceMi` /
+ * `overnight.name` are plain place NAMES the audit matches to the pool or
+ * resolves live (never model-authored ids — nothing to fabricate); `distanceMi` /
  * `driveHours` are the model's STATED values, audited against the engine
  * before display.
  */
@@ -103,13 +104,13 @@ export type DayPlan = {
   weather: string;
   /** Short narrative of the day's drive (road, transitions, why this pacing). */
   rationale: string;
-  /** Corpus ids of key stops — MUST be from the fed pool. */
+  /** Real place NAMES of the day's key stops — always names, never ids.
+   *  The audit matches each name to the pool (keeping corpus data) or
+   *  resolves it live. */
   keyStops: string[];
   overnight: {
-    /** Corpus id when the overnight is a pooled POI; null otherwise. */
-    poiId: string | null;
-    /** A real place NAME when it isn't pooled (resolved live by the audit);
-     *  null when pooled or free-text. */
+    /** The overnight's real place NAME — the audit matches it to the pool or
+     *  resolves it live. null only when no real place fits (use `desc`). */
     name: string | null;
     /** Free-text fallback when no real place fits ("informal boondock…"). */
     desc: string | null;
@@ -226,26 +227,22 @@ const DAY_PLAN_SCHEMA = {
       type: "array",
       items: { type: "string" },
       description:
-        "1–3 entries: a corpus id (mp:…) for a pooled place, OR a plain place NAME for another real place. Never a made-up mp: id.",
+        "1–3 entries, each a plain real-place NAME (e.g. \"Boya Lake Provincial Park\", \"Salmon Glacier\"). NEVER an id or code — just the name, as you'd say it out loud.",
     },
     overnight: {
       type: "object",
       additionalProperties: false,
       properties: {
-        poiId: {
-          type: ["string", "null"],
-          description: "Pooled corpus id (mp:…), or null.",
-        },
         name: {
           type: ["string", "null"],
           description:
-            "A real place NAME when the overnight isn't a pooled id; null otherwise. Never a made-up id.",
+            "The overnight's real place NAME (e.g. \"Meziadin Lake Provincial Park\"). Just the name — never an id. null only when no real place fits (then use desc).",
         },
         desc: { type: ["string", "null"] },
         type: { type: "string" },
         rationale: { type: "string" },
       },
-      required: ["poiId", "name", "desc", "type", "rationale"],
+      required: ["name", "desc", "type", "rationale"],
     },
     logistics: { type: "string" },
     obligations: { type: "array", items: OBLIGATION_SCHEMA },

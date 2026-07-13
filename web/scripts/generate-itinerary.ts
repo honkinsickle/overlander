@@ -209,7 +209,7 @@ async function main() {
       console.log(`  distance: ${day.distanceMi} mi / ${day.driveHours} h [${day.audit?.distanceConfidence}]`);
       console.log(`  keyStops: ${day.keyStops.length ? day.keyStops.join(", ") : "(none survived)"}`);
       console.log(
-        `  overnight: poiId=${day.overnight.poiId ?? "null"} — ${day.overnight.desc ?? day.overnight.rationale}`,
+        `  overnight: ${day.overnight.name ?? day.overnight.desc ?? "(none)"} — ${day.overnight.rationale}`,
       );
       for (const f of day.audit?.flags ?? []) {
         console.log(`  flag [${f.severity}/${f.kind}]: ${f.message}`);
@@ -292,14 +292,14 @@ async function main() {
     console.log(`[gen] done · ${usage.inputTokens} in / ${usage.outputTokens} out · ${itinerary.days.length} days`);
     writeFileSync(`${SCRATCH}/itinerary-output.json`, JSON.stringify(itinerary, null, 2));
     console.log(`[gen] wrote itinerary-output.json (RAW)`);
-    // Prove the prompt contract: which refs are corpus ids vs plain NAMES?
-    const idRefs: string[] = [], nameRefs: string[] = [];
+    // Prove the always-names contract: every ref is a plain NAME; id-like
+    // refs (a leftover "mp:" token) should be ZERO — there's no id field.
+    const idLike: string[] = [], nameRefs: string[] = [];
     for (const d of itinerary.days) {
-      for (const k of d.keyStops) (k.startsWith("mp:") ? idRefs : nameRefs).push(`d${d.n}:${k}`);
+      for (const k of d.keyStops) (k.startsWith("mp:") ? idLike : nameRefs).push(`d${d.n}:${k}`);
       if (d.overnight.name) nameRefs.push(`d${d.n}:overnight="${d.overnight.name}"`);
-      if (d.overnight.poiId) idRefs.push(`d${d.n}:overnight=${d.overnight.poiId}`);
     }
-    console.log(`\n[contract] corpus-id refs: ${idRefs.length} · plain-NAME refs: ${nameRefs.length}`);
+    console.log(`\n[contract] plain-NAME refs: ${nameRefs.length} · id-like refs (should be 0): ${idLike.length}`);
     console.log("[contract] NAMES the LLM emitted (→ audit will resolve+guard):");
     for (const n of nameRefs) console.log(`  ${n}`);
     return;
