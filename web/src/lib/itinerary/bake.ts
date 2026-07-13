@@ -18,8 +18,9 @@
 
 import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
-import { deriveCorridorCities } from "@/lib/corridor/derive";
+import { deriveCorridorCities, DEFAULT_CORRIDOR_PARAMS } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
+import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 import type { GazetteerCity } from "@/lib/corridor/derive";
@@ -117,6 +118,22 @@ export async function bakeGeneratedDays(
           return r.where === "keyStop" ? { ...tile, curated: true } : tile;
         }),
       ];
+
+      // Position curated key stops by along-route mile so they render IN their
+      // spine position (ordered, with distance-from-start) rather than a
+      // detached block. Project onto the polyline directly — independent of the
+      // node-bucketing below, which drops on-route picks past maxAttachMi. Keep
+      // the mile only when the pick is genuinely on-corridor (offset ≤ buffer).
+      if (line && line.length >= 2) {
+        for (let i = 0; i < tiles.length; i++) {
+          const t = tiles[i];
+          if (!t.curated) continue;
+          const r = alongRouteMiles(t.coords, line);
+          if (r && r.offsetMi <= DEFAULT_CORRIDOR_PARAMS.bufferMi) {
+            tiles[i] = { ...t, milesFromStart: Math.round(r.miles) };
+          }
+        }
+      }
 
       // Derive spine + bucket tiles under nodes.
       let corridorCities: CorridorCity[] | undefined;

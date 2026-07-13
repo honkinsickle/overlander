@@ -73,6 +73,13 @@ export type BrowsePlace = {
    *  (not just a corridor-pool member) — set by the generated-day bake so the
    *  Day Detail column can feature the guide's picks and demote the pool. */
   curated?: boolean;
+  /** Along-route distance-from-day-start (miles), projected onto the day's
+   *  polyline at bake time. Set by the generated-day bake for curated key
+   *  stops so they render IN their spine position (ordered, with mileage)
+   *  instead of a detached block. Independent of node-bucketing — it's the
+   *  raw `alongRouteMiles` projection, so an on-route pick the bucketer
+   *  dropped still positions. Absent when off-corridor or no polyline. */
+  milesFromStart?: number;
   /** Federated-only enrichment, carried through the response for
    *  verification even though the card UI doesn't render them yet. NULL
    *  for non-applicable rows; absent on live results. */

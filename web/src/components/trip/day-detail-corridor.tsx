@@ -48,6 +48,11 @@ export type CorridorPlace = {
   /** True for the LLM's curated key stops (generated trips) — featured as the
    *  guide's picks; the rest of the pool collapses behind "Explore more". */
   curated?: boolean;
+  /** Along-route distance-from-day-start (miles) for a curated key stop,
+   *  projected onto the day's polyline at bake time. When present, the pick
+   *  renders IN its spine position (ordered by mile) instead of the detached
+   *  fallback block. Absent for pool tiles and off-corridor picks. */
+  milesFromStart?: number;
 };
 
 type Props = {
@@ -84,6 +89,63 @@ type Props = {
 
 const GUTTER_W = 48;
 
+/** One entry on the rendered spine, in along-route order. */
+export type SpineItem =
+  | { type: "city"; city: CorridorCity; last: boolean }
+  | { type: "keystop"; place: CorridorPlace; mile: number; last: boolean }
+  | { type: "marker"; mile: number; tiles: CorridorPlace[]; last: boolean };
+
+/**
+ * Merge the city spine, the positioned curated key stops, and any (demo) mile
+ * markers into ONE list ordered by along-route mile — so a key stop renders
+ * BETWEEN the anchors at the mile you'd actually reach it, not in a detached
+ * block. Ties break city → keystop → marker so a pick at a city's mile lands
+ * just after that city. `last` marks the final entry (drops its connector).
+ * Pure + exported for unit testing.
+ */
+export function buildSpineItems(input: {
+  cities: CorridorCity[];
+  keyStops: CorridorPlace[];
+  mileMarkers: { mile: number; placeIds?: string[] }[];
+  byId: Map<string, CorridorPlace>;
+}): SpineItem[] {
+  const { cities, keyStops, mileMarkers, byId } = input;
+  const RANK = { city: 0, keystop: 1, marker: 2 };
+  type Entry = { mile: number; rank: number; make: (last: boolean) => SpineItem };
+  const entries: Entry[] = [];
+  cities.forEach((city) =>
+    entries.push({
+      mile: city.milesFromStart,
+      rank: RANK.city,
+      make: (last) => ({ type: "city", city, last }),
+    }),
+  );
+  keyStops.forEach((place) => {
+    const mile = place.milesFromStart as number;
+    entries.push({
+      mile,
+      rank: RANK.keystop,
+      make: (last) => ({ type: "keystop", place, mile, last }),
+    });
+  });
+  mileMarkers.forEach((mk) =>
+    entries.push({
+      mile: mk.mile,
+      rank: RANK.marker,
+      make: (last) => ({
+        type: "marker",
+        mile: mk.mile,
+        tiles: (mk.placeIds ?? [])
+          .map((id) => byId.get(id))
+          .filter(Boolean) as CorridorPlace[],
+        last,
+      }),
+    }),
+  );
+  entries.sort((a, b) => a.mile - b.mile || a.rank - b.rank);
+  return entries.map((e, i) => e.make(i === entries.length - 1));
+}
+
 export function DayDetailCorridor({
   dayLabel,
   dayNumber,
@@ -99,37 +161,32 @@ export function DayDetailCorridor({
   briefing,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
-  // Generated trips flag the LLM's curated key stops; when any exist, the day
-  // leads with a "Today's Picks" block and each node collapses the rest of the
-  // pool. Reference trips (no curated flags) keep showing all tiles inline.
+  // Generated trips flag the LLM's curated key stops; when any exist, they
+  // render IN their spine position (ordered by along-route mile) and each
+  // node collapses the rest of its pool behind "Explore more". Reference
+  // trips (no curated flags) keep showing all tiles inline.
   const curatedMode = places.some((p) => p.curated);
-  // Deduped curated picks for the day-level block (reliable — not dependent on
-  // whether the bucketing assigned each to a node).
+  // Deduped curated picks, split by whether the bake positioned them
+  // (milesFromStart): positioned → in-spine key-stop nodes; unpositioned
+  // (off-corridor, or a layover day with no polyline) → the fallback block, so
+  // nothing disappears.
   const curatedPicks = curatedMode
     ? Array.from(
         new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
       )
     : [];
+  const positionedPicks = curatedPicks.filter((p) => p.milesFromStart != null);
+  const unpositionedPicks = curatedPicks.filter((p) => p.milesFromStart == null);
   const dd = String(dayNumber).padStart(2, "0");
 
-  // Interleave bare mile markers between city nodes by mile position.
-  type Item =
-    | { type: "city"; city: CorridorCity; last: boolean }
-    | { type: "marker"; mile: number; tiles: CorridorPlace[] };
-  const items: Item[] = [];
-  cities.forEach((city, i) => {
-    const isLastCity = i === cities.length - 1;
-    items.push({ type: "city", city, last: isLastCity });
-    const nextMile = isLastCity ? Infinity : cities[i + 1].milesFromStart;
-    mileMarkers
-      .filter((mk) => mk.mile > city.milesFromStart && mk.mile < nextMile)
-      .forEach((mk) =>
-        items.push({
-          type: "marker",
-          mile: mk.mile,
-          tiles: (mk.placeIds ?? []).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[],
-        }),
-      );
+  // One ordered spine: city nodes + positioned key stops + (demo) mile markers,
+  // interleaved by along-route mile so a key stop sits BETWEEN the anchors at
+  // the point you'd actually reach it on the drive.
+  const items = buildSpineItems({
+    cities,
+    keyStops: positionedPicks,
+    mileMarkers,
+    byId,
   });
 
   return (
@@ -185,9 +242,10 @@ export function DayDetailCorridor({
            logistics/obligations) — the day's context, above the route ── */}
       {briefing && <div style={{ paddingTop: 16 }}>{briefing}</div>}
 
-      {/* ── Today's Picks — the guide's curated key stops as the PRIMARY
-           content, above the full corridor pool (gold Section C). ── */}
-      {curatedPicks.length > 0 && (
+      {/* ── Fallback block — curated picks the bake couldn't position on the
+           spine (off-corridor, or a layover day with no polyline). Positioned
+           picks render in-spine below; this keeps the rest visible. ── */}
+      {unpositionedPicks.length > 0 && (
         <div className="flex flex-col" style={{ paddingTop: 16, gap: 10 }}>
           <span
             className="uppercase"
@@ -202,7 +260,7 @@ export function DayDetailCorridor({
             Today&apos;s Key Stops
           </span>
           <div className="flex flex-col" style={{ gap: 8 }}>
-            {curatedPicks.map((p) => (
+            {unpositionedPicks.map((p) => (
               <CategoryListCard
                 key={p.id}
                 place={p}
@@ -214,8 +272,27 @@ export function DayDetailCorridor({
         </div>
       )}
 
-      {/* ── Corridor of city nodes ─────────────────────────────── */}
-      <div className="flex flex-col" style={{ paddingTop: 16 }}>
+      {/* Section label for the in-spine key stops — sits above the Start
+          (Carmacks) node. Only when the day actually has positioned picks. */}
+      {positionedPicks.length > 0 && (
+        <span
+          className="uppercase"
+          style={{
+            paddingTop: 16,
+            fontFamily: "var(--ff-display)",
+            fontSize: 11,
+            lineHeight: "14px",
+            letterSpacing: "0.16em",
+            color: "var(--amber-dark)",
+          }}
+        >
+          Key Stops
+        </span>
+      )}
+
+      {/* ── Corridor spine — city nodes with key stops interleaved at their
+           along-route mile (ordered Start → key stops → End). ── */}
+      <div className="flex flex-col" style={{ paddingTop: positionedPicks.length > 0 ? 12 : 16 }}>
         {items.map((item, idx) =>
           item.type === "city" ? (
             <CityNode
@@ -229,8 +306,16 @@ export function DayDetailCorridor({
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
               curatedMode={curatedMode}
-              last={item.last && idx === items.length - 1}
+              last={item.last}
               onRemovePlace={onRemovePlace}
+              onOpenPlace={onOpenPlace}
+            />
+          ) : item.type === "keystop" ? (
+            <KeyStopNode
+              key={`ks-${item.place.id}`}
+              place={item.place}
+              mile={item.mile}
+              last={item.last}
               onOpenPlace={onOpenPlace}
             />
           ) : (
@@ -238,6 +323,7 @@ export function DayDetailCorridor({
               key={`mk-${item.mile}`}
               mile={item.mile}
               tiles={item.tiles}
+              last={item.last}
               onOpenPlace={onOpenPlace}
             />
           ),
@@ -379,15 +465,72 @@ function CityNode({
   );
 }
 
+/** One key-stop node: an on-route curated pick in its spine position. Gutter
+ *  carries the mile tick + an amber dot (distinct from the white city dots);
+ *  the content column holds the curated tile. The "KEY STOPS" section header
+ *  above the spine labels the group; the gutter mile is the distance-from-start. */
+function KeyStopNode({
+  place,
+  mile,
+  last,
+  onOpenPlace,
+}: {
+  place: CorridorPlace;
+  mile: number;
+  last: boolean;
+  onOpenPlace?: (placeId: string) => void;
+}) {
+  const m = Math.round(mile);
+  return (
+    <div className="flex" style={{ paddingBottom: 22 }}>
+      {/* Gutter — mile label + amber dot/connector (featured pick). */}
+      <div className="relative shrink-0" style={{ width: GUTTER_W }}>
+        <span
+          className="absolute"
+          style={{
+            top: 1,
+            left: 4,
+            fontFamily: "var(--ff-mono)",
+            fontSize: 12,
+            lineHeight: "16px",
+            letterSpacing: "-0.02em",
+            color: "var(--amber)",
+          }}
+        >
+          {m}mi
+        </span>
+        {/* Amber 8px dot (centered on the 13px spine line) + connector. */}
+        <div className="absolute" style={{ left: 10, top: 22, bottom: last ? undefined : -22, width: 6 }}>
+          <div style={{ width: 8, height: 8, marginLeft: -1, borderRadius: 100, backgroundColor: "var(--amber)" }} />
+          {!last && (
+            <div className="absolute" style={{ top: 8, left: 2.5, bottom: 0, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
+          )}
+        </div>
+      </div>
+
+      {/* Content — the curated tile at its spine position (mile in the gutter). */}
+      <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
+        <CategoryListCard
+          place={place}
+          category={place.category}
+          onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Distance tick in the gutter (no city header). May carry place tiles that
  *  align to the marker on the spine (e.g. The Broad at the 40mi mark). */
 function MileTick({
   mile,
   tiles = [],
+  last = false,
   onOpenPlace,
 }: {
   mile: number;
   tiles?: CorridorPlace[];
+  last?: boolean;
   onOpenPlace?: (placeId: string) => void;
 }) {
   const hasTiles = tiles.length > 0;
@@ -410,9 +553,11 @@ function MileTick({
         </span>
         {/* Node dot (white 6px) + connector line starting below it — matches a
          *  city node, so the vertical line has a gap at the marker. */}
-        <div className="absolute" style={{ left: 10, top: 22, bottom: -22, width: 6 }}>
+        <div className="absolute" style={{ left: 10, top: 22, bottom: last ? undefined : -22, width: 6 }}>
           <div style={{ width: 6, height: 6, borderRadius: 100, backgroundColor: "var(--timeline-active)" }} />
-          <div className="absolute" style={{ top: 6, left: 2.5, bottom: 0, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
+          {!last && (
+            <div className="absolute" style={{ top: 6, left: 2.5, bottom: 0, width: 1, backgroundColor: "var(--timeline-inactive)" }} />
+          )}
         </div>
       </div>
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>

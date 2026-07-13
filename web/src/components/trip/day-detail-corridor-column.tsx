@@ -598,6 +598,7 @@ function placePool(day: Day): CorridorPlace[] {
       // Corpus rows carry a google place_id → the day-select hydrate key.
       placeId: p.placeId,
       curated: p.curated,
+      milesFromStart: p.milesFromStart,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
