@@ -97,10 +97,11 @@ function normPlaceName(s: string): string {
 }
 
 /** A curated key stop that resolves to the day's START or END anchor is already
- *  shown as that city node — don't also render it as a positioned key-stop tile
- *  (the same place, twice, at the same mile). Match by normalized NAME, not
- *  coords: coords-proximity would wrongly drop legit in-city stops on layover
- *  days (Miles Canyon sits right at the Whitehorse anchor). Exported for tests. */
+ *  shown as that city node — so its detail card renders UNDER that node instead
+ *  of as a separate positioned key-stop tile at the same mile (the same place,
+ *  twice). Match by normalized NAME, not coords: coords-proximity would wrongly
+ *  pull in legit in-city stops on layover days (Miles Canyon sits right at the
+ *  Whitehorse anchor). Exported for tests. */
 export function coincidesWithAnchor(
   pick: { title: string },
   cities: CorridorCity[],
@@ -196,10 +197,23 @@ export function DayDetailCorridor({
   const curatedPicks = curatedMode
     ? Array.from(
         new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
-      ).filter((p) => !coincidesWithAnchor(p, cities))
+      )
     : [];
-  const positionedPicks = curatedPicks.filter((p) => p.milesFromStart != null);
-  const unpositionedPicks = curatedPicks.filter((p) => p.milesFromStart == null);
+  // A pick that IS the start/end anchor renders as a featured detail card UNDER
+  // that city node (keyed by normalized name), not as a separate positioned key
+  // stop — same place, shown once, but its card stays reachable at the anchor.
+  const anchorPicksByCity = new Map<string, CorridorPlace[]>();
+  for (const p of curatedPicks) {
+    if (!coincidesWithAnchor(p, cities)) continue;
+    const k = normPlaceName(p.title);
+    const arr = anchorPicksByCity.get(k);
+    if (arr) arr.push(p);
+    else anchorPicksByCity.set(k, [p]);
+  }
+  // The rest position on the spine by along-route mile.
+  const spinePicks = curatedPicks.filter((p) => !coincidesWithAnchor(p, cities));
+  const positionedPicks = spinePicks.filter((p) => p.milesFromStart != null);
+  const unpositionedPicks = spinePicks.filter((p) => p.milesFromStart == null);
   const dd = String(dayNumber).padStart(2, "0");
 
   // One ordered spine: city nodes + positioned key stops + (demo) mile markers,
@@ -328,6 +342,7 @@ export function DayDetailCorridor({
               key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
+              featured={anchorPicksByCity.get(normPlaceName(item.city.name)) ?? []}
               curatedMode={curatedMode}
               last={item.last}
               onRemovePlace={onRemovePlace}
@@ -383,6 +398,7 @@ export function DayDetailCorridor({
 function CityNode({
   city,
   tiles,
+  featured = [],
   curatedMode,
   last,
   onRemovePlace,
@@ -390,6 +406,10 @@ function CityNode({
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
+  /** Curated picks that ARE this city (the day's start/end anchor) — rendered
+   *  as detail cards directly under the node header, so the anchor's own place
+   *  is reachable here instead of duplicated as a separate positioned tile. */
+  featured?: CorridorPlace[];
   /** When the day has curated picks: feature this node's picks and collapse
    *  the rest behind "Explore more" (default collapsed). Otherwise show all. */
   curatedMode: boolean;
@@ -452,6 +472,26 @@ function CityNode({
             </button>
           )}
         </div>
+
+        {/* Featured anchor cards — this node's own place (the day's start/end),
+            shown once, here, with its full detail card. */}
+        {featured.length > 0 && (
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {featured.map((p) => (
+              <CategoryListCard
+                key={p.id}
+                place={p}
+                category={p.category}
+                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                onRemove={
+                  p.removable && onRemovePlace
+                    ? () => onRemovePlace(p.id)
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-col" style={{ gap: 8 }}>
           {showRest &&
