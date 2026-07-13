@@ -89,6 +89,29 @@ type Props = {
 
 const GUTTER_W = 48;
 
+/** Normalize a place name for anchor-dedup: lowercase, drop a trailing
+ *  ", <region>" (so "Meziadin Lake Provincial Park, British Columbia" and the
+ *  corpus tile "Meziadin Lake Provincial Park" compare equal), trim. */
+function normPlaceName(s: string): string {
+  return s.toLowerCase().replace(/,\s*[^,]+$/, "").trim();
+}
+
+/** A curated key stop that resolves to the day's START or END anchor is already
+ *  shown as that city node — don't also render it as a positioned key-stop tile
+ *  (the same place, twice, at the same mile). Match by normalized NAME, not
+ *  coords: coords-proximity would wrongly drop legit in-city stops on layover
+ *  days (Miles Canyon sits right at the Whitehorse anchor). Exported for tests. */
+export function coincidesWithAnchor(
+  pick: { title: string },
+  cities: CorridorCity[],
+): boolean {
+  if (cities.length === 0) return false;
+  const pn = normPlaceName(pick.title);
+  if (!pn) return false;
+  const anchors = [cities[0], cities[cities.length - 1]];
+  return anchors.some((a) => normPlaceName(a.name) === pn);
+}
+
 /** One entry on the rendered spine, in along-route order. */
 export type SpineItem =
   | { type: "city"; city: CorridorCity; last: boolean }
@@ -173,7 +196,7 @@ export function DayDetailCorridor({
   const curatedPicks = curatedMode
     ? Array.from(
         new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
-      )
+      ).filter((p) => !coincidesWithAnchor(p, cities))
     : [];
   const positionedPicks = curatedPicks.filter((p) => p.milesFromStart != null);
   const unpositionedPicks = curatedPicks.filter((p) => p.milesFromStart == null);

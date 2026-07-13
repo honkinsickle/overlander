@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSpineItems } from "./day-detail-corridor";
+import { buildSpineItems, coincidesWithAnchor } from "./day-detail-corridor";
 import type { CorridorPlace } from "./day-detail-corridor";
 import type { CorridorCity } from "@/lib/trips/types";
 
@@ -56,6 +56,29 @@ test("a key stop at a city's mile lands just AFTER that city (tie → city first
   });
   const order = items.map((i) => (i.type === "city" ? i.city.id : (i as { place: CorridorPlace }).place.id));
   assert.deepEqual(order, ["s", "mid", "at-junction"]);
+});
+
+test("anchor dedup: a key stop that IS the end anchor coincides (drop it)", () => {
+  const cities = [
+    city("s", "Kinaskan Lake Provincial Park, British Columbia", 0, "start"),
+    city("e", "Meziadin Lake Provincial Park, British Columbia", 125, "end"),
+  ];
+  // corpus tile name lacks the ", British Columbia" region suffix.
+  assert.equal(coincidesWithAnchor({ title: "Meziadin Lake Provincial Park" }, cities), true);
+  // the destination town, no suffix on either side.
+  assert.equal(coincidesWithAnchor({ title: "Stewart" }, [city("s", "Meziadin", 0, "start"), city("e", "Stewart, British Columbia", 38, "end")]), true);
+});
+
+test("anchor dedup: a legit on-route / in-city stop does NOT coincide", () => {
+  const cities = [
+    city("s", "Kinaskan Lake Provincial Park, British Columbia", 0, "start"),
+    city("e", "Meziadin Lake Provincial Park, British Columbia", 125, "end"),
+  ];
+  assert.equal(coincidesWithAnchor({ title: "Bell 2 Lodge" }, cities), false);
+  // in-city layover stop must survive (coords-based dedup would wrongly drop it).
+  const layover = [city("s", "Whitehorse, Yukon", 0, "start"), city("e", "Whitehorse, Yukon", 0, "end")];
+  assert.equal(coincidesWithAnchor({ title: "Miles Canyon" }, layover), false);
+  assert.equal(coincidesWithAnchor({ title: "S.S. Klondike National Historic Site" }, layover), false);
 });
 
 test("no key stops → spine is just the cities, in order", () => {
