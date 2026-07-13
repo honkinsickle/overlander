@@ -32,6 +32,14 @@ test("venues still map as before", () => {
   assert.equal(cat(["tourist_attraction", "park"]), "scenic");
 });
 
+test("urban only fires when 'urban' is in the wanted set (the gate that broke it)", () => {
+  const withoutUrban = new Set<SlideCategoryKey>(["food", "scenic", "fuel"]);
+  // Mirrors the original placeDetails bug: wanted omits urban → towns → null.
+  assert.equal(categoryForGoogleTypes(["locality", "political"], withoutUrban), null);
+  // With urban wanted (the fix), the town maps.
+  assert.equal(categoryForGoogleTypes(["locality", "political"], ALL), "urban");
+});
+
 test("a genuinely unmapped type → null → render falls to the clean interest default", () => {
   // e.g. a bare point_of_interest — the mapper returns null, and the render's
   // interest fallback is now the warm-sand diamond, not the red-pin/grey.

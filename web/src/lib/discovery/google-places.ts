@@ -323,8 +323,13 @@ export async function placeDetails(
   const p = (await res.json()) as GooglePlace;
   const photoRef = p.photos?.[0]?.name;
   const tier = priceLevelToTier(p.priceLevel);
-  // Same mapper + "want any bucket" set the free-text discovery path uses.
-  const category = categoryForGoogleTypes(p.types ?? [], new Set(ALL_SLIDE_CATEGORIES));
+  // Categorize into ANY bucket. NB: ALL_SLIDE_CATEGORIES is the discovery
+  // fanout's search set and omits "urban" — but a hydrated tile CAN be a town,
+  // so add urban here or the locality→urban branch never fires (wanted gate).
+  const category = categoryForGoogleTypes(
+    p.types ?? [],
+    new Set<SlideCategoryKey>([...ALL_SLIDE_CATEGORIES, "urban"]),
+  );
   return {
     ...(category ? { category } : {}),
     ...(typeof p.rating === "number" ? { rating: p.rating } : {}),
