@@ -117,10 +117,12 @@ export function DayDetailCorridorColumn({
       new Set(
         placePool(day)
           .filter(
+            // Any tile carrying a Google place_id and lacking a photo — NOT just
+            // `mp:` corpus rows. Curated key stops resolved via Google arrive as
+            // `google:` ids with a placeId; the old mp:-only gate skipped them,
+            // so their photos never loaded on any surface.
             (t) =>
-              t.id.startsWith("mp:") &&
               t.placeId &&
-              !t.rating &&
               !t.photoUrl &&
               !hydrated[t.placeId],
           )
@@ -599,6 +601,7 @@ function placePool(day: Day): CorridorPlace[] {
       placeId: p.placeId,
       curated: p.curated,
       milesFromStart: p.milesFromStart,
+      coords: p.coords,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
@@ -616,6 +619,7 @@ function placePool(day: Day): CorridorPlace[] {
     photoAlt: p.photoAlt,
     rating: p.rating,
     reviewCount: p.reviewCount,
+    coords: p.coords,
   }));
   const fromWaypoints: CorridorPlace[] = day.waypoints.map((wp) => ({
     id: wp.id,
@@ -625,6 +629,7 @@ function placePool(day: Day): CorridorPlace[] {
     photoAlt: wp.title,
     rating: wp.community?.rating,
     reviewCount: wp.community?.reviewCount,
+    coords: wp.coords,
     removable: true,
   }));
   return [...fromSuggestions, ...fromDaySuggestions, ...fromWaypoints];

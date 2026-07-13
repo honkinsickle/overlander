@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
+import {
+  coincidesWithAnchor,
+  isSameAnchorPlace,
+  type AnchorLike,
+} from "@/lib/corridor/anchor-match";
 
 /**
  * Day Detail v4 — corridor view. PURE PRESENTATIONAL.
@@ -53,6 +58,9 @@ export type CorridorPlace = {
    *  renders IN its spine position (ordered by mile) instead of the detached
    *  fallback block. Absent for pool tiles and off-corridor picks. */
   milesFromStart?: number;
+  /** [lng, lat] — carried for anchor-matching (a pick that IS the day's
+   *  start/end anchor renders under that node, not as a separate tile). */
+  coords?: [number, number];
 };
 
 type Props = {
@@ -89,28 +97,9 @@ type Props = {
 
 const GUTTER_W = 48;
 
-/** Normalize a place name for anchor-dedup: lowercase, drop a trailing
- *  ", <region>" (so "Meziadin Lake Provincial Park, British Columbia" and the
- *  corpus tile "Meziadin Lake Provincial Park" compare equal), trim. */
-function normPlaceName(s: string): string {
-  return s.toLowerCase().replace(/,\s*[^,]+$/, "").trim();
-}
-
-/** A curated key stop that resolves to the day's START or END anchor is already
- *  shown as that city node — so its detail card renders UNDER that node instead
- *  of as a separate positioned key-stop tile at the same mile (the same place,
- *  twice). Match by normalized NAME, not coords: coords-proximity would wrongly
- *  pull in legit in-city stops on layover days (Miles Canyon sits right at the
- *  Whitehorse anchor). Exported for tests. */
-export function coincidesWithAnchor(
-  pick: { title: string },
-  cities: CorridorCity[],
-): boolean {
-  if (cities.length === 0) return false;
-  const pn = normPlaceName(pick.title);
-  if (!pn) return false;
-  const anchors = [cities[0], cities[cities.length - 1]];
-  return anchors.some((a) => normPlaceName(a.name) === pn);
+/** A CorridorPlace as an anchor-match subject (its title is the place name). */
+function toAnchorLike(p: CorridorPlace): AnchorLike {
+  return { id: p.id, name: p.title, coords: p.coords };
 }
 
 /** One entry on the rendered spine, in along-route order. */
@@ -199,19 +188,33 @@ export function DayDetailCorridor({
         new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
       )
     : [];
-  // A pick that IS the start/end anchor renders as a featured detail card UNDER
-  // that city node (keyed by normalized name), not as a separate positioned key
-  // stop — same place, shown once, but its card stays reachable at the anchor.
-  const anchorPicksByCity = new Map<string, CorridorPlace[]>();
-  for (const p of curatedPicks) {
-    if (!coincidesWithAnchor(p, cities)) continue;
-    const k = normPlaceName(p.title);
-    const arr = anchorPicksByCity.get(k);
-    if (arr) arr.push(p);
-    else anchorPicksByCity.set(k, [p]);
-  }
+  // A pick that IS the start/end anchor (matched by id | name | tight coords —
+  // the shared anchor-match rule) renders as a featured detail card UNDER that
+  // city node, not as a separate positioned key stop: same place, shown once,
+  // its card still reachable at the anchor.
+  const startCity = cities[0];
+  const endCity = cities[cities.length - 1];
+  const cityAnchorLike = (c: CorridorCity): AnchorLike => ({
+    id: c.id,
+    name: c.name,
+    coords: c.coords,
+  });
+  const anchorPicks = curatedPicks.filter((p) =>
+    coincidesWithAnchor(toAnchorLike(p), cities),
+  );
+  // Featured cards for a node: only the start/end anchor nodes carry them, each
+  // matched to its own node (so a coords/id match with a differing name still
+  // attaches to the right anchor).
+  const featuredFor = (c: CorridorCity): CorridorPlace[] =>
+    c === startCity || c === endCity
+      ? anchorPicks.filter((p) =>
+          isSameAnchorPlace(toAnchorLike(p), cityAnchorLike(c)),
+        )
+      : [];
   // The rest position on the spine by along-route mile.
-  const spinePicks = curatedPicks.filter((p) => !coincidesWithAnchor(p, cities));
+  const spinePicks = curatedPicks.filter(
+    (p) => !coincidesWithAnchor(toAnchorLike(p), cities),
+  );
   const positionedPicks = spinePicks.filter((p) => p.milesFromStart != null);
   const unpositionedPicks = spinePicks.filter((p) => p.milesFromStart == null);
   const dd = String(dayNumber).padStart(2, "0");
@@ -342,7 +345,7 @@ export function DayDetailCorridor({
               key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
-              featured={anchorPicksByCity.get(normPlaceName(item.city.name)) ?? []}
+              featured={featuredFor(item.city)}
               curatedMode={curatedMode}
               last={item.last}
               onRemovePlace={onRemovePlace}
