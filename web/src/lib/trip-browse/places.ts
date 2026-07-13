@@ -69,6 +69,10 @@ export type BrowsePlace = {
    *  photos at day-select). Set only for corpus rows backed by a google
    *  source; absent otherwise. A stable, cache-exempt id — never persisted. */
   placeId?: string;
+  /** True when this tile is one of the LLM's curated key stops for the day
+   *  (not just a corridor-pool member) — set by the generated-day bake so the
+   *  Day Detail column can feature the guide's picks and demote the pool. */
+  curated?: boolean;
   /** Federated-only enrichment, carried through the response for
    *  verification even though the card UI doesn't render them yet. NULL
    *  for non-applicable rows; absent on live results. */

@@ -108,6 +108,22 @@ export function itineraryToTrip(
       description: dp.rationale,
       weather: dp.weather ? { arrival: dp.weather } : undefined,
       notes: dayNotes(dp),
+      // Structured overnight = the LLM's curated camp pick + why, so the
+      // briefing's Camping section renders it as a recommendation (not just a
+      // notes line). Only when a real place was named (else it stays desc-only).
+      overnight: dp.overnight.name
+        ? {
+            selected: {
+              id: `overnight-${dp.n}`,
+              name: dp.overnight.name,
+              type: dp.overnight.type,
+              detourMiles: 0,
+              cost: "",
+              notes: dp.overnight.rationale,
+            },
+            alternatives: [],
+          }
+        : undefined,
       waypoints: [],
       // Baked corridor: the day's derived spine + per-day bucketed tiles
       // (spec §3). Falls back to the whole unbucketed pool only when the bake

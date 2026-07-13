@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
 
@@ -44,6 +45,9 @@ export type CorridorPlace = {
   /** True for waypoint-backed tiles (user/editorial stops) — they get the
    *  remove control. Suggestion-backed tiles stay read-only. */
   removable?: boolean;
+  /** True for the LLM's curated key stops (generated trips) — featured as the
+   *  guide's picks; the rest of the pool collapses behind "Explore more". */
+  curated?: boolean;
 };
 
 type Props = {
@@ -95,6 +99,10 @@ export function DayDetailCorridor({
   briefing,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
+  // Generated trips flag the LLM's curated key stops; when any exist, each
+  // node features its picks and collapses the rest of the pool. Reference
+  // trips (no curated flags) keep showing all tiles inline.
+  const curatedMode = places.some((p) => p.curated);
   const dd = String(dayNumber).padStart(2, "0");
 
   // Interleave bare mile markers between city nodes by mile position.
@@ -184,6 +192,7 @@ export function DayDetailCorridor({
               key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
               tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
+              curatedMode={curatedMode}
               last={item.last && idx === items.length - 1}
               onRemovePlace={onRemovePlace}
               onOpenPlace={onOpenPlace}
@@ -229,16 +238,24 @@ export function DayDetailCorridor({
 function CityNode({
   city,
   tiles,
+  curatedMode,
   last,
   onRemovePlace,
   onOpenPlace,
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
+  /** When the day has curated picks: feature this node's picks and collapse
+   *  the rest behind "Explore more" (default collapsed). Otherwise show all. */
+  curatedMode: boolean;
   last: boolean;
   onRemovePlace?: (placeId: string) => void;
   onOpenPlace?: (placeId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const picks = curatedMode ? tiles.filter((t) => t.curated) : [];
+  const rest = curatedMode ? tiles.filter((t) => !t.curated) : tiles;
+  const showRest = !curatedMode || expanded;
   const isStart = city.kind === "start";
   // Real derivation output is fractional (projected along-route miles);
   // the gutter shows whole miles.
@@ -271,37 +288,64 @@ function CityNode({
         </div>
       </div>
 
-      {/* Content — header, explore link, tile cluster. */}
+      {/* Content — header, curated picks, collapsible pool. */}
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0, gap: 10 }}>
         <div className="flex flex-col" style={{ gap: 3 }}>
           <span style={{ fontFamily: "var(--ff-sans)", fontWeight: 600, fontSize: 17, lineHeight: "22px", color: "var(--text-primary)" }}>
             {city.name}
           </span>
-          <button
-            type="button"
-            onClick={noop}
-            className="self-start"
-            style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--text-primary)" }}
-          >
-            Explore more {city.name} →
-          </button>
+          {/* Reference trips (no curated picks) keep the passive explore link. */}
+          {!curatedMode && (
+            <button
+              type="button"
+              onClick={noop}
+              className="self-start"
+              style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--text-primary)" }}
+            >
+              Explore more {city.name} →
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col" style={{ gap: 8 }}>
-          {tiles.map((p) => (
+          {/* Curated picks first (the guide's choices), then the pool if shown. */}
+          {picks.map((p) => (
             <CategoryListCard
               key={p.id}
               place={p}
               category={p.category}
               onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-              onRemove={
-                p.removable && onRemovePlace
-                  ? () => onRemovePlace(p.id)
-                  : undefined
-              }
             />
           ))}
+          {showRest &&
+            rest.map((p) => (
+              <CategoryListCard
+                key={p.id}
+                place={p}
+                category={p.category}
+                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                onRemove={
+                  p.removable && onRemovePlace
+                    ? () => onRemovePlace(p.id)
+                    : undefined
+                }
+              />
+            ))}
         </div>
+
+        {/* Demote the pool: collapsed by default, revealed on demand. */}
+        {curatedMode && rest.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            className="self-start"
+            style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--text-muted)" }}
+          >
+            {expanded
+              ? `Hide ${rest.length} more ↑`
+              : `Explore ${rest.length} more near ${city.name} →`}
+          </button>
+        )}
       </div>
     </div>
   );

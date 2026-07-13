@@ -100,10 +100,23 @@ export async function bakeGeneratedDays(
       }
 
       // Per-day corpus fold (same 2-point corridor query as reference/wizard)
-      // + the day's resolved tier-2 places as extra tiles.
+      // + the day's resolved tier-2 places as extra tiles. Flag the LLM's
+      // curated key stops: a pool-hit keyStop is an `mp:` id in day.keyStops
+      // that matches a corpus tile; a live-resolved keyStop is a resolvedPlace
+      // with where==="keyStop". (The overnight is carried via day.overnight,
+      // not flagged here.)
       const corpus =
         start && end ? await fetchCorpusForSegment(start, end, supabase) : [];
-      const tiles: BrowsePlace[] = [...corpus, ...resolved.map(resolvedToTile)];
+      const keyStopIds = new Set(day.keyStops);
+      const tiles: BrowsePlace[] = [
+        ...corpus.map((t) =>
+          keyStopIds.has(t.id) ? { ...t, curated: true } : t,
+        ),
+        ...resolved.map((r) => {
+          const tile = resolvedToTile(r);
+          return r.where === "keyStop" ? { ...tile, curated: true } : tile;
+        }),
+      ];
 
       // Derive spine + bucket tiles under nodes.
       let corridorCities: CorridorCity[] | undefined;
