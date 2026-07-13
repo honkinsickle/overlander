@@ -99,10 +99,17 @@ export function DayDetailCorridor({
   briefing,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
-  // Generated trips flag the LLM's curated key stops; when any exist, each
-  // node features its picks and collapses the rest of the pool. Reference
-  // trips (no curated flags) keep showing all tiles inline.
+  // Generated trips flag the LLM's curated key stops; when any exist, the day
+  // leads with a "Today's Picks" block and each node collapses the rest of the
+  // pool. Reference trips (no curated flags) keep showing all tiles inline.
   const curatedMode = places.some((p) => p.curated);
+  // Deduped curated picks for the day-level block (reliable — not dependent on
+  // whether the bucketing assigned each to a node).
+  const curatedPicks = curatedMode
+    ? Array.from(
+        new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
+      )
+    : [];
   const dd = String(dayNumber).padStart(2, "0");
 
   // Interleave bare mile markers between city nodes by mile position.
@@ -177,6 +184,35 @@ export function DayDetailCorridor({
       {/* ── Day-level reasoned fill (LLM briefing/weather/overnight/
            logistics/obligations) — the day's context, above the route ── */}
       {briefing && <div style={{ paddingTop: 16 }}>{briefing}</div>}
+
+      {/* ── Today's Picks — the guide's curated key stops as the PRIMARY
+           content, above the full corridor pool (gold Section C). ── */}
+      {curatedPicks.length > 0 && (
+        <div className="flex flex-col" style={{ paddingTop: 16, gap: 10 }}>
+          <span
+            className="uppercase"
+            style={{
+              fontFamily: "var(--ff-display)",
+              fontSize: 11,
+              lineHeight: "14px",
+              letterSpacing: "0.16em",
+              color: "var(--amber-dark)",
+            }}
+          >
+            Today&apos;s Key Stops
+          </span>
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {curatedPicks.map((p) => (
+              <CategoryListCard
+                key={p.id}
+                place={p}
+                category={p.category}
+                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Corridor of city nodes ─────────────────────────────── */}
       <div className="flex flex-col" style={{ paddingTop: 16 }}>
@@ -253,7 +289,8 @@ function CityNode({
   onOpenPlace?: (placeId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const picks = curatedMode ? tiles.filter((t) => t.curated) : [];
+  // Curated picks are featured in the day-level "Today's Picks" block (reliable
+  // regardless of bucketing); the spine just collapses the rest of the pool.
   const rest = curatedMode ? tiles.filter((t) => !t.curated) : tiles;
   const showRest = !curatedMode || expanded;
   const isStart = city.kind === "start";
@@ -308,15 +345,6 @@ function CityNode({
         </div>
 
         <div className="flex flex-col" style={{ gap: 8 }}>
-          {/* Curated picks first (the guide's choices), then the pool if shown. */}
-          {picks.map((p) => (
-            <CategoryListCard
-              key={p.id}
-              place={p}
-              category={p.category}
-              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-            />
-          ))}
           {showRest &&
             rest.map((p) => (
               <CategoryListCard
