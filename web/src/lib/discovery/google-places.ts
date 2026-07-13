@@ -254,6 +254,10 @@ export type PlaceRich = {
   /** Routed through /api/places/photo (key stays server-side). */
   photoUrl?: string;
   hours?: string;
+  /** Slide category from Google `types` (same mapper the discovery fanout
+   *  uses). Lets a live-resolved tile with no baked category pick up its
+   *  icon + title color at hydrate — otherwise it falls back to "interest". */
+  category?: SlideCategoryKey;
 };
 
 /** Single-place RICH field mask — MATCHES the browse discovery field set
@@ -263,6 +267,7 @@ export type PlaceRich = {
 const DETAILS_FIELD_MASK = [
   "id",
   "displayName",
+  "types",
   "rating",
   "userRatingCount",
   "priceLevel",
@@ -318,7 +323,10 @@ export async function placeDetails(
   const p = (await res.json()) as GooglePlace;
   const photoRef = p.photos?.[0]?.name;
   const tier = priceLevelToTier(p.priceLevel);
+  // Same mapper + "want any bucket" set the free-text discovery path uses.
+  const category = categoryForGoogleTypes(p.types ?? [], new Set(ALL_SLIDE_CATEGORIES));
   return {
+    ...(category ? { category } : {}),
     ...(typeof p.rating === "number" ? { rating: p.rating } : {}),
     ...(typeof p.userRatingCount === "number"
       ? { reviewCount: p.userRatingCount }

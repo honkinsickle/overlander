@@ -486,6 +486,12 @@ export function DayDetailCorridorColumn({
                     rating: rich.rating ?? t.rating,
                     reviewCount: rich.reviewCount ?? t.reviewCount,
                     photoUrl: rich.photoUrl ?? t.photoUrl,
+                    // Live-resolved tiles bake no category → "interest" default
+                    // (grey title, generic pin). Google types give the real one.
+                    // "overnight" (lodging) has no card palette → "hotel".
+                    category:
+                      (rich.category === "overnight" ? "hotel" : rich.category) ??
+                      t.category,
                   }
                 : t;
             })}
