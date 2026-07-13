@@ -24,7 +24,7 @@ export function DayBriefingCard({ day }: { day: Day }) {
     .join(" · ");
   return (
     <div
-      className="w-[410px] rounded-[4px] overflow-clip border border-border-subtle"
+      className="w-full rounded-[4px] overflow-clip border border-border-subtle"
       style={{ backgroundColor: "#161819BF", padding: 16 }}
     >
       <div className="flex flex-col" style={{ gap: 12 }}>
