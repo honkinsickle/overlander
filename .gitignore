@@ -33,3 +33,6 @@ supabase/.temp/
 data/.cache/
 .session-logs/
 backups/
+
+# Binary working assets (category photos, HTML mockups) — canonical home is Paper.
+mockups/
