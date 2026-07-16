@@ -195,7 +195,10 @@ function NavHeader({
   onToggleCollapsed?: () => void;
 }) {
   const active = tone === "active";
-  const bg = !active
+  // Collapsed → drop the active surface and sit on the card background so
+  // the header reads as one quiet block with Itinerary directly below it
+  // (the amber label keeps carrying the active cue).
+  const bg = !active || collapsed
     ? "var(--bg-card)"
     : activeColor === "blue"
       ? "var(--bg-day-selected)"
