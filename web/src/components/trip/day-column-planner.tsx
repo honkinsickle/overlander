@@ -64,11 +64,14 @@ export function DayColumnPlanner({
   //   - Overview stays green the whole time (you're in the Overview
   //     section), and
   //   - Guides / Places to Visit additionally light blue when their
-  //     section is the current scroll-spy target.
+  //     section is the current scroll-spy target. Guides owns the top of
+  //     the column too ("overview" — the hero): its click lands there,
+  //     and the header is a collapse toggle with no spy target of its own.
   // A selected day turns all three off (the day card highlights instead).
   const inOverview = !wired || activeDayId === null;
   const overviewActive = inOverview;
-  const guidesActive = inOverview && activeSection === "guides";
+  const guidesActive =
+    inOverview && (activeSection === "overview" || activeSection === "guides");
   const placesActive = inOverview && activeSection === "places";
   // Itinerary is the day stack's header — green when a day is the active
   // view (mirroring Overview's green in Overview mode). Legacy (unwired)
