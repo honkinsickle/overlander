@@ -34,17 +34,25 @@ export function TripSlideupBody({
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
   // Single-day selection (Phase 1 corridor integration): null = Overview
-  // state, otherwise the day shown in the corridor column. Seeds from the
-  // ?day= deep-link (the old DayDetail's scroll-to contract, now a
-  // selection); updates rewrite the param and re-emit `trip:activeDay`
-  // for the listeners that tracked the old scroll-spy (FindNearbyPanel).
+  // state, otherwise the day shown in the corridor column. The ?day= URL
+  // param is the SINGLE SOURCE OF TRUTH — selection is derived from
+  // useSearchParams every render, never copied into state. (The previous
+  // one-shot useState seed went stale whenever the param changed under
+  // the mounted segment — back/forward, tab-restore, bfcache traversals —
+  // splitting the surfaces: the map followed the URL while the rail and
+  // column froze. task_3e4b32c9.)
   const searchParams = useSearchParams();
-  const [selectedDayId, setSelectedDayId] = useState<string | null>(() => {
-    const queried = searchParams.get("day");
-    return queried && trip.days.some((d) => d.id === queried) ? queried : null;
-  });
+  const queriedDay = searchParams.get("day");
+  const selectedDayId =
+    queriedDay && trip.days.some((d) => d.id === queriedDay)
+      ? queriedDay
+      : null;
+  // Writes go through replaceState (NOT pushState — day switching must
+  // not spam history). Next patches replaceState, so useSearchParams
+  // re-renders every ?day= consumer (this component + MapColumn) from
+  // the same URL change. `trip:activeDay` stays for the event listeners
+  // that tracked the old scroll-spy (FindNearbyPanel).
   const selectDay = useCallback((dayId: string | null) => {
-    setSelectedDayId(dayId);
     const url = new URL(window.location.href);
     if (dayId) url.searchParams.set("day", dayId);
     else url.searchParams.delete("day");

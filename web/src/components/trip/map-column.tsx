@@ -353,9 +353,12 @@ export function MapColumn({
   }, []);
   const slug = panelSlug;
 
+  // No ?day= (or an unknown id) = the Overview state — activeDay null,
+  // matching the day column's fallback so every surface agrees. (The old
+  // `|| days[0]` default silently showed Day 1's leg while the column
+  // showed the Overview — task_3e4b32c9's unification.)
   const activeDay = useMemo(
-    () =>
-      (queriedDay && days.find((d) => d.id === queriedDay)) || days[0] || null,
+    () => (queriedDay && days.find((d) => d.id === queriedDay)) || null,
     [days, queriedDay],
   );
 
@@ -721,7 +724,33 @@ export function MapColumn({
   // the route to be ready before updating the source.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !activeDay) return;
+    if (!map) return;
+
+    if (!activeDay) {
+      // Overview (no ?day=): clear the day-leg overlay — blue slice,
+      // blue endpoint pins back to gold, endpoint labels — so the map
+      // returns to the whole-route view instead of freezing on the
+      // last selected day's leg.
+      const src = map.getSource("active-day-leg") as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (src) src.setData({ type: "FeatureCollection", features: [] });
+      for (const k of activeLegPinKeysRef.current) {
+        const coord = dayPinCoordsByIdRef.current.get(k);
+        if (!coord) continue;
+        const prevMarker = dayPinsByIdRef.current.get(k);
+        if (prevMarker) prevMarker.remove();
+        const m = new mapboxgl.Marker({ color: "#c8a96e" })
+          .setLngLat(coord)
+          .addTo(map);
+        if (browseOpenRef.current) m.getElement().style.display = "none";
+        dayPinsByIdRef.current.set(k, m);
+      }
+      activeLegPinKeysRef.current = new Set();
+      for (const m of legEndpointMarkersRef.current) m.remove();
+      legEndpointMarkersRef.current = [];
+      return;
+    }
 
     const dayIndex = days.findIndex((d) => d.id === activeDay.id);
     if (dayIndex < 0) return;
