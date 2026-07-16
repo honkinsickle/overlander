@@ -22,6 +22,12 @@ import { ItineraryGenerationError } from "./generate";
 /** Small + fast — parsing one sentence into a typed edit, not reasoning. */
 const PARSE_MODEL = "claude-sonnet-5";
 
+// TODO(living-plan intelligent-parse tier): distinguish "be at X on <date>"
+// (pin ARRIVAL — current behavior; Stewart 7/19 → glacier day 7/20) from
+// "do X on <date>" (the activity day itself lands on the date). Both parse
+// to arrive-by today; the audit's "any day at the place" check accepts
+// either, so the distinction needs a parse-level intent field + a stricter
+// apply (e.g. pin the dwell day, not just presence).
 export type ParsedEdit =
   | {
       type: "arrive-by";
