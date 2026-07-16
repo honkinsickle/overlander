@@ -183,7 +183,6 @@ export function TripSlideupBody({
               activeDayId={selectedDayId}
               activeSection={selectedDayId === null ? activeSection : null}
               onSelectDay={(id) => selectDay(id)}
-              onSelectOverview={() => selectDay(null)}
               onScrollTo={selectSection}
             />
           </div>

@@ -11,11 +11,13 @@ import { cn } from "@/lib/utils";
  * geometry (25px section headers, 112px day cards).
  *
  * Selection wiring (Phase 1 of the corridor integration): when the
- * caller passes `activeDayId` + `onSelectDay` / `onSelectOverview`, the
- * rail is the slideup's day-SELECTOR — clicking a day shows that day's
- * corridor view; clicking Overview shows the trip-level state
- * (activeDayId === null). Without those props (legacy /trip/[id]) the
- * rail stays presentational: first day active, clicks inert.
+ * caller passes `activeDayId` + `onSelectDay`, the rail is the slideup's
+ * day-SELECTOR — clicking a day shows that day's corridor view; clicking
+ * Guides / Places to Visit shows the trip-level Overview state
+ * (activeDayId === null) scrolled to their spot (Guides = the very top).
+ * The Overview header itself is the collapse toggle, not a nav action.
+ * Without those props (legacy /trip/[id]) the rail stays presentational:
+ * first day active, clicks inert.
  *
  * Guides / Places to Visit / Trip Settings remain stubbed no-ops.
  *
@@ -34,7 +36,6 @@ export function DayColumnPlanner({
   overlay = false,
   activeDayId,
   onSelectDay,
-  onSelectOverview,
   onScrollTo,
   activeSection,
 }: {
@@ -48,10 +49,10 @@ export function DayColumnPlanner({
    *  (undefined) for the legacy presentational rendering. */
   activeDayId?: string | null;
   onSelectDay?: (dayId: string) => void;
-  onSelectOverview?: () => void;
-  /** Switch to Overview and scroll its column to the named section
-   *  (#overview / #guides / #places). Wired to all three nav items —
-   *  Overview scrolls back to the hero/top. */
+  /** Switch to Overview and scroll its column to the named spot
+   *  ("overview" = the very top, sent by Guides; "places" = #places).
+   *  Wired to Guides / Places to Visit — the Overview header is the
+   *  collapse toggle, not a nav action. */
   onScrollTo?: (anchor: "overview" | "guides" | "places") => void;
   /** Scroll-spy: the topmost visible Overview section, or null when a day
    *  is selected (the day card highlights instead). Drives which of
@@ -95,7 +96,6 @@ export function DayColumnPlanner({
         tone={overviewActive ? "active" : "idle"}
         height={55}
         fontSize={25}
-        onClick={onScrollTo ? () => onScrollTo("overview") : onSelectOverview}
         collapsed={navCollapsed}
         onToggleCollapsed={() => setNavCollapsed((c) => !c)}
       />
@@ -107,7 +107,7 @@ export function DayColumnPlanner({
             activeColor="blue"
             height={50}
             fontSize={20}
-            onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
+            onClick={onScrollTo ? () => onScrollTo("overview") : undefined}
           />
           <NavHeader
             label="Places to Visit"
@@ -218,8 +218,7 @@ function NavHeader({
         type="button"
         onClick={() => {
           // The whole row toggles the collapse both ways (the chevron alone
-          // is a small mark); the nav click still fires alongside so the
-          // Overview stays reachable from a day view.
+          // is a small mark); any nav onClick fires alongside.
           onToggleCollapsed?.();
           onClick?.();
         }}

@@ -162,6 +162,16 @@ export function DayDetailCorridorColumn({
   // effect fires (post-commit) the section is in the DOM.
   useEffect(() => {
     if (!scrollRequest) return;
+    if (scrollRequest.anchor === "overview") {
+      // "overview" = the very top of the column (sent by the rail's
+      // Guides item) — scroll the container itself so the pad above the
+      // hero comes along, not just the #overview section top.
+      document
+        .getElementById("overview")
+        ?.closest(".overflow-y-auto")
+        ?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     document
       .getElementById(scrollRequest.anchor)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
