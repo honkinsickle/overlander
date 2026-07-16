@@ -1,6 +1,7 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Settings } from "lucide-react";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,11 @@ export function DayColumnPlanner({
   // view (mirroring Overview's green in Overview mode). Legacy (unwired)
   // always shows a day, so it stays green there.
   const itineraryActive = !wired || activeDayId !== null;
+  // Overview nav group collapse — the header chevron folds Guides /
+  // Places to Visit / Trip Settings away so Itinerary + days move up.
+  // Expanded by default; plain state is the session memory (the rail
+  // stays mounted across day switches, resets when the slideup closes).
+  const [navCollapsed, setNavCollapsed] = useState(false);
   return (
     <aside
       aria-label="Days"
@@ -90,24 +96,30 @@ export function DayColumnPlanner({
         height={55}
         fontSize={25}
         onClick={onScrollTo ? () => onScrollTo("overview") : onSelectOverview}
+        collapsed={navCollapsed}
+        onToggleCollapsed={() => setNavCollapsed((c) => !c)}
       />
-      <NavHeader
-        label="Guides"
-        tone={guidesActive ? "active" : "idle"}
-        activeColor="blue"
-        height={50}
-        fontSize={20}
-        onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
-      />
-      <NavHeader
-        label="Places to Visit"
-        tone={placesActive ? "active" : "idle"}
-        activeColor="blue"
-        height={50}
-        fontSize={20}
-        onClick={onScrollTo ? () => onScrollTo("places") : undefined}
-      />
-      <SettingsHeader label="Trip Settings" />
+      {!navCollapsed && (
+        <>
+          <NavHeader
+            label="Guides"
+            tone={guidesActive ? "active" : "idle"}
+            activeColor="blue"
+            height={50}
+            fontSize={20}
+            onClick={onScrollTo ? () => onScrollTo("guides") : undefined}
+          />
+          <NavHeader
+            label="Places to Visit"
+            tone={placesActive ? "active" : "idle"}
+            activeColor="blue"
+            height={50}
+            fontSize={20}
+            onClick={onScrollTo ? () => onScrollTo("places") : undefined}
+          />
+          <SettingsHeader label="Trip Settings" />
+        </>
+      )}
 
       {/* Itinerary header — green/amber when the day view is active
        *  (mirrors Overview's highlight), idle when in Overview. */}
@@ -156,7 +168,10 @@ export function DayColumnPlanner({
 }
 
 /** Top-level nav header. `active` gets the green surface + amber label
- *  (Overview); `idle` is the dark card surface + primary-ink label. */
+ *  (Overview); `idle` is the dark card surface + primary-ink label.
+ *  With `onToggleCollapsed`, a chevron toggle renders on the right as its
+ *  own button (row click still navigates; chevron click collapses) —
+ *  down = expanded, up = collapsed, mirroring the Top Bar convention. */
 function NavHeader({
   label,
   tone,
@@ -164,6 +179,8 @@ function NavHeader({
   fontSize,
   onClick,
   activeColor = "green",
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   label: string;
   tone: "active" | "idle";
@@ -174,6 +191,8 @@ function NavHeader({
    *  "blue" = the day-selected blue (Guides / Places to Visit, so the
    *  section indicator matches the day highlight). */
   activeColor?: "green" | "blue";
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const active = tone === "active";
   const bg = !active
@@ -186,21 +205,37 @@ function NavHeader({
     : activeColor === "blue"
       ? "var(--text-primary)"
       : "var(--amber-light)";
+  const ChevronIcon = collapsed ? ChevronUp : ChevronDown;
   return (
-    <button
-      type="button"
-      onClick={onClick ?? noop}
-      className="flex items-center justify-between shrink-0 border-b border-border-subtle"
-      style={{
-        height,
-        padding: "10px 16px 10px 20px",
-        backgroundColor: bg,
-      }}
+    <div
+      className="flex items-stretch shrink-0 border-b border-border-subtle"
+      style={{ height, backgroundColor: bg }}
     >
-      <span className="font-sans" style={{ fontSize, lineHeight: "33px", color }}>
-        {label}
-      </span>
-    </button>
+      <button
+        type="button"
+        onClick={onClick ?? noop}
+        className="flex items-center flex-1 min-w-0 text-left"
+        style={{ padding: "10px 0 10px 20px" }}
+      >
+        <span className="font-sans" style={{ fontSize, lineHeight: "33px", color }}>
+          {label}
+        </span>
+      </button>
+      {onToggleCollapsed && (
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={
+            collapsed ? "Expand overview section" : "Collapse overview section"
+          }
+          className="flex items-center justify-center shrink-0 text-text-muted transition-colors hover:text-text-primary"
+          style={{ width: 40, padding: "10px 16px 10px 4px" }}
+        >
+          <ChevronIcon className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+        </button>
+      )}
+    </div>
   );
 }
 
