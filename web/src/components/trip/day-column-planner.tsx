@@ -217,9 +217,10 @@ function NavHeader({
       <button
         type="button"
         onClick={() => {
-          // Collapsed, the whole row is an expand target (the chevron alone
-          // is a small mark); the nav click still fires alongside.
-          if (collapsed) onToggleCollapsed?.();
+          // The whole row toggles the collapse both ways (the chevron alone
+          // is a small mark); the nav click still fires alongside so the
+          // Overview stays reachable from a day view.
+          onToggleCollapsed?.();
           onClick?.();
         }}
         className="flex items-center flex-1 min-w-0 text-left"
