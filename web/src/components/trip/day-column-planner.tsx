@@ -216,7 +216,12 @@ function NavHeader({
     >
       <button
         type="button"
-        onClick={onClick ?? noop}
+        onClick={() => {
+          // Collapsed, the whole row is an expand target (the chevron alone
+          // is a small mark); the nav click still fires alongside.
+          if (collapsed) onToggleCollapsed?.();
+          onClick?.();
+        }}
         className="flex items-center flex-1 min-w-0 text-left"
         style={{ padding: "10px 0 10px 20px" }}
       >
