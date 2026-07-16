@@ -35,6 +35,7 @@ import {
 import { SLIDE_TO_PRIMARY_CATEGORY } from "@/lib/trip-browse/federated";
 import { CategoryFilterRow } from "@/components/trip/category-filter-row";
 import { ReplanSuggestionRow } from "@/components/trip/replan-suggestion-row";
+import { ReplanSheet } from "@/components/trip/replan-sheet";
 import { isConstraintLike } from "@/lib/itinerary/constraint-like";
 import { pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 
@@ -279,6 +280,9 @@ export function FindNearbyPanel({
   });
   // When set, the day-picker overlay is open for this place.
   const [pending, setPending] = useState<BrowsePlace | null>(null);
+  // When set, the living-plan re-plan sheet is open for this request
+  // (dev-gated — only reachable via ReplanSuggestionRow).
+  const [replanRequest, setReplanRequest] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   // Bumped when the user presses Enter in the search box — forces a refetch
   // against the current viewport even when the query/tile is unchanged.
@@ -408,7 +412,13 @@ export function FindNearbyPanel({
     >
       <FindScopeHeader />
 
-      {pending ? (
+      {replanRequest ? (
+        <ReplanSheet
+          tripId={trip.id}
+          request={replanRequest}
+          onClose={() => setReplanRequest(null)}
+        />
+      ) : pending ? (
         <DayPicker
           place={pending}
           trip={trip}
@@ -449,7 +459,10 @@ export function FindNearbyPanel({
            *  place search below is untouched — free-text only, never for
            *  tile/chip browsing. */}
           {query.trim() !== "" && isConstraintLike(query) && (
-            <ReplanSuggestionRow query={query.trim()} />
+            <ReplanSuggestionRow
+              query={query.trim()}
+              onReplan={() => setReplanRequest(query.trim())}
+            />
           )}
           <div
             className="flex-1 overflow-y-auto no-scrollbar"
