@@ -159,6 +159,10 @@ export function itineraryToTrip(
     startCoords: first.coords,
     kicker: "YoTrippin · generated expedition",
     generated: true,
+    // Persist the inputs WITH the output — this is what makes the trip
+    // editable (living-plan: edit anchors → re-run). Loose Record on Trip
+    // to avoid a circular import; the real shape is GenerationInput.
+    generationInput: input,
     foodThread: output.foodThread,
     weatherHiF: 70,
     weatherLoF: 45,

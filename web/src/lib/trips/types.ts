@@ -44,6 +44,14 @@ export type Trip = {
    *  lib/plan/types.ts; stored loose here (Record) to avoid a circular
    *  type import between lib/trips and lib/plan. */
   wizard?: Record<string, unknown>;
+  /** The full GenerationInput (anchors + params + rig + objective) that
+   *  produced a generated trip — persisted so the trip is EDITABLE: the
+   *  living-plan loop edits these anchors and re-runs the pipeline. Shape
+   *  follows `GenerationInput` in lib/itinerary/facts.ts; stored loose here
+   *  (Record) to avoid a circular type import between lib/trips and
+   *  lib/itinerary (same pattern as `wizard`). Absent on reference/fork
+   *  trips and on generated trips persisted before this field existed. */
+  generationInput?: Record<string, unknown>;
   /** Offline tile-cache phases (default 7-day chunks). Travels with the
    *  trip across devices; prime status (downloaded/not) lives per-device
    *  in IndexedDB keyed by (tripId, phaseId). See

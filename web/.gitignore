@@ -38,6 +38,9 @@ yarn-error.log*
 .env*
 !.env.local.example
 
+# living-plan edit harness stage state (scripts/living-plan-edit.ts)
+/.living-plan-state/
+
 # vercel
 .vercel
 
