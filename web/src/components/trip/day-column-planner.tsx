@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
  * day-SELECTOR — clicking a day shows that day's corridor view; clicking
  * Guides / Places to Visit shows the trip-level Overview state
  * (activeDayId === null) scrolled to their spot (Guides = the very top).
- * The Overview header itself is the collapse toggle, not a nav action.
+ * The Overview header does both: any click toggles the collapse AND
+ * opens the Overview scrolled to the top.
  * Without those props (legacy /trip/[id]) the rail stays presentational:
  * first day active, clicks inert.
  *
@@ -50,9 +51,9 @@ export function DayColumnPlanner({
   activeDayId?: string | null;
   onSelectDay?: (dayId: string) => void;
   /** Switch to Overview and scroll its column to the named spot
-   *  ("overview" = the very top, sent by Guides; "places" = #places).
-   *  Wired to Guides / Places to Visit — the Overview header is the
-   *  collapse toggle, not a nav action. */
+   *  ("overview" = the very top, sent by the Overview header + Guides;
+   *  "places" = #places). The Overview header additionally toggles the
+   *  nav-group collapse on the same click. */
   onScrollTo?: (anchor: "overview" | "guides" | "places") => void;
   /** Scroll-spy: the topmost visible Overview section, or null when a day
    *  is selected (the day card highlights instead). Drives which of
@@ -111,6 +112,7 @@ export function DayColumnPlanner({
         tone={overviewActive ? "active" : "idle"}
         height={55}
         fontSize={25}
+        onClick={onScrollTo ? () => onScrollTo("overview") : undefined}
         collapsed={navCollapsed}
         onToggleCollapsed={() => setNavCollapsed((c) => !c)}
       />
@@ -257,7 +259,12 @@ function NavHeader({
       {onToggleCollapsed && (
         <button
           type="button"
-          onClick={onToggleCollapsed}
+          onClick={() => {
+            // Same contract as the row — every pixel of the header
+            // toggles AND fires the nav click.
+            onToggleCollapsed();
+            onClick?.();
+          }}
           aria-expanded={!collapsed}
           aria-label={
             collapsed ? "Expand overview section" : "Collapse overview section"
