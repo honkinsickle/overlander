@@ -159,7 +159,16 @@ export function DayColumnPlanner({
             key={day.id}
             day={day}
             active={wired ? activeDayId === day.id : i === 0}
-            onClick={onSelectDay ? () => onSelectDay(day.id) : undefined}
+            onClick={
+              onSelectDay
+                ? () => {
+                    // Picking a day folds the Overview nav group away —
+                    // the day content is the focus now.
+                    setNavCollapsed(true);
+                    onSelectDay(day.id);
+                  }
+                : undefined
+            }
           />
         ))}
       </nav>
