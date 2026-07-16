@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Settings } from "lucide-react";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
@@ -82,6 +82,18 @@ export function DayColumnPlanner({
   // Expanded by default; plain state is the session memory (the rail
   // stays mounted across day switches, resets when the slideup closes).
   const [navCollapsed, setNavCollapsed] = useState(false);
+  // The selected day scrolls to the first position under the Itinerary
+  // header (fires post-commit, after the collapse above has already
+  // resized the stack). Trailing days without enough list below them
+  // clamp to the nearest reachable spot.
+  const stackRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!activeDayId) return;
+    stackRef.current
+      ?.querySelector(`[data-day-id="${CSS.escape(activeDayId)}"]`)
+      ?.closest("div")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeDayId]);
   return (
     <aside
       aria-label="Days"
@@ -153,6 +165,7 @@ export function DayColumnPlanner({
       {/* Day stack — gutter timeline + cards. Wired: the selected day
        *  renders active. Legacy: first day renders selected. */}
       <nav
+        ref={stackRef}
         aria-label="Days"
         className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
         style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
