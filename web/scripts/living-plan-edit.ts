@@ -10,7 +10,9 @@
  *   - The live trip id `dawson-vancouver-cassiar` is refused outright.
  *
  * Run (Supabase → TEST via the SECOND env-file, which wins; Anthropic /
- * Google / Mapbox keys come from .env.local):
+ * Google / Mapbox keys come from .env.local). NOTE: TEST's corpus is the
+ * thin smoke corpus — a sparser POI/fuel picture than PROD is EXPECTED
+ * here; this harness tests the EDIT MECHANISM, not corpus richness:
  *   tsx --env-file=.env.local --env-file=.env.test.local scripts/living-plan-edit.ts \
  *     --trip dawson-cassiar-livingplan-test \
  *     --request "arrive at Salmon Glacier on the 19th" --parse
