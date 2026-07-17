@@ -17,6 +17,40 @@
 import type { Trip, Day } from "@/lib/trips/types";
 import type { EngineFacts, GenerationInput } from "./facts";
 import type { DayPlan, ItineraryOutput, Obligation } from "./schema";
+import type { DayRoute } from "./audit";
+import { encodePolyline } from "@/lib/routing/polyline";
+
+/**
+ * Assemble the full-trip route polyline from the audit's per-day geometry
+ * (already computed for distance measurement — nothing re-routed here). The
+ * standard Google/Apple/Strava model: persist the route line so the map draws
+ * WITHOUT a network call — which is what makes a generated trip render its
+ * real road OFFLINE (a dead-zone can't hit the Directions API; without this,
+ * MapColumn's live-derive path fails and falls back to straight lines between
+ * overnights).
+ *
+ * Concatenates each day's `polyline` in day order, skipping null layover days
+ * (no forward movement), and dropping the shared endpoint between consecutive
+ * days (day N ends where day N+1 starts). Returns undefined when no day has
+ * geometry (nothing to draw).
+ */
+export function assembleRoutePolyline(
+  dayRoutes: DayRoute[] | undefined,
+): string | undefined {
+  if (!dayRoutes?.length) return undefined;
+  const ordered = [...dayRoutes].sort((a, b) => a.n - b.n);
+  const coords: [number, number][] = [];
+  for (const dr of ordered) {
+    if (!dr.polyline?.length) continue; // layover / unroutable day
+    for (const c of dr.polyline) {
+      const prev = coords[coords.length - 1];
+      // Drop consecutive duplicate points (the shared day boundary, and any
+      // repeated vertex) — the encoder + map both dislike zero-length legs.
+      if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) coords.push(c);
+    }
+  }
+  return coords.length >= 2 ? encodePolyline(coords) : undefined;
+}
 
 const SEVERITY_MARK: Record<Obligation["severity"], string> = {
   info: "ℹ",
@@ -82,6 +116,9 @@ export function itineraryToTrip(
    *  When present, each day renders as a full corridor day; when absent, the
    *  whole pool travels unbucketed (degraded 2-node fallback). */
   bakedDays?: import("./bake").BakedDay[],
+  /** The audit's per-day route geometry → persisted as `routePolyline` so the
+   *  map draws the real road offline (no live Directions call). */
+  dayRoutes?: DayRoute[],
 ): Trip {
   const first = facts.anchorsResolved[0];
   const last = facts.anchorsResolved[facts.anchorsResolved.length - 1];
@@ -159,6 +196,9 @@ export function itineraryToTrip(
     startCoords: first.coords,
     kicker: "YoTrippin · generated expedition",
     generated: true,
+    // Persist the road geometry (standard maps model) so the map draws the
+    // real route with no network — the offline fix for generated trips.
+    routePolyline: assembleRoutePolyline(dayRoutes),
     // Persist the inputs WITH the output — this is what makes the trip
     // editable (living-plan: edit anchors → re-run). Loose Record on Trip
     // to avoid a circular import; the real shape is GenerationInput.

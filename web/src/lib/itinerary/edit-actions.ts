@@ -317,7 +317,7 @@ async function runGateStage(
   const supabase: SupabaseClient = createSupabaseServiceClient();
   const baked = await bakeGeneratedDays(audited, editedInput, supabase, dayRoutes);
   const rePlanned = await attachHeroPhotos(
-    itineraryToTrip(tripId, editedInput, facts, audited, baked),
+    itineraryToTrip(tripId, editedInput, facts, audited, baked, dayRoutes),
   );
   const diff = computePlanDiff(beforeDays, rePlanned.days, diffMeta);
 

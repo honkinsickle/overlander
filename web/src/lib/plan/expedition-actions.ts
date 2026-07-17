@@ -64,7 +64,7 @@ export async function generateExpeditionTripAction(
     // Real per-day + trip hero photos (Wikipedia/Commons by destination
     // name) so a generated trip renders place photos, not blank heroes.
     const trip = await attachHeroPhotos(
-      itineraryToTrip(tripId, input, facts, audited, baked),
+      itineraryToTrip(tripId, input, facts, audited, baked, dayRoutes),
     );
 
     const { error } = await supabase.from("reference_trips").upsert({

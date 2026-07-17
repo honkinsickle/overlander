@@ -223,7 +223,7 @@ async function main() {
     console.log(`\n[audit] wrote ${SCRATCH}/itinerary-audited.json`);
 
     const baked = await bakeAndReport(audited, dayRoutes);
-    if (PERSIST) await persist(audited, facts, baked);
+    if (PERSIST) await persist(audited, facts, baked, dayRoutes);
     return;
   }
 
@@ -348,7 +348,7 @@ async function main() {
     }
 
     const baked = await bakeAndReport(audited, dayRoutes);
-    if (PERSIST) await persist(audited, facts, baked);
+    if (PERSIST) await persist(audited, facts, baked, dayRoutes);
   } catch (err) {
     if (err instanceof ItineraryGenerationError) {
       console.error(`[gen] generation failed (${err.code}): ${err.message}`);
@@ -369,6 +369,7 @@ async function persist(
   itinerary: ItineraryOutput,
   facts: Awaited<ReturnType<typeof preComputeFacts>>,
   bakedDays?: BakedDay[],
+  dayRoutes?: import("../src/lib/itinerary/audit").DayRoute[],
 ) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -392,7 +393,7 @@ async function persist(
   }
 
   const trip = await attachHeroPhotos(
-    itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary, bakedDays),
+    itineraryToTrip(DEMO_TRIP_ID, DEMO, facts, itinerary, bakedDays, dayRoutes),
   );
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
