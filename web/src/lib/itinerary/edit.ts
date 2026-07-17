@@ -40,22 +40,34 @@ export type ParsedEdit =
        *  no existing anchor covers the request. */
       targetAnchor: string | null;
     }
+  | {
+      type: "add-stop";
+      /** The place to add, as the user named it. Its route position is
+       *  INFERRED (inferAddStopPosition) — the user gives no "between X and
+       *  Y" hint. */
+      place: string;
+      /** Nights requested at the new stop: "add Barkerville" → 0 (visit);
+       *  "add a night in Barkerville" → 1. */
+      dwell: number;
+    }
   | { type: "unsupported"; reason: string };
 
 /** Flat wire shape — the union is narrowed in code after validation. */
 const PARSE_SCHEMA = {
   type: "object",
   properties: {
-    type: { type: "string", enum: ["arrive-by", "unsupported"] },
+    type: { type: "string", enum: ["arrive-by", "add-stop", "unsupported"] },
     place: { type: ["string", "null"] },
     date: {
       type: ["string", "null"],
       pattern: "^\\d{4}-\\d{2}-\\d{2}$",
     },
     targetAnchor: { type: ["string", "null"] },
+    /** Nights at an added stop (add-stop only); null otherwise. */
+    dwell: { type: ["integer", "null"] },
     reason: { type: ["string", "null"] },
   },
-  required: ["type", "place", "date", "targetAnchor", "reason"],
+  required: ["type", "place", "date", "targetAnchor", "dwell", "reason"],
   additionalProperties: false,
 } as const;
 
@@ -69,9 +81,11 @@ const PARSE_SYSTEM = `You parse a traveler's natural-language steering request a
 
 Rules:
 - "arrive-by": the traveler wants to BE at a place by/on a date. Emit the place as they named it, the date as ISO (resolve relative dates like "the 19th" against the trip window), and targetAnchor = the EXACT place string of the one anchor the request binds to.
-- A request may name a place that is not itself an anchor but belongs to one (an excursion or note on an anchor) — bind it to that anchor.
-- targetAnchor must be copied VERBATIM from the anchor list, or null if no anchor covers the request's place.
-- If the request is not an arrive-by edit (or is ambiguous beyond guessing), emit type "unsupported" with a short reason.
+  - A request may name a place that is not itself an anchor but belongs to one (an excursion or note on an anchor) — bind it to that anchor.
+  - targetAnchor must be copied VERBATIM from the anchor list, or null if no anchor covers the request's place.
+- "add-stop": the traveler wants to ADD a NEW place to the trip ("add Barkerville", "stop at Liard Hot Springs", "add a night in Jasper"). Emit the place as named and dwell = nights requested (0 for a plain visit, 1+ if they ask to stay/overnight). Do NOT infer a date or a position — the system places it on the route automatically. Set date and targetAnchor to null.
+  - Only use add-stop when the place is NOT already an anchor. If they name an existing anchor with a date, that's arrive-by.
+- If the request is not one of the above (or is ambiguous beyond guessing), emit type "unsupported" with a short reason.
 - Set unused fields to null.`;
 
 /**
@@ -139,15 +153,29 @@ export async function parseEditRequest(
     );
   }
   const raw = JSON.parse(text) as {
-    type: "arrive-by" | "unsupported";
+    type: "arrive-by" | "add-stop" | "unsupported";
     place: string | null;
     date: string | null;
     targetAnchor: string | null;
+    dwell: number | null;
     reason: string | null;
   };
 
   if (raw.type === "unsupported") {
     return { type: "unsupported", reason: raw.reason ?? "unsupported request" };
+  }
+  if (raw.type === "add-stop") {
+    if (!raw.place) {
+      throw new ItineraryGenerationError(
+        `Parse emitted add-stop with no place: ${text}`,
+        "bad_output",
+      );
+    }
+    return {
+      type: "add-stop",
+      place: raw.place,
+      dwell: Math.max(0, raw.dwell ?? 0),
+    };
   }
   if (!raw.place || !raw.date) {
     throw new ItineraryGenerationError(
@@ -261,4 +289,134 @@ export function applyEdit(
   anchor.datePin = "fixed";
   anchor.date = edit.date;
   return { input: next, before, after: structuredClone(anchor) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ADD-STOP: infer where a newly-named place slots on the route, then insert
+// it as a waypoint anchor. The user names only the place; position + fit are
+// inferred.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Perpendicular offset (mi) beyond which a place is "far off your route" —
+ *  we still allow it, but the UI must CONFIRM ("X is N mi off — add anyway?")
+ *  rather than silently bending the route by a giant reroute. Chosen above a
+ *  legitimate day-trip spur (Barkerville is 35 mi off) and above the audit's
+ *  corridor guard band (60–120 mi), so only genuinely off-corridor places
+ *  (200 mi+) trip it. */
+export const ADD_STOP_OFFSET_FLAG_MI = 100;
+
+/** Added drive miles at/under which the detour is assumed to tuck into an
+ *  existing day (no scheduling tradeoff, no mode choice). Above it, adding
+ *  the stop needs room → the two-mode choice. A dwell request always forces
+ *  the choice regardless (a night is a whole day). */
+export const ADD_STOP_ABSORB_MI = 40;
+
+export type InferredPosition = {
+  /** Insert the new anchor at this index in the anchors array (it lands
+   *  BETWEEN anchors[insertAt-1] and anchors[insertAt]). */
+  insertAt: number;
+  /** The two anchors it slots between (place labels), for the confirm sheet. */
+  prevAnchor: string;
+  nextAnchor: string;
+  /** Along-route miles of the new place's projection onto the current route. */
+  alongMiles: number;
+  /** Perpendicular distance from the place to the route — the spur/off-route
+   *  signal. */
+  offsetMi: number;
+  /** True when offsetMi exceeds the flag threshold — UI should confirm. */
+  farOffRoute: boolean;
+};
+
+/**
+ * Infer the sequence position of a new place: project it onto the current
+ * anchor-chain route and insert it after the last anchor it's past
+ * (along-route). Pure geometry — `routeCoords` is the decoded polyline from
+ * `routeBetween`, `anchorAlongMiles` the along-route mile of each existing
+ * anchor (both computed by the caller via `alongRouteMiles`).
+ */
+export function inferAddStopPosition(
+  anchors: Anchor[],
+  anchorAlongMiles: number[],
+  newAlong: { miles: number; offsetMi: number },
+): InferredPosition {
+  // First anchor whose along-route position is beyond the new place → insert
+  // before it. Never before the start or after the end (those are endpoint
+  // moves, not inserts) — clamp into [1, anchors.length-1]. findIndex → -1
+  // means the place is past the LAST anchor: clamp to insert before the end.
+  let insertAt = anchorAlongMiles.findIndex((m) => m > newAlong.miles);
+  if (insertAt === -1) insertAt = anchors.length - 1; // past the end
+  else if (insertAt < 1) insertAt = 1; // before the start
+  return {
+    insertAt,
+    prevAnchor: anchors[insertAt - 1].place,
+    nextAnchor: anchors[insertAt].place,
+    alongMiles: Math.round(newAlong.miles),
+    offsetMi: Math.round(newAlong.offsetMi * 10) / 10,
+    farOffRoute: newAlong.offsetMi > ADD_STOP_OFFSET_FLAG_MI,
+  };
+}
+
+/** How adding the stop resolves a scheduling conflict.
+ *   - "adjust": keep the fixed dates; the pipeline compresses to fit.
+ *   - "add-days": push the end anchor + endDate by `addDays` so nothing
+ *     compresses. */
+export type AddStopMode = "adjust" | "add-days";
+
+export type AppliedAddStop = {
+  input: GenerationInput;
+  /** The inserted anchor. */
+  added: Anchor;
+  insertAt: number;
+  mode: AddStopMode;
+  /** For "add-days": the new end date (else null). */
+  newEndDate: string | null;
+};
+
+/** Add `n` days to an ISO date (UTC, no TZ drift). */
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Insert the new place as a waypoint anchor and express the chosen mode as a
+ * GenerationInput mutation. Pure.
+ *   - "adjust": insert only; all date pins (incl. the fixed end) unchanged →
+ *     the same window absorbs the detour by re-pacing (the audit's fixed-anchor
+ *     + leg-over-cap checks do the honoring, or refuse if infeasible).
+ *   - "add-days": insert AND push the end anchor's date + params.endDate by
+ *     `addDays` → headroom absorbs the detour, nothing before it compresses.
+ */
+export function applyAddStop(
+  input: GenerationInput,
+  place: string,
+  coords: [number, number],
+  dwell: number,
+  insertAt: number,
+  mode: AddStopMode,
+  addDays = 1,
+): AppliedAddStop {
+  const next: GenerationInput = structuredClone(input);
+  const added: Anchor = {
+    place,
+    role: "waypoint",
+    datePin: "flexible",
+    date: null,
+    dwell,
+    note: null,
+    coords,
+  };
+  next.anchors.splice(insertAt, 0, added);
+
+  let newEndDate: string | null = null;
+  if (mode === "add-days") {
+    const end = next.anchors[next.anchors.length - 1];
+    if (end.date) end.date = addDaysISO(end.date, addDays);
+    if (next.params.endDate) {
+      next.params.endDate = addDaysISO(next.params.endDate, addDays);
+      newEndDate = next.params.endDate;
+    }
+  }
+  return { input: next, added: structuredClone(added), insertAt, mode, newEndDate };
 }

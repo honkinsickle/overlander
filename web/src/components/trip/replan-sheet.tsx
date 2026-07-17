@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, Loader2, MapPin, Route, X } from "lucide-react";
+import { CalendarCheck, Loader2, MapPin, PlusCircle, Route, X } from "lucide-react";
 import {
   parseReplanAction,
   replanAction,
+  addStopAction,
   applyReplanAction,
   discardReplanAction,
   type ParseReplanResult,
 } from "@/lib/itinerary/edit-actions";
+import type { AddStopMode } from "@/lib/itinerary/edit";
 import type { ReplanDiff } from "@/lib/itinerary/plan-diff";
+
+type ConfirmParse = Extract<ParseReplanResult, { kind: "confirm" }>;
+type AddStopParse = Extract<ParseReplanResult, { kind: "add-stop" }>;
 
 /**
  * Living-plan re-plan flow (dev-gated), mounted inside FindNearbyPanel when
@@ -26,9 +31,10 @@ import type { ReplanDiff } from "@/lib/itinerary/plan-diff";
 
 type Phase =
   | { name: "parsing" }
-  | { name: "confirm"; parse: Extract<ParseReplanResult, { kind: "confirm" }> }
+  | { name: "confirm"; parse: ConfirmParse }
+  | { name: "confirm-addstop"; parse: AddStopParse }
   | { name: "unsupported"; reason: string }
-  | { name: "replanning"; parse: Extract<ParseReplanResult, { kind: "confirm" }> }
+  | { name: "replanning"; label: string }
   | { name: "diff"; diff: ReplanDiff }
   | { name: "applying" }
   | { name: "error"; message: string };
@@ -67,6 +73,9 @@ export function ReplanSheet({
 }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ name: "parsing" });
+  // The signature of the confirmed edit — carried to apply() so it can only
+  // promote the pending row it actually confirmed (stale-pending guard).
+  const [signature, setSignature] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +85,8 @@ export function ReplanSheet({
       if (!r.ok) setPhase({ name: "error", message: r.error });
       else if (r.kind === "unsupported")
         setPhase({ name: "unsupported", reason: r.reason });
+      else if (r.kind === "add-stop")
+        setPhase({ name: "confirm-addstop", parse: r });
       else setPhase({ name: "confirm", parse: r });
     })();
     return () => {
@@ -83,18 +94,36 @@ export function ReplanSheet({
     };
   }, [tripId, request]);
 
-  const runReplan = async (
-    parse: Extract<ParseReplanResult, { kind: "confirm" }>,
-  ) => {
-    setPhase({ name: "replanning", parse });
+  const runReplan = async (parse: ConfirmParse) => {
+    setPhase({ name: "replanning", label: `${parse.place} → ${fmtDate(parse.date)}` });
     const r = await replanAction(tripId, parse.place, parse.date, parse.targetAnchor);
     if (!r.ok) setPhase({ name: "error", message: r.error });
-    else setPhase({ name: "diff", diff: r.diff });
+    else {
+      setSignature(r.editSignature);
+      setPhase({ name: "diff", diff: r.diff });
+    }
+  };
+
+  const runAddStop = async (parse: AddStopParse, mode: AddStopMode) => {
+    setPhase({
+      name: "replanning",
+      label:
+        mode === "add-days"
+          ? `Adding ${parse.place} (+1 day)`
+          : `Adding ${parse.place} (keeping your dates)`,
+    });
+    const r = await addStopAction(tripId, parse.place, mode);
+    if (!r.ok) setPhase({ name: "error", message: r.error });
+    else {
+      setSignature(r.editSignature);
+      setPhase({ name: "diff", diff: r.diff });
+    }
   };
 
   const apply = async () => {
+    if (!signature) return;
     setPhase({ name: "applying" });
-    const r = await applyReplanAction(tripId);
+    const r = await applyReplanAction(tripId, signature);
     if (!r.ok) {
       setPhase({ name: "error", message: r.error });
       return;
@@ -213,8 +242,78 @@ export function ReplanSheet({
         </>
       )}
 
+      {phase.name === "confirm-addstop" && (
+        <>
+          <div
+            className="flex flex-col"
+            style={{
+              gap: 12,
+              padding: 16,
+              borderRadius: 10,
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-mid)",
+            }}
+          >
+            <FieldRow
+              icon={<PlusCircle className="w-3.5 h-3.5" />}
+              label="Add"
+              value={phase.parse.resolvedName}
+              hint={phase.parse.dwell > 0 ? `${phase.parse.dwell}-night stay` : "a stop"}
+            />
+            <FieldRow
+              icon={<Route className="w-3.5 h-3.5" />}
+              label="Fits"
+              value={`between ${phase.parse.prevAnchor} and ${phase.parse.nextAnchor}`}
+              hint={`+${phase.parse.addedMi} mi / +${phase.parse.addedHours} h · ${phase.parse.offsetMi} mi off route`}
+            />
+          </div>
+
+          {phase.parse.farOffRoute && (
+            <p style={{ ...VALUE, color: "#E0B57A", paddingTop: 12 }}>
+              ⚠ {phase.parse.resolvedName} is {phase.parse.offsetMi} mi off your
+              route — adding it is a big detour. Add it anyway?
+            </p>
+          )}
+
+          {phase.parse.needsChoice ? (
+            <>
+              <p style={{ ...VALUE, paddingTop: 16 }}>
+                Adding {phase.parse.resolvedName} (+{phase.parse.addedMi} mi) —
+                how should it fit?
+              </p>
+              <div className="flex flex-col" style={{ gap: 10, paddingTop: 12 }}>
+                <ModeButton
+                  title="Keep your dates"
+                  detail="Tightens the surrounding days; Vancouver stays the same."
+                  onClick={() => runAddStop(phase.parse, "adjust")}
+                />
+                <ModeButton
+                  title="Add a day"
+                  detail="Extends the trip end by one day; nothing else compresses."
+                  onClick={() => runAddStop(phase.parse, "add-days")}
+                />
+                <SheetButton onClick={onClose} kind="ghost" label="Cancel" />
+              </div>
+            </>
+          ) : (
+            <div className="flex" style={{ gap: 10, paddingTop: 16 }}>
+              <SheetButton
+                onClick={() => runAddStop(phase.parse, "adjust")}
+                kind="primary"
+                label={`Add ${phase.parse.place}`}
+              />
+              <SheetButton onClick={onClose} kind="ghost" label="Cancel" />
+            </div>
+          )}
+          <p style={{ ...LABEL, paddingTop: 12 }}>
+            Re-planning regenerates the itinerary — a few minutes. Nothing
+            changes until you apply the result.
+          </p>
+        </>
+      )}
+
       {phase.name === "replanning" && (
-        <Busy text="Re-planning — routing, generation, audit. This takes a few minutes…" />
+        <Busy text={`${phase.label} — routing, generation, audit. A few minutes…`} />
       )}
 
       {phase.name === "diff" && (
@@ -331,6 +430,45 @@ function FieldRow({
         {hint && <span style={LABEL}>{hint}</span>}
       </span>
     </div>
+  );
+}
+
+/** A full-width mode choice for the add-stop tradeoff (title + rationale). */
+function ModeButton({
+  title,
+  detail,
+  onClick,
+}: {
+  title: string;
+  detail: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left transition-colors hover:bg-white/[0.06]"
+      style={{
+        padding: "12px 14px",
+        borderRadius: 8,
+        border: "1px solid var(--amber-dark)",
+        backgroundColor: "rgba(200,169,110,0.08)",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "var(--ff-sans)",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "var(--text-primary)",
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ ...LABEL, textTransform: "none", letterSpacing: 0, marginTop: 2 }}>
+        {detail}
+      </div>
+    </button>
   );
 }
 

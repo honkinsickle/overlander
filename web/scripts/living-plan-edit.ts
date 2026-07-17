@@ -145,6 +145,13 @@ async function main() {
       console.log(`\n[parse] UNSUPPORTED: ${parsed.reason}`);
       process.exit(0);
     }
+    if (parsed.type === "add-stop") {
+      // The harness only exercises the arrive-by loop; add-stop is driven
+      // through the app (edit-actions.ts). Report + stop.
+      console.log(`\n[parse] → type: add-stop · place "${parsed.place}" · dwell ${parsed.dwell}`);
+      console.log("[parse] add-stop runs via the app flow, not this harness.");
+      process.exit(0);
+    }
     console.log(`\n[parse] → type: ${parsed.type}`);
     console.log(`[parse] → place: "${parsed.place}"`);
     console.log(`[parse] → date: ${parsed.date}`);

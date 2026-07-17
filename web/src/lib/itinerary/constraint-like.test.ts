@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isConstraintLike } from "./constraint-like";
 
-test("true positives — plan constraints", () => {
+test("true positives — plan constraints (arrive-by / stay shape)", () => {
   const positives = [
     "arrive at Salmon Glacier on the 19th",
     "arrive in Stewart by the 19th",
@@ -26,15 +26,30 @@ test("true positives — plan constraints", () => {
   }
 });
 
+test("true positives — add-stop shape (verb + place, NO date)", () => {
+  const positives = [
+    "add Barkerville", // the headline case
+    "add Liard Hot Springs",
+    "visit Jasper",
+    "stop at Meziadin Lake",
+    "detour to Salmon Glacier",
+    "swing by Tombstone",
+  ];
+  for (const q of positives) {
+    assert.equal(isConstraintLike(q), true, `should fire: "${q}"`);
+  }
+});
+
 test("true negatives — place searches, incl. constraint-verb place names", () => {
   const negatives = [
-    "Stay Inn Motel Dease Lake", // verb in a place name, no date
+    "Stay Inn Motel Dease Lake", // "stay" verb but no date, not an add-lead
     "gas near Dease Lake", // no verb
     "campgrounds",
     "Salmon Glacier", // bare place
     "2 day hike near Stewart", // duration, no verb
     "coffee", // neither
-    "Add Waypoint Cafe", // verb-ish name, no date
+    "Addison Coffee Roasters", // begins with "add" letters but not the WORD
+    "additive-free snacks", // ditto — word boundary matters
     "", // empty
     "   ", // whitespace
   ];

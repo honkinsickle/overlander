@@ -38,8 +38,16 @@ const DATE_OR_DURATION = new RegExp(
   "i",
 );
 
+/** Add-stop shape: an imperative "add / visit / stop at / detour to …" at the
+ *  START of the query, followed by a place. No date needed — "add Barkerville"
+ *  is a valid trip change. Anchored + word-bounded so a place NAME that merely
+ *  begins with these letters ("Addison Coffee") doesn't trip it. */
+const ADD_STOP_LEAD =
+  /^\s*(add|visit|stop\s+(at|by|in)|detour\s+to|swing\s+by|go\s+to)\s+\S+/i;
+
 export function isConstraintLike(query: string): boolean {
   const q = query.trim();
   if (q.length === 0) return false;
-  return CONSTRAINT_VERB.test(q) && DATE_OR_DURATION.test(q);
+  // add-stop shape (verb + place, no date) OR arrive-by/stay shape (verb + date).
+  return ADD_STOP_LEAD.test(q) || (CONSTRAINT_VERB.test(q) && DATE_OR_DURATION.test(q));
 }
