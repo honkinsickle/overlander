@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, Loader2, MapPin, PlusCircle, Route, X } from "lucide-react";
+import { CalendarCheck, Loader2, MapPin, Navigation, PlusCircle, Route, X } from "lucide-react";
 import {
   parseReplanAction,
   replanAction,
   addStopAction,
   applyReplanAction,
   discardReplanAction,
+  resolveCleaveAction,
   type ParseReplanResult,
+  type CleaveDisplay,
 } from "@/lib/itinerary/edit-actions";
 import type { AddStopMode } from "@/lib/itinerary/edit";
+import type { NowSpec } from "@/lib/itinerary/partial-replan";
 import type { ReplanDiff } from "@/lib/itinerary/plan-diff";
 
 type ConfirmParse = Extract<ParseReplanResult, { kind: "confirm" }>;
@@ -77,6 +80,19 @@ export function ReplanSheet({
   // promote the pending row it actually confirmed (stale-pending guard).
   const [signature, setSignature] = useState<string | null>(null);
 
+  // Partial re-plan: where "now" is. Empty override → date-derived default;
+  // "day 9" → atDay; anything else → atPlace. Drives the tail cleave.
+  const [nowText, setNowText] = useState("");
+  const [editingNow, setEditingNow] = useState(false);
+  const [cleave, setCleave] = useState<CleaveDisplay | null>(null);
+  const nowSpec = useMemo<NowSpec>(() => {
+    const t = nowText.trim();
+    if (!t) return { today: new Date().toISOString().slice(0, 10) };
+    const m = t.match(/day\s*(\d+)/i);
+    if (m) return { atDay: parseInt(m[1], 10) };
+    return { atPlace: t };
+  }, [nowText]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -94,9 +110,25 @@ export function ReplanSheet({
     };
   }, [tripId, request]);
 
+  // Resolve the cleave (free — no spend) whenever "now" changes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const c = await resolveCleaveAction(tripId, nowSpec);
+      if (!cancelled) setCleave(c);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, nowSpec]);
+
+  // Only pass `now` to the paid run when a prefix is actually completed.
+  const partialNow: NowSpec | undefined =
+    cleave?.ok && !cleave.isFullReplan ? nowSpec : undefined;
+
   const runReplan = async (parse: ConfirmParse) => {
     setPhase({ name: "replanning", label: `${parse.place} → ${fmtDate(parse.date)}` });
-    const r = await replanAction(tripId, parse.place, parse.date, parse.targetAnchor);
+    const r = await replanAction(tripId, parse.place, parse.date, parse.targetAnchor, partialNow);
     if (!r.ok) setPhase({ name: "error", message: r.error });
     else {
       setSignature(r.editSignature);
@@ -112,7 +144,7 @@ export function ReplanSheet({
           ? `Adding ${parse.place} (+1 day)`
           : `Adding ${parse.place} (keeping your dates)`,
     });
-    const r = await addStopAction(tripId, parse.place, mode);
+    const r = await addStopAction(tripId, parse.place, mode, partialNow);
     if (!r.ok) setPhase({ name: "error", message: r.error });
     else {
       setSignature(r.editSignature);
@@ -169,6 +201,18 @@ export function ReplanSheet({
       <div style={{ ...VALUE, fontStyle: "italic", paddingBottom: 16 }}>
         “{request}”
       </div>
+
+      {(phase.name === "confirm" || phase.name === "confirm-addstop") &&
+        cleave?.ok && (
+          <PickingUpRow
+            cleave={cleave}
+            editing={editingNow}
+            nowText={nowText}
+            onEdit={() => setEditingNow(true)}
+            onChange={setNowText}
+            onDone={() => setEditingNow(false)}
+          />
+        )}
 
       {phase.name === "parsing" && (
         <Busy text="Understanding the request…" />
@@ -429,6 +473,86 @@ function FieldRow({
         <span style={VALUE}>{value}</span>
         {hint && <span style={LABEL}>{hint}</span>}
       </span>
+    </div>
+  );
+}
+
+/** "Picking up from Day N — place, date. Right?" with a one-phrase override.
+ *  Partial re-plan's front door: it names where the frozen prefix ends so the
+ *  user confirms (or corrects) before spending on the tail. */
+function PickingUpRow({
+  cleave,
+  editing,
+  nowText,
+  onEdit,
+  onChange,
+  onDone,
+}: {
+  cleave: Extract<CleaveDisplay, { ok: true }>;
+  editing: boolean;
+  nowText: string;
+  onEdit: () => void;
+  onChange: (v: string) => void;
+  onDone: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col"
+      style={{
+        gap: 8,
+        padding: "10px 14px",
+        marginBottom: 14,
+        borderRadius: 8,
+        backgroundColor: "rgba(200,169,110,0.06)",
+        border: "1px solid var(--border-mid)",
+      }}
+    >
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <Navigation className="w-3.5 h-3.5" style={{ color: "var(--amber)" }} />
+        <span style={{ ...LABEL, flex: 1 }}>Picking up from</span>
+        {!editing && (
+          <button
+            type="button"
+            onClick={onEdit}
+            style={{ ...LABEL, color: "var(--amber)", textTransform: "none", letterSpacing: 0 }}
+          >
+            Change
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <input
+            autoFocus
+            value={nowText}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onDone()}
+            placeholder="I'm at Prince George — or “day 9”"
+            className="flex-1"
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              backgroundColor: "var(--bg-base)",
+              border: "1px solid var(--input-border-focus)",
+              color: "var(--text-primary)",
+              fontFamily: "var(--ff-sans)",
+              fontSize: 13,
+            }}
+          />
+          <button type="button" onClick={onDone} style={{ ...LABEL, color: "var(--amber)" }}>
+            Set
+          </button>
+        </div>
+      ) : cleave.isFullReplan ? (
+        <span style={VALUE}>The start — re-planning the whole trip.</span>
+      ) : (
+        <span style={VALUE}>
+          Day {cleave.resumeDayNumber} — {cleave.resumePlace}, {fmtDate(cleave.resumeDate)}{" "}
+          <span style={{ color: "var(--text-muted)" }}>
+            · {cleave.completedCount} day{cleave.completedCount === 1 ? "" : "s"} done stay frozen
+          </span>
+        </span>
+      )}
     </div>
   );
 }

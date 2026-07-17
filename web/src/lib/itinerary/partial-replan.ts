@@ -19,6 +19,7 @@
 
 import type { Day } from "@/lib/trips/types";
 import type { Anchor, GenerationInput } from "./facts";
+import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 
 /** A day's start / end place, parsed from its "Start — End" label. */
 export function endPlaceOf(day: Pick<Day, "label">): string {
@@ -189,4 +190,58 @@ export function isEditInFuture(cleave: Cleave, edit: EditPosition): FutureCheck 
     return { ok: false, reason: "That stop is behind you now." };
   }
   return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// STITCH: frozen prefix + recalculated tail → the final trip.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Stitch the frozen completed days (verbatim) with the re-planned tail days,
+ * renumbering the tail to continue the sequence. Tail dates already align
+ * (generated from resumeDate); only dayNumber + id are renumbered. Pure.
+ */
+export function stitchDays(completedDays: Day[], tailDays: Day[]): Day[] {
+  const base = completedDays.length;
+  const renumberedTail = tailDays.map((d, i) => ({
+    ...d,
+    dayNumber: base + i + 1,
+    id: `day-${base + i + 1}`,
+  }));
+  return [...completedDays, ...renumberedTail];
+}
+
+/** Walk the polyline accumulating road miles; return the vertex index at/just
+ *  past `targetMi` (the cut point for the frozen prefix). */
+function splitIndexAtMiles(coords: [number, number][], targetMi: number): number {
+  if (targetMi <= 0) return 1;
+  let acc = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    acc += haversineMi(coords[i], coords[i + 1]);
+    if (acc >= targetMi) return i + 1;
+  }
+  return coords.length;
+}
+
+/**
+ * Splice the stored full-trip route geometry at the resume point and graft on
+ * the recalculated tail — the Google-Maps "recalculate", scoped to ahead.
+ * Truncates `fullCoords` at the projection of `resumeCoords` onto it, then
+ * appends `tailCoords` (deduping the boundary vertex). Pure — the action
+ * decodes the stored polyline, calls this, and re-encodes.
+ */
+export function stitchPolyline(
+  fullCoords: [number, number][],
+  resumeCoords: [number, number],
+  tailCoords: [number, number][],
+): [number, number][] {
+  if (fullCoords.length === 0) return tailCoords;
+  const along = alongRouteMiles(resumeCoords, fullCoords);
+  const cut = along ? splitIndexAtMiles(fullCoords, along.miles) : fullCoords.length;
+  const out = fullCoords.slice(0, cut);
+  for (const c of tailCoords) {
+    const prev = out[out.length - 1];
+    if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) out.push(c);
+  }
+  return out;
 }

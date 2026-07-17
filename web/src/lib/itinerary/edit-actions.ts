@@ -35,6 +35,14 @@ import {
   type GroundedEdit,
   type AddStopMode,
 } from "./edit";
+import {
+  cleaveTrip,
+  buildTailInput,
+  stitchDays,
+  stitchPolyline,
+  type NowSpec,
+  type Cleave,
+} from "./partial-replan";
 import type { Anchor, GenerationInput } from "./facts";
 import type { ReplanDiff } from "./plan-diff";
 
@@ -169,6 +177,55 @@ export async function parseReplanAction(
   }
 }
 
+export type CleaveDisplay =
+  | {
+      ok: true;
+      /** 1-based resume day number. */
+      resumeDayNumber: number;
+      /** Where you're picking up from (last completed day's end), or the trip
+       *  origin when nothing is completed. */
+      resumePlace: string;
+      resumeDate: string;
+      completedCount: number;
+      totalDays: number;
+      /** True when nothing is completed → a normal whole-trip re-plan. */
+      isFullReplan: boolean;
+    }
+  | RailsFailure;
+
+/**
+ * Resolve the "now" cleave for the confirm sheet — free (no routing, no spend,
+ * pure day-table math). Date-derived default OR explicit override
+ * (atDay / atPlace). Surfaced as "Picking up from Day N — <place>, <date>".
+ */
+export async function resolveCleaveAction(
+  tripId: string,
+  now: NowSpec,
+): Promise<CleaveDisplay> {
+  const railFail = checkRails(tripId);
+  if (railFail) return railFail;
+  const loaded = await loadEditableTrip(tripId);
+  if ("ok" in loaded) return loaded;
+
+  try {
+    const c = cleaveTrip(loaded.trip.days, now);
+    return {
+      ok: true,
+      resumeDayNumber: c.resumeIdx + 1,
+      resumePlace: c.syntheticStart?.place ?? loaded.trip.startLocation,
+      resumeDate: c.resumeDate,
+      completedCount: c.completedDays.length,
+      totalDays: loaded.trip.days.length,
+      isFullReplan: c.resumeIdx === 0,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Couldn't resolve where you are.",
+    };
+  }
+}
+
 /** Rebuild the grounded edit server-side from the confirmed fields — the
  *  client only ever sends back what the parse action returned. */
 async function regroundEdit(
@@ -274,9 +331,14 @@ async function previewAddStop(
 }
 
 /**
- * Shared PAID tail: run the pipeline on `editedInput`, quality-gate, bake,
- * diff vs `beforeDays`, and stage as `<tripId>--pending` carrying `signature`.
- * The trip row is never touched here — only applyReplanAction promotes it.
+ * Shared PAID step: run the pipeline, quality-gate, bake, diff, and stage as
+ * `<tripId>--pending` carrying `signature`. The trip row is never touched
+ * here — only applyReplanAction promotes it.
+ *
+ * When `partial` is set, this is a Google-Maps-recalculate scoped to AHEAD:
+ * only the tail (buildTailInput) is regenerated, then stitched onto the frozen
+ * completed prefix (days + route polyline), and the diff is scoped to the tail.
+ * When absent, the whole `editedInput` is regenerated (original behavior).
  */
 async function runGateStage(
   tripId: string,
@@ -284,17 +346,23 @@ async function runGateStage(
   beforeDays: Trip["days"],
   diffMeta: { place: string; date: string },
   signature: string,
+  partial?: { cleave: Cleave; original: Trip },
 ): Promise<{ ok: true; diff: ReplanDiff } | RailsFailure> {
   const { preComputeFacts } = await import("./facts");
   const { generateAndAudit } = await import("./generate");
   const { bakeGeneratedDays } = await import("./bake");
-  const { itineraryToTrip } = await import("./to-trip");
+  const { itineraryToTrip, concatDayRouteCoords } = await import("./to-trip");
   const { attachHeroPhotos } = await import("@/lib/imagery/destination-photo");
   const { computePlanDiff } = await import("./plan-diff");
+  const { encodePolyline } = await import("@/lib/routing/polyline");
+  const { decodePolyline } = await import("@/lib/routing/point-to-polyline");
 
-  const facts = await preComputeFacts(editedInput);
+  // Partial → generate only the tail; else the full edited input.
+  const runInput = partial ? buildTailInput(editedInput, partial.cleave) : editedInput;
+
+  const facts = await preComputeFacts(runInput);
   const { audited, report, unresolved, dayRoutes } = await generateAndAudit(
-    editedInput,
+    runInput,
     facts,
   );
 
@@ -315,20 +383,60 @@ async function runGateStage(
   }
 
   const supabase: SupabaseClient = createSupabaseServiceClient();
-  const baked = await bakeGeneratedDays(audited, editedInput, supabase, dayRoutes);
-  const rePlanned = await attachHeroPhotos(
-    itineraryToTrip(tripId, editedInput, facts, audited, baked, dayRoutes),
+  const baked = await bakeGeneratedDays(audited, runInput, supabase, dayRoutes);
+  const generated = await attachHeroPhotos(
+    itineraryToTrip(tripId, runInput, facts, audited, baked, dayRoutes),
   );
-  const diff = computePlanDiff(beforeDays, rePlanned.days, diffMeta);
+
+  let finalTrip = generated;
+  if (partial) {
+    // Stitch: frozen prefix (verbatim) + recalculated tail.
+    const stitchedDays = stitchDays(partial.cleave.completedDays, generated.days);
+    // Route: truncate the stored polyline at the resume point, graft the tail.
+    const resumeCoords =
+      generated.days[0]?.startCoord ?? partial.original.startCoords;
+    let stitchedPolyline = generated.routePolyline;
+    if (partial.original.routePolyline && resumeCoords) {
+      const full = decodePolyline(partial.original.routePolyline);
+      const tailCoords = concatDayRouteCoords(dayRoutes);
+      stitchedPolyline = encodePolyline(
+        stitchPolyline(full, resumeCoords, tailCoords),
+      );
+    }
+    finalTrip = {
+      ...generated,
+      // Restore the whole-trip head (the tail run's start was the synthetic
+      // "now" anchor; the persisted trip still begins at the real origin).
+      title: partial.original.title,
+      startDate: partial.original.startDate,
+      startLocation: partial.original.startLocation,
+      startCoords: partial.original.startCoords,
+      endDate: editedInput.params.endDate ?? generated.endDate,
+      days: stitchedDays,
+      routePolyline: stitchedPolyline,
+      // Persist the FULL edited input (whole anchor set) + the cleave marker,
+      // so the next edit sees the complete trip and re-cleaves from the new now.
+      generationInput: {
+        ...editedInput,
+        completedThrough: {
+          dayNumber: partial.cleave.resumeIdx,
+          date: partial.cleave.resumeDate,
+          endPlace: partial.cleave.syntheticStart?.place ?? null,
+        },
+      } as unknown as Record<string, unknown>,
+    };
+  }
+
+  const diff = computePlanDiff(beforeDays, generated.days, diffMeta);
 
   const staged = {
-    ...rePlanned,
+    ...finalTrip,
     id: pendingId(tripId),
     livingPlanEditSignature: signature,
   };
   const { error } = await supabase.from("reference_trips").upsert({
     id: pendingId(tripId),
-    title: rePlanned.title,
+    title: finalTrip.title,
     payload: staged,
     source_version: `livingplan-pending@${new Date().toISOString().slice(0, 10)}`,
   });
@@ -336,14 +444,33 @@ async function runGateStage(
   return { ok: true, diff };
 }
 
+/** Resolve the cleave for a paid run: when `now` is set and something is
+ *  completed, returns the partial context (frozen prefix + original) and the
+ *  tail-before slice for a tail-scoped diff. Otherwise a whole-trip run. */
+function partialContext(
+  trip: Trip,
+  now?: NowSpec,
+): { partial?: { cleave: Cleave; original: Trip }; beforeDays: Trip["days"]; cleave?: Cleave } {
+  if (!now) return { beforeDays: trip.days };
+  const cleave = cleaveTrip(trip.days, now);
+  if (cleave.resumeIdx === 0) return { beforeDays: trip.days, cleave }; // nothing done → full
+  return {
+    partial: { cleave, original: trip },
+    beforeDays: trip.days.slice(cleave.resumeIdx),
+    cleave,
+  };
+}
+
 /**
  * The PAID step for arrive-by: re-run with the pinned anchor, stage as pending.
+ * When `now` marks a trip in progress, only the tail is re-planned.
  */
 export async function replanAction(
   tripId: string,
   place: string,
   date: string,
   targetAnchor: string,
+  now?: NowSpec,
 ): Promise<ReplanResult> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -351,15 +478,21 @@ export async function replanAction(
   if ("ok" in loaded) return loaded;
 
   try {
+    const ctx = partialContext(loaded.trip, now);
+    // Edit-in-future guard: can't pin a date that's already passed.
+    if (ctx.cleave && date < ctx.cleave.resumeDate) {
+      return { ok: false, error: `${date} has already passed — you can only change the road ahead.` };
+    }
     const grounded = await regroundEdit(loaded.input, place, date, targetAnchor);
     const { input: editedInput } = applyEdit(loaded.input, grounded);
-    const signature = editSignature(["arrive-by", targetAnchor, date]);
+    const signature = editSignature(["arrive-by", targetAnchor, date, now ? "partial" : "full"]);
     const staged = await runGateStage(
       tripId,
       editedInput,
-      loaded.trip.days,
+      ctx.beforeDays,
       { place: targetAnchor, date },
       signature,
+      ctx.partial,
     );
     if (!staged.ok) return staged;
     return { ok: true, diff: staged.diff, editSignature: signature };
@@ -378,6 +511,7 @@ export async function addStopAction(
   tripId: string,
   place: string,
   mode: AddStopMode,
+  now?: NowSpec,
 ): Promise<ReplanResult> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -387,6 +521,7 @@ export async function addStopAction(
   try {
     const { routeBetween } = await import("@/lib/routing/route-between");
     const { alongRouteMiles } = await import("@/lib/routing/point-to-polyline");
+    const { geocode } = await import("@/lib/routing/geocode");
 
     const coords = await anchorCoords(loaded.input);
     const resolved = await new PlaceResolver().resolve(place, coords[0]);
@@ -404,6 +539,21 @@ export async function addStopAction(
     };
     const pos = inferAddStopPosition(loaded.input.anchors, anchorMiles, newAlong);
 
+    const ctx = partialContext(loaded.trip, now);
+    // Edit-in-future guard (geometry): the new stop must sit AHEAD of the
+    // resume point along the route — you can't add a stop you've driven past.
+    if (ctx.cleave && ctx.partial) {
+      const resumeCoords = await geocode(ctx.cleave.syntheticStart!.place);
+      const resumeAlong =
+        alongRouteMiles(resumeCoords, baseRoute.coordinates)?.miles ?? 0;
+      if (newAlong.miles < resumeAlong) {
+        return {
+          ok: false,
+          error: `${resolved.place.displayName} is behind you now — you can only add stops on the road ahead.`,
+        };
+      }
+    }
+
     // dwell isn't re-parsed here — the confirm sheet already captured it; the
     // MVP re-infers position but treats dwell as 0 (a plain visit). A dwelled
     // add would thread dwell through the action args; deferred.
@@ -415,14 +565,15 @@ export async function addStopAction(
       pos.insertAt,
       mode,
     );
-    const signature = editSignature(["add-stop", place, mode]);
+    const signature = editSignature(["add-stop", place, mode, now ? "partial" : "full"]);
     const endDate = newEndDate ?? loaded.input.params.endDate ?? "";
     const staged = await runGateStage(
       tripId,
       editedInput,
-      loaded.trip.days,
+      ctx.beforeDays,
       { place: resolved.place.displayName, date: endDate },
       signature,
+      ctx.partial,
     );
     if (!staged.ok) return staged;
     return { ok: true, diff: staged.diff, editSignature: signature };

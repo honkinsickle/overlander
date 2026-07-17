@@ -15,6 +15,8 @@ import {
   buildTailInput,
   isEditInFuture,
   endPlaceOf,
+  stitchDays,
+  stitchPolyline,
 } from "./partial-replan";
 import type { Day } from "@/lib/trips/types";
 import type { GenerationInput } from "./facts";
@@ -134,4 +136,42 @@ test("no prefix completed → full re-plan (null synthetic start, input unchange
   assert.equal(c.resumeIdx, 0);
   assert.equal(c.syntheticStart, null);
   assert.equal(buildTailInput(INPUT, c), INPUT); // returns the full input
+});
+
+test("stitchDays: completed kept verbatim, tail renumbered to continue", () => {
+  const completed = DAYS.slice(0, 9); // days 1–9 (through PG)
+  const tail: Day[] = [
+    mk(1, "2026-07-22", "Prince George, BC — Wells, BC", 113),
+    mk(2, "2026-07-23", "Wells, BC — Clinton, BC", 224),
+  ];
+  const stitched = stitchDays(completed, tail);
+  assert.equal(stitched.length, 11);
+  // Completed prefix is byte-identical (same objects).
+  assert.equal(stitched[8], completed[8]);
+  assert.equal(stitched[8].label, "Smithers, BC — Prince George, BC");
+  // Tail renumbered to continue the sequence.
+  assert.equal(stitched[9].dayNumber, 10);
+  assert.equal(stitched[9].id, "day-10");
+  assert.equal(stitched[9].label, "Prince George, BC — Wells, BC");
+  assert.equal(stitched[10].dayNumber, 11);
+  assert.equal(stitched[10].id, "day-11");
+});
+
+test("stitchPolyline: truncates at the resume point, grafts the tail", () => {
+  // A simple west→east line at lat 50, mile-spaced-ish by degrees.
+  const full: [number, number][] = [
+    [-125, 50], [-124, 50], [-123, 50], [-122, 50], [-121, 50],
+  ];
+  // Resume near [-123,50] (~the middle); tail heads NORTH from there.
+  const tail: [number, number][] = [[-123, 50], [-123, 51], [-123, 52]];
+  const out = stitchPolyline(full, [-123, 50], tail);
+  // Prefix up to ~[-123,50] + the northward tail, boundary deduped.
+  assert.deepEqual(out[0], [-125, 50]); // starts at the trip origin
+  assert.deepEqual(out[out.length - 1], [-123, 52]); // ends at the new tail end
+  // The eastern part of the old line ([-122],[-121]) is GONE (recalculated away).
+  assert.ok(!out.some((c) => c[0] === -121 || c[0] === -122));
+  // No consecutive duplicate at the graft boundary.
+  for (let i = 1; i < out.length; i++) {
+    assert.ok(!(out[i][0] === out[i - 1][0] && out[i][1] === out[i - 1][1]));
+  }
 });

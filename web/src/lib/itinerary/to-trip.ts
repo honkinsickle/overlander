@@ -34,10 +34,10 @@ import { encodePolyline } from "@/lib/routing/polyline";
  * days (day N ends where day N+1 starts). Returns undefined when no day has
  * geometry (nothing to draw).
  */
-export function assembleRoutePolyline(
+export function concatDayRouteCoords(
   dayRoutes: DayRoute[] | undefined,
-): string | undefined {
-  if (!dayRoutes?.length) return undefined;
+): [number, number][] {
+  if (!dayRoutes?.length) return [];
   const ordered = [...dayRoutes].sort((a, b) => a.n - b.n);
   const coords: [number, number][] = [];
   for (const dr of ordered) {
@@ -49,6 +49,13 @@ export function assembleRoutePolyline(
       if (!prev || prev[0] !== c[0] || prev[1] !== c[1]) coords.push(c);
     }
   }
+  return coords;
+}
+
+export function assembleRoutePolyline(
+  dayRoutes: DayRoute[] | undefined,
+): string | undefined {
+  const coords = concatDayRouteCoords(dayRoutes);
   return coords.length >= 2 ? encodePolyline(coords) : undefined;
 }
 
