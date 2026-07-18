@@ -31,6 +31,10 @@ import {
   applyEdit,
   inferAddStopPosition,
   applyAddStop,
+  applyReschedule,
+  applyStayLonger,
+  applySkip,
+  findAnchorIndex,
   ADD_STOP_ABSORB_MI,
   type GroundedEdit,
   type AddStopMode,
@@ -616,6 +620,160 @@ export async function addStopAction(
     return { ok: true, diff: staged.diff, editSignature: signature };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Add-stop failed." };
+  }
+}
+
+/** Split a fuzzy multi-place skip string into individual labels. */
+function splitSkipLabels(place: string): string[] {
+  return place
+    .split(/,|\band\b/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1);
+}
+
+/** Resolve a place → coords + its inferred insert position on the route. */
+async function resolveInsert(
+  input: GenerationInput,
+  place: string,
+): Promise<{ coords: [number, number]; displayName: string; insertAt: number }> {
+  const { routeBetween } = await import("@/lib/routing/route-between");
+  const { alongRouteMiles } = await import("@/lib/routing/point-to-polyline");
+  const coordsList = await anchorCoords(input);
+  const resolved = await new PlaceResolver().resolve(place, coordsList[0]);
+  if (resolved.status !== "resolved") {
+    throw new Error(`Couldn't find "${place}" (${resolved.status}).`);
+  }
+  const route = await routeBetween(coordsList);
+  const anchorMiles = coordsList.map(
+    (c) => (alongRouteMiles(c, route.coordinates) ?? { miles: 0 }).miles,
+  );
+  const newAlong = alongRouteMiles(resolved.place.coords, route.coordinates) ?? {
+    miles: 0,
+    offsetMi: 0,
+  };
+  const pos = inferAddStopPosition(input.anchors, anchorMiles, newAlong);
+  return { coords: resolved.place.coords, displayName: resolved.place.displayName, insertAt: pos.insertAt };
+}
+
+/** The interpreted edit the composer dispatches. */
+export type EditPayload = {
+  type: "arrive-by" | "add-stop" | "reschedule" | "skip" | "stay-longer" | "change-end";
+  place: string | null;
+  date: string | null;
+  dwell: number | null;
+  nights: number | null;
+};
+
+/**
+ * DISPATCH (Stage 2): the composer's confirmed interpretation → the right
+ * anchor-set mutation → the SAME runGateStage → stage as pending. Reuses the
+ * proven diff/apply flow wholesale (applyReplanAction promotes with the
+ * editSignature guard). Partial when `now` marks a trip in progress.
+ */
+export async function executeEditAction(
+  tripId: string,
+  edit: EditPayload,
+  now?: NowSpec,
+): Promise<ReplanResult> {
+  const railFail = checkRails(tripId);
+  if (railFail) return railFail;
+  const loaded = await loadEditableTrip(tripId);
+  if ("ok" in loaded) return loaded;
+
+  try {
+    const ctx = partialContext(loaded.trip, now);
+    const resumeDate = ctx.cleave?.resumeDate;
+
+    let editedInput: GenerationInput;
+    let signature: string;
+    let diffMeta: { place: string; date: string };
+
+    switch (edit.type) {
+      case "reschedule": {
+        if (!edit.place || !edit.date) return { ok: false, error: "Reschedule needs a place and a date." };
+        if (resumeDate && edit.date < resumeDate)
+          return { ok: false, error: `${edit.date} has already passed.` };
+        const idx = findAnchorIndex(loaded.input.anchors, edit.place);
+        let coords: [number, number] = [0, 0];
+        let insertAt = 1;
+        let name = edit.place;
+        if (idx === -1) {
+          const r = await resolveInsert(loaded.input, edit.place);
+          coords = r.coords; insertAt = r.insertAt; name = r.displayName;
+        }
+        editedInput = applyReschedule(loaded.input, name, coords, edit.date, insertAt).input;
+        signature = editSignature(["reschedule", edit.place, edit.date, now ? "partial" : "full"]);
+        diffMeta = { place: name, date: edit.date };
+        break;
+      }
+      case "stay-longer": {
+        if (!edit.place) return { ok: false, error: "Stay-longer needs a place." };
+        const nights = edit.nights ?? 1;
+        const idx = findAnchorIndex(loaded.input.anchors, edit.place);
+        let coords: [number, number] = [0, 0];
+        let insertAt = 1;
+        let name = edit.place;
+        if (idx === -1) {
+          const r = await resolveInsert(loaded.input, edit.place);
+          coords = r.coords; insertAt = r.insertAt; name = r.displayName;
+        }
+        editedInput = applyStayLonger(loaded.input, name, coords, nights, insertAt).input;
+        signature = editSignature(["stay-longer", edit.place, String(nights), now ? "partial" : "full"]);
+        diffMeta = { place: name, date: loaded.input.params.endDate ?? "" };
+        break;
+      }
+      case "skip": {
+        if (!edit.place) return { ok: false, error: "Skip needs a place." };
+        const labels = splitSkipLabels(edit.place);
+        editedInput = applySkip(loaded.input, labels).input;
+        signature = editSignature(["skip", edit.place, now ? "partial" : "full"]);
+        diffMeta = { place: labels.join(" · "), date: loaded.input.params.endDate ?? "" };
+        break;
+      }
+      case "change-end": {
+        if (!edit.date) return { ok: false, error: "Change-end needs a date." };
+        const next = structuredClone(loaded.input);
+        const end = next.anchors[next.anchors.length - 1];
+        end.datePin = "fixed";
+        end.date = edit.date;
+        next.params.endDate = edit.date;
+        editedInput = next;
+        signature = editSignature(["change-end", edit.date, now ? "partial" : "full"]);
+        diffMeta = { place: end.place, date: edit.date };
+        break;
+      }
+      case "arrive-by": {
+        if (!edit.place || !edit.date) return { ok: false, error: "Arrive-by needs a place and a date." };
+        if (resumeDate && edit.date < resumeDate)
+          return { ok: false, error: `${edit.date} has already passed.` };
+        // Reuse the reschedule mutation (pin an existing anchor / insert one).
+        const idx = findAnchorIndex(loaded.input.anchors, edit.place);
+        let coords: [number, number] = [0, 0];
+        let insertAt = 1;
+        let name = edit.place;
+        if (idx === -1) {
+          const r = await resolveInsert(loaded.input, edit.place);
+          coords = r.coords; insertAt = r.insertAt; name = r.displayName;
+        }
+        editedInput = applyReschedule(loaded.input, name, coords, edit.date, insertAt).input;
+        signature = editSignature(["arrive-by", edit.place, edit.date, now ? "partial" : "full"]);
+        diffMeta = { place: name, date: edit.date };
+        break;
+      }
+      case "add-stop": {
+        // add-stop keeps its own two-mode flow via addStopAction; the composer
+        // routes there directly. This dispatch shouldn't receive it.
+        return { ok: false, error: "add-stop is handled by its own two-mode flow." };
+      }
+      default:
+        return { ok: false, error: `Unsupported edit type: ${edit.type}` };
+    }
+
+    const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, ctx.partial);
+    if (!staged.ok) return staged;
+    return { ok: true, diff: staged.diff, editSignature: signature };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Edit failed." };
   }
 }
 

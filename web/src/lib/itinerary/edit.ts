@@ -420,3 +420,113 @@ export function applyAddStop(
   }
   return { input: next, added: structuredClone(added), insertAt, mode, newEndDate };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// RESCHEDULE / SKIP / STAY-LONGER — anchor-set mutations, then the same
+// runGateStage pipeline. Pure; the action resolves coords/positions and runs.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Index of the anchor matching `place` (loose name match), or -1. */
+export function findAnchorIndex(anchors: Anchor[], place: string): number {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const p = norm(place);
+  return anchors.findIndex((a) => {
+    const q = norm(a.place);
+    return q === p || q.includes(p) || p.includes(q);
+  });
+}
+
+export type SingleAnchorEdit = {
+  input: GenerationInput;
+  /** The anchor after the edit (inserted or mutated), for the confirm/diff. */
+  anchor: Anchor;
+  /** True when a NEW anchor was inserted (the place wasn't already one). */
+  inserted: boolean;
+};
+
+/**
+ * RESCHEDULE: pin a place to a fixed date. If it's already an anchor, set its
+ * date; if it's a pacing city (not an anchor), INSERT it as a fixed-date
+ * waypoint at `insertAt` — promoting the generator's soft choice to a hard
+ * date-pin the re-run must honor. Pure.
+ */
+export function applyReschedule(
+  input: GenerationInput,
+  place: string,
+  coords: [number, number],
+  date: string,
+  insertAt: number,
+): SingleAnchorEdit {
+  const next = structuredClone(input);
+  const idx = findAnchorIndex(next.anchors, place);
+  if (idx !== -1) {
+    const a = next.anchors[idx];
+    a.datePin = "fixed";
+    a.date = date;
+    return { input: next, anchor: structuredClone(a), inserted: false };
+  }
+  const added: Anchor = { place, role: "waypoint", datePin: "fixed", date, dwell: 0, note: null, coords };
+  next.anchors.splice(insertAt, 0, added);
+  return { input: next, anchor: structuredClone(added), inserted: true };
+}
+
+/**
+ * STAY-LONGER: add `nights` at a place. If it's an anchor, bump its dwell; if
+ * it's a pacing city, insert it as a dwelled (flexible-date) waypoint. Pure.
+ */
+export function applyStayLonger(
+  input: GenerationInput,
+  place: string,
+  coords: [number, number],
+  nights: number,
+  insertAt: number,
+): SingleAnchorEdit {
+  const next = structuredClone(input);
+  const idx = findAnchorIndex(next.anchors, place);
+  if (idx !== -1) {
+    const a = next.anchors[idx];
+    a.dwell += nights;
+    return { input: next, anchor: structuredClone(a), inserted: false };
+  }
+  const added: Anchor = { place, role: "waypoint", datePin: "flexible", date: null, dwell: nights, note: null, coords };
+  next.anchors.splice(insertAt, 0, added);
+  return { input: next, anchor: structuredClone(added), inserted: true };
+}
+
+export type AppliedSkip = {
+  input: GenerationInput;
+  /** Anchors removed (place labels), if any were anchors. */
+  removed: string[];
+  /** Labels added to params.avoid (pacing cities can't be removed from the
+   *  anchor set — the generator is told to avoid them). */
+  avoided: string[];
+};
+
+/**
+ * SKIP: drop places from the trip. An anchor match is removed outright (never
+ * the start/end); anything else is added to params.avoid so the re-run doesn't
+ * route through it. `labels` may be several places (a fuzzy "boring middle").
+ * Pure.
+ */
+export function applySkip(input: GenerationInput, labels: string[]): AppliedSkip {
+  const next = structuredClone(input);
+  const removed: string[] = [];
+  const avoided: string[] = [];
+  for (const label of labels) {
+    const idx = findAnchorIndex(next.anchors, label);
+    const isEndpoint =
+      idx !== -1 && (next.anchors[idx].role === "start" || next.anchors[idx].role === "end");
+    if (idx !== -1 && !isEndpoint) {
+      removed.push(next.anchors[idx].place);
+      next.anchors.splice(idx, 1);
+    } else {
+      // Pacing city (or an endpoint we won't remove) → tell the generator to
+      // skip it via the avoid list.
+      if (!next.params.avoid.some((a) => a.toLowerCase() === label.toLowerCase())) {
+        next.params.avoid.push(label);
+        avoided.push(label);
+      }
+    }
+  }
+  return { input: next, removed, avoided };
+}

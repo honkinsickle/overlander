@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, X } from "lucide-react";
 import {
   interpretEditAction,
+  executeEditAction,
+  addStopAction,
+  applyReplanAction,
+  discardReplanAction,
   type InterpretActionResult,
+  type EditPayload,
 } from "@/lib/itinerary/edit-actions";
 import type { InterpretResult } from "@/lib/itinerary/interpret";
 import type { ClarifyContext } from "@/lib/itinerary/interpret";
+import type { NowSpec } from "@/lib/itinerary/partial-replan";
+import type { ReplanDiff } from "@/lib/itinerary/plan-diff";
+import type { AddStopMode } from "@/lib/itinerary/edit";
 
 /**
  * Living-plan dedicated CHANGE-TRIP box (dev-gated) — a command line with a
@@ -27,6 +36,9 @@ type Phase =
   | { name: "composing" }
   | { name: "interpreting" }
   | { name: "result"; result: InterpretResult }
+  | { name: "replanning"; label: string }
+  | { name: "diff"; diff: ReplanDiff; editSignature: string }
+  | { name: "applying" }
   | { name: "error"; message: string };
 
 const LABEL: React.CSSProperties = {
@@ -87,6 +99,58 @@ export function ChangeTripComposer({
     setClarify(nextCtx);
     setAnswer("");
     interpret(clarify.originalText, nextCtx);
+  };
+
+  const router = useRouter();
+
+  /** The confirmed interpretation → dispatch to the executor → the SAME
+   *  runGateStage/diff flow (reused wholesale). `now` comes from the utterance
+   *  ("I'm at Stewart") when present → partial re-plan. */
+  const dispatch = async (r: Extract<InterpretResult, { kind: "edit" }>) => {
+    const now: NowSpec | undefined = r.nowPlace ? { atPlace: r.nowPlace } : undefined;
+    if (r.type === "add-stop") {
+      // add-stop keeps its own two-mode flow.
+      await runAddStop(r, "adjust", now);
+      return;
+    }
+    setPhase({ name: "replanning", label: `${r.type}: ${r.place ?? ""}` });
+    const payload: EditPayload = {
+      type: r.type,
+      place: r.place,
+      date: r.date,
+      dwell: r.dwell,
+      nights: r.nights,
+    };
+    const res = await executeEditAction(tripId, payload, now);
+    if (!res.ok) setPhase({ name: "error", message: res.error });
+    else setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
+  };
+
+  const runAddStop = async (
+    r: Extract<InterpretResult, { kind: "edit" }>,
+    mode: AddStopMode,
+    now?: NowSpec,
+  ) => {
+    setPhase({ name: "replanning", label: `add ${r.place ?? ""}` });
+    const res = await addStopAction(tripId, r.place ?? "", mode, now);
+    if (!res.ok) setPhase({ name: "error", message: res.error });
+    else setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
+  };
+
+  const apply = async (editSignature: string) => {
+    setPhase({ name: "applying" });
+    const res = await applyReplanAction(tripId, editSignature);
+    if (!res.ok) {
+      setPhase({ name: "error", message: res.error });
+      return;
+    }
+    router.refresh();
+    onClose();
+  };
+
+  const keepOriginal = async () => {
+    await discardReplanAction(tripId);
+    onClose();
   };
 
   const clarifyCount = clarify?.turns.length ?? 0;
@@ -233,8 +297,129 @@ export function ChangeTripComposer({
       )}
 
       {phase.name === "result" && phase.result.kind === "edit" && (
-        <EditConfirmCard result={phase.result} />
+        <EditConfirmCard result={phase.result} onReplan={() => dispatch(phase.result as Extract<InterpretResult, { kind: "edit" }>)} />
       )}
+
+      {phase.name === "replanning" && (
+        <div className="flex items-center" style={{ gap: 10, paddingTop: 16 }}>
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--amber)" }} />
+          <span style={{ ...VALUE, color: "var(--text-muted)" }}>
+            {phase.label} — routing, generation, audit. A few minutes…
+          </span>
+        </div>
+      )}
+
+      {phase.name === "diff" && (
+        <DiffCard
+          diff={phase.diff}
+          onApply={() => apply(phase.editSignature)}
+          onKeep={keepOriginal}
+        />
+      )}
+
+      {phase.name === "applying" && (
+        <div className="flex items-center" style={{ gap: 10, paddingTop: 16 }}>
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--amber)" }} />
+          <span style={{ ...VALUE, color: "var(--text-muted)" }}>Applying…</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Reuses the ReplanDiff shape produced by runGateStage (same back-end the
+ *  arrive-by/add-stop/partial flows use). Apply → applyReplanAction (signature
+ *  guard) → slideup re-renders. */
+function DiffCard({
+  diff,
+  onApply,
+  onKeep,
+}: {
+  diff: ReplanDiff;
+  onApply: () => void;
+  onKeep: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col"
+      style={{
+        gap: 8,
+        marginTop: 16,
+        padding: 16,
+        borderRadius: 10,
+        backgroundColor: "var(--bg-card)",
+        border: "1px solid var(--border-mid)",
+        maxHeight: 360,
+        overflowY: "auto",
+      }}
+    >
+      <div style={VALUE}>
+        {diff.endpointsHeld.start && diff.endpointsHeld.end
+          ? "✓ Start and end dates held"
+          : "⚠ Trip endpoints moved"}
+      </div>
+      {diff.stopsAdded.length > 0 && (
+        <div style={{ ...VALUE, color: "#9CD4B0" }}>+ {diff.stopsAdded.join(" · ")}</div>
+      )}
+      {diff.stopsRemoved.length > 0 && (
+        <div style={{ ...VALUE, color: "var(--text-muted)" }}>− {diff.stopsRemoved.join(" · ")}</div>
+      )}
+      <div style={{ ...VALUE, color: "var(--text-muted)" }}>
+        Rest days: {diff.layovers.before} → {diff.layovers.after}
+      </div>
+      <div
+        style={{
+          borderTop: "1px solid var(--border-subtle)",
+          marginTop: 6,
+          paddingTop: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+        }}
+      >
+        {diff.days.map((d) => (
+          <div
+            key={d.date}
+            className="flex"
+            style={{ gap: 10, fontFamily: "var(--ff-mono)", fontSize: 12, color: "var(--text-muted)" }}
+          >
+            <span style={{ width: 84, flexShrink: 0 }}>{fmtDate(d.date)}</span>
+            <span style={{ width: 52, flexShrink: 0, textAlign: "right" }}>{d.miles} mi</span>
+            <span className="truncate" style={{ color: "var(--text-primary)" }}>{d.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex" style={{ gap: 10, paddingTop: 10 }}>
+        <button
+          type="button"
+          onClick={onApply}
+          style={{
+            padding: "9px 16px",
+            borderRadius: 8,
+            backgroundColor: "var(--button-primary)",
+            color: "var(--text-primary)",
+            fontFamily: "var(--ff-sans)",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          Apply
+        </button>
+        <button
+          type="button"
+          onClick={onKeep}
+          style={{
+            padding: "9px 16px",
+            borderRadius: 8,
+            border: "1px solid var(--border-mid)",
+            color: "var(--text-muted)",
+            fontFamily: "var(--ff-sans)",
+            fontSize: 14,
+          }}
+        >
+          Keep original
+        </button>
+      </div>
     </div>
   );
 }
@@ -250,7 +435,13 @@ const fmtDate = (iso: string) =>
 /** Shows the interpreted edit + (crucially) the fuzzy-reading echo so the user
  *  confirms the concrete interpretation before any spend. Stage 1: display
  *  only; the [Re-plan] dispatch to executors lands in Stage 2. */
-function EditConfirmCard({ result }: { result: Extract<InterpretResult, { kind: "edit" }> }) {
+function EditConfirmCard({
+  result,
+  onReplan,
+}: {
+  result: Extract<InterpretResult, { kind: "edit" }>;
+  onReplan: () => void;
+}) {
   const bits: string[] = [];
   if (result.place) bits.push(result.place);
   if (result.date) bits.push(fmtDate(result.date));
@@ -295,13 +486,11 @@ function EditConfirmCard({ result }: { result: Extract<InterpretResult, { kind: 
       <div className="flex" style={{ gap: 10, paddingTop: 8 }}>
         <button
           type="button"
-          disabled
-          title="Re-plan dispatch lands in Stage 2"
+          onClick={onReplan}
           style={{
             padding: "9px 16px",
             borderRadius: 8,
             backgroundColor: "var(--button-primary)",
-            opacity: 0.5,
             color: "var(--text-primary)",
             fontFamily: "var(--ff-sans)",
             fontSize: 14,
@@ -311,7 +500,7 @@ function EditConfirmCard({ result }: { result: Extract<InterpretResult, { kind: 
           Re-plan trip
         </button>
         <span style={{ ...LABEL, textTransform: "none", letterSpacing: 0, alignSelf: "center" }}>
-          confirm this reading — executor wiring is Stage 2
+          confirm this reading
         </span>
       </div>
     </div>
