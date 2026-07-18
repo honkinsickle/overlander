@@ -36,6 +36,7 @@ import {
   applySkip,
   splitSkipLabels,
   findAnchorIndex,
+  preflightFeasibility,
   ADD_STOP_ABSORB_MI,
   type GroundedEdit,
   type AddStopMode,
@@ -761,6 +762,18 @@ export async function executeEditAction(
       default:
         return { ok: false, error: `Unsupported edit type: ${edit.type}` };
     }
+
+    // PRE-FLIGHT (free): refuse an arithmetically-impossible date pin BEFORE the
+    // paid generation. Geocode the edited anchors (cheap) and check the fixed-
+    // date spans against the mile cap — only clear impossibilities fail here;
+    // borderline edits pass to the full gate (compress-or-refuse).
+    const pfCoords = await anchorCoords(editedInput);
+    const pf = preflightFeasibility(
+      editedInput.anchors,
+      editedInput.params.maxDailyDriveMi,
+      pfCoords,
+    );
+    if (!pf.ok) return { ok: false, error: `Can't fit that — ${pf.reason}` };
 
     const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, ctx.partial);
     if (!staged.ok) return staged;

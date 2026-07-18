@@ -426,6 +426,63 @@ export function applyAddStop(
 // runGateStage pipeline. Pure; the action resolves coords/positions and runs.
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Whole days between two ISO dates (UTC). */
+function daysBetweenISO(a: string, b: string): number {
+  return Math.round(
+    (new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86400000,
+  );
+}
+
+export type Preflight = { ok: true } | { ok: false; reason: string };
+
+/**
+ * PRE-FLIGHT feasibility: a FREE arithmetic check before the paid generation.
+ * Fails fast ONLY on clear impossibility — between two consecutive FIXED-date
+ * anchors, the straight-line distance is a strict LOWER BOUND on the driving
+ * distance (roads are never shorter than crow-flies), so if even that exceeds
+ * `days × cap`, no plan can fit and we refuse without generating. Because it's
+ * a lower bound it NEVER false-refuses: a borderline edit (drivable crow-flies
+ * but tight by road) passes here and the full gate decides (compress-or-refuse).
+ *
+ * Deliberately ignores dwell days (that only OVER-estimates available days →
+ * under-refuses → stays safe). `coords[i]` is the resolved coord of anchor i.
+ */
+export function preflightFeasibility(
+  anchors: Anchor[],
+  maxDailyDriveMi: number,
+  coords: ([number, number] | null)[],
+): Preflight {
+  let lastFixed = -1;
+  let accMi = 0;
+  for (let i = 0; i < anchors.length; i++) {
+    if (i > 0 && coords[i] && coords[i - 1]) {
+      accMi += haversineMi(coords[i - 1]!, coords[i]!);
+    }
+    const a = anchors[i];
+    if (a.datePin === "fixed" && a.date) {
+      if (lastFixed >= 0) {
+        const days = daysBetweenISO(anchors[lastFixed].date!, a.date);
+        if (days <= 0) {
+          return {
+            ok: false,
+            reason: `${a.place} is fixed on or before ${anchors[lastFixed].place} — the dates are out of order.`,
+          };
+        }
+        const budgetMi = days * maxDailyDriveMi;
+        if (accMi > budgetMi) {
+          return {
+            ok: false,
+            reason: `${anchors[lastFixed].place} → ${a.place} is at least ~${Math.round(accMi)} mi, but only ${days} day${days === 1 ? "" : "s"} × ${maxDailyDriveMi} mi (${budgetMi} mi) is available — not reachable.`,
+          };
+        }
+      }
+      lastFixed = i;
+      accMi = 0;
+    }
+  }
+  return { ok: true };
+}
+
 /** Index of the anchor matching `place`, or -1. Matches on the TOWN (the
  *  segment before the first comma) so "Stewart" ↔ "Stewart, British Columbia"
  *  works, but a long descriptive label that merely CONTAINS an anchor name
