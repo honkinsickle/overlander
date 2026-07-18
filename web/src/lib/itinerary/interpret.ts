@@ -89,7 +89,7 @@ Edit types:
 - "arrive-by": be at an EXISTING anchor/stop by a date. place + date; targetAnchor = the exact anchor string.
 - "add-stop": add a NEW place not currently on the trip. place; dwell = nights (0 = just visit). If they state a position ("between X and Y"), set betweenStart/betweenEnd; otherwise leave null (position is inferred downstream).
 - "reschedule": move WHEN they're at an existing place (anchor OR a day-stop) to a date. place + date. If no date is given, you CANNOT reschedule — emit clarify "Reschedule <place> to when?".
-- "skip": drop an existing stop. place.
+- "skip": drop existing stop(s). place = ONLY the concrete place name(s), comma-separated — NO prose, NO parentheticals. Put any descriptive reading ("the interior stretch between X and Y") in "interpretation", never in "place".
 - "stay-longer": add nights at an existing place. place + nights (default 1 for "a day"/"longer").
 - "change-end": move the trip's end date (earlier/later). place = the end place; date = the new end date (resolve "a day earlier" against the current end).
 

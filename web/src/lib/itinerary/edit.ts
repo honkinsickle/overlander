@@ -426,14 +426,16 @@ export function applyAddStop(
 // runGateStage pipeline. Pure; the action resolves coords/positions and runs.
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Index of the anchor matching `place` (loose name match), or -1. */
+/** Index of the anchor matching `place`, or -1. Matches on the TOWN (the
+ *  segment before the first comma) so "Stewart" ↔ "Stewart, British Columbia"
+ *  works, but a long descriptive label that merely CONTAINS an anchor name
+ *  ("…between Barkerville and Vancouver") does NOT false-match — that
+ *  substring-anywhere bug once removed an unrelated anchor during a skip. */
 export function findAnchorIndex(anchors: Anchor[], place: string): number {
-  const norm = (s: string) => s.trim().toLowerCase();
-  const p = norm(place);
-  return anchors.findIndex((a) => {
-    const q = norm(a.place);
-    return q === p || q.includes(p) || p.includes(q);
-  });
+  const town = (s: string) => s.trim().toLowerCase().split(",")[0].trim();
+  const p = town(place);
+  if (!p) return -1;
+  return anchors.findIndex((a) => town(a.place) === p);
 }
 
 export type SingleAnchorEdit = {
@@ -491,6 +493,18 @@ export function applyStayLonger(
   const added: Anchor = { place, role: "waypoint", datePin: "flexible", date: null, dwell: nights, note: null, coords };
   next.anchors.splice(insertAt, 0, added);
   return { input: next, anchor: structuredClone(added), inserted: true };
+}
+
+/** Split a multi-place skip string into individual place labels. Strips any
+ *  parenthetical/descriptive suffix first (the interpreter sometimes appends a
+ *  prose reading like "(the interior stretch between Barkerville and
+ *  Vancouver)") so it never leaks into a place label. */
+export function splitSkipLabels(place: string): string[] {
+  return place
+    .replace(/\([^)]*\)/g, "") // drop "(…)" descriptions
+    .split(/,|\band\b/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1);
 }
 
 export type AppliedSkip = {

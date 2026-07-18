@@ -34,6 +34,7 @@ import {
   applyReschedule,
   applyStayLonger,
   applySkip,
+  splitSkipLabels,
   findAnchorIndex,
   ADD_STOP_ABSORB_MI,
   type GroundedEdit,
@@ -621,14 +622,6 @@ export async function addStopAction(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Add-stop failed." };
   }
-}
-
-/** Split a fuzzy multi-place skip string into individual labels. */
-function splitSkipLabels(place: string): string[] {
-  return place
-    .split(/,|\band\b/i)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 1);
 }
 
 /** Resolve a place → coords + its inferred insert position on the route. */

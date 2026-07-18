@@ -8,6 +8,7 @@ import {
   applyReschedule,
   applyStayLonger,
   applySkip,
+  splitSkipLabels,
   findAnchorIndex,
 } from "./edit";
 import type { GenerationInput } from "./facts";
@@ -26,11 +27,23 @@ const base = (): GenerationInput => ({
 });
 const C: [number, number] = [-127.17, 54.78]; // Smithers-ish
 
-test("findAnchorIndex: loose match on anchor names", () => {
+test("findAnchorIndex: town match, safe against substring-anywhere", () => {
   const a = base().anchors;
-  assert.equal(findAnchorIndex(a, "Stewart"), 1); // first-word substring match
+  assert.equal(findAnchorIndex(a, "Stewart"), 1); // town match
   assert.equal(findAnchorIndex(a, "Stewart, British Columbia"), 1); // exact
   assert.equal(findAnchorIndex(a, "Smithers"), -1); // pacing city, not an anchor
+});
+
+test("REGRESSION: a descriptive label containing an anchor NAME must NOT match", () => {
+  const anchors = [
+    ...base().anchors.slice(0, 2),
+    { place: "Barkerville", role: "waypoint" as const, datePin: "flexible" as const, date: null, dwell: 0, note: null },
+    base().anchors[2],
+  ];
+  // The exact fragment that once false-matched Barkerville during a skip.
+  assert.equal(findAnchorIndex(anchors, "the interior stretch between Barkerville and Vancouver"), -1);
+  // But a clean "Barkerville" still matches.
+  assert.equal(findAnchorIndex(anchors, "Barkerville"), 2);
 });
 
 test("reschedule an EXISTING anchor: sets its date, no insert", () => {
@@ -86,6 +99,32 @@ test("skip refuses to remove start/end → routes them to avoid instead", () => 
   assert.deepEqual(r.removed, []); // end anchor NOT removed
   assert.equal(r.input.anchors.length, 3);
   assert.ok(r.avoided.includes("Vancouver, British Columbia"));
+});
+
+test("splitSkipLabels: strips the prose parenthetical, clean names only", () => {
+  const mangled =
+    "Green Lake Provincial Park, Marble Canyon Provincial Park, and Cultus Lake Provincial Park (the interior stretch between Barkerville and Vancouver)";
+  const labels = splitSkipLabels(mangled);
+  assert.deepEqual(labels, [
+    "Green Lake Provincial Park",
+    "Marble Canyon Provincial Park",
+    "Cultus Lake Provincial Park",
+  ]);
+  // No "Vancouver)" leak, no "…between Barkerville" fragment.
+  assert.ok(!labels.some((l) => /barkerville|vancouver/i.test(l)));
+});
+
+test("REGRESSION end-to-end: the boring-middle skip leaves Barkerville intact", () => {
+  const input = base();
+  input.anchors.splice(2, 0, {
+    place: "Barkerville", role: "waypoint", datePin: "flexible", date: null, dwell: 0, note: null,
+  });
+  const mangled =
+    "Green Lake Provincial Park, Marble Canyon Provincial Park, and Cultus Lake Provincial Park (the interior stretch between Barkerville and Vancouver)";
+  const r = applySkip(input, splitSkipLabels(mangled));
+  assert.deepEqual(r.removed, []); // no anchors removed (all are pacing cities → avoid)
+  assert.ok(r.input.anchors.some((a) => a.place === "Barkerville")); // survives ✓
+  assert.ok(!r.input.params.avoid.some((a) => /barkerville|vancouver\)/i.test(a)));
 });
 
 test("all applies are pure — original untouched", () => {
