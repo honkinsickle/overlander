@@ -3,7 +3,7 @@
 /**
  * Living-plan NL-edit server actions (dev-gated MVP): the app-side of the
  * proven parse → apply → re-run loop (scripts/living-plan-edit.ts). Called
- * from the ReplanSheet behind the Find Nearby suggestion row.
+ * from the change-trip composer (and, in Stage 2, its dispatch flow).
  *
  * SAFETY RAILS (same as the harness, hard):
  *   - Every action refuses unless the env Supabase ref is TEST
@@ -43,6 +43,12 @@ import {
   type NowSpec,
   type Cleave,
 } from "./partial-replan";
+import {
+  interpretEdit,
+  buildInterpretContext,
+  type InterpretResult,
+  type ClarifyContext,
+} from "./interpret";
 import type { Anchor, GenerationInput } from "./facts";
 import type { ReplanDiff } from "./plan-diff";
 
@@ -173,6 +179,37 @@ export async function parseReplanAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Parse failed.",
+    };
+  }
+}
+
+export type InterpretActionResult =
+  | { ok: true; result: InterpretResult }
+  | RailsFailure;
+
+/**
+ * Open-language intent interpretation (Stage 0/1) — the dedicated change-trip
+ * box's front door. Free: one small Sonnet call, no generation, no grounding.
+ * Optionally carries a ClarifyContext for the follow-up turn.
+ */
+export async function interpretEditAction(
+  tripId: string,
+  text: string,
+  clarify?: ClarifyContext,
+): Promise<InterpretActionResult> {
+  const railFail = checkRails(tripId);
+  if (railFail) return railFail;
+  const loaded = await loadEditableTrip(tripId);
+  if ("ok" in loaded) return loaded;
+
+  try {
+    const context = buildInterpretContext(loaded.input, loaded.trip.days);
+    const result = await interpretEdit(text, context, clarify);
+    return { ok: true, result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Couldn't interpret that.",
     };
   }
 }

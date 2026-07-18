@@ -95,9 +95,9 @@ Edit types:
 
 Position / now extraction (any type): if they say "from here" / "where I am now", set fromHere=true. If they name their current location ("I'm at Stewart"), set nowPlace. These are hints for partial re-planning downstream.
 
-FUZZY references: if a place/stretch is vague ("the mountains", "the boring middle", "somewhere cool"), resolve it to the most likely CONCRETE anchor or stop from the trip context, and put your concrete reading in "interpretation" (e.g. "an extra day around Smithers", "skip Williams Lake → Lytton") so the user can confirm it. If you cannot pin a concrete reading with reasonable confidence, emit clarify with ONE question.
+FUZZY references — PROPOSE FIRST, ask only when truly stuck: if a place/stretch is vague ("the mountains", "the boring middle", "somewhere cool"), and you have a CONFIDENT single best read from the trip context, emit the EDIT with your concrete reading in "interpretation" (e.g. "skip Green Lake → Marble Canyon, the Cariboo interior", "an extra day around Smithers"). The confirm step shows this reading so the user can correct it — the proposal IS the confirmation, so make the call. Only emit clarify when it's a GENUINE multi-way fork with no clear winner (e.g. three equally-plausible mountain stretches). Propose-when-confident; ask-when-truly-ambiguous.
 
-CLARIFY: when a REQUIRED param is missing (a reschedule with no date) or the intent is genuinely ambiguous, emit kind="clarify" with ONE short question (the single most-blocking gap) and a "partial" note of what you understood so far. Ask ONE thing, not a batch.
+CLARIFY: use ONLY when (a) a REQUIRED param is missing and cannot be reasonably inferred (a reschedule with no date), or (b) a fuzzy reference is a genuine multi-way fork with no confident winner. Emit kind="clarify" with ONE short question (the single most-blocking gap) and a "partial" note of what you understood. Ask ONE thing, not a batch. Prefer a proposal with "interpretation" over a question whenever you can make a confident call.
 
 UNSUPPORTED: if it isn't a trip change at all, kind="unsupported" with a short reason.
 

@@ -10,7 +10,11 @@ import { MapColumn } from "@/components/trip/map-column";
 import { MapDetailOverlay } from "@/components/trip/map-detail-overlay";
 import { RightEdgeToolbar } from "@/components/trip/right-edge-toolbar";
 import { TopBar } from "@/components/trip/top-bar";
+import { ChangeTripComposer } from "@/components/trip/change-trip-composer";
+import { Sparkles } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
+
+const LIVING_PLAN_ON = process.env.NEXT_PUBLIC_LIVING_PLAN_EDIT === "1";
 
 /**
  * Map-as-background slideup body. Per v2 spec
@@ -92,6 +96,7 @@ export function TripSlideupBody({
   // standalone Find Nearby zero-state must not also mount (it would peek
   // out to the right of the narrower 2-up browse panel).
   const [browseOpen, setBrowseOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
   const toggleCollapsed = () => setCollapsed((c) => !c);
 
   // Latest map viewport bbox [W,S,E,N], updated on every pan/zoom via the
@@ -216,6 +221,50 @@ export function TripSlideupBody({
 
       {/* Right-Edge Toolbar */}
       <RightEdgeToolbar />
+
+      {/* Living-plan CHANGE-TRIP box (dev-gated) — a dedicated command surface,
+       *  separate from search. Floating trigger → centered composer. */}
+      {LIVING_PLAN_ON && (
+        <>
+          {!changeOpen && (
+            <button
+              type="button"
+              onClick={() => setChangeOpen(true)}
+              className="absolute z-40 flex items-center"
+              style={{
+                bottom: 24,
+                left: "50%",
+                transform: "translateX(-50%)",
+                gap: 8,
+                padding: "10px 18px",
+                borderRadius: 999,
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--amber-dark)",
+                color: "var(--amber)",
+                fontFamily: "var(--ff-display)",
+                fontSize: 12,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              }}
+            >
+              <Sparkles className="w-4 h-4" />
+              Change this trip
+            </button>
+          )}
+          {changeOpen && (
+            <div
+              className="absolute inset-0 z-40 flex items-center justify-center"
+              style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+              onClick={() => setChangeOpen(false)}
+            >
+              <div onClick={(e) => e.stopPropagation()}>
+                <ChangeTripComposer tripId={trip.id} onClose={() => setChangeOpen(false)} />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
