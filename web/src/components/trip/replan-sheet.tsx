@@ -390,6 +390,11 @@ export function ReplanSheet({
                 − {phase.diff.stopsRemoved.join(" · ")}
               </div>
             )}
+            {phase.diff.stopsRenamed.length > 0 && (
+              <div style={{ ...VALUE, color: "var(--text-muted)" }}>
+                {phase.diff.stopsRenamed.map((r) => `${r.from} → ${r.to}`).join(" · ")}
+              </div>
+            )}
             <div style={{ ...VALUE, color: "var(--text-muted)" }}>
               Rest days: {phase.diff.layovers.before} → {phase.diff.layovers.after}
             </div>

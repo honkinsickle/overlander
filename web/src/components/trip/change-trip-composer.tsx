@@ -364,6 +364,11 @@ function DiffCard({
       {diff.stopsRemoved.length > 0 && (
         <div style={{ ...VALUE, color: "var(--text-muted)" }}>− {diff.stopsRemoved.join(" · ")}</div>
       )}
+      {diff.stopsRenamed.length > 0 && (
+        <div style={{ ...VALUE, color: "var(--text-muted)" }}>
+          {diff.stopsRenamed.map((r) => `${r.from} → ${r.to}`).join(" · ")}
+        </div>
+      )}
       <div style={{ ...VALUE, color: "var(--text-muted)" }}>
         Rest days: {diff.layovers.before} → {diff.layovers.after}
       </div>
