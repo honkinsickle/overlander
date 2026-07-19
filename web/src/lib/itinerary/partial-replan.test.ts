@@ -17,6 +17,8 @@ import {
   endPlaceOf,
   stitchDays,
   stitchPolyline,
+  resolveEffectiveNow,
+  type CompletedThrough,
 } from "./partial-replan";
 import type { Day } from "@/lib/trips/types";
 import type { GenerationInput } from "./facts";
@@ -238,4 +240,62 @@ test("ahead-of-schedule tail has SLACK, not compression: PG 7/18 → Vancouver 7
     "Barkerville",
     "Vancouver, British Columbia",
   ]);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// DEFAULT CLEAVE: completedThrough is the trip's standing state, so a
+// position-less edit ("add 2 days at the end") cleaves at the recorded point
+// instead of regenerating already-driven days. resolveEffectiveNow picks the
+// effective cleave spec: explicit > completedThrough > full/date-derived.
+// ─────────────────────────────────────────────────────────────────────────
+
+// The marker the earlier partial re-plan recorded: 9 days driven, through PG.
+const CT: CompletedThrough = { dayNumber: 9, date: "2026-07-22", endPlace: "Prince George, BC" };
+
+test("default cleave: completedThrough + a position-LESS edit → cleave at day 9, tail starts at PG, days 1-9 frozen", () => {
+  // No explicit position in the utterance → the standing marker is the default.
+  const eff = resolveEffectiveNow(DAYS.length, CT, undefined, "2026-07-18");
+  assert.deepEqual(eff, { atDay: 10, today: "2026-07-18" }); // position from marker, date = today
+
+  const c = cleaveTrip(DAYS, eff!);
+  assert.equal(c.resumeIdx, 9);
+  assert.equal(c.completedDays.length, 9);
+  assert.equal(c.syntheticStart!.place, "Prince George, BC");
+  // Days 1-9 are the frozen prefix, byte-for-byte.
+  assert.deepEqual(c.completedDays, DAYS.slice(0, 9));
+  // The tail regenerates from PG onward, not the whole 14 days.
+  const tail = buildTailInput(INPUT, c);
+  assert.equal(tail.anchors[0].place, "Prince George, BC");
+  assert.equal(tail.params.startDate, "2026-07-18"); // real today, NOT the marker's 7/22
+});
+
+test("explicit position in the utterance OVERRIDES completedThrough", () => {
+  // "I'm at Smithers" (day 8) must win over the recorded day-9 marker.
+  const eff = resolveEffectiveNow(DAYS.length, CT, { atPlace: "Smithers", today: "2026-07-18" }, "2026-07-18");
+  assert.deepEqual(eff, { atPlace: "Smithers", today: "2026-07-18" }); // explicit-wins, marker ignored
+  const c = cleaveTrip(DAYS, eff!);
+  assert.equal(endPlaceOf(c.completedDays[c.completedDays.length - 1]), "Smithers, BC");
+  assert.equal(c.syntheticStart!.place, "Smithers, BC"); // day 8 end, not PG
+});
+
+test("no completedThrough → full re-plan (undefined) / date-derived preserved", () => {
+  // Composer's position-less edit on a fresh trip → undefined → full re-plan.
+  assert.equal(resolveEffectiveNow(DAYS.length, null, undefined, "2026-07-18"), undefined);
+  // Replan-sheet's bare {today} (date-derived intent) is passed through untouched.
+  assert.deepEqual(
+    resolveEffectiveNow(DAYS.length, null, { today: "2026-07-18" }, "2026-07-18"),
+    { today: "2026-07-18" },
+  );
+  // A stale marker past the (now shorter) trip is ignored, not thrown on.
+  assert.equal(resolveEffectiveNow(5, CT, undefined, "2026-07-18"), undefined);
+});
+
+test("default cleave resumeDate is TODAY, never the marker's date — ahead AND behind", () => {
+  for (const today of ["2026-07-18", "2026-07-25"]) {
+    const eff = resolveEffectiveNow(DAYS.length, CT, undefined, today);
+    assert.equal(eff!.today, today); // never CT.date (7/22)
+    const c = cleaveTrip(DAYS, eff!);
+    assert.equal(c.resumeDate, today);
+    assert.equal(c.plannedResumeDate, "2026-07-22"); // plan-time kept separate
+  }
 });

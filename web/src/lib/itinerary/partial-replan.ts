@@ -120,6 +120,53 @@ export function resolveResumeIndex(days: Day[], now: NowSpec): number {
 }
 
 /**
+ * The standing "you've driven this far" marker, persisted on
+ * `generationInput.completedThrough` after a partial re-plan applies. It makes
+ * the cleave the trip's DEFAULT STATE, not a per-utterance opt-in:
+ * `dayNumber` is the completed-day count (= resumeIdx), so a later edit with no
+ * explicit position resumes from here instead of regenerating driven days.
+ */
+export type CompletedThrough = {
+  /** Completed-day count = the resume day's index. */
+  dayNumber: number;
+  /** The resumeDate recorded at that apply (informational; the resume date of a
+   *  NEW edit is today, not this). */
+  date: string;
+  /** The resume point's place label (last completed day's end). */
+  endPlace: string | null;
+};
+
+/**
+ * Resolve the EFFECTIVE cleave spec for an edit — the fix for "partial re-plan
+ * is opt-in per utterance instead of the trip's default state." Position
+ * precedence:
+ *   1. an explicit position in the utterance/UI (`atDay`/`atPlace`) — always
+ *      wins (explicit-wins unchanged).
+ *   2. the trip's standing `completedThrough` — the DEFAULT for every edit after
+ *      the first partial re-plan, so a position-less edit never regenerates days
+ *      already driven.
+ *   3. neither → the caller's own spec, unchanged: `undefined` = full re-plan
+ *      (a fresh trip with nothing driven); a bare `{today}` = the date-derived
+ *      guess (the replan-sheet's "where am I" default).
+ * The resume DATE stays real today/stated (never a planned date): the default
+ * spec carries `today`, only the POSITION comes from `completedThrough`.
+ */
+export function resolveEffectiveNow(
+  dayCount: number,
+  completedThrough: CompletedThrough | null | undefined,
+  explicit: NowSpec | undefined,
+  today: string,
+): NowSpec | undefined {
+  if (explicit && (explicit.atDay != null || explicit.atPlace != null)) return explicit;
+  const ct = completedThrough;
+  if (ct && ct.dayNumber > 0 && ct.dayNumber < dayCount) {
+    // Position from the marker; date is always the real clock.
+    return { atDay: ct.dayNumber + 1, today: explicit?.today ?? today };
+  }
+  return explicit;
+}
+
+/**
  * Split the trip at "now". Pure. The resume day is re-plannable (you're on it
  * now); everything before is frozen.
  */

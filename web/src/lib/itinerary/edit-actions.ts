@@ -46,8 +46,10 @@ import {
   buildTailInput,
   stitchDays,
   stitchPolyline,
+  resolveEffectiveNow,
   type NowSpec,
   type Cleave,
+  type CompletedThrough,
 } from "./partial-replan";
 import {
   interpretEdit,
@@ -96,6 +98,37 @@ async function loadEditableTrip(
     };
   }
   return { trip, input };
+}
+
+/** The standing cleave marker persisted inside `generationInput` (not part of
+ *  the GenerationInput type — read loosely). */
+function completedThroughOf(input: GenerationInput): CompletedThrough | null {
+  const ct = (input as unknown as { completedThrough?: CompletedThrough })
+    .completedThrough;
+  return ct ?? null;
+}
+
+/** Server clock, ISO date. The resume DATE fallback when the client didn't send
+ *  one (the composer's position-less edits). Never a planned date. */
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** The trip's DEFAULT cleave spec for an edit: explicit position wins, else the
+ *  recorded completedThrough, else the caller's spec (full re-plan / date-
+ *  derived). Centralizes the "cleave is the default state" rule for every
+ *  action + the pre-spend display. */
+function effectiveNow(
+  trip: Trip,
+  input: GenerationInput,
+  explicit: NowSpec | undefined,
+): NowSpec | undefined {
+  return resolveEffectiveNow(
+    trip.days.length,
+    completedThroughOf(input),
+    explicit,
+    isoToday(),
+  );
 }
 
 export type ParseReplanResult =
@@ -238,12 +271,14 @@ export type CleaveDisplay =
 
 /**
  * Resolve the "now" cleave for the confirm sheet — free (no routing, no spend,
- * pure day-table math). Date-derived default OR explicit override
- * (atDay / atPlace). Surfaced as "Picking up from Day N — <place>, <date>".
+ * pure day-table math). The DEFAULT is the trip's standing completedThrough
+ * (so the driver sees "Re-planning from Day N — <place> onward" BEFORE spending,
+ * never a silent whole-trip regen); an explicit override (atDay / atPlace) wins.
+ * `now` omitted → the composer's position-less case (default cleave / full).
  */
 export async function resolveCleaveAction(
   tripId: string,
-  now: NowSpec,
+  now?: NowSpec,
 ): Promise<CleaveDisplay> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -251,7 +286,20 @@ export async function resolveCleaveAction(
   if ("ok" in loaded) return loaded;
 
   try {
-    const c = cleaveTrip(loaded.trip.days, now);
+    const effNow = effectiveNow(loaded.trip, loaded.input, now);
+    // No cleave spec → a fresh trip, nothing driven → full re-plan.
+    if (!effNow) {
+      return {
+        ok: true,
+        resumeDayNumber: 1,
+        resumePlace: loaded.trip.startLocation,
+        resumeDate: isoToday(),
+        completedCount: 0,
+        totalDays: loaded.trip.days.length,
+        isFullReplan: true,
+      };
+    }
+    const c = cleaveTrip(loaded.trip.days, effNow);
     return {
       ok: true,
       resumeDayNumber: c.resumeIdx + 1,
@@ -521,7 +569,7 @@ export async function replanAction(
   if ("ok" in loaded) return loaded;
 
   try {
-    const ctx = partialContext(loaded.trip, now);
+    const ctx = partialContext(loaded.trip, effectiveNow(loaded.trip, loaded.input, now));
     // Edit-in-future guard: can't pin a date that's already passed.
     if (ctx.cleave && date < ctx.cleave.resumeDate) {
       return { ok: false, error: `${date} has already passed — you can only change the road ahead.` };
@@ -582,7 +630,7 @@ export async function addStopAction(
     };
     const pos = inferAddStopPosition(loaded.input.anchors, anchorMiles, newAlong);
 
-    const ctx = partialContext(loaded.trip, now);
+    const ctx = partialContext(loaded.trip, effectiveNow(loaded.trip, loaded.input, now));
     // Edit-in-future guard (geometry): the new stop must sit AHEAD of the
     // resume point along the route — you can't add a stop you've driven past.
     if (ctx.cleave && ctx.partial) {
@@ -675,7 +723,7 @@ export async function executeEditAction(
   if ("ok" in loaded) return loaded;
 
   try {
-    const ctx = partialContext(loaded.trip, now);
+    const ctx = partialContext(loaded.trip, effectiveNow(loaded.trip, loaded.input, now));
     const resumeDate = ctx.cleave?.resumeDate;
 
     let editedInput: GenerationInput;

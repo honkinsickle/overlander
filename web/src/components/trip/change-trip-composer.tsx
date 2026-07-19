@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, X } from "lucide-react";
 import {
@@ -9,8 +9,10 @@ import {
   addStopAction,
   applyReplanAction,
   discardReplanAction,
+  resolveCleaveAction,
   type InterpretActionResult,
   type EditPayload,
+  type CleaveDisplay,
 } from "@/lib/itinerary/edit-actions";
 import type { InterpretResult } from "@/lib/itinerary/interpret";
 import type { ClarifyContext } from "@/lib/itinerary/interpret";
@@ -61,6 +63,21 @@ const EXAMPLES = [
   "get to Vancouver a day earlier",
 ];
 
+const clientToday = () => new Date().toISOString().slice(0, 10);
+
+/** Parse a "where am I now" override typed into the cleave banner. Empty →
+ *  undefined (fall back to the trip's standing default). "start over" forces a
+ *  whole-trip re-plan. `today` always rides along (real resume date). */
+function parseNow(text: string): NowSpec | undefined {
+  const t = text.trim();
+  if (!t) return undefined;
+  if (/^(start over|from the (beginning|start)|whole trip|full)/i.test(t))
+    return { atDay: 1, today: clientToday() };
+  const m = t.match(/day\s*(\d+)/i);
+  if (m) return { atDay: parseInt(m[1], 10), today: clientToday() };
+  return { atPlace: t, today: clientToday() };
+}
+
 export function ChangeTripComposer({
   tripId,
   onClose,
@@ -74,12 +91,51 @@ export function ChangeTripComposer({
   // clarify follow-up so it has the full thread.
   const [clarify, setClarify] = useState<ClarifyContext | null>(null);
   const [answer, setAnswer] = useState("");
+  // The cleave in effect for the paid run, shown BEFORE spend. `override`
+  // undefined → the trip's standing default (completedThrough, resolved
+  // server-side); an explicit position (utterance or the "change" editor) wins.
+  const [override, setOverride] = useState<NowSpec | undefined>(undefined);
+  const [cleave, setCleave] = useState<CleaveDisplay | null>(null);
+  const [nowText, setNowText] = useState("");
+  const [editingNow, setEditingNow] = useState(false);
 
   const interpret = async (t: string, ctx?: ClarifyContext) => {
     setPhase({ name: "interpreting" });
     const r: InterpretActionResult = await interpretEditAction(tripId, ctx?.originalText ?? t, ctx);
-    if (!r.ok) setPhase({ name: "error", message: r.error });
-    else setPhase({ name: "result", result: r.result });
+    if (!r.ok) {
+      setPhase({ name: "error", message: r.error });
+      return;
+    }
+    setPhase({ name: "result", result: r.result });
+    // Seed the cleave override from the utterance ("... from Prince George");
+    // absent → the trip's standing default applies.
+    if (r.result.kind === "edit") {
+      setOverride(r.result.nowPlace ? { atPlace: r.result.nowPlace, today: clientToday() } : undefined);
+      setNowText("");
+      setEditingNow(false);
+    }
+  };
+
+  // Resolve the cleave for display whenever an edit is on the table or the
+  // override changes — free (no spend), so the driver sees which days freeze.
+  useEffect(() => {
+    if (phase.name !== "result" || phase.result.kind !== "edit") {
+      setCleave(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const c = await resolveCleaveAction(tripId, override);
+      if (!cancelled) setCleave(c);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, override, phase]);
+
+  const commitNow = () => {
+    setOverride(parseNow(nowText));
+    setEditingNow(false);
   };
 
   const submit = () => {
@@ -107,12 +163,11 @@ export function ChangeTripComposer({
    *  runGateStage/diff flow (reused wholesale). `now` comes from the utterance
    *  ("I'm at Stewart") when present → partial re-plan. */
   const dispatch = async (r: Extract<InterpretResult, { kind: "edit" }>) => {
-    // `today` (real resume date) rides with the position — never derived from
-    // the plan, so an ahead-of-schedule "I'm at X" resumes from today, not X's
-    // planned date.
-    const now: NowSpec | undefined = r.nowPlace
-      ? { atPlace: r.nowPlace, today: new Date().toISOString().slice(0, 10) }
-      : undefined;
+    // The cleave shown in the banner IS the one we run: `override` (utterance
+    // position or the "change" editor) when set, else the trip's standing
+    // default (completedThrough) resolved server-side. Never a silent whole-trip
+    // regen of days already driven.
+    const now: NowSpec | undefined = override;
     if (r.type === "add-stop") {
       // add-stop keeps its own two-mode flow.
       await runAddStop(r, "adjust", now);
@@ -302,7 +357,20 @@ export function ChangeTripComposer({
       )}
 
       {phase.name === "result" && phase.result.kind === "edit" && (
-        <EditConfirmCard result={phase.result} onReplan={() => dispatch(phase.result as Extract<InterpretResult, { kind: "edit" }>)} />
+        <EditConfirmCard
+          result={phase.result}
+          onReplan={() => dispatch(phase.result as Extract<InterpretResult, { kind: "edit" }>)}
+          banner={
+            <CleaveBanner
+              cleave={cleave}
+              nowText={nowText}
+              setNowText={setNowText}
+              editing={editingNow}
+              setEditing={setEditingNow}
+              onCommit={commitNow}
+            />
+          }
+        />
       )}
 
       {phase.name === "replanning" && (
@@ -442,15 +510,95 @@ const fmtDate = (iso: string) =>
     timeZone: "UTC",
   });
 
+/** Shows which cleave is in effect BEFORE the driver spends — "Re-planning from
+ *  Day N — <place> onward · M days frozen" — with a way to change it, so days
+ *  already driven are never silently frozen (or silently regenerated). */
+function CleaveBanner({
+  cleave,
+  nowText,
+  setNowText,
+  editing,
+  setEditing,
+  onCommit,
+}: {
+  cleave: CleaveDisplay | null;
+  nowText: string;
+  setNowText: (v: string) => void;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+  onCommit: () => void;
+}) {
+  if (!cleave) return null;
+  if (!cleave.ok) {
+    return (
+      <div style={{ ...LABEL, textTransform: "none", letterSpacing: 0, color: "#E08A7A" }}>
+        {cleave.error}
+      </div>
+    );
+  }
+  const summary = cleave.isFullReplan
+    ? "Re-planning the whole trip — nothing driven yet"
+    : `Re-planning from Day ${cleave.resumeDayNumber} — ${cleave.resumePlace} onward · ${cleave.completedCount} day${cleave.completedCount === 1 ? "" : "s"} frozen`;
+  return (
+    <div
+      className="flex flex-col"
+      style={{
+        gap: 8,
+        padding: "10px 12px",
+        borderRadius: 8,
+        backgroundColor: "var(--bg-base)",
+        border: "1px solid var(--border-subtle)",
+      }}
+    >
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <span style={{ ...VALUE, flex: 1, color: cleave.isFullReplan ? "var(--text-muted)" : "var(--text-primary)" }}>
+          {summary}
+        </span>
+        {!editing && (
+          <button type="button" onClick={() => setEditing(true)} style={{ ...LABEL, color: "var(--amber)" }}>
+            change
+          </button>
+        )}
+      </div>
+      {editing && (
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <input
+            autoFocus
+            value={nowText}
+            onChange={(e) => setNowText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onCommit()}
+            placeholder="where are you now? — e.g. Prince George, day 9, start over"
+            className="flex-1"
+            style={{
+              padding: "7px 10px",
+              borderRadius: 6,
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--input-border-focus)",
+              color: "var(--text-primary)",
+              fontFamily: "var(--ff-sans)",
+              fontSize: 13,
+            }}
+          />
+          <button type="button" onClick={onCommit} style={{ ...LABEL, color: "var(--amber)" }}>
+            set
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Shows the interpreted edit + (crucially) the fuzzy-reading echo so the user
  *  confirms the concrete interpretation before any spend. Stage 1: display
  *  only; the [Re-plan] dispatch to executors lands in Stage 2. */
 function EditConfirmCard({
   result,
   onReplan,
+  banner,
 }: {
   result: Extract<InterpretResult, { kind: "edit" }>;
   onReplan: () => void;
+  banner?: React.ReactNode;
 }) {
   const bits: string[] = [];
   if (result.place) bits.push(result.place);
@@ -493,6 +641,7 @@ function EditConfirmCard({
           Reading this as: {result.interpretation}
         </div>
       )}
+      {banner}
       <div className="flex" style={{ gap: 10, paddingTop: 8 }}>
         <button
           type="button"
