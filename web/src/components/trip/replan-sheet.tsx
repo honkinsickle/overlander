@@ -86,11 +86,14 @@ export function ReplanSheet({
   const [editingNow, setEditingNow] = useState(false);
   const [cleave, setCleave] = useState<CleaveDisplay | null>(null);
   const nowSpec = useMemo<NowSpec>(() => {
+    // `today` is the real resume date and rides along with EVERY position form
+    // (place / day-N / date-derived) — position and date are independent.
+    const today = new Date().toISOString().slice(0, 10);
     const t = nowText.trim();
-    if (!t) return { today: new Date().toISOString().slice(0, 10) };
+    if (!t) return { today };
     const m = t.match(/day\s*(\d+)/i);
-    if (m) return { atDay: parseInt(m[1], 10) };
-    return { atPlace: t };
+    if (m) return { atDay: parseInt(m[1], 10), today };
+    return { atPlace: t, today };
   }, [nowText]);
 
   useEffect(() => {

@@ -62,7 +62,7 @@ const SHA_PREFIX_9 = "cc1f04bb4dc4d53f9d3d6d0e10c1bf242cfea19685f77366b0575cc5c8
 const SHA_PREFIX_13 = "92da9d4f1fe7cf9a541ce966231445742ab646c149fad94d34a5c2eb7959ade0";
 
 test("PAID-PROOF LOCK: 9 completed days are BYTE-IDENTICAL across a tail re-plan (sha256)", () => {
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George" });
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George", today: "2026-07-22" });
   assert.equal(cleave.resumeIdx, 9);
   assert.equal(cleave.completedDays.length, 9);
 
@@ -91,7 +91,7 @@ test("PAID-PROOF LOCK: 9 completed days are BYTE-IDENTICAL across a tail re-plan
 });
 
 test("renumbering never mutates the frozen prefix; ids regenerated only on the tail", () => {
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George" }); // resumeIdx 9
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George", today: "2026-07-22" }); // resumeIdx 9
   // A SHORTER tail (3 days) than the original 5 — the prefix must not shift.
   const newTail = makeTail([
     { date: "2026-07-22", label: "Prince George, BC — Clinton, BC", miles: 240 },
@@ -118,7 +118,7 @@ test("renumbering never mutates the frozen prefix; ids regenerated only on the t
 });
 
 test("NEVER SENT: the tail input references only resume→end; no completed day reaches the LLM", () => {
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George" });
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George", today: "2026-07-22" });
   const tail = buildTailInput(FIXTURE_INPUT, cleave);
 
   // The synthetic start is PG (the resume point); the end is Vancouver.
@@ -149,7 +149,7 @@ test("NEVER SENT: the tail input references only resume→end; no completed day 
 
 test("stitchPolyline: leading vertices AND leading encoded bytes match the stored geometry", () => {
   const full = decodePolyline(FIXTURE_ROUTE_POLYLINE);
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George" });
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atPlace: "Prince George", today: "2026-07-22" });
   // Resume at PG — the start of the resume day (a real spine vertex).
   const resumeCoords = FIXTURE_DAYS[cleave.resumeIdx].startCoord!;
   // A recalculated tail heading somewhere new from PG.
@@ -180,7 +180,7 @@ test("stitchPolyline: leading vertices AND leading encoded bytes match the store
 });
 
 test("edge — cleave at day 1: full re-plan, no frozen prefix", () => {
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atDay: 1 });
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atDay: 1, today: "2026-07-13" });
   assert.equal(cleave.resumeIdx, 0);
   assert.equal(cleave.completedDays.length, 0);
   assert.equal(cleave.syntheticStart, null);
@@ -195,7 +195,7 @@ test("edge — cleave at day 1: full re-plan, no frozen prefix", () => {
 });
 
 test("edge — cleave at the last day: 13 frozen, only day 14 regenerates (byte-identical)", () => {
-  const cleave = cleaveTrip(FIXTURE_DAYS, { atDay: 14 });
+  const cleave = cleaveTrip(FIXTURE_DAYS, { atDay: 14, today: "2026-07-26" });
   assert.equal(cleave.resumeIdx, 13);
   assert.equal(cleave.completedDays.length, 13);
   assert.equal(cleave.syntheticStart!.place, "Hope, BC"); // end of day 13
@@ -222,7 +222,7 @@ test("edge — cleave at the last day: 13 frozen, only day 14 regenerates (byte-
 
 test("edge — layover day at the boundary (last-frozen and first-resumed)", () => {
   // (a) Day 7 (Stewart→Stewart layover) is the LAST frozen day: cleave at day 8.
-  const atDay8 = cleaveTrip(FIXTURE_DAYS, { atDay: 8 });
+  const atDay8 = cleaveTrip(FIXTURE_DAYS, { atDay: 8, today: "2026-07-20" });
   assert.equal(atDay8.resumeIdx, 7);
   assert.equal(atDay8.completedDays.length, 7);
   // The layover is in the frozen prefix, verbatim.
@@ -235,7 +235,7 @@ test("edge — layover day at the boundary (last-frozen and first-resumed)", () 
   assert.equal(sha256(stitched.slice(0, 7)), before7); // layover survives byte-for-byte
 
   // (b) Day 7 is the FIRST resumed (re-plannable) day: cleave at day 7.
-  const atDay7 = cleaveTrip(FIXTURE_DAYS, { atDay: 7 });
+  const atDay7 = cleaveTrip(FIXTURE_DAYS, { atDay: 7, today: "2026-07-19" });
   assert.equal(atDay7.resumeIdx, 6);
   assert.equal(atDay7.completedDays.length, 6);
   // The layover is NOT frozen — it's re-plannable, so it's outside the prefix.

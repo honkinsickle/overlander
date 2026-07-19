@@ -107,7 +107,12 @@ export function ChangeTripComposer({
    *  runGateStage/diff flow (reused wholesale). `now` comes from the utterance
    *  ("I'm at Stewart") when present → partial re-plan. */
   const dispatch = async (r: Extract<InterpretResult, { kind: "edit" }>) => {
-    const now: NowSpec | undefined = r.nowPlace ? { atPlace: r.nowPlace } : undefined;
+    // `today` (real resume date) rides with the position — never derived from
+    // the plan, so an ahead-of-schedule "I'm at X" resumes from today, not X's
+    // planned date.
+    const now: NowSpec | undefined = r.nowPlace
+      ? { atPlace: r.nowPlace, today: new Date().toISOString().slice(0, 10) }
+      : undefined;
     if (r.type === "add-stop") {
       // add-stop keeps its own two-mode flow.
       await runAddStop(r, "adjust", now);

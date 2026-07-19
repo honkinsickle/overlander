@@ -40,25 +40,45 @@ function placeMatches(a: string, b: string): boolean {
   return x === y || x.includes(y) || y.includes(x);
 }
 
-/** Where "now" is. Explicit wins; otherwise date-derived from `today`. */
+/**
+ * Where "now" is. Position (WHERE) and date (WHEN) are INDEPENDENT:
+ *   - `atDay`/`atPlace` (or, absent both, `today`) determine the resume
+ *     POSITION — which day you're driving now.
+ *   - `today` is always the real resume DATE — it is NEVER derived from the
+ *     plan. Being ahead of schedule is as normal as being behind, so the
+ *     matched day's planned date must not leak into the resume date.
+ */
 export type NowSpec = {
-  /** Today's ISO date — the date-derived default AND the real resume date. */
-  today?: string;
-  /** "I'm on day N" (1-based). Overrides date. */
+  /** The real resume date (ISO) — today, or a date the user explicitly stated
+   *  as their current position in time ("I'm picking up on the 20th"). This is
+   *  WHEN the tail restarts; it is NEVER the matched day's planned date.
+   *  Required: a caller that can't say when "now" is can't cleave correctly.
+   *  When neither `atDay` nor `atPlace` is given, it also selects the resume
+   *  position (first day on/after it). */
+  today: string;
+  /** "I'm on day N" (1-based) — POSITION only. Does not touch the resume date. */
   atDay?: number;
-  /** "I'm at <place>" — matched against a day's end (then start) label. */
+  /** "I'm at <place>" — matched against a day's end (then start) label.
+   *  POSITION only. Does not touch the resume date. */
   atPlace?: string;
 };
 
 export type Cleave = {
-  /** Days [0 … resumeIdx-1] — frozen, kept verbatim. */
+  /** Days [0 … resumeIdx-1] — frozen, kept verbatim (original dates untouched). */
   completedDays: Day[];
   /** First re-plannable day index (the resume day; you're driving it now). */
   resumeIdx: number;
-  /** The date the tail starts from — TODAY/stated if given (reality), else
-   *  the resume day's originally-planned date. This is the schedule-drift
-   *  crux: a behind-schedule trip re-plans the tail from the real date. */
+  /** WHEN the tail restarts — the real today/stated date from the NowSpec,
+   *  independent of the plan. Drives the synthetic start date, the tail's
+   *  params.startDate, and the future-guard. May be EARLIER than the resume
+   *  day's planned date (ahead of schedule) or later (behind) — both normal. */
   resumeDate: string;
+  /** The resume day's ORIGINAL planned date (plan-time). Used ONLY to decide
+   *  which existing fixed anchors are positionally behind the cleave — a
+   *  plan-time-vs-plan-time comparison. Comparing against the real `resumeDate`
+   *  here would resurrect a just-passed stop whenever the user is ahead of
+   *  schedule (its planned date can equal today). Never used for scheduling. */
+  plannedResumeDate: string;
   /** The synthetic start anchor for the tail (last completed day's end),
    *  or null when nothing is completed (→ a normal full re-plan). */
   syntheticStart: Anchor | null;
@@ -106,8 +126,11 @@ export function resolveResumeIndex(days: Day[], now: NowSpec): number {
 export function cleaveTrip(days: Day[], now: NowSpec): Cleave {
   const resumeIdx = resolveResumeIndex(days, now);
   const completedDays = days.slice(0, resumeIdx);
-  // resumeDate: reality (today/stated) wins over the planned date.
-  const resumeDate = now.today ?? days[resumeIdx]?.date ?? days[days.length - 1].date;
+  // WHEN: reality, full stop. Position (WHERE) is resolved above and is
+  // independent — resumeDate is NEVER the matched day's planned date.
+  const resumeDate = now.today;
+  // Plan-time reference for anchor position filtering ONLY (see anchorAhead).
+  const plannedResumeDate = days[resumeIdx]?.date ?? days[days.length - 1].date;
 
   const syntheticStart: Anchor | null =
     resumeIdx > 0
@@ -123,14 +146,18 @@ export function cleaveTrip(days: Day[], now: NowSpec): Cleave {
         }
       : null;
 
-  return { completedDays, resumeIdx, resumeDate, syntheticStart };
+  return { completedDays, resumeIdx, resumeDate, plannedResumeDate, syntheticStart };
 }
 
 /** Is an existing anchor still AHEAD of the cleave (belongs in the tail)? */
-function anchorAhead(a: Anchor, resumeDate: string): boolean {
+function anchorAhead(a: Anchor, plannedResumeDate: string): boolean {
   if (a.role === "start") return false; // the original start is behind us
-  // A fixed/window anchor is behind if its date has passed.
-  if (a.datePin !== "flexible" && a.date) return a.date >= resumeDate;
+  // PLAN-TIME comparison: a fixed/window anchor is behind if its PLANNED date
+  // is before the resume day's PLANNED date. This must be planned-vs-planned,
+  // NOT against the real resumeDate — when the user is ahead of schedule a
+  // just-passed stop's planned date can equal today, and comparing against the
+  // real date would wrongly resurrect it into the tail.
+  if (a.datePin !== "flexible" && a.date) return a.date >= plannedResumeDate;
   // Flexible/undated anchor: keep it (MVP). The action layer refines this
   // with along-route position once it has the route geometry; a flexible
   // anchor already physically passed can't be detected from the day table
@@ -149,7 +176,7 @@ export function buildTailInput(
 ): GenerationInput {
   if (!cleave.syntheticStart) return fullInput;
 
-  const ahead = fullInput.anchors.filter((a) => anchorAhead(a, cleave.resumeDate));
+  const ahead = fullInput.anchors.filter((a) => anchorAhead(a, cleave.plannedResumeDate));
   const anchors: Anchor[] = [cleave.syntheticStart, ...ahead];
   // Guarantee a terminal "end" role (the original end anchor).
   const last = anchors[anchors.length - 1];

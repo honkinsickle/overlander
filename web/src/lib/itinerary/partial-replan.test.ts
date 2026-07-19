@@ -64,7 +64,7 @@ const INPUT: GenerationInput = {
 };
 
 test("cleave by explicit place: 'I'm at Prince George' → completed through day 9, synthetic start = PG", () => {
-  const c = cleaveTrip(DAYS, { atPlace: "Prince George" });
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-18" });
   assert.equal(c.resumeIdx, 9); // day-10 (PG→Wells) is the resume day
   assert.equal(c.completedDays.length, 9);
   assert.equal(endPlaceOf(c.completedDays[8]), "Prince George, BC");
@@ -72,8 +72,9 @@ test("cleave by explicit place: 'I'm at Prince George' → completed through day
   assert.equal(c.syntheticStart!.place, "Prince George, BC");
   assert.equal(c.syntheticStart!.role, "start");
   assert.equal(c.syntheticStart!.datePin, "fixed");
-  assert.equal(c.resumeDate, "2026-07-22"); // day-10's planned date (no today given)
-  assert.equal(c.syntheticStart!.date, "2026-07-22");
+  assert.equal(c.resumeDate, "2026-07-18"); // reality (today), NOT the planned 7/22
+  assert.equal(c.plannedResumeDate, "2026-07-22"); // day-10's planned date — plan-time only
+  assert.equal(c.syntheticStart!.date, "2026-07-18");
 });
 
 test("cleave by date: today 2026-07-21 → resume day 9 (first date >= today)", () => {
@@ -83,23 +84,26 @@ test("cleave by date: today 2026-07-21 → resume day 9 (first date >= today)", 
   assert.equal(c.syntheticStart!.place, "Smithers, BC"); // end of day 8
 });
 
-test("cleave by day number: 'I'm on day 10' → resume idx 9", () => {
-  const c = cleaveTrip(DAYS, { atDay: 10 });
+test("cleave by day number: 'I'm on day 10' → resume idx 9, resumeDate = today (not planned)", () => {
+  const c = cleaveTrip(DAYS, { atDay: 10, today: "2026-07-18" });
   assert.equal(c.resumeIdx, 9);
   assert.equal(c.syntheticStart!.place, "Prince George, BC");
+  assert.equal(c.resumeDate, "2026-07-18"); // day number is POSITION; date is today
+  assert.equal(c.plannedResumeDate, "2026-07-22");
 });
 
-test("tail input at PG: synthetic start + Vancouver held, Stewart dropped (date passed)", () => {
-  const c = cleaveTrip(DAYS, { atPlace: "Prince George" });
+test("tail input at PG: synthetic start + Vancouver held, Stewart dropped (positionally passed)", () => {
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-18" });
   const tail = buildTailInput(INPUT, c);
   const places = tail.anchors.map((a) => a.place);
-  // Stewart (fixed 7/18 < resume 7/22) is gone; Barkerville (flexible, ahead)
-  // and Vancouver (fixed 7/26) remain, after the PG synthetic start.
+  // Stewart is dropped by PLAN-TIME position (planned 7/18 < plannedResume 7/22)
+  // — even though its planned date EQUALS today (7/18), the ahead-of-schedule
+  // trap. Barkerville (flexible, ahead) + Vancouver (7/26) remain after PG.
   assert.deepEqual(places, ["Prince George, BC", "Barkerville", "Vancouver, British Columbia"]);
   assert.equal(tail.anchors[0].role, "start");
   assert.equal(tail.anchors[tail.anchors.length - 1].role, "end");
   assert.equal(tail.anchors[tail.anchors.length - 1].place, "Vancouver, British Columbia");
-  assert.equal(tail.params.startDate, "2026-07-22"); // resume date
+  assert.equal(tail.params.startDate, "2026-07-18"); // real resume date, NOT planned 7/22
   assert.equal(tail.params.endDate, "2026-07-26"); // fixed end HELD
 });
 
@@ -115,24 +119,24 @@ test("behind schedule: at PG but today is 2026-07-23 → resumeDate = reality (7
 
 test("edit-in-future: add Barkerville is legal at PG, illegal after Wells", () => {
   // Barkerville insert falls at ~day index 9 (the Wells days).
-  const atPG = cleaveTrip(DAYS, { atPlace: "Prince George" }); // resumeIdx 9
+  const atPG = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-18" }); // resumeIdx 9
   assert.deepEqual(isEditInFuture(atPG, { kind: "add-stop", insertDayIndex: 9 }), { ok: true });
 
   // "at Wells" matches the first day ENDING at Wells (day 10 → resume day 11).
-  const afterWells = cleaveTrip(DAYS, { atPlace: "Wells" });
+  const afterWells = cleaveTrip(DAYS, { atPlace: "Wells", today: "2026-07-18" });
   assert.equal(afterWells.resumeIdx, 10);
   const check = isEditInFuture(afterWells, { kind: "add-stop", insertDayIndex: 9 });
-  assert.equal(check.ok, false); // 9 < 10 → the PG→Wells insert is behind you
+  assert.equal(check.ok, false); // 9 < 10 → the PG→Wells insert is behind you (position)
 });
 
-test("edit-in-future: arrive-by date in the past is rejected", () => {
-  const c = cleaveTrip(DAYS, { atPlace: "Prince George" }); // resumeDate 7/22
-  assert.equal(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-19" }).ok, false); // Stewart glacier, passed
+test("edit-in-future: arrive-by date before the REAL resume date is rejected", () => {
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-22" }); // on schedule
+  assert.equal(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-19" }).ok, false); // before today
   assert.deepEqual(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-24" }), { ok: true });
 });
 
 test("no prefix completed → full re-plan (null synthetic start, input unchanged)", () => {
-  const c = cleaveTrip(DAYS, { atDay: 1 });
+  const c = cleaveTrip(DAYS, { atDay: 1, today: "2026-07-13" });
   assert.equal(c.resumeIdx, 0);
   assert.equal(c.syntheticStart, null);
   assert.equal(buildTailInput(INPUT, c), INPUT); // returns the full input
@@ -174,4 +178,64 @@ test("stitchPolyline: truncates at the resume point, grafts the tail", () => {
   for (let i = 1; i < out.length; i++) {
     assert.ok(!(out[i][0] === out[i - 1][0] && out[i][1] === out[i - 1][1]));
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// REGRESSION: cleaveTrip must not conflate POSITION with DATE. The real
+// failure — at Prince George on Sat 7/18 (4 days AHEAD of the plan, which has
+// PG on 7/22), "move Barkerville to Sun 7/19" was rejected as "already passed"
+// because resumeDate was the planned 7/22 instead of today.
+// ─────────────────────────────────────────────────────────────────────────
+
+test("REGRESSION (ahead of schedule): at PG on 7/18 (planned 7/22) → resumeDate = today 7/18, and arrive-by 7/19 is LEGAL", () => {
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-18" });
+  assert.equal(c.resumeIdx, 9); // position from the place — day 10
+  assert.equal(c.resumeDate, "2026-07-18"); // WHEN = reality, NOT the planned 7/22
+  assert.equal(c.plannedResumeDate, "2026-07-22"); // plan-time reference kept separate
+  // The exact edit that was wrongly rejected: move Barkerville to Sun 7/19.
+  assert.deepEqual(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-19" }), { ok: true });
+});
+
+test("behind schedule (today AFTER the planned date): at PG on 7/25 → resumeDate 7/25; a 7/23 arrive-by is correctly past", () => {
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-25" });
+  assert.equal(c.resumeIdx, 9);
+  assert.equal(c.resumeDate, "2026-07-25"); // reality, later than planned 7/22
+  assert.equal(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-23" }).ok, false); // < today
+  assert.deepEqual(isEditInFuture(c, { kind: "arrive-by", date: "2026-07-26" }), { ok: true });
+});
+
+test("atDay is POSITION only: 'day 10' with today 7/18 → resumeDate = today, never day 10's planned 7/22", () => {
+  const c = cleaveTrip(DAYS, { atDay: 10, today: "2026-07-18" });
+  assert.equal(c.resumeIdx, 9);
+  assert.equal(c.resumeDate, "2026-07-18");
+  assert.equal(c.syntheticStart!.date, "2026-07-18");
+  assert.equal(c.plannedResumeDate, "2026-07-22");
+});
+
+test("frozen prefix keeps its ORIGINAL historical dates — ahead AND behind schedule", () => {
+  for (const today of ["2026-07-18", "2026-07-25"]) {
+    const c = cleaveTrip(DAYS, { atPlace: "Prince George", today });
+    // Days 1..9 are sliced verbatim — their planned dates are untouched.
+    assert.deepEqual(
+      c.completedDays.map((d) => d.date),
+      DAYS.slice(0, 9).map((d) => d.date),
+    );
+    assert.equal(c.completedDays[0].date, "2026-07-13"); // day 1 original
+    assert.equal(c.completedDays[8].date, "2026-07-21"); // day 9 original
+    assert.equal(c.resumeDate, today); // only the resume date reflects reality
+  }
+});
+
+test("ahead-of-schedule tail has SLACK, not compression: PG 7/18 → Vancouver 7/26 = a 4-day leg with 8 days to run it", () => {
+  const c = cleaveTrip(DAYS, { atPlace: "Prince George", today: "2026-07-18" });
+  const tail = buildTailInput(INPUT, c);
+  assert.equal(tail.params.startDate, "2026-07-18"); // tail starts today
+  assert.equal(tail.params.endDate, "2026-07-26"); // Vancouver fixed end held
+  // The window is 7/18 → 7/26 = 8 days for a leg the plan plotted in 4 → slack,
+  // not the false compression the buggy 7/22 resumeDate would have implied.
+  assert.deepEqual(tail.anchors.map((a) => a.place), [
+    "Prince George, BC",
+    "Barkerville",
+    "Vancouver, British Columbia",
+  ]);
 });
