@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { routeBetween } from "@/lib/routing/route-between";
+import { reorderDays, applyRecompute } from "@/lib/trips/reorder-days";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetailCorridorColumn } from "@/components/trip/day-detail-corridor-column";
 import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
@@ -12,7 +14,9 @@ import { RightEdgeToolbar } from "@/components/trip/right-edge-toolbar";
 import { TopBar } from "@/components/trip/top-bar";
 import { ChangeTripComposer } from "@/components/trip/change-trip-composer";
 import { Sparkles } from "lucide-react";
-import type { Trip } from "@/lib/trips/types";
+import type { Day, Trip } from "@/lib/trips/types";
+
+const METERS_PER_MILE = 1609.34;
 
 const LIVING_PLAN_ON = process.env.NEXT_PUBLIC_LIVING_PLAN_EDIT === "1";
 
@@ -42,6 +46,54 @@ export function TripSlideupBody({
   // TEMPORARY floating button at the bottom of the rail — the real "Edit
   // Trip" entry is a later piece.
   const [editMode, setEditMode] = useState(false);
+  // Local (unpersisted) reordered day array — null until the user drags a day
+  // card in the rail. Feeds the rail, corridor column, and map so the whole
+  // slideup reads one order. Discarded on refresh; never written to the DB.
+  const [localDays, setLocalDays] = useState<Day[] | null>(null);
+  // Day ids whose miles/driveHours are being re-routed after a drop (dims
+  // their card meta + blocks a second drag until settled).
+  const [recomputing, setRecomputing] = useState<Set<string>>(new Set());
+  const days = localDays ?? trip.days;
+  const effectiveTrip = useMemo(
+    () => (localDays ? { ...trip, days: localDays } : trip),
+    [trip, localDays],
+  );
+
+  // Drop handler: reorder + renumber + redate (pure), then re-route the
+  // endpoints that moved in parallel and merge the miles back. Local only.
+  const handleReorderDay = useCallback(
+    async (from: number, to: number) => {
+      if (from === to) return;
+      const current = localDays ?? trip.days;
+      const { reordered, toRecompute } = reorderDays(
+        current,
+        from,
+        to,
+        trip.startDate,
+        trip.startCoords ?? null,
+      );
+      setLocalDays(reordered); // order/number/date correct; miles still stale
+      if (toRecompute.length === 0) return;
+      setRecomputing(new Set(toRecompute.map((r) => r.id)));
+      const results = await Promise.all(
+        toRecompute.map(async (r) => {
+          try {
+            const rt = await routeBetween([r.start, r.end]);
+            return {
+              id: r.id,
+              miles: Math.round(rt.distanceM / METERS_PER_MILE),
+              driveHours: Math.round((rt.durationS / 3600) * 10) / 10,
+            };
+          } catch {
+            return { id: r.id }; // leave the stale numbers on a routing failure
+          }
+        }),
+      );
+      setLocalDays((prev) => applyRecompute(prev ?? reordered, results));
+      setRecomputing(new Set());
+    },
+    [localDays, trip.days, trip.startDate, trip.startCoords],
+  );
   // Single-day selection (Phase 1 corridor integration): null = Overview
   // state, otherwise the day shown in the corridor column. The ?day= URL
   // param is the SINGLE SOURCE OF TRUTH — selection is derived from
@@ -133,7 +185,7 @@ export function TripSlideupBody({
       <div className="absolute inset-0" aria-label="Map">
         <MapColumn
           tripId={trip.id}
-          days={trip.days}
+          days={days}
           startCoords={trip.startCoords}
           routePolyline={trip.routePolyline}
           onMoveEnd={(bbox) => {
@@ -199,13 +251,16 @@ export function TripSlideupBody({
           >
             <DayColumnPlanner
               tripId={trip.id}
-              days={trip.days}
+              days={days}
               overlay
               editMode={editMode}
               activeDayId={selectedDayId}
               activeSection={selectedDayId === null ? activeSection : null}
               onSelectDay={(id) => selectDay(id)}
               onScrollTo={selectSection}
+              onReorderDay={handleReorderDay}
+              recomputingIds={recomputing}
+              busy={recomputing.size > 0}
             />
             {/* TEMPORARY edit-mode toggle — floats at the bottom of the day
              *  column so the drag handles are viewable before the real "Edit
@@ -242,7 +297,7 @@ export function TripSlideupBody({
             }}
           >
             <DayDetailCorridorColumn
-              trip={trip}
+              trip={effectiveTrip}
               selectedDayId={selectedDayId}
               scrollRequest={scrollRequest}
               onActiveSection={setActiveSection}

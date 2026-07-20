@@ -1,7 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp, Settings, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+// Aliased so it doesn't shadow the global `CSS` (used for CSS.escape below).
+import { CSS as DndCSS } from "@dnd-kit/utilities";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +58,21 @@ export function DayColumnPlanner({
   onSelectDay,
   onScrollTo,
   activeSection,
+  onReorderDay,
+  recomputingIds,
+  busy = false,
 }: {
   tripId: string;
   days: Day[];
+  /** Manual-edit reorder: called on drop with the day's old + new index.
+   *  The parent renumbers/redates/recomputes and feeds the new order back
+   *  down via `days`. Only wired in edit mode. */
+  onReorderDay?: (from: number, to: number) => void;
+  /** Day ids whose miles/driveHours are being recomputed post-drop — their
+   *  card meta line dims until the routing settles. */
+  recomputingIds?: Set<string>;
+  /** True while a recompute is in flight — blocks starting a second drag. */
+  busy?: boolean;
   /** Manual-edit mode. When true, each day card shows a (currently inert)
    *  drag handle in a 40px lane and the rail widens to 229px to fit it.
    *  Off by default; the real "Edit Trip" toggle is a later piece. */
@@ -100,6 +130,49 @@ export function DayColumnPlanner({
       ?.closest("div")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeDayId]);
+
+  // ── Drag-to-reorder (edit mode) ────────────────────────────────────────
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const dayIds = days.map((d) => d.id);
+  const draggingDay = draggingId ? days.find((d) => d.id === draggingId) : null;
+  const onDragEnd = (e: DragEndEvent) => {
+    setDraggingId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = dayIds.indexOf(String(active.id));
+    const to = dayIds.indexOf(String(over.id));
+    if (from !== -1 && to !== -1) onReorderDay?.(from, to);
+  };
+
+  const renderDay = (day: Day, i: number) => {
+    const active = wired ? activeDayId === day.id : i === 0;
+    const onClick = onSelectDay
+      ? () => {
+          // Picking a day folds the Overview nav group away — the day
+          // content is the focus now.
+          setNavCollapsed(true);
+          onSelectDay(day.id);
+        }
+      : undefined;
+    const recomputing = recomputingIds?.has(day.id) ?? false;
+    return editMode ? (
+      <SortableDayCard
+        key={day.id}
+        day={day}
+        active={active}
+        onClick={onClick}
+        recomputing={recomputing}
+        disabled={busy}
+      />
+    ) : (
+      <DayCard key={day.id} day={day} editMode={editMode} active={active} onClick={onClick} />
+    );
+  };
+
   return (
     <aside
       aria-label="Days"
@@ -174,32 +247,42 @@ export function DayColumnPlanner({
       </div>
 
       {/* Day stack — gutter timeline + cards. Wired: the selected day
-       *  renders active. Legacy: first day renders selected. */}
-      <nav
-        ref={stackRef}
-        aria-label="Days"
-        className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
-        style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
-      >
-        {days.map((day, i) => (
-          <DayCard
-            key={day.id}
-            day={day}
-            editMode={editMode}
-            active={wired ? activeDayId === day.id : i === 0}
-            onClick={
-              onSelectDay
-                ? () => {
-                    // Picking a day folds the Overview nav group away —
-                    // the day content is the focus now.
-                    setNavCollapsed(true);
-                    onSelectDay(day.id);
-                  }
-                : undefined
-            }
-          />
-        ))}
-      </nav>
+       *  renders active. Legacy: first day renders selected. In edit mode the
+       *  stack is a dnd-kit sortable list (drag from each card's grip). */}
+      {editMode ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e) => setDraggingId(String(e.active.id))}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setDraggingId(null)}
+        >
+          <SortableContext items={dayIds} strategy={verticalListSortingStrategy}>
+            <nav
+              ref={stackRef}
+              aria-label="Days"
+              className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
+              style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
+            >
+              {days.map(renderDay)}
+            </nav>
+          </SortableContext>
+          <DragOverlay>
+            {draggingDay ? (
+              <DayCard day={draggingDay} editMode active={false} dragging />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <nav
+          ref={stackRef}
+          aria-label="Days"
+          className="relative flex flex-col flex-1 overflow-y-auto no-scrollbar"
+          style={{ backgroundColor: "var(--bg-panel)", paddingTop: 3 }}
+        >
+          {days.map(renderDay)}
+        </nav>
+      )}
     </aside>
   );
 }
@@ -326,12 +409,28 @@ function DayCard({
   active,
   onClick,
   editMode = false,
+  recomputing = false,
+  dragging = false,
+  setDragRef,
+  dragStyle,
+  gripHandleProps,
 }: {
   day: Day;
   active: boolean;
   onClick?: () => void;
-  /** In manual-edit mode, render the drag handle lane. Inert for now. */
+  /** In manual-edit mode, render the drag handle lane. */
   editMode?: boolean;
+  /** Miles/driveHours being recomputed after a reorder — dims the meta line. */
+  recomputing?: boolean;
+  /** Rendered as the lifted DragOverlay clone — slight elevation. */
+  dragging?: boolean;
+  /** dnd-kit sortable node ref for the card wrapper. */
+  setDragRef?: (el: HTMLElement | null) => void;
+  /** dnd-kit transform/transition + drag opacity for the wrapper. */
+  dragStyle?: CSSProperties;
+  /** dnd-kit attributes + listeners — spread onto the grip handle only, so
+   *  the card body still click-selects the day. */
+  gripHandleProps?: Record<string, unknown>;
 }) {
   const at = new Date(`${day.date}T00:00:00`);
   const weekday = at
@@ -349,7 +448,21 @@ function DayCard({
   const subColor = active ? "var(--type-300)" : "var(--text-muted)";
 
   return (
-    <div className="flex shrink-0" style={{ minHeight: 112 }}>
+    <div
+      ref={setDragRef}
+      className="flex shrink-0"
+      style={{
+        minHeight: 112,
+        ...dragStyle,
+        ...(dragging
+          ? {
+              boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+              borderRadius: 4,
+              backgroundColor: "var(--bg-panel)",
+            }
+          : {}),
+      }}
+    >
       {/* Gutter — day code + connector timeline. */}
       <div className="relative shrink-0" style={{ width: 40 }}>
         <span
@@ -394,12 +507,16 @@ function DayCard({
         }
       >
         <span
-          className="font-mono whitespace-nowrap"
+          className={cn(
+            "font-mono whitespace-nowrap transition-opacity",
+            recomputing && "animate-pulse",
+          )}
           style={{
             fontSize: 14,
             lineHeight: "14px",
             letterSpacing: "-0.05em",
             color: subColor,
+            opacity: recomputing ? 0.35 : 1,
           }}
         >
           {meta}
@@ -422,21 +539,57 @@ function DayCard({
         </span>
       </button>
 
-      {/* Drag handle lane — edit mode only. Inert for now (no drag wired). */}
+      {/* Drag handle lane — edit mode only. Drag starts here (dnd-kit
+       *  listeners live on the grip); the card body still click-selects. */}
       {editMode && (
-        <div
-          aria-hidden
-          className="flex items-center justify-center shrink-0"
-          style={{ width: 40 }}
+        <button
+          type="button"
+          aria-label={`Reorder ${day.label}`}
+          className="flex items-center justify-center shrink-0 touch-none cursor-grab active:cursor-grabbing"
+          style={{ width: 40, color: "var(--text-muted)" }}
+          onClick={(e) => e.stopPropagation()}
+          {...gripHandleProps}
         >
-          <GripVertical
-            size={18}
-            strokeWidth={1.75}
-            style={{ color: "var(--text-muted)" }}
-          />
-        </div>
+          <GripVertical size={18} strokeWidth={1.75} />
+        </button>
       )}
     </div>
+  );
+}
+
+/** Sortable wrapper — binds a day card to dnd-kit. The grip is the drag
+ *  handle (listeners), the whole card is the movable node. */
+function SortableDayCard({
+  day,
+  active,
+  onClick,
+  recomputing,
+  disabled,
+}: {
+  day: Day;
+  active: boolean;
+  onClick?: () => void;
+  recomputing: boolean;
+  disabled: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: day.id, disabled });
+  return (
+    <DayCard
+      day={day}
+      active={active}
+      onClick={onClick}
+      editMode
+      recomputing={recomputing}
+      setDragRef={setNodeRef}
+      dragStyle={{
+        transform: DndCSS.Transform.toString(transform),
+        transition,
+        // The original slot fades while its clone rides in the DragOverlay.
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      gripHandleProps={{ ...attributes, ...listeners }}
+    />
   );
 }
 
