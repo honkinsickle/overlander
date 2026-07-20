@@ -23,6 +23,14 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPersistedReferenceTrip } from "@/lib/trips/reference";
 import type { Trip } from "@/lib/trips/types";
+import {
+  summarizeSignature,
+  versionStamp,
+  buildAppliedProvenance,
+  pendingClash,
+  type PendingProvenance,
+  type PendingClashResult,
+} from "./edit-provenance";
 import { geocode } from "@/lib/routing/geocode";
 import { PlaceResolver } from "./resolve";
 import {
@@ -336,6 +344,7 @@ async function regroundEdit(
 
 export type ReplanResult =
   | { ok: true; diff: ReplanDiff; editSignature: string }
+  | PendingClashResult
   | RailsFailure;
 
 const pendingId = (tripId: string) => `${tripId}--pending`;
@@ -346,6 +355,30 @@ const pendingId = (tripId: string) => `${tripId}--pending`;
  *  22:26 write). */
 function editSignature(parts: string[]): string {
   return parts.join("|");
+}
+
+/** Read the signature + summary of the currently-staged `<tripId>--pending`
+ *  row, or null when nothing is staged. Powers the overwrite guard so a new
+ *  edit never silently clobbers an existing staged one. */
+async function readPendingProvenance(
+  tripId: string,
+): Promise<PendingProvenance | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data } = await supabase
+    .from("reference_trips")
+    .select("payload")
+    .eq("id", pendingId(tripId))
+    .maybeSingle();
+  const payload = (
+    data as { payload?: { livingPlanEditSignature?: string; livingPlanEditSummary?: string } } | null
+  )?.payload;
+  if (!payload?.livingPlanEditSignature) return null;
+  return {
+    signature: payload.livingPlanEditSignature,
+    summary:
+      payload.livingPlanEditSummary ??
+      summarizeSignature(payload.livingPlanEditSignature),
+  };
 }
 
 /** Resolve every anchor to coords (picked coords win; geocode the label
@@ -437,8 +470,22 @@ async function runGateStage(
   beforeDays: Trip["days"],
   diffMeta: { place: string; date: string },
   signature: string,
+  replaceExisting: boolean,
   partial?: { cleave: Cleave; original: Trip },
-): Promise<{ ok: true; diff: ReplanDiff } | RailsFailure> {
+): Promise<{ ok: true; diff: ReplanDiff } | PendingClashResult | RailsFailure> {
+  // Overwrite guard (BEFORE the paid generation): refuse to clobber a
+  // different staged edit unless the caller confirmed the replacement.
+  const existingPending = await readPendingProvenance(tripId);
+  const clash = pendingClash(existingPending, signature, replaceExisting);
+  if (clash.blocked) {
+    return {
+      ok: false,
+      kind: "pending-clash",
+      existing: clash.existing,
+      error: `You already have a staged change: ${clash.existing.summary}. Replace it?`,
+    };
+  }
+
   const { preComputeFacts } = await import("./facts");
   const { generateAndAudit } = await import("./generate");
   const { bakeGeneratedDays } = await import("./bake");
@@ -524,12 +571,15 @@ async function runGateStage(
     ...finalTrip,
     id: pendingId(tripId),
     livingPlanEditSignature: signature,
+    // Human-readable summary carried on the pending row so the overwrite
+    // guard can name what's already staged, and apply can stamp provenance.
+    livingPlanEditSummary: summarizeSignature(signature),
   };
   const { error } = await supabase.from("reference_trips").upsert({
     id: pendingId(tripId),
     title: finalTrip.title,
     payload: staged,
-    source_version: `livingplan-pending@${new Date().toISOString().slice(0, 10)}`,
+    source_version: versionStamp("pending"),
   });
   if (error) return { ok: false, error: `Staging failed: ${error.message}` };
   return { ok: true, diff };
@@ -562,6 +612,7 @@ export async function replanAction(
   date: string,
   targetAnchor: string,
   now?: NowSpec,
+  replaceExisting = false,
 ): Promise<ReplanResult> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -583,6 +634,7 @@ export async function replanAction(
       ctx.beforeDays,
       { place: targetAnchor, date },
       signature,
+      replaceExisting,
       ctx.partial,
     );
     if (!staged.ok) return staged;
@@ -603,6 +655,7 @@ export async function addStopAction(
   place: string,
   mode: AddStopMode,
   now?: NowSpec,
+  replaceExisting = false,
 ): Promise<ReplanResult> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -664,6 +717,7 @@ export async function addStopAction(
       ctx.beforeDays,
       { place: resolved.place.displayName, date: endDate },
       signature,
+      replaceExisting,
       ctx.partial,
     );
     if (!staged.ok) return staged;
@@ -716,6 +770,7 @@ export async function executeEditAction(
   tripId: string,
   edit: EditPayload,
   now?: NowSpec,
+  replaceExisting = false,
 ): Promise<ReplanResult> {
   const railFail = checkRails(tripId);
   if (railFail) return railFail;
@@ -823,7 +878,7 @@ export async function executeEditAction(
     );
     if (!pf.ok) return { ok: false, error: `Can't fit that — ${pf.reason}` };
 
-    const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, ctx.partial);
+    const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, replaceExisting, ctx.partial);
     if (!staged.ok) return staged;
     return { ok: true, diff: staged.diff, editSignature: signature };
   } catch (err) {
@@ -855,7 +910,10 @@ export async function applyReplanAction(
   if (error || !data) {
     return { ok: false, error: "No staged re-plan found to apply." };
   }
-  const stagedPayload = data.payload as Trip & { livingPlanEditSignature?: string };
+  const stagedPayload = data.payload as Trip & {
+    livingPlanEditSignature?: string;
+    livingPlanEditSummary?: string;
+  };
   if (stagedPayload.livingPlanEditSignature !== expectedSignature) {
     return {
       ok: false,
@@ -863,14 +921,28 @@ export async function applyReplanAction(
         "The staged re-plan doesn't match the change you confirmed — refusing to apply. Re-run the change.",
     };
   }
-  // Strip the staging-only marker before it lands on the trip row.
-  const { livingPlanEditSignature: _sig, ...clean } = stagedPayload;
-  const payload = { ...clean, id: tripId };
+  // Strip the staging-only markers, then stamp apply provenance (signature +
+  // summary + full ISO instant) so "what changed and when" is a lookup.
+  const {
+    livingPlanEditSignature: _sig,
+    livingPlanEditSummary: _sum,
+    ...clean
+  } = stagedPayload;
+  const appliedAt = new Date();
+  const payload: Trip = {
+    ...clean,
+    id: tripId,
+    livingPlanApplied: buildAppliedProvenance(
+      expectedSignature,
+      stagedPayload.livingPlanEditSummary,
+      appliedAt,
+    ),
+  };
   const { error: writeErr } = await supabase.from("reference_trips").upsert({
     id: tripId,
     title: payload.title,
     payload,
-    source_version: `livingplan-applied@${new Date().toISOString().slice(0, 10)}`,
+    source_version: versionStamp("applied", appliedAt),
   });
   if (writeErr) return { ok: false, error: `Apply failed: ${writeErr.message}` };
   await supabase.from("reference_trips").delete().eq("id", pendingId(tripId));

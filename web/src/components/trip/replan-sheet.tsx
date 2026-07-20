@@ -13,6 +13,7 @@ import {
   type ParseReplanResult,
   type CleaveDisplay,
 } from "@/lib/itinerary/edit-actions";
+import type { PendingProvenance } from "@/lib/itinerary/edit-provenance";
 import type { AddStopMode } from "@/lib/itinerary/edit";
 import type { NowSpec } from "@/lib/itinerary/partial-replan";
 import type { ReplanDiff } from "@/lib/itinerary/plan-diff";
@@ -40,6 +41,8 @@ type Phase =
   | { name: "replanning"; label: string }
   | { name: "diff"; diff: ReplanDiff }
   | { name: "applying" }
+  // A different edit is already staged — confirm before clobbering it.
+  | { name: "replace-confirm"; existing: PendingProvenance; retry: () => void }
   | { name: "error"; message: string };
 
 function fmtDate(iso: string): string {
@@ -129,17 +132,20 @@ export function ReplanSheet({
   const partialNow: NowSpec | undefined =
     cleave?.ok && !cleave.isFullReplan ? nowSpec : undefined;
 
-  const runReplan = async (parse: ConfirmParse) => {
+  const runReplan = async (parse: ConfirmParse, replace = false) => {
     setPhase({ name: "replanning", label: `${parse.place} → ${fmtDate(parse.date)}` });
-    const r = await replanAction(tripId, parse.place, parse.date, parse.targetAnchor, partialNow);
-    if (!r.ok) setPhase({ name: "error", message: r.error });
-    else {
-      setSignature(r.editSignature);
-      setPhase({ name: "diff", diff: r.diff });
+    const r = await replanAction(tripId, parse.place, parse.date, parse.targetAnchor, partialNow, replace);
+    if (!r.ok) {
+      if ("kind" in r && r.kind === "pending-clash")
+        setPhase({ name: "replace-confirm", existing: r.existing, retry: () => runReplan(parse, true) });
+      else setPhase({ name: "error", message: r.error });
+      return;
     }
+    setSignature(r.editSignature);
+    setPhase({ name: "diff", diff: r.diff });
   };
 
-  const runAddStop = async (parse: AddStopParse, mode: AddStopMode) => {
+  const runAddStop = async (parse: AddStopParse, mode: AddStopMode, replace = false) => {
     setPhase({
       name: "replanning",
       label:
@@ -147,12 +153,15 @@ export function ReplanSheet({
           ? `Adding ${parse.place} (+1 day)`
           : `Adding ${parse.place} (keeping your dates)`,
     });
-    const r = await addStopAction(tripId, parse.place, mode, partialNow);
-    if (!r.ok) setPhase({ name: "error", message: r.error });
-    else {
-      setSignature(r.editSignature);
-      setPhase({ name: "diff", diff: r.diff });
+    const r = await addStopAction(tripId, parse.place, mode, partialNow, replace);
+    if (!r.ok) {
+      if ("kind" in r && r.kind === "pending-clash")
+        setPhase({ name: "replace-confirm", existing: r.existing, retry: () => runAddStop(parse, mode, true) });
+      else setPhase({ name: "error", message: r.error });
+      return;
     }
+    setSignature(r.editSignature);
+    setPhase({ name: "diff", diff: r.diff });
   };
 
   const apply = async () => {
@@ -444,6 +453,32 @@ export function ReplanSheet({
       )}
 
       {phase.name === "applying" && <Busy text="Applying the new plan…" />}
+
+      {phase.name === "replace-confirm" && (
+        <>
+          <div
+            className="flex flex-col"
+            style={{
+              gap: 8,
+              padding: 16,
+              borderRadius: 10,
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--border-mid)",
+            }}
+          >
+            <span style={LABEL}>Already staged</span>
+            <span style={VALUE}>{phase.existing.summary}</span>
+            <p style={{ ...VALUE, color: "var(--text-muted)", paddingTop: 4 }}>
+              Replacing it discards that staged change. Keep it, or replace it
+              with this one?
+            </p>
+          </div>
+          <div className="flex" style={{ gap: 10, paddingTop: 16 }}>
+            <SheetButton onClick={phase.retry} kind="primary" label="Replace" />
+            <SheetButton onClick={onClose} kind="ghost" label="Keep staged" />
+          </div>
+        </>
+      )}
     </div>
   );
 }

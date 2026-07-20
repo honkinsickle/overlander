@@ -52,11 +52,29 @@ export type Trip = {
    *  lib/itinerary (same pattern as `wizard`). Absent on reference/fork
    *  trips and on generated trips persisted before this field existed. */
   generationInput?: Record<string, unknown>;
+  /** Living-plan apply provenance — stamped when a living-plan edit is
+   *  promoted onto this trip, so "what changed and when" is a lookup, not a
+   *  forensic investigation (the applied source_version alone couldn't
+   *  reconstruct the 2026-07-18 edit). Absent on trips never edited via the
+   *  living-plan loop. */
+  livingPlanApplied?: LivingPlanProvenance;
   /** Offline tile-cache phases (default 7-day chunks). Travels with the
    *  trip across devices; prime status (downloaded/not) lives per-device
    *  in IndexedDB keyed by (tripId, phaseId). See
    *  docs/decisions/2026-05-21-offline-tile-caching-architecture.md. */
   offlinePhases?: OfflinePhase[];
+};
+
+/** Provenance recorded on a trip when a living-plan edit is applied. */
+export type LivingPlanProvenance = {
+  /** The editSignature that was promoted (the canonical "what"). */
+  signature: string;
+  /** Human-readable one-line summary of the edit, derived from the
+   *  signature (e.g. "Change trip end to 2026-07-28"). */
+  summary: string;
+  /** Full ISO instant of the apply — NOT a UTC-truncated date (a truncated
+   *  date stamps an evening-Pacific write as the next day). */
+  appliedAt: string;
 };
 
 /**

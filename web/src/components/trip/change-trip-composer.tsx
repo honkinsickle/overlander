@@ -14,6 +14,7 @@ import {
   type EditPayload,
   type CleaveDisplay,
 } from "@/lib/itinerary/edit-actions";
+import type { PendingProvenance } from "@/lib/itinerary/edit-provenance";
 import type { InterpretResult } from "@/lib/itinerary/interpret";
 import type { ClarifyContext } from "@/lib/itinerary/interpret";
 import type { NowSpec } from "@/lib/itinerary/partial-replan";
@@ -41,6 +42,8 @@ type Phase =
   | { name: "replanning"; label: string }
   | { name: "diff"; diff: ReplanDiff; editSignature: string }
   | { name: "applying" }
+  // A different edit is already staged — confirm before clobbering it.
+  | { name: "replace-confirm"; existing: PendingProvenance; retry: () => void }
   | { name: "error"; message: string };
 
 const LABEL: React.CSSProperties = {
@@ -162,7 +165,10 @@ export function ChangeTripComposer({
   /** The confirmed interpretation → dispatch to the executor → the SAME
    *  runGateStage/diff flow (reused wholesale). `now` comes from the utterance
    *  ("I'm at Stewart") when present → partial re-plan. */
-  const dispatch = async (r: Extract<InterpretResult, { kind: "edit" }>) => {
+  const dispatch = async (
+    r: Extract<InterpretResult, { kind: "edit" }>,
+    replace = false,
+  ) => {
     // The cleave shown in the banner IS the one we run: `override` (utterance
     // position or the "change" editor) when set, else the trip's standing
     // default (completedThrough) resolved server-side. Never a silent whole-trip
@@ -170,7 +176,7 @@ export function ChangeTripComposer({
     const now: NowSpec | undefined = override;
     if (r.type === "add-stop") {
       // add-stop keeps its own two-mode flow.
-      await runAddStop(r, "adjust", now);
+      await runAddStop(r, "adjust", now, replace);
       return;
     }
     setPhase({ name: "replanning", label: `${r.type}: ${r.place ?? ""}` });
@@ -181,20 +187,31 @@ export function ChangeTripComposer({
       dwell: r.dwell,
       nights: r.nights,
     };
-    const res = await executeEditAction(tripId, payload, now);
-    if (!res.ok) setPhase({ name: "error", message: res.error });
-    else setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
+    const res = await executeEditAction(tripId, payload, now, replace);
+    if (!res.ok) {
+      if ("kind" in res && res.kind === "pending-clash")
+        setPhase({ name: "replace-confirm", existing: res.existing, retry: () => dispatch(r, true) });
+      else setPhase({ name: "error", message: res.error });
+      return;
+    }
+    setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
   };
 
   const runAddStop = async (
     r: Extract<InterpretResult, { kind: "edit" }>,
     mode: AddStopMode,
     now?: NowSpec,
+    replace = false,
   ) => {
     setPhase({ name: "replanning", label: `add ${r.place ?? ""}` });
-    const res = await addStopAction(tripId, r.place ?? "", mode, now);
-    if (!res.ok) setPhase({ name: "error", message: res.error });
-    else setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
+    const res = await addStopAction(tripId, r.place ?? "", mode, now, replace);
+    if (!res.ok) {
+      if ("kind" in res && res.kind === "pending-clash")
+        setPhase({ name: "replace-confirm", existing: res.existing, retry: () => runAddStop(r, mode, now, true) });
+      else setPhase({ name: "error", message: res.error });
+      return;
+    }
+    setPhase({ name: "diff", diff: res.diff, editSignature: res.editSignature });
   };
 
   const apply = async (editSignature: string) => {
@@ -394,6 +411,48 @@ export function ChangeTripComposer({
         <div className="flex items-center" style={{ gap: 10, paddingTop: 16 }}>
           <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--amber)" }} />
           <span style={{ ...VALUE, color: "var(--text-muted)" }}>Applying…</span>
+        </div>
+      )}
+
+      {phase.name === "replace-confirm" && (
+        <div className="flex flex-col" style={{ gap: 12, paddingTop: 16 }}>
+          <div className="flex flex-col" style={{ gap: 6 }}>
+            <span style={LABEL}>Already staged</span>
+            <span style={VALUE}>{phase.existing.summary}</span>
+            <p style={{ ...VALUE, color: "var(--text-muted)" }}>
+              Replacing it discards that staged change. Keep it, or replace it
+              with this one?
+            </p>
+          </div>
+          <div className="flex" style={{ gap: 10 }}>
+            <button
+              type="button"
+              onClick={phase.retry}
+              style={{
+                ...VALUE,
+                padding: "8px 16px",
+                borderRadius: 8,
+                backgroundColor: "var(--amber)",
+                color: "var(--bg-base)",
+                fontWeight: 600,
+              }}
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                ...VALUE,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "1px solid var(--border-mid)",
+                color: "var(--text-muted)",
+              }}
+            >
+              Keep staged
+            </button>
+          </div>
         </div>
       )}
     </div>
