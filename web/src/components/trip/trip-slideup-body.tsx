@@ -37,6 +37,11 @@ export function TripSlideupBody({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  // Manual-edit mode (gated). Widens the day rail to fit each card's drag
+  // handle and shifts the corridor column to make room. Toggled by a
+  // TEMPORARY floating button at the bottom of the rail — the real "Edit
+  // Trip" entry is a later piece.
+  const [editMode, setEditMode] = useState(false);
   // Single-day selection (Phase 1 corridor integration): null = Overview
   // state, otherwise the day shown in the corridor column. The ?day= URL
   // param is the SINGLE SOURCE OF TRUTH — selection is derived from
@@ -183,7 +188,9 @@ export function TripSlideupBody({
           {/* Day Column Planner — translucent overlay (#0C0D0F @ 59%),
            *  wired as the day-selector for the corridor column. */}
           <div
-            className="absolute top-[72px] bottom-[10px] left-[10px] w-[182px] z-20 overflow-hidden rounded-bl-[14px]"
+            className={`absolute top-[72px] bottom-[10px] left-[10px] ${
+              editMode ? "w-[229px]" : "w-[182px]"
+            } z-20 overflow-hidden rounded-bl-[14px]`}
             style={{
               background: "rgba(12,13,15,0.59)",
               borderRight: "0.5px solid rgba(74,72,72,0.83)",
@@ -193,17 +200,41 @@ export function TripSlideupBody({
               tripId={trip.id}
               days={trip.days}
               overlay
+              editMode={editMode}
               activeDayId={selectedDayId}
               activeSection={selectedDayId === null ? activeSection : null}
               onSelectDay={(id) => selectDay(id)}
               onScrollTo={selectSection}
             />
+            {/* TEMPORARY edit-mode toggle — floats at the bottom of the day
+             *  column so the drag handles are viewable before the real "Edit
+             *  Trip" entry exists. Gated + remove when the entry lands. */}
+            {LIVING_PLAN_ON && (
+              <button
+                type="button"
+                onClick={() => setEditMode((e) => !e)}
+                className="absolute bottom-3 right-3 z-30 font-sans rounded-full border shadow-lg transition-colors"
+                style={{
+                  padding: "8px 16px",
+                  fontSize: 13,
+                  color: editMode ? "var(--bg-base)" : "var(--amber-light)",
+                  backgroundColor: editMode
+                    ? "var(--amber-light)"
+                    : "var(--bg-card)",
+                  borderColor: "var(--amber-light)",
+                }}
+              >
+                {editMode ? "Done" : "Edit"}
+              </button>
+            )}
           </div>
 
           {/* Day Detail column — single-day corridor view (v4) or the
            *  Overview state; translucent overlay matched to Day Column. */}
           <div
-            className="absolute top-[72px] bottom-[10px] left-[192px] w-[478px] z-20 overflow-hidden rounded-br-[15px]"
+            className={`absolute top-[72px] bottom-[10px] ${
+              editMode ? "left-[239px] w-[431px]" : "left-[192px] w-[478px]"
+            } z-20 overflow-hidden rounded-br-[15px]`}
             style={{
               background: "color-mix(in srgb, var(--bg-card) 59%, transparent)",
               borderRight: "1px solid var(--border-subtle)",

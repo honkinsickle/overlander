@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Settings } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings, GripVertical } from "lucide-react";
 import type { Day } from "@/lib/trips/types";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ export function DayColumnPlanner({
   tripId,
   days,
   overlay = false,
+  editMode = false,
   activeDayId,
   onSelectDay,
   onScrollTo,
@@ -42,6 +43,10 @@ export function DayColumnPlanner({
 }: {
   tripId: string;
   days: Day[];
+  /** Manual-edit mode. When true, each day card shows a (currently inert)
+   *  drag handle in a 40px lane and the rail widens to 229px to fit it.
+   *  Off by default; the real "Edit Trip" toggle is a later piece. */
+  editMode?: boolean;
   /** When true, the column omits its own opaque background + right border —
    *  the slideup caller wraps it in a translucent overlay. Default false for
    *  the legacy /trip/[id] page which provides no wrapper. */
@@ -101,7 +106,11 @@ export function DayColumnPlanner({
       data-trip-id={tripId}
       className={cn(
         "relative z-20 flex flex-col h-full overflow-hidden",
-        overlay ? "w-full" : "w-[183px] border-r border-border-subtle",
+        overlay
+          ? "w-full"
+          : editMode
+            ? "w-[229px] border-r border-border-subtle"
+            : "w-[183px] border-r border-border-subtle",
       )}
       style={overlay ? undefined : { backgroundColor: "var(--bg-base)" }}
     >
@@ -176,6 +185,7 @@ export function DayColumnPlanner({
           <DayCard
             key={day.id}
             day={day}
+            editMode={editMode}
             active={wired ? activeDayId === day.id : i === 0}
             onClick={
               onSelectDay
@@ -315,10 +325,13 @@ function DayCard({
   day,
   active,
   onClick,
+  editMode = false,
 }: {
   day: Day;
   active: boolean;
   onClick?: () => void;
+  /** In manual-edit mode, render the drag handle lane. Inert for now. */
+  editMode?: boolean;
 }) {
   const at = new Date(`${day.date}T00:00:00`);
   const weekday = at
@@ -408,6 +421,21 @@ function DayCard({
           {day.label.replace(/\s*—\s*/g, "\n— ")}
         </span>
       </button>
+
+      {/* Drag handle lane — edit mode only. Inert for now (no drag wired). */}
+      {editMode && (
+        <div
+          aria-hidden
+          className="flex items-center justify-center shrink-0"
+          style={{ width: 40 }}
+        >
+          <GripVertical
+            size={18}
+            strokeWidth={1.75}
+            style={{ color: "var(--text-muted)" }}
+          />
+        </div>
+      )}
     </div>
   );
 }
