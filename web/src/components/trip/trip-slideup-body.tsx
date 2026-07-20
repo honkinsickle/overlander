@@ -205,9 +205,11 @@ export function TripSlideupBody({
         )}
       </div>
 
-      {/* Top Bar — floating chrome (docks bottom in Collapsed) */}
+      {/* Top Bar — floating chrome (docks bottom in Collapsed). Reads the
+       *  effective (reordered) trip so its total miles stay consistent with
+       *  the rail/corridor after a drag. */}
       <TopBar
-        trip={trip}
+        trip={effectiveTrip}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
         searchActive={searchActive}
