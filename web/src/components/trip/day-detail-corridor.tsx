@@ -257,7 +257,16 @@ export function DayDetailCorridor({
       {/* ── Day header — 464×64 band (Barlow Medium 20 / #ECEAE4) ── */}
       <div
         className="flex flex-col shrink-0"
-        style={{ width: 464, height: 54, gap: 3, padding: "4px 2px 7px 2px", backgroundColor: "var(--steel-750)" }}
+        style={{
+          // Edit mode widens the content to --rail-card-w (495); match the
+          // header band to it so it spans the same width as the hero photo.
+          // Non-edit keeps its original fixed 464.
+          width: editMode ? "var(--rail-card-w)" : 464,
+          height: 54,
+          gap: 3,
+          padding: "4px 2px 7px 2px",
+          backgroundColor: "var(--steel-750)",
+        }}
       >
         <span
           style={{
