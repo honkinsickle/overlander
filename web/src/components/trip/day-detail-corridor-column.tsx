@@ -84,6 +84,7 @@ export function DayDetailCorridorColumn({
   selectedDayId,
   scrollRequest,
   onActiveSection,
+  editMode = false,
 }: {
   trip: Trip;
   selectedDayId: string | null;
@@ -97,6 +98,8 @@ export function DayDetailCorridorColumn({
    *  (#overview / #guides / #places). Lets the rail highlight the
    *  matching nav item as the user scrolls. */
   onActiveSection?: (section: "overview" | "guides" | "places") => void;
+  /** Manual-edit mode — forwarded to the corridor's place cards. */
+  editMode?: boolean;
 }) {
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
@@ -509,6 +512,7 @@ export function DayDetailCorridorColumn({
             onOpenPlace={openPlaceDetail}
             onExploreDay={openBrowse}
             briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
+            editMode={editMode}
           />
         ) : (
           <DayDetailOverview

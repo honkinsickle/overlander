@@ -1,5 +1,6 @@
 "use client";
 
+import { GripVertical } from "lucide-react";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
 import {
@@ -40,6 +41,10 @@ type Props = {
    *  passes this only for waypoint-backed tiles — suggestions stay
    *  read-only (Phase 3 editing model). */
   onRemove?: () => void;
+  /** Manual-edit mode. When true, the card grows 400->440 and shows an
+   *  inert drag handle in a 40px right lane (same convention as the rail).
+   *  Off by default. */
+  editMode?: boolean;
 };
 
 /** Compact a review count: 9300 → "9.3k", 5000 → "5k", 881 → "881". */
@@ -55,6 +60,7 @@ export function CategoryListCard({
   verified = true,
   onOpen,
   onRemove,
+  editMode = false,
 }: Props) {
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
@@ -63,7 +69,7 @@ export function CategoryListCard({
     <div
       onClick={onOpen}
       className="relative flex items-start overflow-clip rounded-md"
-      style={{ width: 400, gap: 13, backgroundColor: "var(--bg-card)" }}
+      style={{ width: editMode ? 440 : 400, gap: 13, backgroundColor: "var(--bg-card)" }}
     >
       {onRemove && (
         <button
@@ -196,6 +202,22 @@ export function CategoryListCard({
           </button>
         </div>
       </div>
+
+      {/* Drag handle lane — edit mode only. Inert (no drag wired). Same
+       *  dotted GripVertical + muted styling as the rail day cards. */}
+      {editMode && (
+        <div
+          aria-hidden
+          className="flex items-center justify-center shrink-0 self-stretch"
+          style={{ width: 40 }}
+        >
+          <GripVertical
+            size={18}
+            strokeWidth={1.75}
+            style={{ color: "var(--text-muted)" }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -96,6 +96,10 @@ type Props = {
    *  day reads as one cohesive corridor day. Absent on reference/fork trips
    *  that carry no LLM reasoning. */
   briefing?: React.ReactNode;
+  /** Manual-edit mode — threaded to every place card (drag-handle lane) and
+   *  used to widen the corridor content so the wider cards fit. Off by
+   *  default. */
+  editMode?: boolean;
 };
 
 const GUTTER_W = 48;
@@ -175,6 +179,7 @@ export function DayDetailCorridor({
   onOpenPlace,
   onExploreDay,
   briefing,
+  editMode = false,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Generated trips flag the LLM's curated key stops; when any exist, they
@@ -238,6 +243,15 @@ export function DayDetailCorridor({
       style={{
         width: "var(--rail-column-w)",
         backgroundColor: "color-mix(in srgb, var(--grounds-850) 80%, transparent)",
+        // Edit mode widens the column 478->511 (and content 462->495) so the
+        // wider place cards (400->440) fit. Overriding the tokens here cascades
+        // to every descendant that reads them.
+        ...(editMode
+          ? ({
+              "--rail-column-w": "511px",
+              "--rail-card-w": "495px",
+            } as React.CSSProperties)
+          : {}),
       }}
     >
       {/* ── Day header — 464×64 band (Barlow Medium 20 / #ECEAE4) ── */}
@@ -310,6 +324,7 @@ export function DayDetailCorridor({
                 category={p.category}
                 status={p.keyStopNote}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                editMode={editMode}
               />
             ))}
           </div>
@@ -354,6 +369,7 @@ export function DayDetailCorridor({
               last={item.last}
               onRemovePlace={onRemovePlace}
               onOpenPlace={onOpenPlace}
+              editMode={editMode}
             />
           ) : item.type === "keystop" ? (
             <KeyStopNode
@@ -362,6 +378,7 @@ export function DayDetailCorridor({
               mile={item.mile}
               last={item.last}
               onOpenPlace={onOpenPlace}
+              editMode={editMode}
             />
           ) : (
             <MileTick
@@ -370,6 +387,7 @@ export function DayDetailCorridor({
               tiles={item.tiles}
               last={item.last}
               onOpenPlace={onOpenPlace}
+              editMode={editMode}
             />
           ),
         )}
@@ -410,6 +428,7 @@ function CityNode({
   last,
   onRemovePlace,
   onOpenPlace,
+  editMode,
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
@@ -423,6 +442,7 @@ function CityNode({
   last: boolean;
   onRemovePlace?: (placeId: string) => void;
   onOpenPlace?: (placeId: string) => void;
+  editMode?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   // Curated picks are featured in the day-level "Today's Picks" block (reliable
@@ -496,6 +516,7 @@ function CityNode({
                     ? () => onRemovePlace(p.id)
                     : undefined
                 }
+                editMode={editMode}
               />
             ))}
           </div>
@@ -515,6 +536,7 @@ function CityNode({
                     ? () => onRemovePlace(p.id)
                     : undefined
                 }
+                editMode={editMode}
               />
             ))}
         </div>
@@ -546,11 +568,13 @@ function KeyStopNode({
   mile,
   last,
   onOpenPlace,
+  editMode,
 }: {
   place: CorridorPlace;
   mile: number;
   last: boolean;
   onOpenPlace?: (placeId: string) => void;
+  editMode?: boolean;
 }) {
   const m = Math.round(mile);
   return (
@@ -587,6 +611,7 @@ function KeyStopNode({
           category={place.category}
           status={place.keyStopNote}
           onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+          editMode={editMode}
         />
       </div>
     </div>
@@ -600,11 +625,13 @@ function MileTick({
   tiles = [],
   last = false,
   onOpenPlace,
+  editMode,
 }: {
   mile: number;
   tiles?: CorridorPlace[];
   last?: boolean;
   onOpenPlace?: (placeId: string) => void;
+  editMode?: boolean;
 }) {
   const hasTiles = tiles.length > 0;
   return (
@@ -641,6 +668,7 @@ function MileTick({
             category={p.category}
             status={p.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+            editMode={editMode}
           />
         ))}
       </div>

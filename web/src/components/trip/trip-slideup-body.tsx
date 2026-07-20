@@ -245,6 +245,7 @@ export function TripSlideupBody({
               selectedDayId={selectedDayId}
               scrollRequest={scrollRequest}
               onActiveSection={setActiveSection}
+              editMode={editMode}
             />
           </div>
         </>
