@@ -37,6 +37,7 @@ export function TopBar({
   searchActive = false,
   onOpenSearch,
   onCloseSearch,
+  editMode = false,
 }: {
   trip: Trip;
   collapsed?: boolean;
@@ -53,6 +54,9 @@ export function TopBar({
    *  the input but does NOT call this — the slideup body has its own
    *  keydown listener that closes the panel on Escape. */
   onCloseSearch?: () => void;
+  /** Manual-edit mode — widens the bar to match the expanded body (740)
+   *  while keeping the search + collapse control right-aligned. */
+  editMode?: boolean;
 }) {
   const totalMiles = trip.days.reduce((sum, d) => sum + (d.miles ?? 0), 0);
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
@@ -119,7 +123,7 @@ export function TopBar({
 
   return (
     <div
-      className={`absolute ${collapsed ? "bottom-3" : "top-3"} left-[10px] z-30 w-[660px] h-[60px] rounded-tl-[15px] rounded-tr-[15px] overflow-hidden`}
+      className={`absolute ${collapsed ? "bottom-3" : "top-3"} left-[10px] z-30 ${editMode ? "w-[740px]" : "w-[660px]"} h-[60px] rounded-tl-[15px] rounded-tr-[15px] overflow-hidden`}
       style={{
         background: "#162029",
         borderBottom: collapsed ? undefined : "1px solid var(--border-mid)",
@@ -157,7 +161,10 @@ export function TopBar({
         className="absolute top-1/2 -translate-y-1/2 h-[44px] transition-[left] duration-200 ease-out motion-reduce:transition-none"
         style={{
           right: 61,
-          left: expanded ? 8 : 351,
+          // Collapsed search stays 248px wide, glued to the right. In edit
+          // mode the bar is 80px wider, so shift the left edge +80 (351->431)
+          // to keep the box the same size and meet the (now-wider) title.
+          left: expanded ? 8 : editMode ? 431 : 351,
         }}
       >
         <label

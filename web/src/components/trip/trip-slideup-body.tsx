@@ -161,6 +161,7 @@ export function TripSlideupBody({
         searchActive={searchActive}
         onOpenSearch={() => setSearchActive(true)}
         onCloseSearch={() => setSearchActive(false)}
+        editMode={editMode}
       />
 
       {/* Find Nearby panel — Search Active state. Overlays the day column +
