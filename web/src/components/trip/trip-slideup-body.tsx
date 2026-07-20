@@ -233,7 +233,7 @@ export function TripSlideupBody({
            *  Overview state; translucent overlay matched to Day Column. */}
           <div
             className={`absolute top-[72px] bottom-[10px] ${
-              editMode ? "left-[239px] w-[431px]" : "left-[192px] w-[478px]"
+              editMode ? "left-[239px] w-[511px]" : "left-[192px] w-[478px]"
             } z-20 overflow-hidden rounded-br-[15px]`}
             style={{
               background: "color-mix(in srgb, var(--bg-card) 59%, transparent)",
