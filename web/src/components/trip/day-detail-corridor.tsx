@@ -264,7 +264,7 @@ export function DayDetailCorridor({
           width: editMode ? "var(--rail-card-w)" : 464,
           height: 54,
           gap: 3,
-          padding: "4px 2px 7px 2px",
+          padding: "4px 2px 7px 12px",
           backgroundColor: "var(--steel-750)",
         }}
       >
