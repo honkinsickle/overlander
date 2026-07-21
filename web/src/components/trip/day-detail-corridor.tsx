@@ -121,6 +121,9 @@ type Props = {
   dayStartMile?: number;
   /** Manual-edit drag (edit spine): pin/unpin a POI by dragging its card. */
   onMovePlace?: (move: PlaceMove) => void;
+  /** Authored per-place order (Trip.placeRanks) + the same-node reorder handler. */
+  ranks?: ReadonlyMap<string, number>;
+  onReorderPlace?: (placeId: string, rankWrites: Record<string, number>) => void;
   pendingPlaceId?: string | null;
   errorPlaceId?: string | null;
   errorMessage?: string | null;
@@ -225,6 +228,8 @@ export function DayDetailCorridor({
   routeLine,
   dayStartMile,
   onMovePlace,
+  ranks,
+  onReorderPlace,
   pendingPlaceId,
   errorPlaceId,
   errorMessage,
@@ -387,6 +392,8 @@ export function DayDetailCorridor({
           onRemovePlace={onRemovePlace}
           editMode={editMode}
           onMovePlace={onMovePlace}
+          ranks={ranks}
+          onReorderPlace={onReorderPlace}
           pendingPlaceId={pendingPlaceId}
           errorPlaceId={errorPlaceId}
           errorMessage={errorMessage}

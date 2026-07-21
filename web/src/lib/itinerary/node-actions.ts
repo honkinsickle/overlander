@@ -48,7 +48,11 @@ async function loadRaw(tripId: string): Promise<Trip | null> {
  *  up the overlay change), then upsert the whole payload. */
 async function persist(
   trip: Trip,
-  overlay: { nodeSeeds?: NodeSeed[]; placeOverrides?: PlaceNodeOverride[] },
+  overlay: {
+    nodeSeeds?: NodeSeed[];
+    placeOverrides?: PlaceNodeOverride[];
+    placeRanks?: Record<string, number>;
+  },
 ): Promise<RailsFailure | null> {
   const days = trip.days.map((d) => {
     const { corridorCities: _cc, ...rest } = d;
@@ -60,6 +64,7 @@ async function persist(
     days,
     nodeSeeds: overlay.nodeSeeds ?? trip.nodeSeeds,
     placeOverrides: overlay.placeOverrides ?? trip.placeOverrides,
+    placeRanks: overlay.placeRanks ?? trip.placeRanks,
   };
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase.from("reference_trips").upsert({
@@ -167,6 +172,24 @@ export async function unpinPlaceAction(
     nodeSeeds: res.nodeSeeds,
     placeOverrides: res.placeOverrides,
   });
+  if (failed) return failed;
+  return { ok: true };
+}
+
+/** Merge authored rank writes (from insertRank) into placeRanks and persist.
+ *  A fractional insert writes one entry; a materialize/reseed writes the whole
+ *  cluster — both are just a shallow merge over the existing map. */
+export async function setPlaceRankAction(
+  tripId: string,
+  rankWrites: Record<string, number>,
+): Promise<{ ok: true } | RailsFailure> {
+  const railed = checkRails(tripId);
+  if (railed) return railed;
+  const trip = await loadRaw(tripId);
+  if (!trip) return { ok: false, error: `Trip "${tripId}" not found.` };
+
+  const placeRanks = { ...(trip.placeRanks ?? {}), ...rankWrites };
+  const failed = await persist(trip, { placeRanks });
   if (failed) return failed;
   return { ok: true };
 }

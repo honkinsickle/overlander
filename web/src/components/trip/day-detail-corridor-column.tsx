@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { decodePolyline } from "@/lib/routing/point-to-polyline";
 import { dayStartMiles } from "@/lib/corridor/stretches";
 import { applyPlaceOverrides } from "@/lib/corridor/bucket";
-import { pinPlaceAction, unpinPlaceAction } from "@/lib/itinerary/node-actions";
+import {
+  pinPlaceAction,
+  unpinPlaceAction,
+  setPlaceRankAction,
+} from "@/lib/itinerary/node-actions";
 import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
 import {
   DayDetailOverview,
@@ -186,6 +190,38 @@ export function DayDetailCorridorColumn({
       });
     },
     [day, localOverrides, trip.id],
+  );
+
+  // ── Optimistic authored order (edit-mode reorder within a node) ─────────
+  // Same pattern as localOverrides: a same-node drop flips these ranks
+  // immediately (the edit spine re-sorts the cluster from them), then persists
+  // in the background; a failed write reverts and raises the inline error.
+  const serverRanks = trip.placeRanks;
+  const [localRanks, setLocalRanks] = useState<Record<string, number>>(serverRanks ?? {});
+  useEffect(() => {
+    setLocalRanks(trip.placeRanks ?? {});
+  }, [trip.placeRanks]);
+  const ranksMap = useMemo(
+    () => new Map(Object.entries(localRanks)),
+    [localRanks],
+  );
+  const onReorderPlace = useCallback(
+    (placeId: string, rankWrites: Record<string, number>) => {
+      const prev = localRanks;
+      setMoveError(null);
+      setMoveNote(null);
+      setLocalRanks({ ...prev, ...rankWrites });
+      setPendingPlaceId(placeId);
+      startMoveTransition(async () => {
+        const res = await setPlaceRankAction(trip.id, rankWrites);
+        if (!res.ok) {
+          setLocalRanks(prev);
+          setMoveError({ placeId, message: `Couldn't reorder: ${res.error}` });
+        }
+        setPendingPlaceId((p) => (p === placeId ? null : p));
+      });
+    },
+    [localRanks, trip.id],
   );
 
   // The selected day's cities with the OPTIMISTIC overlay applied: strip a
@@ -623,6 +659,8 @@ export function DayDetailCorridorColumn({
             routeLine={routeLine}
             dayStartMile={dayStartMile}
             onMovePlace={editMode ? onMovePlace : undefined}
+            ranks={ranksMap}
+            onReorderPlace={editMode ? onReorderPlace : undefined}
             pendingPlaceId={pendingPlaceId}
             errorPlaceId={moveError?.placeId ?? null}
             errorMessage={moveError?.message ?? null}

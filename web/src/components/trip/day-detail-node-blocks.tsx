@@ -23,7 +23,7 @@
  * its stretch (a stop within the drive). Content-driven height. Off-corridor
  * places (offset > bufferMi) are the only thing in "Along the way".
  */
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -45,6 +45,8 @@ import {
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
 import { haversineMi } from "@/lib/routing/point-to-polyline";
+import { insertRank } from "@/lib/corridor/place-rank";
+import { computeInsertIndex } from "@/lib/corridor/insert-index";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
@@ -90,6 +92,12 @@ type Props = {
   /** Wire the drag: a place dragged onto a node cluster pins it there; dragged
    *  onto the drive, unpins it. When absent, the grips stay inert. */
   onMovePlace?: (move: PlaceMove) => void;
+  /** Authored per-place ranks (Trip.placeRanks) — order within a cluster. Feeds
+   *  the sort; a place absent keeps its derived (mile / near→far) order. */
+  ranks?: ReadonlyMap<string, number>;
+  /** Reorder within a node's own cluster (same-node drop): the dragged place +
+   *  the minimal rank writes from insertRank. Absent → reorder disabled. */
+  onReorderPlace?: (placeId: string, rankWrites: Record<string, number>) => void;
   /** Placeid whose pin/unpin write is in flight — its card shows a saving cue. */
   pendingPlaceId?: string | null;
   /** Placeid whose last write FAILED — its card shows a persistent inline
@@ -110,6 +118,8 @@ export function DayDetailNodeBlocks({
   onRemovePlace,
   editMode = true,
   onMovePlace,
+  ranks,
+  onReorderPlace,
   pendingPlaceId,
   errorPlaceId,
   errorMessage,
@@ -130,14 +140,18 @@ export function DayDetailNodeBlocks({
     const anchor = cities[0]?.coords;
     const roundTrip =
       cities.length >= 2 && sameCoords(anchor, cities[cities.length - 1]?.coords);
-    const orderKey =
-      roundTrip && anchor
-        ? new Map(
-            places
-              .filter((p) => p.coords)
-              .map((p) => [p.id, haversineMi(p.coords as [number, number], anchor)]),
-          )
-        : undefined;
+    // Sort key per place: an AUTHORED rank wins; else near→far on a round-trip
+    // day; else absent → the along-route mile (assignPlacesToStretches fallback).
+    let orderKey: Map<string, number> | undefined;
+    if ((ranks && ranks.size) || (roundTrip && anchor)) {
+      orderKey = new Map();
+      for (const p of places) {
+        const r = ranks?.get(p.id);
+        if (r !== undefined) orderKey.set(p.id, r);
+        else if (roundTrip && anchor && p.coords)
+          orderKey.set(p.id, haversineMi(p.coords, anchor));
+      }
+    }
     // HYBRID: cluster membership is the server's bucketing (cities[].placeIds),
     // which carries user pin overrides (applyPlaceOverrides) — pure geometry
     // can't see those. Geometry only positions the residual (a place in no
@@ -150,7 +164,7 @@ export function DayDetailNodeBlocks({
       orderKey,
     });
     return { positioned, nodeClusters, stretches, alongTheWay };
-  }, [byId, line, dayStartMile, cities]);
+  }, [byId, line, dayStartMile, cities, ranks]);
 
   // ── Drag-to-repin (edit mode) ──────────────────────────────────────────
   const dndEnabled = !!onMovePlace;
@@ -159,6 +173,15 @@ export function DayDetailNodeBlocks({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
   const cityById = useMemo(() => new Map(cities.map((c) => [c.id, c])), [cities]);
+  // Per-cluster card element registry (placeId → DOM node), read at drop time to
+  // measure sibling rects for the insertion index. Never cached across drags.
+  const cardRefs = useRef(new Map<string, HTMLElement>());
+  // Stable identity so PoiRow's merged ref callback doesn't churn each render
+  // (a churning ref nulls the dnd node mid-activation and aborts the drag).
+  const registerCard = useCallback((placeId: string, el: HTMLElement | null) => {
+    if (el) cardRefs.current.set(placeId, el);
+    else cardRefs.current.delete(placeId);
+  }, []);
   // The node a place currently clusters under (server/optimistic placeIds), or
   // -1 if it's mid-drive — used to no-op a drop back onto the same node.
   const currentNodeId = (placeId: string): string | null => {
@@ -180,7 +203,34 @@ export function DayDetailNodeBlocks({
     }
     if (overId.startsWith(NODE)) {
       const nodeId = overId.slice(NODE.length);
-      if (currentNodeId(placeId) === nodeId) return; // already here — no-op
+      if (currentNodeId(placeId) === nodeId) {
+        // Same node → REORDER within its cluster (sequence, not attachment).
+        // Display order is the rendered cluster (DOM order); the insert index
+        // comes from the drop pointer vs sibling midpoints; insertRank turns
+        // (finalOrder, index) into the minimal rank writes.
+        const nodeIdx = cities.findIndex((c) => c.id === nodeId);
+        const displayOrder = nodeClusters[nodeIdx] ?? [];
+        const tr = e.active.rect.current.translated;
+        if (!onReorderPlace || displayOrder.length < 2 || !tr) return;
+        const els = displayOrder.map((id) => cardRefs.current.get(id));
+        if (els.some((el) => !el)) return; // can't measure reliably — bail
+        const rects = els.map((el) => (el as HTMLElement).getBoundingClientRect());
+        const selfIndex = displayOrder.indexOf(placeId);
+        const insertIndex = computeInsertIndex(
+          rects,
+          tr.top + tr.height / 2,
+          selfIndex >= 0 ? selfIndex : null,
+        );
+        const withoutSelf = displayOrder.filter((id) => id !== placeId);
+        const finalOrder = [
+          ...withoutSelf.slice(0, insertIndex),
+          placeId,
+          ...withoutSelf.slice(insertIndex),
+        ];
+        const writes = insertRank(finalOrder, insertIndex, ranks ?? new Map());
+        if (writes.size) onReorderPlace(placeId, Object.fromEntries(writes));
+        return;
+      }
       const pos = positioned.get(placeId);
       const node = cityById.get(nodeId);
       const distanceMi =
@@ -202,6 +252,7 @@ export function DayDetailNodeBlocks({
     onRemovePlace,
     editMode,
     dndEnabled,
+    registerCard,
     pendingPlaceId,
     errorPlaceId,
     errorMessage,
@@ -456,6 +507,8 @@ type PoiCtx = {
   onRemovePlace?: (placeId: string) => void;
   editMode?: boolean;
   dndEnabled?: boolean;
+  /** Register the card's DOM node for drop-time rect measurement. */
+  registerCard?: (placeId: string, el: HTMLElement | null) => void;
   pendingPlaceId?: string | null;
   errorPlaceId?: string | null;
   errorMessage?: string | null;
@@ -474,6 +527,7 @@ function PoiRow({
   onRemovePlace,
   editMode,
   dndEnabled,
+  registerCard,
   pendingPlaceId,
   errorPlaceId,
   errorMessage,
@@ -489,6 +543,16 @@ function PoiRow({
     id: placeId,
     disabled: !dndEnabled,
   });
+  // Merge the dnd node ref with the card registry (drop-time rect measurement).
+  // Stable identity (deps are all stable) so it doesn't churn the node ref each
+  // render — a churning ref nulls the draggable mid-activation and aborts drags.
+  const setRefs = useCallback(
+    (el: HTMLElement | null) => {
+      setNodeRef(el);
+      registerCard?.(placeId, el);
+    },
+    [setNodeRef, registerCard, placeId],
+  );
   if (!place) return null;
   const pending = pendingPlaceId === placeId;
   const errored = errorPlaceId === placeId;
@@ -501,7 +565,7 @@ function PoiRow({
       dotSize={8}
       last={last}
     >
-      <div ref={setNodeRef} style={{ opacity: isDragging ? 0.4 : 1 }}>
+      <div ref={setRefs} style={{ opacity: isDragging ? 0.4 : 1 }}>
         <div style={pending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}>
           <CategoryListCard
             place={place}

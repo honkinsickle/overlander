@@ -173,7 +173,14 @@ export function assignPlacesToStretches(input: {
   // (on-corridor) or Along the way (off-corridor). Clustered places keep their
   // server home regardless of where their mile would land them.
   if (serverClusters) {
-    const nodeClusters = serverClusters.map((ids) => [...ids]);
+    // Server order verbatim, EXCEPT a fully-ranked cluster sorts by its authored
+    // ranks (materialization guarantees all-or-nothing, so a partial mix of rank
+    // and mile never happens within one cluster).
+    const nodeClusters = serverClusters.map((ids) =>
+      orderKey && ids.length > 1 && ids.every((id) => orderKey.has(id))
+        ? [...ids].sort((a, b) => (orderKey.get(a) as number) - (orderKey.get(b) as number))
+        : [...ids],
+    );
     const clustered = new Set(serverClusters.flat());
     for (const p of positioned.values()) {
       if (clustered.has(p.id)) continue;
