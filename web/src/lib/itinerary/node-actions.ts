@@ -96,10 +96,14 @@ export async function createNodeSeedAction(
   return { ok: true, seedId: res.id, created: res.created };
 }
 
-/** Pin a POI under a node, promoting a gazetteer node to a seed first. */
+/** Pin a POI under a node, promoting a gazetteer node to a seed first. An
+ *  optional `rankWrites` (from insertRank, on a cross-node drop that lands the
+ *  place AT a position) is merged into placeRanks in the SAME persist, so the
+ *  attachment + authored order commit atomically — a cluster is never left
+ *  partially ranked on disk. */
 export async function pinPlaceAction(
   tripId: string,
-  input: { dayId: string; placeId: string; nodeId: string },
+  input: { dayId: string; placeId: string; nodeId: string; rankWrites?: Record<string, number> },
 ): Promise<Result<{ nodeId: string; promoted: boolean }>> {
   const railed = checkRails(tripId);
   if (railed) return railed;
@@ -123,9 +127,13 @@ export async function pinPlaceAction(
     input.placeId,
     new Date().toISOString(),
   );
+  const placeRanks = input.rankWrites
+    ? { ...(trip.placeRanks ?? {}), ...input.rankWrites }
+    : undefined;
   const failed = await persist(trip, {
     nodeSeeds: res.nodeSeeds,
     placeOverrides: res.placeOverrides,
+    placeRanks,
   });
   if (failed) return failed;
   return { ok: true, nodeId: res.nodeId, promoted: res.nodeSeeds.length > before };

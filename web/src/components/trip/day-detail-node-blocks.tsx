@@ -69,6 +69,11 @@ export type PlaceMove = {
   distanceMi?: number;
   nodeName?: string;
   placeName?: string;
+  /** Authored order for the TARGET cluster (cross-node pin dropped at a
+   *  position): the rank writes from insertRank, committed with the pin in one
+   *  action so the target is never left partially ranked. Absent when the drop
+   *  had no orderable target (empty/unmeasurable cluster). */
+  rankWrites?: Record<string, number>;
 };
 
 /** Droppable id prefixes — parsed in onDragEnd to tell a node drop (pin) from a
@@ -195,6 +200,39 @@ export function DayDetailNodeBlocks({
     const placeId = String(e.active.id);
     const overId = e.over ? String(e.over.id) : null;
     if (!overId) return;
+    // Rank writes to land `placeId` at its drop position within a target
+    // cluster (used by same-node reorder AND cross-node pin). Display order is
+    // the rendered cluster (DOM order); the insert index comes from the drop
+    // pointer vs sibling midpoints. If the cluster already contains placeId
+    // (same-node) it's excluded via selfIndex; if not (cross-node) it's the
+    // incoming newcomer — insertRank materializes from the TARGET's order either
+    // way. Returns undefined when there's nothing orderable (empty/1-card
+    // target) or the rects can't be measured.
+    const computeRankWrites = (targetNodeId: string): Record<string, number> | undefined => {
+      const nodeIdx = cities.findIndex((c) => c.id === targetNodeId);
+      if (nodeIdx < 0) return undefined;
+      const cluster = nodeClusters[nodeIdx] ?? [];
+      const tr = e.active.rect.current.translated;
+      if (!tr) return undefined;
+      const els = cluster.map((id) => cardRefs.current.get(id));
+      if (els.some((el) => !el)) return undefined; // unmeasurable — skip authoring
+      const rects = els.map((el) => (el as HTMLElement).getBoundingClientRect());
+      const selfIndex = cluster.indexOf(placeId); // ≥0 same-node, -1 cross-node
+      const insertIndex = computeInsertIndex(
+        rects,
+        tr.top + tr.height / 2,
+        selfIndex >= 0 ? selfIndex : null,
+      );
+      const withoutSelf = cluster.filter((id) => id !== placeId);
+      const finalOrder = [
+        ...withoutSelf.slice(0, insertIndex),
+        placeId,
+        ...withoutSelf.slice(insertIndex),
+      ];
+      if (finalOrder.length < 2) return undefined; // nothing to order
+      const writes = insertRank(finalOrder, insertIndex, ranks ?? new Map());
+      return writes.size ? Object.fromEntries(writes) : undefined;
+    };
     if (overId.startsWith(DRIVE)) {
       // Dropped on the drive: unpin. If the place had no override this is a
       // no-op (it was already at its geometry position) — the caller elides it.
@@ -205,32 +243,13 @@ export function DayDetailNodeBlocks({
       const nodeId = overId.slice(NODE.length);
       if (currentNodeId(placeId) === nodeId) {
         // Same node → REORDER within its cluster (sequence, not attachment).
-        // Display order is the rendered cluster (DOM order); the insert index
-        // comes from the drop pointer vs sibling midpoints; insertRank turns
-        // (finalOrder, index) into the minimal rank writes.
-        const nodeIdx = cities.findIndex((c) => c.id === nodeId);
-        const displayOrder = nodeClusters[nodeIdx] ?? [];
-        const tr = e.active.rect.current.translated;
-        if (!onReorderPlace || displayOrder.length < 2 || !tr) return;
-        const els = displayOrder.map((id) => cardRefs.current.get(id));
-        if (els.some((el) => !el)) return; // can't measure reliably — bail
-        const rects = els.map((el) => (el as HTMLElement).getBoundingClientRect());
-        const selfIndex = displayOrder.indexOf(placeId);
-        const insertIndex = computeInsertIndex(
-          rects,
-          tr.top + tr.height / 2,
-          selfIndex >= 0 ? selfIndex : null,
-        );
-        const withoutSelf = displayOrder.filter((id) => id !== placeId);
-        const finalOrder = [
-          ...withoutSelf.slice(0, insertIndex),
-          placeId,
-          ...withoutSelf.slice(insertIndex),
-        ];
-        const writes = insertRank(finalOrder, insertIndex, ranks ?? new Map());
-        if (writes.size) onReorderPlace(placeId, Object.fromEntries(writes));
+        const writes = computeRankWrites(nodeId);
+        if (onReorderPlace && writes) onReorderPlace(placeId, writes);
         return;
       }
+      // Cross-node → PIN, AND author the drop position in the TARGET cluster so
+      // it's never left partially ranked (attachment + rank commit together).
+      const rankWrites = computeRankWrites(nodeId);
       const pos = positioned.get(placeId);
       const node = cityById.get(nodeId);
       const distanceMi =
@@ -241,6 +260,7 @@ export function DayDetailNodeBlocks({
         distanceMi,
         nodeName: node?.name,
         placeName: byId.get(placeId)?.title,
+        rankWrites,
       });
     }
   };

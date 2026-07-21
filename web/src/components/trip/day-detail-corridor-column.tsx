@@ -141,6 +141,13 @@ export function DayDetailCorridorColumn({
   const [moveError, setMoveError] = useState<{ placeId: string; message: string } | null>(null);
   const [moveNote, setMoveNote] = useState<string | null>(null);
   const [, startMoveTransition] = useTransition();
+  // Authored order overlay (declared before onMovePlace so a cross-node pin can
+  // flip + revert ranks alongside the override). Same optimistic pattern.
+  const [localRanks, setLocalRanks] = useState<Record<string, number>>(trip.placeRanks ?? {});
+  useEffect(() => {
+    setLocalRanks(trip.placeRanks ?? {});
+  }, [trip.placeRanks]);
+  const ranksMap = useMemo(() => new Map(Object.entries(localRanks)), [localRanks]);
 
   const onMovePlace = useCallback(
     (move: PlaceMove) => {
@@ -148,6 +155,7 @@ export function DayDetailCorridorColumn({
       const tripId = trip.id;
       const dayId = day.id;
       const prev = localOverrides;
+      const prevRanks = localRanks;
       setMoveError(null);
 
       if (move.toNodeId === null) {
@@ -179,32 +187,33 @@ export function DayDetailCorridorColumn({
           ? `${move.placeName} is ${Math.round(move.distanceMi as number)} mi from ${move.nodeName} — pinned anyway.`
           : null,
       );
+      // Cross-node drop authors the position in the target too: flip ranks with
+      // the override so the target is never partially ranked, and commit both in
+      // ONE action (pinPlaceAction merges rankWrites). Revert both on failure.
+      if (move.rankWrites) setLocalRanks({ ...prevRanks, ...move.rankWrites });
       setPendingPlaceId(move.placeId);
       startMoveTransition(async () => {
-        const res = await pinPlaceAction(tripId, { dayId, placeId: move.placeId, nodeId });
+        const res = await pinPlaceAction(tripId, {
+          dayId,
+          placeId: move.placeId,
+          nodeId,
+          rankWrites: move.rankWrites,
+        });
         if (!res.ok) {
           setLocalOverrides(prev);
+          if (move.rankWrites) setLocalRanks(prevRanks);
           setMoveError({ placeId: move.placeId, message: `Couldn't move: ${res.error}` });
         }
         setPendingPlaceId((p) => (p === move.placeId ? null : p));
       });
     },
-    [day, localOverrides, trip.id],
+    [day, localOverrides, localRanks, trip.id],
   );
 
-  // ── Optimistic authored order (edit-mode reorder within a node) ─────────
-  // Same pattern as localOverrides: a same-node drop flips these ranks
-  // immediately (the edit spine re-sorts the cluster from them), then persists
-  // in the background; a failed write reverts and raises the inline error.
-  const serverRanks = trip.placeRanks;
-  const [localRanks, setLocalRanks] = useState<Record<string, number>>(serverRanks ?? {});
-  useEffect(() => {
-    setLocalRanks(trip.placeRanks ?? {});
-  }, [trip.placeRanks]);
-  const ranksMap = useMemo(
-    () => new Map(Object.entries(localRanks)),
-    [localRanks],
-  );
+  // ── Optimistic authored order (edit-mode same-node reorder) ─────────────
+  // localRanks + ranksMap are declared above (before onMovePlace). A same-node
+  // drop flips ranks immediately (the edit spine re-sorts from them), then
+  // persists in the background; a failed write reverts and raises the error.
   const onReorderPlace = useCallback(
     (placeId: string, rankWrites: Record<string, number>) => {
       const prev = localRanks;
