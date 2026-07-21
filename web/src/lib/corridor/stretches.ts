@@ -151,9 +151,16 @@ export function assignPlacesToStretches(input: {
    *  `nodeMiles` order) = each `CorridorCity.placeIds`. When present, clusters
    *  are used verbatim and geometry only places the residual — see HYBRID MODE. */
   serverClusters?: string[][];
+  /** Per-place sort key overriding day-mile for ORDER only (not assignment).
+   *  On a round-trip day the along-route mile is degenerate (the spur projects
+   *  onto the main route reversed — summit first); the presenter passes near→far
+   *  distance-from-anchor instead. Absent id → its mile. */
+  orderKey?: Map<string, number>;
 }): { nodeClusters: string[][]; stretches: Stretch[]; alongTheWay: string[] } {
-  const { nodeMiles, positioned, serverClusters } = input;
+  const { nodeMiles, positioned, serverClusters, orderKey } = input;
   const maxAttach = input.maxAttachMi ?? DEFAULT_CORRIDOR_PARAMS.maxAttachMi;
+  // Sort rank: the order override when present, else the along-route mile.
+  const rank = (id: string, mile: number) => orderKey?.get(id) ?? mile;
   const stretches: Stretch[] = [];
   for (let i = 0; i < nodeMiles.length - 1; i++) {
     stretches.push({ fromNode: i, toNode: i + 1, placeIds: [] });
@@ -180,7 +187,7 @@ export function assignPlacesToStretches(input: {
         mile: p.dayMile,
       });
     }
-    stretchHits.sort((a, b) => a.mile - b.mile);
+    stretchHits.sort((a, b) => rank(a.id, a.mile) - rank(b.id, b.mile));
     for (const h of stretchHits) stretches[h.s].placeIds.push(h.id);
     return { nodeClusters, stretches, alongTheWay };
   }
@@ -219,9 +226,9 @@ export function assignPlacesToStretches(input: {
     });
   }
 
-  clusterHits.sort((a, b) => a.mile - b.mile);
+  clusterHits.sort((a, b) => rank(a.id, a.mile) - rank(b.id, b.mile));
   for (const h of clusterHits) nodeClusters[h.node].push(h.id);
-  stretchHits.sort((a, b) => a.mile - b.mile);
+  stretchHits.sort((a, b) => rank(a.id, a.mile) - rank(b.id, b.mile));
   for (const h of stretchHits) stretches[h.s].placeIds.push(h.id);
   return { nodeClusters, stretches, alongTheWay };
 }

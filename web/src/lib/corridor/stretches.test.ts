@@ -174,6 +174,35 @@ test("hybrid: residual off-corridor → Along the way; server cluster order pres
   assert.deepEqual(alongTheWay, ["detour"]);
 });
 
+test("orderKey overrides the mile sort for ORDER only (round-trip near→far)", () => {
+  // A round-trip day: all POIs project to ~0 (degenerate), and the raw mile
+  // order is reversed (summit "furthest" projects most-negative → first).
+  // near→far distance-from-anchor reorders the single stretch outbound.
+  const orderKey = new Map([
+    ["summit", 16], // farthest from anchor → last
+    ["fishcreek", 5],
+    ["hyder", 0.5], // nearest → first
+  ]);
+  const { stretches, nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 50], // Stewart@0 · Stewart@50 fallback
+    // raw miles would sort summit(-15) first; orderKey must beat that.
+    positioned: pos([["summit", -15, true], ["fishcreek", -2, true], ["hyder", -1, true]]),
+    serverClusters: [[], []],
+    orderKey,
+  });
+  assert.deepEqual(nodeClusters, [[], []]);
+  assert.deepEqual(stretches[0].placeIds, ["hyder", "fishcreek", "summit"]);
+});
+
+test("orderKey falls back to mile for any id absent from the map", () => {
+  const { stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 400],
+    positioned: pos([["a", 300, true], ["b", 100, true]]),
+    orderKey: new Map([["a", -999]]), // a forced first; b keeps its mile
+  });
+  assert.deepEqual(stretches[0].placeIds, ["a", "b"]);
+});
+
 test("hybrid: empty serverClusters (fallback day) → every place is residual", () => {
   // A fallback 2-node day carries empty placeIds; hybrid must reproduce the
   // pure-geometry stretch placement for the whole pool.

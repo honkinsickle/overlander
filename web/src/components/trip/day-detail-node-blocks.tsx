@@ -44,11 +44,18 @@ import {
   assignPlacesToStretches,
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
+import { haversineMi } from "@/lib/routing/point-to-polyline";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
 const GUTTER_W = 48;
 const noop = () => {};
+
+/** Two coords within ~11 m — used to spot a round-trip day (start node == end
+ *  node), where the fallback spine's endpoints coincide. */
+function sameCoords(a?: [number, number], b?: [number, number]): boolean {
+  return !!a && !!b && Math.abs(a[0] - b[0]) < 1e-4 && Math.abs(a[1] - b[1]) < 1e-4;
+}
 
 /** A drag drop resolved to an intent. `toNodeId: null` = dropped on the drive
  *  → unpin (return to geometry). Otherwise pin the place under that node; the
@@ -116,6 +123,21 @@ export function DayDetailNodeBlocks({
     // Positions feed the gutter mile ticks for EVERY POI (clustered ones too),
     // and drive the geometric assignment of the residual below.
     const positioned = positionPlacesOnDay({ line, places, dayStartMile });
+    // Round-trip day (out-and-back): start node == end node, so along-route mile
+    // is degenerate and its sort is reversed (the spur projects onto the main
+    // route backwards — summit first). Order the leg near→far by distance from
+    // the anchor — the outbound drive sequence — until authored sequence exists.
+    const anchor = cities[0]?.coords;
+    const roundTrip =
+      cities.length >= 2 && sameCoords(anchor, cities[cities.length - 1]?.coords);
+    const orderKey =
+      roundTrip && anchor
+        ? new Map(
+            places
+              .filter((p) => p.coords)
+              .map((p) => [p.id, haversineMi(p.coords as [number, number], anchor)]),
+          )
+        : undefined;
     // HYBRID: cluster membership is the server's bucketing (cities[].placeIds),
     // which carries user pin overrides (applyPlaceOverrides) — pure geometry
     // can't see those. Geometry only positions the residual (a place in no
@@ -125,6 +147,7 @@ export function DayDetailNodeBlocks({
       nodeMiles: cities.map((c) => c.milesFromStart),
       positioned,
       serverClusters: cities.map((c) => c.placeIds),
+      orderKey,
     });
     return { positioned, nodeClusters, stretches, alongTheWay };
   }, [byId, line, dayStartMile, cities]);
