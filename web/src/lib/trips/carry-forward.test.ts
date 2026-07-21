@@ -8,7 +8,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { carryUserAuthored, assertUserAuthoredCarried } from "./carry-forward";
+import {
+  carryUserAuthored,
+  assertUserAuthoredCarried,
+  finalizeUserAuthored,
+} from "./carry-forward";
 import type { Trip, NodeSeed, PlaceNodeOverride } from "./types";
 
 function trip(over: Partial<Trip> = {}): Trip {
@@ -90,4 +94,22 @@ test("guard: passes when the overlays were carried forward", () => {
   const original = trip({ nodeSeeds: seeds, placeOverrides: overrides });
   const carried = carryUserAuthored(original, trip());
   assert.doesNotThrow(() => assertUserAuthoredCarried(original, carried));
+});
+
+test("finalizeUserAuthored carries overlays AND passes the guard (wired unit)", () => {
+  const original = trip({ nodeSeeds: seeds, placeOverrides: overrides });
+  const regenerated = trip({
+    title: "Regenerated",
+    days: [{ id: "new1", dayNumber: 1, date: "2026-07-20", label: "A — B", waypoints: [] }],
+  });
+  const out = finalizeUserAuthored(original, regenerated);
+  assert.equal(out.title, "Regenerated"); // generated content wins
+  assert.deepEqual(out.nodeSeeds, seeds); // overlays carried
+  assert.deepEqual(out.placeOverrides, overrides);
+});
+
+test("finalizeUserAuthored is a no-op for a seedless trip", () => {
+  const out = finalizeUserAuthored(trip(), trip({ title: "R" }));
+  assert.equal(out.title, "R");
+  assert.equal(out.nodeSeeds, undefined);
 });

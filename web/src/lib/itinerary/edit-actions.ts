@@ -22,7 +22,8 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPersistedReferenceTrip } from "@/lib/trips/reference";
-import { assertUserAuthoredCarried } from "@/lib/trips/carry-forward";
+import { finalizeUserAuthored } from "@/lib/trips/carry-forward";
+import { checkRails, type RailsFailure } from "./rails";
 import type { Trip } from "@/lib/trips/types";
 import {
   summarizeSignature,
@@ -69,29 +70,6 @@ import {
 import type { Anchor, GenerationInput } from "./facts";
 import type { ReplanDiff } from "./plan-diff";
 
-const TEST_REF = "znldzjdatkogdktymtvi";
-const FORBIDDEN_IDS = new Set(["dawson-vancouver-cassiar"]);
-
-type RailsFailure = { ok: false; error: string };
-
-/** Flag + TEST-ref + forbidden-id gate. Every action calls this first. */
-function checkRails(tripId: string): RailsFailure | null {
-  if (process.env.NEXT_PUBLIC_LIVING_PLAN_EDIT !== "1") {
-    return { ok: false, error: "Living-plan editing is not enabled." };
-  }
-  if (FORBIDDEN_IDS.has(tripId)) {
-    return { ok: false, error: "This trip is live and cannot be re-planned." };
-  }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const ref = url.match(/https:\/\/([a-z0-9]+)\.supabase/)?.[1] ?? "unknown";
-  if (ref !== TEST_REF) {
-    return {
-      ok: false,
-      error: `Refusing: Supabase ref is ${ref}, not TEST. Point dev at the TEST project.`,
-    };
-  }
-  return null;
-}
 
 /** Load the trip + its persisted GenerationInput, or a typed failure. */
 async function loadEditableTrip(
@@ -571,15 +549,12 @@ async function runGateStage(
 
   const diff = computePlanDiff(beforeDays, generated.days, diffMeta);
 
-  // REQUIRED BEFORE SEEDS SHIP: `finalTrip` is fresh pipeline output and carries
-  // NO user-authored overlays. Once the write-actions slice lets a user create
-  // a NodeSeed / placeOverride, this persist MUST first run
-  //   finalTrip = carryUserAuthored(original, finalTrip)
-  // or the regeneration silently drops them (the routePolyline-by-omission bug
-  // class). The guard below is dormant today (no seeds can exist yet) and turns
-  // that silent drop into a hard error the moment it can happen. See
-  // src/lib/trips/carry-forward.ts.
-  assertUserAuthoredCarried(original, finalTrip);
+  // `finalTrip` is fresh pipeline output and carries NO user-authored overlays
+  // (nodeSeeds / placeOverrides). finalizeUserAuthored carries them from the
+  // live `original` and then asserts they survived — so a regeneration can't
+  // silently drop a user's node seeds (the routePolyline-by-omission bug class).
+  // Carry-then-assert is one tested unit; see src/lib/trips/carry-forward.ts.
+  finalTrip = finalizeUserAuthored(original, finalTrip);
 
   const staged = {
     ...finalTrip,

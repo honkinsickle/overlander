@@ -48,3 +48,16 @@ export function assertUserAuthoredCarried(original: Trip, next: Trip): void {
     );
   }
 }
+
+/**
+ * The one call the regeneration persist site makes: carry the previous trip's
+ * user-authored overlays onto `regenerated`, then assert they survived. Bundles
+ * carry-then-guard into a single tested unit so the composition and ORDER
+ * (carry before assert) can't drift apart at the call site. Returns the carried
+ * trip; throws (via the guard) if the carry didn't take. Pure.
+ */
+export function finalizeUserAuthored(prev: Trip, regenerated: Trip): Trip {
+  const carried = carryUserAuthored(prev, regenerated);
+  assertUserAuthoredCarried(prev, carried);
+  return carried;
+}
