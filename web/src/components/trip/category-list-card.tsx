@@ -41,7 +41,7 @@ type Props = {
    *  passes this only for waypoint-backed tiles — suggestions stay
    *  read-only (Phase 3 editing model). */
   onRemove?: () => void;
-  /** Manual-edit mode. When true, the card grows 400->440 and shows an
+  /** Manual-edit mode. When true, the card grows 400->447 and shows an
    *  inert drag handle in a 40px right lane (same convention as the rail).
    *  Off by default. */
   editMode?: boolean;
@@ -69,7 +69,7 @@ export function CategoryListCard({
     <div
       onClick={onOpen}
       className="relative flex items-start overflow-clip rounded-md"
-      style={{ width: editMode ? 440 : 400, gap: 13, backgroundColor: "var(--bg-card)" }}
+      style={{ width: editMode ? 447 : 400, gap: 13, backgroundColor: "var(--bg-card)" }}
     >
       {onRemove && (
         <button
@@ -203,13 +203,15 @@ export function CategoryListCard({
         </div>
       </div>
 
-      {/* Drag handle lane — edit mode only. Inert (no drag wired). Same
-       *  dotted GripVertical + muted styling as the rail day cards. */}
+      {/* Select/Drag lane — edit mode only. Grip only for now (inert, no drag
+       *  wired), but the lane is sized to the artboard's full 47px Select/Drag
+       *  cluster (checkbox + kebab + drag handle) so adding the kebab later
+       *  doesn't resize the card. */}
       {editMode && (
         <div
           aria-hidden
           className="flex items-center justify-center shrink-0 self-stretch"
-          style={{ width: 40 }}
+          style={{ width: 47 }}
         >
           <GripVertical
             size={18}
