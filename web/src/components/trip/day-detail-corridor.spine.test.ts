@@ -64,3 +64,26 @@ test("no key stops → spine is just the cities, in order", () => {
   assert.equal(items.length, 2);
   assert.deepEqual(items.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
 });
+
+test("a pinned pick sorts UNDER its node but displays its own (out-of-order) mile", () => {
+  // Bear Glacier's true mile is 315, but it's pinned to Dease Lake@95: it must
+  // render right AFTER Dease Lake (not at 315 near the end) yet show 315mi.
+  const cities = [
+    city("boya", "Boya Lake", 0, "start"),
+    city("dease", "Dease Lake", 95, "corridor"),
+    city("stewart", "Stewart", 338, "end"),
+  ];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    pinnedKeyStops: [{ place: pick("bear-glacier", 315), nodeMile: 95 }],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+  });
+  const order = items.map((i) =>
+    i.type === "city" ? i.city.id : (i as { place: CorridorPlace }).place.id,
+  );
+  assert.deepEqual(order, ["boya", "dease", "bear-glacier", "stewart"]); // after Dease, before Stewart
+  const bear = items.find((i) => i.type === "keystop") as { mile: number };
+  assert.equal(bear.mile, 315); // displays its TRUE mile, not the node's 95
+});

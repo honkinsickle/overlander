@@ -121,6 +121,17 @@ export function pinPlaceToNode(
 
   const alreadySeed = nodeSeeds.some((s) => s.id === target.id);
   if (target.kind === "corridor" && !alreadySeed) {
+    // LOUD-FAIL the degenerate promotion: a seed minted without a name or coords
+    // can't merge back to its gazetteer node via node-identity (name required,
+    // coords ≤2mi), so it would split into a PHANTOM TWIN at the same mile — a
+    // silent, hard-to-trace spine corruption. Refuse it at the source instead.
+    if (!target.name?.trim() || !target.coords) {
+      throw new Error(
+        `pinPlaceToNode: refusing to promote node "${target.id}" to a seed — ` +
+          `missing ${!target.name?.trim() ? "name" : "coords"}. A name/coord-less ` +
+          `seed can't merge via node-identity and would render as a phantom twin.`,
+      );
+    }
     const res = addNodeSeed(
       nodeSeeds,
       { name: target.name, coords: target.coords, createdAt },

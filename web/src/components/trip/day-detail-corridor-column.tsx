@@ -526,6 +526,7 @@ export function DayDetailCorridorColumn({
             onExploreDay={openBrowse}
             briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
             editMode={editMode}
+            placeOverrides={trip.placeOverrides ?? []}
             dayMiles={day.miles}
             dayDriveHours={day.driveHours}
             routeLine={routeLine}

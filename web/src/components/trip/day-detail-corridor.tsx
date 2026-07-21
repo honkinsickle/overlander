@@ -9,6 +9,8 @@ import {
   isSameAnchorPlace,
   type AnchorLike,
 } from "@/lib/corridor/anchor-match";
+import { classifyCuratedPicks } from "@/lib/corridor/curated-placement";
+import type { PlaceNodeOverride } from "@/lib/trips/types";
 
 /**
  * Day Detail v4 — corridor view. PURE PRESENTATIONAL.
@@ -102,6 +104,11 @@ type Props = {
    *  default. In edit mode the center column renders the node-model City Block
    *  spine (DayDetailNodeBlocks) instead of the mile-interleaved read spine. */
   editMode?: boolean;
+  /** User pin overrides (placeId → nodeId). A pinned CURATED pick relocates
+   *  under its node (at its true mile) instead of sitting on the mile-ordered
+   *  Key Stops timeline — so the read spine agrees with the edit spine and the
+   *  iPad. Non-curated pins are already reflected via CorridorCity.placeIds. */
+  placeOverrides?: PlaceNodeOverride[];
   /** Day driving total — labels the drive connector on a 2-node day (the
    *  single connector IS the whole day's drive). Edit render only. */
   dayMiles?: number;
@@ -137,10 +144,14 @@ export type SpineItem =
 export function buildSpineItems(input: {
   cities: CorridorCity[];
   keyStops: CorridorPlace[];
+  /** Curated picks pinned UNDER a node (placeOverride): they sort at the
+   *  pinned node's mile (so they render right after it) but DISPLAY their own
+   *  true mile — the honest out-of-order tick that matches the edit spine. */
+  pinnedKeyStops?: { place: CorridorPlace; nodeMile: number }[];
   mileMarkers: { mile: number; placeIds?: string[] }[];
   byId: Map<string, CorridorPlace>;
 }): SpineItem[] {
-  const { cities, keyStops, mileMarkers, byId } = input;
+  const { cities, keyStops, pinnedKeyStops = [], mileMarkers, byId } = input;
   const RANK = { city: 0, keystop: 1, marker: 2 };
   type Entry = { mile: number; rank: number; make: (last: boolean) => SpineItem };
   const entries: Entry[] = [];
@@ -157,6 +168,16 @@ export function buildSpineItems(input: {
       mile,
       rank: RANK.keystop,
       make: (last) => ({ type: "keystop", place, mile, last }),
+    });
+  });
+  // Pinned picks sort at their NODE's mile (lands just after that node, tie →
+  // city first) but show their own mile in the gutter.
+  pinnedKeyStops.forEach(({ place, nodeMile }) => {
+    const display = place.milesFromStart ?? nodeMile;
+    entries.push({
+      mile: nodeMile,
+      rank: RANK.keystop,
+      make: (last) => ({ type: "keystop", place, mile: display, last }),
     });
   });
   mileMarkers.forEach((mk) =>
@@ -191,6 +212,7 @@ export function DayDetailCorridor({
   onExploreDay,
   briefing,
   editMode = false,
+  placeOverrides = [],
   dayMiles,
   dayDriveHours,
   routeLine,
@@ -211,6 +233,15 @@ export function DayDetailCorridor({
         new Map(places.filter((p) => p.curated).map((p) => [p.id, p])).values(),
       )
     : [];
+  // Override wins over both anchor and mile-position: a curated pick explicitly
+  // PINNED to a node this day relocates under it (rendered via pinnedKeyStops
+  // below, at its true mile). Split those out FIRST so the anchor/positioned
+  // logic only sees the non-pinned rest (precedence: override > anchor > mile).
+  const { pinnedByNode, rest: unpinnedPicks } = classifyCuratedPicks({
+    curatedPicks,
+    presentNodeIds: new Set(cities.map((c) => c.id)),
+    placeOverrides,
+  });
   // A pick that IS the start/end anchor (matched by id | name | tight coords —
   // the shared anchor-match rule) renders as a featured detail card UNDER that
   // city node, not as a separate positioned key stop: same place, shown once,
@@ -222,7 +253,7 @@ export function DayDetailCorridor({
     name: c.name,
     coords: c.coords,
   });
-  const anchorPicks = curatedPicks.filter((p) =>
+  const anchorPicks = unpinnedPicks.filter((p) =>
     coincidesWithAnchor(toAnchorLike(p), cities),
   );
   // Featured cards for a node: only the start/end anchor nodes carry them, each
@@ -235,19 +266,24 @@ export function DayDetailCorridor({
         )
       : [];
   // The rest position on the spine by along-route mile.
-  const spinePicks = curatedPicks.filter(
+  const spinePicks = unpinnedPicks.filter(
     (p) => !coincidesWithAnchor(toAnchorLike(p), cities),
   );
   const positionedPicks = spinePicks.filter((p) => p.milesFromStart != null);
   const unpositionedPicks = spinePicks.filter((p) => p.milesFromStart == null);
+  // Pinned picks render at their node's position (carrying their true mile).
+  const pinnedKeyStops = cities.flatMap((c) =>
+    (pinnedByNode.get(c.id) ?? []).map((place) => ({ place, nodeMile: c.milesFromStart })),
+  );
   const dd = String(dayNumber).padStart(2, "0");
 
-  // One ordered spine: city nodes + positioned key stops + (demo) mile markers,
-  // interleaved by along-route mile so a key stop sits BETWEEN the anchors at
-  // the point you'd actually reach it on the drive.
+  // One ordered spine: city nodes + positioned key stops + pinned picks (at
+  // their node) + (demo) mile markers, interleaved by along-route mile so a key
+  // stop sits BETWEEN the anchors at the point you'd actually reach it.
   const items = buildSpineItems({
     cities,
     keyStops: positionedPicks,
+    pinnedKeyStops,
     mileMarkers,
     byId,
   });

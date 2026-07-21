@@ -102,6 +102,12 @@ export type NodeSeed = {
   /** Full ISO instant the seed was created — provenance. Presence in
    *  Trip.nodeSeeds is itself the "user-authored" marker. */
   createdAt: string;
+  // TODO(Phase 1, approved): add `origin: "manual" | "promoted"`. A seed minted
+  // as a side effect of pinning a place (pinPlaceToNode promotion) exists ONLY
+  // to host that pin; when the last override referencing it is removed,
+  // unpinPlaceAction should GC it (else a pure service point leaves a phantom
+  // empty node). A "manual" seed (createNodeSeedAction) always outlives pins.
+  // Not this slice — recorded here so it isn't forgotten.
 };
 
 /** A user pin re-homing a place under a specific node, overriding the
