@@ -33,10 +33,15 @@ function pos(
 }
 
 // ── dayStartMiles ──────────────────────────────────────────────────────────
-test("dayStartMiles is the cumulative sum of prior day miles (dwell = 0)", () => {
+test("dayStartMiles sums NET route progress — round-trip days make none", () => {
   assert.deepEqual(
-    dayStartMiles([{ miles: 332 }, { miles: 0 }, { miles: 313 }, { miles: 0 }]),
-    [0, 332, 332, 645],
+    dayStartMiles([
+      { miles: 332, label: "Dawson City — Whitehorse, YT" },
+      { miles: 50, label: "Stewart — Stewart" }, // out-and-back: 50 driving mi, 0 net
+      { miles: 313, label: "Whitehorse — Boya Lake" },
+      { miles: 0, label: "Boya Lake — Boya Lake" }, // dwell
+    ]),
+    [0, 332, 332, 645], // day 2's 50 excursion mi does NOT advance the cumulative
   );
 });
 
@@ -64,22 +69,53 @@ test("positionPlacesOnDay subtracts the day's cumulative start mile", () => {
 });
 
 // ── assignPlacesToStretches ────────────────────────────────────────────────
-test("half-open interval: upstream node wins a tie at the boundary", () => {
-  const { stretches } = assignPlacesToStretches({
-    nodeMiles: [0, 100, 200],
-    positioned: pos([["at100", 100, true], ["at150", 150, true]]),
+test("a place within maxAttachMi of a node clusters UNDER it, not in the stretch", () => {
+  // maxAttach 25: at 10 mi it's within the start node's radius; at 60 it's mid-drive.
+  const { nodeClusters, stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 200],
+    positioned: pos([["near", 10, true], ["mid", 60, true]]),
   });
-  assert.deepEqual(stretches[0].placeIds, ["at100"]); // 100 → upstream stretch [0,100]
-  assert.deepEqual(stretches[1].placeIds, ["at150"]); // 150 → [100,200]
+  assert.deepEqual(nodeClusters[0], ["near"]);
+  assert.deepEqual(stretches[0].placeIds, ["mid"]);
 });
 
-test("a place past the last node clamps into the final stretch", () => {
-  const { stretches, alongTheWay } = assignPlacesToStretches({
+test("a place just PAST the last node clusters under it (the arrival case)", () => {
+  // The Whitehorse overnight at 333 on a 332-mi day: within 25 of the end node.
+  const { nodeClusters, stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 332],
+    positioned: pos([["klondike", 331, true], ["camp", 333, true]]),
+  });
+  assert.deepEqual(nodeClusters[1], ["klondike", "camp"]); // mile-ordered, under end node
+  assert.deepEqual(stretches[0].placeIds, []);
+});
+
+test("cluster ties keep the upstream node", () => {
+  // Equidistant (100) from nodes at 0 and 200 — but 100 > maxAttach 25, so it's
+  // mid-drive; move it to 25 from each impossible, so test the near-tie at a
+  // coincident-node (dwell) case: both nodes at 0, place at 10 → upstream node 0.
+  const { nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 0],
+    positioned: pos([["x", 10, true]]),
+  });
+  assert.deepEqual(nodeClusters[0], ["x"]);
+  assert.deepEqual(nodeClusters[1], []);
+});
+
+test("mid-drive: >maxAttach from every node → the stretch, mile-ordered", () => {
+  const { stretches, nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 400],
+    positioned: pos([["c", 267, true], ["a", 37, true], ["b", 155, true]]),
+  });
+  assert.deepEqual(stretches[0].placeIds, ["a", "b", "c"]);
+  assert.deepEqual(nodeClusters, [[], []]);
+});
+
+test("a mid-drive place beyond the last node (and far from it) clamps into the final stretch", () => {
+  const { stretches } = assignPlacesToStretches({
     nodeMiles: [0, 100],
-    positioned: pos([["over", 120, true]]),
+    positioned: pos([["over", 200, true]]), // 100 mi past the end node, >25 → not a cluster
   });
   assert.deepEqual(stretches[0].placeIds, ["over"]);
-  assert.deepEqual(alongTheWay, []);
 });
 
 test("off-corridor is the ONLY thing in Along the way", () => {
@@ -87,23 +123,15 @@ test("off-corridor is the ONLY thing in Along the way", () => {
     nodeMiles: [0, 300],
     positioned: pos([["a", 37, true], ["detour", 155, false], ["b", 267, true]]),
   });
-  assert.deepEqual(stretches[0].placeIds, ["a", "b"]); // on-corridor, mile-ordered
+  assert.deepEqual(stretches[0].placeIds, ["a", "b"]);
   assert.deepEqual(alongTheWay, ["detour"]);
 });
 
-test("places within a stretch are ordered by mile ascending", () => {
-  const { stretches } = assignPlacesToStretches({
-    nodeMiles: [0, 400],
-    positioned: pos([["c", 267, true], ["a", 37, true], ["b", 155, true]]),
-  });
-  assert.deepEqual(stretches[0].placeIds, ["a", "b", "c"]);
-});
-
-test("a 1-node day has no stretch → on-corridor places fall to Along the way", () => {
-  const { stretches, alongTheWay } = assignPlacesToStretches({
-    nodeMiles: [0],
-    positioned: pos([["a", 5, true]]),
-  });
-  assert.equal(stretches.length, 0);
-  assert.deepEqual(alongTheWay, ["a"]);
+test("1-node day: near clusters under it; beyond its radius → Along the way", () => {
+  const near = assignPlacesToStretches({ nodeMiles: [0], positioned: pos([["a", 5, true]]) });
+  assert.deepEqual(near.nodeClusters[0], ["a"]);
+  assert.deepEqual(near.alongTheWay, []);
+  const far = assignPlacesToStretches({ nodeMiles: [0], positioned: pos([["b", 80, true]]) });
+  assert.equal(far.stretches.length, 0);
+  assert.deepEqual(far.alongTheWay, ["b"]);
 });

@@ -18,6 +18,7 @@
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";
 import { DEFAULT_CORRIDOR_PARAMS } from "./derive";
+import { normPlaceName } from "./anchor-match";
 
 export type PositionedPlace = {
   id: string;
@@ -29,17 +30,29 @@ export type PositionedPlace = {
   onCorridor: boolean;
 };
 
-/** Route-relative start mile for each day = cumulative sum of prior `day.miles`
- *  (a dwell day, miles 0, doesn't advance). Matches the fallbackCorridor node
- *  miles, which are also `day.miles`-based, so POIs and nodes share an origin. */
-export function dayStartMiles(days: { miles?: number }[]): number[] {
+/** Route-relative start mile for each day = cumulative NET route progress.
+ *  A round-trip day (start city == end city — a dwell, or an out-and-back
+ *  excursion whose `day.miles` are real driving miles but make ZERO net route
+ *  progress, e.g. Stewart → Salmon Glacier → Stewart) must NOT advance the
+ *  cumulative, or every downstream day drifts by the excursion distance. Matches
+ *  the fallbackCorridor node miles so POIs and nodes share an origin. */
+export function dayStartMiles(days: { miles?: number; label?: string }[]): number[] {
   const out: number[] = [];
   let acc = 0;
   for (const d of days) {
     out.push(acc);
-    acc += d.miles ?? 0;
+    if (!isRoundTripDay(d.label)) acc += d.miles ?? 0;
   }
   return out;
+}
+
+function isRoundTripDay(label?: string): boolean {
+  if (!label) return false;
+  const parts = label.split(" — ");
+  if (parts.length < 2) return false;
+  const a = normPlaceName(parts[0]);
+  const b = normPlaceName(parts[parts.length - 1]);
+  return a.length > 0 && a === b;
 }
 
 /** Project each place's coords onto the route → day-relative mile + offset. */
@@ -74,41 +87,67 @@ export type Stretch = {
   placeIds: string[];
 };
 
+/** Ties within this many miles keep the upstream node (mirrors bucket.ts). */
+const TIE_EPS_MI = 0.01;
+
 /**
- * Assign positioned places to the stretches between consecutive nodes.
- *   - Interval [A, B]: upstream node wins ties (a place at node B's mile stays
- *     in the stretch ending at B, not the next one).
- *   - A place past the last node (an overnight projecting a mile or two beyond
- *     the end) CLAMPS into the final stretch.
- *   - OFF-CORRIDOR (offsetMi > bufferMi) is the only thing that lands in
- *     "Along the way" — a place you genuinely detour to.
+ * Assign positioned places to NODE CLUSTERS and drive STRETCHES — the same
+ * maxAttachMi idea bucket.ts uses, so a place near a node clusters UNDER it
+ * (its arrival — where you eat, where you sleep) and only genuinely mid-drive
+ * places sit in the stretch between two nodes.
+ *   - Within `maxAttachMi` of the nearest node → that node's cluster (ties keep
+ *     the upstream node). This catches an arriving stop or overnight that sits
+ *     a mile or two past the node — it lands under the node, not before it.
+ *   - Otherwise → the drive stretch it falls in ([A, B], upstream wins ties; a
+ *     place beyond the last node clamps into the final stretch).
+ *   - OFF-CORRIDOR (offsetMi > bufferMi) → "Along the way", the only thing left.
+ * Node-IDENTICAL places (a pool place that IS a node) must be filtered out by
+ * the caller before positioning — they aren't cards, they're the node.
  * Pure.
  */
 export function assignPlacesToStretches(input: {
   /** Node day-miles, ascending (fallbackCorridor 2-node day: [0, day.miles]). */
   nodeMiles: number[];
   positioned: Map<string, PositionedPlace>;
-}): { stretches: Stretch[]; alongTheWay: string[] } {
+  maxAttachMi?: number;
+}): { nodeClusters: string[][]; stretches: Stretch[]; alongTheWay: string[] } {
   const { nodeMiles, positioned } = input;
+  const maxAttach = input.maxAttachMi ?? DEFAULT_CORRIDOR_PARAMS.maxAttachMi;
+  const nodeClusters: string[][] = nodeMiles.map(() => []);
   const stretches: Stretch[] = [];
   for (let i = 0; i < nodeMiles.length - 1; i++) {
     stretches.push({ fromNode: i, toNode: i + 1, placeIds: [] });
   }
   const alongTheWay: string[] = [];
-  const hits: { id: string; mile: number; s: number }[] = [];
+  const clusterHits: { node: number; id: string; mile: number }[] = [];
+  const stretchHits: { s: number; id: string; mile: number }[] = [];
 
   for (const p of positioned.values()) {
     if (!p.onCorridor) {
       alongTheWay.push(p.id);
       continue;
     }
+    // Nearest node by day-mile; upstream wins ties (bucket.ts §2.3 rule).
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < nodeMiles.length; i++) {
+      const d = Math.abs(nodeMiles[i] - p.dayMile);
+      if (d < bestDist - TIE_EPS_MI) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    if (best >= 0 && bestDist <= maxAttach) {
+      clusterHits.push({ node: best, id: p.id, mile: p.dayMile });
+      continue;
+    }
     if (stretches.length === 0) {
-      // Degenerate 1-node day — nowhere to place it on the rail.
+      // 1-node day and beyond its attach radius — nowhere on the rail.
       alongTheWay.push(p.id);
       continue;
     }
     // First stretch whose UPPER bound ≥ dayMile (<= → upstream wins ties);
-    // a place beyond the last node falls through and clamps to the last stretch.
+    // beyond the last node clamps into the last stretch.
     let s = -1;
     for (let k = 0; k < stretches.length; k++) {
       if (p.dayMile <= nodeMiles[k + 1]) {
@@ -117,10 +156,12 @@ export function assignPlacesToStretches(input: {
       }
     }
     if (s === -1) s = stretches.length - 1;
-    hits.push({ id: p.id, mile: p.dayMile, s });
+    stretchHits.push({ s, id: p.id, mile: p.dayMile });
   }
 
-  hits.sort((a, b) => a.mile - b.mile);
-  for (const h of hits) stretches[h.s].placeIds.push(h.id);
-  return { stretches, alongTheWay };
+  clusterHits.sort((a, b) => a.mile - b.mile);
+  for (const h of clusterHits) nodeClusters[h.node].push(h.id);
+  stretchHits.sort((a, b) => a.mile - b.mile);
+  for (const h of stretchHits) stretches[h.s].placeIds.push(h.id);
+  return { nodeClusters, stretches, alongTheWay };
 }

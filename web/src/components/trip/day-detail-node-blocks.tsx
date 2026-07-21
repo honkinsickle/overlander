@@ -26,6 +26,7 @@ import {
   assignPlacesToStretches,
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
+import { isSameAnchorPlace } from "@/lib/corridor/anchor-match";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
@@ -58,14 +59,22 @@ export function DayDetailNodeBlocks({
   onRemovePlace,
   editMode = true,
 }: Props) {
-  const { positioned, stretches, alongTheWay } = useMemo(() => {
-    const places = Array.from(byId.values());
+  const { positioned, nodeClusters, stretches, alongTheWay } = useMemo(() => {
+    // Node-identity dedup: a pool place that IS a node (same id | name | tight
+    // coords) is not a card — it's the node. Drop it before positioning so
+    // "Whitehorse" doesn't render both as a stretch card and as its End node.
+    const places = Array.from(byId.values()).filter(
+      (p) =>
+        !cities.some((c) =>
+          isSameAnchorPlace({ id: p.id, name: p.title, coords: p.coords }, c),
+        ),
+    );
     const positioned = positionPlacesOnDay({ line, places, dayStartMile });
-    const { stretches, alongTheWay } = assignPlacesToStretches({
+    const { nodeClusters, stretches, alongTheWay } = assignPlacesToStretches({
       nodeMiles: cities.map((c) => c.milesFromStart),
       positioned,
     });
-    return { positioned, stretches, alongTheWay };
+    return { positioned, nodeClusters, stretches, alongTheWay };
   }, [byId, line, dayStartMile, cities]);
 
   // Whole-day dwell (2 coincident nodes, 0-mi "drive"): collapse to one node
@@ -79,7 +88,11 @@ export function DayDetailNodeBlocks({
     .filter(Boolean) as CorridorPlace[];
 
   if (isDwell) {
-    const clusterIds = stretches[0]?.placeIds ?? [];
+    // One place, one location — everything hangs under the single node.
+    const clusterIds = [
+      ...nodeClusters.flat(),
+      ...stretches.flatMap((s) => s.placeIds),
+    ];
     return (
       <div className="flex flex-col" style={{ paddingTop: 16 }}>
         <NodeHeaderRow city={cities[0]} last={clusterIds.length === 0} />
@@ -105,11 +118,28 @@ export function DayDetailNodeBlocks({
     <div className="flex flex-col" style={{ paddingTop: 16 }}>
       {cities.map((city, i) => {
         const next = cities[i + 1];
-        const stretch = i < cities.length - 1 ? stretches[i] : null;
-        const stretchIds = stretch?.placeIds ?? [];
+        const clusterIds = nodeClusters[i] ?? [];
+        const stretchIds = next ? stretches[i]?.placeIds ?? [] : [];
+        // The rail terminates on the final node's last cluster card (nothing
+        // renders on the rail after the last node).
+        const clusterLast = (j: number) =>
+          !next && j === clusterIds.length - 1;
         return (
           <Fragment key={`${city.id}-${city.kind}-${i}`}>
-            <NodeHeaderRow city={city} last={false} />
+            <NodeHeaderRow city={city} last={!next && clusterIds.length === 0} />
+            {/* The node's arrival cluster: places within the attach radius —
+                where you eat, where you sleep — hang UNDER the node header. */}
+            {clusterIds.map((id, j) => (
+              <PoiRow
+                key={id}
+                place={byId.get(id)}
+                pos={positioned.get(id)}
+                last={clusterLast(j)}
+                onOpenPlace={onOpenPlace}
+                onRemovePlace={onRemovePlace}
+                editMode={editMode}
+              />
+            ))}
             {next && (
               <StretchContainer
                 miles={Math.round(next.milesFromStart - city.milesFromStart)}
