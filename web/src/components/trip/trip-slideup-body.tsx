@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { routeBetween } from "@/lib/routing/route-between";
-import { reorderDays, applyRecompute } from "@/lib/trips/reorder-days";
+import {
+  reorderDays,
+  applyRecompute,
+  splicePolylineCoords,
+} from "@/lib/trips/reorder-days";
+import { decodePolyline } from "@/lib/routing/point-to-polyline";
+import { encodePolyline } from "@/lib/routing/polyline";
 import { DayColumnPlanner } from "@/components/trip/day-column-planner";
 import { DayDetailCorridorColumn } from "@/components/trip/day-detail-corridor-column";
 import { FindNearbyPanel } from "@/components/trip/find-nearby-panel";
@@ -53,6 +59,10 @@ export function TripSlideupBody({
   // Day ids whose miles/driveHours are being re-routed after a drop (dims
   // their card meta + blocks a second drag until settled).
   const [recomputing, setRecomputing] = useState<Set<string>>(new Set());
+  // Locally-spliced route polyline (matches localDays). Null = use the trip's
+  // baked line. Rebuilt on each reorder from the moved days' fresh geometry +
+  // the unchanged days' original segments — no full re-route, no network.
+  const [localPolyline, setLocalPolyline] = useState<string | null>(null);
   const days = localDays ?? trip.days;
   const effectiveTrip = useMemo(
     () => (localDays ? { ...trip, days: localDays } : trip),
@@ -75,24 +85,50 @@ export function TripSlideupBody({
       setLocalDays(reordered); // order/number/date correct; miles still stale
       if (toRecompute.length === 0) return;
       setRecomputing(new Set(toRecompute.map((r) => r.id)));
-      const results = await Promise.all(
-        toRecompute.map(async (r) => {
+      type RecResult = {
+        id: string;
+        miles?: number;
+        driveHours?: number;
+        coordinates?: [number, number][];
+      };
+      const results: RecResult[] = await Promise.all(
+        toRecompute.map(async (r): Promise<RecResult> => {
           try {
             const rt = await routeBetween([r.start, r.end]);
             return {
               id: r.id,
               miles: Math.round(rt.distanceM / METERS_PER_MILE),
               driveHours: Math.round((rt.durationS / 3600) * 10) / 10,
+              coordinates: rt.coordinates,
             };
           } catch {
             return { id: r.id }; // leave the stale numbers on a routing failure
           }
         }),
       );
-      setLocalDays((prev) => applyRecompute(prev ?? reordered, results));
+      const finalDays = applyRecompute(reordered, results);
+      setLocalDays(finalDays);
       setRecomputing(new Set());
+
+      // Splice the route line: reuse each unchanged day's original segment,
+      // drop in the fresh geometry the recompute already fetched, reassemble in
+      // the new order. Pure geometry — no re-route, no network.
+      const basePoly = localPolyline ?? trip.routePolyline;
+      if (basePoly) {
+        const freshById = new Map<string, [number, number][]>();
+        for (const r of results) {
+          if (r.coordinates) freshById.set(r.id, r.coordinates);
+        }
+        const spliced = splicePolylineCoords(
+          decodePolyline(basePoly),
+          current,
+          finalDays,
+          freshById,
+        );
+        if (spliced.length >= 2) setLocalPolyline(encodePolyline(spliced));
+      }
     },
-    [localDays, trip.days, trip.startDate, trip.startCoords],
+    [localDays, localPolyline, trip.days, trip.startDate, trip.startCoords, trip.routePolyline],
   );
   // Single-day selection (Phase 1 corridor integration): null = Overview
   // state, otherwise the day shown in the corridor column. The ?day= URL
@@ -187,7 +223,7 @@ export function TripSlideupBody({
           tripId={trip.id}
           days={days}
           startCoords={trip.startCoords}
-          routePolyline={trip.routePolyline}
+          routePolyline={localPolyline ?? trip.routePolyline}
           onMoveEnd={(bbox) => {
             viewportBboxRef.current = bbox;
             // Let the top-level search refresh against the new viewport. Only

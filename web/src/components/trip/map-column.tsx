@@ -697,6 +697,38 @@ export function MapColumn({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reactive route repaint. The initial line is drawn once inside the map's
+  // load handler (the empty-dep effect above), so a LATER routePolyline
+  // change — e.g. a local reorder splicing new geometry — wouldn't repaint on
+  // its own. Update the trip-route source (and routePathRef, which the
+  // active-day leg reads) whenever the polyline changes and the source exists.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !routePolyline) return;
+    const apply = () => {
+      const src = map.getSource("trip-route") as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (!src) return false;
+      const coords = decodePolyline(routePolyline);
+      routePathRef.current = coords;
+      src.setData({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: coords },
+      });
+      return true;
+    };
+    if (!apply()) {
+      // Source not built yet (initial draw handled on load) — retry once.
+      const onIdle = () => apply();
+      map.once("idle", onIdle);
+      return () => {
+        map.off("idle", onIdle);
+      };
+    }
+  }, [routePolyline]);
+
   // Fly to the active day whenever ?day= changes. Prefer the day's
   // *start* coord — `coords` is the end-of-day overnight, so without
   // this Day 1 lands at the first night's stop instead of the origin
