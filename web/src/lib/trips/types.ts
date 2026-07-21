@@ -63,7 +63,78 @@ export type Trip = {
    *  in IndexedDB keyed by (tripId, phaseId). See
    *  docs/decisions/2026-05-21-offline-tile-caching-architecture.md. */
   offlinePhases?: OfflinePhase[];
+  /** User-authored corridor node "seeds" (§ node-stack model) — places the
+   *  user pinned as nodes on the route. DISTINCT from `anchors` (routing
+   *  waypoints, inside generationInput): a seed feeds deriveCorridorCities
+   *  ONLY, never routeBetween, so pinning a node never detours the route.
+   *  Trip-level (not per-Day) so both derivation paths — finalize and the
+   *  reference resolver — read one list, and so a seed survives day-boundary
+   *  changes on regeneration (positioned by re-projecting its coords each
+   *  derivation). Carried forward across regeneration by carryUserAuthored(). */
+  nodeSeeds?: NodeSeed[];
+  /** User re-homing of a POI to a specific node, overriding nearest-node
+   *  bucketing. References a durable node id (a NodeSeed id, or a gazetteer
+   *  node promoted to a seed at pin time). A dangling override (target node
+   *  absent this derivation) falls back to nearest-node. Trip-level, carried
+   *  forward with nodeSeeds. */
+  placeOverrides?: PlaceNodeOverride[];
+  /** Per-seed resolution status from the LAST derivation — queryable so a
+   *  DORMANT seed (projects onto no day's route) is DETECTABLE, not silently
+   *  dropped. Derived output, recomputed every derivation (like
+   *  corridorCities); never authored. Absent when the trip has no nodeSeeds. */
+  seedResolutions?: SeedResolution[];
 };
+
+/** A user-authored corridor node seed (§ node-stack model). Feeds
+ *  deriveCorridorCities only — never routeBetween — so it names a place ON
+ *  the route without detouring to it. */
+export type NodeSeed = {
+  /** Minted ONCE at creation and stored here; copied verbatim onto the
+   *  derived node so the id survives regeneration (gazetteer nodes re-slugify
+   *  their ids each derivation — seeds do not). */
+  id: string;
+  /** Display + node name, e.g. "Wells, BC". */
+  name: string;
+  /** `[lng, lat]` pin. RE-PROJECTED onto each day's route line every
+   *  derivation to position the node; if it projects onto no day within the
+   *  corridor buffer the seed is dormant (see SeedResolution). */
+  coords: [number, number];
+  /** Full ISO instant the seed was created — provenance. Presence in
+   *  Trip.nodeSeeds is itself the "user-authored" marker. */
+  createdAt: string;
+};
+
+/** A user pin re-homing a place under a specific node, overriding the
+ *  nearest-node bucketing (§ node-stack model). */
+export type PlaceNodeOverride = {
+  /** BrowsePlace.id / Waypoint.id of the place being re-homed. */
+  placeId: string;
+  /** Durable node id to attach it to (a NodeSeed id, or a promoted node). */
+  nodeId: string;
+};
+
+/** Per-seed outcome of a derivation pass — makes dormant seeds queryable
+ *  instead of silently lost. `resolved:false` means the seed's coords
+ *  projected onto no day's route within the corridor buffer. */
+export type SeedResolution =
+  | {
+      seedId: string;
+      resolved: true;
+      /** Day.id the seed attached to (min-offset day; ties → earliest). */
+      dayId: string;
+      /** Along-route miles from that day's start where the node landed. */
+      milesFromStart: number;
+      /** Perpendicular miles from the pin to the route — how far "off road"
+       *  the seed sits on its winning day. */
+      offsetMi: number;
+    }
+  | {
+      seedId: string;
+      resolved: false;
+      /** "off-corridor" — projected onto no day within bufferMi.
+       *  "no-days" — the trip yielded no sliceable day lines. */
+      reason: "off-corridor" | "no-days";
+    };
 
 /** Provenance recorded on a trip when a living-plan edit is applied. */
 export type LivingPlanProvenance = {

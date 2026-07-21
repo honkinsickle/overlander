@@ -75,6 +75,18 @@ export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
 
 type Candidate = { city: GazetteerCity; mi: number };
 
+/** A NodeSeed already resolved to THIS day's line — its along-route position
+ *  precomputed by resolveSeeds (src/lib/corridor/seeds.ts), so derive only
+ *  splices it into the spine and never re-projects. Keeping the projection in
+ *  one place means the resolver's reported mile and the emitted node's mile
+ *  can't drift. */
+export type PositionedSeed = {
+  id: string;
+  name: string;
+  coords: LngLat;
+  milesFromStart: number;
+};
+
 function slugify(text: string): string {
   return text
     .normalize("NFD")
@@ -92,6 +104,9 @@ export function deriveCorridorCities(input: {
   start: { name: string; coords: LngLat };
   end: { name: string; coords: LngLat };
   gazetteer: GazetteerCity[];
+  /** User-authored node seeds resolved to THIS day (spec § node-stack).
+   *  Force-included in the spine, bypassing the gazetteer selection gates. */
+  seeds?: PositionedSeed[];
   params?: Partial<CorridorParams>;
 }): CorridorCity[] | null {
   const { line, start, end, gazetteer } = input;
@@ -210,6 +225,49 @@ export function deriveCorridorCities(input: {
   }
 
   selected.sort((a, b) => a.mi - b.mi);
+
+  // Force-include user-authored seeds (spec § node-stack). A seed bypasses
+  // popFloor / spacing / maxNodes — a user pin outranks every tuning gate —
+  // and keeps its durable id. Seeds within anchorGuardMi of Start/End are
+  // dropped as redundant with the endpoint node. A gazetteer pick within
+  // minSpacingMi of a seed is dropped (the seed wins), holding the
+  // "nodes ≥ minSpacing apart" invariant with user intent dominant. When no
+  // seeds are supplied this reduces to the prior gazetteer-only spine.
+  const seedNodes: CorridorCity[] = (input.seeds ?? [])
+    .filter(
+      (s) =>
+        s.milesFromStart > p.anchorGuardMi &&
+        s.milesFromStart < endMi - p.anchorGuardMi,
+    )
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: "corridor" as const,
+      coords: s.coords,
+      milesFromStart: s.milesFromStart,
+      placeIds: [],
+    }));
+
+  const gazNodes: CorridorCity[] = selected
+    .filter(
+      (c) =>
+        !seedNodes.some(
+          (sn) => Math.abs(sn.milesFromStart - c.mi) < p.minSpacingMi,
+        ),
+    )
+    .map((c) => ({
+      id: slugify(`${c.city.name} ${c.city.admin}`),
+      name: `${c.city.name}, ${c.city.admin}`,
+      kind: "corridor" as const,
+      coords: [c.city.lng, c.city.lat] as LngLat,
+      milesFromStart: c.mi,
+      placeIds: [],
+    }));
+
+  const mid = [...gazNodes, ...seedNodes].sort(
+    (a, b) => a.milesFromStart - b.milesFromStart,
+  );
+
   return [
     {
       id: slugify(start.name),
@@ -219,14 +277,7 @@ export function deriveCorridorCities(input: {
       milesFromStart: 0,
       placeIds: [],
     },
-    ...selected.map((c) => ({
-      id: slugify(`${c.city.name} ${c.city.admin}`),
-      name: `${c.city.name}, ${c.city.admin}`,
-      kind: "corridor" as const,
-      coords: [c.city.lng, c.city.lat] as LngLat,
-      milesFromStart: c.mi,
-      placeIds: [],
-    })),
+    ...mid,
     {
       id: slugify(end.name),
       name: end.name,

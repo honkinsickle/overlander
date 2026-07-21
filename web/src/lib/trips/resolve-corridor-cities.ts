@@ -5,7 +5,11 @@ import {
   haversineMi,
 } from "@/lib/routing/point-to-polyline";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
-import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
+import {
+  bucketPlacesIntoCorridor,
+  applyPlaceOverrides,
+} from "@/lib/corridor/bucket";
+import { resolveSeeds } from "@/lib/corridor/seeds";
 import gazetteer from "@/lib/corridor/data/cities-na.json";
 
 /**
@@ -83,6 +87,17 @@ export function resolveCorridorCities(trip: Trip): Trip {
     return lo;
   };
 
+  // One sliced day's derivation inputs, computed by the forward-cursor walk
+  // (pass 1). `null` for a day that can't be sliced — it carries no corridor.
+  type Slice = {
+    startName: string;
+    endName: string;
+    startCoord: [number, number];
+    endCoord: [number, number];
+    daySlice: [number, number][];
+    pool: { id: string; coords: [number, number] }[];
+  };
+
   let cursor = 0;
   // Carry the previous day's location forward. Destination/location halves
   // reliably carry the ", ST" admin suffix; start halves often don't
@@ -95,7 +110,13 @@ export function resolveCorridorCities(trip: Trip): Trip {
   // day resumes from. Parsed BEFORE the geometry guards so a day we can't
   // slice still advances the chain. (Admin-suffix fix 2026-07-09.)
   let prevEndName: string | undefined;
-  const days = trip.days.map((day, i) => {
+
+  // PASS 1 — forward-cursor walk. Deriving/bucketing is deferred to pass 2 so
+  // resolveSeeds can arbitrate a seed across EVERY day's line before any spine
+  // is built (an out-and-back / loop seed must pick the nearest day). Neither
+  // derive nor bucket ever fed the cursor, so splitting the walk is behavior-
+  // preserving; with no seeds/overrides pass 2 reproduces the prior output.
+  const slices: (Slice | null)[] = trip.days.map((day, i) => {
     // Day labels are "Start City, ST — End City, ST" (same format the
     // finalize path writes; spec §1.3 derives node names from the halves).
     // Some reference labels carry a via segment ("Lake Louise — Icefields
@@ -119,13 +140,13 @@ export function resolveCorridorCities(trip: Trip): Trip {
     const startCoord =
       day.startCoord ??
       (i === 0 ? trip.startCoords : trip.days[i - 1].coords);
-    if (!startCoord || !day.coords) return day;
-    if (!startName || !endName) return day;
+    if (!startCoord || !day.coords) return null;
+    if (!startName || !endName) return null;
 
     const window = line.slice(cursor);
-    if (window.length < 2) return day;
+    if (window.length < 2) return null;
     const a = alongRouteMiles(startCoord, window);
-    if (!a) return day;
+    if (!a) return null;
     // Bound the END projection by the day's published length: a repeated
     // destination (Anchorage is visited three times) can otherwise
     // project onto a LATER pass ahead of the cursor, ballooning the
@@ -136,23 +157,17 @@ export function resolveCorridorCities(trip: Trip): Trip {
       ? idxAtMile(a.miles + day.miles * 1.5 + 25, cursor)
       : line.length - 1;
     const endWindow = line.slice(cursor, endCapIdx + 1);
-    if (endWindow.length < 2) return day;
+    if (endWindow.length < 2) return null;
     const b = alongRouteMiles(day.coords, endWindow);
-    if (!b || b.miles <= a.miles) return day;
+    if (!b || b.miles <= a.miles) return null;
     const iA = idxAtMile(a.miles, cursor);
     const iB = idxAtMile(b.miles, cursor);
-    if (iB - iA < 1) return day;
+    if (iB - iA < 1) return null;
 
     const daySlice = line.slice(iA, iB + 1);
-    const spine = deriveCorridorCities({
-      line: daySlice,
-      start: { name: startName, coords: startCoord },
-      end: { name: endName, coords: day.coords },
-      gazetteer,
-    });
     cursor = iB;
-    if (!spine) return day;
-    // Place→node bucketing (spec §2.3) over the day's full place pool —
+
+    // Place→node bucketing pool (spec §2.3): the day's full place pool —
     // segmentSuggestions ∪ waypoints (spec §1.4 resolution set), deduped
     // by id (an added suggestion exists in BOTH pools under one id).
     // Phase 0 (2026-07-09): also fold in `day.suggestions` — the legacy
@@ -173,12 +188,51 @@ export function resolveCorridorCities(trip: Trip): Trip {
       seen.add(p.id);
       pool.push({ id: p.id, coords: p.coords });
     }
-    const corridorCities = bucketPlacesIntoCorridor({
-      cities: spine,
-      places: pool,
-      line: daySlice,
+
+    return {
+      startName,
+      endName,
+      startCoord,
+      endCoord: day.coords,
+      daySlice,
+      pool,
+    };
+  });
+
+  // PASS 2 — cross-day seed arbitration, then per-day derive + bucket +
+  // override. resolveSeeds sees every sliceable day's line, so a seed on an
+  // out-and-back / loop attaches to the single nearest day (ties → earliest),
+  // and a seed that projects onto no day is reported dormant (not dropped).
+  const seeds = trip.nodeSeeds ?? [];
+  const overrides = trip.placeOverrides ?? [];
+  const sliceLines = slices
+    .map((s, i) => (s ? { id: trip.days[i].id, line: s.daySlice } : null))
+    .filter((d): d is { id: string; line: [number, number][] } => d !== null);
+  const { byDay, resolutions } = resolveSeeds({ days: sliceLines, seeds });
+
+  const days = trip.days.map((day, i) => {
+    const s = slices[i];
+    if (!s) return day;
+    const spine = deriveCorridorCities({
+      line: s.daySlice,
+      start: { name: s.startName, coords: s.startCoord },
+      end: { name: s.endName, coords: s.endCoord },
+      gazetteer,
+      seeds: byDay.get(day.id),
     });
+    if (!spine) return day;
+    const bucketed = bucketPlacesIntoCorridor({
+      cities: spine,
+      places: s.pool,
+      line: s.daySlice,
+    });
+    const corridorCities = applyPlaceOverrides({ cities: bucketed, overrides });
     return { ...day, corridorCities };
   });
-  return { ...trip, days };
+
+  // seedResolutions is a queryable diagnostic (dormant-seed signal), stamped
+  // only when the trip actually carries seeds so seedless trips are untouched.
+  return seeds.length
+    ? { ...trip, days, seedResolutions: resolutions }
+    : { ...trip, days };
 }

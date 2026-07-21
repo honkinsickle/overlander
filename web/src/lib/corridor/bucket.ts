@@ -78,3 +78,47 @@ export function bucketPlacesIntoCorridor(input: {
     return placeIds.length ? { ...city, placeIds } : city;
   });
 }
+
+/**
+ * Apply user POI re-homing on top of nearest-node bucketing (spec § node-stack
+ * model). Each override pins a placeId under a specific node id — a durable
+ * NodeSeed id, or a gazetteer node promoted to a seed at pin time. Overrides
+ * win over the computed nearest node; a place can also be pulled in from
+ * nowhere (an orphan that cleared no node's max-attach gate). A DANGLING
+ * override — its target node absent from this derivation — is ignored, so the
+ * nearest-node result stands (graceful, never a crash). Pure.
+ */
+export function applyPlaceOverrides(input: {
+  cities: CorridorCity[];
+  overrides: { placeId: string; nodeId: string }[];
+}): CorridorCity[] {
+  const { cities, overrides } = input;
+  if (overrides.length === 0) return cities;
+
+  const present = new Set(cities.map((c) => c.id));
+  // placeId → target node, only for overrides whose target exists this pass.
+  const target = new Map<string, string>();
+  for (const o of overrides) {
+    if (present.has(o.nodeId)) target.set(o.placeId, o.nodeId);
+  }
+  if (target.size === 0) return cities;
+
+  return cities.map((city) => {
+    // Keep places not overridden away from this node.
+    const kept = city.placeIds.filter((pid) => {
+      const to = target.get(pid);
+      return to === undefined || to === city.id;
+    });
+    // Append places overridden TO this node not already present. A re-homed
+    // place lands at the end (a manual pin is explicit; the auto-bucketed
+    // places keep their mile order ahead of it).
+    const incoming = [...target.entries()]
+      .filter(([pid, nid]) => nid === city.id && !kept.includes(pid))
+      .map(([pid]) => pid);
+
+    if (incoming.length === 0 && kept.length === city.placeIds.length) {
+      return city;
+    }
+    return { ...city, placeIds: [...kept, ...incoming] };
+  });
+}
