@@ -5,6 +5,8 @@ model is the prerequisite**. Pricing an arbitrary order is solved and free — t
 backtrack detector ships as a standalone pure function (`lib/trips/backtrack.ts`,
 tested). Branch `feat/manual-trip-edit`.
 **Date:** 2026-07-20 (finding + two revisions same day; this is the settled version).
+**Updated 2026-07-21 (see addendum):** the node-stack model shipped; place-reorder
+is **no longer blocked on rendering**. Sequence is a separate, still-open primitive.
 
 Manual-edit added drag-to-reorder for the **day cards** in the rail (a flat
 `Day[]`, `arrayMove` + recompute + polyline splice — `lib/trips/reorder-days.ts`).
@@ -77,3 +79,41 @@ number. Never a routing-cost block — only a rendering one.
 - **Blocked / deferred:** place-card reorder UI (needs the node-stack render);
   Tier-2 authoritative recompute; cross-day moves. The node-stack model is the
   gating prerequisite.
+
+---
+
+## Update 2026-07-21 — node-stack shipped; reorder unblocked; sequence is a new primitive
+
+The node-stack model above shipped: the edit spine reads server bucketing
+(`corridorCities[].placeIds`, hybrid clusters + geometry residual), and a POI's
+card drags between nodes to pin/unpin (`placeOverrides`, optimistic + persisted).
+Place-reorder is therefore **no longer blocked on rendering** — the original
+status predates that.
+
+With the node render in place, reorder split into two independent concerns:
+
+- **Attachment** — which node owns a POI. Solved: `placeOverrides` (placeId →
+  nodeId), the Phase 1 drag.
+- **Sequence** — the order of POIs *among their siblings under a node*. Still
+  unsolved: `placeOverrides` is an attachment map, not an order. Two POIs under
+  one node have no authored order on **any** day; dwell days (one node, all POIs
+  at 0 mi) just make it total and impossible to ignore.
+
+Sequence is being built as **Option B — per-place fractional rank**: a durable,
+placeId-keyed `Trip.placeRanks` map that survives regeneration exactly as
+`placeOverrides` does, leaves un-touched clusters on their derived (mile /
+near→far) order, and folds into the existing drag. Pure core shipped:
+`web/src/lib/corridor/place-rank.ts` (`insertRank`, tested). A cheap correct-ish
+default landed first: round-trip days order the leg **near→far from the anchor**
+instead of the reversed main-route projection (`assignPlacesToStretches` +
+`orderKey`).
+
+**Correction to an earlier (conversational) claim** that Phase 1 already computes
+and discards a drop *index*: it does not. The clusters are plain `useDroppable`
+regions and `onDragEnd` reads only `active.id` + `over.id` — there is no index.
+The accurate statement:
+
+> The index is derivable from the existing single drag via pointer-vs-rect on
+> drop, so "one gesture, both primitives" holds. SortableContext is the
+> idiomatic index source but requires converting each cluster to a sortable
+> list; deferred to a later fidelity pass, with no model change.
