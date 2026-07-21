@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CategoryListCard } from "@/components/trip/category-list-card";
+import { DayDetailNodeBlocks } from "@/components/trip/day-detail-node-blocks";
 import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
 import {
   coincidesWithAnchor,
@@ -98,8 +99,13 @@ type Props = {
   briefing?: React.ReactNode;
   /** Manual-edit mode — threaded to every place card (drag-handle lane) and
    *  used to widen the corridor content so the wider cards fit. Off by
-   *  default. */
+   *  default. In edit mode the center column renders the node-model City Block
+   *  spine (DayDetailNodeBlocks) instead of the mile-interleaved read spine. */
   editMode?: boolean;
+  /** Day driving total — labels the drive connector on a 2-node day (the
+   *  single connector IS the whole day's drive). Edit render only. */
+  dayMiles?: number;
+  dayDriveHours?: number;
 };
 
 const GUTTER_W = 48;
@@ -180,6 +186,8 @@ export function DayDetailCorridor({
   onExploreDay,
   briefing,
   editMode = false,
+  dayMiles,
+  dayDriveHours,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Generated trips flag the LLM's curated key stops; when any exist, they
@@ -236,6 +244,17 @@ export function DayDetailCorridor({
     mileMarkers,
     byId,
   });
+
+  // Edit render: pool places bucketed under no node (>25mi from every node,
+  // or off-corridor) and not the day's start/end anchor → the "Along the way"
+  // tail group. Deduped via byId so a suggestion+waypoint sharing an id counts
+  // once. Nothing silently dropped.
+  const nodeReferenced = new Set(cities.flatMap((c) => c.placeIds));
+  const orphans = Array.from(byId.values()).filter(
+    (p) =>
+      !nodeReferenced.has(p.id) &&
+      !coincidesWithAnchor(toAnchorLike(p), cities),
+  );
 
   return (
     <div
@@ -308,6 +327,23 @@ export function DayDetailCorridor({
            logistics/obligations) — the day's context, above the route ── */}
       {briefing && <div style={{ paddingTop: 16 }}>{briefing}</div>}
 
+      {/* Edit surface: the node-model City Block spine (nodes with POIs
+          grouped beneath, mile gutter, capped labeled drives, orphan tail).
+          The read view keeps the mile-interleaved spine below so the two
+          treatments can be compared directly. */}
+      {editMode ? (
+        <DayDetailNodeBlocks
+          cities={cities}
+          byId={byId}
+          orphans={orphans}
+          dayMiles={dayMiles}
+          dayDriveHours={dayDriveHours}
+          onOpenPlace={onOpenPlace}
+          onRemovePlace={onRemovePlace}
+          editMode={editMode}
+        />
+      ) : (
+      <>
       {/* ── Fallback block — curated picks the bake couldn't position on the
            spine (off-corridor, or a layover day with no polyline). Positioned
            picks render in-spine below; this keeps the rest visible. ── */}
@@ -401,6 +437,8 @@ export function DayDetailCorridor({
           ),
         )}
       </div>
+      </>
+      )}
 
       {/* ── Footer CTA ─────────────────────────────────────────── */}
       <div style={{ padding: 15 }}>
