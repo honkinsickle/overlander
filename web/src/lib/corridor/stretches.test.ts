@@ -135,3 +135,53 @@ test("1-node day: near clusters under it; beyond its radius → Along the way", 
   assert.equal(far.stretches.length, 0);
   assert.deepEqual(far.alongTheWay, ["b"]);
 });
+
+// ── assignPlacesToStretches: HYBRID MODE (serverClusters) ───────────────────
+test("hybrid: clusters come from serverClusters verbatim, residual → stretch", () => {
+  // Server bucketed "near" under node 0; "mid" is in no cluster → geometry
+  // positions it into the drive stretch.
+  const { nodeClusters, stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 200],
+    positioned: pos([["near", 10, true], ["mid", 60, true]]),
+    serverClusters: [["near"], []],
+  });
+  assert.deepEqual(nodeClusters, [["near"], []]);
+  assert.deepEqual(stretches[0].placeIds, ["mid"]);
+});
+
+test("hybrid: a pinned-FAR place stays in its server cluster (override wins geometry)", () => {
+  // "bell2" projects at mile 5 (near node 0) but the server pinned it under
+  // node 1 (an override). Hybrid honors the server: it clusters under node 1
+  // and never leaks into node 0 or a stretch.
+  const { nodeClusters, stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 240],
+    positioned: pos([["bell2", 5, true]]),
+    serverClusters: [[], ["bell2"]],
+  });
+  assert.deepEqual(nodeClusters, [[], ["bell2"]]);
+  assert.deepEqual(stretches[0].placeIds, []);
+});
+
+test("hybrid: residual off-corridor → Along the way; server cluster order preserved", () => {
+  const { nodeClusters, stretches, alongTheWay } = assignPlacesToStretches({
+    nodeMiles: [0, 300],
+    // node 1 cluster order is the server's (manual pin appended last, not re-sorted)
+    positioned: pos([["mid", 155, true], ["detour", 200, false]]),
+    serverClusters: [[], ["arrival", "pinned"]],
+  });
+  assert.deepEqual(nodeClusters, [[], ["arrival", "pinned"]]);
+  assert.deepEqual(stretches[0].placeIds, ["mid"]);
+  assert.deepEqual(alongTheWay, ["detour"]);
+});
+
+test("hybrid: empty serverClusters (fallback day) → every place is residual", () => {
+  // A fallback 2-node day carries empty placeIds; hybrid must reproduce the
+  // pure-geometry stretch placement for the whole pool.
+  const { nodeClusters, stretches } = assignPlacesToStretches({
+    nodeMiles: [0, 400],
+    positioned: pos([["c", 267, true], ["a", 37, true], ["b", 155, true]]),
+    serverClusters: [[], []],
+  });
+  assert.deepEqual(nodeClusters, [[], []]);
+  assert.deepEqual(stretches[0].placeIds, ["a", "b", "c"]);
+});

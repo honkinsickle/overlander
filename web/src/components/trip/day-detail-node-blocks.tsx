@@ -7,10 +7,15 @@
  * falls within that stretch, in mile order, on a left mile-timeline gutter.
  * Replaces the mile-interleaved read spine for the edit surface only.
  *
- * POI positions come from projecting each place's COORDS onto the route
- * (positionPlacesOnDay) — NOT the stored `milesFromStart`, which is unreliable
- * on current generated trips (~+589-mi foreign offset). This is a render-time
- * stopgap pending the day-coords persistence fix; see
+ * Cluster membership (which node owns a POI) comes from the SERVER bucketing —
+ * each `CorridorCity.placeIds`, which carries user pin overrides. Geometry only
+ * positions the residual (a place in no cluster) into the drive stretches. See
+ * assignPlacesToStretches' HYBRID MODE.
+ *
+ * POI positions (the gutter mile ticks) come from projecting each place's COORDS
+ * onto the route (positionPlacesOnDay) — NOT the stored `milesFromStart`, which
+ * is unreliable on current generated trips (~+589-mi foreign offset). This is a
+ * render-time stopgap pending the day-coords persistence fix; see
  * lib/corridor/stretches.ts and docs/findings/2026-07-20-*.md.
  *
  * Scope: rendering only, edit-mode gated. Drag handles inert. Node = white dot
@@ -63,10 +68,18 @@ export function DayDetailNodeBlocks({
     // resolveCorridorCities + bakeGeneratedDays), so this pool already excludes
     // any place that IS a node — no per-surface filtering here.
     const places = Array.from(byId.values());
+    // Positions feed the gutter mile ticks for EVERY POI (clustered ones too),
+    // and drive the geometric assignment of the residual below.
     const positioned = positionPlacesOnDay({ line, places, dayStartMile });
+    // HYBRID: cluster membership is the server's bucketing (cities[].placeIds),
+    // which carries user pin overrides (applyPlaceOverrides) — pure geometry
+    // can't see those. Geometry only positions the residual (a place in no
+    // server cluster) into the drive stretches / Along the way. On a fallback
+    // day with empty placeIds, every place is residual → prior behavior.
     const { nodeClusters, stretches, alongTheWay } = assignPlacesToStretches({
       nodeMiles: cities.map((c) => c.milesFromStart),
       positioned,
+      serverClusters: cities.map((c) => c.placeIds),
     });
     return { positioned, nodeClusters, stretches, alongTheWay };
   }, [byId, line, dayStartMile, cities]);

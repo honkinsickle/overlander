@@ -100,6 +100,20 @@ export type Stretch = {
 /** Ties within this many miles keep the upstream node (mirrors bucket.ts). */
 const TIE_EPS_MI = 0.01;
 
+/** The stretch a mid-drive place falls in: the first whose UPPER bound ≥
+ *  dayMile (<= → upstream wins ties); beyond the last node clamps into the
+ *  final stretch. Shared by both assignment modes. */
+function stretchIndexFor(
+  dayMile: number,
+  nodeMiles: number[],
+  stretchCount: number,
+): number {
+  for (let k = 0; k < stretchCount; k++) {
+    if (dayMile <= nodeMiles[k + 1]) return k;
+  }
+  return stretchCount - 1;
+}
+
 /**
  * Assign positioned places to NODE CLUSTERS and drive STRETCHES — the same
  * maxAttachMi idea bucket.ts uses, so a place near a node clusters UNDER it
@@ -114,6 +128,18 @@ const TIE_EPS_MI = 0.01;
  * Node-IDENTICAL places (a pool place that IS a node) are already filtered out
  * upstream at the resolver (corridor/node-identity, applied in
  * resolveCorridorCities + bakeGeneratedDays), so the pool reaching here is clean.
+ *
+ * HYBRID MODE (`serverClusters`): pass the day's `CorridorCity.placeIds` and
+ * cluster membership is taken from the SERVER bucketing verbatim — carrying user
+ * pin overrides (applyPlaceOverrides), which pure geometry can't see. Geometry
+ * then only positions the RESIDUAL (a place in no server cluster) into stretches
+ * / along-the-way. This is the reconciliation the render needs: the server owns
+ * "which node owns this place," the client owns "where the leftover mid-drive
+ * places sit." A pinned-far place stays in its node's cluster AND keeps its true
+ * (projected) mile tick, so the out-of-order mile reads as the honest signal it
+ * is. Omit `serverClusters` for pure-geometry mode (unchanged; still used by any
+ * caller with no server spine, e.g. a fallback 2-node day with empty placeIds —
+ * there every place is residual, reproducing the prior behavior exactly).
  * Pure.
  */
 export function assignPlacesToStretches(input: {
@@ -121,18 +147,47 @@ export function assignPlacesToStretches(input: {
   nodeMiles: number[];
   positioned: Map<string, PositionedPlace>;
   maxAttachMi?: number;
+  /** Server-authoritative cluster membership (one array per node, matching
+   *  `nodeMiles` order) = each `CorridorCity.placeIds`. When present, clusters
+   *  are used verbatim and geometry only places the residual — see HYBRID MODE. */
+  serverClusters?: string[][];
 }): { nodeClusters: string[][]; stretches: Stretch[]; alongTheWay: string[] } {
-  const { nodeMiles, positioned } = input;
+  const { nodeMiles, positioned, serverClusters } = input;
   const maxAttach = input.maxAttachMi ?? DEFAULT_CORRIDOR_PARAMS.maxAttachMi;
-  const nodeClusters: string[][] = nodeMiles.map(() => []);
   const stretches: Stretch[] = [];
   for (let i = 0; i < nodeMiles.length - 1; i++) {
     stretches.push({ fromNode: i, toNode: i + 1, placeIds: [] });
   }
   const alongTheWay: string[] = [];
-  const clusterHits: { node: number; id: string; mile: number }[] = [];
   const stretchHits: { s: number; id: string; mile: number }[] = [];
 
+  // Hybrid: clusters come from the server (overrides included); geometry only
+  // routes the residual — a positioned place in no server cluster — to a stretch
+  // (on-corridor) or Along the way (off-corridor). Clustered places keep their
+  // server home regardless of where their mile would land them.
+  if (serverClusters) {
+    const nodeClusters = serverClusters.map((ids) => [...ids]);
+    const clustered = new Set(serverClusters.flat());
+    for (const p of positioned.values()) {
+      if (clustered.has(p.id)) continue;
+      if (!p.onCorridor || stretches.length === 0) {
+        alongTheWay.push(p.id);
+        continue;
+      }
+      stretchHits.push({
+        s: stretchIndexFor(p.dayMile, nodeMiles, stretches.length),
+        id: p.id,
+        mile: p.dayMile,
+      });
+    }
+    stretchHits.sort((a, b) => a.mile - b.mile);
+    for (const h of stretchHits) stretches[h.s].placeIds.push(h.id);
+    return { nodeClusters, stretches, alongTheWay };
+  }
+
+  // Pure-geometry: nearest-node clustering within maxAttach, else stretch.
+  const nodeClusters: string[][] = nodeMiles.map(() => []);
+  const clusterHits: { node: number; id: string; mile: number }[] = [];
   for (const p of positioned.values()) {
     if (!p.onCorridor) {
       alongTheWay.push(p.id);
@@ -157,17 +212,11 @@ export function assignPlacesToStretches(input: {
       alongTheWay.push(p.id);
       continue;
     }
-    // First stretch whose UPPER bound ≥ dayMile (<= → upstream wins ties);
-    // beyond the last node clamps into the last stretch.
-    let s = -1;
-    for (let k = 0; k < stretches.length; k++) {
-      if (p.dayMile <= nodeMiles[k + 1]) {
-        s = k;
-        break;
-      }
-    }
-    if (s === -1) s = stretches.length - 1;
-    stretchHits.push({ s, id: p.id, mile: p.dayMile });
+    stretchHits.push({
+      s: stretchIndexFor(p.dayMile, nodeMiles, stretches.length),
+      id: p.id,
+      mile: p.dayMile,
+    });
   }
 
   clusterHits.sort((a, b) => a.mile - b.mile);
