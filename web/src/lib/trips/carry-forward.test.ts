@@ -36,6 +36,9 @@ const seeds: NodeSeed[] = [
 const overrides: PlaceNodeOverride[] = [
   { placeId: "barkerville", nodeId: "seed-wells-bc" },
 ];
+const ranks: Record<string, { nodeId: string; rank: number }> = {
+  barkerville: { nodeId: "seed-wells-bc", rank: 0 },
+};
 
 test("seeds + overrides survive a regeneration cycle intact", () => {
   const prev = trip({
@@ -60,6 +63,17 @@ test("seeds + overrides survive a regeneration cycle intact", () => {
   // …but the user overlays are carried forward byte-for-byte.
   assert.deepEqual(out.nodeSeeds, seeds);
   assert.deepEqual(out.placeOverrides, overrides);
+});
+
+test("placeRanks survive a regeneration cycle (authored order carries)", () => {
+  const prev = trip({ nodeSeeds: seeds, placeOverrides: overrides, placeRanks: ranks });
+  const out = carryUserAuthored(prev, trip());
+  assert.deepEqual(out.placeRanks, ranks);
+});
+
+test("guard: throws loud when regeneration drops placeRanks", () => {
+  const original = trip({ placeRanks: ranks });
+  assert.throws(() => assertUserAuthoredCarried(original, trip()), /placeRanks/);
 });
 
 test("carry does not mutate the regenerated trip's other fields", () => {

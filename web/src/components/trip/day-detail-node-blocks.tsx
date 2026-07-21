@@ -70,10 +70,10 @@ export type PlaceMove = {
   nodeName?: string;
   placeName?: string;
   /** Authored order for the TARGET cluster (cross-node pin dropped at a
-   *  position): the rank writes from insertRank, committed with the pin in one
-   *  action so the target is never left partially ranked. Absent when the drop
-   *  had no orderable target (empty/unmeasurable cluster). */
-  rankWrites?: Record<string, number>;
+   *  position): node-scoped rank writes, committed with the pin in one action so
+   *  the target is never left partially ranked. Absent when the drop had no
+   *  orderable target (empty/unmeasurable cluster). */
+  rankWrites?: Record<string, { nodeId: string; rank: number }>;
 };
 
 /** Droppable id prefixes — parsed in onDragEnd to tell a node drop (pin) from a
@@ -97,12 +97,16 @@ type Props = {
   /** Wire the drag: a place dragged onto a node cluster pins it there; dragged
    *  onto the drive, unpins it. When absent, the grips stay inert. */
   onMovePlace?: (move: PlaceMove) => void;
-  /** Authored per-place ranks (Trip.placeRanks) — order within a cluster. Feeds
-   *  the sort; a place absent keeps its derived (mile / near→far) order. */
-  ranks?: ReadonlyMap<string, number>;
+  /** Authored per-place ranks (Trip.placeRanks) — node-scoped order. Feeds the
+   *  cluster sort; a place whose rank is for a DIFFERENT node is treated as
+   *  unranked here (scoping is applied when building rankKey below). */
+  ranks?: ReadonlyMap<string, { nodeId: string; rank: number }>;
   /** Reorder within a node's own cluster (same-node drop): the dragged place +
-   *  the minimal rank writes from insertRank. Absent → reorder disabled. */
-  onReorderPlace?: (placeId: string, rankWrites: Record<string, number>) => void;
+   *  the node-scoped rank writes from insertRank. Absent → reorder disabled. */
+  onReorderPlace?: (
+    placeId: string,
+    rankWrites: Record<string, { nodeId: string; rank: number }>,
+  ) => void;
   /** Placeid whose pin/unpin write is in flight — its card shows a saving cue. */
   pendingPlaceId?: string | null;
   /** Placeid whose last write FAILED — its card shows a persistent inline
@@ -145,17 +149,27 @@ export function DayDetailNodeBlocks({
     const anchor = cities[0]?.coords;
     const roundTrip =
       cities.length >= 2 && sameCoords(anchor, cities[cities.length - 1]?.coords);
-    // Sort key per place: an AUTHORED rank wins; else near→far on a round-trip
-    // day; else absent → the along-route mile (assignPlacesToStretches fallback).
+    // CLUSTER order (rankKey): a place's authored rank is honored ONLY in the
+    // cluster its rank was scoped to. Walk server placeIds so a place carrying
+    // another node's rank (regen/geometry/unpin drift) is simply omitted here →
+    // it's unranked in this cluster → appended, never sorted by a stale value.
+    let rankKey: Map<string, number> | undefined;
+    if (ranks && ranks.size) {
+      const m = new Map<string, number>();
+      cities.forEach((c) =>
+        c.placeIds.forEach((pid) => {
+          const e = ranks.get(pid);
+          if (e && e.nodeId === c.id) m.set(pid, e.rank);
+        }),
+      );
+      if (m.size) rankKey = m;
+    }
+    // STRETCH/residual order (orderKey): near→far on a round-trip day only — a
+    // SEPARATE map from rankKey (different unit; the two never sort one cluster).
     let orderKey: Map<string, number> | undefined;
-    if ((ranks && ranks.size) || (roundTrip && anchor)) {
+    if (roundTrip && anchor) {
       orderKey = new Map();
-      for (const p of places) {
-        const r = ranks?.get(p.id);
-        if (r !== undefined) orderKey.set(p.id, r);
-        else if (roundTrip && anchor && p.coords)
-          orderKey.set(p.id, haversineMi(p.coords, anchor));
-      }
+      for (const p of places) if (p.coords) orderKey.set(p.id, haversineMi(p.coords, anchor));
     }
     // HYBRID: cluster membership is the server's bucketing (cities[].placeIds),
     // which carries user pin overrides (applyPlaceOverrides) — pure geometry
@@ -167,6 +181,7 @@ export function DayDetailNodeBlocks({
       positioned,
       serverClusters: cities.map((c) => c.placeIds),
       orderKey,
+      rankKey,
     });
     return { positioned, nodeClusters, stretches, alongTheWay };
   }, [byId, line, dayStartMile, cities, ranks]);
@@ -208,7 +223,9 @@ export function DayDetailNodeBlocks({
     // incoming newcomer — insertRank materializes from the TARGET's order either
     // way. Returns undefined when there's nothing orderable (empty/1-card
     // target) or the rects can't be measured.
-    const computeRankWrites = (targetNodeId: string): Record<string, number> | undefined => {
+    const computeRankWrites = (
+      targetNodeId: string,
+    ): Record<string, { nodeId: string; rank: number }> | undefined => {
       const nodeIdx = cities.findIndex((c) => c.id === targetNodeId);
       if (nodeIdx < 0) return undefined;
       const cluster = nodeClusters[nodeIdx] ?? [];
@@ -230,8 +247,22 @@ export function DayDetailNodeBlocks({
         ...withoutSelf.slice(insertIndex),
       ];
       if (finalOrder.length < 2) return undefined; // nothing to order
-      const writes = insertRank(finalOrder, insertIndex, ranks ?? new Map());
-      return writes.size ? Object.fromEntries(writes) : undefined;
+      // Scope the ranks fed to insertRank to the TARGET node — a member carrying
+      // another node's rank reads as unranked, so insertRank materializes it in.
+      const scoped = new Map<string, number>();
+      for (const id of finalOrder) {
+        const entry = ranks?.get(id);
+        if (entry && entry.nodeId === targetNodeId) scoped.set(id, entry.rank);
+      }
+      const writes = insertRank(finalOrder, insertIndex, scoped);
+      if (!writes.size) return undefined;
+      // Stamp the target nodeId on every write (materialization writes the whole
+      // cluster; a fractional insert writes one — both get scoped here).
+      const out: Record<string, { nodeId: string; rank: number }> = {};
+      writes.forEach((rank, id) => {
+        out[id] = { nodeId: targetNodeId, rank };
+      });
+      return out;
     };
     if (overId.startsWith(DRIVE)) {
       // Dropped on the drive: unpin. If the place had no override this is a

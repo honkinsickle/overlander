@@ -18,6 +18,10 @@ export function carryUserAuthored(prev: Trip, regenerated: Trip): Trip {
     ...regenerated,
     nodeSeeds: prev.nodeSeeds ?? regenerated.nodeSeeds,
     placeOverrides: prev.placeOverrides ?? regenerated.placeOverrides,
+    // Authored order carries too. Safe without a reconciliation pass because
+    // ranks are node-scoped: a carried rank whose place re-buckets to a
+    // different node after regen is inert (scope mismatch → treated unranked).
+    placeRanks: prev.placeRanks ?? regenerated.placeRanks,
   };
 }
 
@@ -39,6 +43,12 @@ export function assertUserAuthoredCarried(original: Trip, next: Trip): void {
     (next.placeOverrides?.length ?? 0) === 0
   ) {
     lost.push("placeOverrides");
+  }
+  if (
+    Object.keys(original.placeRanks ?? {}).length > 0 &&
+    Object.keys(next.placeRanks ?? {}).length === 0
+  ) {
+    lost.push("placeRanks");
   }
   if (lost.length > 0) {
     throw new Error(

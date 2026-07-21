@@ -143,7 +143,9 @@ export function DayDetailCorridorColumn({
   const [, startMoveTransition] = useTransition();
   // Authored order overlay (declared before onMovePlace so a cross-node pin can
   // flip + revert ranks alongside the override). Same optimistic pattern.
-  const [localRanks, setLocalRanks] = useState<Record<string, number>>(trip.placeRanks ?? {});
+  const [localRanks, setLocalRanks] = useState<Record<string, { nodeId: string; rank: number }>>(
+    trip.placeRanks ?? {},
+  );
   useEffect(() => {
     setLocalRanks(trip.placeRanks ?? {});
   }, [trip.placeRanks]);
@@ -215,7 +217,7 @@ export function DayDetailCorridorColumn({
   // drop flips ranks immediately (the edit spine re-sorts from them), then
   // persists in the background; a failed write reverts and raises the error.
   const onReorderPlace = useCallback(
-    (placeId: string, rankWrites: Record<string, number>) => {
+    (placeId: string, rankWrites: Record<string, { nodeId: string; rank: number }>) => {
       const prev = localRanks;
       setMoveError(null);
       setMoveNote(null);

@@ -122,8 +122,11 @@ type Props = {
   /** Manual-edit drag (edit spine): pin/unpin a POI by dragging its card. */
   onMovePlace?: (move: PlaceMove) => void;
   /** Authored per-place order (Trip.placeRanks) + the same-node reorder handler. */
-  ranks?: ReadonlyMap<string, number>;
-  onReorderPlace?: (placeId: string, rankWrites: Record<string, number>) => void;
+  ranks?: ReadonlyMap<string, { nodeId: string; rank: number }>;
+  onReorderPlace?: (
+    placeId: string,
+    rankWrites: Record<string, { nodeId: string; rank: number }>,
+  ) => void;
   pendingPlaceId?: string | null;
   errorPlaceId?: string | null;
   errorMessage?: string | null;

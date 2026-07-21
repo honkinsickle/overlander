@@ -100,6 +100,19 @@ export type Stretch = {
 /** Ties within this many miles keep the upstream node (mirrors bucket.ts). */
 const TIE_EPS_MI = 0.01;
 
+/** Order one server cluster: ranked members (by authored rank) first, unranked
+ *  ones APPENDED in server order. `rankKey` is node-scoped, so a place carrying
+ *  another node's rank isn't in it and lands in the appended tail rather than
+ *  sorting by a stale value. No ranked members → server order verbatim. */
+function sortClusterByRank(ids: string[], rankKey?: Map<string, number>): string[] {
+  if (!rankKey) return [...ids];
+  const ranked = ids.filter((id) => rankKey.has(id));
+  if (ranked.length === 0) return [...ids];
+  const sorted = ranked.sort((a, b) => (rankKey.get(a) as number) - (rankKey.get(b) as number));
+  const rest = ids.filter((id) => !rankKey.has(id));
+  return [...sorted, ...rest];
+}
+
 /** The stretch a mid-drive place falls in: the first whose UPPER bound ≥
  *  dayMile (<= → upstream wins ties); beyond the last node clamps into the
  *  final stretch. Shared by both assignment modes. */
@@ -151,14 +164,36 @@ export function assignPlacesToStretches(input: {
    *  `nodeMiles` order) = each `CorridorCity.placeIds`. When present, clusters
    *  are used verbatim and geometry only places the residual — see HYBRID MODE. */
   serverClusters?: string[][];
-  /** Per-place sort key overriding day-mile for ORDER only (not assignment).
-   *  On a round-trip day the along-route mile is degenerate (the spur projects
-   *  onto the main route reversed — summit first); the presenter passes near→far
-   *  distance-from-anchor instead. Absent id → its mile. */
+  /** STRETCH/residual order key — the along-route mile substitute for a
+   *  round-trip day (near→far distance-from-anchor, since the spur projects onto
+   *  the main route reversed). Absent id → its mile. A DIFFERENT unit from
+   *  `rankKey` (miles, not fractional ranks); the two must never cover the same
+   *  cluster (asserted). */
   orderKey?: Map<string, number>;
+  /** CLUSTER order key — authored fractional ranks, already NODE-SCOPED by the
+   *  caller (a place's rank is present here only when it's in the cluster its
+   *  rank was authored for). A cluster with ≥1 ranked member sorts its ranked
+   *  members by rank and APPENDS the unranked ones in server order — never
+   *  demotes to mile, never sorts a foreigner by a stale rank (a foreigner is
+   *  simply not in this map). */
+  rankKey?: Map<string, number>;
 }): { nodeClusters: string[][]; stretches: Stretch[]; alongTheWay: string[] } {
-  const { nodeMiles, positioned, serverClusters, orderKey } = input;
+  const { nodeMiles, positioned, serverClusters, orderKey, rankKey } = input;
   const maxAttach = input.maxAttachMi ?? DEFAULT_CORRIDOR_PARAMS.maxAttachMi;
+  // Scale guard (spec item 3): authored ranks and near→far miles are different
+  // units; they must never both cover a member of the same cluster or the sort
+  // mixes scales. rankKey is cluster-scoped, orderKey is residual/round-trip, so
+  // in practice they're disjoint — fail LOUDLY if that ever breaks.
+  if (rankKey && orderKey) {
+    for (const id of rankKey.keys()) {
+      if (orderKey.has(id)) {
+        throw new Error(
+          `assignPlacesToStretches: "${id}" has both an authored rank and a ` +
+            `near→far key — different units must never sort the same cluster.`,
+        );
+      }
+    }
+  }
   // Sort rank: the order override when present, else the along-route mile.
   const rank = (id: string, mile: number) => orderKey?.get(id) ?? mile;
   const stretches: Stretch[] = [];
@@ -173,14 +208,13 @@ export function assignPlacesToStretches(input: {
   // (on-corridor) or Along the way (off-corridor). Clustered places keep their
   // server home regardless of where their mile would land them.
   if (serverClusters) {
-    // Server order verbatim, EXCEPT a fully-ranked cluster sorts by its authored
-    // ranks (materialization guarantees all-or-nothing, so a partial mix of rank
-    // and mile never happens within one cluster).
-    const nodeClusters = serverClusters.map((ids) =>
-      orderKey && ids.length > 1 && ids.every((id) => orderKey.has(id))
-        ? [...ids].sort((a, b) => (orderKey.get(a) as number) - (orderKey.get(b) as number))
-        : [...ids],
-    );
+    // Server order verbatim, EXCEPT an AUTHORED cluster (≥1 node-scoped rank)
+    // sorts its ranked members by rank and APPENDS the unranked ones (newcomers
+    // arriving via a non-drag path, or foreigners carrying another node's rank)
+    // in server order. Never demote to mile (that destroys N authored decisions
+    // to avoid one unspecified one); never sort a foreigner by a stale rank (it
+    // isn't in rankKey). An untouched cluster (no ranked members) stays verbatim.
+    const nodeClusters = serverClusters.map((ids) => sortClusterByRank(ids, rankKey));
     const clustered = new Set(serverClusters.flat());
     for (const p of positioned.values()) {
       if (clustered.has(p.id)) continue;

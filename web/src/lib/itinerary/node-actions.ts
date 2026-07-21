@@ -51,7 +51,7 @@ async function persist(
   overlay: {
     nodeSeeds?: NodeSeed[];
     placeOverrides?: PlaceNodeOverride[];
-    placeRanks?: Record<string, number>;
+    placeRanks?: Record<string, { nodeId: string; rank: number }>;
   },
 ): Promise<RailsFailure | null> {
   const days = trip.days.map((d) => {
@@ -103,7 +103,12 @@ export async function createNodeSeedAction(
  *  partially ranked on disk. */
 export async function pinPlaceAction(
   tripId: string,
-  input: { dayId: string; placeId: string; nodeId: string; rankWrites?: Record<string, number> },
+  input: {
+    dayId: string;
+    placeId: string;
+    nodeId: string;
+    rankWrites?: Record<string, { nodeId: string; rank: number }>;
+  },
 ): Promise<Result<{ nodeId: string; promoted: boolean }>> {
   const railed = checkRails(tripId);
   if (railed) return railed;
@@ -189,7 +194,7 @@ export async function unpinPlaceAction(
  *  cluster — both are just a shallow merge over the existing map. */
 export async function setPlaceRankAction(
   tripId: string,
-  rankWrites: Record<string, number>,
+  rankWrites: Record<string, { nodeId: string; rank: number }>,
 ): Promise<{ ok: true } | RailsFailure> {
   const railed = checkRails(tripId);
   if (railed) return railed;

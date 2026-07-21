@@ -203,6 +203,55 @@ test("orderKey falls back to mile for any id absent from the map", () => {
   assert.deepEqual(stretches[0].placeIds, ["a", "b"]);
 });
 
+// ── assignPlacesToStretches: rankKey (authored cluster order) ────────────────
+test("rankKey sorts a fully-ranked cluster by rank", () => {
+  const { nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 200],
+    positioned: pos([]),
+    serverClusters: [["a", "b", "c"], []], // server/mile order a,b,c
+    rankKey: new Map([["a", 2], ["b", 0], ["c", 1]]),
+  });
+  assert.deepEqual(nodeClusters[0], ["b", "c", "a"]); // by rank
+});
+
+test("rankKey APPENDS an unranked member (newcomer/foreigner), never demotes to mile", () => {
+  // "x" has no rank in THIS cluster (a non-drag newcomer, or a place carrying
+  // another node's rank that the caller scoped out). Ranked a,b keep their
+  // authored order; x is appended in server order — the whole cluster does NOT
+  // fall back to mile (which would erase the authored order).
+  const { nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 200],
+    positioned: pos([]),
+    serverClusters: [["a", "x", "b"], []],
+    rankKey: new Map([["a", 0], ["b", 1]]),
+  });
+  assert.deepEqual(nodeClusters[0], ["a", "b", "x"]);
+});
+
+test("rankKey: untouched cluster (no ranked members) → server order verbatim", () => {
+  const { nodeClusters } = assignPlacesToStretches({
+    nodeMiles: [0, 200],
+    positioned: pos([]),
+    serverClusters: [["a", "b", "c"], []],
+    rankKey: new Map([["other", 0]]), // none of a,b,c ranked
+  });
+  assert.deepEqual(nodeClusters[0], ["a", "b", "c"]);
+});
+
+test("scale guard: a placeId in BOTH rankKey and orderKey throws (mixed units)", () => {
+  assert.throws(
+    () =>
+      assignPlacesToStretches({
+        nodeMiles: [0, 200],
+        positioned: pos([]),
+        serverClusters: [["a"], []],
+        rankKey: new Map([["a", 0]]),
+        orderKey: new Map([["a", 5]]),
+      }),
+    /different units/,
+  );
+});
+
 test("hybrid: empty serverClusters (fallback day) → every place is residual", () => {
   // A fallback 2-node day carries empty placeIds; hybrid must reproduce the
   // pure-geometry stretch placement for the whole pool.

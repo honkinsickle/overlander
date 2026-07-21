@@ -78,13 +78,16 @@ export type Trip = {
    *  absent this derivation) falls back to nearest-node. Trip-level, carried
    *  forward with nodeSeeds. */
   placeOverrides?: PlaceNodeOverride[];
-  /** User-authored ORDER of POIs among their siblings (spec Option B). A sparse
-   *  placeId → fractional-rank map: a place with a rank sorts by it within its
-   *  cluster; unranked places keep their derived (mile / near→far) order. Keyed
-   *  by placeId so it survives regeneration exactly as placeOverrides do; node-
-   *  independent (rank only compares within a cluster). Written via insertRank
-   *  (lib/corridor/place-rank.ts); carried forward with nodeSeeds/placeOverrides. */
-  placeRanks?: Record<string, number>;
+  /** User-authored ORDER of POIs among their siblings (spec Option B). Sparse,
+   *  placeId-keyed, and SCOPED TO A NODE: `{ nodeId, rank }` — the rank is read
+   *  ONLY when `nodeId` equals the place's current cluster node; in any other
+   *  cluster the place is treated as unranked. This makes every membership-change
+   *  failure inert: a rank that survives into a cluster that no longer holds the
+   *  place (regeneration, geometry shift, unpin→re-bucket) simply doesn't apply.
+   *  Written via insertRank (lib/corridor/place-rank.ts, which supplies the rank;
+   *  the caller stamps the target nodeId); carried forward with the other
+   *  user-authored overlays. */
+  placeRanks?: Record<string, { nodeId: string; rank: number }>;
   /** Per-seed resolution status from the LAST derivation — queryable so a
    *  DORMANT seed (projects onto no day's route) is DETECTABLE, not silently
    *  dropped. Derived output, recomputed every derivation (like
