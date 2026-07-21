@@ -14,6 +14,13 @@
  * discarded.md), which is also why nodes fall back to a 2-node day spine. Once
  * that persistence bug is fixed and the engine runs at serve, this same pair of
  * functions can be called there instead of in the presenter.
+ *
+ * TODO(scope): the per-day-coords persist fix (to-trip.ts, 2026-07-20) lets the
+ * engine run live, but does NOT fix the +589mi `milesFromStart` offset — that's
+ * a separate persist-quality defect in the bake/corpus tiles (bake.ts stamps a
+ * corrected mile only on curated on-corridor tiles). Keep both functions as the
+ * render-time fallback until (a) milesFromStart is corrected at persist AND (b)
+ * a per-day start-mile is stored, then move this projection to the resolver.
  */
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";

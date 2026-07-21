@@ -130,15 +130,20 @@ export function itineraryToTrip(
   const first = facts.anchorsResolved[0];
   const last = facts.anchorsResolved[facts.anchorsResolved.length - 1];
   const bakedByN = new Map((bakedDays ?? []).map((b) => [b.n, b]));
+  const routeByN = new Map((dayRoutes ?? []).map((r) => [r.n, r]));
 
   const days: Day[] = output.days.map((dp, i) => {
     const baked = bakedByN.get(dp.n);
-    // Chain coords across days: day i ends where day i+1 starts. Fall back
-    // to the anchor endpoints for the first/last day.
-    const startCoord =
-      i === 0 ? first.coords : (output.days[i - 1] && undefined);
+    // Per-day endpoints come straight from the audit's dayRoutes, which
+    // already chained each day's start to the previous day's end (audit.ts's
+    // `currentPos` walk). On a dwell / out-and-back day the audit set end ==
+    // start, so both land on the base city — correct. Fall back to the trip
+    // anchor endpoints for the first/last day only when dayRoutes is absent
+    // (e.g. a non-audited straight projection).
+    const dr = routeByN.get(dp.n);
+    const startCoord = dr?.startCoord ?? (i === 0 ? first.coords : undefined);
     const endCoord =
-      i === output.days.length - 1 ? last.coords : undefined;
+      dr?.endCoord ?? (i === output.days.length - 1 ? last.coords : undefined);
 
     return {
       id: `day-${dp.n}`,
