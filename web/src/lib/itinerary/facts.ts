@@ -22,7 +22,7 @@ import { routeBetween } from "@/lib/routing/route-between";
 import { segmentByPace } from "@/lib/routing/segment-by-pace";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { fetchCorpusForSegment, fetchCorpusForPolyline } from "@/lib/trips/bake-corridors";
-import gazetteer from "@/lib/corridor/data/cities-na.json";
+import gazetteer from "@/lib/corridor/data/gazetteer";
 import type { GazetteerCity } from "@/lib/corridor/derive";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { BrowsePlace } from "@/lib/trip-browse/places";

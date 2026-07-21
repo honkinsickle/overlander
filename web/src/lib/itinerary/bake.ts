@@ -22,7 +22,8 @@ import { deriveCorridorCities, DEFAULT_CORRIDOR_PARAMS } from "@/lib/corridor/de
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
-import gazetteer from "@/lib/corridor/data/cities-na.json";
+import gazetteer from "@/lib/corridor/data/gazetteer";
+import { stripNodeIdentical } from "@/lib/corridor/node-identity";
 import type { GazetteerCity } from "@/lib/corridor/derive";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -147,6 +148,10 @@ export async function bakeGeneratedDays(
 
       // Derive spine + bucket tiles under nodes.
       let corridorCities: CorridorCity[] | undefined;
+      // Node/card dedup (corridor/node-identity): a tile that IS a node isn't a
+      // card. Strip before bucketing AND from the returned segmentSuggestions,
+      // so the persisted payload never carries a place as both.
+      let cardTiles = tiles;
       if (line && line.length >= 2 && start && end) {
         const spine = deriveCorridorCities({
           line,
@@ -155,15 +160,16 @@ export async function bakeGeneratedDays(
           gazetteer: gazetteer as GazetteerCity[],
         });
         if (spine) {
+          cardTiles = stripNodeIdentical(tiles, spine);
           corridorCities = bucketPlacesIntoCorridor({
             cities: spine,
-            places: tiles.map((t) => ({ id: t.id, coords: t.coords })),
+            places: cardTiles.map((t) => ({ id: t.id, coords: t.coords })),
             line,
           });
         }
       }
 
-      return { n: day.n, corridorCities, segmentSuggestions: tiles };
+      return { n: day.n, corridorCities, segmentSuggestions: cardTiles };
     }),
   );
 }

@@ -111,8 +111,9 @@ const TIE_EPS_MI = 0.01;
  *   - Otherwise → the drive stretch it falls in ([A, B], upstream wins ties; a
  *     place beyond the last node clamps into the final stretch).
  *   - OFF-CORRIDOR (offsetMi > bufferMi) → "Along the way", the only thing left.
- * Node-IDENTICAL places (a pool place that IS a node) must be filtered out by
- * the caller before positioning — they aren't cards, they're the node.
+ * Node-IDENTICAL places (a pool place that IS a node) are already filtered out
+ * upstream at the resolver (corridor/node-identity, applied in
+ * resolveCorridorCities + bakeGeneratedDays), so the pool reaching here is clean.
  * Pure.
  */
 export function assignPlacesToStretches(input: {

@@ -10,7 +10,8 @@ import {
   applyPlaceOverrides,
 } from "@/lib/corridor/bucket";
 import { resolveSeeds } from "@/lib/corridor/seeds";
-import gazetteer from "@/lib/corridor/data/cities-na.json";
+import { stripNodeIdentical } from "@/lib/corridor/node-identity";
+import gazetteer from "@/lib/corridor/data/gazetteer";
 
 /**
  * Reference-trip corridor derivation (docs/corridor-cities-spec.md §3).
@@ -95,7 +96,7 @@ export function resolveCorridorCities(trip: Trip): Trip {
     startCoord: [number, number];
     endCoord: [number, number];
     daySlice: [number, number][];
-    pool: { id: string; coords: [number, number] }[];
+    pool: { id: string; coords: [number, number]; title?: string }[];
   };
 
   let cursor = 0;
@@ -177,7 +178,7 @@ export function resolveCorridorCities(trip: Trip): Trip {
     // the corridor. Surfacing them here (live-at-serve) puts real places
     // under nodes without a reseed, until the reference build is taught to
     // write segmentSuggestions directly.
-    const pool: { id: string; coords: [number, number] }[] = [];
+    const pool: { id: string; coords: [number, number]; title?: string }[] = [];
     const seen = new Set<string>();
     for (const p of [
       ...(day.segmentSuggestions ?? []),
@@ -186,7 +187,7 @@ export function resolveCorridorCities(trip: Trip): Trip {
     ]) {
       if (!p.coords || seen.has(p.id)) continue;
       seen.add(p.id);
-      pool.push({ id: p.id, coords: p.coords });
+      pool.push({ id: p.id, coords: p.coords, title: p.title });
     }
 
     return {
@@ -221,13 +222,20 @@ export function resolveCorridorCities(trip: Trip): Trip {
       seeds: byDay.get(day.id),
     });
     if (!spine) return day;
+    // Node/card dedup (corridor/node-identity): a pool place that IS a node
+    // isn't a card. Strip before bucketing so `placeIds` stays clean, and from
+    // the rendered `segmentSuggestions` so no surface shows it twice.
+    const pool = stripNodeIdentical(s.pool, spine);
     const bucketed = bucketPlacesIntoCorridor({
       cities: spine,
-      places: s.pool,
+      places: pool,
       line: s.daySlice,
     });
     const corridorCities = applyPlaceOverrides({ cities: bucketed, overrides });
-    return { ...day, corridorCities };
+    const segmentSuggestions = day.segmentSuggestions
+      ? stripNodeIdentical(day.segmentSuggestions, spine)
+      : day.segmentSuggestions;
+    return { ...day, corridorCities, segmentSuggestions };
   });
 
   // seedResolutions is a queryable diagnostic (dormant-seed signal), stamped

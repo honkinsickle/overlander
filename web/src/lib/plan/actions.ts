@@ -34,7 +34,7 @@ import { encodePolyline } from "@/lib/routing/polyline";
 import { buildDaySuggestions } from "@/lib/routing/day-suggestions";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
-import gazetteer from "@/lib/corridor/data/cities-na.json";
+import gazetteer from "@/lib/corridor/data/gazetteer";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
 import { mergeCorpusIntoPool } from "@/lib/trip-browse/merge-corpus";
 import type { BrowsePlace } from "@/lib/trip-browse/places";

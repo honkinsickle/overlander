@@ -26,7 +26,6 @@ import {
   assignPlacesToStretches,
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
-import { isSameAnchorPlace } from "@/lib/corridor/anchor-match";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
@@ -60,15 +59,10 @@ export function DayDetailNodeBlocks({
   editMode = true,
 }: Props) {
   const { positioned, nodeClusters, stretches, alongTheWay } = useMemo(() => {
-    // Node-identity dedup: a pool place that IS a node (same id | name | tight
-    // coords) is not a card — it's the node. Drop it before positioning so
-    // "Whitehorse" doesn't render both as a stretch card and as its End node.
-    const places = Array.from(byId.values()).filter(
-      (p) =>
-        !cities.some((c) =>
-          isSameAnchorPlace({ id: p.id, name: p.title, coords: p.coords }, c),
-        ),
-    );
+    // Node/card dedup happens upstream now (corridor/node-identity, applied in
+    // resolveCorridorCities + bakeGeneratedDays), so this pool already excludes
+    // any place that IS a node — no per-surface filtering here.
+    const places = Array.from(byId.values());
     const positioned = positionPlacesOnDay({ line, places, dayStartMile });
     const { nodeClusters, stretches, alongTheWay } = assignPlacesToStretches({
       nodeMiles: cities.map((c) => c.milesFromStart),

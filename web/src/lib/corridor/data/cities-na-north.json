@@ -1,0 +1,10 @@
+[
+{"name":"Pelly Crossing","admin":"YT","lat":62.8244444,"lng":-136.5719444,"pop":0,"tier":2},
+{"name":"Carmacks","admin":"YT","lat":62.0911111,"lng":-136.2969444,"pop":588,"tier":2},
+{"name":"Teslin","admin":"YT","lat":60.1672222,"lng":-132.7216666,"pop":239,"tier":2},
+{"name":"Watson Lake","admin":"YT","lat":60.0624374,"lng":-128.7068575,"pop":1133,"tier":2},
+{"name":"Dease Lake","admin":"BC","lat":58.433333,"lng":-130.024167,"pop":0,"tier":2},
+{"name":"Iskut","admin":"BC","lat":57.8375,"lng":-129.9875,"pop":0,"tier":2},
+{"name":"Kitwanga","admin":"BC","lat":55.0997222,"lng":-128.0680556,"pop":0,"tier":2},
+{"name":"New Hazelton","admin":"BC","lat":55.243333,"lng":-127.586944,"pop":602,"tier":2}
+]

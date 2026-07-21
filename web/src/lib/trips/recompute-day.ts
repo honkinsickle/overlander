@@ -7,7 +7,7 @@ import {
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
-import gazetteer from "@/lib/corridor/data/cities-na.json";
+import gazetteer from "@/lib/corridor/data/gazetteer";
 
 /**
  * Edit-time route recalculation (Phase 0 of the editable-corridor
