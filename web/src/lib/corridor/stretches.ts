@@ -15,12 +15,15 @@
  * that persistence bug is fixed and the engine runs at serve, this same pair of
  * functions can be called there instead of in the presenter.
  *
- * TODO(scope): the per-day-coords persist fix (to-trip.ts, 2026-07-20) lets the
- * engine run live, but does NOT fix the +589mi `milesFromStart` offset — that's
- * a separate persist-quality defect in the bake/corpus tiles (bake.ts stamps a
- * corrected mile only on curated on-corridor tiles). Keep both functions as the
- * render-time fallback until (a) milesFromStart is corrected at persist AND (b)
- * a per-day start-mile is stored, then move this projection to the resolver.
+ * TODO(scope): `milesFromStart` is now corrected at persist — bake.ts stamps a
+ * day-relative mile on EVERY on-corridor tile (not just curated), and the
+ * reseed backfills existing trips (both 2026-07-20). With a correct, day-relative
+ * mile stored (present ⇒ on-corridor per the BrowsePlace contract),
+ * `positionPlacesOnDay` is DELETABLE — but only after `day-detail-node-blocks.tsx`
+ * is refactored to build its PositionedPlace map from stored `milesFromStart`
+ * (present → {dayMile, onCorridor:true}; absent → alongTheWay) instead of
+ * projecting. Not done in this slice: the stopgap stays until that refactor and
+ * until every served trip carries corrected miles (old trips need the reseed).
  */
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";

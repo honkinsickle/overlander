@@ -1,5 +1,11 @@
 /**
- * GEOMETRY-ONLY per-day coord recovery for a persisted reference trip.
+ * GEOMETRY-ONLY recovery for a persisted reference trip — one guarded write
+ * fixes two stale fields together:
+ *   (1) per-day startCoord/coords, and
+ *   (2) per-POI day-relative milesFromStart (on-corridor tiles only).
+ * Both are recomputed from data already persisted (coords + routePolyline);
+ * nothing is re-resolved. See docs/findings/2026-07-20-generated-day-coords-
+ * discarded.md.
  *
  * WHY THIS AND NOT AN AUDIT RE-RUN: re-running the audit would re-resolve 14 of
  * this trip's 17 day endpoints through live Google (only Dawson / Stewart /
@@ -29,8 +35,9 @@
  *   npx tsx --env-file=.env.development.local scripts/reseed-day-coords.ts --write
  */
 import { createSupabaseServiceClient } from "../src/lib/supabase/server";
-import { getPersistedReferenceTrip } from "../src/lib/trips/reference";
-import { decodePolyline, haversineMi } from "../src/lib/routing/point-to-polyline";
+import { resolveCorridorCities } from "../src/lib/trips/resolve-corridor-cities";
+import { decodePolyline, haversineMi, alongRouteMiles } from "../src/lib/routing/point-to-polyline";
+import { DEFAULT_CORRIDOR_PARAMS } from "../src/lib/corridor/derive";
 import { normPlaceName } from "../src/lib/corridor/anchor-match";
 import type { Trip } from "../src/lib/trips/types";
 
@@ -105,10 +112,37 @@ function main() {
       return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     };
 
+    // SECOND PASS — day-relative milesFromStart for every on-corridor tile.
+    // Project each POI's persisted coords onto the full routePolyline (trip
+    // mile), subtract the day's cumulative net start mile → day-relative, the
+    // same value bake.ts now stamps from the day slice. On-corridor only
+    // (offset ≤ buffer, clamped ≥ 0); off-corridor tiles are stripped of any
+    // stale mile per the BrowsePlace contract (absent ⇒ off-corridor).
+    // Re-resolves nothing — coords + routePolyline are already persisted.
+    const buffer = DEFAULT_CORRIDOR_PARAMS.bufferMi;
+    let milesSet = 0, milesCleared = 0, milesBeforeCount = 0;
+    const fixSuggestions = (
+      d: Trip["days"][number],
+      i: number,
+    ): NonNullable<Trip["days"][number]["segmentSuggestions"]> =>
+      (d.segmentSuggestions ?? []).map((p) => {
+        const { milesFromStart: stale, ...rest } = p;
+        if (stale != null) milesBeforeCount++;
+        if (!p.coords) return rest;
+        const proj = alongRouteMiles(p.coords, line);
+        if (proj && proj.offsetMi <= buffer) {
+          milesSet++;
+          return { ...rest, milesFromStart: Math.max(0, Math.round(proj.miles - startNet[i])) };
+        }
+        if (stale != null) milesCleared++;
+        return rest; // off-corridor ⇒ no mile
+      });
+
     const nextDays = trip.days.map((d, i) => ({
       ...d,
       startCoord: toCoord(startNet[i]),
       coords: toCoord(endNet[i]),
+      segmentSuggestions: fixSuggestions(d, i),
     }));
 
     // ── slop report against the coords we can actually check ──
@@ -132,6 +166,16 @@ function main() {
       console.log(`  Barkerville (interior anchor): nearest route mile ≈ ${bMile.toFixed(0)} net-mi, offset ${bBest.toFixed(1)}mi → falls in day ${dayOf >= 0 ? trip.days[dayOf].dayNumber : "?"} (${dayOf >= 0 ? trip.days[dayOf].label : "n/a"})`);
     }
 
+    // ── milesFromStart pass report ──
+    console.log(`\nmilesFromStart: ${milesBeforeCount} tiles had a (stale) value before; ${milesSet} on-corridor tiles get a day-relative mile, ${milesCleared} off-corridor tiles cleared.`);
+    const d1 = trip.days[0];
+    const d1next = nextDays[0].segmentSuggestions ?? [];
+    console.log("  day 1 sample (stored → recovered day-relative):");
+    (d1.segmentSuggestions ?? []).forEach((p, k) => {
+      const nu = d1next[k]?.milesFromStart;
+      console.log(`    ${(p.title ?? p.id).slice(0, 30).padEnd(30)} ${p.milesFromStart ?? "—"} → ${nu ?? "— (off-corridor)"}`);
+    });
+
     if (!write) {
       console.log("\nDRY RUN — no write. Re-run with --write to persist.");
       return;
@@ -153,25 +197,27 @@ function main() {
     };
     console.log(`\nAFTER (raw read-back): corridorCities ${after.cc}/${back.days.length}, startCoord ${after.start}/${back.days.length}, coords ${after.end}/${back.days.length}`);
 
-    // ── render report: run the real serve transform (federated POI fold →
-    //    resolveCorridorCities) and show what the engine now derives ──
-    const served = await getPersistedReferenceTrip(TRIP_ID);
-    if (!served) throw new Error("serve transform returned null");
-    console.log("\nRENDER (served trip — engine running):");
+    // ── render report: resolveCorridorCities on the read-back (faithful serve
+    //    here — USE_FEDERATED_CORRIDOR is off, so the fold is a no-op). Shows
+    //    the engine's spine AND the now-corrected day-relative POI miles. ──
+    const served = resolveCorridorCities(back);
+    console.log("\nRENDER (engine running on re-seeded coords + miles):");
     let bucketedTotal = 0, alongTotal = 0;
     served.days.forEach((d) => {
       const cc = d.corridorCities ?? [];
-      const nodes = cc.length;
       const bucketed = cc.reduce((s, c) => s + (c.placeIds?.length ?? 0), 0);
       const pool = (d.segmentSuggestions?.length ?? 0);
       bucketedTotal += bucketed;
       alongTotal += Math.max(0, pool - bucketed);
       const rt = isRoundTrip(d.label) ? " [round-trip]" : "";
-      console.log(`  day ${String(d.dayNumber).padStart(2)}: ${nodes} nodes, ${bucketed}/${pool} POIs bucketed${rt}  ${d.label}`);
-      if (nodes) console.log(`         nodes: ${cc.map((c) => `${c.name}@${Math.round(c.milesFromStart)}`).join("  ·  ")}`);
+      console.log(`  day ${String(d.dayNumber).padStart(2)}: ${cc.length} nodes, ${bucketed}/${pool} POIs bucketed${rt}  ${d.label}`);
     });
     const withEngine = served.days.filter((d) => d.corridorCities?.length).length;
     console.log(`\nsummary: ${withEngine}/${served.days.length} days derive a spine; ${bucketedTotal} POIs under nodes, ${alongTotal} along-the-way.`);
+    console.log("day 1 POI miles (read view will now show these):");
+    (served.days[0].segmentSuggestions ?? []).forEach((p) =>
+      console.log(`    ${(p.title ?? p.id).slice(0, 30).padEnd(30)} ${p.milesFromStart ?? "— (off-corridor)"}`),
+    );
   })();
 }
 

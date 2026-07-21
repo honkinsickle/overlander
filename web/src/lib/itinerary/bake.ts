@@ -126,15 +126,18 @@ export async function bakeGeneratedDays(
         }),
       ];
 
-      // Position curated key stops by along-route mile so they render IN their
-      // spine position (ordered, with distance-from-start) rather than a
-      // detached block. Project onto the polyline directly — independent of the
+      // Position EVERY tile by along-route mile so on-corridor POIs render IN
+      // their spine position (ordered, with day-relative distance-from-start) —
+      // not just curated key stops. `line` is the day's own polyline, so
+      // `r.miles` is already day-relative. Project directly — independent of the
       // node-bucketing below, which drops on-route picks past maxAttachMi. Keep
-      // the mile only when the pick is genuinely on-corridor (offset ≤ buffer).
+      // the mile only when the pick is genuinely on-corridor (offset ≤ buffer);
+      // off-corridor tiles stay mile-less per the BrowsePlace contract (absent
+      // milesFromStart ⇒ off-corridor). This is what makes the READ view show a
+      // real distance for a plain corpus stop, not only a curated one.
       if (line && line.length >= 2) {
         for (let i = 0; i < tiles.length; i++) {
           const t = tiles[i];
-          if (!t.curated) continue;
           const r = alongRouteMiles(t.coords, line);
           if (r && r.offsetMi <= DEFAULT_CORRIDOR_PARAMS.bufferMi) {
             tiles[i] = { ...t, milesFromStart: Math.round(r.miles) };
