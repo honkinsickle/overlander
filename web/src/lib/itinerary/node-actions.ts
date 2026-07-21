@@ -148,7 +148,8 @@ export async function removeSeedAction(
   return { ok: true };
 }
 
-/** Unpin a place (returns it to nearest-node bucketing). */
+/** Unpin a place (returns it to nearest-node bucketing) and GC a promoted seed
+ *  left with no remaining references (unpinPure handles the provenance rule). */
 export async function unpinPlaceAction(
   tripId: string,
   placeId: string,
@@ -158,8 +159,14 @@ export async function unpinPlaceAction(
   const trip = await loadRaw(tripId);
   if (!trip) return { ok: false, error: `Trip "${tripId}" not found.` };
 
-  const placeOverrides = unpinPure(trip.placeOverrides ?? [], placeId);
-  const failed = await persist(trip, { placeOverrides });
+  const res = unpinPure(
+    { nodeSeeds: trip.nodeSeeds ?? [], placeOverrides: trip.placeOverrides ?? [] },
+    placeId,
+  );
+  const failed = await persist(trip, {
+    nodeSeeds: res.nodeSeeds,
+    placeOverrides: res.placeOverrides,
+  });
   if (failed) return failed;
   return { ok: true };
 }

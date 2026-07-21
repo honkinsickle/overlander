@@ -71,14 +71,23 @@ export function findDuplicateSeed(
  */
 export function addNodeSeed(
   seeds: readonly NodeSeed[],
-  input: { name: string; coords: [number, number]; createdAt: string },
+  input: { name: string; coords: [number, number]; createdAt: string; origin?: NodeSeed["origin"] },
   gen: SuffixGen = defaultSuffix,
 ): { seeds: NodeSeed[]; id: string; created: boolean } {
   const dup = findDuplicateSeed(seeds, input.coords);
   if (dup) return { seeds: [...seeds], id: dup.id, created: false };
   const id = mintSeedId(input.name, new Set(seeds.map((s) => s.id)), gen);
   return {
-    seeds: [...seeds, { id, name: input.name, coords: input.coords, createdAt: input.createdAt }],
+    seeds: [
+      ...seeds,
+      {
+        id,
+        name: input.name,
+        coords: input.coords,
+        createdAt: input.createdAt,
+        origin: input.origin ?? "manual",
+      },
+    ],
     id,
     created: true,
   };
@@ -134,7 +143,7 @@ export function pinPlaceToNode(
     }
     const res = addNodeSeed(
       nodeSeeds,
-      { name: target.name, coords: target.coords, createdAt },
+      { name: target.name, coords: target.coords, createdAt, origin: "promoted" },
       gen,
     );
     nodeSeeds = res.seeds;
@@ -164,10 +173,28 @@ export function removeSeed(
   };
 }
 
-/** Drop a place's pin (returns it to nearest-node bucketing). */
+/**
+ * Drop a place's pin (returns it to nearest-node bucketing) and GC the seed it
+ * was pinned to IFF that seed exists ONLY to host pins — `origin:"promoted"` —
+ * and no other override still references it. A "manual" seed (deliberately
+ * authored) always survives; a legacy seed with no `origin` is treated as manual
+ * (never GC'd). This makes unpin the true inverse of a pin's seed-promotion: a
+ * pure service point promoted solely by the pin doesn't linger as a phantom
+ * empty node once the pin is gone. Pure.
+ */
 export function unpinPlace(
-  overrides: readonly PlaceNodeOverride[],
+  state: { nodeSeeds: readonly NodeSeed[]; placeOverrides: readonly PlaceNodeOverride[] },
   placeId: string,
-): PlaceNodeOverride[] {
-  return overrides.filter((o) => o.placeId !== placeId);
+): { nodeSeeds: NodeSeed[]; placeOverrides: PlaceNodeOverride[] } {
+  const removed = state.placeOverrides.find((o) => o.placeId === placeId);
+  const placeOverrides = state.placeOverrides.filter((o) => o.placeId !== placeId);
+  let nodeSeeds = [...state.nodeSeeds];
+  if (removed) {
+    const seed = nodeSeeds.find((s) => s.id === removed.nodeId);
+    const stillReferenced = placeOverrides.some((o) => o.nodeId === removed.nodeId);
+    if (seed && seed.origin === "promoted" && !stillReferenced) {
+      nodeSeeds = nodeSeeds.filter((s) => s.id !== seed.id);
+    }
+  }
+  return { nodeSeeds, placeOverrides };
 }

@@ -23,7 +23,20 @@
  * its stretch (a stop within the drive). Content-driven height. Off-corridor
  * places (offset > bufferMi) are the only thing in "Along the way".
  */
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { X } from "lucide-react";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { LngLat } from "@/lib/routing/route-between";
 import {
@@ -36,6 +49,23 @@ import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
 const GUTTER_W = 48;
 const noop = () => {};
+
+/** A drag drop resolved to an intent. `toNodeId: null` = dropped on the drive
+ *  → unpin (return to geometry). Otherwise pin the place under that node; the
+ *  distance context lets the caller price an out-of-radius drop. */
+export type PlaceMove = {
+  placeId: string;
+  toNodeId: string | null;
+  /** Along-route miles between the place and the target node (pin only). */
+  distanceMi?: number;
+  nodeName?: string;
+  placeName?: string;
+};
+
+/** Droppable id prefixes — parsed in onDragEnd to tell a node drop (pin) from a
+ *  drive drop (unpin). */
+const NODE = "node:";
+const DRIVE = "drive:";
 
 type Props = {
   cities: CorridorCity[];
@@ -50,6 +80,16 @@ type Props = {
   onOpenPlace?: (placeId: string) => void;
   onRemovePlace?: (placeId: string) => void;
   editMode?: boolean;
+  /** Wire the drag: a place dragged onto a node cluster pins it there; dragged
+   *  onto the drive, unpins it. When absent, the grips stay inert. */
+  onMovePlace?: (move: PlaceMove) => void;
+  /** Placeid whose pin/unpin write is in flight — its card shows a saving cue. */
+  pendingPlaceId?: string | null;
+  /** Placeid whose last write FAILED — its card shows a persistent inline
+   *  error (loud, not a toast) until dismissed. */
+  errorPlaceId?: string | null;
+  errorMessage?: string | null;
+  onDismissError?: () => void;
 };
 
 export function DayDetailNodeBlocks({
@@ -62,6 +102,11 @@ export function DayDetailNodeBlocks({
   onOpenPlace,
   onRemovePlace,
   editMode = true,
+  onMovePlace,
+  pendingPlaceId,
+  errorPlaceId,
+  errorMessage,
+  onDismissError,
 }: Props) {
   const { positioned, nodeClusters, stretches, alongTheWay } = useMemo(() => {
     // Node/card dedup happens upstream now (corridor/node-identity, applied in
@@ -84,6 +129,62 @@ export function DayDetailNodeBlocks({
     return { positioned, nodeClusters, stretches, alongTheWay };
   }, [byId, line, dayStartMile, cities]);
 
+  // ── Drag-to-repin (edit mode) ──────────────────────────────────────────
+  const dndEnabled = !!onMovePlace;
+  const [dragId, setDragId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+  const cityById = useMemo(() => new Map(cities.map((c) => [c.id, c])), [cities]);
+  // The node a place currently clusters under (server/optimistic placeIds), or
+  // -1 if it's mid-drive — used to no-op a drop back onto the same node.
+  const currentNodeId = (placeId: string): string | null => {
+    const i = nodeClusters.findIndex((ids) => ids.includes(placeId));
+    return i >= 0 ? cities[i].id : null;
+  };
+  const onDragStart = (e: DragStartEvent) => setDragId(String(e.active.id));
+  const onDragEnd = (e: DragEndEvent) => {
+    setDragId(null);
+    if (!onMovePlace) return;
+    const placeId = String(e.active.id);
+    const overId = e.over ? String(e.over.id) : null;
+    if (!overId) return;
+    if (overId.startsWith(DRIVE)) {
+      // Dropped on the drive: unpin. If the place had no override this is a
+      // no-op (it was already at its geometry position) — the caller elides it.
+      onMovePlace({ placeId, toNodeId: null });
+      return;
+    }
+    if (overId.startsWith(NODE)) {
+      const nodeId = overId.slice(NODE.length);
+      if (currentNodeId(placeId) === nodeId) return; // already here — no-op
+      const pos = positioned.get(placeId);
+      const node = cityById.get(nodeId);
+      const distanceMi =
+        pos && node ? Math.abs(pos.dayMile - node.milesFromStart) : 0;
+      onMovePlace({
+        placeId,
+        toNodeId: nodeId,
+        distanceMi,
+        nodeName: node?.name,
+        placeName: byId.get(placeId)?.title,
+      });
+    }
+  };
+  const draggedPlace = dragId ? byId.get(dragId) : undefined;
+
+  // Shared per-POI props threaded to every draggable card.
+  const poiCtx = {
+    onOpenPlace,
+    onRemovePlace,
+    editMode,
+    dndEnabled,
+    pendingPlaceId,
+    errorPlaceId,
+    errorMessage,
+    onDismissError,
+  };
+
   // Whole-day dwell (2 coincident nodes, 0-mi "drive"): collapse to one node
   // with its places beneath — no duplicate header, no "0 mi drive" connector.
   const isDwell =
@@ -94,34 +195,55 @@ export function DayDetailNodeBlocks({
     .map((id) => byId.get(id))
     .filter(Boolean) as CorridorPlace[];
 
+  // The spine, wrapped so drop targets + drag overlay live under one context.
+  const shell = (children: React.ReactNode) =>
+    dndEnabled ? (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setDragId(null)}
+      >
+        {children}
+        <DragOverlay>
+          {draggedPlace ? (
+            <CategoryListCard
+              place={draggedPlace}
+              category={draggedPlace.category}
+              status={draggedPlace.keyStopNote}
+              editMode
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    ) : (
+      <>{children}</>
+    );
+
   if (isDwell) {
-    // One place, one location — everything hangs under the single node.
+    // One place, one location — everything hangs under the single node. The
+    // whole block is one node drop target; no drive on a 0-mi day.
     const clusterIds = [
       ...nodeClusters.flat(),
       ...stretches.flatMap((s) => s.placeIds),
     ];
-    return (
+    return shell(
       <div className="flex flex-col" style={{ paddingTop: 16 }}>
-        <NodeHeaderRow city={cities[0]} last={clusterIds.length === 0} />
-        {clusterIds.map((id, j) => (
-          <PoiRow
-            key={id}
-            place={byId.get(id)}
-            pos={positioned.get(id)}
-            last={j === clusterIds.length - 1}
-            onOpenPlace={onOpenPlace}
-            onRemovePlace={onRemovePlace}
-            editMode={editMode}
-          />
-        ))}
+        <DroppableRegion id={`${NODE}${cities[0].id}`} disabled={!dndEnabled}>
+          <NodeHeaderRow city={cities[0]} last={clusterIds.length === 0} />
+          {clusterIds.map((id, j) => (
+            <PoiRow key={id} placeId={id} place={byId.get(id)} pos={positioned.get(id)} last={j === clusterIds.length - 1} {...poiCtx} />
+          ))}
+        </DroppableRegion>
         {orphanCards.length > 0 && (
           <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
         )}
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return shell(
     <div className="flex flex-col" style={{ paddingTop: 16 }}>
       {cities.map((city, i) => {
         const next = cities[i + 1];
@@ -133,33 +255,27 @@ export function DayDetailNodeBlocks({
           !next && j === clusterIds.length - 1;
         return (
           <Fragment key={`${city.id}-${city.kind}-${i}`}>
-            <NodeHeaderRow city={city} last={!next && clusterIds.length === 0} />
-            {/* The node's arrival cluster: places within the attach radius —
-                where you eat, where you sleep — hang UNDER the node header. */}
-            {clusterIds.map((id, j) => (
-              <PoiRow
-                key={id}
-                place={byId.get(id)}
-                pos={positioned.get(id)}
-                last={clusterLast(j)}
-                onOpenPlace={onOpenPlace}
-                onRemovePlace={onRemovePlace}
-                editMode={editMode}
-              />
-            ))}
+            {/* The node + its arrival cluster is one drop target (pin here). */}
+            <DroppableRegion id={`${NODE}${city.id}`} disabled={!dndEnabled}>
+              <NodeHeaderRow city={city} last={!next && clusterIds.length === 0} />
+              {clusterIds.map((id, j) => (
+                <PoiRow key={id} placeId={id} place={byId.get(id)} pos={positioned.get(id)} last={clusterLast(j)} {...poiCtx} />
+              ))}
+            </DroppableRegion>
             {next && (
-              <StretchContainer
-                miles={Math.round(next.milesFromStart - city.milesFromStart)}
-                hours={cities.length === 2 ? dayDriveHours : undefined}
-                wholeDayMiles={cities.length === 2 ? dayMiles : undefined}
-                placeIds={stretchIds}
-                byId={byId}
-                positioned={positioned}
-                isLast={i === cities.length - 2}
-                onOpenPlace={onOpenPlace}
-                onRemovePlace={onRemovePlace}
-                editMode={editMode}
-              />
+              // The drive is one drop target (drop here to unpin → geometry).
+              <DroppableRegion id={`${DRIVE}${i}`} disabled={!dndEnabled}>
+                <StretchContainer
+                  miles={Math.round(next.milesFromStart - city.milesFromStart)}
+                  hours={cities.length === 2 ? dayDriveHours : undefined}
+                  wholeDayMiles={cities.length === 2 ? dayMiles : undefined}
+                  placeIds={stretchIds}
+                  byId={byId}
+                  positioned={positioned}
+                  isLast={i === cities.length - 2}
+                  poiCtx={poiCtx}
+                />
+              </DroppableRegion>
             )}
           </Fragment>
         );
@@ -167,6 +283,38 @@ export function DayDetailNodeBlocks({
       {orphanCards.length > 0 && (
         <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
       )}
+    </div>,
+  );
+}
+
+/** A drop zone: a node cluster (pin here) or a drive stretch (unpin here). The
+ *  amber wash on hover reads as "this is where it'll land." */
+function DroppableRegion({
+  id,
+  disabled,
+  children,
+}: {
+  id: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled });
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex flex-col"
+      style={
+        isOver
+          ? {
+              borderRadius: 8,
+              outline: "1.5px solid var(--amber)",
+              outlineOffset: -1,
+              backgroundColor: "color-mix(in srgb, var(--amber) 9%, transparent)",
+            }
+          : undefined
+      }
+    >
+      {children}
     </div>
   );
 }
@@ -279,23 +427,48 @@ function NodeHeaderRow({ city, last }: { city: CorridorCity; last: boolean }) {
   );
 }
 
-/** One POI within a stretch: amber tick + its day-relative mile + card. */
+/** Per-POI wiring threaded to every draggable card (spread from poiCtx). */
+type PoiCtx = {
+  onOpenPlace?: (placeId: string) => void;
+  onRemovePlace?: (placeId: string) => void;
+  editMode?: boolean;
+  dndEnabled?: boolean;
+  pendingPlaceId?: string | null;
+  errorPlaceId?: string | null;
+  errorMessage?: string | null;
+  onDismissError?: () => void;
+};
+
+/** One POI within a stretch: amber tick + its day-relative mile + card. In edit
+ *  mode the card is draggable by its grip (pin/unpin); a saving cue while its
+ *  write is in flight, a persistent inline error if it failed. */
 function PoiRow({
+  placeId,
   place,
   pos,
   last,
   onOpenPlace,
   onRemovePlace,
   editMode,
+  dndEnabled,
+  pendingPlaceId,
+  errorPlaceId,
+  errorMessage,
+  onDismissError,
 }: {
+  placeId: string;
   place?: CorridorPlace;
   pos?: PositionedPlace;
   last: boolean;
-  onOpenPlace?: (placeId: string) => void;
-  onRemovePlace?: (placeId: string) => void;
-  editMode?: boolean;
-}) {
+} & PoiCtx) {
+  // Hook order stays stable across a missing byId lookup — id is always known.
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: placeId,
+    disabled: !dndEnabled,
+  });
   if (!place) return null;
+  const pending = pendingPlaceId === placeId;
+  const errored = errorPlaceId === placeId;
   return (
     <RailRow
       mile={pos ? `${Math.max(0, Math.round(pos.dayMile))}mi` : null}
@@ -305,15 +478,65 @@ function PoiRow({
       dotSize={8}
       last={last}
     >
-      <CategoryListCard
-        place={place}
-        category={place.category}
-        status={place.keyStopNote}
-        onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
-        onRemove={place.removable && onRemovePlace ? () => onRemovePlace(place.id) : undefined}
-        editMode={editMode}
-      />
+      <div ref={setNodeRef} style={{ opacity: isDragging ? 0.4 : 1 }}>
+        <div style={pending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}>
+          <CategoryListCard
+            place={place}
+            category={place.category}
+            status={place.keyStopNote}
+            onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+            onRemove={place.removable && onRemovePlace ? () => onRemovePlace(place.id) : undefined}
+            editMode={editMode}
+            gripHandleProps={dndEnabled ? { ...attributes, ...listeners } : undefined}
+          />
+        </div>
+        {errored && errorMessage && (
+          <InlineError message={errorMessage} onDismiss={onDismissError} />
+        )}
+      </div>
     </RailRow>
+  );
+}
+
+/** Loud, persistent write-failure banner pinned to the affected card (NOT a
+ *  toast that scrolls away). Stays until dismissed. */
+function InlineError({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start"
+      style={{
+        marginTop: 6,
+        gap: 8,
+        padding: "8px 10px",
+        borderRadius: 6,
+        border: "1px solid var(--danger, #b3452f)",
+        backgroundColor: "color-mix(in srgb, var(--danger, #b3452f) 14%, transparent)",
+      }}
+    >
+      <span
+        style={{
+          flex: 1,
+          fontFamily: "var(--ff-sans)",
+          fontSize: 13,
+          lineHeight: "17px",
+          color: "var(--text-primary)",
+        }}
+      >
+        {message}
+      </span>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss error"
+          className="shrink-0"
+          style={{ color: "var(--text-muted)", padding: 1 }}
+        >
+          <X size={14} strokeWidth={2} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -328,9 +551,7 @@ function StretchContainer({
   byId,
   positioned,
   isLast,
-  onOpenPlace,
-  onRemovePlace,
-  editMode,
+  poiCtx,
 }: {
   miles: number;
   hours?: number;
@@ -339,9 +560,7 @@ function StretchContainer({
   byId: Map<string, CorridorPlace>;
   positioned: Map<string, PositionedPlace>;
   isLast: boolean;
-  onOpenPlace?: (placeId: string) => void;
-  onRemovePlace?: (placeId: string) => void;
-  editMode?: boolean;
+  poiCtx: PoiCtx;
 }) {
   const mi = wholeDayMiles ?? miles;
   const label = hours != null ? `↓  ${mi} mi · ${hours} hr drive` : `↓  ${mi} mi drive`;
@@ -362,17 +581,16 @@ function StretchContainer({
           </span>
         </div>
       </RailRow>
-      {placeIds.map((id, j) => (
+      {placeIds.map((id) => (
         <PoiRow
           key={id}
+          placeId={id}
           place={byId.get(id)}
           pos={positioned.get(id)}
           // The last POI of the last stretch terminates the rail (next node
           // header follows otherwise).
           last={false}
-          onOpenPlace={onOpenPlace}
-          onRemovePlace={onRemovePlace}
-          editMode={editMode}
+          {...poiCtx}
         />
       ))}
     </>

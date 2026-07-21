@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { decodePolyline } from "@/lib/routing/point-to-polyline";
 import { dayStartMiles } from "@/lib/corridor/stretches";
+import { applyPlaceOverrides } from "@/lib/corridor/bucket";
+import { pinPlaceAction, unpinPlaceAction } from "@/lib/itinerary/node-actions";
+import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
 import {
   DayDetailOverview,
   type OverviewGuide,
@@ -29,7 +32,7 @@ import {
   removeWaypointAction,
 } from "@/lib/trips/actions";
 import type { AddedPlace } from "@/lib/trips/added-place";
-import type { CorridorCity, Day, Trip, Waypoint } from "@/lib/trips/types";
+import type { CorridorCity, Day, PlaceNodeOverride, Trip, Waypoint } from "@/lib/trips/types";
 import { isSameAnchorPlace } from "@/lib/corridor/anchor-match";
 
 /**
@@ -117,6 +120,94 @@ export function DayDetailCorridorColumn({
     const idx = trip.days.findIndex((d) => d.id === selectedDayId);
     return idx >= 0 ? dayStartMiles(trip.days)[idx] : 0;
   }, [trip.days, selectedDayId]);
+
+  // ── Optimistic pin/unpin overlay (edit-mode drag) ──────────────────────
+  // The drag flips this local override list IMMEDIATELY (the spine re-renders
+  // from it), then persists in the background; a failed write reverts it and
+  // raises a loud, persistent inline error on the card. Re-seeded from server
+  // truth whenever the trip payload lands (revalidatePath is unreliable on the
+  // modal-intercept slideup, so the optimism carries the UX — same as addedIds).
+  const MAX_ATTACH_MI = 25;
+  const serverOverrides = trip.placeOverrides ?? [];
+  const [localOverrides, setLocalOverrides] = useState<PlaceNodeOverride[]>(serverOverrides);
+  useEffect(() => {
+    setLocalOverrides(trip.placeOverrides ?? []);
+  }, [trip.placeOverrides]);
+  const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<{ placeId: string; message: string } | null>(null);
+  const [moveNote, setMoveNote] = useState<string | null>(null);
+  const [, startMoveTransition] = useTransition();
+
+  const onMovePlace = useCallback(
+    (move: PlaceMove) => {
+      if (!day) return;
+      const tripId = trip.id;
+      const dayId = day.id;
+      const prev = localOverrides;
+      setMoveError(null);
+
+      if (move.toNodeId === null) {
+        // Unpin. Elide a no-op (place wasn't pinned) so the drive stays inert.
+        if (!prev.some((o) => o.placeId === move.placeId)) return;
+        setMoveNote(null);
+        setLocalOverrides(prev.filter((o) => o.placeId !== move.placeId));
+        setPendingPlaceId(move.placeId);
+        startMoveTransition(async () => {
+          const res = await unpinPlaceAction(tripId, move.placeId);
+          if (!res.ok) {
+            setLocalOverrides(prev);
+            setMoveError({ placeId: move.placeId, message: `Couldn't unpin: ${res.error}` });
+          }
+          setPendingPlaceId((p) => (p === move.placeId ? null : p));
+        });
+        return;
+      }
+
+      // Pin (one home per place — replace any prior override).
+      const nodeId = move.toNodeId;
+      setLocalOverrides([
+        ...prev.filter((o) => o.placeId !== move.placeId),
+        { placeId: move.placeId, nodeId },
+      ]);
+      // Out-of-radius: state the cost, don't block (keep the true mile).
+      setMoveNote(
+        (move.distanceMi ?? 0) > MAX_ATTACH_MI && move.placeName && move.nodeName
+          ? `${move.placeName} is ${Math.round(move.distanceMi as number)} mi from ${move.nodeName} — pinned anyway.`
+          : null,
+      );
+      setPendingPlaceId(move.placeId);
+      startMoveTransition(async () => {
+        const res = await pinPlaceAction(tripId, { dayId, placeId: move.placeId, nodeId });
+        if (!res.ok) {
+          setLocalOverrides(prev);
+          setMoveError({ placeId: move.placeId, message: `Couldn't move: ${res.error}` });
+        }
+        setPendingPlaceId((p) => (p === move.placeId ? null : p));
+      });
+    },
+    [day, localOverrides, trip.id],
+  );
+
+  // The selected day's cities with the OPTIMISTIC overlay applied: strip a
+  // locally-unpinned place from every placeIds (→ it falls to geometry in the
+  // hybrid render) and re-home locally-pinned places. base already carries the
+  // SERVER overrides, so unpins must be un-baked here, not just dropped.
+  const effectiveCities = useMemo(() => {
+    if (!day) return undefined;
+    const base = day.corridorCities;
+    if (!base) return undefined;
+    const removed = new Set(
+      serverOverrides
+        .filter((so) => !localOverrides.some((lo) => lo.placeId === so.placeId))
+        .map((so) => so.placeId),
+    );
+    const stripped = removed.size
+      ? base.map((c) => ({ ...c, placeIds: c.placeIds.filter((pid) => !removed.has(pid)) }))
+      : base;
+    return applyPlaceOverrides({ cities: stripped, overrides: localOverrides });
+    // serverOverrides is derived from trip.placeOverrides (in the deps already).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day, localOverrides, trip.placeOverrides]);
 
   // P3 (2026-07-09): hydrate the visible day's corpus tiles with live Google
   // ratings/photos by place_id. Keyed by place_id, accumulated across days.
@@ -503,7 +594,7 @@ export function DayDetailCorridorColumn({
             routeLabel={day.label}
             heroImageUrl={dayHeroImage}
             heroAlt={day.label}
-            cities={day.corridorCities ?? fallbackCorridor(day)}
+            cities={effectiveCities ?? fallbackCorridor(day)}
             places={placePool(day).map((t) => {
               const rich = t.placeId ? hydrated[t.placeId] : undefined;
               return rich
@@ -526,11 +617,16 @@ export function DayDetailCorridorColumn({
             onExploreDay={openBrowse}
             briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
             editMode={editMode}
-            placeOverrides={trip.placeOverrides ?? []}
+            placeOverrides={localOverrides}
             dayMiles={day.miles}
             dayDriveHours={day.driveHours}
             routeLine={routeLine}
             dayStartMile={dayStartMile}
+            onMovePlace={editMode ? onMovePlace : undefined}
+            pendingPlaceId={pendingPlaceId}
+            errorPlaceId={moveError?.placeId ?? null}
+            errorMessage={moveError?.message ?? null}
+            onDismissError={() => setMoveError(null)}
           />
         ) : (
           <DayDetailOverview
@@ -572,6 +668,38 @@ export function DayDetailCorridorColumn({
             style={{ width: 8, height: 8, backgroundColor: "var(--amber)" }}
           />
           Updating route…
+        </div>
+      )}
+
+      {/* Out-of-radius note — non-blocking: the pin LANDED; this just states the
+       *  cost (a backtrack isn't wrong, it's expensive — price it, don't prevent
+       *  it). Persists until dismissed or the next move. */}
+      {moveNote && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center"
+          style={{
+            top: 10,
+            gap: 10,
+            padding: "6px 10px 6px 14px",
+            borderRadius: 8,
+            backgroundColor: "var(--bg-card)",
+            border: "1px solid var(--amber-dark)",
+            color: "var(--text-primary)",
+            fontFamily: "var(--ff-sans)",
+            fontSize: 13,
+            maxWidth: "90%",
+          }}
+        >
+          <span>{moveNote}</span>
+          <button
+            type="button"
+            onClick={() => setMoveNote(null)}
+            aria-label="Dismiss"
+            className="shrink-0"
+            style={{ color: "var(--text-muted)" }}
+          >
+            ✕
+          </button>
         </div>
       )}
 

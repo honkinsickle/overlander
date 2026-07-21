@@ -41,10 +41,13 @@ type Props = {
    *  passes this only for waypoint-backed tiles — suggestions stay
    *  read-only (Phase 3 editing model). */
   onRemove?: () => void;
-  /** Manual-edit mode. When true, the card grows 400->447 and shows an
-   *  inert drag handle in a 40px right lane (same convention as the rail).
-   *  Off by default. */
+  /** Manual-edit mode. When true, the card grows 400->447 and shows the drag
+   *  handle in a 40px right lane (same convention as the rail). Off by default. */
   editMode?: boolean;
+  /** dnd-kit attributes + listeners — spread onto the grip handle so the grip
+   *  (only) starts a drag while the card body still click-opens. Absent → the
+   *  grip renders inert (aria-hidden), as before. */
+  gripHandleProps?: Record<string, unknown>;
 };
 
 /** Compact a review count: 9300 → "9.3k", 5000 → "5k", 881 → "881". */
@@ -61,6 +64,7 @@ export function CategoryListCard({
   onOpen,
   onRemove,
   editMode = false,
+  gripHandleProps,
 }: Props) {
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
@@ -203,23 +207,31 @@ export function CategoryListCard({
         </div>
       </div>
 
-      {/* Select/Drag lane — edit mode only. Grip only for now (inert, no drag
-       *  wired), but the lane is sized to the artboard's full 47px Select/Drag
-       *  cluster (checkbox + kebab + drag handle) so adding the kebab later
-       *  doesn't resize the card. */}
-      {editMode && (
-        <div
-          aria-hidden
-          className="flex items-center justify-center shrink-0 self-stretch"
-          style={{ width: 47 }}
-        >
-          <GripVertical
-            size={18}
-            strokeWidth={1.75}
-            style={{ color: "var(--text-muted)" }}
-          />
-        </div>
-      )}
+      {/* Select/Drag lane — edit mode only. The grip is the drag handle when
+       *  gripHandleProps are supplied (dnd wired); otherwise inert. The lane is
+       *  sized to the artboard's full 47px Select/Drag cluster so adding the
+       *  kebab later doesn't resize the card. */}
+      {editMode &&
+        (gripHandleProps ? (
+          <button
+            type="button"
+            aria-label={`Drag ${place.title} to another stop`}
+            className="flex items-center justify-center shrink-0 self-stretch touch-none cursor-grab active:cursor-grabbing"
+            style={{ width: 47, color: "var(--text-muted)" }}
+            onClick={(e) => e.stopPropagation()}
+            {...gripHandleProps}
+          >
+            <GripVertical size={18} strokeWidth={1.75} />
+          </button>
+        ) : (
+          <div
+            aria-hidden
+            className="flex items-center justify-center shrink-0 self-stretch"
+            style={{ width: 47 }}
+          >
+            <GripVertical size={18} strokeWidth={1.75} style={{ color: "var(--text-muted)" }} />
+          </div>
+        ))}
     </div>
   );
 }

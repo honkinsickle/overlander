@@ -11,6 +11,7 @@ import {
 } from "@/lib/corridor/anchor-match";
 import { classifyCuratedPicks } from "@/lib/corridor/curated-placement";
 import type { PlaceNodeOverride } from "@/lib/trips/types";
+import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
 
 /**
  * Day Detail v4 — corridor view. PURE PRESENTATIONAL.
@@ -118,6 +119,12 @@ type Props = {
    *  (the stored milesFromStart is unreliable; see lib/corridor/stretches.ts). */
   routeLine?: [number, number][];
   dayStartMile?: number;
+  /** Manual-edit drag (edit spine): pin/unpin a POI by dragging its card. */
+  onMovePlace?: (move: PlaceMove) => void;
+  pendingPlaceId?: string | null;
+  errorPlaceId?: string | null;
+  errorMessage?: string | null;
+  onDismissError?: () => void;
 };
 
 const GUTTER_W = 48;
@@ -217,6 +224,11 @@ export function DayDetailCorridor({
   dayDriveHours,
   routeLine,
   dayStartMile,
+  onMovePlace,
+  pendingPlaceId,
+  errorPlaceId,
+  errorMessage,
+  onDismissError,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Generated trips flag the LLM's curated key stops; when any exist, they
@@ -374,6 +386,11 @@ export function DayDetailCorridor({
           onOpenPlace={onOpenPlace}
           onRemovePlace={onRemovePlace}
           editMode={editMode}
+          onMovePlace={onMovePlace}
+          pendingPlaceId={pendingPlaceId}
+          errorPlaceId={errorPlaceId}
+          errorMessage={errorMessage}
+          onDismissError={onDismissError}
         />
       ) : (
       <>

@@ -107,8 +107,44 @@ test("removeSeed drops the seed and prunes overrides that pointed at it", () => 
 });
 
 test("unpinPlace removes just that place's override", () => {
-  const out = unpinPlace([{ placeId: "a", nodeId: "n" }, { placeId: "b", nodeId: "n" }], "a");
-  assert.deepEqual(out, [{ placeId: "b", nodeId: "n" }]);
+  const out = unpinPlace(
+    { nodeSeeds: [], placeOverrides: [{ placeId: "a", nodeId: "n" }, { placeId: "b", nodeId: "n" }] },
+    "a",
+  );
+  assert.deepEqual(out.placeOverrides, [{ placeId: "b", nodeId: "n" }]);
+  assert.deepEqual(out.nodeSeeds, []);
+});
+
+test("unpinPlace GCs a PROMOTED seed once its last override is gone", () => {
+  const s: NodeSeed = { id: "seed-x", name: "X", coords: [0, 0], createdAt: "t", origin: "promoted" };
+  const out = unpinPlace({ nodeSeeds: [s], placeOverrides: [{ placeId: "a", nodeId: "seed-x" }] }, "a");
+  assert.deepEqual(out.placeOverrides, []);
+  assert.deepEqual(out.nodeSeeds, []); // promoted-only seed GC'd
+});
+
+test("unpinPlace KEEPS a promoted seed still referenced by another pin", () => {
+  const s: NodeSeed = { id: "seed-x", name: "X", coords: [0, 0], createdAt: "t", origin: "promoted" };
+  const out = unpinPlace(
+    { nodeSeeds: [s], placeOverrides: [{ placeId: "a", nodeId: "seed-x" }, { placeId: "b", nodeId: "seed-x" }] },
+    "a",
+  );
+  assert.deepEqual(out.nodeSeeds.map((x) => x.id), ["seed-x"]); // still hosts "b"
+});
+
+test("unpinPlace never GCs a MANUAL seed (nor a legacy origin-less one)", () => {
+  const manual: NodeSeed = { id: "seed-m", name: "M", coords: [0, 0], createdAt: "t", origin: "manual" };
+  const legacy: NodeSeed = { id: "seed-l", name: "L", coords: [1, 1], createdAt: "t" }; // no origin
+  const outM = unpinPlace({ nodeSeeds: [manual], placeOverrides: [{ placeId: "a", nodeId: "seed-m" }] }, "a");
+  assert.deepEqual(outM.nodeSeeds.map((x) => x.id), ["seed-m"]);
+  const outL = unpinPlace({ nodeSeeds: [legacy], placeOverrides: [{ placeId: "a", nodeId: "seed-l" }] }, "a");
+  assert.deepEqual(outL.nodeSeeds.map((x) => x.id), ["seed-l"]);
+});
+
+test("addNodeSeed defaults origin to manual; pin-promotion marks it promoted", () => {
+  const manual = addNodeSeed([], { name: "Wells, BC", coords: [-121.6, 53.1], createdAt: "t" }, counter());
+  assert.equal(manual.seeds[0].origin, "manual");
+  const pin = pinPlaceToNode({ nodeSeeds: [], placeOverrides: [] }, gazTarget, "p", "t", counter());
+  assert.equal(pin.nodeSeeds[0].origin, "promoted");
 });
 
 // ── findNodeInTrip ───────────────────────────────────────────────────────
