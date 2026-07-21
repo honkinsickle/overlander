@@ -1,13 +1,14 @@
-# Place-card order is route-derived, not stored — place-reorder is blocked on the node-stack model
+# Place-card order is route-derived — reorder is allowed, but the backtrack is priced
 
-**Status:** Finding. Place-reorder NOT built (deliberately). Branch `feat/manual-trip-edit`.
-**Date:** 2026-07-20.
+**Status:** Finding + resolution. Place-reorder unblocked via a **free backtrack
+advisory (Tier 1)**; being built. Branch `feat/manual-trip-edit`.
+**Date:** 2026-07-20 (finding); revised same day (resolution).
 
 Manual-edit added drag-to-reorder for the **day cards** in the rail (a flat
 `Day[]`, `arrayMove` + recompute + polyline splice — see `lib/trips/reorder-days.ts`).
-The obvious next step was the same gesture for the **place cards** in the centre
-corridor column. It doesn't fit the data. This note records why, so the next
-session doesn't re-derive it.
+The same gesture for the **place cards** in the centre corridor column doesn't
+fit the data the same way. This note records why, and how it's resolved without
+lying about geography.
 
 ---
 
@@ -21,56 +22,72 @@ DERIVED from route position.**
   (+ legacy `day.suggestions`). There is no per-day ordered place array.
 - `CorridorPlace.milesFromStart` (`day-detail-corridor.tsx`) is the along-route
   distance of a curated key stop, projected onto the day's polyline at bake time.
-- `DayDetailCorridor` renders the day as a **spine** (`buildSpineItems`):
-  - **curated key stops** render at their `milesFromStart` position, ordered by
-    mile (`KeyStopNode`);
-  - **pool tiles** bucket under a city node in `corridorCities[].placeIds` order
-    (`CityNode`);
-  - `MileTick` for distance markers.
+- `DayDetailCorridor` renders the day as a **spine** (`buildSpineItems`): curated
+  key stops at their `milesFromStart` position ordered by mile (`KeyStopNode`);
+  pool tiles bucketed under a city node in `corridorCities[].placeIds` order
+  (`CityNode`); `MileTick` markers.
 
 So "the order of place cards in a day" is emergent from mile-position + city
 bucketing — not a sequence anyone stored.
 
-**Concrete evidence (dawson-cassiar-livingplan-test, day 9, Smithers → Prince
-George):** the two cards are curated key stops — *Burns Lake @ 372 mi* and
-*Nancy O's @ 514 mi*. They render in that order because those are their real
-along-route distances. Burns Lake precedes Prince George because it does.
+**Evidence (dawson-cassiar-livingplan-test, day 9, Smithers → Prince George):** the
+spine cards are curated key stops — *Burns Lake @ 372 mi*, *Nancy O's @ 514 mi* —
+rendered in that order because those are their real along-route distances. All
+place cards carry coords; the two spine stops carry `milesFromStart`; the
+anchor/overnight tiles (Prince George, Bee Lazee) lack it. 17/17 days have ≥2
+positioned places.
 
-## Why reorder can't be bolted on
+## Why a naive reorder was rejected — and the resolution
 
-Dragging to reorder needs an order that doesn't exist. Every way to fake one is
-a workaround, not a fit:
+The original block was against faking an order by **corrupting the markers**:
+overriding `milesFromStart`, dropping the mile labels, or rewriting them on drop.
+Those let you put Prince George before Burns Lake and *hide* that it's a
+backtrack — a lie about the drive.
 
-- **Introduce an explicit user order that overrides `milesFromStart`** — lets you
-  put Prince George before Burns Lake, which is a lie about the drive, and has to
-  drop/relocate the mile markers to do it.
-- **Reorder only within a city-node's pool tiles** — leaves the route-positioned
-  key stops fixed, so the common generated-trip case (the key stops above) isn't
-  draggable at all.
-- **Rewrite `milesFromStart` on drop** — corrupts the mile labels (which show real
-  distances) and still fights the geometry.
+**The resolution is messaging, not prevention.** Allow any drag; keep the markers
+honest; **price the consequence**. A "514 mi" card sitting above a "372 mi" card
+*is* the visual of the backtrack — the number stays true and an advisory line
+states the cost. A backtrack isn't wrong, it's expensive, and the job is to price
+it, not forbid it.
 
-## What is / isn't affected by place order (so the cost is understood)
+## Resolution: two tiers
 
-Reordering places within a day changes **nothing computed**: a day's
-`miles`/`driveHours` come from its **endpoint cities** (the `corridorCities`
-start/end nodes = the overnight), not the intermediate place cards. No mileage
-recompute, no polyline splice. The day's terminus is the end-node/overnight, which
-is not a reorderable place card. So this was never blocked on routing cost — only
-on the data model.
+- **Tier 1 — free, arithmetic, no network (what we build).** Every place has an
+  along-route position: stored `milesFromStart`, or a pure-geometry projection of
+  its coords onto the day polyline via `alongRouteMiles` (the same bake-time
+  projection; no fetch). Walk the user's order; any **descending step**
+  `m_{i+1} < m_i` is a backtrack costing ≈ **2 × (m_i − m_{i+1})**. Sum = extra
+  miles. Instant. Powers the "this order backtracks ~N mi" advisory. Markers are
+  never rewritten.
+- **Tier 2 — optional, one ~560 ms Directions call.** Route the day through its
+  places as ordered waypoints (`routeBetween([start, …places, end])`, ≤25 coords →
+  one call) for the *exact* new distance/duration/geometry. Only needed if the
+  day's official miles should reflect the visit order (authoritative), rather than
+  the endpoint-derived miles plus an advisory (see next section).
 
-## The model this actually needs
+## What is / isn't affected by place order
 
-The **node-stack model**: a day is an ordered list of **city nodes**; POIs hang
-under nodes; you reorder **nodes**, and geography stays honest because the nodes
-carry the mileage. Reordering the *sequence of places you visit* is really
-reordering *nodes*, not detaching a POI from its along-route position. That model
-isn't built. Place-reorder is blocked on it, not on drag implementation.
+Endpoint-derived miles don't change from a reorder: a day's `miles`/`driveHours`
+come from its **endpoint cities** (`corridorCities` start/end = the overnight),
+not the intermediate cards. So the **advisory** path (Tier 1) recomputes nothing —
+the header keeps its endpoint miles and the backtrack shows as a separate
+consequence. Only the **authoritative** path (Tier 2) would fold the backtrack
+into the day's official mileage. This was never a routing-cost block — only a
+data-model one, and Tier 1 answers it with arithmetic.
+
+## The node-stack model (future, authoritative — not required now)
+
+The cleaner long-term model is the **node-stack**: a day is an ordered list of
+city **nodes**, POIs hang under nodes, you reorder **nodes**, and geography stays
+honest because nodes carry the mileage. That would make Tier 2 the natural default
+(reorder = re-sequence nodes = re-route). It is **not a prerequisite** for the
+Tier 1 advisory, which prices arbitrary place order today without it.
 
 ## What was built vs. left
 
-- **Built (kept):** the place-card **grip** is rendered and **inert** — dotted
-  `GripVertical` in the 47px Select/Drag lane (`category-list-card.tsx`,
-  `editMode`-gated). No drag wired.
-- **Not built:** place-card drag-reorder. Revisit only after the node-stack model
-  exists.
+- **Built:** place-card **grip** — dotted `GripVertical` in the 47px Select/Drag
+  lane (`category-list-card.tsx`, `editMode`-gated).
+- **Building now:** Tier-1 place-card drag-reorder within a day — honest markers +
+  arithmetic backtrack advisory, no routing.
+- **Deferred:** Tier-2 authoritative recompute; cross-day moves; the node-stack
+  model.
