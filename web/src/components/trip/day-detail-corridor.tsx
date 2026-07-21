@@ -106,6 +106,11 @@ type Props = {
    *  single connector IS the whole day's drive). Edit render only. */
   dayMiles?: number;
   dayDriveHours?: number;
+  /** Decoded trip route polyline + this day's cumulative start mile — the edit
+   *  render projects POI coords onto the route to position them in stretches
+   *  (the stored milesFromStart is unreliable; see lib/corridor/stretches.ts). */
+  routeLine?: [number, number][];
+  dayStartMile?: number;
 };
 
 const GUTTER_W = 48;
@@ -188,6 +193,8 @@ export function DayDetailCorridor({
   editMode = false,
   dayMiles,
   dayDriveHours,
+  routeLine,
+  dayStartMile,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Generated trips flag the LLM's curated key stops; when any exist, they
@@ -244,17 +251,6 @@ export function DayDetailCorridor({
     mileMarkers,
     byId,
   });
-
-  // Edit render: pool places bucketed under no node (>25mi from every node,
-  // or off-corridor) and not the day's start/end anchor → the "Along the way"
-  // tail group. Deduped via byId so a suggestion+waypoint sharing an id counts
-  // once. Nothing silently dropped.
-  const nodeReferenced = new Set(cities.flatMap((c) => c.placeIds));
-  const orphans = Array.from(byId.values()).filter(
-    (p) =>
-      !nodeReferenced.has(p.id) &&
-      !coincidesWithAnchor(toAnchorLike(p), cities),
-  );
 
   return (
     <div
@@ -335,7 +331,8 @@ export function DayDetailCorridor({
         <DayDetailNodeBlocks
           cities={cities}
           byId={byId}
-          orphans={orphans}
+          line={routeLine ?? []}
+          dayStartMile={dayStartMile ?? 0}
           dayMiles={dayMiles}
           dayDriveHours={dayDriveHours}
           onOpenPlace={onOpenPlace}

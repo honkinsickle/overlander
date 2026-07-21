@@ -2,28 +2,30 @@
 
 /**
  * Edit-mode "City Block" render of a day (spec § node-stack model, Paper
- * artboard "Trip Edit— aligned v1-1"). The node model made visible: a day is
- * an ordered list of city NODES, each carrying the POIs bucketed beneath it,
- * against a left mile-timeline gutter. Replaces the mile-INTERLEAVED spine
- * (buildSpineItems) for the edit surface only — the read view keeps its
- * existing render so the two can be compared directly.
+ * artboard "Trip Edit— aligned v1-1"). A day is an ordered list of city NODES;
+ * the DRIVE between two nodes is a CONTAINER holding the POIs whose position
+ * falls within that stretch, in mile order, on a left mile-timeline gutter.
+ * Replaces the mile-interleaved read spine for the edit surface only.
  *
- * Deliberate scope (rendering only):
- * - Timeline is CONTENT-DRIVEN, not mile-proportional. The inter-node drive is
- *   a capped, labeled connector ("264 mi · 5.2 hr") — a 400-mi 2-node day would
- *   be thousands of px of empty gutter otherwise, and nearly every real day is
- *   that shape. The label does the work whitespace can't.
- * - A POI carries a gutter mile tick only when it has `milesFromStart` (today:
- *   curated key stops). Un-positioned POIs render as cards under their node in
- *   bucket order, without a tick — never dropped. (The fix that gives every POI
- *   a mile is server-side: persist the mile bucketing already computes.)
- * - Orphans (pool places bucketed under no node — >25mi from every node) go to
- *   an "Along the way" tail group, off the rail. The model rests on nodes being
- *   real road positions, so a distant place is not forced under one.
- * - Drag handles render but are inert (drag is a later slice).
+ * POI positions come from projecting each place's COORDS onto the route
+ * (positionPlacesOnDay) — NOT the stored `milesFromStart`, which is unreliable
+ * on current generated trips (~+589-mi foreign offset). This is a render-time
+ * stopgap pending the day-coords persistence fix; see
+ * lib/corridor/stretches.ts and docs/findings/2026-07-20-*.md.
+ *
+ * Scope: rendering only, edit-mode gated. Drag handles inert. Node = white dot
+ * + city name (a place ON the road); POI = amber tick + mile, indented within
+ * its stretch (a stop within the drive). Content-driven height. Off-corridor
+ * places (offset > bufferMi) are the only thing in "Along the way".
  */
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import type { CorridorCity } from "@/lib/trips/types";
+import type { LngLat } from "@/lib/routing/route-between";
+import {
+  positionPlacesOnDay,
+  assignPlacesToStretches,
+  type PositionedPlace,
+} from "@/lib/corridor/stretches";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
@@ -32,12 +34,12 @@ const noop = () => {};
 
 type Props = {
   cities: CorridorCity[];
-  /** Resolves a placeId (from `city.placeIds`) to its tile. */
   byId: Map<string, CorridorPlace>;
-  /** Pool places referenced by no node — the "Along the way" group. */
-  orphans: CorridorPlace[];
-  /** Day totals — used to label the drive connector on a 2-node day (the
-   *  single connector IS the whole day's drive). */
+  /** Decoded trip route polyline — POIs project onto it for their position. */
+  line: LngLat[];
+  /** This day's cumulative start mile along the route (dayStartMiles[idx]). */
+  dayStartMile: number;
+  /** Day totals — label the whole-day drive on a 2-node day. */
   dayMiles?: number;
   dayDriveHours?: number;
   onOpenPlace?: (placeId: string) => void;
@@ -48,51 +50,91 @@ type Props = {
 export function DayDetailNodeBlocks({
   cities,
   byId,
-  orphans,
+  line,
+  dayStartMile,
   dayMiles,
   dayDriveHours,
   onOpenPlace,
   onRemovePlace,
   editMode = true,
 }: Props) {
-  const wholeDay = cities.length === 2;
+  const { positioned, stretches, alongTheWay } = useMemo(() => {
+    const places = Array.from(byId.values());
+    const positioned = positionPlacesOnDay({ line, places, dayStartMile });
+    const { stretches, alongTheWay } = assignPlacesToStretches({
+      nodeMiles: cities.map((c) => c.milesFromStart),
+      positioned,
+    });
+    return { positioned, stretches, alongTheWay };
+  }, [byId, line, dayStartMile, cities]);
+
+  // Whole-day dwell (2 coincident nodes, 0-mi "drive"): collapse to one node
+  // with its places beneath — no duplicate header, no "0 mi drive" connector.
+  const isDwell =
+    cities.length === 2 &&
+    cities[0].milesFromStart === cities[cities.length - 1].milesFromStart;
+
+  const orphanCards = alongTheWay
+    .map((id) => byId.get(id))
+    .filter(Boolean) as CorridorPlace[];
+
+  if (isDwell) {
+    const clusterIds = stretches[0]?.placeIds ?? [];
+    return (
+      <div className="flex flex-col" style={{ paddingTop: 16 }}>
+        <NodeHeaderRow city={cities[0]} last={clusterIds.length === 0} />
+        {clusterIds.map((id, j) => (
+          <PoiRow
+            key={id}
+            place={byId.get(id)}
+            pos={positioned.get(id)}
+            last={j === clusterIds.length - 1}
+            onOpenPlace={onOpenPlace}
+            onRemovePlace={onRemovePlace}
+            editMode={editMode}
+          />
+        ))}
+        {orphanCards.length > 0 && (
+          <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col" style={{ paddingTop: 16 }}>
       {cities.map((city, i) => {
         const next = cities[i + 1];
-        const tiles = city.placeIds
-          .map((id) => byId.get(id))
-          .filter(Boolean) as CorridorPlace[];
+        const stretch = i < cities.length - 1 ? stretches[i] : null;
+        const stretchIds = stretch?.placeIds ?? [];
         return (
           <Fragment key={`${city.id}-${city.kind}-${i}`}>
-            <NodeCityBlock
-              city={city}
-              tiles={tiles}
-              isLastBlock={i === cities.length - 1}
-              onOpenPlace={onOpenPlace}
-              onRemovePlace={onRemovePlace}
-              editMode={editMode}
-            />
+            <NodeHeaderRow city={city} last={false} />
             {next && (
-              <DriveConnector
+              <StretchContainer
                 miles={Math.round(next.milesFromStart - city.milesFromStart)}
-                hours={wholeDay ? dayDriveHours : undefined}
-                wholeDayMiles={wholeDay ? dayMiles : undefined}
+                hours={cities.length === 2 ? dayDriveHours : undefined}
+                wholeDayMiles={cities.length === 2 ? dayMiles : undefined}
+                placeIds={stretchIds}
+                byId={byId}
+                positioned={positioned}
+                isLast={i === cities.length - 2}
+                onOpenPlace={onOpenPlace}
+                onRemovePlace={onRemovePlace}
+                editMode={editMode}
               />
             )}
           </Fragment>
         );
       })}
-      {orphans.length > 0 && (
-        <AlongTheWay places={orphans} onOpenPlace={onOpenPlace} editMode={editMode} />
+      {orphanCards.length > 0 && (
+        <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
       )}
     </div>
   );
 }
 
-/** One rail row: fixed 48px gutter (optional mile tick + dot + connector line
- *  down to the next row) beside the content column. Mirrors the read-view
- *  spine geometry so the two treatments stay visually aligned. */
+/** Fixed 48px gutter (optional mile tick + dot + connector) beside content. */
 function RailRow({
   mile,
   mileColor = "var(--timeline-active)",
@@ -111,8 +153,6 @@ function RailRow({
   dotSize?: number;
   last?: boolean;
   gap?: number;
-  /** Draw the connector from the row top (no dot break) — used by the drive
-   *  connector so the "driving" stretch reads as one continuous line. */
   lineFromTop?: boolean;
   children: React.ReactNode;
 }) {
@@ -171,124 +211,140 @@ function RailRow({
   );
 }
 
-/** A city node header (white dot + mile) followed by its bucketed POI cards,
- *  each on the shared rail. Positioned POIs get an amber tick; un-positioned
- *  ones sit flush without a tick, in bucket order. */
-function NodeCityBlock({
-  city,
-  tiles,
-  isLastBlock,
-  onOpenPlace,
-  onRemovePlace,
-  editMode,
-}: {
-  city: CorridorCity;
-  tiles: CorridorPlace[];
-  isLastBlock: boolean;
-  onOpenPlace?: (placeId: string) => void;
-  onRemovePlace?: (placeId: string) => void;
-  editMode?: boolean;
-}) {
-  const isStart = city.kind === "start";
-  const mileLabel = isStart ? "Start" : `${Math.round(city.milesFromStart)}mi`;
-  // The rail terminates on the final node's final element (no drive/orphans
-  // render on the rail after it). Orphans are detached below.
-  const headerIsTerminal = isLastBlock && tiles.length === 0;
-
+/** A city node: white dot + mile + bold city name + explore link. A place ON
+ *  the road (distinct from a POI, which is a stop within the drive). */
+function NodeHeaderRow({ city, last }: { city: CorridorCity; last: boolean }) {
+  const mileLabel = city.kind === "start" ? "Start" : `${Math.round(city.milesFromStart)}mi`;
   return (
-    <>
-      <RailRow mile={mileLabel} last={headerIsTerminal}>
-        <div className="flex flex-col" style={{ gap: 3, paddingBottom: tiles.length ? 12 : 0 }}>
-          <span
-            style={{
-              fontFamily: "var(--ff-sans)",
-              fontWeight: 700,
-              fontSize: 22,
-              lineHeight: "26px",
-              color: "var(--text-primary)",
-            }}
-          >
-            {city.name}
-          </span>
-          <button
-            type="button"
-            onClick={noop}
-            className="self-start"
-            style={{
-              fontFamily: "var(--ff-sans)",
-              fontSize: 13,
-              lineHeight: "18px",
-              color: "var(--text-muted)",
-            }}
-          >
-            Explore more {city.name} →
-          </button>
-        </div>
-      </RailRow>
-
-      {tiles.map((p, j) => {
-        const positioned = p.milesFromStart != null;
-        return (
-          <RailRow
-            key={p.id}
-            mile={positioned ? `${Math.round(p.milesFromStart as number)}mi` : null}
-            mileColor="var(--amber)"
-            dot={positioned}
-            dotColor="var(--amber)"
-            dotSize={8}
-            last={isLastBlock && j === tiles.length - 1}
-          >
-            <CategoryListCard
-              place={p}
-              category={p.category}
-              status={p.keyStopNote}
-              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-              onRemove={p.removable && onRemovePlace ? () => onRemovePlace(p.id) : undefined}
-              editMode={editMode}
-            />
-          </RailRow>
-        );
-      })}
-    </>
-  );
-}
-
-/** The capped, labeled drive between two nodes. Fixed vertical space (NOT
- *  scaled to miles); the label carries the distance the whitespace can't. */
-function DriveConnector({
-  miles,
-  hours,
-  wholeDayMiles,
-}: {
-  miles: number;
-  hours?: number;
-  wholeDayMiles?: number;
-}) {
-  const mi = wholeDayMiles ?? miles;
-  const label =
-    hours != null ? `↓  ${mi} mi · ${hours} hr drive` : `↓  ${mi} mi drive`;
-  return (
-    <RailRow dot={false} lineFromTop gap={14}>
-      <div style={{ paddingTop: 8, paddingBottom: 8 }}>
+    <RailRow mile={mileLabel} last={last}>
+      <div className="flex flex-col" style={{ gap: 3, paddingBottom: 2 }}>
         <span
           style={{
-            fontFamily: "var(--ff-mono)",
-            fontSize: 12,
-            lineHeight: "16px",
-            letterSpacing: "0.02em",
-            color: "var(--text-muted)",
+            fontFamily: "var(--ff-sans)",
+            fontWeight: 700,
+            fontSize: 22,
+            lineHeight: "26px",
+            color: "var(--text-primary)",
           }}
         >
-          {label}
+          {city.name}
         </span>
+        <button
+          type="button"
+          onClick={noop}
+          className="self-start"
+          style={{ fontFamily: "var(--ff-sans)", fontSize: 13, lineHeight: "18px", color: "var(--text-muted)" }}
+        >
+          Explore more {city.name} →
+        </button>
       </div>
     </RailRow>
   );
 }
 
-/** Off-rail tail group for pool places bucketed under no node (>25mi from
- *  every node). Surfaced so nothing is silently dropped — the node/POI rule
- *  keeps them off the road-position rail. */
+/** One POI within a stretch: amber tick + its day-relative mile + card. */
+function PoiRow({
+  place,
+  pos,
+  last,
+  onOpenPlace,
+  onRemovePlace,
+  editMode,
+}: {
+  place?: CorridorPlace;
+  pos?: PositionedPlace;
+  last: boolean;
+  onOpenPlace?: (placeId: string) => void;
+  onRemovePlace?: (placeId: string) => void;
+  editMode?: boolean;
+}) {
+  if (!place) return null;
+  return (
+    <RailRow
+      mile={pos ? `${Math.max(0, Math.round(pos.dayMile))}mi` : null}
+      mileColor="var(--amber)"
+      dot={!!pos}
+      dotColor="var(--amber)"
+      dotSize={8}
+      last={last}
+    >
+      <CategoryListCard
+        place={place}
+        category={place.category}
+        status={place.keyStopNote}
+        onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+        onRemove={place.removable && onRemovePlace ? () => onRemovePlace(place.id) : undefined}
+        editMode={editMode}
+      />
+    </RailRow>
+  );
+}
+
+/** The drive between two nodes, as a container: a labeled header ("↓ 264 mi ·
+ *  5.2 hr drive"), then its POIs in mile order. Content-driven height (NOT
+ *  scaled to miles). */
+function StretchContainer({
+  miles,
+  hours,
+  wholeDayMiles,
+  placeIds,
+  byId,
+  positioned,
+  isLast,
+  onOpenPlace,
+  onRemovePlace,
+  editMode,
+}: {
+  miles: number;
+  hours?: number;
+  wholeDayMiles?: number;
+  placeIds: string[];
+  byId: Map<string, CorridorPlace>;
+  positioned: Map<string, PositionedPlace>;
+  isLast: boolean;
+  onOpenPlace?: (placeId: string) => void;
+  onRemovePlace?: (placeId: string) => void;
+  editMode?: boolean;
+}) {
+  const mi = wholeDayMiles ?? miles;
+  const label = hours != null ? `↓  ${mi} mi · ${hours} hr drive` : `↓  ${mi} mi drive`;
+  return (
+    <>
+      <RailRow dot={false} lineFromTop gap={12}>
+        <div style={{ paddingTop: 8, paddingBottom: placeIds.length ? 4 : 8 }}>
+          <span
+            style={{
+              fontFamily: "var(--ff-mono)",
+              fontSize: 12,
+              lineHeight: "16px",
+              letterSpacing: "0.02em",
+              color: "var(--text-muted)",
+            }}
+          >
+            {label}
+          </span>
+        </div>
+      </RailRow>
+      {placeIds.map((id, j) => (
+        <PoiRow
+          key={id}
+          place={byId.get(id)}
+          pos={positioned.get(id)}
+          // The last POI of the last stretch terminates the rail (next node
+          // header follows otherwise).
+          last={false}
+          onOpenPlace={onOpenPlace}
+          onRemovePlace={onRemovePlace}
+          editMode={editMode}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Off-rail tail for OFF-CORRIDOR places (offset > bufferMi) — a place you
+ *  genuinely detour to, not a stop on the drive. Empty on every day of the
+ *  current trip; kept for correctness. */
 function AlongTheWay({
   places,
   onOpenPlace,

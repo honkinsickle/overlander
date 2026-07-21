@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { decodePolyline } from "@/lib/routing/point-to-polyline";
+import { dayStartMiles } from "@/lib/corridor/stretches";
 import {
   DayDetailOverview,
   type OverviewGuide,
@@ -104,6 +106,17 @@ export function DayDetailCorridorColumn({
   const day = selectedDayId
     ? trip.days.find((d) => d.id === selectedDayId)
     : undefined;
+
+  // Edit render positions POIs by projecting their coords onto the route:
+  // decode the trip polyline once, and the selected day's cumulative start mile.
+  const routeLine = useMemo(
+    () => (trip.routePolyline ? decodePolyline(trip.routePolyline) : []),
+    [trip.routePolyline],
+  );
+  const dayStartMile = useMemo(() => {
+    const idx = trip.days.findIndex((d) => d.id === selectedDayId);
+    return idx >= 0 ? dayStartMiles(trip.days)[idx] : 0;
+  }, [trip.days, selectedDayId]);
 
   // P3 (2026-07-09): hydrate the visible day's corpus tiles with live Google
   // ratings/photos by place_id. Keyed by place_id, accumulated across days.
@@ -515,6 +528,8 @@ export function DayDetailCorridorColumn({
             editMode={editMode}
             dayMiles={day.miles}
             dayDriveHours={day.driveHours}
+            routeLine={routeLine}
+            dayStartMile={dayStartMile}
           />
         ) : (
           <DayDetailOverview
