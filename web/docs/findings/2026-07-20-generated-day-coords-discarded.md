@@ -66,3 +66,33 @@ In `itineraryToTrip`, set `startCoord`/`coords` from `baked`/`dayRoutes`
 (`dr.startCoord`/`dr.endCoord`) for every day, chaining day i's end to day i+1's
 start. Once persisted, `resolveCorridorCities` runs, real nodes + bucketing
 appear, and the render-time geometry stopgap can be deleted.
+
+## Fixed (2026-07-20)
+
+`itineraryToTrip` now copies `dr.startCoord`/`dr.endCoord` from the audit's
+`dayRoutes` for every day (commit `1c487c0`). NEW generated trips persist real
+per-day coords going forward.
+
+## Recovery for the already-persisted trip — geometry-only re-seed
+
+The working trip `dawson-cassiar-livingplan-test` was persisted BEFORE the fix,
+so it has neither per-day coords (1/17 start, 1/17 end) nor baked
+`corridorCities` (0/17). Re-running the audit to recover them was rejected: 14
+of its 17 day endpoints are NOT trip anchors and would re-resolve through live
+Google — a silent content change (a moved/closed/re-ranked place lands at a new
+coord), not a geometry fix. Instead `scripts/reseed-day-coords.ts` recovers each
+day's coords purely from already-persisted data — the trip's own `routePolyline`
+walked by the per-day published `miles` (net of round-trip / dwell days). It
+re-resolves nothing and re-routes nothing. Measured slop: −0.2% total
+(polyline 1992mi vs summed net day-miles 1995mi), endpoints pin at 0.00mi, and
+the interior Barkerville anchor lands in its correct Wells excursion day (day 11,
+3.3mi offset).
+
+### PROVENANCE — day.coords now means two different things
+
+A re-seeded day's `coords`/`startCoord` is a **point ON THE ROAD at cumulative
+mile X**, not the overnight place's own coordinate. That is correct for
+`resolveCorridorCities` (it slices the polyline between two miles), but it is
+DIFFERENT PROVENANCE from what `itineraryToTrip` writes for NEW trips, where
+`day.coords` is the audit's *resolved place* coordinate. Same field, two
+meanings. Do not read a re-seeded `day.coords` as "where Whitehorse is."
