@@ -8,7 +8,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { carryUserAuthored } from "./carry-forward";
+import { carryUserAuthored, assertUserAuthoredCarried } from "./carry-forward";
 import type { Trip, NodeSeed, PlaceNodeOverride } from "./types";
 
 function trip(over: Partial<Trip> = {}): Trip {
@@ -71,4 +71,23 @@ test("no prior overlays → nothing invented (both stay undefined)", () => {
   const out = carryUserAuthored(trip(), trip());
   assert.equal(out.nodeSeeds, undefined);
   assert.equal(out.placeOverrides, undefined);
+});
+
+test("guard: seedless trips pass (dormant today — the current state)", () => {
+  assert.doesNotThrow(() => assertUserAuthoredCarried(trip(), trip()));
+});
+
+test("guard: throws loud when regeneration drops overlays", () => {
+  const original = trip({ nodeSeeds: seeds, placeOverrides: overrides });
+  const dropped = trip(); // regenerated body with the overlays lost
+  assert.throws(
+    () => assertUserAuthoredCarried(original, dropped),
+    /nodeSeeds \+ placeOverrides/,
+  );
+});
+
+test("guard: passes when the overlays were carried forward", () => {
+  const original = trip({ nodeSeeds: seeds, placeOverrides: overrides });
+  const carried = carryUserAuthored(original, trip());
+  assert.doesNotThrow(() => assertUserAuthoredCarried(original, carried));
 });

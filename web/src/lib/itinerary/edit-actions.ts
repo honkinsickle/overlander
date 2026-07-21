@@ -22,6 +22,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPersistedReferenceTrip } from "@/lib/trips/reference";
+import { assertUserAuthoredCarried } from "@/lib/trips/carry-forward";
 import type { Trip } from "@/lib/trips/types";
 import {
   summarizeSignature,
@@ -471,6 +472,9 @@ async function runGateStage(
   diffMeta: { place: string; date: string },
   signature: string,
   replaceExisting: boolean,
+  /** The live trip being edited — its user-authored overlays (nodeSeeds,
+   *  placeOverrides) must survive regeneration; guarded at the persist site. */
+  original: Trip,
   partial?: { cleave: Cleave; original: Trip },
 ): Promise<{ ok: true; diff: ReplanDiff } | PendingClashResult | RailsFailure> {
   // Overwrite guard (BEFORE the paid generation): refuse to clobber a
@@ -567,6 +571,16 @@ async function runGateStage(
 
   const diff = computePlanDiff(beforeDays, generated.days, diffMeta);
 
+  // REQUIRED BEFORE SEEDS SHIP: `finalTrip` is fresh pipeline output and carries
+  // NO user-authored overlays. Once the write-actions slice lets a user create
+  // a NodeSeed / placeOverride, this persist MUST first run
+  //   finalTrip = carryUserAuthored(original, finalTrip)
+  // or the regeneration silently drops them (the routePolyline-by-omission bug
+  // class). The guard below is dormant today (no seeds can exist yet) and turns
+  // that silent drop into a hard error the moment it can happen. See
+  // src/lib/trips/carry-forward.ts.
+  assertUserAuthoredCarried(original, finalTrip);
+
   const staged = {
     ...finalTrip,
     id: pendingId(tripId),
@@ -635,6 +649,7 @@ export async function replanAction(
       { place: targetAnchor, date },
       signature,
       replaceExisting,
+      loaded.trip,
       ctx.partial,
     );
     if (!staged.ok) return staged;
@@ -718,6 +733,7 @@ export async function addStopAction(
       { place: resolved.place.displayName, date: endDate },
       signature,
       replaceExisting,
+      loaded.trip,
       ctx.partial,
     );
     if (!staged.ok) return staged;
@@ -878,7 +894,7 @@ export async function executeEditAction(
     );
     if (!pf.ok) return { ok: false, error: `Can't fit that — ${pf.reason}` };
 
-    const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, replaceExisting, ctx.partial);
+    const staged = await runGateStage(tripId, editedInput, ctx.beforeDays, diffMeta, signature, replaceExisting, loaded.trip, ctx.partial);
     if (!staged.ok) return staged;
     return { ok: true, diff: staged.diff, editSignature: signature };
   } catch (err) {
