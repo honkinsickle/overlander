@@ -266,8 +266,9 @@ export function DayDetailCorridor({
   // logic only sees the non-pinned rest (precedence: override > anchor > mile).
   const { pinnedByNode, rest: unpinnedPicks } = classifyCuratedPicks({
     curatedPicks,
-    presentNodeIds: new Set(cities.map((c) => c.id)),
+    cities,
     placeOverrides,
+    rankKey,
   });
   // A pick that IS the start/end anchor (matched by id | name | tight coords —
   // the shared anchor-match rule) renders as a featured detail card UNDER that
