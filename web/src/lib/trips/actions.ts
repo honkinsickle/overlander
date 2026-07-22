@@ -5,6 +5,7 @@ import * as repo from "./repository";
 import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
 import { isUserTripId, updateUserTripPayload } from "./user-trips";
 import { recomputeDay } from "./recompute-day";
+import { checkNotFrozen } from "@/lib/itinerary/rails";
 import type { OfflinePhase } from "./types";
 
 /**
@@ -84,6 +85,11 @@ export async function addWaypointAction(
   dayId: string,
   place: AddedPlace,
 ): Promise<ActionResult> {
+  // PROPERTY guard only (not the phase guards): this is a shipped user-trip path,
+  // so the frozen PROD trip is refused everywhere, but legitimate user-trip edits
+  // keep working in prod. See rails.ts.
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
   if (!place?.id || !place?.title) {
     return { ok: false, error: "Missing place." };
   }
@@ -100,6 +106,9 @@ export async function removeWaypointAction(
   dayId: string,
   waypointId: string,
 ): Promise<ActionResult> {
+  // PROPERTY guard only — frozen trip refused, user-trip edits keep working.
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
   const ok = await repo.removeWaypoint(tripId, dayId, waypointId);
   if (!ok) return { ok: false, error: "Could not remove stop." };
   await recomputeDayBestEffort(tripId, dayId);

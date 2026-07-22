@@ -11,6 +11,15 @@ thing worked, it moves into STATE.md §Queued.
   insufficient. (See STATE.md §Parked.)
 
 ## Someday / unscheduled
+- **Reference trips render a remove ✕ that always fails** — the read spine shows
+  the ✕ on waypoint tiles for reference trips too, but `removeWaypointAction` on a
+  slug hits the in-memory `TRIPS` fixture (`repository.ts:184`), misses a DB-only
+  reference trip, and returns *"Could not remove stop."* A visible control that
+  cannot work. Reference trips are read-only templates (fork-to-edit), so the ✕
+  should not render on them. Fix: pass `isReference` from `trip-slideup-body.tsx`
+  into `DayDetailCorridorColumn` (`:337` currently omits it) and gate the remove
+  control on `!isReference`. (Separate from the frozen-trip *server* guard, which
+  is now `checkNotFrozen`.)
 - **`applyPlaceOverrides`: insert by mile, not append** — today a re-homed place is
   appended to its node's `placeIds` (`bucket.ts:112-122`), so "server order" is mile
   order for auto-bucketed picks but pin order for overridden ones. That makes an
