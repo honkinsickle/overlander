@@ -10,6 +10,7 @@ import {
   type AnchorLike,
 } from "@/lib/corridor/anchor-match";
 import { classifyCuratedPicks } from "@/lib/corridor/curated-placement";
+import { scopeRankKey, sortClusterByRank } from "@/lib/corridor/stretches";
 import type { PlaceNodeOverride } from "@/lib/trips/types";
 import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
 
@@ -239,6 +240,12 @@ export function DayDetailCorridor({
   onDismissError,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
+  // Read-spine cluster order: the SAME node-scoped rank key the edit spine builds
+  // (scopeRankKey), so a city node's pool tiles render in authored order rather
+  // than raw server/mile order (Hop A). Undefined when nothing's ranked, in which
+  // case sortClusterByRank is a passthrough. Curated key stops honor it separately
+  // (Hop B, via classifyCuratedPicks) — they don't render inside the pool cluster.
+  const rankKey = scopeRankKey(cities, ranks);
   // Generated trips flag the LLM's curated key stops; when any exist, they
   // render IN their spine position (ordered by along-route mile) and each
   // node collapses the rest of its pool behind "Explore more". Reference
@@ -468,7 +475,7 @@ export function DayDetailCorridor({
               // through-cities with the same slug.
               key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
-              tiles={item.city.placeIds.map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
+              tiles={sortClusterByRank(item.city.placeIds, rankKey).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
               featured={featuredFor(item.city)}
               curatedMode={curatedMode}
               last={item.last}
