@@ -2,17 +2,17 @@
 
 ```
 Branch:      main   (both feature arcs merged in; working branch is now main)
-HEAD/main:   d68cd1c   — PUSHED to origin/main (fast-forward 1859cff → d68cd1c,
-                          62 commits). origin/main == local main == d68cd1c.
+HEAD/main:   e51e8be   — origin/main == local main. History: 1859cff → d68cd1c
+                          (62-commit arc) → e51e8be (STATE.md + the deploy fix).
 Merged in:   feat/living-plan-editing (tip c3611d8, 20 commits, LLM/NL trip-edit)
              + feat/manual-trip-edit (42-commit manual-edit arc on top). manual
              DESCENDS from living-plan (merge-base c3611d8), so both went in as
              two clean fast-forwards; both branches are fully contained in main.
-Deploy:      Vercel PRODUCTION deploy of d68cd1c FAILED (build error, ~22s).
-             https://vercel.com/acwcreative-6405s-projects/overlander/D5jacdSMdex12yuawSa6eaNCGfGQ
-             Suspect: `next build` typechecks all files, so the tolerated
-             `scripts/verify-bell2-seed.ts` TS error breaks a real prod build
-             (src/ itself is clean). NOT investigated/intervened — Adam's call.
+Deploy:      GREEN — main e51e8be deployed to production successfully. The ONLY
+             failure was d68cd1c: `next build` rejected a TS error in
+             scripts/verify-bell2-seed.ts that `npm run typecheck` had tolerated;
+             fixed in e51e8be. Prior green was 1859cff (2026-07-16); the 62-commit
+             arc was the first main deploy since, so d68cd1c is the sole failure.
 Written:     2026-07-22
 DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
              as of restore@2026-07-22T20:24Z. No verification fixtures injected.
@@ -41,12 +41,17 @@ The live thread is drag-to-order POIs within/between node clusters via durable f
 Earlier landed on this branch: node-stack model (`3d654c8`→render), living-plan productionization + partial re-plan, corridor northern gazetteer.
 
 ## In-flight (uncommitted working tree)
-None — Step 3 (insertion indicator, `day-detail-node-blocks.tsx`) is landing with this STATE.md update. Tree clean afterward except an unrelated `CLAUDE.md` edit (session-start protocol; not this arc's).
+None — the whole arc is merged to `main` and deployed green (`e51e8be`). Working tree carries only an unrelated `CLAUDE.md` edit (session-start protocol; not this arc's).
 
 ## Queued
 1. Dwell-day reorder (Day 6 out-and-back POIs) — needs a scope decision (spur-distance axis vs. reorder-in-drive vs. leave near→far). Read spine has NO near→far (edit-only); Day 6 keeps mile order until this lands.
 2. Save Changes + confirmation modal — day-reorder is local-only (discarded on refresh); pins/ranks persist immediately. Specced, not built.
 3. `applyPlaceOverrides` insert-by-mile (see BACKLOG) — makes "server order" == mile order everywhere, retiring the append quirk the read-spine gate flagged.
+
+## Open — Adam-owned (repo/CI settings, not code)
+Two settings would have caught the `d68cd1c` prod failure before it shipped; both are Adam's to make:
+1. **Require PRs into `main`** (branch protection) — a fast-forward PUSH to main currently bypasses CI entirely (see the LESSON under Gotchas).
+2. **Add `cd web && npx next build` to `ci.yml`** — CI today runs only `tsc`-based typecheck + data tests; `next build` is what Vercel actually runs and is a strict superset.
 
 ## Parked
 dnd-kit `SortableContext` — deferred; pointer-vs-rect (`computeInsertIndex`) chosen instead, no model change.
@@ -62,6 +67,7 @@ dnd-kit `SortableContext` — deferred; pointer-vs-rect (`computeInsertIndex`) c
 
 ## Gotchas
 - Tests: the real runner is **`node:test` via tsx**, NOT vitest (there is no committed vitest config; a bare `npx vitest run` fails at the `@/` alias). Run: `cd web && npx tsx --test <files>`. Current suite = **263 tests, all passing** (32 files). Earlier "193/193" and "207" figures came from tooling not in the tree — ignore them. Quirk: a single all-32-files invocation aborts before printing the summary; run per lib-dir (`corridor`+`trips` = 144, `itinerary` = 93, `discovery`+`routing` = 15, `corridor/data`+`components/trip` = 11) and sum.
-- Typecheck (the reliable gate): `npm run typecheck` in `web/`. One PRE-EXISTING error in `scripts/verify-bell2-seed.ts` (`SeedResolution.find`) is tolerated; product `src/` is clean.
+- THE BUILD GATE IS `cd web && npx next build`, exit 0, NO EXCEPTIONS. `npm run typecheck` (`tsc --noEmit`) is a subset — same tsconfig, but `next build` also enforces RSC/`'use client'` boundaries, route types, bundling, static-gen. There are NO tolerated errors; a non-zero exit is a red gate, full stop.
+- LESSON (the `d68cd1c` prod failure): a real TS error in `scripts/verify-bell2-seed.ts` reached `main` because (1) a red `npm run typecheck` was accepted as "cosmetic — just a script, src/ clean", AND (2) `ci.yml` is `pull_request`-only, so the fast-forward PUSH to main skipped it. **The check existed and never ran.** Don't tolerate a red gate; don't reach main by a path CI doesn't cover (see Open — Adam-owned). That script had also printed `absent` unconditionally since it was written (same bug); the fix matches `SeedResolution.seedId` and it now resolves correctly — day-5, mile 243, seedId == nodeSeed id.
 - Live-verify the slideup: dev server via `preview_start` name `web` (port 3210); dev talks to TEST because `.env.development.local` (znldz) overrides `.env.local`, and the edit flag `NEXT_PUBLIC_LIVING_PLAN_EDIT=1` comes from `.env.local`. Soft-nav only: `/demo/livingplan` → click "Open the TEST copy" → select day → "Edit". Hard-reload `/trip/[id]?day=day-N` = surface #2 fresh server read.
 - Synthetic dnd (hard-won): pointerdown+threshold, then moves, then pointerup each in SEPARATE js calls (rAF gap) — pointerup in the same call as moves → `onDragEnd` never fires. Keep the drag target mid-viewport: the top/bottom edges trigger dnd-kit auto-scroll, which shifts the layout AND (critically) inflates `delta`. `active.rect.current.translated` is the on-screen truth for the dragged midpoint; `initial+delta` diverges under scroll — use translated. `read_console`/`__drag()` read in the SAME call as the dispatch is stale (async) — read state in a separate call. `over` is non-deterministic across cluster boundaries with synthetic events (cross-node drop can't be forced) — verify cross-node by hand. Escape cancels the drag AND closes the slideup.
