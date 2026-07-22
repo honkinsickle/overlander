@@ -1,25 +1,26 @@
-# Branch State — `main` (manual-edit + living-plan MERGED; ADR §1 version-column arc in flight)
+# Branch State — `main` (manual-edit + living-plan MERGED; STEP 2 version-column LIVE on PROD)
 
 ```
 Branch:      main   (both feature arcs merged in; working branch is now main)
-HEAD/main:   3e909da (STEP 1: seed-test-user) — local main is 3 commits AHEAD of
-                          origin/main (e51e8be), ALL UNPUSHED; Adam owns the push.
+HEAD/main:   95c5c07 (STEP 2) — origin/main == local main, PUSHED & deployed green.
+                          This STATE.md commit sits one above 95c5c07 (STATE-only,
+                          per write discipline). History since last deploy:
                           e51e8be → d56840d (checkNotFrozen rail on the shipped
                           waypoint actions) → 3e909da (STEP 1: RLS seed harness) →
-                          THIS review-gate commit (STEP 2: trips.version column +
-                          conflict classification). STATE.md is written against
-                          3e909da; the STEP 2 commit carrying it sits one above.
+                          95c5c07 (STEP 2: trips.version column + conflict
+                          classification) — all now on origin/main.
 Merged in:   feat/living-plan-editing (tip c3611d8, 20 commits, LLM/NL trip-edit)
              + feat/manual-trip-edit (42-commit manual-edit arc on top). manual
              DESCENDS from living-plan (merge-base c3611d8), so both went in as
              two clean fast-forwards; both branches are fully contained in main.
-Deploy:      GREEN — main e51e8be deployed to production successfully. The ONLY
-             failure was d68cd1c: `next build` rejected a TS error in
-             scripts/verify-bell2-seed.ts that `npm run typecheck` had tolerated;
-             fixed in e51e8be. Prior green was 1859cff (2026-07-16); the 62-commit
-             arc was the first main deploy since, so d68cd1c is the sole failure.
-             d56840d / 3e909da / STEP 2 are local-only — UNPUSHED, undeployed.
-             The STEP 2 migration (trips.version) is applied to TEST only, NOT PROD.
+Deploy:      GREEN — 95c5c07 (STEP 2) deployed to PRODUCTION successfully
+             (2026-07-22, Vercel status "success"). ORDER MATTERED: the STEP 2
+             migration (trips.version) was applied to PROD FIRST — pre-flight
+             confirmed it the SOLE pending migration; column landed integer NOT
+             NULL default 0 with all 9 rows backfilled to 0 — THEN the code was
+             pushed, so the concurrency code finds the column it expects. Prior
+             green: e51e8be. Sole historical failure: d68cd1c (a `next build` TS
+             error tolerated by typecheck; see LESSON under Gotchas).
 Written:     2026-07-22
 DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
              as of restore@2026-07-22T20:24Z. No verification fixtures injected.
@@ -62,11 +63,11 @@ Earlier landed on this branch: node-stack model (`3d654c8`→render), living-pla
 Sequence toward flipping `NEXT_PUBLIC_LIVING_PLAN_EDIT` live and dispatching user-trip writes through the SSR/RLS path. See the handoff for STEP 3/4 detail.
 - `d56840d` — **checkNotFrozen rail** on the SHIPPED waypoint add/remove actions (property guard; the frozen PROD trip was previously protected only by a fixture-miss accident).
 - `3e909da` — **STEP 1: seed-test-user** RLS harness. `scripts/seed-test-user.ts`, TEST-ref-guarded, idempotent. Proves RLS isolation (owner vs other) on the write path off-prod. Seeds owner+other trips under `seed-owner@ / seed-other@overlander.test`.
-- `(this gate)` — **STEP 2: optimistic concurrency on `trips.payload`.** Adds `trips.version` (migration `20260722120000`, applied TEST only). `updateUserTripPayload` now reads `version`, writes `.eq("version", v)` with `version: v+1`, 0 rows = conflict; a REQUIRED `onConflict` policy per mutator: `retry` (by-id composes), `refuse` (absolute-set / index — returns `TRIP_CONFLICT`, surfaced as `TRIP_CHANGED_ERROR`), `abandon` (best-effort derived). DI `client` seam so verify drives the REAL fn under the seeded JWT. Fixed the swallowed-conflict defect: 3 `FormState` wizard actions truthiness-checked a now-truthy `TRIP_CONFLICT` and advanced having lost the write. Deleted dead index-based `reorderWaypoints`/`reorderWaypointsAction` (a class-(b) refuse path with no consumer) rather than converting. Verify: `next build` exit 0; 149 corridor+trips tests pass; STEP 2 verify script 5/5 under the seeded JWT.
-- NEXT: STEP 3 (two-write collapse / delete `applyDayDerived` as a separate racy writer) — NOT STARTED. Then STEP 4 (ADR §1 dispatch on `isUserTripId`). Migration lands on PROD as a separate authorized step.
+- `95c5c07` — **STEP 2: optimistic concurrency on `trips.payload`. LIVE on PROD.** Adds `trips.version` (migration `20260722120000`, applied to TEST **and PROD** — column integer NOT NULL default 0, 9 PROD rows backfilled to 0; applied to PROD BEFORE the code push). `updateUserTripPayload` now reads `version`, writes `.eq("version", v)` with `version: v+1`, 0 rows = conflict; a REQUIRED `onConflict` policy per mutator: `retry` (by-id composes), `refuse` (absolute-set / index — returns `TRIP_CONFLICT`, surfaced as `TRIP_CHANGED_ERROR`), `abandon` (best-effort derived). DI `client` seam so verify drives the REAL fn under the seeded JWT. Fixed the swallowed-conflict defect: 3 `FormState` wizard actions truthiness-checked a now-truthy `TRIP_CONFLICT` and advanced having lost the write. Deleted dead index-based `reorderWaypoints`/`reorderWaypointsAction` (a class-(b) refuse path with no consumer) rather than converting. Verify: `next build` exit 0; 149 corridor+trips tests pass; STEP 2 verify script 5/5 under the seeded JWT.
+- NEXT: STEP 3 (two-write collapse / delete `applyDayDerived` as a separate racy writer) — NOT STARTED. Then STEP 4 (ADR §1 dispatch on `isUserTripId`). The `version` migration is already on PROD; the flag `NEXT_PUBLIC_LIVING_PLAN_EDIT` is still unset in Vercel, so the edit UI stays dark — STEP 2 hardens the SHIPPED waypoint/wizard write path, it does not flip the edit feature on.
 
 ## In-flight (uncommitted working tree)
-None after the STEP 2 commit lands. STEP 2 (version column + conflict classification, above) is this review-gate commit — it carries this STATE.md. The abandoned cold-start scaffolding (a root `CLAUDE.md` edit calling a non-existent `scripts/cold-start-check.sh` + unused STATE-HEAD/Landing fields) was reverted this session, not committed.
+None. STEP 2 (`95c5c07`) is pushed to origin/main and live on PROD; this STATE.md commit (STEP 2 live) sits one above it. The abandoned cold-start scaffolding (a root `CLAUDE.md` edit calling a non-existent `scripts/cold-start-check.sh` + unused STATE-HEAD/Landing fields) was reverted this session, not committed.
 
 ## Queued
 1. Dwell-day reorder (Day 6 out-and-back POIs) — needs a scope decision (spur-distance axis vs. reorder-in-drive vs. leave near→far). Read spine has NO near→far (edit-only); Day 6 keeps mile order until this lands.
