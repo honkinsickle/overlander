@@ -35,6 +35,7 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
 import { X } from "lucide-react";
 import type { CorridorCity } from "@/lib/trips/types";
@@ -81,6 +82,22 @@ export type PlaceMove = {
  *  drive drop (unpin). */
 const NODE = "node:";
 const DRIVE = "drive:";
+
+/** The dragged card's current vertical midpoint, in VIEWPORT coordinates — read
+ *  from `active.rect.current.translated` (the initial rect with the live drag
+ *  transform applied). This is the right space to compare against the siblings'
+ *  getBoundingClientRect, which are also viewport coords. NOT `initial + delta`:
+ *  dnd-kit's `delta` folds in container auto-scroll, so `initial + delta` diverges
+ *  from the on-screen position the moment the list scrolls mid-drag (verified —
+ *  under scroll the two produced DIFFERENT insert slots). `translated` is the
+ *  on-screen truth, and the same value onDragMove (the live line) and onDragEnd
+ *  (the drop) both feed to computeInsertIndex, so they can't disagree. Null before
+ *  measured. onDragMove fires per move, so it stays live (the freeze was onDragOver
+ *  firing only on droppable change, not `translated` lagging). */
+function draggedMidY(e: DragMoveEvent | DragEndEvent): number | null {
+  const tr = e.active.rect.current.translated;
+  return tr ? tr.top + tr.height / 2 : null;
+}
 
 type Props = {
   cities: CorridorCity[];
@@ -193,6 +210,55 @@ export function DayDetailNodeBlocks({
     if (el) cardRefs.current.set(placeId, el);
     else cardRefs.current.delete(placeId);
   }, []);
+  // Insertion-indicator state: which cluster + slot a drop will land in, so a 2px
+  // line can show the target. On a touch surface the finger covers the card, so
+  // snap-on-drop alone gives no pre-drop feedback. { clusterId (=nodeId),
+  // insertIndex } | null; cleared on drag end and cancel.
+  const [dropIndicator, setDropIndicator] =
+    useState<{ clusterId: string; insertIndex: number } | null>(null);
+  // The ONE insert-index derivation — shared by the live indicator (onDragOver)
+  // and the authored drop (onDragEnd/computeRankWrites). Same computeInsertIndex
+  // call, same selfIndex rule: same-node → exclude the dragged card (still in the
+  // DOM), cross-node → null. Returns null when unmeasurable. Stable identity:
+  // onDragOver fires constantly and an unstable handler would churn dnd-kit's node
+  // ref mid-drag (the Step-2 failure).
+  const computeInsertAt = useCallback(
+    (targetNodeId: string, activeId: string, pointerY: number | null): number | null => {
+      const nodeIdx = cities.findIndex((c) => c.id === targetNodeId);
+      if (nodeIdx < 0 || pointerY === null) return null;
+      const cluster = nodeClusters[nodeIdx] ?? [];
+      const els = cluster.map((id) => cardRefs.current.get(id));
+      if (els.some((el) => !el)) return null; // unmeasurable
+      const rects = els.map((el) => (el as HTMLElement).getBoundingClientRect());
+      const selfIndex = cluster.indexOf(activeId); // ≥0 same-node, -1 cross-node
+      return computeInsertIndex(rects, pointerY, selfIndex >= 0 ? selfIndex : null);
+    },
+    [cities, nodeClusters],
+  );
+  // Track the target slot on EVERY pointer move. onDragMove — NOT onDragOver,
+  // which fires only when the droppable under the pointer changes, so it can't
+  // follow the pointer between cards inside one cluster. Only a NODE cluster gets
+  // an indicator; the drive/unpin droppable is attachment, not sequence. Return
+  // the same state ref when unchanged so React bails out (no re-render per move).
+  // Stable (useCallback): it fires constantly, and an unstable handler would
+  // churn dnd-kit's node ref mid-drag (the Step-2 failure).
+  const onDragMove = useCallback(
+    (e: DragMoveEvent) => {
+      const overId = e.over ? String(e.over.id) : null;
+      if (!overId || !overId.startsWith(NODE)) {
+        setDropIndicator((prev) => (prev === null ? prev : null));
+        return;
+      }
+      const nodeId = overId.slice(NODE.length);
+      const idx = computeInsertAt(nodeId, String(e.active.id), draggedMidY(e));
+      setDropIndicator((prev) => {
+        if (idx === null) return prev === null ? prev : null;
+        if (prev && prev.clusterId === nodeId && prev.insertIndex === idx) return prev;
+        return { clusterId: nodeId, insertIndex: idx };
+      });
+    },
+    [computeInsertAt],
+  );
   // The node a place currently clusters under (server/optimistic placeIds), or
   // -1 if it's mid-drive — used to no-op a drop back onto the same node.
   const currentNodeId = (placeId: string): string | null => {
@@ -202,6 +268,7 @@ export function DayDetailNodeBlocks({
   const onDragStart = (e: DragStartEvent) => setDragId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {
     setDragId(null);
+    setDropIndicator(null);
     if (!onMovePlace) return;
     const placeId = String(e.active.id);
     const overId = e.over ? String(e.over.id) : null;
@@ -220,17 +287,10 @@ export function DayDetailNodeBlocks({
       const nodeIdx = cities.findIndex((c) => c.id === targetNodeId);
       if (nodeIdx < 0) return undefined;
       const cluster = nodeClusters[nodeIdx] ?? [];
-      const tr = e.active.rect.current.translated;
-      if (!tr) return undefined;
-      const els = cluster.map((id) => cardRefs.current.get(id));
-      if (els.some((el) => !el)) return undefined; // unmeasurable — skip authoring
-      const rects = els.map((el) => (el as HTMLElement).getBoundingClientRect());
-      const selfIndex = cluster.indexOf(placeId); // ≥0 same-node, -1 cross-node
-      const insertIndex = computeInsertIndex(
-        rects,
-        tr.top + tr.height / 2,
-        selfIndex >= 0 ? selfIndex : null,
-      );
+      // Same derivation the live indicator uses — ONE source, so the line and the
+      // landed position can't disagree.
+      const insertIndex = computeInsertAt(targetNodeId, placeId, draggedMidY(e));
+      if (insertIndex === null) return undefined; // unmeasurable — skip authoring
       const withoutSelf = cluster.filter((id) => id !== placeId);
       const finalOrder = [
         ...withoutSelf.slice(0, insertIndex),
@@ -301,6 +361,36 @@ export function DayDetailNodeBlocks({
     onDismissError,
   };
 
+  // Where the insert line falls in a cluster's RENDERED rows. dropIndicator holds
+  // insertIndex in the "without dragged card" space (exactly as the drop path
+  // computes it); map it to the id the line should precede, or {atEnd} for the
+  // tail / an empty cluster. No optimistic reorder — the cards never move.
+  const indicatorFor = (nodeId: string, clusterIds: string[]) => {
+    if (!dropIndicator || dropIndicator.clusterId !== nodeId) return null;
+    const withoutSelf = dragId ? clusterIds.filter((id) => id !== dragId) : clusterIds;
+    const i = Math.max(0, Math.min(dropIndicator.insertIndex, withoutSelf.length));
+    return i >= withoutSelf.length
+      ? { atEnd: true, beforeId: null as string | null }
+      : { atEnd: false, beforeId: withoutSelf[i] };
+  };
+  // Render a cluster's PoiRows with the insert line spliced into the target gap.
+  const clusterRows = (
+    nodeId: string,
+    clusterIds: string[],
+    lastFn: (j: number) => boolean,
+  ): React.ReactNode[] => {
+    const ind = indicatorFor(nodeId, clusterIds);
+    const rows: React.ReactNode[] = [];
+    clusterIds.forEach((id, j) => {
+      if (ind && !ind.atEnd && ind.beforeId === id) rows.push(<InsertLine key={`ins-${nodeId}`} />);
+      rows.push(
+        <PoiRow key={id} placeId={id} place={byId.get(id)} pos={positioned.get(id)} last={lastFn(j)} {...poiCtx} />,
+      );
+    });
+    if (ind && ind.atEnd) rows.push(<InsertLine key={`ins-${nodeId}-end`} />);
+    return rows;
+  };
+
   // Whole-day dwell (2 coincident nodes, 0-mi "drive"): collapse to one node
   // with its places beneath — no duplicate header, no "0 mi drive" connector.
   const isDwell =
@@ -318,8 +408,12 @@ export function DayDetailNodeBlocks({
         sensors={sensors}
         collisionDetection={pointerWithin}
         onDragStart={onDragStart}
+        onDragMove={onDragMove}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setDragId(null)}
+        onDragCancel={() => {
+          setDragId(null);
+          setDropIndicator(null);
+        }}
       >
         {children}
         <DragOverlay>
@@ -348,9 +442,7 @@ export function DayDetailNodeBlocks({
       <div className="flex flex-col" style={{ paddingTop: 16 }}>
         <DroppableRegion id={`${NODE}${cities[0].id}`} disabled={!dndEnabled}>
           <NodeHeaderRow city={cities[0]} last={clusterIds.length === 0} />
-          {clusterIds.map((id, j) => (
-            <PoiRow key={id} placeId={id} place={byId.get(id)} pos={positioned.get(id)} last={j === clusterIds.length - 1} {...poiCtx} />
-          ))}
+          {clusterRows(cities[0].id, clusterIds, (j) => j === clusterIds.length - 1)}
         </DroppableRegion>
         {orphanCards.length > 0 && (
           <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
@@ -374,9 +466,7 @@ export function DayDetailNodeBlocks({
             {/* The node + its arrival cluster is one drop target (pin here). */}
             <DroppableRegion id={`${NODE}${city.id}`} disabled={!dndEnabled}>
               <NodeHeaderRow city={city} last={!next && clusterIds.length === 0} />
-              {clusterIds.map((id, j) => (
-                <PoiRow key={id} placeId={id} place={byId.get(id)} pos={positioned.get(id)} last={clusterLast(j)} {...poiCtx} />
-              ))}
+              {clusterRows(city.id, clusterIds, clusterLast)}
             </DroppableRegion>
             {next && (
               // The drive is one drop target (drop here to unpin → geometry).
@@ -400,6 +490,29 @@ export function DayDetailNodeBlocks({
         <AlongTheWay places={orphanCards} onOpenPlace={onOpenPlace} editMode={editMode} />
       )}
     </div>,
+  );
+}
+
+/** The insertion indicator: a 2px amber line in the gap where the dragged card
+ *  will land. A zero-height wrapper so it never shifts the cards; the line is
+ *  absolutely positioned into the gap, aligned with the card content (past the
+ *  gutter). pointer-events off so it can't interfere with the drag. */
+function InsertLine() {
+  return (
+    <div aria-hidden className="relative" style={{ height: 0 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: GUTTER_W,
+          right: 0,
+          top: -1,
+          height: 2,
+          borderRadius: 1,
+          backgroundColor: "var(--amber)",
+          pointerEvents: "none",
+        }}
+      />
+    </div>
   );
 }
 

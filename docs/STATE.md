@@ -2,14 +2,20 @@
 
 ```
 Branch:      feat/manual-trip-edit   (manual drag-to-edit: pin / unpin / reorder POIs)
-HEAD:        5d9945b   <- sha this file was written against; the review-gate commit
-                          that ADDS this file also carries the Hop B code (curated
-                          placement + read spine) — so actual HEAD sits one commit
-                          ahead of 5d9945b carrying code+docs. That is THIS gate,
-                          not a discrepancy (CLAUDE.md §SESSION START step 3).
+HEAD:        f2f07ae   <- sha this file was written against; the review-gate commit
+                          that ADDS this file also carries the Step 3 code
+                          (day-detail-node-blocks insertion indicator) — so actual
+                          HEAD sits one commit ahead of f2f07ae carrying code+docs.
+                          That is THIS gate, not a discrepancy (CLAUDE.md §SESSION
+                          START step 3).
 Written:     2026-07-22
 DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
-             as of restore@2026-07-22. No verification fixtures injected.
+             as of restore@2026-07-22T20:24Z. No verification fixtures injected.
+             RULE: navigate the browser OFF the edited day (close the tab) BEFORE
+             restoring baseline, then re-read — an open Day-N edit view holds
+             optimistic localRanks and any interaction re-persists them (writes
+             tag `node-edit@`, vs a restore's `restore@`), silently undoing the
+             restore. This was the "ranks reappeared after I cleared them" anomaly.
 Sibling:     feat/living-plan-editing (last commit c3611d8) holds the SEPARATE
              LLM/NL trip-editing work — do NOT conflate with this branch.
 ```
@@ -20,7 +26,8 @@ Base: `origin/main` (merge-base `1859cff`).
 
 ## Committed (recent arc — POI sequencing, "Option B")
 The live thread is drag-to-order POIs within/between node clusters via durable fractional ranks:
-- `(this gate)` — READ SPINE HONORS `placeRanks` (was Queued #1). Two hops, both via the ONE shared rule `sortClusterByRank(scopeRankKey(cities, ranks))`. `cb6e1bc` extracted `scopeRankKey` + exported `sortClusterByRank` (edit spine now calls it; output unchanged). `5d9945b` Hop A: read-spine pool cluster sorts by rank (unit-verified only — every TEST-trip target is curated, so this path never renders live). This commit Hop B: `classifyCuratedPicks` is rank-aware — an authored node-scoped rank (not just an override) groups a curated pick under its node, ordered by the same cluster rule (pinned-keystop treatment: sorted at node mile, true mile shown). Verified live: drag Ksan to top → read spine + hard-nav `/trip/[id]` both show `Ksan · Gitwangak · Seven Sisters` (rank order, not mile 130/134/158), survives refresh; baseline restored. NOTE: this changed Fix #1's multi-pick override-only ordering from mile → cluster/append order (single-override case unchanged) — required for read/edit agreement; see BACKLOG (insert-by-mile) to retire the append quirk.
+- `(this gate)` — STEP 3, INSERTION INDICATOR (`day-detail-node-blocks`). A 2px amber line shows where a drop will land — needed because on iPad the finger covers the card. Computed in `onDragMove` (NOT `onDragOver` — that fires only on droppable CHANGE, so it can't track between cards in one cluster) via the SAME `computeInsertAt`/`computeInsertIndex` the drop path uses; held as `{clusterId, insertIndex} | null`, cleared on end+cancel; rendered as a zero-height absolutely-positioned line (no layout shift); NODE clusters only (drive/unpin is attachment, not sequence). KEY CORRECTION found by instrumenting the drop: the dragged midpoint MUST be `active.rect.current.translated` (viewport coords), NOT `initial + delta` — dnd-kit's `delta` folds in container auto-scroll, so `initial+delta` diverges from the on-screen position under mid-drag scroll (5-drop audit: 1/5 disagreed, by one slot; `translated` matched the on-screen landing every time). Both `onDragMove` and `onDragEnd` feed `translated` → one derivation, line == drop. Verified live: same-node line tracks + drop lands at the indicated slot; cross-node line appears in the target and tracks (over=`smithers-bc`, line 677→597). Cross-node DROP-lands-at-slot not reproducible via synthetic events (dnd-kit `pointerWithin` non-deterministic across cluster boundaries) — Adam verifies that by hand.
+- `f2f07ae` / `5d9945b` / `cb6e1bc` — READ SPINE HONORS `placeRanks` (was Queued #1). Two hops via the ONE shared rule `sortClusterByRank(scopeRankKey(cities, ranks))`. `cb6e1bc` extracted `scopeRankKey` + exported `sortClusterByRank` (edit spine calls it; output unchanged). `5d9945b` Hop A: read-spine pool cluster sorts by rank (unit-verified only — every TEST-trip target is curated, so this path never renders live). `f2f07ae` Hop B: `classifyCuratedPicks` is rank-aware — an authored node-scoped rank (not just an override) groups a curated pick under its node, ordered by the same cluster rule (pinned-keystop treatment: sorted at node mile, true mile shown). Verified live: read spine + hard-nav `/trip/[id]` show `Ksan · Gitwangak · Seven Sisters` (rank order, not mile 130/134/158). NOTE: changed Fix #1's multi-pick override-only ordering from mile → cluster/append order (single-override case unchanged) — required for read/edit agreement; see BACKLOG (insert-by-mile).
 - `2ba79cb` — THE ROOT FIX: `placeRanks` is node-scoped `Record<placeId, {nodeId, rank}>`. A rank counts only in its authored cluster; a foreign/stale rank surviving into another cluster is inert → appended (never mis-sorts). Separate `rankKey` (cluster) / `orderKey` (near→far stretch) maps + scale-guard assert. Append newcomer policy (never demote). Carry-forward carries+guards `placeRanks`. Verified live on TEST: write path persists `{nodeId, rank}` with the TARGET nodeId (survives refresh); read path treats a Stewart-scoped `-99` on Seven Sisters as inert (appended last, authored order preserved). Baseline since restored (`restore@2026-07-21T22:28Z`, `placeRanks {}`).
 - `69c323f` — cross-node drop authors position atomically (attachment + rank land in ONE `pinPlaceAction` write; no partially-ranked cluster reachable on disk).
 - `d70c8e8` — same-node reorder wired end to end (`localRanks` optimistic overlay; ref-registry via `useCallback`).
@@ -31,7 +38,7 @@ The live thread is drag-to-order POIs within/between node clusters via durable f
 Earlier landed on this branch: node-stack model (`3d654c8`→render), living-plan productionization + partial re-plan, corridor northern gazetteer.
 
 ## In-flight (uncommitted working tree)
-None — the read-spine gate (Hop A `5d9945b`, Hop B this commit) is landing with this STATE.md update. Tree clean afterward except an unrelated `CLAUDE.md` edit (session-start protocol; not this arc's).
+None — Step 3 (insertion indicator, `day-detail-node-blocks.tsx`) is landing with this STATE.md update. Tree clean afterward except an unrelated `CLAUDE.md` edit (session-start protocol; not this arc's).
 
 ## Queued
 1. Dwell-day reorder (Day 6 out-and-back POIs) — needs a scope decision (spur-distance axis vs. reorder-in-drive vs. leave near→far). Read spine has NO near→far (edit-only); Day 6 keeps mile order until this lands.
@@ -53,4 +60,5 @@ dnd-kit `SortableContext` — deferred; pointer-vs-rect (`computeInsertIndex`) c
 ## Gotchas
 - Tests: the real runner is **`node:test` via tsx**, NOT vitest (there is no committed vitest config; a bare `npx vitest run` fails at the `@/` alias). Run: `cd web && npx tsx --test <files>`. Current suite = **263 tests, all passing** (32 files). Earlier "193/193" and "207" figures came from tooling not in the tree — ignore them. Quirk: a single all-32-files invocation aborts before printing the summary; run per lib-dir (`corridor`+`trips` = 144, `itinerary` = 93, `discovery`+`routing` = 15, `corridor/data`+`components/trip` = 11) and sum.
 - Typecheck (the reliable gate): `npm run typecheck` in `web/`. One PRE-EXISTING error in `scripts/verify-bell2-seed.ts` (`SeedResolution.find`) is tolerated; product `src/` is clean.
-- Live-verify the slideup: dev server via `preview_start` name `web` (port 3210); dev talks to TEST because `.env.development.local` (znldz) overrides `.env.local`, and the edit flag `NEXT_PUBLIC_LIVING_PLAN_EDIT=1` comes from `.env.local`. Soft-nav only: `/demo/livingplan` → click "Open the TEST copy" → select day → "Edit". Synthetic dnd needs pointerdown+moves and pointerup in SEPARATE js calls (rAF gap), target mid-viewport (top edge auto-scrolls). Hard-reload `/trip/[id]?day=day-N` = surface #2 fresh server read.
+- Live-verify the slideup: dev server via `preview_start` name `web` (port 3210); dev talks to TEST because `.env.development.local` (znldz) overrides `.env.local`, and the edit flag `NEXT_PUBLIC_LIVING_PLAN_EDIT=1` comes from `.env.local`. Soft-nav only: `/demo/livingplan` → click "Open the TEST copy" → select day → "Edit". Hard-reload `/trip/[id]?day=day-N` = surface #2 fresh server read.
+- Synthetic dnd (hard-won): pointerdown+threshold, then moves, then pointerup each in SEPARATE js calls (rAF gap) — pointerup in the same call as moves → `onDragEnd` never fires. Keep the drag target mid-viewport: the top/bottom edges trigger dnd-kit auto-scroll, which shifts the layout AND (critically) inflates `delta`. `active.rect.current.translated` is the on-screen truth for the dragged midpoint; `initial+delta` diverges under scroll — use translated. `read_console`/`__drag()` read in the SAME call as the dispatch is stale (async) — read state in a separate call. `over` is non-deterministic across cluster boundaries with synthetic events (cross-node drop can't be forced) — verify cross-node by hand. Escape cancels the drag AND closes the slideup.
