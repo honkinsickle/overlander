@@ -1,13 +1,18 @@
-# Branch State — `feat/manual-trip-edit`
+# Branch State — `main` (manual-edit + living-plan arcs MERGED)
 
 ```
-Branch:      feat/manual-trip-edit   (manual drag-to-edit: pin / unpin / reorder POIs)
-HEAD:        f2f07ae   <- sha this file was written against; the review-gate commit
-                          that ADDS this file also carries the Step 3 code
-                          (day-detail-node-blocks insertion indicator) — so actual
-                          HEAD sits one commit ahead of f2f07ae carrying code+docs.
-                          That is THIS gate, not a discrepancy (CLAUDE.md §SESSION
-                          START step 3).
+Branch:      main   (both feature arcs merged in; working branch is now main)
+HEAD/main:   d68cd1c   — PUSHED to origin/main (fast-forward 1859cff → d68cd1c,
+                          62 commits). origin/main == local main == d68cd1c.
+Merged in:   feat/living-plan-editing (tip c3611d8, 20 commits, LLM/NL trip-edit)
+             + feat/manual-trip-edit (42-commit manual-edit arc on top). manual
+             DESCENDS from living-plan (merge-base c3611d8), so both went in as
+             two clean fast-forwards; both branches are fully contained in main.
+Deploy:      Vercel PRODUCTION deploy of d68cd1c FAILED (build error, ~22s).
+             https://vercel.com/acwcreative-6405s-projects/overlander/D5jacdSMdex12yuawSa6eaNCGfGQ
+             Suspect: `next build` typechecks all files, so the tolerated
+             `scripts/verify-bell2-seed.ts` TS error breaks a real prod build
+             (src/ itself is clean). NOT investigated/intervened — Adam's call.
 Written:     2026-07-22
 DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
              as of restore@2026-07-22T20:24Z. No verification fixtures injected.
@@ -16,14 +21,6 @@ DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
              optimistic localRanks and any interaction re-persists them (writes
              tag `node-edit@`, vs a restore's `restore@`), silently undoing the
              restore. This was the "ranks reappeared after I cleared them" anomaly.
-Ancestor:    feat/living-plan-editing (tip c3611d8) is NOT a sibling — it is an
-             ANCESTOR of this branch. merge-base(the two) = c3611d8; living-plan
-             is fully contained here. main..feat/manual-trip-edit = 62 commits =
-             20 living-plan (LLM/NL trip-editing) + 42 manual-edit arc.
-             CONSEQUENCE: this branch CANNOT merge to main without also merging
-             ALL of feat/living-plan-editing. To ship the manual-edit arc alone,
-             the arc must first be split off main (rebase/cherry-pick), or
-             living-plan merged/decided on first.
 ```
 
 _Session-restart aid. Overwrite in place at every "stop for review" gate — do not fork per session._
