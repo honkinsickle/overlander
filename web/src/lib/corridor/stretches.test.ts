@@ -10,6 +10,8 @@ import {
   dayStartMiles,
   positionPlacesOnDay,
   assignPlacesToStretches,
+  scopeRankKey,
+  sortClusterByRank,
   type PositionedPlace,
 } from "./stretches";
 
@@ -262,4 +264,69 @@ test("hybrid: empty serverClusters (fallback day) → every place is residual", 
   });
   assert.deepEqual(nodeClusters, [[], []]);
   assert.deepEqual(stretches[0].placeIds, ["a", "b", "c"]);
+});
+
+// ── scopeRankKey (shared node-scoping — one rule for every surface) ──────────
+
+test("scopeRankKey: keeps a rank only in the cluster it was authored for", () => {
+  const cities = [
+    { id: "kitwanga", placeIds: ["a", "b"] },
+    { id: "stewart", placeIds: ["c"] },
+  ];
+  const ranks = new Map([
+    ["a", { nodeId: "kitwanga", rank: 1 }],
+    ["b", { nodeId: "kitwanga", rank: 0 }],
+    ["c", { nodeId: "stewart", rank: 0 }],
+  ]);
+  const key = scopeRankKey(cities, ranks);
+  assert.deepEqual([...(key as Map<string, number>)], [["a", 1], ["b", 0], ["c", 0]]);
+});
+
+test("scopeRankKey: a foreign-scoped rank is dropped (inert), not carried", () => {
+  const cities = [{ id: "kitwanga", placeIds: ["a", "seven"] }];
+  const ranks = new Map([
+    ["a", { nodeId: "kitwanga", rank: 0 }],
+    ["seven", { nodeId: "stewart", rank: -99 }], // scoped to a DIFFERENT node
+  ]);
+  const key = scopeRankKey(cities, ranks);
+  assert.deepEqual([...(key as Map<string, number>)], [["a", 0]]); // "seven" omitted
+});
+
+test("scopeRankKey: undefined when nothing is ranked (callers skip the sort)", () => {
+  const cities = [{ id: "kitwanga", placeIds: ["a", "b"] }];
+  assert.equal(scopeRankKey(cities, new Map()), undefined);
+  assert.equal(scopeRankKey(cities, undefined), undefined);
+  // A rank that lands in no present cluster → empty → undefined.
+  assert.equal(
+    scopeRankKey(cities, new Map([["a", { nodeId: "elsewhere", rank: 0 }]])),
+    undefined,
+  );
+});
+
+// ── sortClusterByRank — the ONE ordering rule (Hop A / Hop B / edit all call it) ─
+
+test("sortClusterByRank: ranked members sort by rank, unranked appended in server order", () => {
+  // Server order (mile order from the bucket) is ["a","b","c"]; only b,c ranked.
+  const out = sortClusterByRank(["a", "b", "c"], new Map([["c", 0], ["b", 1]]));
+  assert.deepEqual(out, ["c", "b", "a"]); // c(0),b(1) by rank, then a appended
+});
+
+test("sortClusterByRank: foreign-scoped rank inert → cluster falls to server order", () => {
+  // scopeRankKey would already have dropped the foreigner; sortClusterByRank
+  // with no in-cluster ranks returns server order verbatim.
+  const cities = [{ id: "kitwanga", placeIds: ["a", "b", "c"] }];
+  const ranks = new Map([["b", { nodeId: "stewart", rank: -99 }]]); // all foreign
+  const key = scopeRankKey(cities, ranks);
+  assert.deepEqual(sortClusterByRank(["a", "b", "c"], key), ["a", "b", "c"]);
+});
+
+test("sortClusterByRank: mixed ranked/unranked — ranked first, unranked keep server order", () => {
+  // The override-without-rank case (added waypoint / geometry shift / pre-rank
+  // override): 'a' has no rank and must land in the appended tail at its server
+  // position, NOT be re-sorted — the same rule the edit spine uses.
+  const out = sortClusterByRank(
+    ["a", "b", "c", "d"],
+    new Map([["d", 0], ["b", 1]]),
+  );
+  assert.deepEqual(out, ["d", "b", "a", "c"]); // d,b by rank; a,c appended in server order
 });

@@ -42,6 +42,7 @@ import type { LngLat } from "@/lib/routing/route-between";
 import {
   positionPlacesOnDay,
   assignPlacesToStretches,
+  scopeRankKey,
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
 import { haversineMi } from "@/lib/routing/point-to-polyline";
@@ -150,20 +151,10 @@ export function DayDetailNodeBlocks({
     const roundTrip =
       cities.length >= 2 && sameCoords(anchor, cities[cities.length - 1]?.coords);
     // CLUSTER order (rankKey): a place's authored rank is honored ONLY in the
-    // cluster its rank was scoped to. Walk server placeIds so a place carrying
-    // another node's rank (regen/geometry/unpin drift) is simply omitted here →
-    // it's unranked in this cluster → appended, never sorted by a stale value.
-    let rankKey: Map<string, number> | undefined;
-    if (ranks && ranks.size) {
-      const m = new Map<string, number>();
-      cities.forEach((c) =>
-        c.placeIds.forEach((pid) => {
-          const e = ranks.get(pid);
-          if (e && e.nodeId === c.id) m.set(pid, e.rank);
-        }),
-      );
-      if (m.size) rankKey = m;
-    }
+    // cluster its rank was scoped to (scopeRankKey walks server placeIds and keeps
+    // a rank only when entry.nodeId === c.id) — the shared scoping the read spine
+    // uses too, so a place carrying another node's rank is omitted on every surface.
+    const rankKey = scopeRankKey(cities, ranks);
     // STRETCH/residual order (orderKey): near→far on a round-trip day only — a
     // SEPARATE map from rankKey (different unit; the two never sort one cluster).
     let orderKey: Map<string, number> | undefined;

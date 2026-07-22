@@ -100,11 +100,36 @@ export type Stretch = {
 /** Ties within this many miles keep the upstream node (mirrors bucket.ts). */
 const TIE_EPS_MI = 0.01;
 
+/** Node-scope the authored ranks for a day: walk each city's server placeIds and
+ *  keep a place's rank ONLY in the cluster its rank was authored for (`entry.nodeId
+ *  === c.id`). A place carrying another node's rank (regen/geometry/unpin drift) is
+ *  omitted → it reads as unranked in whatever cluster it's in → appended, never
+ *  sorted by a stale value. The single map both the edit spine and the read spine
+ *  feed to `sortClusterByRank` — one scoping rule, so the surfaces can't drift.
+ *  Returns undefined when nothing is ranked (so callers can skip the sort). */
+export function scopeRankKey(
+  cities: { id: string; placeIds: string[] }[],
+  ranks?: ReadonlyMap<string, { nodeId: string; rank: number }>,
+): Map<string, number> | undefined {
+  if (!ranks || !ranks.size) return undefined;
+  const m = new Map<string, number>();
+  for (const c of cities) {
+    for (const pid of c.placeIds) {
+      const e = ranks.get(pid);
+      if (e && e.nodeId === c.id) m.set(pid, e.rank);
+    }
+  }
+  return m.size ? m : undefined;
+}
+
 /** Order one server cluster: ranked members (by authored rank) first, unranked
  *  ones APPENDED in server order. `rankKey` is node-scoped, so a place carrying
  *  another node's rank isn't in it and lands in the appended tail rather than
- *  sorting by a stale value. No ranked members → server order verbatim. */
-function sortClusterByRank(ids: string[], rankKey?: Map<string, number>): string[] {
+ *  sorting by a stale value. No ranked members → server order verbatim.
+ *  The single ordering rule shared by every surface — the edit spine (via
+ *  assignPlacesToStretches), the read-spine pool cluster (Hop A), and the
+ *  read-spine curated key-stop group (Hop B) all call THIS, never a reimplementation. */
+export function sortClusterByRank(ids: string[], rankKey?: Map<string, number>): string[] {
   if (!rankKey) return [...ids];
   const ranked = ids.filter((id) => rankKey.has(id));
   if (ranked.length === 0) return [...ids];
