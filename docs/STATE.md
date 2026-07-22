@@ -1,8 +1,16 @@
 # Branch State — `feat/manual-trip-edit`
 
-_Session-restart aid. Overwrite in place at every "stop for review" gate — do not fork per session. Last updated: 2026-07-22._
+```
+Branch:      feat/manual-trip-edit
+HEAD:        51e8268          <- the sha this file was written against
+Written:     2026-07-22
+DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
+             as of restore@2026-07-21T22:28Z. No verification fixtures injected.
+```
 
-Base: `origin/main` (merge-base `1859cff`). HEAD: `2ba79cb`.
+_Session-restart aid. Overwrite in place at every "stop for review" gate — do not fork per session._
+
+Base: `origin/main` (merge-base `1859cff`).
 
 ## Committed (recent arc — POI sequencing, "Option B")
 The live thread is drag-to-order POIs within/between node clusters via durable fractional ranks:
@@ -16,7 +24,7 @@ The live thread is drag-to-order POIs within/between node clusters via durable f
 Earlier landed on this branch: node-stack model (`3d654c8`→render), living-plan productionization + partial re-plan, corridor northern gazetteer.
 
 ## In-flight (uncommitted working tree)
-None. `2ba79cb` landed the node-scoped `placeRanks` change (was the in-flight item); tree clean except this file.
+Never-cold-start scaffolding lands as the review-gate commit ONE above the `HEAD` recorded in the header block (`51e8268`): the CLAUDE.md SESSION-START/STANDING-RULES/WRITE-DISCIPLINE/POINTERS block, this header block, `docs/decisions/README.md`, and `docs/BACKLOG.md`. No code touched. Expect a clean tree with actual HEAD exactly one commit ahead of `51e8268` — that is the healthy state per CLAUDE.md §SESSION START step 3, not a discrepancy.
 
 ## Queued
 1. **Read spine honors `placeRanks` (APPROVED, planning).** Authored order shows in the EDIT spine only; the read spine (`DayDetailCorridor` non-edit), iPad, and share still mile-order it — same edit/read divergence Fix #1 (`6ecd725`) closed for overrides. Put the scoped-rank sort in a shared `lib/corridor` fn every surface calls; edit-path output must stay byte-identical.

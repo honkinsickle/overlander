@@ -1,3 +1,51 @@
+# CLAUDE.md — Overlander (never-cold-start system)
+
+## SESSION START — MANDATORY, IN ORDER
+1. Read `docs/STATE.md` in full.
+2. Run: `git rev-parse HEAD`, `git branch --show-current`, `git status`.
+3. Compare actual HEAD/branch against STATE.md's header block. Two states are
+   healthy and need no action:
+   - actual branch == STATE.md `Branch`, **and**
+   - actual HEAD == STATE.md `HEAD`, **or** actual HEAD is exactly ONE commit
+     ahead of STATE.md `HEAD` and that one commit is the review-gate commit
+     that wrote this STATE.md. Verify with `git log --oneline <STATE.HEAD>..HEAD`:
+     the range is a SINGLE commit, and it modifies `docs/STATE.md`
+     (`git show --stat HEAD` lists it). STATE.md cannot contain the sha of the
+     commit that commits it, so it records the sha it was written against; the
+     review-gate commit legitimately sits one above and, per WRITE DISCIPLINE,
+     bundles that gate's work — STATE.md's "Committed" section describes it.
+4. Anything else — branch differs; HEAD is behind STATE.md's claim; HEAD is
+   more than one commit ahead; HEAD is not a descendant of STATE.md's `HEAD`;
+   or there is uncommitted/untracked work STATE.md's "In-flight" does not
+   mention — STOP. Report the discrepancy. Do NOT reconcile silently and do
+   NOT begin work. Adam decides.
+5. If STATE.md's `DB baseline` says verification fixtures were injected, do a
+   read-only read-back and report the literal value before any work.
+6. Report position and wait.
+
+## STANDING RULES
+- Never work directly on `main`. Feature branches only.
+- Adam owns every push, merge, deploy, and production gate.
+- PROD trip `dawson-vancouver-cassiar` is FROZEN. Never regenerate or touch it.
+- TEST Supabase `znldzjdatkogdktymtvi`. PROD `nqzeywzcowujzyegxbsr`. Never cross them.
+- Corpus materialize is additive only. Never `--rematerialize` without explicit authorization.
+- Grounding: every field real or absent, never invented.
+- iOverlander is a banned data source.
+- The standing unstaged `.gitignore` is never committed.
+- Stop for review at every gate.
+
+## WRITE DISCIPLINE
+- Update `docs/STATE.md` as part of every review-gate commit. Not a follow-up.
+- Any decision that closes an option gets a dated ADR in `docs/decisions/`
+  BEFORE the code that depends on it.
+
+## POINTERS
+- Current position: `docs/STATE.md`
+- Why things are the way they are: `docs/decisions/`
+- Open work: `docs/BACKLOG.md`
+
+---
+
 # OVERLANDER_01 — Claude Code Working Document
 
 ## Project goal
