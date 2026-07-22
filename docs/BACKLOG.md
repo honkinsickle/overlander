@@ -11,6 +11,31 @@ thing worked, it moves into STATE.md §Queued.
   insufficient. (See STATE.md §Parked.)
 
 ## Someday / unscheduled
+- **`reorderWaypoints` was dead — deleted in STEP 2; id-based only if a consumer
+  returns.** The index-based `reorderWaypoints` (repo) + `reorderWaypointsAction`
+  pair had NO consumer (live drag-reorder goes through `node-actions`/`localRanks`
+  fractional `placeRanks`, not waypoint-index splice). Both were deleted rather
+  than converted, removing a conflict-class (b) `refuse` path entirely instead of
+  fixing it. IF a waypoint-reorder consumer is ever added: implement it id-based
+  ("move waypoint X before waypoint Y"), NEVER index-based — position-splice
+  corrupts against any changed list (a stale client view reorders the wrong pair),
+  and id-based lands in class (a) so its write can `retry`/compose. Same lesson as
+  `placeRanks` being keyed by placeId, not position.
+- **Wizard form-actions can't surface `TRIP_CONFLICT`** — the four void
+  `writeWizardSlice` callers in `plan/actions.ts` (`addStopAction`,
+  `removeStopAction`, `saveStopsAction`, `toggleSuggestionAction`) are consumed as
+  `<form action={…}>` server actions returning `void`, so a `refuse` conflict has
+  no return channel. `addStop`/`removeStop`/`toggleSuggestion` stay on-page and the
+  trailing `revalidatePath` re-reads fresh state, so a dropped edit shows as absent
+  and the user retries.
+- **KNOWN LOSSY PATH — `saveStopsAction` silently drops the `avoidHighways`
+  toggle on a `refuse` conflict.** Unlike its stay-on-page siblings, it `redirect`s
+  to the loader after the write, so a conflict advances the wizard having dropped
+  the toggle with no signal. Do NOT call this benign: it only looks harmless at
+  today's 9 single-owner trips — exactly the light-usage reasoning the `version`
+  column exists to stop relying on. Fix: convert the stops page to `useActionState`
+  so the `refuse` conflict has a return channel and surfaces `TRIP_CHANGED_ERROR`
+  (same treatment the three `FormState` wizard steps already got).
 - **Reference trips render a remove ✕ that always fails** — the read spine shows
   the ✕ on waypoint tiles for reference trips too, but `removeWaypointAction` on a
   slug hits the in-memory `TRIPS` fixture (`repository.ts:184`), misses a DB-only

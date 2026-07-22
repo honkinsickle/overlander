@@ -20,6 +20,8 @@ import {
   isUserTripId,
   getUserTrip,
   writeWizardSlice,
+  TRIP_CONFLICT,
+  TRIP_CHANGED_ERROR,
 } from "@/lib/trips/user-trips";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ALL_CHIP_IDS } from "./interests";
@@ -386,6 +388,7 @@ export async function saveGoingAction(
   const ok = isUserTripId(draftId)
     ? await writeWizardSlice(draftId, { going: data, currentStep: "vehicle" })
     : await repo.saveGoing(draftId, data);
+  if (ok === TRIP_CONFLICT) return { error: TRIP_CHANGED_ERROR };
   if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");
@@ -420,6 +423,7 @@ export async function saveVehicleAction(
   const ok = isUserTripId(draftId)
     ? await writeWizardSlice(draftId, { vehicle: data, currentStep: "interests" })
     : await repo.saveVehicle(draftId, data);
+  if (ok === TRIP_CONFLICT) return { error: TRIP_CHANGED_ERROR };
   if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");
@@ -442,6 +446,7 @@ export async function saveInterestsAction(
   const ok = isUserTripId(draftId)
     ? await writeWizardSlice(draftId, { interests: data, currentStep: "stops" })
     : await repo.saveInterests(draftId, data);
+  if (ok === TRIP_CONFLICT) return { error: TRIP_CHANGED_ERROR };
   if (!ok) return { error: "Trip not found." };
 
   revalidatePath(`/plan/${draftId}`, "layout");

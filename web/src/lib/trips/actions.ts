@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import * as repo from "./repository";
 import { addedPlaceToWaypoint, type AddedPlace } from "./added-place";
-import { isUserTripId, updateUserTripPayload } from "./user-trips";
+import {
+  isUserTripId,
+  updateUserTripPayload,
+  TRIP_CONFLICT,
+  TRIP_CHANGED_ERROR,
+} from "./user-trips";
 import { recomputeDay } from "./recompute-day";
 import { checkNotFrozen } from "@/lib/itinerary/rails";
 import type { OfflinePhase } from "./types";
@@ -31,6 +36,7 @@ export async function renameDayAction(
     return { ok: false, error: "Day label must be under 120 characters." };
   }
   const day = await repo.renameDay(tripId, dayId, label);
+  if (day === TRIP_CONFLICT) return { ok: false, error: TRIP_CHANGED_ERROR };
   if (!day) return { ok: false, error: "Day not found." };
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
@@ -52,6 +58,7 @@ export async function pickOvernightAction(
   overnightId: string,
 ): Promise<ActionResult> {
   const updated = await repo.pickOvernight(tripId, dayId, overnightId);
+  if (updated === TRIP_CONFLICT) return { ok: false, error: TRIP_CHANGED_ERROR };
   if (!updated) return { ok: false, error: "Overnight not found." };
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
@@ -116,32 +123,12 @@ export async function removeWaypointAction(
   return { ok: true };
 }
 
-export async function reorderWaypointsAction(
-  tripId: string,
-  dayId: string,
-  fromIdx: number,
-  toIdx: number,
-): Promise<ActionResult> {
-  if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx)) {
-    return { ok: false, error: "Invalid indices." };
-  }
-  if (fromIdx < 0 || toIdx < 0) {
-    return { ok: false, error: "Invalid indices." };
-  }
-  const ok = await repo.reorderWaypoints(tripId, dayId, fromIdx, toIdx);
-  if (!ok) return { ok: false, error: "Could not reorder stops." };
-  // Stop order changes a through-stops route (2026-07-07 ruling:
-  // reorder triggers reroute).
-  await recomputeDayBestEffort(tripId, dayId);
-  revalidatePath(`/trip/${tripId}`);
-  return { ok: true };
-}
-
 export async function resetDayToReferenceAction(
   tripId: string,
   dayId: string,
 ): Promise<ActionResult> {
   const ok = await repo.resetDayToReference(tripId, dayId);
+  if (ok === TRIP_CONFLICT) return { ok: false, error: TRIP_CHANGED_ERROR };
   if (!ok) {
     return {
       ok: false,
@@ -166,10 +153,12 @@ export async function setOfflinePhasesAction(
   if (!Array.isArray(phases)) {
     return { ok: false, error: "Invalid phases payload." };
   }
-  const updated = await updateUserTripPayload(tripId, (trip) => ({
-    ...trip,
-    offlinePhases: phases,
-  }));
+  const updated = await updateUserTripPayload(
+    tripId,
+    (trip) => ({ ...trip, offlinePhases: phases }),
+    { onConflict: "refuse" }, // whole-array replace — retry would drop a concurrent phase edit
+  );
+  if (updated === TRIP_CONFLICT) return { ok: false, error: TRIP_CHANGED_ERROR };
   if (!updated) return { ok: false, error: "Could not save phases." };
   revalidatePath(`/trips/${tripId}`);
   return { ok: true, data: updated.offlinePhases ?? [] };
@@ -205,7 +194,7 @@ export async function setOfflinePhaseHashAction(
       updatedAt: now,
     };
     return { ...trip, offlinePhases: nextPhases };
-  });
+  }, { onConflict: "retry" }); // per-phase stamp on a found id — composes
   if (!updated) return { ok: false, error: "Phase not found." };
   revalidatePath(`/trips/${tripId}`);
   return { ok: true };

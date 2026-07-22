@@ -5,6 +5,8 @@ import {
   isUserTripId,
   resetUserTripDayToReference,
   updateUserTripPayload,
+  TRIP_CONFLICT,
+  type TripConflict,
 } from "./user-trips";
 import type {
   CorridorCity,
@@ -86,15 +88,20 @@ export async function renameDay(
   tripId: string,
   dayId: string,
   label: string,
-): Promise<Day | null> {
+): Promise<Day | TripConflict | null> {
   if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day) return null;
-      day.label = label;
-      return next;
-    });
+    const updated = await updateUserTripPayload(
+      tripId,
+      (trip) => {
+        const next = structuredClone(trip);
+        const day = next.days.find((d) => d.id === dayId);
+        if (!day) return null;
+        day.label = label;
+        return next;
+      },
+      { onConflict: "refuse" }, // absolute set of day.label
+    );
+    if (updated === TRIP_CONFLICT) return TRIP_CONFLICT;
     return updated?.days.find((d) => d.id === dayId) ?? null;
   }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
@@ -115,7 +122,7 @@ export async function removeDay(
       if (idx === -1) return null;
       next.days.splice(idx, 1);
       return next;
-    });
+    }, { onConflict: "retry" }); // by-id removal composes
     return updated !== null;
   }
   if (tripId === "la-to-deadhorse") await ensureAlaskaUpgraded();
@@ -144,7 +151,7 @@ export async function addWaypoint(
       day.waypoints.push(waypoint);
       next.routePolyline = undefined;
       return next;
-    });
+    }, { onConflict: "retry" }); // by-id append composes
     return (
       updated?.days
         .find((d) => d.id === dayId)
@@ -178,7 +185,7 @@ export async function removeWaypoint(
       day.waypoints.splice(idx, 1);
       next.routePolyline = undefined;
       return next;
-    });
+    }, { onConflict: "retry" }); // by-id removal composes
     return updated !== null;
   }
   const trip = TRIPS[tripId];
@@ -188,55 +195,6 @@ export async function removeWaypoint(
   const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
   if (idx === -1) return false;
   day.waypoints.splice(idx, 1);
-  trip.routePolyline = undefined;
-  return true;
-}
-
-/** Reorder waypoints within a single day. `fromIdx` / `toIdx` are
- *  positions in `day.waypoints`. Clears `routePolyline` so the route
- *  redraws on next render (stop order affects the line). */
-export async function reorderWaypoints(
-  tripId: string,
-  dayId: string,
-  fromIdx: number,
-  toIdx: number,
-): Promise<boolean> {
-  if (fromIdx === toIdx) return true;
-
-  if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day) return null;
-      if (
-        fromIdx < 0 ||
-        toIdx < 0 ||
-        fromIdx >= day.waypoints.length ||
-        toIdx >= day.waypoints.length
-      ) {
-        return null;
-      }
-      const [moved] = day.waypoints.splice(fromIdx, 1);
-      day.waypoints.splice(toIdx, 0, moved);
-      next.routePolyline = undefined;
-      return next;
-    });
-    return updated !== null;
-  }
-  const trip = TRIPS[tripId];
-  if (!trip) return false;
-  const day = trip.days.find((d) => d.id === dayId);
-  if (!day) return false;
-  if (
-    fromIdx < 0 ||
-    toIdx < 0 ||
-    fromIdx >= day.waypoints.length ||
-    toIdx >= day.waypoints.length
-  ) {
-    return false;
-  }
-  const [moved] = day.waypoints.splice(fromIdx, 1);
-  day.waypoints.splice(toIdx, 0, moved);
   trip.routePolyline = undefined;
   return true;
 }
@@ -265,7 +223,7 @@ export async function applyDayDerived(
       day.driveHours = derived.driveHours;
       day.corridorCities = derived.corridorCities;
       return next;
-    });
+    }, { onConflict: "abandon" }); // best-effort; a conflict means this derived is stale
     return updated !== null;
   }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
@@ -283,7 +241,7 @@ export async function applyDayDerived(
 export async function resetDayToReference(
   tripId: string,
   dayId: string,
-): Promise<boolean> {
+): Promise<boolean | TripConflict> {
   if (!isUserTripId(tripId)) return false;
   return resetUserTripDayToReference(tripId, dayId);
 }
@@ -294,22 +252,25 @@ export async function pickOvernight(
   tripId: string,
   dayId: string,
   overnightId: string,
-): Promise<OvernightSelection | null> {
+): Promise<OvernightSelection | TripConflict | null> {
   if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day?.overnight) return null;
-      const all = [day.overnight.selected, ...day.overnight.alternatives];
-      const picked = all.find((o) => o.id === overnightId);
-      if (!picked) return null;
-      const rest = all.filter((o) => o.id !== overnightId);
-      day.overnight = { selected: picked, alternatives: rest };
-      return next;
-    });
-    return (
-      updated?.days.find((d) => d.id === dayId)?.overnight ?? null
+    const updated = await updateUserTripPayload(
+      tripId,
+      (trip) => {
+        const next = structuredClone(trip);
+        const day = next.days.find((d) => d.id === dayId);
+        if (!day?.overnight) return null;
+        const all = [day.overnight.selected, ...day.overnight.alternatives];
+        const picked = all.find((o) => o.id === overnightId);
+        if (!picked) return null;
+        const rest = all.filter((o) => o.id !== overnightId);
+        day.overnight = { selected: picked, alternatives: rest };
+        return next;
+      },
+      { onConflict: "refuse" }, // absolute set of day.overnight
     );
+    if (updated === TRIP_CONFLICT) return TRIP_CONFLICT;
+    return updated?.days.find((d) => d.id === dayId)?.overnight ?? null;
   }
   const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
   if (!day?.overnight) return null;
