@@ -60,7 +60,7 @@ async function main() {
   console.log(`     (force-included past popFloor 10k — Bell 2 pop≈${bellPop})`);
   console.log(`     day 5 spine: ${(d5.corridorCities ?? []).map((c) => `${c.name}@${Math.round(c.milesFromStart)}`).join(" · ")}`);
 
-  const resolved = (served.seedResolutions ?? []).find((r: { name?: string }) => /bell 2/i.test(r.name ?? ""));
+  const resolved = (served.seedResolutions ?? []).find((r) => /bell.?2/i.test(r.seedId));
   console.log(`\n4. seedResolutions reports it: ${resolved ? JSON.stringify(resolved) : "absent"}`);
 
   const card = (d5.segmentSuggestions ?? []).find((p) => /bell 2 lodge/i.test(p.title ?? ""));
