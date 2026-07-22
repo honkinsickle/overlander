@@ -16,8 +16,14 @@ DB baseline: clean — TEST copy dawson-cassiar-livingplan-test, placeRanks {}
              optimistic localRanks and any interaction re-persists them (writes
              tag `node-edit@`, vs a restore's `restore@`), silently undoing the
              restore. This was the "ranks reappeared after I cleared them" anomaly.
-Sibling:     feat/living-plan-editing (last commit c3611d8) holds the SEPARATE
-             LLM/NL trip-editing work — do NOT conflate with this branch.
+Ancestor:    feat/living-plan-editing (tip c3611d8) is NOT a sibling — it is an
+             ANCESTOR of this branch. merge-base(the two) = c3611d8; living-plan
+             is fully contained here. main..feat/manual-trip-edit = 62 commits =
+             20 living-plan (LLM/NL trip-editing) + 42 manual-edit arc.
+             CONSEQUENCE: this branch CANNOT merge to main without also merging
+             ALL of feat/living-plan-editing. To ship the manual-edit arc alone,
+             the arc must first be split off main (rebase/cherry-pick), or
+             living-plan merged/decided on first.
 ```
 
 _Session-restart aid. Overwrite in place at every "stop for review" gate — do not fork per session._
