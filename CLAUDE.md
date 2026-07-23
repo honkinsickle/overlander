@@ -1,27 +1,11 @@
 # CLAUDE.md — Overlander (never-cold-start system)
 
-## SESSION START — MANDATORY, IN ORDER
-1. Read `docs/STATE.md` in full.
-2. Run: `git rev-parse HEAD`, `git branch --show-current`, `git status`.
-3. Compare actual HEAD/branch against STATE.md's header block. Two states are
-   healthy and need no action:
-   - actual branch == STATE.md `Branch`, **and**
-   - actual HEAD == STATE.md `HEAD`, **or** actual HEAD is exactly ONE commit
-     ahead of STATE.md `HEAD` and that one commit is the review-gate commit
-     that wrote this STATE.md. Verify with `git log --oneline <STATE.HEAD>..HEAD`:
-     the range is a SINGLE commit, and it modifies `docs/STATE.md`
-     (`git show --stat HEAD` lists it). STATE.md cannot contain the sha of the
-     commit that commits it, so it records the sha it was written against; the
-     review-gate commit legitimately sits one above and, per WRITE DISCIPLINE,
-     bundles that gate's work — STATE.md's "Committed" section describes it.
-4. Anything else — branch differs; HEAD is behind STATE.md's claim; HEAD is
-   more than one commit ahead; HEAD is not a descendant of STATE.md's `HEAD`;
-   or there is uncommitted/untracked work STATE.md's "In-flight" does not
-   mention — STOP. Report the discrepancy. Do NOT reconcile silently and do
-   NOT begin work. Adam decides.
-5. If STATE.md's `DB baseline` says verification fixtures were injected, do a
-   read-only read-back and report the literal value before any work.
-6. Report position and wait.
+## SESSION START
+1. Read `docs/STATE.md`.
+2. Run: `git branch --show-current`, `git status`.
+3. If the branch differs from STATE.md's, or there is uncommitted work
+   STATE.md does not mention — report it and wait. Do not reconcile silently.
+4. Report position. Wait for direction.
 
 ## STANDING RULES
 - Never work directly on `main`. Feature branches only.
@@ -33,16 +17,45 @@
 - iOverlander is a banned data source.
 - The standing unstaged `.gitignore` is never committed.
 - Stop for review at every gate.
-
-## WRITE DISCIPLINE
-- Update `docs/STATE.md` as part of every review-gate commit. Not a follow-up.
-- Any decision that closes an option gets a dated ADR in `docs/decisions/`
-  BEFORE the code that depends on it.
+- The gate is `cd web && npx next build`, exit 0.
 
 ## POINTERS
-- Current position: `docs/STATE.md`
-- Why things are the way they are: `docs/decisions/`
-- Open work: `docs/BACKLOG.md`
+- `docs/STATE.md` — position
+- `docs/BACKLOG.md` — parked
+- `docs/decisions/` — why
+
+## WRITE DISCIPLINE
+- Update `docs/STATE.md` in the SAME commit as the work.
+
+## RUNBOOK — how to run (stable reference)
+- **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
+  (per lib-dir).
+- **Build gate:** `cd web && npx next build`, exit 0.
+- **Dev server:** `preview_start` name `web` (port 3210, talks to TEST via
+  `.env.development.local`; flag from `.env.local`). A UUID trip needs an authed
+  session (RLS); a slug renders anonymously.
+- **Verify scripts** — each drives the REAL fns under the seeded owner JWT (the
+  DI `client` seam), run from `web/` with
+  `npx tsx --env-file=.env.development.local scripts/<name>.ts`:
+  - `verify-trip-version.ts` — optimistic-concurrency: real version conflicts
+    from racing two writes off one base version.
+  - `verify-trip-collapse.ts` — add/remove is ONE guarded write (waypoint +
+    derived land together; routing failure still persists the waypoint).
+  - `verify-trip-step4.ts` — ADR §1 node-action dispatch onto `public.trips`
+    (UUID) under RLS: bake-at-write, closure-recompute concurrency, ownership +
+    frozen-slug refusal.
+- **Seeded TEST credentials:** `seed-owner@overlander.test` /
+  `seed-other@overlander.test` (password is TEST-only, printed by the seed).
+  Seed/re-seed (idempotent) with
+  `cd web && npx tsx --env-file=.env.development.local scripts/seed-test-user.ts`.
+  TEST `public.trips` is otherwise empty — these are the ONLY way to exercise the
+  RLS write path off PROD.
+- **Gotchas (hard-won):**
+  - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
+  - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
+  - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
+    edited day re-persists it via the client.
+  - `rm -rf web/.next` when compile errors don't match what's on disk.
 
 ---
 
