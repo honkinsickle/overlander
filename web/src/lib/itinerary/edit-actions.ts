@@ -571,6 +571,21 @@ async function runGateStage(
     source_version: versionStamp("pending"),
   });
   if (error) return { ok: false, error: `Staging failed: ${error.message}` };
+
+  // Corpus feedback (spec §8.3): enqueue this re-plan's tier-2 live-resolved
+  // places as google_resolved source_records for a later `materialize`
+  // (self-densifying). TEST-only — this action refuses a non-TEST ref. Non-fatal:
+  // a corpus-write failure must never fail the re-plan.
+  const resolvedPlaces = audited.days.flatMap((d) => d.audit?.resolvedPlaces ?? []);
+  if (resolvedPlaces.length > 0) {
+    try {
+      const { enqueueResolvedPlaces } = await import("./ingest");
+      const enq = await enqueueResolvedPlaces(resolvedPlaces, supabase);
+      if (enq.errors.length > 0) console.warn("[ingest] google_resolved partial:", enq);
+    } catch (e) {
+      console.warn("[ingest] google_resolved enqueue failed (non-fatal):", e);
+    }
+  }
   return { ok: true, diff };
 }
 
