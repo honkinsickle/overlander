@@ -172,6 +172,14 @@ export async function GET(req: Request) {
   // returned no matches", so the client can say which half is missing. Mutated
   // synchronously inside each half's catch; both halves are single-threaded JS.
   const failedSources = new Set<string>();
+  // Per-source error MESSAGE for the failed sources. Only surfaced in the
+  // response behind a debug gate (below) — a Supabase/DB error can name table
+  // or column internals, so it must never reach ordinary users.
+  const sourceErrors: Record<string, string> = {};
+  const noteError = (sourceId: string, error: unknown): void => {
+    failedSources.add(sourceId);
+    sourceErrors[sourceId] = error instanceof Error ? error.message : String(error);
+  };
 
   // ── LIVE half ────────────────────────────────────────────────────────
   const livePromise: Promise<BrowsePlace[]> = (async () => {
@@ -184,7 +192,7 @@ export async function GET(req: Request) {
           sources: [googleTextSearchSource],
           textQuery: q,
           signal: req.signal,
-          onSourceError: (id) => failedSources.add(id),
+          onSourceError: noteError,
         });
       }
       // Category tiles → searchNearby fanout, mapped to the buckets Google
@@ -229,7 +237,7 @@ export async function GET(req: Request) {
       return await hydratePlacesByIds(hits.map((h) => h.id));
     } catch (err) {
       console.error("[search-area] FEDERATED_DOWN", err);
-      failedSources.add("corpus");
+      noteError("corpus", err);
       return [];
     }
   })();
@@ -248,14 +256,21 @@ export async function GET(req: Request) {
   }
 
   const failed = [...failedSources];
+  // Debug gate for the per-source error text: `?debug=1` or the server env
+  // SEARCH_DEBUG_ERRORS=1. Off by default so internal DB error strings never
+  // leak to ordinary users.
+  const debug =
+    searchParams.get("debug") === "1" || process.env.SEARCH_DEBUG_ERRORS === "1";
   const payload = {
     source: "search-area",
     places,
     counts: { live: live.length, federated: federated.length },
     failedSources: failed,
+    ...(debug && failed.length > 0 ? { sourceErrors } : {}),
   };
   // Don't pin a transient failure: only cache a fully-successful result, so a
-  // recovered source isn't masked by a 15-min-stale error payload.
+  // recovered source isn't masked by a 15-min-stale error payload. (A debug
+  // response with failures is never cached — failed.length > 0 here.)
   if (failed.length === 0) cacheSet(cacheKey, payload);
   return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
 }
