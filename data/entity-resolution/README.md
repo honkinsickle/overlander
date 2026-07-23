@@ -702,11 +702,16 @@ one source_record rather than forming sibling records).
 
 Surfaced during BC Parks (PR #63). Source-integration smoke tests write
 to the test project; the convention (CLAUDE.md "Source integration
-workflow") is to manually `DELETE FROM source_record WHERE source_id =
-'<new_source>'` after smoke validation passes, so the D4 baseline stays
-at its canonical 219 / 153 / 16 / 17 / 33. Without it, leftover smoke
-records become extra solo master_places under full-corpus `matchAll` and
-the D4 distribution drifts (BC Parks left 8 records → 227 / 161 until
+workflow") is to capture a measured baseline snapshot (row counts of
+`master_place` / `source_record` / `place_match`, and `source_record`
+grouped by `source_id`) BEFORE the test, then after smoke validation
+passes manually `DELETE FROM source_record WHERE source_id =
+'<new_source>'` and confirm the counts return to that snapshot. Restore
+to the measured snapshot, NOT to a hardcoded figure — the corpus grows,
+so any baseline written here goes stale (it was ~219 total early in
+Phase 1; far larger by 2026-07). Without teardown, leftover smoke records
+become extra solo master_places under full-corpus `matchAll` and the
+counts drift (BC Parks left 8 records → 8 extra solo places until
 cleaned).
 
 Future improvement: add a `--cleanup-after` flag to the ingester that

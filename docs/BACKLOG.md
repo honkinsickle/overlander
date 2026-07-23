@@ -64,5 +64,19 @@ thing worked, it moves into STATE.md §Queued.
   car_repair rows + cross-compat to any OSM/pipeline equivalents) is worth
   scoping. Not in the google_resolved-category PR.
 
+- **`materialize`'s final Typesense-sync stage fails (DNS `ENOTFOUND`) from a
+  network-restricted context** — the DB stages (entity resolution + promotion)
+  run and commit FIRST, then the last stage syncs `*.typesense.net`. From a
+  sandboxed/egress-restricted environment that host doesn't resolve, so the run
+  exits non-zero AFTER the corpus writes have landed: `master_place` is updated
+  but the search index is NOT. Net effect — a `materialize` run from a
+  restricted context leaves **Typesense stale** (DB and index diverge) while
+  reporting failure. Mitigations today: run `materialize` from a machine that
+  can reach `*.typesense.net`, or run `npm run -w data search:sync` separately
+  afterward to reconcile the index. Worth scoping: make the sync stage a
+  distinct, separately-resumable step (or a preflight reachability check) so a
+  DB-successful run isn't reported as a total failure and the index gap is
+  explicit. Surfaced 2026-07-23 during the google_resolved end-to-end proof.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
