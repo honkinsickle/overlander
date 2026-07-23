@@ -24,7 +24,7 @@
 ## POINTERS
 - `docs/STATE.md` — position
 - `docs/BACKLOG.md` — parked
-- `docs/decisions/` — why
+- `docs/decisions/` — the record of WHY. Read it before revisiting a settled question.
 
 ## WRITE DISCIPLINE
 - Update `docs/STATE.md` in the SAME commit as the work. For changes with no
