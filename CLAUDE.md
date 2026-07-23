@@ -27,7 +27,9 @@
 - `docs/decisions/` — why
 
 ## WRITE DISCIPLINE
-- Update `docs/STATE.md` in the SAME commit as the work.
+- Update `docs/STATE.md` in the SAME commit as the work. For changes with no
+  commit — dashboard settings, env vars, infra — open a docs-only PR the same
+  day.
 
 ## RUNBOOK — how to run (stable reference)
 - **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
