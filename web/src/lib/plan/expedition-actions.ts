@@ -14,6 +14,7 @@
 
 import { preComputeFacts } from "@/lib/itinerary/facts";
 import { generateAndAudit, ItineraryGenerationError } from "@/lib/itinerary/generate";
+import { enqueueResolvedPlaces } from "@/lib/itinerary/ingest";
 import { bakeGeneratedDays } from "@/lib/itinerary/bake";
 import { itineraryToTrip } from "@/lib/itinerary/to-trip";
 import { attachHeroPhotos } from "@/lib/imagery/destination-photo";
@@ -74,6 +75,21 @@ export async function generateExpeditionTripAction(
       source_version: `yotrippin-wizard@${new Date().toISOString().slice(0, 10)}`,
     });
     if (error) return { ok: false, error: `Persist failed: ${error.message}` };
+
+    // Corpus feedback (spec §8.3): enqueue this generation's tier-2 live-resolved
+    // places as google_resolved source_records so a later `materialize` can
+    // promote them (self-densifying). Only reachable on TEST — the guard at the
+    // top of this action refuses any non-TEST project. Non-fatal: a corpus-write
+    // failure must never fail the user's generation.
+    const resolvedPlaces = audited.days.flatMap((d) => d.audit?.resolvedPlaces ?? []);
+    if (resolvedPlaces.length > 0) {
+      try {
+        const enq = await enqueueResolvedPlaces(resolvedPlaces, supabase);
+        if (enq.errors.length > 0) console.warn("[ingest] google_resolved partial:", enq);
+      } catch (e) {
+        console.warn("[ingest] google_resolved enqueue failed (non-fatal):", e);
+      }
+    }
 
     return {
       ok: true,

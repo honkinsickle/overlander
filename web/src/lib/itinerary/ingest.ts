@@ -16,9 +16,13 @@
  * categories you intend to promote. Auto-materialize is intentionally NOT
  * wired: generation-triggered prod corpus writes need earned trust first.
  *
- * OPT-IN: nothing calls this during a normal generation unless the caller
- * explicitly enables it and passes a target client — a corpus write is a
- * deliberate act with an eyes-on target preflight.
+ * WIRED at the two TEST-guarded persist points — expedition-actions.ts (wizard
+ * generation) and edit-actions.ts (NL-edit re-plan) — each AFTER its successful
+ * persist, collecting audited.days.flatMap(d => d.audit?.resolvedPlaces ?? []).
+ * Both callers refuse unless the app is pointed at the TEST project, so this
+ * only ever writes on TEST; a PROD corpus write would need a SEPARATE deliberate
+ * gate (its own flag + a PROD field_precedence apply). The call is non-fatal:
+ * a rejected RPC is logged and never thrown into the generation/re-plan path.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
