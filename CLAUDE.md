@@ -8,7 +8,9 @@
 4. Report position. Wait for direction.
 
 ## STANDING RULES
-- Never work directly on `main`. Feature branches only.
+- `main` is protected. Direct pushes are rejected. Every change goes:
+  branch → push branch → open PR → Adam merges. CI (typecheck, test, build)
+  must pass before merge.
 - Adam owns every push, merge, deploy, and production gate.
 - PROD trip `dawson-vancouver-cassiar` is FROZEN. Never regenerate or touch it.
 - TEST Supabase `znldzjdatkogdktymtvi`. PROD `nqzeywzcowujzyegxbsr`. Never cross them.
