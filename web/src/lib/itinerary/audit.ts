@@ -306,6 +306,7 @@ export async function auditItinerary(
           displayName: r.place.displayName,
           placeId: r.place.placeId,
           coords: r.place.coords,
+          category: r.place.category,
           where: "endpoint",
         },
       };

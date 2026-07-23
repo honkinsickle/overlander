@@ -288,6 +288,11 @@ async function placeDetails(placeId: string, ledger: CostLedger): Promise<Place 
 // Normalization + persistence (shared)
 // ──────────────────────────────────────────────────────────────────────
 
+// TWIN — this switch is duplicated in web/src/lib/itinerary/resolve.ts
+// (inferCategory) so live tier-2 resolution and this rich corpus ingester map
+// Google's primaryType to the SAME corpus category vocabulary. They are copied,
+// not shared, because web/ must not import from data/ at runtime (CLAUDE.md
+// cross-workspace rule). If you change one arm, change BOTH.
 function inferCategory(p: Place): string | null {
   switch (p.primaryType) {
     case "gas_station":

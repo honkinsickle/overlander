@@ -60,6 +60,10 @@ export type ResolvedPlace = {
   displayName: string;
   placeId: string;
   coords: [number, number];
+  /** Corpus primary_category from Google's primaryType, null when Google gave
+   *  none (see resolve.ts inferCategory). Carried so a corpus write-back can
+   *  set inferred_category instead of null. */
+  category: string | null;
   where: "keyStop" | "overnight" | "endpoint";
 };
 
