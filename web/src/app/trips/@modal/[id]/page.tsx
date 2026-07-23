@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { SlideupShell } from "@/components/trip/slideup-shell";
 import { TripSlideupBody } from "@/components/trip/trip-slideup-body";
 import { getTrip } from "@/lib/trips/repository";
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 
 /** Parallel `modal` slot for /trips/[id]. Mounts the slideup over the
  *  /trips list (kept persistent by app/trips/layout.tsx). Closing via
@@ -21,7 +22,12 @@ export default async function TripsModalSlideup(
   // fork CTA isn't relevant here.
   return (
     <SlideupShell trip={trip}>
-      <TripSlideupBody trip={trip} isReference={false} isAuthed={false} />
+      <TripSlideupBody
+        trip={trip}
+        isReference={false}
+        isAuthed={false}
+        canEdit={isUserTrip(trip.id)}
+      />
     </SlideupShell>
   );
 }

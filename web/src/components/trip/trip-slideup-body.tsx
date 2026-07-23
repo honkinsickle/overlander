@@ -40,10 +40,17 @@ export function TripSlideupBody({
   trip,
   isReference,
   isAuthed,
+  canEdit = false,
 }: {
   trip: Trip;
   isReference: boolean;
   isAuthed: boolean;
+  /** Show the manual-edit surfaces (edit toggle + change-trip composer). True
+   *  only for a user-owned, editable UUID trip (`!isReference &&
+   *  isUserTripId(trip.id)`, computed by the render surface — a UUID trip only
+   *  renders to its owner under RLS). Reference slugs (incl. frozen Cassiar)
+   *  pass false, so the edit surfaces stay hidden even with the flag on. */
+  canEdit?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
@@ -303,7 +310,7 @@ export function TripSlideupBody({
             {/* TEMPORARY edit-mode toggle — floats at the bottom of the day
              *  column so the drag handles are viewable before the real "Edit
              *  Trip" entry exists. Gated + remove when the entry lands. */}
-            {LIVING_PLAN_ON && (
+            {LIVING_PLAN_ON && canEdit && (
               <button
                 type="button"
                 onClick={() => setEditMode((e) => !e)}
@@ -350,7 +357,7 @@ export function TripSlideupBody({
 
       {/* Living-plan CHANGE-TRIP box (dev-gated) — a dedicated command surface,
        *  separate from search. Floating trigger → centered composer. */}
-      {LIVING_PLAN_ON && (
+      {LIVING_PLAN_ON && canEdit && (
         <>
           {!changeOpen && (
             <button

@@ -4,6 +4,7 @@ import { TripSlideupBody } from "@/components/trip/trip-slideup-body";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getTrip } from "@/lib/trips/repository";
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 
 // TODO(scope): duplicated from app/trip/[id]/layout.tsx. Extract to a
 // shared module if a second reference trip ever lands.
@@ -26,6 +27,11 @@ export default async function SlideupTripPage(
 
   const isReference = REFERENCE_TRIP_IDS.has(trip.id);
   const isAuthed = isReference ? await checkAuthed() : false;
+  // Edit surfaces show only for a user-owned UUID trip. A UUID trip only renders
+  // here if getTrip -> getUserTrip returned it under RLS, i.e. the viewer owns
+  // it — so isUserTrip(trip.id) implies ownership. Reference slugs (incl.
+  // frozen Cassiar, a slug) are never user-trip ids, so they never qualify.
+  const canEdit = !isReference && isUserTrip(trip.id);
 
   return (
     <SlideupShell trip={trip}>
@@ -33,6 +39,7 @@ export default async function SlideupTripPage(
         trip={trip}
         isReference={isReference}
         isAuthed={isAuthed}
+        canEdit={canEdit}
       />
     </SlideupShell>
   );

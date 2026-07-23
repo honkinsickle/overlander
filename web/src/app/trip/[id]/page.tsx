@@ -4,6 +4,7 @@ import { TripSlideupBody } from "@/components/trip/trip-slideup-body";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getTrip } from "@/lib/trips/repository";
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 
 // Reference trips that expose the "Make it mine" fork CTA. Mirrors the
 // intercepting slideup route (@modal/(.)trip/[id]).
@@ -33,6 +34,8 @@ export default async function TripPage(props: PageProps<"/trip/[id]">) {
 
   const isReference = REFERENCE_TRIP_IDS.has(trip.id);
   const isAuthed = isReference ? await checkAuthed() : false;
+  // See the intercepting route: a rendered UUID trip is owner-scoped by RLS.
+  const canEdit = !isReference && isUserTrip(trip.id);
 
   return (
     <SlideupShell trip={trip} closeHref="/trips">
@@ -40,6 +43,7 @@ export default async function TripPage(props: PageProps<"/trip/[id]">) {
         trip={trip}
         isReference={isReference}
         isAuthed={isAuthed}
+        canEdit={canEdit}
       />
     </SlideupShell>
   );

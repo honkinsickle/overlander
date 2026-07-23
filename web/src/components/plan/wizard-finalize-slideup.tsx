@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { SlideupShell } from "@/components/trip/slideup-shell";
 import { TripSlideupBody } from "@/components/trip/trip-slideup-body";
+import { isUserTrip } from "@/lib/trips/is-user-trip";
 import type { Trip } from "@/lib/trips/types";
 
 /**
@@ -29,7 +30,12 @@ export function WizardFinalizeSlideup({ trip }: { trip: Trip }) {
     <SlideupShell trip={trip} closeHref="/trips">
       {/* Wizard-finalize is the user finalizing their own scratch trip;
        *  the "Make it mine" fork CTA never applies here. */}
-      <TripSlideupBody trip={trip} isReference={false} isAuthed={false} />
+      <TripSlideupBody
+        trip={trip}
+        isReference={false}
+        isAuthed={false}
+        canEdit={isUserTrip(trip.id)}
+      />
     </SlideupShell>
   );
 }
