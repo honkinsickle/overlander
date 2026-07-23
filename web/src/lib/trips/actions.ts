@@ -9,7 +9,6 @@ import {
   TRIP_CONFLICT,
   TRIP_CHANGED_ERROR,
 } from "./user-trips";
-import { recomputeDay } from "./recompute-day";
 import { checkNotFrozen } from "@/lib/itinerary/rails";
 import type { OfflinePhase } from "./types";
 
@@ -64,29 +63,6 @@ export async function pickOvernightAction(
   return { ok: true };
 }
 
-/** Best-effort day recompute after a route-affecting edit (Phase 0,
- *  spec §3.1). DECOUPLED by design: the edit has already persisted —
- *  a Mapbox/derivation failure logs and leaves the day's derived
- *  values stale rather than failing the user's edit. Applies to both
- *  user (UUID) and slug/fixture trips. */
-async function recomputeDayBestEffort(
-  tripId: string,
-  dayId: string,
-): Promise<void> {
-  try {
-    const trip = await repo.getTrip(tripId);
-    if (!trip) return;
-    const derived = await recomputeDay(trip, dayId);
-    if (!derived) return;
-    await repo.applyDayDerived(tripId, dayId, derived);
-  } catch (err) {
-    console.warn(
-      `[trips] day recompute failed for ${tripId}/${dayId} (edit persisted, derived values stale):`,
-      err instanceof Error ? `${err.name}: ${err.message}` : err,
-    );
-  }
-}
-
 export async function addWaypointAction(
   tripId: string,
   dayId: string,
@@ -101,9 +77,10 @@ export async function addWaypointAction(
     return { ok: false, error: "Missing place." };
   }
   const waypoint = addedPlaceToWaypoint(place);
+  // STEP 3: repo.addWaypoint persists the waypoint AND its recomputed derived
+  // values in one guarded write — no separate best-effort recompute pass.
   const added = await repo.addWaypoint(tripId, dayId, waypoint);
   if (!added) return { ok: false, error: "Could not add stop." };
-  await recomputeDayBestEffort(tripId, dayId);
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }
@@ -116,9 +93,9 @@ export async function removeWaypointAction(
   // PROPERTY guard only — frozen trip refused, user-trip edits keep working.
   const frozen = checkNotFrozen(tripId);
   if (frozen) return frozen;
+  // STEP 3: derived recompute folded into the single guarded removeWaypoint write.
   const ok = await repo.removeWaypoint(tripId, dayId, waypointId);
   if (!ok) return { ok: false, error: "Could not remove stop." };
-  await recomputeDayBestEffort(tripId, dayId);
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
 }

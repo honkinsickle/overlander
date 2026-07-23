@@ -1,14 +1,15 @@
-# Branch State — `main` (manual-edit + living-plan MERGED; STEP 2 version-column LIVE on PROD)
+# Branch State — `main` (STEP 2 LIVE on PROD; STEP 3 committed, unpushed)
 
 ```
 Branch:      main   (both feature arcs merged in; working branch is now main)
-HEAD/main:   95c5c07 (STEP 2) — origin/main == local main, PUSHED & deployed green.
-                          This STATE.md commit sits one above 95c5c07 (STATE-only,
-                          per write discipline). History since last deploy:
-                          e51e8be → d56840d (checkNotFrozen rail on the shipped
-                          waypoint actions) → 3e909da (STEP 1: RLS seed harness) →
-                          95c5c07 (STEP 2: trips.version column + conflict
-                          classification) — all now on origin/main.
+HEAD/main:   STEP 3 (two-write collapse) — local main is 1 commit AHEAD of
+                          origin/main (`95c5c07` STEP-2-live, the STATE.md commit
+                          `2bcf1bb` above it). STEP 3 is TEST-only, UNPUSHED; Adam
+                          authorizes the push. STATE.md is written against
+                          `2bcf1bb`; the STEP 3 commit carrying it sits one above.
+                          History: e51e8be → d56840d (checkNotFrozen rail) →
+                          3e909da (STEP 1) → 95c5c07 (STEP 2, on PROD) → 2bcf1bb
+                          (STATE: STEP 2 live) → THIS commit (STEP 3).
 Merged in:   feat/living-plan-editing (tip c3611d8, 20 commits, LLM/NL trip-edit)
              + feat/manual-trip-edit (42-commit manual-edit arc on top). manual
              DESCENDS from living-plan (merge-base c3611d8), so both went in as
@@ -64,10 +65,12 @@ Sequence toward flipping `NEXT_PUBLIC_LIVING_PLAN_EDIT` live and dispatching use
 - `d56840d` — **checkNotFrozen rail** on the SHIPPED waypoint add/remove actions (property guard; the frozen PROD trip was previously protected only by a fixture-miss accident).
 - `3e909da` — **STEP 1: seed-test-user** RLS harness. `scripts/seed-test-user.ts`, TEST-ref-guarded, idempotent. Proves RLS isolation (owner vs other) on the write path off-prod. Seeds owner+other trips under `seed-owner@ / seed-other@overlander.test`.
 - `95c5c07` — **STEP 2: optimistic concurrency on `trips.payload`. LIVE on PROD.** Adds `trips.version` (migration `20260722120000`, applied to TEST **and PROD** — column integer NOT NULL default 0, 9 PROD rows backfilled to 0; applied to PROD BEFORE the code push). `updateUserTripPayload` now reads `version`, writes `.eq("version", v)` with `version: v+1`, 0 rows = conflict; a REQUIRED `onConflict` policy per mutator: `retry` (by-id composes), `refuse` (absolute-set / index — returns `TRIP_CONFLICT`, surfaced as `TRIP_CHANGED_ERROR`), `abandon` (best-effort derived). DI `client` seam so verify drives the REAL fn under the seeded JWT. Fixed the swallowed-conflict defect: 3 `FormState` wizard actions truthiness-checked a now-truthy `TRIP_CONFLICT` and advanced having lost the write. Deleted dead index-based `reorderWaypoints`/`reorderWaypointsAction` (a class-(b) refuse path with no consumer) rather than converting. Verify: `next build` exit 0; 149 corridor+trips tests pass; STEP 2 verify script 5/5 under the seeded JWT.
-- NEXT: STEP 3 (two-write collapse / delete `applyDayDerived` as a separate racy writer) — NOT STARTED. Then STEP 4 (ADR §1 dispatch on `isUserTripId`). The `version` migration is already on PROD; the flag `NEXT_PUBLIC_LIVING_PLAN_EDIT` is still unset in Vercel, so the edit UI stays dark — STEP 2 hardens the SHIPPED waypoint/wizard write path, it does not flip the edit feature on.
+- `(this commit)` — **STEP 3: collapse the two-write add/remove path. TEST-only, UNPUSHED.** `recomputeDay` now runs ONCE before a SINGLE guarded write: `addWaypoint`/`removeWaypoint` persist the waypoint AND its derived (miles/driveHours/corridorCities) together in one version bump (no torn intermediate a concurrent edit can straddle). A Mapbox failure skips derived and still persists the waypoint atomically. Deleted `applyDayDerived` + `recomputeDayBestEffort` — the ONLY abandon-class caller; onConflict census after: `retry×6 refuse×6 abandon×0` (abandon machinery retained — designed policy, STEP 2 verify exercises it). add/remove stay `retry`. New `verify-trip-collapse.ts` drives the real collapsed path under the seeded JWT (Mapbox leaf stubbed): 3/3 pass; `next build` exit 0; 149 tests. This hardens the already-SHIPPED waypoint add/remove path — it is NOT the edit button.
+- KEY FINDING (STEP 4 scope): the edit-button **drag-reorder** slice writes `placeRanks` via `node-actions` and does NOT call `recomputeDay` / touch `day.waypoints` — it never enters STEP 3's add/remove/recompute path. So STEP 4's minimal slice depends on **STEP 2's envelope**, NOT STEP 3. STEP 3 and the STEP-4 edit-button slice are parallel consumers of STEP 2, not a dependency chain.
+- NEXT: STEP 4 (ADR §1 dispatch on `isUserTripId`) — NOT STARTED. Concentrated in `node-actions.ts`: dispatch `persist()`/read on UUID→`updateUserTripPayload` (RLS) vs slug→`reference_trips` (service), swap `checkRails` phase guards for authenticated + owns-via-RLS + editable + `checkNotFrozen`(slug), classify each `placeRanks`/`nodeSeeds` write's onConflict, then flip `NEXT_PUBLIC_LIVING_PLAN_EDIT` in Vercel (Adam-owned). Moderate, single-file-dominant, smaller than STEP 2.
 
 ## In-flight (uncommitted working tree)
-None. STEP 2 (`95c5c07`) is pushed to origin/main and live on PROD; this STATE.md commit (STEP 2 live) sits one above it. The abandoned cold-start scaffolding (a root `CLAUDE.md` edit calling a non-existent `scripts/cold-start-check.sh` + unused STATE-HEAD/Landing fields) was reverted this session, not committed.
+None. STEP 3 (this commit) lands on `2bcf1bb`; TEST-only, unpushed — Adam authorizes the push. STEP 2 (`95c5c07`) is on origin/main and live on PROD.
 
 ## Queued
 1. Dwell-day reorder (Day 6 out-and-back POIs) — needs a scope decision (spur-distance axis vs. reorder-in-drive vs. leave near→far). Read spine has NO near→far (edit-only); Day 6 keeps mile order until this lands.

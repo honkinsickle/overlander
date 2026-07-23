@@ -32,10 +32,13 @@ export function isUserTripId(id: string): boolean {
  *
  *  Uses the per-request server client so RLS scopes the row to
  *  auth.uid() — no need for an explicit owner_id filter here. */
-export async function getUserTrip(id: string): Promise<Trip | null> {
+export async function getUserTrip(
+  id: string,
+  client?: SupabaseClient,
+): Promise<Trip | null> {
   if (!isConfigured() || !isUserTripId(id)) return null;
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = client ?? (await createSupabaseServerClient());
     const { data, error } = await supabase
       .from("trips")
       .select("id, title, payload, reference_id")

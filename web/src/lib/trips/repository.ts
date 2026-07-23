@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
 import { getPersistedReferenceTrip } from "./reference";
 import {
@@ -8,13 +9,63 @@ import {
   TRIP_CONFLICT,
   type TripConflict,
 } from "./user-trips";
+import { recomputeDay, type DayDerived } from "./recompute-day";
+import type { LngLat, Route } from "@/lib/routing/route-between";
 import type {
-  CorridorCity,
   Day,
   OvernightSelection,
   Trip,
   Waypoint,
 } from "./types";
+
+/** Injectable deps for the collapsed waypoint writers. `client` drives the
+ *  read + guarded write under a caller-supplied (e.g. seeded-JWT) Supabase
+ *  client; `route` overrides the Mapbox call inside `recomputeDay` for
+ *  offline/deterministic verification. Both default to production behavior. */
+type WaypointDeps = {
+  client?: SupabaseClient;
+  route?: (coords: LngLat[]) => Promise<Route>;
+};
+
+/** Compute a day's derived values (miles / driveHours / corridorCities) AS THEY
+ *  WILL BE after `editDay` is applied — so a caller can persist the edit and its
+ *  derived values in ONE guarded write (STEP 3: no torn intermediate a
+ *  concurrent edit can straddle, no separate abandon-class second writer).
+ *  Returns null when the day can't be routed — a Mapbox failure or unroutable
+ *  day — and the caller then persists the edit alone (best-effort derived,
+ *  exactly as the old decoupled recompute behaved: a routing hiccup never
+ *  blocks the user's edit). */
+async function deriveAfterDayEdit(
+  tripId: string,
+  dayId: string,
+  editDay: (day: Day) => void,
+  deps: WaypointDeps,
+): Promise<DayDerived | null> {
+  try {
+    const current = isUserTripId(tripId)
+      ? await getUserTrip(tripId, deps.client)
+      : await getTrip(tripId);
+    if (!current) return null;
+    const postEdit = structuredClone(current);
+    const day = postEdit.days.find((d) => d.id === dayId);
+    if (!day) return null;
+    editDay(day);
+    return await recomputeDay(postEdit, dayId, { route: deps.route });
+  } catch {
+    return null;
+  }
+}
+
+/** Apply precomputed derived values onto a day, in place. Null derived (routing
+ *  failed) → leave the day's existing values stale (best-effort). Non-null →
+ *  set all three, including `corridorCities: undefined` (a stale corridor
+ *  describes the pre-edit route; clients fall back per spec decision F). */
+function applyDerivedToDay(day: Day, derived: DayDerived | null): void {
+  if (!derived) return;
+  day.miles = derived.miles;
+  day.driveHours = derived.driveHours;
+  day.corridorCities = derived.corridorCities;
+}
 
 /**
  * Server-side trip repository. Async by design so callers don't
@@ -134,24 +185,48 @@ export async function removeDay(
   return true;
 }
 
-/** Append a waypoint to a day. Idempotent on waypoint id — re-adding
- *  the same id returns null (nothing changed). Clears the trip's
- *  `routePolyline` so the map redraws the route on next render. */
+/** Append a waypoint to a day AND its recomputed derived values in ONE write.
+ *  Idempotent on waypoint id — re-adding the same id returns null (nothing
+ *  changed). Clears the trip's `routePolyline` so the map redraws the route.
+ *
+ *  STEP 3 collapse: derived (miles/driveHours/corridorCities) is computed for
+ *  the post-add day BEFORE the single guarded write and applied inside the same
+ *  mutate — no separate `applyDayDerived` write spanning the Mapbox call. A
+ *  routing failure yields null derived and the waypoint still persists (the
+ *  edit is never blocked by a Mapbox hiccup). `retry`: by-id append composes,
+ *  and derived is a deterministic function of the day, so re-applying it on a
+ *  conflict-retry is safe (may be one generation stale, never torn). */
 export async function addWaypoint(
   tripId: string,
   dayId: string,
   waypoint: Waypoint,
+  deps: WaypointDeps = {},
 ): Promise<Waypoint | null> {
+  const derived = await deriveAfterDayEdit(
+    tripId,
+    dayId,
+    (day) => {
+      if (!day.waypoints.some((wp) => wp.id === waypoint.id)) {
+        day.waypoints.push(waypoint);
+      }
+    },
+    deps,
+  );
   if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day) return null;
-      if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
-      day.waypoints.push(waypoint);
-      next.routePolyline = undefined;
-      return next;
-    }, { onConflict: "retry" }); // by-id append composes
+    const updated = await updateUserTripPayload(
+      tripId,
+      (trip) => {
+        const next = structuredClone(trip);
+        const day = next.days.find((d) => d.id === dayId);
+        if (!day) return null;
+        if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
+        day.waypoints.push(waypoint);
+        applyDerivedToDay(day, derived);
+        next.routePolyline = undefined;
+        return next;
+      },
+      { onConflict: "retry", client: deps.client },
+    );
     return (
       updated?.days
         .find((d) => d.id === dayId)
@@ -164,28 +239,47 @@ export async function addWaypoint(
   if (!day) return null;
   if (day.waypoints.some((wp) => wp.id === waypoint.id)) return null;
   day.waypoints.push(waypoint);
+  applyDerivedToDay(day, derived);
   trip.routePolyline = undefined;
   return waypoint;
 }
 
-/** Remove a waypoint by id from a day. Returns true if removed, false
- *  if trip/day/waypoint not found. Clears `routePolyline`. */
+/** Remove a waypoint by id from a day AND its recomputed derived values in ONE
+ *  write. Returns true if removed, false if trip/day/waypoint not found. Clears
+ *  `routePolyline`. Same STEP 3 collapse as `addWaypoint`: derived precomputed
+ *  for the post-remove day, applied in the single guarded write; a routing
+ *  failure still persists the removal. `retry`: by-id removal composes. */
 export async function removeWaypoint(
   tripId: string,
   dayId: string,
   waypointId: string,
+  deps: WaypointDeps = {},
 ): Promise<boolean> {
-  if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day) return null;
+  const derived = await deriveAfterDayEdit(
+    tripId,
+    dayId,
+    (day) => {
       const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
-      if (idx === -1) return null;
-      day.waypoints.splice(idx, 1);
-      next.routePolyline = undefined;
-      return next;
-    }, { onConflict: "retry" }); // by-id removal composes
+      if (idx !== -1) day.waypoints.splice(idx, 1);
+    },
+    deps,
+  );
+  if (isUserTripId(tripId)) {
+    const updated = await updateUserTripPayload(
+      tripId,
+      (trip) => {
+        const next = structuredClone(trip);
+        const day = next.days.find((d) => d.id === dayId);
+        if (!day) return null;
+        const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
+        if (idx === -1) return null;
+        day.waypoints.splice(idx, 1);
+        applyDerivedToDay(day, derived);
+        next.routePolyline = undefined;
+        return next;
+      },
+      { onConflict: "retry", client: deps.client },
+    );
     return updated !== null;
   }
   const trip = TRIPS[tripId];
@@ -195,42 +289,8 @@ export async function removeWaypoint(
   const idx = day.waypoints.findIndex((wp) => wp.id === waypointId);
   if (idx === -1) return false;
   day.waypoints.splice(idx, 1);
+  applyDerivedToDay(day, derived);
   trip.routePolyline = undefined;
-  return true;
-}
-
-/** Apply edit-time recomputed derived values to one day (Phase 0 —
- *  see lib/trips/recompute-day.ts). Sets `miles` / `driveHours` and
- *  REPLACES `corridorCities` (including with undefined: a stale
- *  corridor describes the pre-edit route; clients fall back per spec
- *  decision F). Does not touch `routePolyline` — the edit mutator
- *  already cleared it. */
-export async function applyDayDerived(
-  tripId: string,
-  dayId: string,
-  derived: {
-    miles: number;
-    driveHours: number;
-    corridorCities?: CorridorCity[];
-  },
-): Promise<boolean> {
-  if (isUserTripId(tripId)) {
-    const updated = await updateUserTripPayload(tripId, (trip) => {
-      const next = structuredClone(trip);
-      const day = next.days.find((d) => d.id === dayId);
-      if (!day) return null;
-      day.miles = derived.miles;
-      day.driveHours = derived.driveHours;
-      day.corridorCities = derived.corridorCities;
-      return next;
-    }, { onConflict: "abandon" }); // best-effort; a conflict means this derived is stale
-    return updated !== null;
-  }
-  const day = TRIPS[tripId]?.days.find((d) => d.id === dayId);
-  if (!day) return false;
-  day.miles = derived.miles;
-  day.driveHours = derived.driveHours;
-  day.corridorCities = derived.corridorCities;
   return true;
 }
 
