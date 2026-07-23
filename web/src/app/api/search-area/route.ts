@@ -167,6 +167,12 @@ export async function GET(req: Request) {
     return NextResponse.json(cached, { headers: { "x-cache": "HIT" } });
   }
 
+  // Sources that THREW (network/DNS unreachable) this request — corpus and/or
+  // named live sources. Distinguishes "a source is down" from "a source
+  // returned no matches", so the client can say which half is missing. Mutated
+  // synchronously inside each half's catch; both halves are single-threaded JS.
+  const failedSources = new Set<string>();
+
   // ── LIVE half ────────────────────────────────────────────────────────
   const livePromise: Promise<BrowsePlace[]> = (async () => {
     try {
@@ -178,6 +184,7 @@ export async function GET(req: Request) {
           sources: [googleTextSearchSource],
           textQuery: q,
           signal: req.signal,
+          onSourceError: (id) => failedSources.add(id),
         });
       }
       // Category tiles → searchNearby fanout, mapped to the buckets Google
@@ -201,6 +208,7 @@ export async function GET(req: Request) {
           blmSource,
         ],
         signal: req.signal,
+        onSourceError: (id) => failedSources.add(id),
       });
     } catch (err) {
       console.warn("[search-area] live discovery failed:", err);
@@ -220,7 +228,8 @@ export async function GET(req: Request) {
       if (hits.length === 0) return [];
       return await hydratePlacesByIds(hits.map((h) => h.id));
     } catch (err) {
-      console.warn("[search-area] federated search failed:", err);
+      console.error("[search-area] FEDERATED_DOWN", err);
+      failedSources.add("corpus");
       return [];
     }
   })();
@@ -238,11 +247,15 @@ export async function GET(req: Request) {
     places.push(p);
   }
 
+  const failed = [...failedSources];
   const payload = {
     source: "search-area",
     places,
     counts: { live: live.length, federated: federated.length },
+    failedSources: failed,
   };
-  cacheSet(cacheKey, payload);
+  // Don't pin a transient failure: only cache a fully-successful result, so a
+  // recovered source isn't masked by a 15-min-stale error payload.
+  if (failed.length === 0) cacheSet(cacheKey, payload);
   return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
 }

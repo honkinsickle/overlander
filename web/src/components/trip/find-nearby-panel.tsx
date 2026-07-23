@@ -547,6 +547,9 @@ function SearchAreaResults({
   const [places, setPlaces] = useState<BrowsePlace[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sources that were unreachable this request (server's failedSources) — drives
+  // the quiet "showing partial results" note. Distinct from an empty result set.
+  const [failedSources, setFailedSources] = useState<string[]>([]);
   const reqIdRef = useRef(0);
   // The result currently linked from the map (marker tap) or tapped in the
   // list — gets the active-POI ring-glow.
@@ -565,6 +568,7 @@ function SearchAreaResults({
       const reqId = ++reqIdRef.current;
       setLoading(true);
       setError(null);
+      setFailedSources([]);
 
       // Free-text wins; otherwise the tile's corpus primary_category set.
       const params = new URLSearchParams();
@@ -583,16 +587,20 @@ function SearchAreaResults({
           const detail = await res.json().catch(() => null);
           throw new Error(detail?.error ?? `search failed (${res.status})`);
         }
-        const { places: found } = (await res.json()) as {
-          places: BrowsePlace[];
-        };
+        const { places: found, failedSources: failed = [] } =
+          (await res.json()) as {
+            places: BrowsePlace[];
+            failedSources?: string[];
+          };
         if (reqId !== reqIdRef.current) return;
         setPlaces(found);
+        setFailedSources(failed);
       })()
         .catch((e: unknown) => {
           if (reqId !== reqIdRef.current) return;
           setError(e instanceof Error ? e.message : "search failed");
           setPlaces([]);
+          setFailedSources([]);
         })
         .finally(() => {
           if (reqId !== reqIdRef.current) return;
@@ -609,6 +617,16 @@ function SearchAreaResults({
 
   const shownPlaces = hasInput ? places : [];
   const shownError = hasInput ? error : null;
+  // Quiet note when a source was unreachable: corpus-only → corpus wording;
+  // any live source (incl. corpus + live) → the partial wording. Suppressed
+  // while erroring/idle (the error box already speaks).
+  const shownFailed = hasInput && !shownError ? failedSources : [];
+  const failedNote =
+    shownFailed.length === 0
+      ? null
+      : shownFailed.every((s) => s === "corpus")
+        ? "Corpus search unavailable — showing live results only."
+        : "Some sources unavailable — showing partial results.";
 
   // Plot the visible results on the map by reusing the in-day browse marker
   // layer: trip:browseResults → MapColumn renders one 22px category-colored
@@ -700,6 +718,19 @@ function SearchAreaResults({
           }}
         >
           {shownError}
+        </div>
+      )}
+
+      {failedNote !== null && (
+        <div
+          style={{
+            marginBottom: 16,
+            fontFamily: "var(--ff-mono)",
+            fontSize: 12,
+            color: "var(--text-muted)",
+          }}
+        >
+          {failedNote}
         </div>
       )}
 

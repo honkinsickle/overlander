@@ -32,6 +32,12 @@ export async function discover(args: {
   /** Free-text path: when set, text-capable sources match this string
    *  within each bbox and ignore `categories`. */
   textQuery?: string;
+  /** Called with a source id when that source's query THROWS (network/DNS
+   *  unreachable). NOT called when a source returns empty cleanly — an
+   *  unconfigured source (missing API key) or an HTTP error is swallowed to
+   *  [] inside the adapter and never reaches here, so "not configured" is not
+   *  reported as "failed". Aborts (superseded request) are excluded too. */
+  onSourceError?: (sourceId: string) => void;
 }): Promise<BrowsePlace[]> {
   const queries = args.sources.flatMap((s) =>
     args.bboxes.map((bbox) =>
@@ -43,7 +49,13 @@ export async function discover(args: {
           textQuery: args.textQuery,
         })
         .catch((err) => {
-          console.warn(`[discovery] source ${s.id} failed:`, err);
+          // A superseded request aborts the signal — normal, not a source
+          // failure; stay quiet and don't report it.
+          if (err instanceof Error && err.name === "AbortError") {
+            return [] as SourceResult[];
+          }
+          console.error("[discovery] SOURCE_DOWN", s.id, err);
+          args.onSourceError?.(s.id);
           return [] as SourceResult[];
         }),
     ),
