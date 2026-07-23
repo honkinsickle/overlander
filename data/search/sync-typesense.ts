@@ -33,7 +33,13 @@ import { logger } from "../ingestion/lib/logger.ts";
 // Constants
 // ──────────────────────────────────────────────────────────────────────
 
-const COLLECTION_NAME = "places";
+// One Typesense cluster is shared across environments; each env MUST use its
+// own collection (e.g. places_prod / places_test) or a sync from one env prunes
+// the other's docs. No default — a silent fallback to "places" is exactly the
+// shared-collection bug this guards against. requireEnv (below) is a hoisted
+// function declaration, so it's callable here at module-eval time; unset →
+// fails loud at startup.
+const COLLECTION_NAME = requireEnv("TYPESENSE_COLLECTION");
 const SUPABASE_PAGE_SIZE = 1000;
 const TYPESENSE_BATCH_SIZE = 100;
 

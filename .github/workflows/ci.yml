@@ -40,6 +40,12 @@ jobs:
           # data/.env.test (same shape as data/.env.test.example).
           SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
           SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          # Dummy value — the suite never reaches Typesense. It only satisfies the
+          # module-load requireEnv("TYPESENSE_COLLECTION") in sync-typesense.ts,
+          # which materialize.ts imports transitively. Deliberately NOT a code
+          # default: a silent "places" fallback is the cross-env clobber this PR
+          # fixes, so the requirement stays enforced and CI supplies the value.
+          TYPESENSE_COLLECTION: places_ci
         run: npm run -w data test
 
   build:
