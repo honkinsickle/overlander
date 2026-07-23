@@ -56,6 +56,18 @@ const SEGMENTS: readonly SegmentDef[] = [
   // Supersedes the Segment-A-only (Days 1–3) bootstrap now that the
   // Canada/Arctic legs are being ingested.
   { name: "la_to_deadhorse_full", startDay: 1, endDay: 66, includeStartCoords: true },
+  // Slice-1 pipeline-validation segment (2026-07). Day 1 ONLY — LA → Cedar
+  // City, UT (~400 mi). Deliberately the smallest unit that reuses the
+  // EXISTING `segment_a_la_pnw` config in ingest-corridor.ts (SEGMENT_NPS_STATES
+  // + SEGMENT_ANCHORS are keyed by this exact name), so no new source config is
+  // needed. Day-1-only bounds the bbox-scoped stages (OSM / RIDB / Google
+  // enrichment) to a small, cheap footprint. NOTE: NPS (state list) and Google
+  // discovery (anchor list) are NOT bbox-clipped — they fire the full segment_a
+  // footprint (6 states / 8 anchors, LA → Whitefish) regardless of this day
+  // range. That's intended for a plumbing test (every stage exercises); the
+  // resulting data is not geographically confined to Day 1. Deploy with
+  // `--only segment_a_la_pnw` to avoid a second active corridor row.
+  { name: "segment_a_la_pnw", startDay: 1, endDay: 1, includeStartCoords: true },
 ] as const;
 
 interface DayCoord {
@@ -190,7 +202,21 @@ async function main(): Promise<void> {
     "deploy-corridor: extracted",
   );
 
+  // --only <name>: deploy just that one segment and leave the others untouched.
+  // Absent → deploy all SEGMENTS (unchanged behavior). Deploying a single
+  // segment avoids leaving two `active = true` corridor rows, which would make
+  // the LIMIT-1 resolvers in ingestion/lib/corridor.ts (getActiveCorridorBbox /
+  // getActiveCorridorPolygon, used by manual.ts and run-canada.ts) ambiguous.
+  const onlyIdx = process.argv.indexOf("--only");
+  const only = onlyIdx !== -1 ? process.argv[onlyIdx + 1] : undefined;
+  if (only && !SEGMENTS.some((s) => s.name === only)) {
+    throw new Error(
+      `--only '${only}' matches no segment. Known: ${SEGMENTS.map((s) => s.name).join(", ")}`,
+    );
+  }
+
   for (const seg of SEGMENTS) {
+    if (only && seg.name !== only) continue;
     const coords = coordsForSegment(seg, startCoords, days);
     if (coords.length < 2) {
       logger.warn(
