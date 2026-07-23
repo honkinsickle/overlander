@@ -18,7 +18,40 @@
 
 const TEXT_ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
 const RESOLVE_FIELD_MASK =
-  "places.id,places.displayName,places.location,places.formattedAddress,places.types";
+  "places.id,places.displayName,places.location,places.formattedAddress,places.types,places.primaryType";
+
+/**
+ * Map Google's `primaryType` to a corpus `primary_category`.
+ *
+ * TWIN — this is a deliberate byte-for-byte duplicate of `inferCategory` in
+ * data/ingestion/sources/google-places.ts (the rich `google` corpus source).
+ * The two MUST stay identical so a live-resolved place and an ingested Google
+ * place land under the SAME category vocabulary — the one the entity-resolution
+ * matcher keys on (data/entity-resolution/matcher.ts CATEGORY_COMPATIBILITY).
+ * They are copied, not shared, because web/ must not import from data/ at
+ * runtime (CLAUDE.md cross-workspace rule). If you change one arm, change BOTH.
+ *
+ * Do NOT substitute discovery/google-places.ts `categoryForGoogleTypes` here —
+ * it returns the 9 slide buckets (fuel/camping/scenic…), the WRONG vocabulary,
+ * which scores 0 in the matcher.
+ */
+export function inferCategory(primaryType: string | null | undefined): string | null {
+  switch (primaryType) {
+    case "gas_station":
+      return "gas_station";
+    case "lodging":
+      return "lodging";
+    case "restaurant":
+      return "restaurant";
+    case "car_repair":
+      return "car_repair";
+    case "supermarket":
+    case "convenience_store":
+      return "grocery";
+    default:
+      return primaryType ?? null;
+  }
+}
 // Google's max locationBias circle radius.
 const BIAS_RADIUS_M = 50_000;
 /** Per-generation ceiling on live resolutions (hard cost cap). */
@@ -28,6 +61,8 @@ export type ResolvedName = {
   placeId: string;
   displayName: string;
   coords: [number, number];
+  /** Corpus primary_category from Google's primaryType (see inferCategory). */
+  category: string | null;
 };
 
 export type ResolveStatus =
@@ -104,6 +139,7 @@ export class PlaceResolver {
             id: string;
             displayName?: { text: string };
             location: { latitude: number; longitude: number };
+            primaryType?: string;
           }[];
         };
         const p = json.places?.[0];
@@ -114,6 +150,7 @@ export class PlaceResolver {
                 placeId: p.id,
                 displayName: p.displayName?.text ?? name,
                 coords: [p.location.longitude, p.location.latitude],
+                category: inferCategory(p.primaryType),
               },
             }
           : { status: "not-found" };

@@ -54,5 +54,15 @@ thing worked, it moves into STATE.md §Queued.
   attachment code (`bucketPlacesIntoCorridor`/`applyPlaceOverrides`) — needs the
   Phase-1 bucketing re-verification, not a drive-by.
 
+- **`CATEGORY_COMPATIBILITY` has no keys for `restaurant`, `grocery`,
+  `car_repair`** (`data/entity-resolution/matcher.ts:162-201`). With the
+  google_resolved category fix landed, food/grocery resolutions now carry a
+  correct *stored* `primary_category`, but `lookupCompatibility` returns 0 for
+  those categories, so they can never `name_dominant`/auto-link and accumulate
+  as isolated `master_place` rows (one per resolution, no dedup). Given how much
+  itinerary content is food, extending the matrix (add restaurant/grocery/
+  car_repair rows + cross-compat to any OSM/pipeline equivalents) is worth
+  scoping. Not in the google_resolved-category PR.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

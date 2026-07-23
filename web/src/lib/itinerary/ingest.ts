@@ -5,11 +5,16 @@
  * Reuses the existing `upsert_source_record` RPC — idempotent on
  * (source_id, external_id), and it does NOT trigger entity resolution, so it
  * only captures a `source_record` row and moves nothing in `master_place`.
- * Promotion to the corpus is a DELIBERATE, MANUAL step out of band:
- *   npm run -w data materialize --only-categories <cats>
- * (the incremental ER path — never --rematerialize). Auto-materialize is
- * intentionally NOT wired: generation-triggered prod corpus writes need
- * earned trust first.
+ * Promotion to the corpus is a DELIBERATE, MANUAL step out of band. Run it
+ * BARE so the whole unresolved delta promotes:
+ *   npm run -w data materialize
+ * (the incremental ER path — never --rematerialize). Do NOT reach for
+ * --only-categories here: it is a fail-closed allowlist (materialize.ts
+ * computeTrulyUnresolvedIds) that SILENTLY holds back every record whose
+ * category is not listed — including any new/unmapped category a resolution
+ * produced. If you must scope a run, pass an EXPLICIT, COMPLETE list of the
+ * categories you intend to promote. Auto-materialize is intentionally NOT
+ * wired: generation-triggered prod corpus writes need earned trust first.
  *
  * OPT-IN: nothing calls this during a normal generation unless the caller
  * explicitly enables it and passes a target client — a corpus write is a
@@ -52,7 +57,7 @@ export async function enqueueResolvedPlaces(
       p_source_id: SOURCE_ID,
       p_external_id: `google:${p.placeId}`,
       p_name: p.displayName,
-      p_inferred_category: null,
+      p_inferred_category: p.category,
       p_geometry: `SRID=4326;POINT(${lng} ${lat})`,
       p_raw_payload: {
         place_id: p.placeId,
@@ -60,8 +65,14 @@ export async function enqueueResolvedPlaces(
         resolvedFromName: p.name,
         location: { latitude: lat, longitude: lng },
       },
+      // Keys MUST match master_place field names — resolve_field reads
+      // `normalized_payload -> <field_name>` (migration
+      // 20260601010000_phase3a_resolve_field_determinism). Paired with the
+      // google_resolved field_precedence rows so a solo-resolved place resolves
+      // (and attributes) its own name/category instead of landing with '{}'.
       p_normalized_payload: {
-        name: p.displayName,
+        canonical_name: p.displayName,
+        primary_category: p.category,
         coords: [lng, lat],
         provenance: "itinerary-audit tier-2 live resolve",
       },
