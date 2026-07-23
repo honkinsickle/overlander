@@ -41,3 +41,24 @@ jobs:
           SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
           SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
         run: npm run -w data test
+
+  build:
+    # The gate that matches production. `next build` catches RSC boundary
+    # errors, 'use client' violations, route-type mismatches, and static-gen
+    # failures that tsc alone cannot see. A non-zero exit fails the check.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install
+      # No env vars: a clean production build with every .env* absent exits 0.
+      # All env access is lazy/runtime-guarded and static generation falls back
+      # (e.g. the getAlaskaTrip snapshot). Do NOT stub env here — if a future
+      # change makes the build require a var, add it as a repo secret and wire
+      # it below rather than faking a value.
+      - name: Build web (production gate)
+        run: cd web && npx next build

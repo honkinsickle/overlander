@@ -13,13 +13,15 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   sites, one checkRails fork. **WATCH THIS.**
 
 ## IN FLIGHT
-- Nothing. Working tree clean; the manual-editing arc (ADR §1) is complete and
-  deployed green.
+- **Build gate in CI** — PR `ci/add-build-gate` adds a `build` job running
+  `cd web && npx next build` to `ci.yml`. Clean build needs no env/secrets
+  (verified: every `.env*` absent → exit 0). Awaiting Adam's merge. Branch
+  protection (require PRs into `main`) is still Adam-owned, not yet set.
 
 ## NEXT (ordered)
-1. **Branch protection + build gate in CI** (Adam-owned, not code). Require PRs
-   into `main`; add `cd web && npx next build` to `ci.yml`. CI is PR-only today,
-   so fast-forward pushes to main skip it — that is how a red build reached PROD.
+1. **Branch protection** (Adam-owned, not code). Require PRs into `main` so the
+   new build gate can't be bypassed. CI is PR-only today, so fast-forward pushes
+   to main skip it — that is how a red build reached PROD.
 2. **Flag split** — if NL editing should stay dark while manual stays live.
 3. **Search architecture** — June Google-primary vs July corpus-first unresolved;
    blocks discovery → cards → corpus (incl. whether audit-resolved Google Places
