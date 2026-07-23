@@ -127,6 +127,20 @@ function getClient(): SearchClient {
   return _client;
 }
 
+// One shared cluster, one collection per environment (e.g. places_prod /
+// places_test) — never share a collection across envs, or a sync from one
+// prunes the other's docs. No default: unset → fails loud (Missing required
+// env var), which is the bug we're preventing.
+let _collection: string | null = null;
+function collectionName(): string {
+  if (_collection) return _collection;
+  _collection = requireEnv(
+    "NEXT_PUBLIC_TYPESENSE_COLLECTION",
+    process.env.NEXT_PUBLIC_TYPESENSE_COLLECTION,
+  );
+  return _collection;
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Filter construction
 // ──────────────────────────────────────────────────────────────────────
@@ -174,7 +188,7 @@ export async function search(params: SearchParams): Promise<SearchResult[]> {
   const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
   const response = (await client
-    .collections<PlaceDocument>("places")
+    .collections<PlaceDocument>(collectionName())
     .documents()
     .search(
       {
