@@ -18,10 +18,11 @@ import { getDb, upsertSourceRecord } from "../ingestion/lib/db.ts";
 import { matchAll } from "./matcher.ts";
 import { applyMatches, type ApplyResult } from "./promote.ts";
 import {
-  JT_POSITIVE_FIXTURES,
-  JT_NEGATIVE_FIXTURES,
-  JT_AMENITY_ROLLUP_FIXTURES,
+  ER_POSITIVE_FIXTURES,
+  ER_NEGATIVE_FIXTURES,
+  ER_AMENITY_FIXTURES,
 } from "./test-fixtures.ts";
+import { ER_CORPUS } from "./fixtures/er-corpus.ts";
 
 const db = getDb();
 
@@ -57,14 +58,17 @@ if (!ALLOW) {
 
 const describeIfAllowed = ALLOW ? describe : describe.skip;
 
-describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
+describeIfAllowed("Phase 3a — entity resolution over the pinned ER corpus", () => {
   beforeAll(async () => {
-    // Sanity: there's an unresolved corpus to match against.
+    // Sanity: the pinned fixture is fully seeded and unresolved. Exact, not a
+    // floor — the corpus is a known size now (see fixtures/er-corpus.ts).
     await db.rpc("reset_phase3a_test_state");
     const { count } = await db
       .from("source_record")
       .select("id", { count: "exact", head: true });
-    expect(count, "expected ≥150 source_records in corpus").toBeGreaterThan(150);
+    expect(count, `expected exactly ${ER_CORPUS.length} pinned source_records`).toBe(
+      ER_CORPUS.length,
+    );
 
     // Single matchAll + applyMatches; subsequent tests query the resulting state.
     const start = Date.now();
@@ -89,7 +93,7 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   // Each named fixture resolves to exactly one master_place with the
   // expected source coverage.
   // ───────────────────────────────────────────────────────────────────
-  it.each(JT_POSITIVE_FIXTURES)(
+  it.each(ER_POSITIVE_FIXTURES)(
     "$canonical_name resolves to one master_place with expected sources",
     async (fixture) => {
       // Find the master_place via canonical_name. Use ilike to tolerate
@@ -118,27 +122,23 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   );
 
   // ───────────────────────────────────────────────────────────────────
-  // OSM dump_station / toilet / water nodes that have a parent
-  // campground/facility/recarea within 100m should roll up.
-  //
-  // METRIC, not strict assertion: some dump stations are >100m from any
-  // parent campground (no polygon containment in Phase 3a, that's a 3b
-  // pickup). Those legitimately become solo master_places. The Ryan
-  // dump_station spot-check (JT_AMENITY_ROLLUP_FIXTURES) is the
-  // principled rollup test; this just logs the orphan dump count for
-  // tracking how much 3b polygon containment will recover.
+  // Case 2 — amenity_rollup FALLS THROUGH. The lone OSM dump_station is
+  // >100m from any parent campground, so it becomes its own solo
+  // master_place. Exact (was a scale-tracking metric over the big corpus):
+  // in the pinned fixture there is EXACTLY one "dump station" place, solo.
   // ───────────────────────────────────────────────────────────────────
-  it("orphan dump_station master_place count (metric)", async () => {
-    const { count } = await db
+  it("orphan dump_station (no parent within 100m) → exactly one solo master_place", async () => {
+    const { data: mps } = await db
       .from("master_place")
-      .select("id", { count: "exact", head: true })
+      .select("id, canonical_name")
       .ilike("canonical_name", "%dump station%");
-    // eslint-disable-next-line no-console
-    console.log(
-      `[phase3a] orphan "Unnamed dump station" master_places: ${count ?? 0} ` +
-        `(expected 3b cleanup via polygon containment)`,
-    );
-    expect(count).toBeGreaterThanOrEqual(0);
+    expect(mps, "expected exactly one orphan dump station master_place").toHaveLength(1);
+
+    const { count } = await db
+      .from("source_record")
+      .select("id", { count: "exact", head: true })
+      .eq("master_place_id", mps![0]!.id);
+    expect(count, "orphan dump station should be solo (1 linked source)").toBe(1);
   });
 
   // ───────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   // record should be linked (or not) to the target campground depending
   // on expected_rollup.
   // ───────────────────────────────────────────────────────────────────
-  it.each(JT_AMENITY_ROLLUP_FIXTURES)(
+  it.each(ER_AMENITY_FIXTURES)(
     'amenity "$amenity_name" near $near_campground — expected_rollup=$expected_rollup',
     async (fixture) => {
       const { data: mp } = await db
@@ -192,7 +192,7 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   // Single-source records (no cross-source neighbors) become solo
   // master_places. Used as a sanity check against over-eager merging.
   // ───────────────────────────────────────────────────────────────────
-  it.each(JT_NEGATIVE_FIXTURES)(
+  it.each(ER_NEGATIVE_FIXTURES)(
     "single-source fixture ${external_id_pattern} → solo master_place",
     async (fixture) => {
       let q = db.from("source_record").select("master_place_id, name, external_id").ilike("external_id", fixture.external_id_pattern);
@@ -211,57 +211,64 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
   );
 
   // ───────────────────────────────────────────────────────────────────
-  // Every place_match in status='pending' should have its source_record
-  // unlinked (master_place_id IS NULL). Tests the manual_review path's
-  // promise to not link until human review.
+  // The manual_review path leaves its source_record unlinked. With a
+  // pinned corpus the pending set is KNOWN EXACTLY (was a slice(0,20)
+  // sample): the Beta OSM numeric node (close_nameless) and the Kappa2
+  // gas station (blended_residual, forced there by the same-source guard).
+  // Both unlinked. Anything else pending is a regression.
   // ───────────────────────────────────────────────────────────────────
-  it("pending place_matches do not link their source_record", async () => {
+  it("pending place_matches are EXACTLY {close_nameless Beta, blended_residual Kappa2}, all unlinked", async () => {
     const { data: pending } = await db
       .from("place_match")
       .select("source_record_id, match_method")
       .eq("status", "pending");
-    expect(pending, "no pending place_matches found").not.toHaveLength(0);
 
-    // Sample at least the first 20 — covers the close_nameless cluster
-    // plus any blended_residual stragglers.
-    for (const row of (pending ?? []).slice(0, 20)) {
-      const { data: sr } = await db
-        .from("source_record")
-        .select("master_place_id")
-        .eq("id", row.source_record_id)
-        .single();
-      expect(
-        sr?.master_place_id,
-        `pending place_match (${row.match_method}) linked source_record ${row.source_record_id}`,
-      ).toBeNull();
-    }
+    const ids = (pending ?? []).map((p) => p.source_record_id);
+    const { data: srcs } = await db
+      .from("source_record")
+      .select("id, external_id, master_place_id")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const byId = new Map((srcs ?? []).map((s) => [s.id, s]));
+
+    const got = (pending ?? [])
+      .map((p) => ({
+        external_id: byId.get(p.source_record_id)?.external_id ?? "<unknown>",
+        method: p.match_method,
+        linked: byId.get(p.source_record_id)?.master_place_id ?? null,
+      }))
+      .sort((a, b) => a.external_id.localeCompare(b.external_id));
+
+    expect(got).toEqual([
+      { external_id: "er:beta:osm7", method: "close_nameless", linked: null },
+      { external_id: "er:kappa2:osm", method: "blended_residual", linked: null },
+    ]);
   });
 
   // ───────────────────────────────────────────────────────────────────
-  // Adjustment 3 from the spec carryover: OSM Sheep Pass campsite nodes
-  // within 100m of Sheep Pass go to close_nameless manual_review.
+  // Case 3 — close_nameless. Beta's OSM node is named "7" (a campsite
+  // number, name_sim ~0), category campground, 40m from the nps-seeded
+  // Beta campground. Beta has no osm link, so the same-source guard passes
+  // and it routes to close_nameless manual_review (pending, unlinked).
   // ───────────────────────────────────────────────────────────────────
-  it("OSM Sheep Pass campsite nodes within 100m → close_nameless pending", async () => {
-    const { data: sp } = await db
+  it("Beta OSM numeric-name node within 100m → close_nameless pending, unlinked", async () => {
+    const { data: beta } = await db
       .from("master_place")
       .select("id")
-      .ilike("canonical_name", "%sheep pass%")
+      .ilike("canonical_name", "%beta%")
       .single();
-    expect(sp, "Sheep Pass master_place not found").toBeTruthy();
+    expect(beta, "Beta master_place not found").toBeTruthy();
 
-    // place_match rows targeting Sheep Pass with method='close_nameless'
     const { data: closeNameless } = await db
       .from("place_match")
       .select("source_record_id, match_method, status")
-      .eq("master_place_id", sp!.id)
+      .eq("master_place_id", beta!.id)
       .eq("match_method", "close_nameless")
       .eq("status", "pending");
     expect(
       closeNameless,
-      "expected ≥1 close_nameless pending row for Sheep Pass",
+      "expected ≥1 close_nameless pending row for Beta",
     ).not.toHaveLength(0);
 
-    // Each referenced source_record is an OSM campground and is unlinked
     for (const row of closeNameless ?? []) {
       const { data: src } = await db
         .from("source_record")
@@ -277,41 +284,100 @@ describeIfAllowed("Phase 3a — entity resolution over JT corpus", () => {
     }
   });
 
-  // ───────────────────────────────────────────────────────────────────
-  // Adjustment 4: tracked metric, not an assertion. Count solo OSM
-  // campground-category master_places — these are the expected 3b
-  // cleanup targets (polygon containment).
-  // ───────────────────────────────────────────────────────────────────
-  it("logs orphan OSM campground master_place count (metric, not assertion)", async () => {
-    const { data: osmCampgroundSources } = await db
+  // Helper: master_place_id for a fixture source_record by external_id.
+  async function mpIdFor(externalId: string): Promise<string | null> {
+    const { data } = await db
       .from("source_record")
       .select("master_place_id")
-      .eq("source_id", "osm")
-      .eq("inferred_category", "campground")
-      .not("master_place_id", "is", null);
+      .eq("external_id", externalId)
+      .single();
+    return (data?.master_place_id as string | null) ?? null;
+  }
+  async function linkedCount(mpId: string): Promise<number> {
+    const { count } = await db
+      .from("source_record")
+      .select("id", { count: "exact", head: true })
+      .eq("master_place_id", mpId);
+    return count ?? 0;
+  }
 
-    const mpIds = Array.from(
-      new Set(
-        (osmCampgroundSources ?? [])
-          .map((s) => s.master_place_id as string | null)
-          .filter((id): id is string => id != null),
-      ),
-    );
+  // ───────────────────────────────────────────────────────────────────
+  // Case 4 — the false-merge guard. Gamma and Delta are same-category
+  // campgrounds 150m apart with DIFFERENT names (name_sim ~0.47). The name
+  // gate rejects the merge; they must resolve to two distinct places.
+  // ───────────────────────────────────────────────────────────────────
+  it("Gamma and Delta resolve to distinct master_places (name gate rejects)", async () => {
+    const gamma = await mpIdFor("er:gamma:nps");
+    const delta = await mpIdFor("er:delta:google");
+    expect(gamma, "Gamma should link to a master_place").toBeTruthy();
+    expect(delta, "Delta should link to a master_place").toBeTruthy();
+    expect(
+      gamma,
+      "different-named campgrounds 150m apart must NOT merge",
+    ).not.toBe(delta);
+  });
 
-    let orphanCount = 0;
-    for (const mpId of mpIds) {
-      const { count } = await db
-        .from("source_record")
-        .select("id", { count: "exact", head: true })
-        .eq("master_place_id", mpId);
-      if (count === 1) orphanCount += 1;
+  // ───────────────────────────────────────────────────────────────────
+  // Case 6 — the ER gate stays shut for a matrix-absent category. Zeta is
+  // a Google 'restaurant' 50m from Gamma; restaurant↔campground has no
+  // CATEGORY_COMPATIBILITY entry → 0 → cannot merge. Solo, not linked to
+  // either campground neighbor.
+  // ───────────────────────────────────────────────────────────────────
+  it("Zeta restaurant (matrix-absent category) stays solo — ER gate shut", async () => {
+    const zeta = await mpIdFor("er:zeta:google");
+    expect(zeta, "Zeta should get its own master_place").toBeTruthy();
+    expect(await linkedCount(zeta!), "Zeta should be solo").toBe(1);
+    for (const ext of ["er:gamma:nps", "er:delta:google"]) {
+      expect(await mpIdFor(ext), `Zeta must not merge into ${ext}`).not.toBe(zeta);
     }
+  });
 
-    // eslint-disable-next-line no-console
-    console.log(`[phase3a] expected 3b cleanup: ${orphanCount} orphan campsite nodes`);
-    // Sanity bound — not a hard assertion, but if this gets wildly large
-    // something else is wrong.
-    expect(orphanCount).toBeGreaterThanOrEqual(0);
+  // ───────────────────────────────────────────────────────────────────
+  // Case 7 — a record with NO category. lookupCompatibility pins to 0 for
+  // a null category, so Eta cannot merge into its 50m campground neighbor.
+  // Solo.
+  // ───────────────────────────────────────────────────────────────────
+  it("Eta (null category) stays solo — compatibility pins to 0", async () => {
+    const eta = await mpIdFor("er:eta:google");
+    expect(eta, "Eta should get its own master_place").toBeTruthy();
+    expect(await linkedCount(eta!), "Eta should be solo").toBe(1);
+    expect(await mpIdFor("er:delta:google"), "Eta must not merge into Delta").not.toBe(eta);
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // Same-source chain-business guard. Kappa1/Kappa2 are two OSM gas
+  // stations with IDENTICAL name+category 120m apart. name_dominant would
+  // auto-link them, but masterPlaceHasSource blocks it (Kappa1's place is
+  // already osm-linked), so Kappa2 falls to blended → 0.6 → manual_review.
+  // Kappa1 anchors its own place; Kappa2 stays unlinked (NOT auto-merged).
+  // ───────────────────────────────────────────────────────────────────
+  it("Kappa2 is NOT auto-linked to Kappa1 — same-source guard holds", async () => {
+    expect(await mpIdFor("er:kappa1:osm"), "Kappa1 should anchor a master_place").toBeTruthy();
+    expect(
+      await mpIdFor("er:kappa2:osm"),
+      "Kappa2 must stay unlinked (guard blocks the same-source auto-link)",
+    ).toBeNull();
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // Case 5 — binational field_precedence. Epsilon merges parks_canada +
+  // Google (name_dominant); resolve_field must pick the parks_canada
+  // canonical_name (priority 1 > google priority 2). The attribution is
+  // the strong assertion — it proves parks_canada won, not a coincidence.
+  // ───────────────────────────────────────────────────────────────────
+  it("Epsilon canonical_name + attribution resolve to parks_canada (binational)", async () => {
+    const { data: mp } = await db
+      .from("master_place")
+      .select("canonical_name, attribution")
+      .ilike("canonical_name", "%epsilon%")
+      .single();
+    expect(mp, "Epsilon master_place not found").toBeTruthy();
+    expect(mp!.canonical_name).toBe("Epsilon Campground");
+    const attribution = (mp!.attribution as Record<string, unknown>) ?? {};
+    expect(
+      attribution.canonical_name,
+      "parks_canada (priority 1) must win canonical_name over google (priority 2)",
+    ).toBe("parks_canada");
   });
 });
 

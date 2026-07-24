@@ -78,5 +78,17 @@ thing worked, it moves into STATE.md §Queued.
   DB-successful run isn't reported as a total failure and the index gap is
   explicit. Surfaced 2026-07-23 during the google_resolved end-to-end proof.
 
+- **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
+  run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving
+  `master_place` empty, so `matchAll` runs in `skipRpcs` rematerialize mode
+  (`matcher.ts` — RPC skipped, candidates come from in-memory
+  `plannedMasterPlaces`). The populated-`master_place` PostGIS candidate lookup
+  is therefore covered only by `matcher.test.ts` mocks and the 3b synthetic
+  `recompute` (a different RPC), never by a real populated-corpus `matchAll`.
+  **Pre-existing** — true of the old prod-derived seed too, NOT introduced by the
+  pinned-fixture change (docs/decisions/2026-07-23-pinned-er-fixture.md). Worth a
+  dedicated test that seeds a small resolved corpus (non-empty `master_place`)
+  and runs an incremental `matchAll(delta)` so the RPC path runs for real.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
