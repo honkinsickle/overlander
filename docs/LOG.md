@@ -1,7 +1,10 @@
-<!-- Append-only session log. Newest entry at top. Never edit past entries.
-     One "## YYYY-MM-DD" per session. 3-8 bullets: what happened, what was
-     found, what was decided, what was learned that git log won't show.
-     Include corrections and dead ends. Link PRs and decision docs. -->
+<!-- Append-only session log. Newest entry at top. One "## YYYY-MM-DD" per
+     session; today's entry may gain bullets as the session continues, but
+     entries for prior dates are never edited or reordered. 3-8 bullets:
+     what happened, what was found, what was decided, what was learned that
+     git log won't show. Include corrections and dead ends — a later entry
+     corrects an earlier one, the earlier one is not rewritten. Link PRs and
+     decision docs. -->
 
 # LOG — append-only session diary
 
