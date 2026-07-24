@@ -26,11 +26,15 @@
 - `docs/BACKLOG.md` — parked
 - `docs/decisions/` — why
 - `docs/DATA_INVENTORY.md` — what data exists where (PROD/TEST/Typesense/backups)
+- `docs/LOG.md` — append-only session diary: what happened and was learned, in
+  order (never overwritten)
 
 ## WRITE DISCIPLINE
 - Update `docs/STATE.md` in the SAME commit as the work. For changes with no
   commit — dashboard settings, env vars, infra — open a docs-only PR the same
   day.
+- Append a `docs/LOG.md` entry at end of session, same discipline as updating
+  STATE.md. Format is documented in LOG.md's header.
 
 ## RUNBOOK — how to run (stable reference)
 - **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
