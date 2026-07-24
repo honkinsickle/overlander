@@ -113,3 +113,36 @@ for the durable versions.
   persisting rail day-reorder (today local-only).
 - **Do not touch** the scroll/windowing/map layer while building this — it is built and
   working (`docs/architecture/itinerary-model.md` §4).
+
+## `dayAssignment` overlay — Adam's decision (2026-07-24)
+
+Manual day-assignment must be **authoritative** ("move to day 3" = day 3 regardless of
+geography), same principle as `placeOverrides`/`placeRanks` overriding the geometric
+default. This supersedes the splice-based move (#131), which sticks on serve but is
+**lost on regeneration** (day membership is geographically derived — see
+`itinerary-model.md` §2d). The move should WRITE a durable overlay, not mutate arrays.
+
+Shape scoped (root fact: day membership = geometry, re-derived at bake/regenerate):
+
+1. **Field** — `dayAssignment: Record<placeId, day>` on `Trip`, sparse, parallel to
+   `placeRanks` (`types.ts:81-90`). Crux: its TARGET has no stable key —
+   `placeOverrides`/`placeRanks` key on `nodeId` (name-slug, re-resolves); `Day.id` is
+   positional `day-N` (§3), so a day target is positional and fragile.
+2. **Bucketing** — the check goes at **pool assembly** (`resolve-corridor-cities.ts:181-191`),
+   NOT in `bucketPlacesIntoCorridor`: `pool(D) = [POIs in D's arrays w/o assignment] +
+   [POIs assigned to D from anywhere]`; per-day bucketing then runs unchanged.
+3. **Mileage** — a geographically-foreign assigned POI fails day D's on-corridor buffer
+   (`bucket.ts:55`) → renders in **"Along the way"** with no mile (honest, per grounding).
+   Embrace that, don't synthesize a distance.
+4. **rescopeOverlays** — must extend to `dayAssignment`: drop entries whose target day is
+   gone. On a positional key, reorder/insert requires **remap**, not just drop (harder
+   than the index-independent node overlays).
+5. **Regeneration** — add to `carryUserAuthored` (`carry-forward.ts:16-26`); but a
+   positional day target does not re-resolve to "the same day" post-regen the way a
+   `nodeId` does.
+
+**Blocker to resolve first:** #1/#4/#5 all reduce to *days having no durable,
+geometry-stable identity*. Recommended: mint a durable `Day.id` (uuid, carried like
+`NodeSeed.id`) so `dayAssignment` behaves like a first-class overlay; alternative is
+re-resolving by a durable day anchor (end-city/coords), ambiguous when a trip revisits
+a city.

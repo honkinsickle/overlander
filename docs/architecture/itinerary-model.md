@@ -98,6 +98,40 @@ generator can rewrite it freely); the overlay is durable user intent that must
 outlive regeneration. Keeping them separate is what lets a regenerate replace every
 day while the pins/order survive (§5).
 
+### 2d. Which DAY a POI belongs to is geographically DERIVED (not authored)
+
+§2a says day membership is "array-based" — but the array itself is **populated by
+geography**, and there is **no durable per-POI day-assignment overlay** today:
+
+- **The corpus fold assigns POIs to days by coordinates.**
+  `foldFederatedCorridorSupply` (`src/lib/trips/bake-corridors.ts:68-96`) fills *each
+  day's* `segmentSuggestions` from a **per-day-segment** corpus query — a 16 km buffer
+  around that day's `start→end` (`fetchCorpusForSegment`, `:105-111`). A POI lands in
+  a day's array because its coords are within that day's corridor, nowhere else.
+- **For user trips it is BAKED once at fork-create and stored** (`bakeCorridors` →
+  fold + `resolveCorridorCities`, `src/app/api/trips/fork/route.ts:67`), then
+  **skipped on serve** (`hasBakedCorpusTiles`, `bake-corridors.ts:78`); `getUserTrip`
+  does not re-fold or re-bucket. **Reference** trips fold live-at-serve
+  (`src/lib/trips/reference.ts:99`). So it is NOT re-run every render for a user
+  trip — but it IS re-run on **regeneration** (the generator rebuilds
+  `segmentSuggestions` from a fresh fold).
+- **`bucketPlacesIntoCorridor` is per-day and coords-based, never cross-day**
+  (`src/lib/corridor/bucket.ts:40-79`): it projects each pool place's coords onto
+  *this day's* line and buckets to the nearest node; a place >`bufferMi` off the
+  route fails gate 1 and falls to **"Along the way"** (off-corridor), it is never
+  reassigned to another day.
+
+**Implication.** Day membership is a *geometrically-derived* property, not a durable
+user-authored one — unlike `placeOverrides`/`placeRanks`, which `carryUserAuthored`
+preserves across regeneration (§5). A manual cross-day move done by mutating the
+`segmentSuggestions` arrays therefore **sticks on normal serves but is lost on
+regeneration**. Making manual day-assignment authoritative *and* durable requires a
+**new overlay** (e.g. `dayAssignment[placeId] → day`) checked at pool-assembly
+(`resolve-corridor-cities.ts:181-191`) before per-day bucketing — blocked on a
+durable day identity, since `Day.id` is positional `day-N` (§3), not a
+geometry-stable key like `nodeId`. Scoped in
+`docs/decisions/2026-07-24-cross-day-stop-movement.md`.
+
 ---
 
 ## 3. nodeIds — name/coords-based, NOT `day-${index}`
