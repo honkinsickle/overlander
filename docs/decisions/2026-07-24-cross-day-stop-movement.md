@@ -5,6 +5,22 @@ durable structural map lives in `docs/architecture/itinerary-model.md`; this doc
 the *reasoning about a feature in flight* — the fork, what the code investigation
 found, what's decided so far, and the open questions. Append-only.
 
+## Chosen design (2026-07-24)
+
+Resolves the "durable day identity" blocker at the end of the `dayAssignment`
+section below. Manual day-assignment becomes a durable OVERLAY, not an array
+splice: a sparse `dayAssignment: Record<placeId, dayAnchorId>` on `Trip`, keyed on
+the day's durable **anchor uuid** rather than the positional `day-N`. It is read at
+pool assembly (`resolve-corridor-cities.ts:181-191`) before per-day bucketing,
+carried across regeneration (added to `carryUserAuthored`, `carry-forward.ts:16-26`),
+and dropped by `rescopeOverlays` when its target anchor is gone. A POI assigned to a
+geographically-foreign day fails that day's on-corridor buffer (`bucket.ts:55`) and
+renders under **"Along the way"** with no mile — honest, never a synthesized
+distance. The gesture is a picker, not a drag, and the assignment is AUTHORITATIVE:
+geography never silently overrides the chosen day. The "Rejected alternatives"
+section at the end records the six paths tried and killed to get here, so the next
+session doesn't re-derive them.
+
 ## Context
 
 The goal is the full edit loop: create a trip in the wizard, then fully edit it —
@@ -146,3 +162,44 @@ geometry-stable identity*. Recommended: mint a durable `Day.id` (uuid, carried l
 `NodeSeed.id`) so `dayAssignment` behaves like a first-class overlay; alternative is
 re-resolving by a durable day anchor (end-city/coords), ambiguous when a trip revisits
 a city.
+
+## Rejected alternatives
+
+Tried and killed while getting to the chosen design (top) — recorded so the next
+session doesn't re-derive them. Each: what it was, why it's dead.
+
+- **Cross-day DRAG (any distance).** Impossible as the primary gesture: the detail
+  column mounts ONE day at a time (single-day conditional swap, no
+  virtualization/windowing — `day-detail-corridor-column.tsx:637`; see
+  `itinerary-model.md` §4), so a distant day is never on screen to be a drop
+  target. That is why the move is a PICKER, not a drag. (NB: the reason is the
+  single-day mount, not IntersectionObserver windowing — there is none.)
+- **Moving a ROUTE WAYPOINT between days.** A waypoint is part of the routed line
+  (`recompute-day.ts` routes `start → waypoints → end`), so moving it re-cuts trip
+  geometry and reshapes every day's mileage — fighting the base regenerator. The
+  route is not user-editable; only the user's curated POIs (`segmentSuggestions`)
+  move.
+- **ARRAY-SPLICE the POI into another day's list** (the in-flight #131 approach).
+  Sticks on serve — the corpus fold is baked at fork-create and skipped on serve
+  (`bake-corridors.ts:78`, §2d) — but does NOT survive regeneration:
+  `carryUserAuthored` doesn't carry a splice (`carry-forward.ts:16-26`) and the
+  generator re-buckets geographically. This is why day-membership must be an
+  OVERLAY, not an array mutation.
+- **Option A — honor geography, `placeOverrides` only.** Let the pin move but keep
+  day membership geometric: geography then silently overrides the user's chosen day
+  and the move doesn't stick. Rejected — the gesture must be AUTHORITATIVE.
+- **Minting a new `Day.id` (uuid).** Unnecessary: key `dayAssignment` on the day's
+  durable **anchor uuid** (carried through regen like any `NodeSeed.id`,
+  `carry-forward.ts:19`) instead of a parallel positional-id replacement —
+  collapsing the blast radius from the ~15 positional `day-N` references to near
+  zero. *[Code note, 2026-07-24: `nodeSeeds` today is a sparse, USER-authored list —
+  created only via `createNodeSeedAction` (`node-actions.ts:181`) or promoted pins
+  (`node-edits.ts:146`), with no per-day overnight anchor stamped at fork-create
+  (`types.ts:98-123`). So "the day's anchor uuid already exists" presumes stamping
+  one anchor seed per day at fork — a prerequisite to build, not current behavior.
+  Flagged for Adam.]*
+- **Re-resolving `dayAssignment` by end-city anchor (name/coords).** A durable day
+  anchor by city name/coords is ambiguous when a trip revisits a city (the Cassiar
+  return leg passes towns twice — cf. §3 cross-day slug collision, and the closing
+  note of the `dayAssignment` section above). Rejected in favor of the durable
+  anchor uuid.
