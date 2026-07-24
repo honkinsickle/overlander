@@ -21,8 +21,17 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   OVERLAY entry, not a routed `Day.waypoints` point — moving or removing one
   changes NO drive geometry (routing runs only over waypoints). So the move is a
   geometry-free array splice + `rescopeOverlays` to drop the now-orphaned
-  pin/rank. In progress on `feat/curated-poi-kebab` (`curated-place.ts` + test,
-  `curated-kebab.tsx`; uncommitted), built on #130.
+  pin/rank. In flight as #131 (`curated-place.ts` + test, `curated-kebab.tsx`),
+  built on #130.
+- **BACKLOG honesty-item verification pass (#129, open)** — recorded three
+  carried detail-panel honesty items after re-verifying each against current
+  code. What git log won't show: a fourth candidate — the suggested-section
+  card-face detour ("Adds ~22h28m") — was verified ALREADY RESOLVED and skipped
+  rather than recorded, because `suggested-section.tsx` (which owned that bug)
+  was deleted in the 2026-07-12 one-day-renderer refactor `435443e`; and item
+  2's provenance drop was corrected to the `USE_FEDERATED_CORRIDOR` corpus fold
+  (`mergeCorpusIntoPool`), NOT the `USE_FEDERATED_POIS` browse merge (which is
+  additive and keeps live provenance).
 - **Started this LOG** (`docs/LOG.md`) + a WRITE-DISCIPLINE rule to append an
   entry each session. Format lives in the file's own header so it can't drift.
 - Correction/gap: the WIP `curated-place.ts` cites
