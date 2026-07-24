@@ -21,11 +21,20 @@
 - Stop for review at every gate.
 - The gate is `cd web && npx next build`, exit 0.
 
-## POINTERS
-- `docs/STATE.md` — position
-- `docs/BACKLOG.md` — parked
-- `docs/decisions/` — why
-- `docs/DATA_INVENTORY.md` — what data exists where (PROD/TEST/Typesense/backups)
+## END-OF-DAY DOC PASS
+The doc set and what each is for (this replaces/reconciles the old POINTERS list):
+
+- `docs/STATE.md`          — where the project is right now (rewritten each session)
+- `docs/BACKLOG.md`        — parked work, not yet started
+- `docs/decisions/`        — why choices were made (append-only), incl.
+                             in-progress feature design records
+- `docs/architecture/`     — how subsystems are built (updated as they change)
+- `docs/DATA_INVENTORY.md` — what data lives in which database
+- `docs/LOG.md`            — append-only session diary (format in its own header)
+
+Rule: at the end of every session, walk this list and update what the session
+changed. `STATE.md` and `LOG.md` every time; the others only when the session
+actually touched what they describe. The `/wrap` command runs this pass.
 
 ## WRITE DISCIPLINE
 - Update `docs/STATE.md` in the SAME commit as the work. For changes with no
