@@ -78,6 +78,16 @@ thing worked, it moves into STATE.md §Queued.
   DB-successful run isn't reported as a total failure and the index gap is
   explicit. Surfaced 2026-07-23 during the google_resolved end-to-end proof.
 
+- **No dev sign-in path — verifying any authed browser surface needs a hand-minted
+  cookie every time.** The UI offers Google OAuth only, and TEST has no Google
+  provider configured, so exercising a `canEdit`/RLS surface in a real browser means
+  minting a Supabase SSR session server-side and injecting the cookie by hand — a
+  throwaway script each session (done again during the NL flag-split verify, PR #126).
+  Options: a dev-only `/auth/dev-login` route, or a committed helper script that mints
+  and prints the cookie. The route is cleaner. Its guard MUST be the TEST-ref check
+  (the same `ref !== znldzjdatkogdktymtvi` gate `checkRails` uses), NOT a flag — so it
+  is structurally incapable of existing in prod, flag misconfiguration notwithstanding.
+
 - **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
   run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving
   `master_place` empty, so `matchAll` runs in `skipRpcs` rematerialize mode

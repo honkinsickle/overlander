@@ -36,6 +36,7 @@
 - **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
   (per lib-dir).
 - **Build gate:** `cd web && npx next build`, exit 0.
+- **Drift check:** `npm run -w data drift:check` — probes deployed prod and every stored service key. Run when search looks broken or after rotating credentials. Not part of session start.
 - **Dev server:** `preview_start` name `web` (port 3210, talks to TEST via
   `.env.development.local`; flag from `.env.local`). A UUID trip needs an authed
   session (RLS); a slug renders anonymously.

@@ -25,6 +25,10 @@ import type { Day, Trip } from "@/lib/trips/types";
 const METERS_PER_MILE = 1609.34;
 
 const LIVING_PLAN_ON = process.env.NEXT_PUBLIC_LIVING_PLAN_EDIT === "1";
+// NL "Change this trip" is a SEPARATE cost surface (per-interaction Opus spend)
+// behind its own flag. Unset => off, the desired prod state, so NL stays dark
+// while manual editing stays live on LIVING_PLAN_ON.
+const NL_EDIT_ON = process.env.NEXT_PUBLIC_NL_EDIT === "1";
 
 /**
  * Map-as-background slideup body. Per v2 spec
@@ -356,8 +360,11 @@ export function TripSlideupBody({
       <RightEdgeToolbar />
 
       {/* Living-plan CHANGE-TRIP box (dev-gated) — a dedicated command surface,
-       *  separate from search. Floating trigger → centered composer. */}
-      {LIVING_PLAN_ON && canEdit && (
+       *  separate from search. Floating trigger → centered composer. Gated on the
+       *  SEPARATE NL flag (per-interaction Opus spend); dark in prod while the
+       *  manual Edit toggle above stays live on LIVING_PLAN_ON. Still respects
+       *  canEdit — reference/frozen slugs never show it, flag on or off. */}
+      {NL_EDIT_ON && canEdit && (
         <>
           {!changeOpen && (
             <button
