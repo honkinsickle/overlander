@@ -12,6 +12,7 @@
     "ingest-corridor": "tsx --env-file=.env scripts/ingest-corridor.ts",
     "slice:snapshot": "tsx --env-file=.env scripts/slice1-snapshot.ts",
     "slice:rollback": "tsx --env-file=.env scripts/slice1-rollback.ts",
+    "drift:check": "tsx scripts/drift-check.ts",
     "audit": "tsx entity-resolution/audit-cli.ts",
     "audit:coverage": "tsx scripts/audit-coverage.ts",
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",

@@ -133,3 +133,18 @@ don't exist in *its* Supabase, so the federated **hydrate step throws entirely**
   and fixed **2026-07-23** (Vercel key updated + redeploy; corpus search now
   returns over the full corridor). The `?debug=1` gate on `/api/search-area`
   surfaces such errors in-band going forward.
+
+---
+
+## CREDENTIAL DRIFT — it lives in the deployment, not the files
+
+Every local and backup service key was **valid** throughout the 2026-06-01
+incident; only **Vercel's runtime key** was stale. So a local file scan would
+never have caught it — the check that matters probes the live deployment.
+`npm run -w data drift:check` (run it **when something looks wrong**, not on a
+schedule) does both:
+- **(a) runtime probe** — hits the deployed prod `/api/search-area?debug=1` and
+  asserts `failedSources` is empty (exercises the service-role hydrate path; this
+  is the part that would have caught 2026-06-01);
+- **(b) stored-key scan** — one live read per stored service key against its own
+  project, reported valid/invalid by SHA-10 fingerprint (never prints a key).
