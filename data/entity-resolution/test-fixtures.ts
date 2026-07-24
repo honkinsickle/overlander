@@ -1,78 +1,44 @@
 /**
- * Phase 3a D4 — ground truth fixtures for the JT smoke-test corpus.
+ * Ground-truth fixtures for the PINNED ER corpus (data/entity-resolution/
+ * fixtures/er-corpus.ts). Each entry is a per-case OUTCOME expectation the
+ * phase3a JT-corpus block asserts after a single matchAll + applyMatches over
+ * the ~17-record fixture.
  *
- * Five named campgrounds make up the positive set. Each fixture's
- * `expected_source_ids` reflects the corrected matcher rules (see
- * data/entity-resolution/README.md "Phase 3a diagnostic"):
+ * These are OUTCOME assertions, not counts — "records X and Y resolved to one
+ * master_place with sources {…}", "amenity A rolled into parent P", "record R
+ * stayed solo". They survive any fixture edit that preserves the SHAPES; they do
+ * not depend on any corpus size. See docs/decisions/2026-07-23-pinned-er-fixture.md.
  *
- *   - Ryan, White Tank, Jumbo Rocks
- *       4 sources merge — NPS/RIDB/Google via name_dominant or
- *       fed_exact; OSM via amenity_rollup (the nearby `dump_station`
- *       node rolls up into the campground master_place).
- *
- *   - Hidden Valley
- *       3 sources merge — NPS/RIDB/Google. OSM's nearest neighbor is
- *       "Chimney Rock" (a peak), `peak ↔ campground = 0.0` in
- *       CATEGORY_COMPATIBILITY → must NOT merge.
- *
- *   - Sheep Pass
- *       3 sources merge — NPS/RIDB/Google. OSM tags 6 campsite-numbered
- *       nodes ("1"–"6") near the cluster; the closest go through the
- *       close_nameless path → manual_review (status='pending'), not
- *       linked. Those beyond 100m become solo master_places (Phase 3a
- *       limitation — polygon containment is 3b).
- *
- * Negative fixtures verify that single-source records become their own
- * master_place (no false merges). The amenity-rollup fixtures spot-check
- * the rollup vs no-rollup classification.
+ * The name-similarity / category-compatibility / blended-confidence values that
+ * drive each expected path were verified by pure computation against the
+ * matcher's own scoreMatch/normalizeName/lookupCompatibility while authoring the
+ * fixture (see the ADR's verification note).
  */
 
 export interface PositiveFixture {
   /** ilike pattern for finding the master_place after resolution */
   canonical_name: string;
   /** sources that should be linked to the resolved master_place */
-  expected_source_ids: ReadonlyArray<"nps" | "ridb" | "google" | "osm">;
+  expected_source_ids: ReadonlyArray<"nps" | "ridb" | "google" | "osm" | "parks_canada">;
   /** explanatory note for failure diagnostics */
   notes?: string;
 }
 
-export const JT_POSITIVE_FIXTURES: ReadonlyArray<PositiveFixture> = [
+export const ER_POSITIVE_FIXTURES: ReadonlyArray<PositiveFixture> = [
   {
-    canonical_name: "Ryan Campground",
-    expected_source_ids: ["nps", "ridb", "google", "osm"],
-    notes: "OSM dump_station rolls up via amenity_rollup",
-  },
-  {
-    canonical_name: "Hidden Valley Campground",
+    canonical_name: "Alpha Campground",
     expected_source_ids: ["nps", "ridb", "google", "osm"],
     notes:
-      "OSM Chimney Rock (peak) MUST NOT merge — checked separately via " +
-      "JT_AMENITY_ROLLUP_FIXTURES. Other OSM amenity nodes near Hidden " +
-      "Valley (dump_station / toilet / etc.) DO roll up via amenity_rollup.",
+      "4-source merge: NPS+RIDB @0m via fed_exact; Google @200m via name_dominant " +
+      "(name_sim 1.0); OSM toilet @40m via amenity_rollup.",
   },
   {
-    canonical_name: "White Tank Campground",
-    expected_source_ids: ["nps", "ridb", "google", "osm"],
-    notes: "OSM dump_station rolls up via amenity_rollup",
-  },
-  {
-    canonical_name: "Jumbo Rocks Campground",
-    expected_source_ids: ["nps", "ridb", "google", "osm"],
+    canonical_name: "Epsilon Campground",
+    expected_source_ids: ["google", "parks_canada"],
     notes:
-      "NPS↔RIDB drift 341m, NPS↔Google drift 347m — both auto via " +
-      "name_dominant after radius widened to 500m",
-  },
-  {
-    canonical_name: "Sheep Pass Group Campground",
-    expected_source_ids: ["nps", "ridb", "google", "osm"],
-    notes:
-      "Resolved canonical_name comes from NPS (priority 1 in field_precedence) " +
-      "now that all four normalizers write canonical_name into " +
-      "normalized_payload. Previously fell through to Google because NPS " +
-      "didn't write it. OSM presence is via dump_station amenity_rollup " +
-      "(two nodes within 100m of the seeded MP); OSM campsite-numbered " +
-      "nodes (name='1'..'6') route to close_nameless manual_review " +
-      "separately and stay unlinked.",
+      "Binational name_dominant: parks_canada + Google @100m (name_sim ~0.92). " +
+      "canonical_name resolves to the parks_canada value via field_precedence " +
+      "(parks_canada priority 1 > google priority 2) — asserted separately.",
   },
 ];
 
@@ -87,11 +53,11 @@ export interface NegativeFixture {
   reason: string;
 }
 
-export const JT_NEGATIVE_FIXTURES: ReadonlyArray<NegativeFixture> = [
+export const ER_NEGATIVE_FIXTURES: ReadonlyArray<NegativeFixture> = [
   {
-    external_id_pattern: "ridb:recarea:%",
-    name_pattern: "%pinto%",
-    reason: "Pinto Mountains Wilderness — BLM, no other source has it",
+    external_id_pattern: "er:theta:%",
+    name_pattern: "%theta%",
+    reason: "Theta Recreation Area — RIDB only, isolated, no cross-source neighbor → solo",
   },
 ];
 
@@ -108,17 +74,18 @@ export interface AmenityRolloutFixture {
   reason?: string;
 }
 
-export const JT_AMENITY_ROLLUP_FIXTURES: ReadonlyArray<AmenityRolloutFixture> = [
+export const ER_AMENITY_FIXTURES: ReadonlyArray<AmenityRolloutFixture> = [
   {
-    amenity_name: "Unnamed dump station",
-    near_campground: "Ryan Campground",
+    amenity_name: "Alpha Toilet",
+    near_campground: "Alpha Campground",
     expected_rollup: true,
     max_distance_m: 100,
+    reason: "OSM toilet 40 m from Alpha → amenity_rollup into the campground",
   },
   {
-    amenity_name: "Chimney Rock",
-    near_campground: "Hidden Valley Campground",
+    amenity_name: "Iota Peak",
+    near_campground: "Alpha Campground",
     expected_rollup: false,
-    reason: "peak ↔ campground category_compatibility = 0",
+    reason: "peak ↔ campground category_compatibility = 0 (hard zero) → must NOT merge",
   },
 ];

@@ -1,35 +1,35 @@
 /**
- * Seed the dedicated Supabase test project with the JT fixture corpus.
+ * Seed the disposable ER test project with the PINNED fixture corpus.
  *
- * Phase 2.5 Part B Option 1 — copies every source_record from the
- * production project into the isolated test project, and inserts the
- * test_marker row that unlocks reset_phase3a_test_state on this
- * project.
+ * Loads data/entity-resolution/fixtures/er-corpus.ts (~17 hand-built records)
+ * into the isolated test project via the upsert_source_record RPC, and inserts
+ * the test_marker row that unlocks reset_phase3a_test_state there.
  *
- * Idempotent: upserts by (source_id, external_id). Stripping
- * master_place_id during the copy means the test project starts with
- * an unresolved corpus — every test run rematerializes from scratch.
+ * WHY PINNED (not a prod copy): this script used to copy EVERY prod
+ * source_record into test. That silently tracked prod — ~219 rows when it was
+ * written, 20,384 by 2026-07 — so the D4 baseline drifted and the ER run got
+ * slow and unreasonable. The fixture is now a small, versioned, reason-about-able
+ * set. See docs/decisions/2026-07-23-pinned-er-fixture.md.
  *
- * Re-run when:
- *   - the test project has been recreated from empty
- *   - source_record schema gained a new column
- *   - new fixtures landed in production and the test suite needs them
+ * NO PROD CREDENTIALS. The prod read side is gone entirely — this script never
+ * builds a prod service-role client and never reads prod. It writes ONLY to the
+ * test project (SUPABASE_TEST_*). It does read the working URL (SUPABASE_URL, a
+ * URL, not a secret) for one purpose: to REFUSE seeding if the test ref equals
+ * the working ref — the same isolation guard preflight-er-test.ts enforces, so a
+ * misconfigured SUPABASE_TEST_URL can never write the fixture into the working DB.
  *
- * CLI:
- *   npm run -w data test:seed
+ * Idempotent: upsert_source_record upserts by (source_id, external_id).
+ *
+ * CLI:  npm run -w data test:seed
  *
  * Required env (loaded by the npm script via tsx --env-file=.env --env-file=.env.test):
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY            (read-side: prod)
- *   SUPABASE_TEST_URL, SUPABASE_TEST_SERVICE_ROLE_KEY  (write-side: test)
+ *   SUPABASE_TEST_URL, SUPABASE_TEST_SERVICE_ROLE_KEY  (write-side: the ER test project)
+ *   SUPABASE_URL                                       (working URL — isolation guard only)
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "../ingestion/lib/logger.ts";
-
-const PAGE_SIZE = 1000;
-const UPSERT_BATCH = 100;
-
-type SourceRecordRow = Record<string, unknown> & { id: string; source_id: string; external_id: string };
+import { ER_CORPUS } from "../entity-resolution/fixtures/er-corpus.ts";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -37,17 +37,45 @@ function requireEnv(name: string): string {
   return v;
 }
 
-function clientFor(urlEnv: string, keyEnv: string): SupabaseClient {
-  return createClient(requireEnv(urlEnv), requireEnv(keyEnv), {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { "x-application-name": "overlander-test-seed" } },
-  });
+function projectRef(url: string): string {
+  try {
+    return new URL(url).hostname.split(".")[0] ?? url;
+  } catch {
+    return url;
+  }
+}
+
+/** Refuse to seed the working DB. Mirrors preflight-er-test.ts: if the test ref
+ *  equals the working ref, writing the fixture would land in the working corpus. */
+function assertIsolated(): void {
+  const workingUrl = requireEnv("SUPABASE_URL");
+  const testUrl = requireEnv("SUPABASE_TEST_URL");
+  const workingRef = projectRef(workingUrl);
+  const testRef = projectRef(testUrl);
+  if (workingRef === testRef) {
+    throw new Error(
+      `test:seed ABORT — SUPABASE_TEST_URL (${testRef}) equals SUPABASE_URL (${workingRef}). ` +
+        `Seeding here would write the fixture into the working DB. Provision a separate ` +
+        `disposable test project and point SUPABASE_TEST_URL at it.`,
+    );
+  }
+}
+
+function testClient(): SupabaseClient {
+  return createClient(
+    requireEnv("SUPABASE_TEST_URL"),
+    requireEnv("SUPABASE_TEST_SERVICE_ROLE_KEY"),
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { "x-application-name": "overlander-test-seed" } },
+    },
+  );
 }
 
 async function ensureTestMarker(test: SupabaseClient): Promise<void> {
   const { error } = await test
     .from("test_marker")
-    .upsert({ id: true, note: "JT fixture seed (Phase 2.5 Part B Option 1)" });
+    .upsert({ id: true, note: "pinned ER fixture (er-corpus.ts)" });
   if (error) {
     logger.error({ err: error }, "seed: test_marker upsert failed");
     throw error;
@@ -55,70 +83,52 @@ async function ensureTestMarker(test: SupabaseClient): Promise<void> {
   logger.info("seed: test_marker row present");
 }
 
-async function fetchAllSourceRecords(prod: SupabaseClient): Promise<SourceRecordRow[]> {
-  const all: SourceRecordRow[] = [];
-  for (let offset = 0; ; offset += PAGE_SIZE) {
-    const { data, error } = await prod
-      .from("source_record")
-      .select("*")
-      .order("id", { ascending: true })
-      .range(offset, offset + PAGE_SIZE - 1);
-    if (error) throw error;
-    const rows = (data ?? []) as SourceRecordRow[];
-    if (rows.length === 0) break;
-    all.push(...rows);
-    if (rows.length < PAGE_SIZE) break;
-  }
-  return all;
-}
-
-async function upsertIntoTest(test: SupabaseClient, rows: SourceRecordRow[]): Promise<number> {
-  let upserted = 0;
-  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
-    const batch = rows.slice(i, i + UPSERT_BATCH);
-    const { error } = await test.from("source_record").upsert(batch, {
-      onConflict: "source_id,external_id",
+async function seedCorpus(test: SupabaseClient): Promise<number> {
+  let seeded = 0;
+  for (const r of ER_CORPUS) {
+    const geometryWkt =
+      typeof r.point === "string"
+        ? r.point
+        : `SRID=4326;POINT(${r.point[0]} ${r.point[1]})`;
+    const { error } = await test.rpc("upsert_source_record", {
+      p_source_id: r.sourceId,
+      p_external_id: r.externalId,
+      p_name: r.name,
+      p_inferred_category: r.inferredCategory,
+      p_geometry: geometryWkt,
+      p_raw_payload: r.rawPayload,
+      p_normalized_payload: r.normalizedPayload,
+      p_source_quality_score: r.sourceQualityScore ?? 0.5,
     });
     if (error) {
-      logger.error(
-        { err: error, batch_idx: Math.floor(i / UPSERT_BATCH), batch_size: batch.length },
-        "seed: source_record upsert failed",
-      );
+      logger.error({ err: error, externalId: r.externalId }, "seed: upsert_source_record failed");
       throw error;
     }
-    upserted += batch.length;
-    logger.debug({ batch: Math.floor(i / UPSERT_BATCH) + 1, upserted }, "seed: batch complete");
+    seeded += 1;
   }
-  return upserted;
+  return seeded;
 }
 
 async function main(): Promise<void> {
-  const prod = clientFor("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY");
-  const test = clientFor("SUPABASE_TEST_URL", "SUPABASE_TEST_SERVICE_ROLE_KEY");
+  assertIsolated();
+  const test = testClient();
 
   await ensureTestMarker(test);
+  const seeded = await seedCorpus(test);
 
-  const prodRows = await fetchAllSourceRecords(prod);
-  logger.info({ count: prodRows.length }, "seed: source_records fetched from prod");
-
-  // Strip master_place_id — test starts unresolved; ER materializes from scratch.
-  const seedRows = prodRows.map((row) => ({ ...row, master_place_id: null }));
-
-  const upserted = await upsertIntoTest(test, seedRows);
-
-  const { count: testCount, error: countErr } = await test
+  const { count, error: countErr } = await test
     .from("source_record")
     .select("id", { count: "exact", head: true });
   if (countErr) throw countErr;
 
-  if (testCount !== prodRows.length) {
+  if (count !== ER_CORPUS.length) {
     logger.warn(
-      { expected: prodRows.length, actual: testCount, upserted },
-      "seed: row-count mismatch — test project may have stale rows from a different prod state",
+      { expected: ER_CORPUS.length, actual: count, seeded },
+      "seed: row-count mismatch — test project may hold stale rows outside the fixture",
     );
   }
   logger.info(
-    { fetched: prodRows.length, upserted, final_count: testCount },
+    { fixture_size: ER_CORPUS.length, seeded, final_count: count },
     "seed: complete",
   );
 }

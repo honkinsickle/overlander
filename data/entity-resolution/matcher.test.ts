@@ -26,7 +26,78 @@ import {
   lookupCompatibility,
   MatchAllCircuitBreakerError,
   paginateLinkedSourceRecords,
+  scoreMatch,
 } from "./matcher.ts";
+
+// ───────────────────────────────────────────────────────────────────────────
+// scoreMatch — the blended 0.4·distance + 0.4·name + 0.2·category math and the
+// two fallback bands it feeds (Step 5): deterministic auto_link (≥0.85) and
+// blended_residual manual_review ([0.6, 0.85)). scoreMatch previously had NO
+// unit test — it was exercised only through the corpus run. With the corpus
+// pinned to ~17 records, these locks live here where they belong.
+//
+// name_similarity is derived from the names via Jaro-Winkler, so the values
+// below are measured against the pinned `natural` version, not invented.
+// ───────────────────────────────────────────────────────────────────────────
+describe("scoreMatch — blend math + Step-5 fallback bands", () => {
+  it("weights 0.4/0.4/0.2 and clips the distance contribution at 100m", () => {
+    const src = { name: "Willow Flat", inferred_category: "campground" };
+    const cand = (distance_m: number) => ({
+      id: "x",
+      canonical_name: "Willow Flat",
+      primary_category: "campground",
+      distance_m,
+    });
+    // Identical name (1.0), campground↔campground (1.0).
+    expect(scoreMatch(src, cand(0)).combined_confidence).toBeCloseTo(1.0, 6);
+    // At 100m the distance term is fully clipped to 0 → 0.4·0 + 0.4 + 0.2.
+    expect(scoreMatch(src, cand(100)).combined_confidence).toBeCloseTo(0.6, 6);
+    // Beyond 100m the clip means no further decay: 250m scores the same as 100m.
+    expect(scoreMatch(src, cand(250)).combined_confidence).toBeCloseTo(0.6, 6);
+  });
+
+  it("deterministic band (≥0.85): sub-name-gate similarity still auto-links when close", () => {
+    // "black rock" vs "black butte" — name_sim 0.829 (< the 0.85 name_dominant
+    // gate), campground↔campground=1.0, 20m. name_dominant is skipped (name too
+    // low), but the blend clears 0.85 → Step 5 deterministic auto_link.
+    const s = scoreMatch(
+      { name: "Black Rock Campground", inferred_category: "campground" },
+      { id: "x", canonical_name: "Black Butte Campground", primary_category: "campground", distance_m: 20 },
+    );
+    expect(s.name_similarity).toBeCloseTo(0.8291, 3);
+    expect(s.name_similarity).toBeLessThan(0.85); // would skip name_dominant
+    expect(s.category_compatibility).toBe(1.0);
+    expect(s.combined_confidence).toBeCloseTo(0.8516, 3);
+    expect(s.combined_confidence).toBeGreaterThanOrEqual(0.85); // deterministic band
+  });
+
+  it("blended_residual band ([0.6, 0.85)): sub-category-gate pair defers to manual review", () => {
+    // Identical name (1.0) but recreation_area↔campground=0.7 (< the 0.8
+    // name_dominant category gate), 60m. name_dominant is skipped (category too
+    // low), close_nameless is skipped (name too high) → Step 5 blended lands at
+    // 0.70 → manual_review blended_residual.
+    const s = scoreMatch(
+      { name: "Willow Flat", inferred_category: "recreation_area" },
+      { id: "x", canonical_name: "Willow Flat", primary_category: "campground", distance_m: 60 },
+    );
+    expect(s.category_compatibility).toBe(0.7);
+    expect(s.category_compatibility).toBeLessThan(0.8); // would skip name_dominant
+    expect(s.combined_confidence).toBeCloseTo(0.7, 6);
+    expect(s.combined_confidence).toBeGreaterThanOrEqual(0.6);
+    expect(s.combined_confidence).toBeLessThan(0.85); // manual_review, not auto
+  });
+
+  it("below the 0.6 floor → neither band (would become a new master_place)", () => {
+    // Same sub-gate name pair as the deterministic case, but 150m apart: the
+    // distance term is fully clipped, so 0.4·0 + 0.4·0.829 + 0.2·1.0 = 0.53.
+    const s = scoreMatch(
+      { name: "Black Rock Campground", inferred_category: "campground" },
+      { id: "x", canonical_name: "Black Butte Campground", primary_category: "campground", distance_m: 150 },
+    );
+    expect(s.combined_confidence).toBeCloseTo(0.5316, 3);
+    expect(s.combined_confidence).toBeLessThan(0.6);
+  });
+});
 
 describe("lookupCompatibility — dispersed_camping (Phase 2)", () => {
   it("matches itself at 1.0 (USFS dispersed ↔ OSM backcountry)", () => {

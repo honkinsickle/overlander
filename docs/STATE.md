@@ -26,8 +26,9 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
-- **Flag split** — branch `feat/split-nl-edit-flag`, PR open, awaiting Adam merge.
-  Splits `NEXT_PUBLIC_LIVING_PLAN_EDIT` (which gated BOTH surfaces) so manual
+- **Flag split** — MERGED to main (#126); takes effect on the next Vercel deploy
+  (Adam owns deploy), at which point NL goes dark and the LIVE ON PROD note above
+  updates. Splits `NEXT_PUBLIC_LIVING_PLAN_EDIT` (which gated BOTH surfaces) so manual
   editing stays live and NL "Change this trip" goes behind a new
   `NEXT_PUBLIC_NL_EDIT` (unset = off, the prod end state — dark on deploy, no
   dashboard action). UI: manual `LIVING_PLAN_ON && canEdit`, NL
@@ -36,6 +37,17 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   tests + real-browser DOM verify on TEST (owner canEdit=true: Edit shows / NL
   hidden with only manual on; neither with both off). `next build` exit 0.
   **DO NOT set `NEXT_PUBLIC_NL_EDIT` in Vercel** — unset is the desired prod state.
+- **Pinned ER fixture** — branch `feat/pinned-er-fixture`, PR #128 open. Replaces
+  the ER seed's "copy every prod `source_record`" (silently tracked prod, 219 →
+  20,384, baselines drifted) with a ~17-record hand-built fixture
+  (`data/entity-resolution/fixtures/er-corpus.ts`), loaded via `upsertSourceRecord`;
+  the seed no longer needs prod credentials. Assertions re-keyed to per-case
+  outcomes; +4 `scoreMatch` unit tests (previously untested). Path values checked
+  by pure computation. **The corpus block is UNVERIFIED end-to-end** — `test:er`
+  is inert while `SUPABASE_TEST_URL` and `SUPABASE_URL` share a ref (the disposable
+  ER project doesn't exist yet); first real `test:er` run is the true gate. The
+  trade (and what a small fixture can't catch) is in
+  `docs/decisions/2026-07-23-pinned-er-fixture.md`.
 
 ## NEXT (ordered)
 1. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
