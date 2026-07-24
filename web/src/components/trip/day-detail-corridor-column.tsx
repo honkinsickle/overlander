@@ -34,7 +34,11 @@ import {
 import {
   addWaypointAction,
   removeWaypointAction,
+  moveCuratedPlaceAction,
+  removeCuratedPlaceAction,
 } from "@/lib/trips/actions";
+import { useRouter } from "next/navigation";
+import type { CuratedMenu } from "@/components/trip/curated-kebab";
 import type { AddedPlace } from "@/lib/trips/added-place";
 import type { CorridorCity, Day, PlaceNodeOverride, Trip, Waypoint } from "@/lib/trips/types";
 import { isSameAnchorPlace } from "@/lib/corridor/anchor-match";
@@ -94,9 +98,14 @@ export function DayDetailCorridorColumn({
   scrollRequest,
   onActiveSection,
   editMode = false,
+  canEdit = false,
 }: {
   trip: Trip;
   selectedDayId: string | null;
+  /** True for a user-owned, editable UUID trip (`!isReference &&
+   *  isUserTripId`). Gates the curated-POI ⋮ kebab — reference/frozen slugs
+   *  never show it. */
+  canEdit?: boolean;
   /** Bumped by the rail's Overview/Guides/Places nav to scroll the
    *  Overview to a section. `nonce` re-triggers even on the same anchor. */
   scrollRequest?: {
@@ -478,6 +487,57 @@ export function DayDetailCorridorColumn({
     });
   };
 
+  // ── Curated-POI kebab (⋮ Move to day / Delete) ─────────────────────────────
+  // Geometry-free overlay edits on segmentSuggestion tiles: the guarded actions
+  // move/delete the entry and rescopeOverlays drops its now-orphaned pin/rank
+  // (moved POI lands unranked+unpinned on the new day). Gated on canEdit — the
+  // kebab never shows on reference/frozen slugs.
+  const router = useRouter();
+  const [curatedBusyId, setCuratedBusyId] = useState<string | null>(null);
+  const [curatedError, setCuratedError] = useState<string | null>(null);
+  const runCurated = useCallback(
+    (placeId: string, action: () => Promise<{ ok: boolean; error?: string }>) => {
+      setCuratedError(null);
+      setCuratedBusyId(placeId);
+      startTransition(async () => {
+        const res = await action();
+        setCuratedBusyId((p) => (p === placeId ? null : p));
+        if (!res.ok) {
+          setCuratedError(res.error ?? "Something went wrong.");
+          return;
+        }
+        // revalidatePath is unreliable on the modal-intercept slideup; force the
+        // RSC re-fetch so the moved/removed tile reflects server truth.
+        router.refresh();
+      });
+    },
+    [router, startTransition],
+  );
+  const dayList = useMemo(
+    () => trip.days.map((d) => ({ id: d.id, label: `Day ${d.dayNumber}` })),
+    [trip.days],
+  );
+  const buildCuratedMenu = useCallback(
+    (place: CorridorPlace): CuratedMenu | undefined => {
+      if (!canEdit || !day || !place.curatedMovable) return undefined;
+      const fromDayId = day.id;
+      return {
+        days: dayList,
+        currentDayId: fromDayId,
+        busy: curatedBusyId === place.id,
+        onMoveToDay: (toDayId) =>
+          runCurated(place.id, () =>
+            moveCuratedPlaceAction(trip.id, fromDayId, toDayId, place.id),
+          ),
+        onDelete: () =>
+          runCurated(place.id, () =>
+            removeCuratedPlaceAction(trip.id, fromDayId, place.id),
+          ),
+      };
+    },
+    [canEdit, day, dayList, curatedBusyId, runCurated, trip.id],
+  );
+
   // Resolve a placeId within a given day to its source (waypoint or
   // segmentSuggestion) and open the shared MapDetailOverlay via
   // trip:openDetail, exactly as the browse cards do. Waypoints pass the
@@ -628,6 +688,41 @@ export function DayDetailCorridorColumn({
 
   return (
     <div className="relative h-full">
+      {curatedError && (
+        <div
+          role="alert"
+          className="absolute left-3 right-3 z-40 flex items-start"
+          style={{
+            bottom: 12,
+            gap: 8,
+            padding: "8px 10px",
+            borderRadius: 6,
+            border: "1px solid var(--danger, #b3452f)",
+            backgroundColor: "color-mix(in srgb, var(--danger, #b3452f) 16%, var(--bg-card))",
+          }}
+        >
+          <span
+            style={{
+              flex: 1,
+              fontFamily: "var(--ff-sans)",
+              fontSize: 13,
+              lineHeight: "17px",
+              color: "var(--text-primary)",
+            }}
+          >
+            {curatedError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCuratedError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0"
+            style={{ color: "var(--text-muted)", padding: 1, fontSize: 13 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div
         className={
           "h-full overflow-y-auto no-scrollbar" +
@@ -676,6 +771,7 @@ export function DayDetailCorridorColumn({
             errorPlaceId={moveError?.placeId ?? null}
             errorMessage={moveError?.message ?? null}
             onDismissError={() => setMoveError(null)}
+            buildCuratedMenu={buildCuratedMenu}
           />
         ) : (
           <DayDetailOverview
@@ -836,6 +932,9 @@ function placePool(day: Day): CorridorPlace[] {
       // Corpus rows carry a google place_id → the day-select hydrate key.
       placeId: p.placeId,
       curated: p.curated,
+      // segmentSuggestions are the overlay tiles the ⋮ kebab can move/delete
+      // (geometry-free); waypoints and legacy day.suggestions are not.
+      curatedMovable: true,
       milesFromStart: p.milesFromStart,
       coords: p.coords,
       keyStopNote: p.keyStopNote,

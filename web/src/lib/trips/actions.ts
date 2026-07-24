@@ -51,6 +51,39 @@ export async function deleteDayAction(
   return { ok: true };
 }
 
+export async function moveCuratedPlaceAction(
+  tripId: string,
+  fromDayId: string,
+  toDayId: string,
+  placeId: string,
+): Promise<ActionResult> {
+  // PROPERTY guard only — frozen trip refused, user-trip edits keep working.
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
+  if (fromDayId === toDayId) return { ok: false, error: "Already on that day." };
+  // Geometry-free: curated POIs are overlay (segmentSuggestions), not routed
+  // waypoints — the guarded write moves the entry, rescopes overlays, re-bakes
+  // the spine. No Mapbox. (Moved stop lands unranked+unpinned on the new day.)
+  const ok = await repo.moveCuratedPlace(tripId, fromDayId, toDayId, placeId);
+  if (!ok) return { ok: false, error: "Could not move place." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
+export async function removeCuratedPlaceAction(
+  tripId: string,
+  dayId: string,
+  placeId: string,
+): Promise<ActionResult> {
+  // PROPERTY guard only — frozen trip refused, user-trip edits keep working.
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
+  const ok = await repo.removeCuratedPlace(tripId, dayId, placeId);
+  if (!ok) return { ok: false, error: "Could not remove place." };
+  revalidatePath(`/trip/${tripId}`);
+  return { ok: true };
+}
+
 export async function pickOvernightAction(
   tripId: string,
   dayId: string,

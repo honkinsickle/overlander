@@ -13,6 +13,7 @@ import { classifyCuratedPicks } from "@/lib/corridor/curated-placement";
 import { scopeRankKey, sortClusterByRank } from "@/lib/corridor/stretches";
 import type { PlaceNodeOverride } from "@/lib/trips/types";
 import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
+import type { CuratedMenu } from "@/components/trip/curated-kebab";
 
 /**
  * Day Detail v4 — corridor view. PURE PRESENTATIONAL.
@@ -55,6 +56,9 @@ export type CorridorPlace = {
   /** True for waypoint-backed tiles (user/editorial stops) — they get the
    *  remove control. Suggestion-backed tiles stay read-only. */
   removable?: boolean;
+  /** True for a curated POI backed by `Day.segmentSuggestions` — the tiles the
+   *  ⋮ kebab (Move to day / Delete) can act on (geometry-free overlay edit). */
+  curatedMovable?: boolean;
   /** True for the LLM's curated key stops (generated trips) — featured as the
    *  guide's picks; the rest of the pool collapses behind "Explore more". */
   curated?: boolean;
@@ -132,6 +136,10 @@ type Props = {
   errorPlaceId?: string | null;
   errorMessage?: string | null;
   onDismissError?: () => void;
+  /** Build the ⋮ kebab menu for a curated (segmentSuggestion) tile, or undefined
+   *  to show no kebab. Wired only on editable (user) trips; read-only otherwise.
+   *  The read spine renders this on every curated-POI card. */
+  buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
 };
 
 const GUTTER_W = 48;
@@ -238,6 +246,7 @@ export function DayDetailCorridor({
   errorPlaceId,
   errorMessage,
   onDismissError,
+  buildCuratedMenu,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Read-spine cluster order: the SAME node-scoped rank key the edit spine builds
@@ -437,6 +446,7 @@ export function DayDetailCorridor({
                 category={p.category}
                 status={p.keyStopNote}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                curatedMenu={buildCuratedMenu?.(p)}
                 editMode={editMode}
               />
             ))}
@@ -483,6 +493,7 @@ export function DayDetailCorridor({
               onRemovePlace={onRemovePlace}
               onOpenPlace={onOpenPlace}
               editMode={editMode}
+              buildCuratedMenu={buildCuratedMenu}
             />
           ) : item.type === "keystop" ? (
             <KeyStopNode
@@ -492,6 +503,7 @@ export function DayDetailCorridor({
               last={item.last}
               onOpenPlace={onOpenPlace}
               editMode={editMode}
+              buildCuratedMenu={buildCuratedMenu}
             />
           ) : (
             <MileTick
@@ -501,6 +513,7 @@ export function DayDetailCorridor({
               last={item.last}
               onOpenPlace={onOpenPlace}
               editMode={editMode}
+              buildCuratedMenu={buildCuratedMenu}
             />
           ),
         )}
@@ -544,6 +557,7 @@ function CityNode({
   onRemovePlace,
   onOpenPlace,
   editMode,
+  buildCuratedMenu,
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
@@ -558,6 +572,7 @@ function CityNode({
   onRemovePlace?: (placeId: string) => void;
   onOpenPlace?: (placeId: string) => void;
   editMode?: boolean;
+  buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   // Curated picks are featured in the day-level "Today's Picks" block (reliable
@@ -631,6 +646,7 @@ function CityNode({
                     ? () => onRemovePlace(p.id)
                     : undefined
                 }
+                curatedMenu={buildCuratedMenu?.(p)}
                 editMode={editMode}
               />
             ))}
@@ -651,6 +667,7 @@ function CityNode({
                     ? () => onRemovePlace(p.id)
                     : undefined
                 }
+                curatedMenu={buildCuratedMenu?.(p)}
                 editMode={editMode}
               />
             ))}
@@ -684,12 +701,14 @@ function KeyStopNode({
   last,
   onOpenPlace,
   editMode,
+  buildCuratedMenu,
 }: {
   place: CorridorPlace;
   mile: number;
   last: boolean;
   onOpenPlace?: (placeId: string) => void;
   editMode?: boolean;
+  buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
 }) {
   const m = Math.round(mile);
   return (
@@ -726,6 +745,7 @@ function KeyStopNode({
           category={place.category}
           status={place.keyStopNote}
           onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+          curatedMenu={buildCuratedMenu?.(place)}
           editMode={editMode}
         />
       </div>
@@ -741,12 +761,14 @@ function MileTick({
   last = false,
   onOpenPlace,
   editMode,
+  buildCuratedMenu,
 }: {
   mile: number;
   tiles?: CorridorPlace[];
   last?: boolean;
   onOpenPlace?: (placeId: string) => void;
   editMode?: boolean;
+  buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
 }) {
   const hasTiles = tiles.length > 0;
   return (
@@ -783,6 +805,7 @@ function MileTick({
             category={p.category}
             status={p.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+            curatedMenu={buildCuratedMenu?.(p)}
             editMode={editMode}
           />
         ))}

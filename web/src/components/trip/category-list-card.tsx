@@ -3,6 +3,7 @@
 import { GripVertical } from "lucide-react";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
+import { CuratedKebab, type CuratedMenu } from "@/components/trip/curated-kebab";
 import {
   CategoryIconV2,
   type CategoryIconV2Name,
@@ -41,6 +42,10 @@ type Props = {
    *  passes this only for waypoint-backed tiles — suggestions stay
    *  read-only (Phase 3 editing model). */
   onRemove?: () => void;
+  /** Curated-POI kebab (⋮ → Move to day / Delete). Present only on curated
+   *  suggestion tiles of editable (user) trips; mutually exclusive with the
+   *  waypoint-tile `onRemove` ✕. Geometry-free — see curated-kebab.tsx. */
+  curatedMenu?: CuratedMenu;
   /** Manual-edit mode. When true, the card grows 400->447 and shows the drag
    *  handle in a 40px right lane (same convention as the rail). Off by default. */
   editMode?: boolean;
@@ -63,6 +68,7 @@ export function CategoryListCard({
   verified = true,
   onOpen,
   onRemove,
+  curatedMenu,
   editMode = false,
   gripHandleProps,
 }: Props) {
@@ -75,7 +81,7 @@ export function CategoryListCard({
       className="relative flex items-start overflow-clip rounded-md"
       style={{ width: editMode ? 447 : 400, gap: 13, backgroundColor: "var(--bg-card)" }}
     >
-      {onRemove && (
+      {onRemove && !curatedMenu && (
         <button
           type="button"
           aria-label={`Remove ${place.title} from day`}
@@ -95,6 +101,7 @@ export function CategoryListCard({
           <RemoveX />
         </button>
       )}
+      {curatedMenu && <CuratedKebab menu={curatedMenu} placeTitle={place.title} />}
       {/* Hero — photo (category-color fallback) + icon badge. */}
       <div
         role="img"
