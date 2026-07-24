@@ -25,6 +25,9 @@
 - `docs/STATE.md` — position
 - `docs/BACKLOG.md` — parked
 - `docs/decisions/` — why
+- `docs/architecture/` — how subsystems are built (structural reference, kept
+  current). Read the relevant file before modifying that subsystem — e.g.
+  `docs/architecture/itinerary-model.md` for days/waypoints/overlays/persistence.
 - `docs/DATA_INVENTORY.md` — what data exists where (PROD/TEST/Typesense/backups)
 
 ## WRITE DISCIPLINE

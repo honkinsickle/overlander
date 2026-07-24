@@ -1,0 +1,115 @@
+# 2026-07-24 — Cross-day stop movement (feature in flight)
+
+Feature-scoped design record: moving a stop between days, and adding a day. The
+durable structural map lives in `docs/architecture/itinerary-model.md`; this doc is
+the *reasoning about a feature in flight* — the fork, what the code investigation
+found, what's decided so far, and the open questions. Append-only.
+
+## Context
+
+The goal is the full edit loop: create a trip in the wizard, then fully edit it —
+add days, move stops between days, delete things, find and add places. Most of the
+**stop layer** already works (reorder within a day via the rank arc, pin to a node,
+delete, search-and-add). The gap is the **day layer**: adding a day, and moving a
+stop from one day to another.
+
+Cross-day movement has no gesture today. Drag only works within one viewport, and on
+a 66-day trip day 1 and day 40 are never on screen together.
+
+**Scope note (launch = California-only):** move-to-day is a MOVE, not add-to-day —
+`placeOverrides` stays one-home-per-place. The add-to case (a place on two days, e.g.
+a return leg through the same town) is real for LA→Deadhorse and is **deferred, not
+forgotten**.
+
+## The fork — two candidate gestures (not yet chosen)
+
+- **A. Continuous day column.** The day-detail column becomes one scroll of all days;
+  a stop is dragged up/down into another day. Natural for ADJACENT days; questionable
+  for distant ones (66 days × 112px ≈ 7,400px; day 1→40 is ~4,400px of held
+  auto-scroll — and dnd-kit auto-scroll near the viewport edge is exactly where the
+  earlier drop bug lived).
+- **B. Kebab picker.** A ⋮ on each stop card opening Delete and "Move to day," which
+  presents a day list. Works regardless of distance.
+
+These may both be right for different distances. The choice is deliberately left open;
+the investigation below is what makes it informed. (A predecessor Paper artboard
+"Trip · Edit — Overlander" `HO4-0` exists; the hypothesized successor
+"Trip Edit— aligned v1-1" was searched across all Overlander Paper files and **does
+not exist** — only day-level kebab designs ("Phase 2 — Editable Trips" `LC-0`,
+"Day — Menu Open" `3HI-0`) were found, neither a per-stop "Move to day".)
+
+## What the code investigation found (informs the fork)
+
+All cite `web/` and are current as of 2026-07-24; see `docs/architecture/itinerary-model.md`
+for the durable versions.
+
+- **Mount is a single-day swap, not windowed.** `DayDetailCorridorColumn` renders one
+  `{day ? … : …}` at a time (`src/components/trip/day-detail-corridor-column.tsx:637`).
+  No virtualization exists. Design A requires building a windowed/stacked column from
+  scratch — the per-day leaf (`DayDetailCorridor`) is duplication-safe, but the parent
+  (scroll-spy, hydration keyed to `selectedDayId`, optimistic edit state) assumes one
+  mounted day.
+- **The map is NOT a per-day cliff.** One shared `mapboxgl.Map`
+  (`src/components/trip/map-column.tsx:395`); the day hero is an image
+  (`:642`). 5 stacked days = 5 images + 1 map. The real question Design A raises is
+  *which day drives the one shared map's flyTo* under scroll, not map count.
+- **Two separate `DndContext`s** (rail `day-column-planner.tsx:253`, detail
+  `day-detail-node-blocks.tsx:407`). Cross-day drag means unifying two working,
+  separately-verified systems and re-entering the auto-scroll/`delta` hazard
+  (`day-detail-node-blocks.tsx:88-100`).
+- **Day membership is geometric** — a stop is on day N because it's in day N's pool
+  (`day.segmentSuggestions ∪ day.suggestions ∪ day.waypoints`,
+  `src/lib/trips/resolve-corridor-cities.ts:181-191`). Moving = splice from A's array,
+  push to B's — NOT an override change.
+- **nodeIds are name/coords-based, not `dayIndex`** (`src/lib/corridor/derive.ts:259,
+  273, 282`). So a day insert/remove does not index-orphan overlays. What breaks a
+  naive move is the trip-level, name-scoped override: after a waypoint-only splice it
+  can dangle on day B AND still match a same-named node on day A (the
+  `applyPlaceOverrides` pull-in, `src/lib/corridor/bucket.ts:112-123`) — split/ghost
+  state.
+- **No `moveWaypointToDay`, no `addDay` write path** — only `addWaypoint` /
+  `removeWaypoint` / `removeDay` exist (`src/lib/trips/repository.ts`). Day-reorder in
+  the rail is currently **local-only/unpersisted**
+  (`src/components/trip/trip-slideup-body.tsx:66-69`).
+
+## Decision (so far)
+
+1. **`rescopeOverlays` built as a pure, tested primitive — PR #130** (merged).
+   `src/lib/corridor/rescope-overlays.ts`: given the overlays and the NEW day layout,
+   DROP overlays whose stop no longer has a valid home (its node isn't on the day that
+   now holds it), keep the rest unchanged, never rewrite a nodeId. Signature is
+   `(overlays, newDays)` — the proposed `oldDays` was a dead parameter because ids are
+   name-based, not index-based (no remap to diff). This is the shared primitive both
+   move and add/remove-day need.
+2. **Cross-day move = pool splice + two-day geometry recompute + rescope, in ONE
+   guarded write.** `moveWaypointToDay` follows the STEP-3 collapse: precompute
+   `deriveAfterDayEdit`/`recomputeDay` for BOTH affected days (A loses a stop, B gains
+   one — both route geometries change; a half-recompute is the silent-wrong outcome to
+   avoid), then inside the `updateUserTripPayload` mutate closure apply both derived,
+   splice A→push B (by-id, so `onConflict: "retry"` composes), run `rescopeOverlays`,
+   and clear `routePolyline`. Atomic; no torn intermediate.
+3. **Build order:** the move ACTION (mechanics, script-verified under the seeded JWT,
+   no UI) is one PR; the gesture (kebab picker and/or drag) is a second. Not together —
+   the action's first real use of the primitive is isolated from the new UI surface.
+4. **`removeDay` is not a live correctness bug** — it leaves inert, un-GC'd ghost
+   overlays for the deleted day's own stops (hygiene). Recorded in `docs/BACKLOG.md`;
+   folds into the shared adapter opportunistically, not its own milestone.
+
+## Consequences / open questions
+
+- **Which gesture (A / B / both by distance)** is unresolved and deliberately so.
+  Evidence leans: B needs no shared drag context and no auto-scroll but has no existing
+  design; A collides with the single-day mount, the separate DndContexts, and the
+  7,400px auto-scroll hazard. Both hit the same net-new server write regardless.
+- **Known v1 UX outcome:** a moved stop **loses its manual pin and ordering** — its
+  overlay was scoped to a day-A node absent on day B, so `rescopeOverlays` drops it and
+  the stop re-buckets to nearest-node on B, unranked. Acceptable for v1 (MOVE,
+  one-home-per-place); worth a small "ordering reset on move" note in the picker PR.
+  Not a surprise — a confirmed outcome.
+- **Add-a-day is not UI-only** — no `repo.addDay`/action exists; the write path
+  (insert day + renumber + recompute) must be built. UI is designed (Paper `LC-0`
+  "+ ADD DAY" / "Insert Day Above/Below").
+- **Deferred:** the add-to case (a place on two days) for LA→Deadhorse return legs;
+  persisting rail day-reorder (today local-only).
+- **Do not touch** the scroll/windowing/map layer while building this — it is built and
+  working (`docs/architecture/itinerary-model.md` §4).
