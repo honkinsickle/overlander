@@ -351,6 +351,7 @@ export function TripSlideupBody({
               scrollRequest={scrollRequest}
               onActiveSection={setActiveSection}
               editMode={editMode}
+              canEdit={canEdit}
             />
           </div>
         </>

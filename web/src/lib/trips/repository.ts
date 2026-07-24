@@ -10,6 +10,8 @@ import {
   type TripConflict,
 } from "./user-trips";
 import { recomputeDay, type DayDerived } from "./recompute-day";
+import * as curated from "./curated-place";
+import { resolveCorridorCities } from "./resolve-corridor-cities";
 import type { LngLat, Route } from "@/lib/routing/route-between";
 import type {
   Day,
@@ -292,6 +294,52 @@ export async function removeWaypoint(
   applyDerivedToDay(day, derived);
   trip.routePolyline = undefined;
   return true;
+}
+
+/** Move a curated POI (a `segmentSuggestions` entry — OVERLAY, not a routed
+ *  waypoint) from one day to another. GEOMETRY-FREE: no Mapbox, no `routePolyline`
+ *  touch — the pure move + overlay rescope (`curated.moveCuratedPlace`) then a pure
+ *  `resolveCorridorCities` re-bake, all inside ONE guarded write. `retry`: the
+ *  by-id splice composes. UUID user trips only — reference/slug trips are read-only
+ *  templates (no edit control renders on them). Returns false if not found. */
+export async function moveCuratedPlace(
+  tripId: string,
+  fromDayId: string,
+  toDayId: string,
+  placeId: string,
+  deps: { client?: SupabaseClient } = {},
+): Promise<boolean> {
+  if (!isUserTripId(tripId)) return false;
+  const updated = await updateUserTripPayload(
+    tripId,
+    (trip) => {
+      const moved = curated.moveCuratedPlace(trip, fromDayId, toDayId, placeId);
+      return moved ? resolveCorridorCities(moved) : null;
+    },
+    { onConflict: "retry", client: deps.client },
+  );
+  return updated !== null;
+}
+
+/** Remove a curated POI (a `segmentSuggestions` entry) from a day. Same
+ *  geometry-free, rescope-then-rebake, single guarded write as `moveCuratedPlace`.
+ *  UUID user trips only. Returns false if not found. */
+export async function removeCuratedPlace(
+  tripId: string,
+  dayId: string,
+  placeId: string,
+  deps: { client?: SupabaseClient } = {},
+): Promise<boolean> {
+  if (!isUserTripId(tripId)) return false;
+  const updated = await updateUserTripPayload(
+    tripId,
+    (trip) => {
+      const removed = curated.removeCuratedPlace(trip, dayId, placeId);
+      return removed ? resolveCorridorCities(removed) : null;
+    },
+    { onConflict: "retry", client: deps.client },
+  );
+  return updated !== null;
 }
 
 /** Reset a single day in a user trip back to its reference content.
