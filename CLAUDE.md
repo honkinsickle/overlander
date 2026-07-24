@@ -25,6 +25,7 @@
 - `docs/STATE.md` — position
 - `docs/BACKLOG.md` — parked
 - `docs/decisions/` — why
+- `docs/DATA_INVENTORY.md` — what data exists where (PROD/TEST/Typesense/backups)
 
 ## WRITE DISCIPLINE
 - Update `docs/STATE.md` in the SAME commit as the work. For changes with no
