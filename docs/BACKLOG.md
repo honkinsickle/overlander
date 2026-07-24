@@ -100,5 +100,22 @@ thing worked, it moves into STATE.md §Queued.
   dedicated test that seeds a small resolved corpus (non-empty `master_place`)
   and runs an incremental `matchAll(delta)` so the RPC path runs for real.
 
+- **`removeDay` leaves inert GHOST overlays (hygiene, not a correctness bug)** —
+  deleting a day (`repository.ts:165` `removeDay`) splices the day out of
+  `trip.days` and never touches `placeRanks`/`placeOverrides`. Because nodeIds are
+  NAME/coords-based (`corridor/derive.ts` `slugify(name+admin)`), NOT
+  `day-${index}`, this does NOT index-orphan later days — their overlays stay
+  valid, their node slugs unchanged. What it leaves is GHOST overlays for the
+  DELETED day's own stops: `placeRanks`/`placeOverrides` entries whose `placeId`
+  is no longer in any day's pool. They are harmless — the node-scoped read guard
+  (`stretches.ts` `scopeRankKey`, `bucket.ts` `applyPlaceOverrides`) ignores an
+  entry whose node isn't in the current day — but never get GC'd, so the `payload`
+  jsonb accumulates cruft over repeated day deletes. Low priority (no user-visible
+  effect). Fix: route `removeDay`'s result through `rescopeOverlays`
+  (`corridor/rescope-overlays.ts`, PR #130) — drops the ghosts and, on the
+  move path, kills the cross-day pull-in reattachment. Sequenced after the
+  primitive lands; may fold into the first `moveWaypointToDay` write rather than a
+  standalone `removeDay` pass (see sequencing note in session handoff).
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
