@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-07-23
+# STATE — `main` · 2026-07-24
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -37,7 +37,35 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   tests + real-browser DOM verify on TEST (owner canEdit=true: Edit shows / NL
   hidden with only manual on; neither with both off). `next build` exit 0.
   **DO NOT set `NEXT_PUBLIC_NL_EDIT` in Vercel** — unset is the desired prod state.
-- **Pinned ER fixture** — branch `feat/pinned-er-fixture`, PR #128 open. Replaces
+- **Curated-POI editing (kebab)** — MERGED (#131), on `main`, takes effect on the
+  next Vercel deploy. A ⋮ kebab on each curated-POI card in the day detail:
+  **Move to day** (curated/`segmentSuggestions` tiles) + **Delete**; route-waypoint
+  tiles get Delete only. Gated on `canEdit` (user UUID trips; reference/frozen never
+  show it). **Move-to-day is FUNCTIONAL, not a stub** — `moveCuratedPlace`
+  (`web/src/lib/trips/curated-place.ts`) splices the POI between days'
+  `segmentSuggestions` + `rescopeOverlays` drops its now-orphaned pin/rank, persisted
+  in one guarded `updateUserTripPayload` write. **Geometry-free** (routing runs over
+  `waypoints` only). CAVEAT: the move is an **array-splice**, so it **sticks on serve
+  but does NOT survive a regenerate** — day membership is geographically re-derived at
+  bake/regen (see `docs/architecture/itinerary-model.md` §2d — that doc was added then
+  dropped on main by #133's "canonical supersedes it"; the finding stands). Durable
+  cross-day assignment needs `dayAssignment` (below), NOT yet built.
+- **`rescopeOverlays`** — MERGED (#130). Pure keep/drop core: given the trip-level
+  `placeRanks`/`placeOverrides` + a NEW day layout, drops overlays whose stop lost its
+  home, keeps the rest, never rewrites a `nodeId`. The kebab move uses it; `dayAssignment`
+  will extend it.
+- **`dayAssignment` — DESIGN OPEN, NOT resolved, NOT built.** Would make manual
+  cross-day assignment authoritative + durable (survive regen), parallel to
+  `placeOverrides`/`placeRanks`. **The anchor-seed-uuid key is DEAD** (verified from
+  code, not assumed): `nodeSeed` ids are coord-deduped (`SEED_DEDUPE_MI=0.25`,
+  `node-edits.ts:24,77,150`) → a revisited city collides (per-city, NOT per-instance),
+  and `nodeSeeds` is trip-level + empty on fresh trips (never stamped per day). A **plain
+  positional day key** breaks on reorder/regen renumber. Recommendation: **mint a genuine
+  per-day uuid** (unique + reorder/remove-durable); **regen-survival remains a separate
+  open problem** — days are regenerated content, not a carried coords-projected overlay,
+  so no key survives regen for free (needs a re-attach rule). Scope +
+  rejected-alternatives in `docs/decisions/2026-07-24-cross-day-stop-movement.md`.
+- **Pinned ER fixture** — MERGED (#128). Replaces
   the ER seed's "copy every prod `source_record`" (silently tracked prod, 219 →
   20,384, baselines drifted) with a ~17-record hand-built fixture
   (`data/entity-resolution/fixtures/er-corpus.ts`), loaded via `upsertSourceRecord`;
@@ -50,13 +78,20 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   `docs/decisions/2026-07-23-pinned-er-fixture.md`.
 
 ## NEXT (ordered)
-1. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
+1. **`dayAssignment` — decide the day-key, then build.** First call: mint a per-day
+   uuid vs accept regen orphan-drop (the anchor-seed key is ruled out — see IN FLIGHT).
+   Then build `dayAssignment` (a third overlay), apply at pool-assembly
+   (`resolve-corridor-cities.ts`), extend `rescopeOverlays`, carry through regen, and
+   **re-wire the kebab's move-to-day to write it** (replacing today's array-splice) so a
+   move survives regeneration. Geographically-foreign assigned POIs render "Along the
+   way", no fabricated mileage.
+2. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
    current. It is the source of truth for what data lives where.
-2. **Search architecture (reframed)** — the corridor corpus already EXISTS on
+3. **Search architecture (reframed)** — the corridor corpus already EXISTS on
    PROD (13,629, federated + working). The open question narrows to
    Google-primary vs corpus-first ranking/precedence and whether audit-resolved
    Google records write back — NOT whether to build the corpus.
-3. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+4. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
