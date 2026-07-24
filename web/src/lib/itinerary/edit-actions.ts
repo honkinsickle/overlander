@@ -9,8 +9,10 @@
  *   - Every action refuses unless the env Supabase ref is TEST
  *     (znldzjdatkogdktymtvi) — dev points there via .env.development.local.
  *   - The live trip id `dawson-vancouver-cassiar` is refused outright.
- *   - NEXT_PUBLIC_LIVING_PLAN_EDIT=1 required server-side too (defense in
- *     depth — prod has neither the flag nor the TEST ref).
+ *   - NEXT_PUBLIC_NL_EDIT=1 required server-side too (defense in depth — prod
+ *     has neither the flag nor the TEST ref). This is the NL flag, SEPARATE from
+ *     manual editing's NEXT_PUBLIC_LIVING_PLAN_EDIT: NL carries per-interaction
+ *     Opus spend and stays dark in prod while manual stays live.
  *
  * NOTE (deliberate deviation, surfaced not papered over): these actions
  * write `reference_trips` directly instead of via lib/trips/repository.ts.
@@ -23,7 +25,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPersistedReferenceTrip } from "@/lib/trips/reference";
 import { finalizeUserAuthored } from "@/lib/trips/carry-forward";
-import { checkRails, type RailsFailure } from "./rails";
+import { checkNlRails, type RailsFailure } from "./rails";
 import type { Trip } from "@/lib/trips/types";
 import {
   summarizeSignature,
@@ -162,7 +164,7 @@ export async function parseReplanAction(
   tripId: string,
   request: string,
 ): Promise<ParseReplanResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -223,7 +225,7 @@ export async function interpretEditAction(
   text: string,
   clarify?: ClarifyContext,
 ): Promise<InterpretActionResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -267,7 +269,7 @@ export async function resolveCleaveAction(
   tripId: string,
   now?: NowSpec,
 ): Promise<CleaveDisplay> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -618,7 +620,7 @@ export async function replanAction(
   now?: NowSpec,
   replaceExisting = false,
 ): Promise<ReplanResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -662,7 +664,7 @@ export async function addStopAction(
   now?: NowSpec,
   replaceExisting = false,
 ): Promise<ReplanResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -778,7 +780,7 @@ export async function executeEditAction(
   now?: NowSpec,
   replaceExisting = false,
 ): Promise<ReplanResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const loaded = await loadEditableTrip(tripId);
   if ("ok" in loaded) return loaded;
@@ -904,7 +906,7 @@ export async function applyReplanAction(
   tripId: string,
   expectedSignature: string,
 ): Promise<ApplyResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
 
   const supabase = createSupabaseServiceClient();
@@ -957,7 +959,7 @@ export async function applyReplanAction(
 
 /** Keep original: drop the staged row, trip untouched. */
 export async function discardReplanAction(tripId: string): Promise<ApplyResult> {
-  const railFail = checkRails(tripId);
+  const railFail = checkNlRails(tripId);
   if (railFail) return railFail;
   const supabase = createSupabaseServiceClient();
   await supabase.from("reference_trips").delete().eq("id", pendingId(tripId));

@@ -9,7 +9,7 @@
  *     the STEP 2 optimistic-concurrency envelope). The mutate re-runs the pure
  *     edit against the FRESH payload every attempt and re-bakes corridorCities.
  *   - slug reference trips -> reference_trips via the SERVICE client, the
- *     original strip-and-serve-re-derive path. UNCHANGED, incl. checkRails.
+ *     original strip-and-serve-re-derive path. UNCHANGED, incl. checkManualRails.
  *
  * PAYLOAD SHAPE DIVERGES BY TABLE, BY DESIGN (do NOT "fix" one to match the
  * other): UUID rows carry BAKED corridorCities; slug rows carry them STRIPPED.
@@ -29,7 +29,7 @@ import {
 import { isUserTripId, updateUserTripPayload } from "@/lib/trips/user-trips";
 import { resolveCorridorCities } from "@/lib/trips/resolve-corridor-cities";
 import type { Trip, NodeSeed, PlaceNodeOverride } from "@/lib/trips/types";
-import { checkRails, type RailsFailure } from "./rails";
+import { checkManualRails, type RailsFailure } from "./rails";
 import {
   addNodeSeed,
   pinPlaceToNode as pinPure,
@@ -107,7 +107,9 @@ async function persistSlug(
  *     read/write returns 0 rows, so updateUserTripPayload no-ops to null; there
  *     is deliberately no app-level owner check. At this scope "editable" == a
  *     user-owned UUID trip; a future `state`/`editable` predicate slots in here.
- *   slug: checkRails UNCHANGED (flag + frozen + TEST-ref, incl. checkNotFrozen).
+ *   slug: checkManualRails UNCHANGED (manual flag + frozen + TEST-ref, incl.
+ *     checkNotFrozen). The MANUAL surface — pure overlay writes, no LLM spend —
+ *     so it reads NEXT_PUBLIC_LIVING_PLAN_EDIT, not the NL flag.
  */
 async function guard(tripId: string, deps: EditDeps): Promise<RailsFailure | null> {
   if (isUserTripId(tripId)) {
@@ -118,7 +120,7 @@ async function guard(tripId: string, deps: EditDeps): Promise<RailsFailure | nul
     if (!user) return { ok: false, error: "Sign in to edit this trip." };
     return null;
   }
-  return checkRails(tripId);
+  return checkManualRails(tripId);
 }
 
 /**
