@@ -519,23 +519,35 @@ export function DayDetailCorridorColumn({
   );
   const buildCuratedMenu = useCallback(
     (place: CorridorPlace): CuratedMenu | undefined => {
-      if (!canEdit || !day || !place.curatedMovable) return undefined;
+      if (!canEdit || !day) return undefined;
       const fromDayId = day.id;
-      return {
-        days: dayList,
-        currentDayId: fromDayId,
-        busy: curatedBusyId === place.id,
-        onMoveToDay: (toDayId) =>
-          runCurated(place.id, () =>
-            moveCuratedPlaceAction(trip.id, fromDayId, toDayId, place.id),
-          ),
-        onDelete: () =>
-          runCurated(place.id, () =>
-            removeCuratedPlaceAction(trip.id, fromDayId, place.id),
-          ),
-      };
+      if (place.curatedMovable) {
+        // Curated POI (segmentSuggestion, overlay): Move + Delete, geometry-free.
+        return {
+          busy: curatedBusyId === place.id,
+          onDelete: () =>
+            runCurated(place.id, () =>
+              removeCuratedPlaceAction(trip.id, fromDayId, place.id),
+            ),
+          move: {
+            days: dayList,
+            currentDayId: fromDayId,
+            onMoveToDay: (toDayId) =>
+              runCurated(place.id, () =>
+                moveCuratedPlaceAction(trip.id, fromDayId, toDayId, place.id),
+              ),
+          },
+        };
+      }
+      if (place.removable) {
+        // Route-waypoint (day.waypoints, routed): Delete only — moving a routed
+        // waypoint changes geometry (deferred to moveWaypointToDay). Reuse the
+        // existing optimistic delete path (removeWaypointAction via removePlace).
+        return { onDelete: () => removePlace(place.id) };
+      }
+      return undefined;
     },
-    [canEdit, day, dayList, curatedBusyId, runCurated, trip.id],
+    [canEdit, day, dayList, curatedBusyId, runCurated, removePlace, trip.id],
   );
 
   // Resolve a placeId within a given day to its source (waypoint or

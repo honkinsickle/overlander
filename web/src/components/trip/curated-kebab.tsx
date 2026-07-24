@@ -15,13 +15,17 @@ import { MoreVertical, Trash2, ArrowRightLeft } from "lucide-react";
  * the caller (DayDetailCorridorColumn), same as the drag repin path.
  */
 export type CuratedMenu = {
-  /** All days, for the Move-to picker (current day is shown disabled). */
-  days: { id: string; label: string }[];
-  currentDayId: string;
-  onMoveToDay: (toDayId: string) => void;
   onDelete: () => void;
   /** True while this tile's move/delete write is in flight — disables the menu. */
   busy?: boolean;
+  /** Present → curated POI card (Move to day + Delete). Absent → route-waypoint
+   *  card (Delete only — moving a routed waypoint touches geometry, deferred). */
+  move?: {
+    /** All days, for the Move-to picker (current day is excluded). */
+    days: { id: string; label: string }[];
+    currentDayId: string;
+    onMoveToDay: (toDayId: string) => void;
+  };
 };
 
 export function CuratedKebab({ menu, placeTitle }: { menu: CuratedMenu; placeTitle: string }) {
@@ -51,7 +55,9 @@ export function CuratedKebab({ menu, placeTitle }: { menu: CuratedMenu; placeTit
     setPicking(false);
   };
 
-  const otherDays = menu.days.filter((d) => d.id !== menu.currentDayId);
+  const otherDays = menu.move
+    ? menu.move.days.filter((d) => d.id !== menu.move!.currentDayId)
+    : [];
 
   return (
     <div ref={rootRef} className="absolute" style={{ top: 2, right: 2 }}>
@@ -97,13 +103,15 @@ export function CuratedKebab({ menu, placeTitle }: { menu: CuratedMenu; placeTit
         >
           {!picking ? (
             <>
-              <MenuItem
-                icon={<ArrowRightLeft size={15} strokeWidth={1.75} />}
-                label="Move to day"
-                trailing="›"
-                disabled={otherDays.length === 0}
-                onClick={() => setPicking(true)}
-              />
+              {menu.move && (
+                <MenuItem
+                  icon={<ArrowRightLeft size={15} strokeWidth={1.75} />}
+                  label="Move to day"
+                  trailing="›"
+                  disabled={otherDays.length === 0}
+                  onClick={() => setPicking(true)}
+                />
+              )}
               <MenuItem
                 icon={<Trash2 size={15} strokeWidth={1.75} />}
                 label="Delete"
@@ -133,7 +141,7 @@ export function CuratedKebab({ menu, placeTitle }: { menu: CuratedMenu; placeTit
                   key={d.id}
                   label={d.label}
                   onClick={() => {
-                    menu.onMoveToDay(d.id);
+                    menu.move?.onMoveToDay(d.id);
                     close();
                   }}
                 />
