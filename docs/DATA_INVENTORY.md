@@ -52,15 +52,15 @@ SoCal-only" conclusions this session; it isn't — PROD is.)
   (≈ the PADUS land-status polygons).
 - **Searchable latitude range:** 33.8 → 34.4 (1,749 rows) — the LA/Joshua-Tree
   reseed only.
-- **source_record:** 10,889 total, by `source_id`: `osm 10,674 · padus 113 ·
+- **source_record:** 2,236 total, by `source_id`: `osm 2,021 · padus 113 ·
   nps 83 · ridb 8 · usfs 6 · google 5`.
-  - ⚠ **`osm` is inflated:** ~**8,653 of the 10,674 are UNRESOLVED OSM
-    source_records from an aborted Slice-1 corridor run** (baseline osm ≈ 2,021).
-    `materialize` never ran, so `master_place` is unchanged (still 1,860). These,
-    plus the leftover active corridor below, are reversible via
-    `npm run -w data slice:rollback` against the STEP-0 snapshot.
-- **Active corridor:** `segment_a_la_pnw`, status **`ingesting`** (never reset
-  after the Slice-1 run was killed), envelope `[-119.1, 33.3] → [-112.6, 37.8]`.
+- **Active corridor:** none (`ingestion_corridor` is empty).
+
+(An aborted Slice-1 corridor run had left TEST with ~8,653 extra unresolved OSM
+source_records and a leftover active `segment_a_la_pnw` corridor row; both were
+rolled back 2026-07-23 via `npm run -w data slice:rollback --execute` against the
+STEP-0 snapshot, and `places_test` re-synced. The numbers above are the restored
+baseline.)
 
 ## STAGING — `gjzqlsyusmtrwbaluuho` ("overlander-staging") — DELETED
 

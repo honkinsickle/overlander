@@ -29,15 +29,12 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 ## NEXT (ordered)
 1. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
    current. It is the source of truth for what data lives where.
-2. **TEST Slice-1 rollback** — TEST carries ~8,653 unresolved OSM source_records
-   + a leftover active `segment_a_la_pnw` corridor from an aborted Slice-1 run.
-   Revert with `npm run -w data slice:rollback` against the STEP-0 snapshot.
-3. **Search architecture (reframed)** — the corridor corpus already EXISTS on
+2. **Search architecture (reframed)** — the corridor corpus already EXISTS on
    PROD (13,629, federated + working). The open question narrows to
    Google-primary vs corpus-first ranking/precedence and whether audit-resolved
    Google records write back — NOT whether to build the corpus.
-4. **Flag split** — if NL editing should stay dark while manual stays live.
-5. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+3. **Flag split** — if NL editing should stay dark while manual stays live.
+4. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
