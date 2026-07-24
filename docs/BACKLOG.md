@@ -100,5 +100,59 @@ thing worked, it moves into STATE.md §Queued.
   dedicated test that seeds a small resolved corpus (non-empty `master_place`)
   and runs an incremental `matchAll(delta)` so the RPC path runs for real.
 
+- **`enrich.ts` HONESTY PASS — the trip-waypoint detail panel still fabricates**
+  (`web/src/lib/trips/enrich.ts`). The detail-honesty pass (#85) made the
+  browse/search path into the slide-up panel honest — `browsePlaceToWaypoint`
+  surfaces every field real or absent. The OTHER path into the SAME panel — a
+  trip waypoint already added to a day, enriched via `enrichWaypoint` — was
+  deliberately left untouched and still invents, per the "Guisados"-card
+  comparison: the reliability score ("81 GOOD RELIABILITY / computed from 2
+  sources" is `75 + hash(slug,…)` / `2 + hash(slug,…)`, not computed); the "IF
+  YOU STOP HERE" stop time (heuristic 45m); a ~$15–25 entrée (canned per
+  category via `ENTRY_BY_CATEGORY`); planned/with-stop ETAs and "arrive at St.
+  George at 1:20 PM" (hardcoded/derived); "DAY 2 UNAFFECTED" (asserted); and
+  Local Eats / Sit-down / Cash-OK tags + the DATA SOURCES trio (the slug-hashed
+  `*_BY_CATEGORY` maps — which even list `iOverlander`, a banned source). This
+  violates the grounding invariant (every field real or absent) on a surface
+  users see, so it ranks HIGHER than its age suggests. **THE FORK — record
+  both, do not pick:** (a) strip the fabrication so trip-waypoint cards match
+  the honest browse cards — consistent and honest, but thinner; (b) keep the
+  rich "if you stop here" impact layout and rebuild it on REAL routing data —
+  real detour and arrival impact, now feasible with Mapbox routing (the same
+  routing the directions panel uses). Under (b) the reliability score and canned
+  tags would still need real backing or stay out.
+
+- **FED-MERGE LIVE-PROVENANCE GAP — merged live rows lose their DATA SOURCES
+  section** (`web/src/lib/trip-browse/merge-corpus.ts`). `mergeCorpusIntoPool`
+  folds the federated corpus into a day's live-discovered pool via a coord+name
+  `sameSpot` match; on a match CORPUS WINS and only `photoUrl`/`photoAlt` are
+  backfilled from the live twin — NOT `mention.secondary`. When the winning
+  corpus row (`mapMasterPlaceRow`) has null/empty `attribution`, its `secondary`
+  is `""` (`federated.ts:176`), so `realDataSources` (`card-stats.ts:191`)
+  returns `[]` and the panel's DATA SOURCES section is omitted entirely — even
+  though the matched live row carried real provenance ("Google ·
+  OpenStreetMap"). Honest (absent provenance → no section, not fabrication) but
+  a real gap, and the most prod-visible of these: the corpus fold feeds
+  `day.segmentSuggestions`. Fix: on a corpus-wins match, backfill `mention`
+  (and/or `attribution`/`overlanderTags`) from the live twin the same way the
+  photo already is. Note: the note that surfaced this filed it under
+  `USE_FEDERATED_POIS`; the verified provenance-drop is in the
+  `USE_FEDERATED_CORRIDOR` corpus fold (`plan/actions.ts:216-233`) — the
+  browse-route `USE_FEDERATED_POIS` merge is purely additive
+  (`[...liveTagged, ...federated]`) and does NOT drop live provenance.
+
+- **GPS-ORIGIN LABEL on the no-GPS directions fallback**
+  (`web/src/components/trip/directions-panel.tsx:126`). For a route-to-place
+  search result (`dayRelative === false`), the route origin is
+  `routeTo ? position ?? legStart : legStart` — with no GPS fix it silently
+  falls back to the day-start (`legStart`), yet the panel presents a live "from
+  now" arrival ETA (`:49`, `:230-233`) that frames the route as departing from
+  the user's current position. Nothing labels the origin as the day-start
+  rather than "here," so the no-GPS case (the common web-planning case — noted
+  as such at `:195`) mislabels where the route starts. Small, cosmetic,
+  honest-labelling issue. Fix: label the origin when it's the day-start fallback
+  (i.e. when `position` is null), so the route/ETA don't imply a live-location
+  departure that isn't happening.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
