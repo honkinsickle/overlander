@@ -80,7 +80,11 @@ tier = 1 cluster).
 |---|---:|---|
 | `places_prod` | 13,629 | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
 | `places_test` | 1,749 | dev (`web/.env.local`) + `data/.env` |
-| `places` | 1,749 | **old shared collection — now UNUSED**, left in place, safe to delete once confirmed |
+
+(The old shared `places` collection — 1,749 docs — was **deleted 2026-07-23**
+once both environments were confirmed on their own collections. Nothing read it:
+`search.ts` and `sync-typesense.ts` both resolve the name from env with no
+`"places"` default.)
 
 **Why collection-per-environment (not one shared `places`):** a shared
 collection means `search:sync` from one environment **prunes every doc not in
