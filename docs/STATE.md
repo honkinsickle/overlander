@@ -5,12 +5,14 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 
 ## LIVE ON PROD (what a user can do today)
 - **Manual drag editing on user-owned trips.** `NEXT_PUBLIC_LIVING_PLAN_EDIT=1`
-  set in Vercel Production. Verified by Adam on a real user trip.
+  set in Vercel Production. Verified by Adam on a real user trip. Once the flag
+  split (IN FLIGHT) deploys, this flag gates manual editing ONLY.
 - Reference slugs (`la-to-deadhorse`, `dawson-vancouver-cassiar`) never show the
   edit toggle — `canEdit = !isReference && isUserTrip(trip.id)`. Cassiar FROZEN.
-- **"Change this trip" (NL editing) is live on the SAME flag.** Per-interaction
-  Opus spend, no quota/rate-limit infra. Manual vs NL split = one env var, two UI
-  sites, one checkRails fork. **WATCH THIS.**
+- **"Change this trip" (NL editing) is still live on the SAME flag ON PROD** until
+  the split deploys. Per-interaction Opus spend, no quota/rate-limit infra. The
+  split that moves it behind its OWN dark flag `NEXT_PUBLIC_NL_EDIT` (unset = off,
+  no dashboard action) is IN FLIGHT.
 - **Corpus search works over the full LA→Deadhorse corridor.** Federated
   `/api/search-area` returns PROD's 13,629-place corpus (lat ~30→70.2, US +
   Canada sources) via Typesense `places_prod`. Restored 2026-07-23 after a
@@ -24,7 +26,16 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
-- Nothing. Working tree clean.
+- **Flag split** — branch `feat/split-nl-edit-flag`, PR open, awaiting Adam merge.
+  Splits `NEXT_PUBLIC_LIVING_PLAN_EDIT` (which gated BOTH surfaces) so manual
+  editing stays live and NL "Change this trip" goes behind a new
+  `NEXT_PUBLIC_NL_EDIT` (unset = off, the prod end state — dark on deploy, no
+  dashboard action). UI: manual `LIVING_PLAN_ON && canEdit`, NL
+  `NL_EDIT_ON && canEdit`. Server: `checkRails` → `checkManualRails` /
+  `checkNlRails` (frozen-id + TEST-ref guards unchanged on both). 12 rails unit
+  tests + real-browser DOM verify on TEST (owner canEdit=true: Edit shows / NL
+  hidden with only manual on; neither with both off). `next build` exit 0.
+  **DO NOT set `NEXT_PUBLIC_NL_EDIT` in Vercel** — unset is the desired prod state.
 
 ## NEXT (ordered)
 1. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
@@ -33,8 +44,7 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
    PROD (13,629, federated + working). The open question narrows to
    Google-primary vs corpus-first ranking/precedence and whether audit-resolved
    Google records write back — NOT whether to build the corpus.
-3. **Flag split** — if NL editing should stay dark while manual stays live.
-4. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+3. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
