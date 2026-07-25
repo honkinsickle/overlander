@@ -9,17 +9,26 @@ found, what's decided so far, and the open questions. Append-only.
 
 Resolves the "durable day identity" blocker at the end of the `dayAssignment`
 section below. Manual day-assignment becomes a durable OVERLAY, not an array
-splice: a sparse `dayAssignment: Record<placeId, dayAnchorId>` on `Trip`, keyed on
-the day's durable **anchor uuid** rather than the positional `day-N`. It is read at
+splice: a sparse `dayAssignment: Record<placeId, dayId>` on `Trip`, **keyed on a
+newly-minted per-day uuid** (`Day.id` becomes a stable uuid, minted once and carried
+like `NodeSeed.id`) rather than the positional `day-N`. It is read at
 pool assembly (`resolve-corridor-cities.ts:181-191`) before per-day bucketing,
 carried across regeneration (added to `carryUserAuthored`, `carry-forward.ts:16-26`),
-and dropped by `rescopeOverlays` when its target anchor is gone. A POI assigned to a
+and dropped by `rescopeOverlays` when its target day is gone. A POI assigned to a
 geographically-foreign day fails that day's on-corridor buffer (`bucket.ts:55`) and
 renders under **"Along the way"** with no mile — honest, never a synthesized
 distance. The gesture is a picker, not a drag, and the assignment is AUTHORITATIVE:
 geography never silently overrides the chosen day. The "Rejected alternatives"
-section at the end records the six paths tried and killed to get here, so the next
+section at the end records the paths tried and killed to get here, so the next
 session doesn't re-derive them.
+
+> **Not** the day's anchor-*seed* uuid. *(Correction 2026-07-24: an earlier draft of
+> this section keyed `dayAssignment` on "the day's durable anchor uuid." The verified
+> anchor-seed investigation — recorded in STATE.md and LOG.md — ruled that key DEAD:
+> `nodeSeed` ids are coord-deduped (`SEED_DEDUPE_MI=0.25`, `node-edits.ts:24,77,150`),
+> so a revisited city collides to ONE uuid (per-CITY, not per-instance), and `nodeSeeds`
+> isn't per-day (empty on a fresh trip). The key is a newly-minted per-day uuid — see
+> the corrected "anchor-seed uuid" entry under Rejected alternatives.)*
 
 ## Context
 
@@ -202,18 +211,21 @@ session doesn't re-derive them. Each: what it was, why it's dead.
 - **Option A — honor geography, `placeOverrides` only.** Let the pin move but keep
   day membership geometric: geography then silently overrides the user's chosen day
   and the move doesn't stick. Rejected — the gesture must be AUTHORITATIVE.
-- **Minting a new `Day.id` (uuid).** Unnecessary: key `dayAssignment` on the day's
-  durable **anchor uuid** (carried through regen like any `NodeSeed.id`,
-  `carry-forward.ts:19`) instead of a parallel positional-id replacement —
-  collapsing the blast radius from the ~15 positional `day-N` references to near
-  zero. *[Code note, 2026-07-24: `nodeSeeds` today is a sparse, USER-authored list —
-  created only via `createNodeSeedAction` (`node-actions.ts:181`) or promoted pins
-  (`node-edits.ts:146`), with no per-day overnight anchor stamped at fork-create
-  (`types.ts:98-123`). So "the day's anchor uuid already exists" presumes stamping
-  one anchor seed per day at fork — a prerequisite to build, not current behavior.
-  Flagged for Adam.]*
+- **Keying `dayAssignment` on the day's anchor-SEED uuid** (`nodeSeeds[0].id`, "carried
+  through regen like any `NodeSeed.id`"). **DEAD** — the tempting shortcut, ruled out by
+  direct code check 2026-07-24. Two independent failures: (1) seed ids are coord-deduped
+  (`SEED_DEDUPE_MI=0.25`, `node-edits.ts:24,77,150`), so a revisited city (the Cassiar
+  return leg) collides to ONE uuid — per-CITY, not per-instance — an ambiguous day key;
+  (2) `nodeSeeds` is a sparse, USER-authored list, EMPTY on a fresh trip (created only
+  via `createNodeSeedAction` `node-actions.ts:181` or promoted pins `node-edits.ts:146`,
+  with no per-day anchor stamped at fork, `types.ts:98-123`) — so there is no per-day
+  anchor uuid to key on. **Therefore the chosen key is a newly-minted per-day uuid**
+  (`Day.id` → stable uuid), NOT the anchor seed. *(Correction 2026-07-24: an earlier
+  draft of this item had it backwards — it rejected minting a per-day uuid "in favor of
+  the anchor uuid." That contradicted the verified finding and STATE.md/LOG.md; inverted
+  here so the docs agree.)*
 - **Re-resolving `dayAssignment` by end-city anchor (name/coords).** A durable day
   anchor by city name/coords is ambiguous when a trip revisits a city (the Cassiar
   return leg passes towns twice — cf. §3 cross-day slug collision, and the closing
-  note of the `dayAssignment` section above). Rejected in favor of the durable
-  anchor uuid.
+  note of the `dayAssignment` section above). Rejected in favor of a newly-minted
+  per-day uuid (`Day.id` → stable uuid).
