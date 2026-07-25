@@ -56,6 +56,33 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **Started this LOG** (`docs/LOG.md`); the append rule lives in CLAUDE.md's
   END-OF-DAY DOC PASS section. (Supersedes the LOG.md drafted in #132, whose 2026-07-23
   entry is carried below and whose CLAUDE.md hunks are redundant post-#133 — #132 closed.)
+- **#134 misroute RESOLVED** (corrects the bullet above): the cross-day decision doc,
+  merged into the orphan branch instead of main, was re-PR'd onto main via **#136**. The
+  rest of the cluster landed too — **#129** (BACKLOG honesty items), **#114** (place-search
+  decision docs, CLAUDE.md hunk dropped as redundant post-#133), **#135** (STATE.md +
+  LOG.md); **#132 closed** with its 2026-07-23 entry carried into this LOG.
+- **Architecture doc restored to main (#138).** #133 had dropped `itinerary-model.md`
+  deferring to a canonical branch that never merged — leaving the architecture layer
+  absent while STATE.md + the decision doc still referenced it (dangling). Restored the
+  266-line version; corrected §4 (windowing NOT built) and §5 (`rescopeOverlays` IS wired
+  via `moveCuratedPlace`) against code, resynced line refs drifted by #131.
+- **Doc-consistency corrections (verified from code, provenance preserved):**
+  **#137** fixed the decision doc's false "scroll/windowing layer built and working" §4
+  claim (no `IntersectionObserver`/virtualization exists — center is a single-day swap).
+  **#141** corrected the "Chosen design" `dayAssignment` key from the anchor-SEED uuid
+  (DEAD — coord-deduped, revisited-city collision) to a **newly-minted per-day uuid**,
+  inverting two backwards rejected-alternatives items; decision doc, STATE.md, LOG.md now
+  AGREE on the key. **#139** fixed a stale note (the itinerary-model ref no longer dangles).
+- **Stale-PR triage** — closed 6 superseded/obsolete PRs (#79, #49, #35, #34, #19, #6; all
+  300-424 commits behind, work reworked or landed elsewhere). **Kept #24 open** (live
+  weather — OpenMeteo + climatology fallback, `src/lib/weather/` + `resolve-weather.ts`,
+  ABSENT from main): a genuine unmerged feature, rescue is a SALVAGE not a rebase (its
+  hook `suggested-section.tsx` was deleted 7/12). Recorded in BACKLOG (#140) so it isn't
+  lost as a dead-looking stale PR. Open-PR list is now #24 only.
+- **Verified the kebab is live on prod** — the Vercel Production deployment on the #131
+  SHA completed successfully; the ⋮ kebab is reachable now on user-owned UUID trips (not
+  reference slugs, not flag-gated — gated on `canEdit` only). Also confirmed `/wrap` is a
+  Claude Code command (`.claude/commands/wrap.md`), NOT a web route — no `/wrap` URL exists.
 
 ## 2026-07-23
 - **Corpus outage root-caused and fixed — the corpus was on PROD all along.**
