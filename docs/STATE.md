@@ -5,14 +5,14 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 
 ## LIVE ON PROD (what a user can do today)
 - **Manual drag editing on user-owned trips.** `NEXT_PUBLIC_LIVING_PLAN_EDIT=1`
-  set in Vercel Production. Verified by Adam on a real user trip. Once the flag
-  split (IN FLIGHT) deploys, this flag gates manual editing ONLY.
+  set in Vercel Production. Verified by Adam on a real user trip. The flag split has
+  DEPLOYED, so this flag now gates manual editing ONLY.
 - Reference slugs (`la-to-deadhorse`, `dawson-vancouver-cassiar`) never show the
   edit toggle — `canEdit = !isReference && isUserTrip(trip.id)`. Cassiar FROZEN.
-- **"Change this trip" (NL editing) is still live on the SAME flag ON PROD** until
-  the split deploys. Per-interaction Opus spend, no quota/rate-limit infra. The
-  split that moves it behind its OWN dark flag `NEXT_PUBLIC_NL_EDIT` (unset = off,
-  no dashboard action) is IN FLIGHT.
+- **"Change this trip" (NL editing) is now DARK on prod.** The flag split (#126)
+  deployed, moving it behind its OWN flag `NEXT_PUBLIC_NL_EDIT` — **unset in Vercel =
+  off, the prod end state; DO NOT set it.** (It had been per-interaction Opus spend with
+  no quota/rate-limit infra, which is why it's dark until that infra exists.)
 - **Corpus search works over the full LA→Deadhorse corridor.** Federated
   `/api/search-area` returns PROD's 13,629-place corpus (lat ~30→70.2, US +
   Canada sources) via Typesense `places_prod`. Restored 2026-07-23 after a
@@ -26,19 +26,9 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
-- **Flag split** — MERGED to main (#126); takes effect on the next Vercel deploy
-  (Adam owns deploy), at which point NL goes dark and the LIVE ON PROD note above
-  updates. Splits `NEXT_PUBLIC_LIVING_PLAN_EDIT` (which gated BOTH surfaces) so manual
-  editing stays live and NL "Change this trip" goes behind a new
-  `NEXT_PUBLIC_NL_EDIT` (unset = off, the prod end state — dark on deploy, no
-  dashboard action). UI: manual `LIVING_PLAN_ON && canEdit`, NL
-  `NL_EDIT_ON && canEdit`. Server: `checkRails` → `checkManualRails` /
-  `checkNlRails` (frozen-id + TEST-ref guards unchanged on both). 12 rails unit
-  tests + real-browser DOM verify on TEST (owner canEdit=true: Edit shows / NL
-  hidden with only manual on; neither with both off). `next build` exit 0.
-  **DO NOT set `NEXT_PUBLIC_NL_EDIT` in Vercel** — unset is the desired prod state.
-- **Curated-POI editing (kebab)** — MERGED (#131), on `main`, takes effect on the
-  next Vercel deploy. A ⋮ kebab on each curated-POI card in the day detail:
+- **Curated-POI editing (kebab)** — MERGED (#131) and **DEPLOYED to prod** (Vercel
+  auto-deploys `main`; the prod deployment on the #131 SHA completed successfully). Live
+  now on user-owned UUID trips. A ⋮ kebab on each curated-POI card in the day detail:
   **Move to day** (curated/`segmentSuggestions` tiles) + **Delete**; route-waypoint
   tiles get Delete only. Gated on `canEdit` (user UUID trips; reference/frozen never
   show it). **Move-to-day is FUNCTIONAL, not a stub** — `moveCuratedPlace`
@@ -47,9 +37,8 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   in one guarded `updateUserTripPayload` write. **Geometry-free** (routing runs over
   `waypoints` only). CAVEAT: the move is an **array-splice**, so it **sticks on serve
   but does NOT survive a regenerate** — day membership is geographically re-derived at
-  bake/regen (see `docs/architecture/itinerary-model.md` §2d — that doc was added then
-  dropped on main by #133's "canonical supersedes it"; the finding stands). Durable
-  cross-day assignment needs `dayAssignment` (below), NOT yet built.
+  bake/regen (see `docs/architecture/itinerary-model.md` §2d, restored to main via #138).
+  Durable cross-day assignment needs `dayAssignment` (below), NOT yet built.
 - **`rescopeOverlays`** — MERGED (#130). Pure keep/drop core: given the trip-level
   `placeRanks`/`placeOverrides` + a NEW day layout, drops overlays whose stop lost its
   home, keeps the rest, never rewrites a `nodeId`. The kebab move uses it; `dayAssignment`
