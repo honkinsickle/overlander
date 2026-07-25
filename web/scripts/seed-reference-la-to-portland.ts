@@ -55,11 +55,13 @@ function jsonNormalized(trip: Trip): unknown {
 }
 
 function client() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // TEST env uses NEXT_PUBLIC_SUPABASE_URL; the PROD env backup uses
+  // SUPABASE_URL — accept either so the same script runs against both.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     console.error(
-      "✗ requires NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (use --env-file)",
+      "✗ requires (NEXT_PUBLIC_SUPABASE_URL|SUPABASE_URL) + SUPABASE_SERVICE_ROLE_KEY (use --env-file)",
     );
     process.exit(1);
   }
