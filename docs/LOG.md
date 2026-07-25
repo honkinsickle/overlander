@@ -54,5 +54,39 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   Lesson: verify each PR's base branch before `gh pr merge`, not just its mergeable
   state (which is computed against the base, not necessarily main).
 - **Started this LOG** (`docs/LOG.md`); the append rule lives in CLAUDE.md's
-  END-OF-DAY DOC PASS section. (Supersedes the LOG.md drafted in #132 — that PR's
-  remaining CLAUDE.md hunks are redundant post-#133, so #132 can be closed.)
+  END-OF-DAY DOC PASS section. (Supersedes the LOG.md drafted in #132, whose 2026-07-23
+  entry is carried below and whose CLAUDE.md hunks are redundant post-#133 — #132 closed.)
+
+## 2026-07-23
+- **Corpus outage root-caused and fixed — the corpus was on PROD all along.**
+  `/api/search-area` had silently returned nothing because the **2026-06-01 prod
+  Supabase service-role key rotation never reached Vercel**; hydrate failed with
+  `master_place read failed: Invalid API key` from June 1 until the fix today
+  (Vercel key updated + redeploy). PROD's full 13,629-place LA→Deadhorse corpus
+  (Typesense `places_prod`) was intact the whole time — the earlier framing that
+  the corpus still needed building was wrong. (`docs/DATA_INVENTORY.md`)
+- **Second, independent fault: the shared Typesense `places` collection.** Prod
+  and test shared one cluster AND one collection; `search:sync`'s prune pass
+  deletes every doc whose id isn't in the syncing env's `master_place`, and the
+  two envs' uuid id-sets are disjoint — so each env's sync clobbered the other's
+  docs, taking the federated half fully down (`failedSources: ["corpus"]`), not
+  merely returning fewer results. Fixed with **one collection per environment**
+  (`places_prod` / `places_test`), name read from env with NO default (fails
+  loud), orphan `places` deleted. (#120, #123;
+  `docs/decisions/2026-07-23-typesense-collection-per-env.md`)
+- **The tools that made these silent faults findable:** `failedSources` (#119)
+  distinguishes a down source from a genuine no-match, and a `?debug=1` /
+  `SEARCH_DEBUG_ERRORS=1` gate (#121) surfaces the per-source error text (off by
+  default so internal DB error strings never leak).
+- **`credential-drift` check** (`npm run -w data drift:check`, #124) — probes
+  deployed prod + every stored service key by SHA-10 fingerprint. It is the
+  check that would have caught 2026-06-01: every local/backup key was valid the
+  whole time; only Vercel's runtime key was stale, so a local file scan couldn't
+  have found it.
+- **Flag split (#126):** `NEXT_PUBLIC_LIVING_PLAN_EDIT` gated BOTH manual drag
+  editing and NL "Change this trip"; split so manual stays live and NL goes
+  behind its own dark flag `NEXT_PUBLIC_NL_EDIT` (unset = off — do NOT set it in
+  Vercel). Takes effect on the next deploy.
+- **`DATA_INVENTORY.md` written as the measured source of truth** for what data
+  lives where (PROD/TEST/Typesense/backups) + STATE refresh (#122); pinned ER
+  fixture replacing the copy-prod-into-test seed (#128).
