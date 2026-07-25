@@ -190,6 +190,54 @@ thing worked, it moves into STATE.md §Queued.
   Ephemeral — lost on server restart, never persisted to Supabase. Not part of the
   reference-trip migration; recorded so the next person doesn't mistake it for
   dead fixture code. Deleting the `TRIPS` module would remove this feature.
+- **Plotting-on-map architecture (deep dive)** — an ARCHITECTURE REVIEW that
+  intra-day map plotting waits on, NOT a feature ticket. Today the map plots only
+  day start/end pins and user waypoints; day-detail items (corridor cities, curated
+  picks) are never plotted. Before building intra-day plotting, the map's plotting
+  architecture needs a dedicated design pass.
+  - **Already measured (verified from source 2026-07-25 — carry forward, do not
+    re-derive):**
+    - Every PIN is a `mapboxgl.Marker` DOM instance in `map-column.tsx` — day-end
+      pins (default color) plus waypoint pins built as hand-rolled category-colored
+      DOM elements (`CAT_SVG` icon map). The route line is a GL layer (`map.on("load")`
+      source+line); there is NO GeoJSON source+layer for POINTS anywhere.
+    - Open call: DOM markers vs GeoJSON source + symbol/circle layer. Not settled.
+      The argument is CHURN (markers created/destroyed per `?day=` transition), NOT
+      raw volume.
+    - Volume/day: corridor cities ~2–6 (`CorridorCity`, soft cap `max_nodes=4`
+      intermediate per corridor-cities-spec); `Day.segmentSuggestions` capped at
+      `MAX_SEGMENT_SUGGESTIONS` (`routing/day-suggestions.ts`); legacy `Day.suggestions`
+      ~5–8. Fuel/camp/food are CATEGORY values (`category` on waypoints/picks), NOT
+      distinct item kinds; fuel additionally lazy-fetches per day via
+      `FuelStopCard` → `/api/trip-browse/{tripId}/{dayId}?category=fuel` and is NOT in
+      the Trip payload.
+    - Coordinates: `CorridorCity.coords` and `BrowsePlace.coords` are REQUIRED, real,
+      sourced (gazetteer / corpus / Google). `Waypoint.coords` is OPTIONAL and the map
+      already skips the coordless ones (`if (!wp.coords) continue`). `NodeSeed`
+      "re-projection" computes an along-route MILE scalar from a real pin — it does NOT
+      synthesize map coordinates. So there is no approximated-onto-route case; grounding
+      holds by construction (omit, never approximate).
+    - Test-data caveat: reference-derived trips populate `Day.suggestions` but NOT
+      `Day.segmentSuggestions` (`placePool` in `day-detail-corridor-column.tsx`), so the
+      66-day fork likely shows ~5–8 items/day. A regenerated trip is needed to exercise
+      the `MAX_SEGMENT_SUGGESTIONS` cap.
+  - **Questions the deep dive must answer:**
+    - DOM markers vs GL source+layer, and what the migration costs if it changes.
+    - WHICH day's items are plotted. Prior lean was CENTERED-DAY-ONLY driven by the
+      `?day=` param — the same channel that drives `flyTo` — so the map never learns the
+      scroll window. Confirm or revisit, but preserve the constraint that the map does
+      NOT know which days are mounted.
+    - Marker ↔ detail-list highlight linkage. A design was described to this session
+      as living in `OVERLANDER_STYLE_GUIDE.md` (per-type marker colors + an Active POI
+      State, 22px → 35px, double-ring glow) — but NO such file exists in the repo, and
+      that spec text is in NO tracked file (verified 2026-07-25). What DOES exist:
+      `DESIGN.md` carries the marker tokens (`--pin`/`--marker`/`--pin-border`) and the
+      per-category color roles the current DOM markers already use — but no Active-POI-
+      State / marker-highlight spec. The deep dive's FIRST step is to locate the real
+      source (likely a Paper artboard, where this project's designs live) before treating
+      the 22px→35px/double-ring detail as settled.
+    - Interaction with the continuous-scroll settle-debounce (the scroll→`?day=` sync in
+      the Design-A continuous day-detail scroll).
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
