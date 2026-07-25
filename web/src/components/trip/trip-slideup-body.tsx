@@ -350,6 +350,7 @@ export function TripSlideupBody({
               selectedDayId={selectedDayId}
               scrollRequest={scrollRequest}
               onActiveSection={setActiveSection}
+              onSelectDay={selectDay}
               editMode={editMode}
               canEdit={canEdit}
             />

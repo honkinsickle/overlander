@@ -87,6 +87,113 @@ thing worked, it moves into STATE.md §Queued.
   and prints the cookie. The route is cleaner. Its guard MUST be the TEST-ref check
   (the same `ref !== znldzjdatkogdktymtvi` gate `checkRails` uses), NOT a flag — so it
   is structurally incapable of existing in prod, flag misconfiguration notwithstanding.
+  **PARTIAL (2026-07-25):** the helper-script half now exists —
+  `web/scripts/mint-dev-session.ts` (TEST-ref-guarded, prints the cookie JSON;
+  used for the continuous-scroll authed verify, #146). CAVEAT it documents: this
+  machine and the TEST auth server disagree by ~1h, so the printed session's
+  `expires_at` must be patched to local-now before injecting or `@supabase/ssr`
+  force-refreshes (and 401s once the refresh chain goes stale). The
+  `/auth/dev-login` route remains the cleaner endgame.
+
+- **SEED-ID PINS ARE INVISIBLE TO THE READ SPINE (view mode)** — surfaced during
+  the #146 authed verify. **Pre-existing, NOT introduced by the continuous
+  scroll — established by direct A/B on `main` vs the branch, same trip, same
+  drag** (an earlier "proof" by running `applyPlaceOverrides` on raw stored state
+  was BAD METHODOLOGY and is retracted: it tested the function, not what the
+  component receives). Observed: on a FRESH SERVE both `main` and the branch
+  render the pinned place under its ORIGINAL node — the durable behaviour is
+  identical and wrong on both. (What DOES differ post-edit is recorded as its own
+  item below.) A cross-node
+  drag-pin in the edit spine mints a `nodeSeed` ("promoted") and writes
+  `placeOverrides[].nodeId` as the **seed id** (`seed-<city>-<suffix>`), but the
+  baked `Day.corridorCities` carry **plain slug ids** and the read spine
+  (`DayDetailCorridor` / `applyPlaceOverrides`) never consumes `trip.nodeSeeds` —
+  so the override dangles (inert per the documented semantics) and the pin
+  renders in its ORIGINAL bucket in view mode, while the edit spine (seed-aware
+  projection) shows it re-homed. Same-node rank writes use the plain cc id and
+  DO render in view. Fix directions: teach the view spine to resolve seed ids
+  (inject promoted seeds into the render spine, as the edit spine does), or bake
+  seed nodes into `corridorCities` at write time. Touches verified bucketing
+  code — needs its own pass, not a drive-by. **Scoped as its own PR** (Adam,
+  2026-07-25): it cannot ride inside #146, whose tripwire forbids the read spine
+  consuming `nodeSeeds`.
+  **↔ DEPENDENCY (both ends):** landing this **dissolves** the post-edit
+  divergence recorded below, because server truth and the optimistic list then
+  agree. When it lands, **revert the continuous stack to server truth** —
+  `placeOverrides={trip.placeOverrides}` / `ranks` from `trip.placeRanks` in
+  `renderViewDay` (`day-detail-corridor-column.tsx`), which is the build spec's
+  original rule and drops the optimistic coupling from the view path.
+
+- **Seeded TEST password hardcoded in 4 tracked scripts of a PUBLIC repo —
+  DECIDED: ACCEPT, DO NOT ROTATE (Adam, 2026-07-25).** Not an oversight; a
+  considered accept. Do not re-litigate without new facts.
+
+  **The credential:** `const PW = "…"` in `web/scripts/seed-test-user.ts`,
+  `verify-trip-collapse.ts`, `verify-trip-step4.ts`, `verify-trip-version.ts`
+  (both seeded users share it). Surfaced by the #146 hygiene sweep. Permanent in
+  git history, so stripping HEAD would not undo the exposure — only rotation
+  would.
+
+  **Why accept — measured blast radius** (read from
+  `supabase/migrations/20260513000000_init_identity.sql` + the Phase-1 corpus
+  migration, not assumed):
+  - `public.trips` — owner-scoped RLS, so **only that account's own trips**.
+  - `public.users` — its own row only.
+  - `public.reference_trips` — read only, and the policy is `using (true)`:
+    **anon can already read it without any credential**, so the password adds
+    nothing.
+  - `public.master_place` / corpus — **nothing**. RLS enabled with *no policies*;
+    service-role only.
+  - PROD — **nothing**. Scoped to the TEST ref `znldzjdatkogdktymtvi`.
+
+  TEST holds no real user data. Weighed against that: rotation costs four script
+  edits plus a cascade-risky user update (below). Not worth it.
+
+  **⚠️ CASCADE HAZARD — read this before ever rotating.** `trips.owner_id` is
+  `references public.users(id) **on delete cascade**`. Rotating by
+  delete-and-recreate the seeded users **destroys the seed harness trip AND the
+  66-day TEST fork `05b346df-3bb5-4c46-8ff1-e0c5cfe26301`**. Any real rotation
+  must add an `admin.auth.admin.updateUserById(id, { password })` path to
+  `seed-test-user.ts` — its current existing-user branch only *looks the user up*
+  and never updates the password — and switch all four scripts to
+  `process.env.SEED_PASSWORD`. CI is unaffected either way (it runs the data
+  suite + web typecheck + build; never the seed or verify scripts).
+
+  **FORWARD RULE (binding on new code):** TEST seed credentials come from **env**,
+  never committed literals. The four scripts above are **grandfathered**; new
+  scripts are not. `web/scripts/mint-dev-session.ts` is the pattern to copy — it
+  reads `SEED_PASSWORD` and refuses to run against a non-TEST project ref.
+
+- **POST-EDIT VIEW DIVERGENCE — RESOLVED in #146 by passing the optimistic
+  trip-level values; REVISIT when the seed-id fix above lands.** Recorded because
+  the resolution is a deliberate spec deviation with a scheduled undo, not a
+  finished story. Original divergence (measured A/B, same trip + same drag,
+  editMode asserted by the toggle's own label):
+  | | fresh serve | in edit, after drag | after Done (view) |
+  |---|---|---|---|
+  | `main` | original node | re-homed | **re-homed** |
+  | #146 branch | original node | re-homed | **original node** |
+
+  Cause: `main`'s view render passes the OPTIMISTIC `localOverrides`, which
+  survive the editMode toggle because `DayDetailCorridorColumn` stays mounted;
+  the windowed stack passes server-truth `trip.placeOverrides` per the build
+  spec ("values cross the bridge, machinery does not" — optimistic machinery
+  deferred to PR2). Where the two disagree is exactly the seed-id case above:
+  the persisted override cannot resolve, so server truth renders the pre-pin
+  position. **Neither is durable** — `main`'s re-homing is a transient illusion
+  that also reverts on reload; the branch was arguably more honest but showed the
+  revert one step earlier, which reads as "my edit was lost".
+
+  **RESOLUTION (Adam, 2026-07-25): option (b)** — the stack passes the optimistic
+  trip-level values (`localOverrides` / `ranksMap`), handlers still undefined.
+  Reasoning: this PR is presentation-only, so matching `main` IS
+  behaviour-neutrality; a pin that snaps back on Done makes the refactor
+  blameable for a defect it did not cause, and `main`'s falseness is the
+  pre-existing pin bug, already tracked above. Re-verified after the change —
+  all three points match (`original` / `re-homed` / `re-homed` on both).
+  **↔ UNDO CONDITION:** when the seed-id fix above lands, revert
+  `renderViewDay` to `trip.placeOverrides` / `trip.placeRanks` (the build spec's
+  original rule). This item closes at that point.
 
 - **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
   run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving

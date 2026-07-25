@@ -26,6 +26,38 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
+- **Continuous day-detail scroll (Design A) — BUILT (view mode),
+  [PR #146](https://github.com/honkinsickle/overlander/pull/146) approved, CI
+  green, merging.** The day-detail center is a continuous river of days when NOT
+  in edit mode: `ContinuousDayStack` (`components/trip/continuous-day-stack.tsx`)
+  IO-windows the near-viewport days (far days are height-holding placeholders),
+  the scroll writes `?day=` settle-debounced (140ms) with a 400ms max-wait
+  ceiling, and the one shared map follows the scroll-centered day on settle.
+  Hysteresis (±15% vp dead zone) + a measured-height cache seeded with the model
+  estimate, so BOTH unmount and first-mount are jump-free (0px measured in both
+  directions). **PRESENTATION LAYER ONLY** — zero diff to the day-partitioned
+  model (tripwire held). `editMode` + Overview keep the single-day swap VERBATIM
+  (the bridge; delete it once edit mode moves inside the container — PR2).
+  - **VALUES that cross the bridge are the OPTIMISTIC trip-level
+    `localOverrides`/`ranksMap`, NOT server truth** — a deliberate, scheduled
+    deviation from the build spec (Adam's call). Server truth was not
+    behaviour-neutral: it made a just-made pin snap back on Done, because `main`
+    renders the optimistic list. **Revert `renderViewDay` to server truth when
+    the seed-id pin fix lands** (below). Machinery still does not cross.
+  - Verified authed on the editable 66-day TEST fork `05b346df…`: edit-mode
+    bridge (mid-scroll toggle lands the reader's day), freeze intact byte-level
+    (1 of 66 days changed on a real edit), three-point A/B matching `main`,
+    windowing + no-jump both directions, 60-transition sweep with flat DOM
+    (2393→2393). Why + mechanics + the full verification record:
+    `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
+    `docs/architecture/itinerary-model.md` updated.
+- **NEXT PR (queued, scoped): seed-id pin resolution.** Cross-node drag-pins
+  write a `nodeSeed`-keyed override the read spine can't resolve against
+  plain-slug `corridorCities`, so pins render un-homed in view on `main` AND
+  #146 (pre-existing, proven by direct A/B). It could not ride inside #146 —
+  the tripwire forbids the read spine consuming `nodeSeeds`. Landing it also
+  **reverts the view stack to server truth**; dependency recorded on both ends
+  in `docs/BACKLOG.md`.
 - **Reference trips serve DB-first** — [PR #143](https://github.com/honkinsickle/overlander/pull/143)
   **MERGED** to `main` (auto-deploys to prod via Vercel). Resolves the
   docs-say-DB-first / code-was-fixture-first contradiction. `getTrip` is now
@@ -105,12 +137,10 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
    `TRIPS` must survive (it is the anon-wizard store). Full item + open question in
    `docs/BACKLOG.md`; updating `docs/architecture/trip-resolution.md` is part of it.
 
-_Parked (scoped 2026-07-25, no code, not scheduled):_ **Design-A continuous
-day-detail scroll** — IntersectionObserver windowing over the day-detail center,
-`?day=` settle-debounce with a max-wait, one shared map following scroll-center,
-dead-zone hysteresis. Read-only scoping + self-falsification complete; resume
-from the 2026-07-25 `docs/LOG.md` entry. (`la-to-portland` is the short
-view-mode test instrument; the 66-day fork the long one.)
+_Design-A continuous day-detail scroll is no longer parked — **BUILT (view
+mode)**, see IN FLIGHT above. Remaining: PR2 brings edit mode inside the windowed
+container (per-day optimistic overlays + drag) and deletes the single-day-swap
+bridge._
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.

@@ -158,26 +158,30 @@ geometry-stable key like `nodeId`. Scoped in
 ## 4. Scroll / map layer (built) · windowing (NOT built)
 
 > The **rail scroll** (all day cards) and the **one shared map** ARE built and
-> working — leave them alone unless you're deliberately reworking them. But there is
-> **NO virtualization / windowing**: the day-detail center is a **single-day
-> conditional swap** (`src/components/trip/day-detail-corridor-column.tsx:122`), not a
-> continuous scroll. A continuous windowed day-scroll is **Design A — scoped but NEVER
-> BUILT** (see `docs/decisions/2026-07-24-cross-day-stop-movement.md`); building it is
-> from scratch. (Header corrected 2026-07-24 vs an earlier "windowing … built and
-> working" phrasing — verified on `main`: no `react-window`/`react-virtual`, no
-> `IntersectionObserver` mount/unmount, no scroll-driven mounting anywhere in the trip
-> components.)
+> working — leave them alone unless you're deliberately reworking them. As of
+> **2026-07-25 the day-detail center IS a continuous windowed scroll in VIEW mode**
+> (Design A): `ContinuousDayStack` (`src/components/trip/continuous-day-stack.tsx`)
+> IntersectionObserver-windows the near-viewport days over the day-detail center,
+> writes `?day=` settle-debounced, and the one shared map follows the
+> scroll-centered day on settle — built from scratch with IO + ResizeObserver (no
+> `react-window`/`react-virtual`). **`editMode` still uses the single-day
+> conditional swap** (`day-detail-corridor-column.tsx`) — the bridge, deleted once
+> edit mode moves inside the windowed container (PR2). The scroll is a
+> **presentation layer only**: the day-partitioned model is untouched. Why +
+> mechanics: `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`.
 
 - **Rail — `DayColumnPlanner`** (`src/components/trip/day-column-planner.tsx:52`): a
   single `<nav … overflow-y-auto>` holding ALL day cards mounted at once
   (`:277-285`; edit-mode dnd-kit sortable at `:260-268`). Cards are 112px tall
   (`:454`), the rail 183/229px wide (view/edit, `:185-186`).
-- **Detail — `DayDetailCorridorColumn`** (`src/components/trip/day-detail-corridor-column.tsx:95`)
-  derives ONE `day` from `selectedDayId` (`:122`) and renders a single
-  `{day ? <DayDetailCorridor/> : <DayDetailOverview/>}` swap inside one scroll
-  container (`:744`). The edit spine is `DayDetailNodeBlocks`
-  (`src/components/trip/day-detail-node-blocks.tsx:137`). The per-day hero is a static
-  IMAGE, not a map (`:749`).
+- **Detail — `DayDetailCorridorColumn`** (`src/components/trip/day-detail-corridor-column.tsx`)
+  now branches three ways: **Overview** (`selectedDayId === null`) → `DayDetailOverview`;
+  **edit mode** (a day selected, `editMode`) → the verbatim single-day
+  `DayDetailCorridor` swap (the bridge); **view mode** (a day selected, `!editMode`)
+  → `ContinuousDayStack` mounting one `DayDetailCorridor` per near-viewport day via
+  the shared per-day render helper (`renderViewDay`). The edit spine is
+  `DayDetailNodeBlocks` (`src/components/trip/day-detail-node-blocks.tsx:137`). The
+  per-day hero is a static IMAGE, not a map.
 - **Map — one shared instance.** A single `new mapboxgl.Map`
   (`src/components/trip/map-column.tsx:395`), one `<MapColumn>` mounted
   (`src/components/trip/trip-slideup-body.tsx:233`), full-canvas behind the translucent

@@ -77,6 +77,110 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   v5.1.0, user scope). The CLI install was blocked by the permission classifier;
   ran from the terminal instead. Plugin skills load at session start, so it's
   active next session, not this one.
+- **Built the continuous day-detail scroll (Design A, view mode) —
+  [#146](https://github.com/honkinsickle/overlander/pull/146).** The day-detail
+  center is now a continuous river of days when NOT editing, not a one-at-a-time
+  swap. New `ContinuousDayStack` IO-windows the near-viewport days; scroll writes
+  `?day=` settle-debounced (140ms) with a 400ms max-wait; the one shared map
+  follows on settle (settle-only `?day=` write ⇒ settle-only flyTo, for free).
+  Hysteresis (±15% vp) + measured-height cache make unmount height-neutral.
+  Re-verified the handoff's `[RECHECK]` claims against `main` first (all held).
+  **Falsification catch that shaped it:** `placeOverrides`/`ranks` drive pin +
+  cluster order in VIEW mode (no editMode guard), so every mounted day gets
+  server-truth values while the optimistic drag machinery stays out —
+  "values cross the bridge, machinery does not." `editMode` + Overview keep the
+  VERBATIM single-day swap (the bridge; PR2 deletes it). Presentation-only fence
+  held (zero model-file diff). Verified in the slideup on `la-to-deadhorse` (66d)
+  + `yotrippin-demo` (19d): windowing, cached-height no-jump, rail-click
+  programmatic guard, Overview flush-guard (the guard stops the unmount flush from
+  resurrecting a day when you leave to Overview — a bug I hit and fixed).
+  Edit-mode + saved-pins-in-view were NOT exercised end-to-end (needs an authed
+  UUID trip / a trip carrying overrides) — verbatim render + server-truth wiring
+  cover them by construction. Decision:
+  `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
+  `docs/architecture/itinerary-model.md` updated.
+- **#146 review round: the "by construction" shortcut above was called, correctly.**
+  Review demanded the authed verifications. Ran them on a fresh editable 66-day
+  TEST fork (`05b346df…`, forked in-app as seed-owner; the handoff's `762577ca…`
+  fork is PROD — substituted, flagged). Results: edit-mode bridge PASS (mid-scroll
+  toggle lands the swap on the centered day, not the stale `?day=`); freeze PASS
+  byte-level (only `["day-2"]` of 66 days changed on a real add); authored order
+  PASS in the view stack. **Upward-scroll jump FOUND+FIXED**: first-mount
+  estimate→measured deltas were uncompensated (cache had no prior entry) — 366px
+  jumps scrolling UP through never-mounted days; fixed by seeding the height cache
+  with the rendered estimate + above-fold-clamped compensation; re-measured 0px
+  both directions. **Pre-existing finding (BACKLOGGED, not this PR):** cross-node
+  drag-pins write seed-id overrides that the read spine can't resolve (baked cc =
+  plain slugs; `nodeSeeds` never consumed at view render) → pins render un-homed
+  in view mode on main AND branch identically (proven via the shared
+  `applyPlaceOverrides` on live state). Also learned the hard way: synthetic
+  pointer-drags leak dnd-kit auto-scroll (`scrollBy`) — two "self-scrolling
+  stack" scares were tooling contamination, proven by a spied fresh context
+  (50s idle, zero writes, pinned scroll); and this machine's clock is ~1h ahead
+  of TEST's auth server, so minted sessions must patch `expires_at`
+  (`web/scripts/mint-dev-session.ts`, now committed).
+
+- **#146 second review round — the A/B overturned my own "pre-existing" verdict.**
+  Review rejected function-level equivalence as proof and demanded a direct A/B.
+  Ran it (checkout `main`, same fork, same drag, editMode asserted by the
+  toggle's label — the first attempt was invalid because `stackPresent:false` is
+  trivially true on main and proved nothing about edit state). Result: the seed-id
+  pin gap IS pre-existing on a fresh serve (both revert), **but** `main` keeps the
+  pin looking re-homed after exiting edit mode via its OPTIMISTIC `localOverrides`,
+  and the windowed stack — passing server truth per the build spec — snaps it
+  back. That is a real post-edit regression I had reported as "identical". Left
+  for Adam's call (accept / pass the optimistic trip-level values / fix the
+  seed-id resolution). **Lesson: "same function, same inputs" is not "same
+  rendered outcome" — the component receives served + optimistic state, not the
+  row I queried.**
+- **Two loose ends from the previous round closed, both tooling not product:**
+  the "day renders 6 nodes, ZERO cards" scare was a probe querying `span` only
+  (card titles are `<h3>`; correct selector finds all 3), and the two dev-server
+  deaths were not windowing memory churn — both happened during route/auth work
+  with no stack mounted, and a 60-transition sweep of the 66-day trip holds DOM
+  nodes flat (2393 → 2393) with sawtooth heap and the server alive. Also fixed
+  the rail-click-then-Edit edge I had wrongly deferred (the flush now prefers the
+  click target while the programmatic guard is open) and corrected CLAUDE.md:
+  **`762577ca…` is a PROD trip**, unusable from dev — TEST replacement
+  `05b346df…` recorded.
+
+- **#146 round 3 — behaviour-neutrality chosen over spec-literalism.** Adam's
+  call on the post-edit divergence: **option (b)** (stack passes the optimistic
+  trip-level values), with the seed-id pin fix as its own PR since the tripwire
+  forbids the read spine consuming `nodeSeeds` inside this one. Rationale worth
+  keeping: a presentation-only refactor matching `main` IS neutrality even when
+  what `main` shows is known-false — otherwise the refactor becomes blameable for
+  a pre-existing defect. Re-ran the three-point A/B after the change; `main` and
+  the branch now match at all three (`original` / `re-homed` / `re-homed`).
+  Dependency recorded on BOTH ends: the seed-id fix dissolves the divergence and
+  its PR must revert `renderViewDay` to server truth.
+- **Debugging lesson that cost the most time this session: a stale auth session
+  looks exactly like broken drag tooling.** Four consecutive "synthetic drags
+  stopped working" failures were the minted session expiring — the drags fired,
+  the server action refused (*"Couldn't move: Sign in to edit this trip."*), and
+  the optimistic overlay reverted, so the DOM read as "drag did nothing". Only a
+  screenshot showed the error banner; every JS probe I had written looked at
+  placement, not at errors. **Read the screen before re-engineering the tool** —
+  and probe for error banners, not just expected state.
+
+- **Credential decision: ACCEPT, do not rotate (Adam).** The seeded TEST password
+  in 4 tracked scripts of a public repo stays. Measured blast radius is one TEST
+  account's own trips — RLS blocks the corpus (enabled, no policies) and PROD is a
+  different ref, and `reference_trips` is anon-readable regardless, so the
+  credential buys an attacker nothing there. Weighed against a cascade-risky
+  rotation (`trips.owner_id` is ON DELETE CASCADE — delete-and-recreate would
+  destroy the seed harness trip and the `05b346df…` fork) plus four script edits.
+  Recorded in BACKLOG as a considered accept with the cascade hazard and a
+  binding forward rule: new scripts read seed creds from env; the four existing
+  ones are grandfathered.
+- **#146 closed out and merged.** Final shape: continuous view-mode scroll,
+  optimistic trip-level values crossing the bridge (with a scheduled revert), the
+  seed-id pin fix queued as its own PR. Three review rounds, and each one caught
+  something the previous round's summary had smoothed over — the unauthenticated
+  verification, then the equivalence-by-inference, then the deferred edge that was
+  actually a small fix. The durable lesson from all three: **an untested claim
+  dressed as a verified one is worse than an admitted gap**, because it spends the
+  reviewer's trust to hide exactly the work that still needed doing.
 
 ## 2026-07-24
 

@@ -59,13 +59,36 @@ actually touched what they describe. The `/wrap` command runs this pass.
   - `verify-trip-step4.ts` — ADR §1 node-action dispatch onto `public.trips`
     (UUID) under RLS: bake-at-write, closure-recompute concurrency, ownership +
     frozen-slug refusal.
+- **Test trips — which instrument to reach for (verified 2026-07-25):**
+  - **`762577ca-5ca0-417a-be05-58b17b63bd19` is a PROD trip — NOT usable from
+    dev.** Older handoffs call it "the 66-day fork"; dev talks to TEST, so it
+    resolves as *Trip not found*. Do not cross PROD/TEST to reach it.
+  - **TEST replacement: `05b346df-3bb5-4c46-8ff1-e0c5cfe26301`** — 66 days,
+    editable UUID owned by `seed-owner`, forked from `la-to-deadhorse` via the
+    app's own `POST /api/trips/fork`. The windowing/edit instrument. Re-create
+    with that same endpoint (authed) if TEST is ever reset.
+  - Reference slugs (`la-to-deadhorse`, `yotrippin-demo` 19d) render anonymously
+    — fine for read-only work, but they are NOT editable, so `canEdit` surfaces
+    (edit toggle, drag, kebab) are invisible on them. Reaching for a slug to
+    dodge auth silently skips every edit-path verification.
 - **Seeded TEST credentials:** `seed-owner@overlander.test` /
   `seed-other@overlander.test` (password is TEST-only, printed by the seed).
+  Browser auth: `web/scripts/mint-dev-session.ts` (reads `SEED_PASSWORD` from
+  env) prints the session cookie to inject — patch its `expires_at` to local
+  now first; this machine and the TEST auth server disagree by ~1h.
   Seed/re-seed (idempotent) with
   `cd web && npx tsx --env-file=.env.development.local scripts/seed-test-user.ts`.
   TEST `public.trips` is otherwise empty — these are the ONLY way to exercise the
   RLS write path off PROD.
 - **Gotchas (hard-won):**
+  - **A minted dev session expires ~1h, and expiry MASQUERADES as broken drag
+    tooling.** After expiry the drag still fires, the server action refuses
+    (*"Couldn't move: Sign in to edit this trip."*), and the optimistic overlay
+    reverts — so the DOM reads as "nothing happened" and looks exactly like a
+    synthetic-drag that failed to activate. Cost an hour of re-engineering the
+    drag harness in the #146 verify. **Probe for the error banner, not just the
+    expected placement**, and **re-mint before concluding an interaction is
+    broken.**
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
