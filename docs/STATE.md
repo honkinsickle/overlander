@@ -39,7 +39,11 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   the DB; `ensureAlaskaUpgraded` still has 4 waypoint-helper callers. Finishing
   the fixture removal is backlogged (gated on lookup-vs-write of those helpers;
   lands with the remove-✕ affordance gating). Accepted: federated-fold-as-
-  convergence, 404-on-DB-failure for the demo slug.
+  convergence, 404-on-DB-failure for the demo slug. Why + how:
+  `docs/decisions/2026-07-25-reference-trips-db-first.md`; the serving model
+  (readers, derivation, caching) is documented in
+  `docs/architecture/trip-resolution.md`; `reference_trips` rows per DB live in
+  `docs/DATA_INVENTORY.md`.
 - **Curated-POI editing (kebab)** — MERGED (#131) and **DEPLOYED to prod** (Vercel
   auto-deploys `main`; the prod deployment on the #131 SHA completed successfully). Live
   now on user-owned UUID trips. A ⋮ kebab on each curated-POI card in the day detail:
@@ -95,6 +99,18 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
    Google-primary vs corpus-first ranking/precedence and whether audit-resolved
    Google records write back — NOT whether to build the corpus.
 4. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+5. **Reference-fixture removal (residual of #143)** — empty the reference `seed()`,
+   reroute `ensureAlaskaUpgraded`'s 4 waypoint-helper reads to the DB reader, drop
+   `la-to-portland` from `FIXTURE_TRIPS`. Gated on lookup-vs-write of those helpers;
+   `TRIPS` must survive (it is the anon-wizard store). Full item + open question in
+   `docs/BACKLOG.md`; updating `docs/architecture/trip-resolution.md` is part of it.
+
+_Parked (scoped 2026-07-25, no code, not scheduled):_ **Design-A continuous
+day-detail scroll** — IntersectionObserver windowing over the day-detail center,
+`?day=` settle-debounce with a max-wait, one shared map following scroll-center,
+dead-zone hysteresis. Read-only scoping + self-falsification complete; resume
+from the 2026-07-25 `docs/LOG.md` entry. (`la-to-portland` is the short
+view-mode test instrument; the 66-day fork the long one.)
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
