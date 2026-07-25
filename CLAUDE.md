@@ -21,10 +21,20 @@
 - Stop for review at every gate.
 - The gate is `cd web && npx next build`, exit 0.
 
-## POINTERS
-- `docs/STATE.md` — position
-- `docs/BACKLOG.md` — parked
-- `docs/decisions/` — the record of WHY. Read it before revisiting a settled question.
+## END-OF-DAY DOC PASS
+The doc set and what each is for (this replaces/reconciles the old POINTERS list):
+
+- `docs/STATE.md`          — where the project is right now (rewritten each session)
+- `docs/BACKLOG.md`        — parked work, not yet started
+- `docs/decisions/`        — why choices were made (append-only), incl.
+                             in-progress feature design records
+- `docs/architecture/`     — how subsystems are built (updated as they change)
+- `docs/DATA_INVENTORY.md` — what data lives in which database
+- `docs/LOG.md`            — append-only session diary (format in its own header)
+
+Rule: at the end of every session, walk this list and update what the session
+changed. `STATE.md` and `LOG.md` every time; the others only when the session
+actually touched what they describe. The `/wrap` command runs this pass.
 
 ## WRITE DISCIPLINE
 - Update `docs/STATE.md` in the SAME commit as the work. For changes with no
@@ -35,6 +45,7 @@
 - **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
   (per lib-dir).
 - **Build gate:** `cd web && npx next build`, exit 0.
+- **Drift check:** `npm run -w data drift:check` — probes deployed prod and every stored service key. Run when search looks broken or after rotating credentials. Not part of session start.
 - **Dev server:** `preview_start` name `web` (port 3210, talks to TEST via
   `.env.development.local`; flag from `.env.local`). A UUID trip needs an authed
   session (RLS); a slug renders anonymously.
@@ -140,4 +151,4 @@ For web client design tokens, see `web/CLAUDE.md` — Phase 1 work in `data/` do
 
 ## Source integration workflow
 - Source-integration smoke tests write to the **test** project; only deliberate full-corridor execution writes to production.
-- After smoke validation passes, clean up the smoke artifacts from test (`DELETE FROM source_record WHERE source_id = '<new_source>'`) so the D4 baseline stays at its canonical distribution (**219 / 153 new / 16 auto_link / 17 amenity_rollup / 33 manual_review**). Failure to clean up leads to baseline drift that surfaces as confusing D4 number shifts during the *next* source integration (the leftover records become extra solo master_places under full-corpus `matchAll`). Surfaced during BC Parks (PR #63).
+- **Snapshot before, restore to the snapshot — never to a hardcoded baseline.** Before ANY corpus-mutating test, capture a measured baseline: row counts of `master_place` / `source_record` / `place_match`, plus `source_record` grouped by `source_id`. After the test, delete exactly what you added (`DELETE FROM source_record WHERE source_id = '<new_source>'`, plus the master_places it spawned) and confirm the counts return to that snapshot. Do NOT restore to a written-down figure — the corpus grows, so any hardcoded baseline goes stale by definition (it was ~219 total early in Phase 1; TEST was ~1860 master_place / ~2236 source_record by 2026-07). Failure to clean up leaves the added records as extra solo master_places under full-corpus `matchAll`, drifting the counts and confusing the *next* source integration. Surfaced during BC Parks (PR #63).
