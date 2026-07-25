@@ -120,6 +120,30 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   of TEST's auth server, so minted sessions must patch `expires_at`
   (`web/scripts/mint-dev-session.ts`, now committed).
 
+- **#146 second review round — the A/B overturned my own "pre-existing" verdict.**
+  Review rejected function-level equivalence as proof and demanded a direct A/B.
+  Ran it (checkout `main`, same fork, same drag, editMode asserted by the
+  toggle's label — the first attempt was invalid because `stackPresent:false` is
+  trivially true on main and proved nothing about edit state). Result: the seed-id
+  pin gap IS pre-existing on a fresh serve (both revert), **but** `main` keeps the
+  pin looking re-homed after exiting edit mode via its OPTIMISTIC `localOverrides`,
+  and the windowed stack — passing server truth per the build spec — snaps it
+  back. That is a real post-edit regression I had reported as "identical". Left
+  for Adam's call (accept / pass the optimistic trip-level values / fix the
+  seed-id resolution). **Lesson: "same function, same inputs" is not "same
+  rendered outcome" — the component receives served + optimistic state, not the
+  row I queried.**
+- **Two loose ends from the previous round closed, both tooling not product:**
+  the "day renders 6 nodes, ZERO cards" scare was a probe querying `span` only
+  (card titles are `<h3>`; correct selector finds all 3), and the two dev-server
+  deaths were not windowing memory churn — both happened during route/auth work
+  with no stack mounted, and a 60-transition sweep of the 66-day trip holds DOM
+  nodes flat (2393 → 2393) with sawtooth heap and the server alive. Also fixed
+  the rail-click-then-Edit edge I had wrongly deferred (the flush now prefers the
+  click target while the programmatic guard is open) and corrected CLAUDE.md:
+  **`762577ca…` is a PROD trip**, unusable from dev — TEST replacement
+  `05b346df…` recorded.
+
 ## 2026-07-24
 
 - **`rescopeOverlays` landed (#130)** — a pure keep/drop core for overlays across

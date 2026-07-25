@@ -96,9 +96,14 @@ thing worked, it moves into STATE.md §Queued.
   `/auth/dev-login` route remains the cleaner endgame.
 
 - **SEED-ID PINS ARE INVISIBLE TO THE READ SPINE (view mode)** — surfaced during
-  the #146 authed verify; **pre-existing, NOT introduced by the continuous
-  scroll** (proven by running the shared `applyPlaceOverrides` on live server
-  state — main's view path and the stack produce identical output). A cross-node
+  the #146 authed verify. **Pre-existing, NOT introduced by the continuous
+  scroll — established by direct A/B on `main` vs the branch, same trip, same
+  drag** (an earlier "proof" by running `applyPlaceOverrides` on raw stored state
+  was BAD METHODOLOGY and is retracted: it tested the function, not what the
+  component receives). Observed: on a FRESH SERVE both `main` and the branch
+  render the pinned place under its ORIGINAL node — the durable behaviour is
+  identical and wrong on both. (What DOES differ post-edit is recorded as its own
+  item below.) A cross-node
   drag-pin in the edit spine mints a `nodeSeed` ("promoted") and writes
   `placeOverrides[].nodeId` as the **seed id** (`seed-<city>-<suffix>`), but the
   baked `Day.corridorCities` carry **plain slug ids** and the read spine
@@ -110,6 +115,43 @@ thing worked, it moves into STATE.md §Queued.
   (inject promoted seeds into the render spine, as the edit spine does), or bake
   seed nodes into `corridorCities` at write time. Touches verified bucketing
   code — needs its own pass, not a drive-by.
+
+- **The seeded TEST password is hardcoded in 4 tracked scripts of a PUBLIC repo**
+  (`web/scripts/seed-test-user.ts`, `verify-trip-collapse.ts`,
+  `verify-trip-step4.ts`, `verify-trip-version.ts` — each `const PW = "…"`).
+  Pre-existing, surfaced during the #146 credential-hygiene sweep; the docs and
+  the new `mint-dev-session.ts` are clean (it reads `SEED_PASSWORD` from env).
+  It is TEST-only and TEST holds no real user data, so this is hygiene rather
+  than an incident — but it is a real credential in a public repo, and the
+  pattern invites the next script to copy it. Fix: read from
+  `process.env.SEED_PASSWORD` in all four (the seed script can generate + print
+  one), then rotate the TEST user's password. Deliberately NOT done as a
+  drive-by inside a scroll PR — it touches the verify harness Adam runs.
+
+- **POST-EDIT VIEW DIVERGENCE: the continuous stack drops the optimistic overlay,
+  so a just-made pin visibly snaps back on exiting edit mode** (#146, view mode
+  only). Measured A/B, same trip + same drag, editMode asserted by the toggle's
+  own label:
+  | | fresh serve | in edit, after drag | after Done (view) |
+  |---|---|---|---|
+  | `main` | original node | re-homed | **re-homed** |
+  | #146 branch | original node | re-homed | **original node** |
+
+  Cause: `main`'s view render passes the OPTIMISTIC `localOverrides`, which
+  survive the editMode toggle because `DayDetailCorridorColumn` stays mounted;
+  the windowed stack passes server-truth `trip.placeOverrides` per the build
+  spec ("values cross the bridge, machinery does not" — optimistic machinery
+  deferred to PR2). Where the two disagree is exactly the seed-id case above:
+  the persisted override cannot resolve, so server truth renders the pre-pin
+  position. **Neither is durable** — `main`'s re-homing is a transient illusion
+  that also reverts on reload; the branch is arguably more honest but shows the
+  revert one step earlier (immediately, not on refresh), which reads as "my edit
+  was lost". **Decision for Adam:** (a) accept (honest, and the underlying pin
+  bug is what actually needs fixing), (b) pass `localOverrides`/`localRanks`
+  instead of `trip.*` to the stack — a 2-line change, same trip-level values,
+  still no handlers, restores parity with `main`, but deviates from the build
+  spec's literal "server truth, no optimistic layer", or (c) fix the seed-id
+  resolution above, which makes the divergence disappear on its own.
 
 - **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
   run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving

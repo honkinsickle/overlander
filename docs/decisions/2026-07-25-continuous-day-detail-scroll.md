@@ -114,14 +114,25 @@ unusable from dev — PROD/TEST wall).
   exactly `["day-2"]` changed; trip-level only `routePolyline` cleared.
 - **Saved order in the view stack: VERIFIED** (authored rank order renders,
   inverting server order, from server-truth `placeRanks`).
-- **Saved pins: pre-existing gap surfaced, NOT a scroll regression.** A
-  cross-node drag-pin mints a `nodeSeed` and writes the override against the
-  **seed id**; baked `corridorCities` carry **plain slug ids**; the read spine
-  never consumes `nodeSeeds`, so `applyPlaceOverrides` sees the override as
-  dangling → inert (documented semantics) and the pin renders in its original
-  bucket in VIEW mode. Proven equivalent to `main`'s old view path by running
-  the shared `applyPlaceOverrides` on the live server state — identical inputs,
-  identical function, identical output. Recorded in `docs/BACKLOG.md`.
+- **Saved pins — the claim was re-tested by direct A/B and PARTLY CORRECTED.**
+  The first report asserted equivalence with `main` by running the shared
+  `applyPlaceOverrides` on raw stored state. That was bad methodology (it tests
+  the function, not what the component receives) and is retracted. Direct A/B —
+  `main` vs branch, same trip, same drag, editMode asserted by the toggle's own
+  label — found:
+  - **Durable behaviour IDENTICAL:** on a fresh serve both render the pinned
+    place under its ORIGINAL node. The underlying cause (cross-node pins write
+    a `nodeSeed`-keyed override that the read spine can't resolve against
+    plain-slug `corridorCities`) is genuinely **pre-existing**; `main` reverts on
+    reload exactly as the branch does. Backlogged.
+  - **Post-edit transient DIFFERS — a real regression this PR introduces:**
+    after Done, `main` still shows the pin re-homed (its view render passes the
+    OPTIMISTIC `localOverrides`, which survive the toggle because the column
+    stays mounted); the stack shows server truth, so the pin visibly snaps back
+    to its original node. Per the build spec ("values cross the bridge,
+    machinery does not"), but the user-visible effect reads as a lost edit.
+    Open for Adam's call with three options (accept / pass the optimistic
+    trip-level values / fix the seed-id resolution) — see `docs/BACKLOG.md`.
 - **Upward-scroll jump: FOUND and FIXED.** First mount of a never-measured day
   (estimate→measured) was uncompensated — the `heights` cache had no prior
   entry, so the guard skipped exactly the largest correction class; scrolling
@@ -129,7 +140,17 @@ unusable from dev — PROD/TEST wall).
   cache with the rendered placeholder estimate and compensate by the
   above-fold-clamped delta. Re-measured: 0px on all 16 upward steps, 0px
   downward.
-- **Known edge (recorded, not fixed):** toggling Edit while a rail-click's
-  smooth scroll is still in flight lands the swap on the fly-by day, not the
-  click target — the unmount flush reads the centered-day ref, which tracks the
-  animation. Unlikely interaction; revisit with PR2.
+- **Rail-click-then-Edit edge: FIXED here** (it was mis-deferred to PR2). The
+  programmatic-scroll guard already knew a rail click was in flight; the flush
+  just wasn't using it. It now records the click TARGET and prefers it over the
+  animating centered-day ref while the guard window is open. Verified: with the
+  scroll mid-flight and the centered ref still reading `day-2`, toggling Edit
+  committed `day-30` and opened "Day 30".
+- **Two verification-tooling artifacts, both closed (recorded so they aren't
+  re-chased):** (1) a probe that reported "day renders 6 city nodes, ZERO place
+  cards" was querying `span` only — card titles render in `<h3>` (city names are
+  spans). Same DOM, correct selector: 3 cards. No render hole. (2) two dev-server
+  deaths were NOT windowing memory churn: both occurred during route/auth work
+  with no stack mounted, and a 60-transition sweep of the 66-day trip shows DOM
+  nodes flat (2393 → 2393), heap sawtoothing 65→117→97 MB (GC, not monotonic),
+  server alive throughout.

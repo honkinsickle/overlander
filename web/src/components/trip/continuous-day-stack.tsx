@@ -87,6 +87,10 @@ export function ContinuousDayStack({
   /** While set (a timestamp), a programmatic scroll is in flight — keep the
    *  centered ref fresh but don't schedule a settle write. */
   const programmaticUntil = useRef<number>(0);
+  /** The day a programmatic scroll is heading TO (the rail-click target). Read
+   *  by `flush` while that scroll is in flight so a mid-animation flush (e.g.
+   *  toggling into edit mode) commits the clicked day, not a fly-by one. */
+  const programmaticTargetRef = useRef<string | null>(null);
 
   // Keep parent callbacks current without re-running observer effects when the
   // parent hands us new function identities each render.
@@ -128,7 +132,14 @@ export function ContinuousDayStack({
     if (typeof window !== "undefined" && !new URL(window.location.href).searchParams.get("day")) {
       return;
     }
-    const id = centeredRef.current;
+    // While a programmatic (rail-click) scroll is still animating, the centered
+    // ref is tracking the days flying past — committing it would land on a
+    // fly-by day instead of the day the user actually clicked. The click target
+    // is the intended selection for the whole window, so prefer it.
+    const id =
+      Date.now() < programmaticUntil.current && programmaticTargetRef.current
+        ? programmaticTargetRef.current
+        : centeredRef.current;
     if (id && id !== lastWrittenRef.current) {
       lastWrittenRef.current = id;
       onSettleDayRef.current(id);
@@ -255,8 +266,10 @@ export function ContinuousDayStack({
     const el = slotEls.current.get(selectedDayId);
     if (!el) return;
     // Guard the observer for the duration of the smooth scroll so it doesn't
-    // re-write ?day= as it passes intervening days.
+    // re-write ?day= as it passes intervening days, and record the target so a
+    // flush landing mid-animation commits the clicked day rather than a fly-by.
     programmaticUntil.current = Date.now() + PROGRAMMATIC_MS;
+    programmaticTargetRef.current = selectedDayId;
     el.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [selectedDayId]);
 
