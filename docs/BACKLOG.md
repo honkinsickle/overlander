@@ -179,6 +179,9 @@ thing worked, it moves into STATE.md §Queued.
   or after the remove-✕ affordance gating** — same in-memory write paths. Do NOT
   bundle on tired assumptions; every dig this session found another coupling.
   Note: `TRIPS` must SURVIVE this — it is also the anon-wizard store (below).
+  **DOC:** this removes the "4 residual `ensureAlaskaUpgraded` reads" and the
+  "literals still sit in `TRIPS`" claims — update
+  `docs/architecture/trip-resolution.md` (§ `TRIPS`' current role) in the same PR.
 - **`TRIPS` is the anon-wizard persistence layer** (not just reference fixtures).
   `createTrip` (`plan/actions.ts:786`, anon finalize, gated `ENABLE_PLANNER_WIZARD`)
   writes `trip-<8char>` drafts into the `globalThis`-pinned `TRIPS` store;
