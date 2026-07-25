@@ -87,6 +87,29 @@ thing worked, it moves into STATE.md §Queued.
   and prints the cookie. The route is cleaner. Its guard MUST be the TEST-ref check
   (the same `ref !== znldzjdatkogdktymtvi` gate `checkRails` uses), NOT a flag — so it
   is structurally incapable of existing in prod, flag misconfiguration notwithstanding.
+  **PARTIAL (2026-07-25):** the helper-script half now exists —
+  `web/scripts/mint-dev-session.ts` (TEST-ref-guarded, prints the cookie JSON;
+  used for the continuous-scroll authed verify, #146). CAVEAT it documents: this
+  machine and the TEST auth server disagree by ~1h, so the printed session's
+  `expires_at` must be patched to local-now before injecting or `@supabase/ssr`
+  force-refreshes (and 401s once the refresh chain goes stale). The
+  `/auth/dev-login` route remains the cleaner endgame.
+
+- **SEED-ID PINS ARE INVISIBLE TO THE READ SPINE (view mode)** — surfaced during
+  the #146 authed verify; **pre-existing, NOT introduced by the continuous
+  scroll** (proven by running the shared `applyPlaceOverrides` on live server
+  state — main's view path and the stack produce identical output). A cross-node
+  drag-pin in the edit spine mints a `nodeSeed` ("promoted") and writes
+  `placeOverrides[].nodeId` as the **seed id** (`seed-<city>-<suffix>`), but the
+  baked `Day.corridorCities` carry **plain slug ids** and the read spine
+  (`DayDetailCorridor` / `applyPlaceOverrides`) never consumes `trip.nodeSeeds` —
+  so the override dangles (inert per the documented semantics) and the pin
+  renders in its ORIGINAL bucket in view mode, while the edit spine (seed-aware
+  projection) shows it re-homed. Same-node rank writes use the plain cc id and
+  DO render in view. Fix directions: teach the view spine to resolve seed ids
+  (inject promoted seeds into the render spine, as the edit spine does), or bake
+  seed nodes into `corridorCities` at write time. Touches verified bucketing
+  code — needs its own pass, not a drive-by.
 
 - **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
   run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving

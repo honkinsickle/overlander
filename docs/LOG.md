@@ -99,6 +99,26 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   cover them by construction. Decision:
   `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
   `docs/architecture/itinerary-model.md` updated.
+- **#146 review round: the "by construction" shortcut above was called, correctly.**
+  Review demanded the authed verifications. Ran them on a fresh editable 66-day
+  TEST fork (`05b346df…`, forked in-app as seed-owner; the handoff's `762577ca…`
+  fork is PROD — substituted, flagged). Results: edit-mode bridge PASS (mid-scroll
+  toggle lands the swap on the centered day, not the stale `?day=`); freeze PASS
+  byte-level (only `["day-2"]` of 66 days changed on a real add); authored order
+  PASS in the view stack. **Upward-scroll jump FOUND+FIXED**: first-mount
+  estimate→measured deltas were uncompensated (cache had no prior entry) — 366px
+  jumps scrolling UP through never-mounted days; fixed by seeding the height cache
+  with the rendered estimate + above-fold-clamped compensation; re-measured 0px
+  both directions. **Pre-existing finding (BACKLOGGED, not this PR):** cross-node
+  drag-pins write seed-id overrides that the read spine can't resolve (baked cc =
+  plain slugs; `nodeSeeds` never consumed at view render) → pins render un-homed
+  in view mode on main AND branch identically (proven via the shared
+  `applyPlaceOverrides` on live state). Also learned the hard way: synthetic
+  pointer-drags leak dnd-kit auto-scroll (`scrollBy`) — two "self-scrolling
+  stack" scares were tooling contamination, proven by a spied fresh context
+  (50s idle, zero writes, pinned scroll); and this machine's clock is ~1h ahead
+  of TEST's auth server, so minted sessions must patch `expires_at`
+  (`web/scripts/mint-dev-session.ts`, now committed).
 
 ## 2026-07-24
 

@@ -95,3 +95,41 @@ column, so scroll-back is free.
   edit-mode swap (needs an authed UUID trip — the hand-minted-cookie path;
   unchanged verbatim render + build cover it) and saved-pins/order rendering
   (no reference trip carries overrides; wired to server truth by construction).
+
+---
+
+## Addendum 2026-07-25 (later the same day) — authed verification round + one fix
+
+The "not verified end-to-end" gaps above were closed on an authed, editable
+66-day TEST fork (`05b346df…`, forked from `la-to-deadhorse` via the app's own
+`/api/trips/fork` as `seed-owner`; the handoff's PROD fork `762577ca…` is
+unusable from dev — PROD/TEST wall).
+
+- **Edit-mode bridge: VERIFIED.** Mid-scroll toggle (Edit clicked inside the
+  140ms settle window, `?day=` stale at day-1, center at day-20) → flush wrote
+  `day-20`, swap opened Day 20. Toggle back re-entered the stack at day-20.
+  Drag-pin, same-node reorder, and kebab all work in the verbatim edit path
+  (real `pinPlaceAction`/`setPlaceRankAction` writes, v0→v4).
+- **Freeze: VERIFIED byte-level.** Real add-waypoint to day-2 → of 66 days
+  exactly `["day-2"]` changed; trip-level only `routePolyline` cleared.
+- **Saved order in the view stack: VERIFIED** (authored rank order renders,
+  inverting server order, from server-truth `placeRanks`).
+- **Saved pins: pre-existing gap surfaced, NOT a scroll regression.** A
+  cross-node drag-pin mints a `nodeSeed` and writes the override against the
+  **seed id**; baked `corridorCities` carry **plain slug ids**; the read spine
+  never consumes `nodeSeeds`, so `applyPlaceOverrides` sees the override as
+  dangling → inert (documented semantics) and the pin renders in its original
+  bucket in VIEW mode. Proven equivalent to `main`'s old view path by running
+  the shared `applyPlaceOverrides` on the live server state — identical inputs,
+  identical function, identical output. Recorded in `docs/BACKLOG.md`.
+- **Upward-scroll jump: FOUND and FIXED.** First mount of a never-measured day
+  (estimate→measured) was uncompensated — the `heights` cache had no prior
+  entry, so the guard skipped exactly the largest correction class; scrolling
+  UP through never-mounted days jumped up to 366px per mount. Fix: seed the
+  cache with the rendered placeholder estimate and compensate by the
+  above-fold-clamped delta. Re-measured: 0px on all 16 upward steps, 0px
+  downward.
+- **Known edge (recorded, not fixed):** toggling Edit while a rail-click's
+  smooth scroll is still in flight lands the swap on the fly-by day, not the
+  click target — the unmount flush reads the centered-day ref, which tracks the
+  animation. Unlikely interaction; revisit with PR2.

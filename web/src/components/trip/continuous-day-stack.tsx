@@ -199,11 +199,17 @@ export function ContinuousDayStack({
 
   // ── ResizeObserver: cache measured heights + compensate above-fold shifts ────
   // Unmount is already height-neutral (placeholder = cached height). The residual
-  // jump is a mounted slot ABOVE the viewport changing height (first measure of a
-  // day the buffer mounted just above the fold, or hydration grafting a taller
-  // photo): its growth would push visible content down. Compensate by adding the
-  // delta to scrollTop so the reader's position holds. Native scroll-anchoring is
-  // disabled on the container (overflow-anchor:none) so this doesn't double-count.
+  // jump is a slot ABOVE the viewport changing height — critically including the
+  // FIRST mount of a day scrolled toward from below (upward scroll): its
+  // placeholder held the model ESTIMATE, and the estimate→measured delta would
+  // shift everything below it (the viewport) by the difference. `heights` is
+  // seeded with the rendered placeholder height (estimate) at render time, so
+  // that first-mount delta is compensable like any re-measure. Only the portion
+  // of the delta ABOVE the fold shifts visible content, so the correction clamps
+  // the old/new slot bottoms to the fold — fully-above slots compensate the full
+  // delta, fully-below slots none, straddling slots just the invisible part.
+  // Native scroll-anchoring is disabled on the container (overflow-anchor:none)
+  // so the browser doesn't double-correct.
   useEffect(() => {
     const ro = new ResizeObserver((entries) => {
       const root = scrollRef.current;
@@ -212,15 +218,14 @@ export function ContinuousDayStack({
         const id = el.dataset.dayId;
         if (!id) continue;
         const newH = el.offsetHeight;
-        const oldH = heights.current.get(id);
+        const oldH = heights.current.get(id) ?? newH;
         heights.current.set(id, newH);
-        if (root && oldH !== undefined && oldH !== newH) {
-          // Slot's old bottom was at/above the viewport top → fully off-screen
-          // above. Hold visible content by absorbing the delta into scrollTop.
-          if (el.offsetTop + oldH <= root.scrollTop) {
-            root.scrollTop += newH - oldH;
-          }
-        }
+        if (!root || oldH === newH) continue;
+        const fold = root.scrollTop;
+        const top = el.offsetTop;
+        const clamp = (v: number) => Math.min(Math.max(v, top), fold);
+        const delta = clamp(top + newH) - clamp(top + oldH);
+        if (delta !== 0) root.scrollTop += delta;
       }
     });
     for (const id of mounted) {
@@ -279,6 +284,13 @@ export function ContinuousDayStack({
       {days.map((d) => {
         const isMounted = mounted.has(d.id);
         const placeholderH = heights.current.get(d.id) ?? estimateHeight(d);
+        // Seed the height cache with the estimate a never-measured placeholder is
+        // ABOUT to render at, so the ResizeObserver can compensate the
+        // estimate→measured delta on first mount (the upward-scroll jump).
+        // Idempotent set-if-absent; measured values are never overwritten.
+        if (!isMounted && !heights.current.has(d.id)) {
+          heights.current.set(d.id, placeholderH);
+        }
         return (
           <div
             key={d.id}
