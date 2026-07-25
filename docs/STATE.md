@@ -26,6 +26,21 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
+- **Continuous day-detail scroll (Design A) — BUILT (view mode).** The day-detail
+  center is now a continuous river of days when NOT in edit mode: a new
+  `ContinuousDayStack` (`components/trip/continuous-day-stack.tsx`) IO-windows the
+  near-viewport days (far days are height-holding placeholders), the scroll writes
+  `?day=` settle-debounced (140ms) with a 400ms max-wait ceiling, and the one
+  shared map follows the scroll-centered day on settle. Hysteresis (±15% vp dead
+  zone) + cached measured heights (unmount is height-neutral). **PRESENTATION
+  LAYER ONLY** — zero diff to the day-partitioned model (fence held); values cross
+  the bridge (server-truth overrides/ranks), the optimistic edit machinery does
+  not. `editMode` + Overview keep the single-day swap VERBATIM (the bridge; delete
+  it once edit mode moves inside the container — PR2). Pure scroll math is
+  unit-tested (`lib/trips/continuous-scroll.ts`). Verified in the slideup on
+  `la-to-deadhorse` (66d) + `yotrippin-demo` (19d); build green. Why + mechanics:
+  `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
+  `docs/architecture/itinerary-model.md` updated.
 - **Reference trips serve DB-first** — [PR #143](https://github.com/honkinsickle/overlander/pull/143)
   **MERGED** to `main` (auto-deploys to prod via Vercel). Resolves the
   docs-say-DB-first / code-was-fixture-first contradiction. `getTrip` is now
@@ -105,12 +120,10 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
    `TRIPS` must survive (it is the anon-wizard store). Full item + open question in
    `docs/BACKLOG.md`; updating `docs/architecture/trip-resolution.md` is part of it.
 
-_Parked (scoped 2026-07-25, no code, not scheduled):_ **Design-A continuous
-day-detail scroll** — IntersectionObserver windowing over the day-detail center,
-`?day=` settle-debounce with a max-wait, one shared map following scroll-center,
-dead-zone hysteresis. Read-only scoping + self-falsification complete; resume
-from the 2026-07-25 `docs/LOG.md` entry. (`la-to-portland` is the short
-view-mode test instrument; the 66-day fork the long one.)
+_Design-A continuous day-detail scroll is no longer parked — **BUILT (view
+mode)**, see IN FLIGHT above. Remaining: PR2 brings edit mode inside the windowed
+container (per-day optimistic overlays + drag) and deletes the single-day-swap
+bridge._
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
