@@ -58,23 +58,18 @@ reference source:
 **Residual fixture read path:** `ensureAlaskaUpgraded` still has **4 waypoint-helper
 callers** in `repository.ts` (around `:94,108,120,181`) that read
 `TRIPS["la-to-deadhorse"]` — the last place a reference trip is read from the
-fixture. `[grep]` Removing it is backlogged (gated on whether those helpers back
-any write). The reference **literals also still sit in `TRIPS`** but no longer
-shadow the DB (the flip resolves them via DB first).
+fixture. `[grep]` The reference **literals also still sit in `TRIPS`** but no
+longer shadow the DB (the flip resolves them via DB first). Removing both is
+tracked by [`docs/BACKLOG.md`](../BACKLOG.md) → "Finish reference-fixture removal"
+(gated on whether those 4 helpers back any write); **that work must update this
+section** when it lands.
 
 ## `reference_trips` — access and contents
 
-- **RLS:** `create policy "reference_trips_public_read" on public.reference_trips
-  for select using (true)` — no role restriction. `[read: supabase/migrations/20260513000000_init_identity.sql:50-52]`
-- **Anon read works** — confirmed empirically with the anon key (no session, RLS-subject):
-  - TEST: 7 rows returned. `[queried TEST, anon key]`
-  - PROD: read succeeded. `[queried PROD, anon key]`
-- **Rows present (point-in-time):**
-  - TEST: `alaska-south-final`, `alaska-south-regen`, `dawson-cassiar-livingplan-test`,
-    `expedition-mri4puxo`, `expedition-mri5tv6g`, `la-to-deadhorse`, `yotrippin-demo`,
-    plus `la-to-portland` (added this session). `[queried TEST]`
-  - PROD: `dawson-vancouver-cassiar`, `la-to-deadhorse`, plus `la-to-portland`
-    (added this session; 2 → 3 rows, one added). `[queried PROD; script hash-reference-trips.ts before/after]`
+The RLS policy (`for select using (true)`, anon-readable) and the per-DB row
+inventory (which slugs exist in TEST vs PROD) live in
+[`docs/DATA_INVENTORY.md`](../DATA_INVENTORY.md) § `reference_trips` — that is
+"what data lives in which database," and it changes independently of this code.
 
 ## Fork path (`web/src/app/api/trips/fork/route.ts`)
 
@@ -118,14 +113,12 @@ Verified instances `[script: prove-la-to-deadhorse-neutral.ts]`:
 
 ## The three trip shapes
 
-- **Fixture-degraded** — no `corridorCities`, no `segmentSuggestions`; renders the
-  two-node fallback. Exercised by **`la-to-portland`**. `[grep fixtures.ts: corridorCities count 0]`
-- **Reference-derived (baked)** — a persisted reference payload carrying
-  `corridorCities`. Exercised by the **`la-to-deadhorse` family**. `[script: prove-la-to-deadhorse-neutral.ts]`
-- **Regenerated** — `segmentSuggestions` up to `MAX_SEGMENT_SUGGESTIONS = 30`
-  per day. `[grep: web/src/lib/routing/day-suggestions.ts]` **Which specific test
-  trip exercises the 30-cap rung was NOT confirmed this session** `[UNVERIFIED]` —
-  a regenerated trip was never inspected.
+The three payload shapes (fixture-degraded · reference-derived · regenerated),
+including which test trip exercises each and the `[UNVERIFIED]` 30-cap rung, are
+documented once in [`docs/architecture/itinerary-model.md`](itinerary-model.md) §7
+— the scroll/windowing layer is where that distinction bites, so it lives with
+the model. This doc's **baked-vs-unbaked** section above covers what those shapes
+mean at *serve* time.
 
 ## Caching on the trip path
 

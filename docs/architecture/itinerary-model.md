@@ -267,8 +267,33 @@ geometry-stable key like `nodeId`. Scoped in
 
 ---
 
+## 7. The three payload shapes (fixture-degraded · reference-derived · regenerated)
+
+A trip's day payload arrives in one of three shapes. This matters to the
+scroll/windowing layer (§4): each shape renders different per-day content, so a
+degraded fixture is not a representative test instrument for dense days.
+
+- **Fixture-degraded** — no `corridorCities`, no `segmentSuggestions`; renders the
+  two-node fallback (§1). Exercised by **`la-to-portland`**. `[grep fixtures.ts: corridorCities count 0, 2026-07-25]`
+- **Reference-derived (baked)** — a persisted `reference_trips` payload carrying
+  `corridorCities` (baked at seed time; see §2d). Exercised by the
+  **`la-to-deadhorse` family**. `[script: web/scripts/prove-la-to-deadhorse-neutral.ts, 2026-07-25]`
+- **Regenerated** — `segmentSuggestions` populated up to
+  `MAX_SEGMENT_SUGGESTIONS = 30` per day (§2d fold). `[grep: web/src/lib/routing/day-suggestions.ts]`
+  **Which specific test trip exercises the 30-cap rung was NOT confirmed** `[UNVERIFIED]`
+  — a regenerated trip was never inspected. (The 66-day user fork is the likely
+  instrument but was not inspected.)
+
+How a trip is *served* into one of these shapes (which reader, read-time
+derivation, baked-vs-unbaked short-circuit):
+[`docs/architecture/trip-resolution.md`](trip-resolution.md).
+
+---
+
 ## Related
 
+- `docs/architecture/trip-resolution.md` — how `getTrip` resolves and serves a
+  trip (reader split, read-time derivation, caching).
 - `docs/decisions/` — why calls were made (append-only). In particular
   `docs/decisions/2026-07-24-cross-day-stop-movement.md` for the in-flight cross-day
   move / add-day feature and its open questions.

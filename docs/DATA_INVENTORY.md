@@ -62,6 +62,24 @@ rolled back 2026-07-23 via `npm run -w data slice:rollback --execute` against th
 STEP-0 snapshot, and `places_test` re-synced. The numbers above are the restored
 baseline.)
 
+## `reference_trips` — RLS + rows per DB
+
+App data (canonical seed trips), not corpus. **RLS:** `create policy
+"reference_trips_public_read" on public.reference_trips for select using (true)`
+— no role restriction, so **anon can read**. Confirmed empirically with the anon
+key (no session, RLS-subject): TEST returned 7 rows, PROD read succeeded.
+`[read: supabase/migrations/20260513000000_init_identity.sql:50-52; queried TEST + PROD, anon key, 2026-07-25]`
+
+**Rows present (point-in-time 2026-07-25):**
+- **TEST:** `alaska-south-final`, `alaska-south-regen`, `dawson-cassiar-livingplan-test`,
+  `expedition-mri4puxo`, `expedition-mri5tv6g`, `la-to-deadhorse`, `yotrippin-demo`,
+  `la-to-portland` (added 2026-07-25). `[queried TEST]`
+- **PROD:** `dawson-vancouver-cassiar`, `la-to-deadhorse`, `la-to-portland`
+  (added 2026-07-25; 2 → 3 rows). `[queried PROD; hash-reference-trips.ts before/after]`
+
+How `getTrip` serves these rows (reader split, derivation, caching):
+[`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).
+
 ## STAGING — `gjzqlsyusmtrwbaluuho` ("overlander-staging") — DELETED
 
 A pre-cutover prod clone (created 2026-06-04, master_place 12,242). **Deleted**
