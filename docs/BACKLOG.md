@@ -154,5 +154,14 @@ thing worked, it moves into STATE.md §Queued.
   (i.e. when `position` is null), so the route/ETA don't imply a live-location
   departure that isn't happening.
 
+- **Live-weather integration — RESCUABLE from PR #24 (salvage, not rebase).** OpenMeteo
+  forecast + climatology fallback (`src/lib/weather/` + `src/lib/trips/resolve-weather.ts`)
+  is a genuine unmerged feature: **ABSENT from main** — only the `Day.weather` placeholder
+  field exists, not the live fetch. PR #24 sits ~400 commits behind; **do NOT rebase it**
+  (it would fight 400 commits of drift). Rescue by SALVAGE: lift the weather lib and
+  re-wire it into `DayBriefingCard` — its original hook `suggested-section.tsx` was
+  deleted in the 2026-07-12 one-day-renderer refactor. Kept open as PR #24 with the same
+  note; this entry is what keeps it from reading as a dead stale PR. (Triage 2026-07-24.)
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
