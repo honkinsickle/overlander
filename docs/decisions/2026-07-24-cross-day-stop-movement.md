@@ -140,7 +140,8 @@ for the durable versions.
     with nonexistent windowing, sourced from an unverified earlier report. Verified: no
     `react-window`/`react-virtual`, no virtualization, no `IntersectionObserver`
     mount/unmount, no scroll-driven mounting anywhere in the trip components. (The
-    `itinerary-model.md` reference also dangles — that doc was dropped from main by #133.)
+    `itinerary-model.md` reference briefly dangled — #133 dropped that doc from main —
+    but #138 RESTORED it, §4 header corrected to match, so the reference resolves again.)
 
 ## `dayAssignment` overlay — Adam's decision (2026-07-24)
 
