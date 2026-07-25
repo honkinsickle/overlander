@@ -77,6 +77,28 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   v5.1.0, user scope). The CLI install was blocked by the permission classifier;
   ran from the terminal instead. Plugin skills load at session start, so it's
   active next session, not this one.
+- **Built the continuous day-detail scroll (Design A, view mode) —
+  [#146](https://github.com/honkinsickle/overlander/pull/146).** The day-detail
+  center is now a continuous river of days when NOT editing, not a one-at-a-time
+  swap. New `ContinuousDayStack` IO-windows the near-viewport days; scroll writes
+  `?day=` settle-debounced (140ms) with a 400ms max-wait; the one shared map
+  follows on settle (settle-only `?day=` write ⇒ settle-only flyTo, for free).
+  Hysteresis (±15% vp) + measured-height cache make unmount height-neutral.
+  Re-verified the handoff's `[RECHECK]` claims against `main` first (all held).
+  **Falsification catch that shaped it:** `placeOverrides`/`ranks` drive pin +
+  cluster order in VIEW mode (no editMode guard), so every mounted day gets
+  server-truth values while the optimistic drag machinery stays out —
+  "values cross the bridge, machinery does not." `editMode` + Overview keep the
+  VERBATIM single-day swap (the bridge; PR2 deletes it). Presentation-only fence
+  held (zero model-file diff). Verified in the slideup on `la-to-deadhorse` (66d)
+  + `yotrippin-demo` (19d): windowing, cached-height no-jump, rail-click
+  programmatic guard, Overview flush-guard (the guard stops the unmount flush from
+  resurrecting a day when you leave to Overview — a bug I hit and fixed).
+  Edit-mode + saved-pins-in-view were NOT exercised end-to-end (needs an authed
+  UUID trip / a trip carrying overrides) — verbatim render + server-truth wiring
+  cover them by construction. Decision:
+  `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
+  `docs/architecture/itinerary-model.md` updated.
 
 ## 2026-07-24
 
