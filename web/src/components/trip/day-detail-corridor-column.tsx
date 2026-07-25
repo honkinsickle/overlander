@@ -18,6 +18,8 @@ import {
   DayDetailCorridor,
   type CorridorPlace,
 } from "@/components/trip/day-detail-corridor";
+import { ContinuousDayStack } from "@/components/trip/continuous-day-stack";
+import { estimateDayHeight } from "@/lib/trips/continuous-scroll";
 import { DayBriefingCard } from "@/components/trip/day-briefing-card";
 import type { PlaceRich } from "@/lib/discovery/google-places";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -97,11 +99,16 @@ export function DayDetailCorridorColumn({
   selectedDayId,
   scrollRequest,
   onActiveSection,
+  onSelectDay,
   editMode = false,
   canEdit = false,
 }: {
   trip: Trip;
   selectedDayId: string | null;
+  /** Writes `?day=` (the canonical selection channel). In the continuous
+   *  view-mode scroll, the settle handler calls this so the rail highlight and
+   *  map follow the reader — one fan-out per settle. Same writer the rail uses. */
+  onSelectDay?: (dayId: string | null) => void;
   /** True for a user-owned, editable UUID trip (`!isReference &&
    *  isUserTripId`). Gates the curated-POI ⋮ kebab — reference/frozen slugs
    *  never show it. */
@@ -269,26 +276,49 @@ export function DayDetailCorridorColumn({
   // ratings/photos by place_id. Keyed by place_id, accumulated across days.
   const [hydrated, setHydrated] = useState<Record<string, PlaceRich>>({});
 
-  // On day-select, fetch Place Details for the mp:* corpus tiles that carry a
-  // placeId and aren't already rich (waypoints + already-rich tiles skipped).
-  // Progressive + non-blocking: tiles render essentials immediately; the rich
-  // fields graft in when this lands. Graceful: any failure/abort leaves the
-  // tiles on essentials (no error UI). The API key never reaches the client —
-  // the /api/places/details route holds it server-side.
+  // Server-truth rank map (Trip.placeRanks). The continuous view render passes
+  // THIS (not the optimistic localRanks) — values cross the bridge, the
+  // optimistic edit machinery does not.
+  const serverRanksMap = useMemo(
+    () => new Map(Object.entries(trip.placeRanks ?? {})),
+    [trip.placeRanks],
+  );
+
+  // Days currently mounted in the continuous stack (reported by the stack).
+  // Drives the hydration union below so scroll-back is free and approaching
+  // days are already hydrated when they reach the viewport.
+  const [mountedIds, setMountedIds] = useState<string[]>([]);
+
+  // The set of day ids to hydrate. Continuous view mode → the mounted window;
+  // single-day edit swap → just the selected day; Overview → none.
+  const hydrateDayIds = useMemo(() => {
+    if (selectedDayId === null) return [] as string[];
+    if (editMode) return [selectedDayId];
+    return mountedIds;
+  }, [selectedDayId, editMode, mountedIds]);
+  const hydrateKey = hydrateDayIds.join("|");
+
+  // Fetch Place Details for the corpus tiles across the mounted day set that
+  // carry a placeId and aren't already rich (waypoints + already-rich tiles
+  // skipped). One batched POST per mount change; the in-filter !hydrated[] guard
+  // means only NEW ids are fetched. Progressive + non-blocking: tiles render
+  // essentials immediately; rich fields graft in when this lands. Graceful: any
+  // failure/abort leaves the tiles on essentials. The API key never reaches the
+  // client — the /api/places/details route holds it server-side.
   useEffect(() => {
-    if (!day) return;
+    const daysToHydrate = hydrateDayIds
+      .map((id) => trip.days.find((d) => d.id === id))
+      .filter((d): d is Day => !!d);
     const placeIds = Array.from(
       new Set(
-        placePool(day)
+        daysToHydrate
+          .flatMap((d) => placePool(d))
           .filter(
             // Any tile carrying a Google place_id and lacking a photo — NOT just
             // `mp:` corpus rows. Curated key stops resolved via Google arrive as
             // `google:` ids with a placeId; the old mp:-only gate skipped them,
             // so their photos never loaded on any surface.
-            (t) =>
-              t.placeId &&
-              !t.photoUrl &&
-              !hydrated[t.placeId],
+            (t) => t.placeId && !t.photoUrl && !hydrated[t.placeId],
           )
           .map((t) => t.placeId as string),
       ),
@@ -315,10 +345,10 @@ export function DayDetailCorridorColumn({
       }
     })();
     return () => ctrl.abort();
-    // hydrated is intentionally omitted: re-run only on day switch, using the
-    // in-filter guard to skip already-hydrated ids.
+    // hydrated is intentionally omitted: re-run only when the mounted set
+    // changes, using the in-filter guard to skip already-hydrated ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDayId]);
+  }, [hydrateKey]);
 
   // Rail Guides/Places → scroll the mounted Overview to the section.
   // Batched with the Overview switch upstream, so by the time this
@@ -401,10 +431,17 @@ export function DayDetailCorridorColumn({
   // decoupled recompute (and, for the modal-intercept slideup, an
   // unreliable revalidatePath) can't be depended on to re-emit this.
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
-  // Re-seed from server truth on day switch / revalidation landing.
+  // Re-seed from server truth. When the browse panel is open it may be scoped to
+  // any mounted day (openBrowseFor(d)), so seed from THAT day's waypoints;
+  // otherwise the selected day. Keeps the panel's "Added ✓" correct in the
+  // continuous stack where there is no single mounted day.
   useEffect(() => {
-    setAddedIds(new Set(day?.waypoints.map((wp) => wp.id) ?? []));
-  }, [day]);
+    const seedDay = browseTarget
+      ? trip.days.find((x) => x.id === browseTarget.dayId)
+      : day;
+    setAddedIds(new Set(seedDay?.waypoints.map((wp) => wp.id) ?? []));
+    // browseTarget carries the scoped dayId; `day` covers the edit/overview path.
+  }, [browseTarget, day, trip.days]);
   // Broadcast on every change (seed + optimistic flips) so the panel's
   // trip:addedSync listener stays in sync.
   useEffect(() => {
@@ -456,26 +493,28 @@ export function DayDetailCorridorColumn({
     return () => window.removeEventListener("trip:toggleAdded", onToggle);
   }, []);
 
-  const openBrowse = () => {
-    if (!day) return;
-    const i = trip.days.findIndex((d) => d.id === day.id);
+  // Open the day-scoped browse panel for an EXPLICIT day (any mounted day in the
+  // continuous stack, not just the selected one).
+  const openBrowseFor = (d: Day) => {
+    const i = trip.days.findIndex((x) => x.id === d.id);
     const prev = i > 0 ? trip.days[i - 1] : undefined;
     setBrowseTarget({
       category: "scenic",
-      dayNumber: day.dayNumber,
+      dayNumber: d.dayNumber,
       tripId: trip.id,
-      dayId: day.id,
-      dayCoords: day.coords,
+      dayId: d.id,
+      dayCoords: d.coords,
       dayStartCoords:
-        day.startCoord ?? prev?.coords ?? (i === 0 ? trip.startCoords : undefined),
-      dayLabel: day.label,
-      dayDate: day.date,
+        d.startCoord ?? prev?.coords ?? (i === 0 ? trip.startCoords : undefined),
+      dayLabel: d.label,
+      dayDate: d.date,
     });
   };
+  const openBrowse = () => {
+    if (day) openBrowseFor(day);
+  };
 
-  const removePlace = (placeId: string) => {
-    if (!day) return;
-    const dayId = day.id;
+  const removePlaceFor = (d: Day, placeId: string) => {
     // Optimistic flip so a corridor-tile ✕ also reverts the panel card.
     setAddedIds((prev) => {
       const next = new Set(prev);
@@ -483,8 +522,11 @@ export function DayDetailCorridorColumn({
       return next;
     });
     startTransition(async () => {
-      await removeWaypointAction(trip.id, dayId, placeId);
+      await removeWaypointAction(trip.id, d.id, placeId);
     });
+  };
+  const removePlace = (placeId: string) => {
+    if (day) removePlaceFor(day, placeId);
   };
 
   // ── Curated-POI kebab (⋮ Move to day / Delete) ─────────────────────────────
@@ -517,10 +559,10 @@ export function DayDetailCorridorColumn({
     () => trip.days.map((d) => ({ id: d.id, label: `Day ${d.dayNumber}` })),
     [trip.days],
   );
-  const buildCuratedMenu = useCallback(
-    (place: CorridorPlace): CuratedMenu | undefined => {
-      if (!canEdit || !day) return undefined;
-      const fromDayId = day.id;
+  const buildCuratedMenuFor = useCallback(
+    (d: Day, place: CorridorPlace): CuratedMenu | undefined => {
+      if (!canEdit) return undefined;
+      const fromDayId = d.id;
       if (place.curatedMovable) {
         // Curated POI (segmentSuggestion, overlay): Move + Delete, geometry-free.
         return {
@@ -542,13 +584,18 @@ export function DayDetailCorridorColumn({
       if (place.removable) {
         // Route-waypoint (day.waypoints, routed): Delete only — moving a routed
         // waypoint changes geometry (deferred to moveWaypointToDay). Reuse the
-        // existing optimistic delete path (removeWaypointAction via removePlace).
-        return { onDelete: () => removePlace(place.id) };
+        // existing optimistic delete path (removeWaypointAction via removePlaceFor).
+        return { onDelete: () => removePlaceFor(d, place.id) };
       }
       return undefined;
     },
-    [canEdit, day, dayList, curatedBusyId, runCurated, removePlace, trip.id],
+    // removePlaceFor is a stable-enough closure over trip.id; excluded to keep
+    // the menu builder from re-identifying every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canEdit, dayList, curatedBusyId, runCurated, trip.id],
   );
+  const buildCuratedMenu = (place: CorridorPlace): CuratedMenu | undefined =>
+    day ? buildCuratedMenuFor(day, place) : undefined;
 
   // Resolve a placeId within a given day to its source (waypoint or
   // segmentSuggestion) and open the shared MapDetailOverlay via
@@ -678,25 +725,109 @@ export function DayDetailCorridorColumn({
     }
   };
 
+  // ── Per-day view render helpers ─────────────────────────────────────────────
+  // Shared by the continuous stack (every mounted day) and the single-day edit
+  // swap, so both paths derive tiles/hero identically. PURE reads of the trip +
+  // the accumulated `hydrated` cache — no model mutation.
+
+  // Graft live hydrate (rating/photo/category) onto a day's pool tiles.
+  const hydratePlaces = (d: Day): CorridorPlace[] =>
+    placePool(d).map((t) => {
+      const rich = t.placeId ? hydrated[t.placeId] : undefined;
+      return rich
+        ? {
+            ...t,
+            rating: rich.rating ?? t.rating,
+            reviewCount: rich.reviewCount ?? t.reviewCount,
+            photoUrl: rich.photoUrl ?? t.photoUrl,
+            // Live-resolved tiles bake no category → "interest" default (grey
+            // title, generic pin). Google types give the real one. "overnight"
+            // (lodging) has no card palette → "hotel".
+            category:
+              (rich.category === "overnight" ? "hotel" : rich.category) ??
+              t.category,
+          }
+        : t;
+    });
+
   // Day hero: prefer the persisted (Wikipedia) image; if absent (remote parks
   // have no wiki image), REUSE the tile hydration already fetched for this day —
   // the destination place's Google photo sits in `hydrated`, so one fetch feeds
   // both tiles and the hero. Degrades to blank when the destination has no
   // placeId or hasn't hydrated yet (no flash/crash — fills on the next render).
-  const heroCities = day ? day.corridorCities ?? fallbackCorridor(day) : [];
-  const heroEndCity = heroCities[heroCities.length - 1];
-  const destTile =
-    day && heroEndCity
-      ? placePool(day).find((t) =>
+  const heroFor = (d: Day): string | undefined => {
+    const heroCities = d.corridorCities ?? fallbackCorridor(d);
+    const heroEndCity = heroCities[heroCities.length - 1];
+    const destTile = heroEndCity
+      ? placePool(d).find((t) =>
           isSameAnchorPlace(
             { id: t.id, name: t.title, coords: t.coords },
             { id: heroEndCity.id, name: heroEndCity.name, coords: heroEndCity.coords },
           ),
         )
       : undefined;
-  const dayHeroImage =
-    day?.heroImage ??
-    (destTile?.placeId ? hydrated[destTile.placeId]?.photoUrl : undefined);
+    return (
+      d.heroImage ??
+      (destTile?.placeId ? hydrated[destTile.placeId]?.photoUrl : undefined)
+    );
+  };
+
+  // View-mode cities: server overrides only (no optimistic overlay). base
+  // already carries server overrides; applyPlaceOverrides is idempotent on them.
+  const viewCities = (d: Day): CorridorCity[] =>
+    d.corridorCities
+      ? applyPlaceOverrides({
+          cities: d.corridorCities,
+          overrides: trip.placeOverrides ?? [],
+        })
+      : fallbackCorridor(d);
+
+  const dayStartMileForId = (id: string): number => {
+    const idx = trip.days.findIndex((d) => d.id === id);
+    return idx >= 0 ? dayStartMiles(trip.days)[idx] : 0;
+  };
+
+  // One mounted day in the continuous VIEW stack. Values cross the bridge
+  // (server-truth overrides/ranks); the optimistic edit machinery does NOT —
+  // editMode is false and the move/reorder handlers are absent (deferred to PR2).
+  const renderViewDay = (d: Day) => (
+    <DayDetailCorridor
+      dayLabel={`Day ${d.dayNumber} — ${formatDayDate(d.date)}`}
+      dayNumber={d.dayNumber}
+      routeLabel={d.label}
+      heroImageUrl={heroFor(d)}
+      heroAlt={d.label}
+      cities={viewCities(d)}
+      places={hydratePlaces(d)}
+      onRemovePlace={(id) => removePlaceFor(d, id)}
+      onOpenPlace={(id) => dispatchPlaceDetail(d, id)}
+      onExploreDay={() => openBrowseFor(d)}
+      briefing={trip.generated ? <DayBriefingCard day={d} /> : undefined}
+      editMode={false}
+      placeOverrides={trip.placeOverrides ?? []}
+      dayMiles={d.miles}
+      dayDriveHours={d.driveHours}
+      routeLine={routeLine}
+      dayStartMile={dayStartMileForId(d.id)}
+      ranks={serverRanksMap}
+      buildCuratedMenu={(p) => buildCuratedMenuFor(d, p)}
+    />
+  );
+
+  const overviewEl = (
+    <DayDetailOverview
+      routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
+      heroImageUrl={trip.heroImage}
+      heroAlt={trip.title}
+      guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
+      guides={OVERVIEW_GUIDES}
+      foodThread={trip.foodThread}
+      placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
+      places={topPlacesForTrip(trip)}
+      onOpenPlace={openTripPlaceDetail}
+      addPlaceholder
+    />
+  );
 
   return (
     <div className="relative h-full">
@@ -737,66 +868,57 @@ export function DayDetailCorridorColumn({
       )}
       <div
         className={
-          "h-full overflow-y-auto no-scrollbar" +
+          "relative h-full" +
           (isPending ? " opacity-60 pointer-events-none" : "")
         }
       >
-        {day ? (
-          <DayDetailCorridor
-            dayLabel={`Day ${day.dayNumber} — ${formatDayDate(day.date)}`}
-            dayNumber={day.dayNumber}
-            routeLabel={day.label}
-            heroImageUrl={dayHeroImage}
-            heroAlt={day.label}
-            cities={effectiveCities ?? fallbackCorridor(day)}
-            places={placePool(day).map((t) => {
-              const rich = t.placeId ? hydrated[t.placeId] : undefined;
-              return rich
-                ? {
-                    ...t,
-                    rating: rich.rating ?? t.rating,
-                    reviewCount: rich.reviewCount ?? t.reviewCount,
-                    photoUrl: rich.photoUrl ?? t.photoUrl,
-                    // Live-resolved tiles bake no category → "interest" default
-                    // (grey title, generic pin). Google types give the real one.
-                    // "overnight" (lodging) has no card palette → "hotel".
-                    category:
-                      (rich.category === "overnight" ? "hotel" : rich.category) ??
-                      t.category,
-                  }
-                : t;
-            })}
-            onRemovePlace={removePlace}
-            onOpenPlace={openPlaceDetail}
-            onExploreDay={openBrowse}
-            briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
-            editMode={editMode}
-            placeOverrides={localOverrides}
-            dayMiles={day.miles}
-            dayDriveHours={day.driveHours}
-            routeLine={routeLine}
-            dayStartMile={dayStartMile}
-            onMovePlace={editMode ? onMovePlace : undefined}
-            ranks={ranksMap}
-            onReorderPlace={editMode ? onReorderPlace : undefined}
-            pendingPlaceId={pendingPlaceId}
-            errorPlaceId={moveError?.placeId ?? null}
-            errorMessage={moveError?.message ?? null}
-            onDismissError={() => setMoveError(null)}
-            buildCuratedMenu={buildCuratedMenu}
-          />
+        {selectedDayId === null || !day ? (
+          // Overview state (or a stale ?day= that matches no day).
+          <div className="h-full overflow-y-auto no-scrollbar">{overviewEl}</div>
+        ) : editMode ? (
+          // Single-day edit swap — the VERBATIM pre-continuous render, kept as the
+          // bridge until edit mode moves inside the windowed container (PR2). Its
+          // optimistic overlays (localOverrides/ranksMap/moveError) are correct
+          // only for the one selected day, which is all edit mode ever shows.
+          <div className="h-full overflow-y-auto no-scrollbar">
+            <DayDetailCorridor
+              dayLabel={`Day ${day.dayNumber} — ${formatDayDate(day.date)}`}
+              dayNumber={day.dayNumber}
+              routeLabel={day.label}
+              heroImageUrl={heroFor(day)}
+              heroAlt={day.label}
+              cities={effectiveCities ?? fallbackCorridor(day)}
+              places={hydratePlaces(day)}
+              onRemovePlace={removePlace}
+              onOpenPlace={openPlaceDetail}
+              onExploreDay={openBrowse}
+              briefing={trip.generated ? <DayBriefingCard day={day} /> : undefined}
+              editMode={editMode}
+              placeOverrides={localOverrides}
+              dayMiles={day.miles}
+              dayDriveHours={day.driveHours}
+              routeLine={routeLine}
+              dayStartMile={dayStartMile}
+              onMovePlace={editMode ? onMovePlace : undefined}
+              ranks={ranksMap}
+              onReorderPlace={editMode ? onReorderPlace : undefined}
+              pendingPlaceId={pendingPlaceId}
+              errorPlaceId={moveError?.placeId ?? null}
+              errorMessage={moveError?.message ?? null}
+              onDismissError={() => setMoveError(null)}
+              buildCuratedMenu={buildCuratedMenu}
+            />
+          </div>
         ) : (
-          <DayDetailOverview
-            routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
-            heroImageUrl={trip.heroImage}
-            heroAlt={trip.title}
-            guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
-            guides={OVERVIEW_GUIDES}
-            foodThread={trip.foodThread}
-            placesSubtitle={`Across your route · ${trip.startLocation} → ${trip.endLocation}`}
-            places={topPlacesForTrip(trip)}
-            onOpenPlace={openTripPlaceDetail}
-            addPlaceholder
+          // Continuous VIEW scroll — the river of days (Design A). One shared map
+          // and rail underneath; this is the only surface that becomes seamless.
+          <ContinuousDayStack
+            days={trip.days}
+            selectedDayId={selectedDayId}
+            renderDay={renderViewDay}
+            estimateHeight={(d) => estimateDayHeight(placePool(d).length)}
+            onSettleDay={(id) => onSelectDay?.(id)}
+            onMountedChange={setMountedIds}
           />
         )}
       </div>
