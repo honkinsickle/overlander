@@ -163,5 +163,30 @@ thing worked, it moves into STATE.md §Queued.
   deleted in the 2026-07-12 one-day-renderer refactor. Kept open as PR #24 with the same
   note; this entry is what keeps it from reading as a dead stale PR. (Triage 2026-07-24.)
 
+- **Finish reference-fixture removal** (follow-up to the getTrip DB-first flip,
+  branch `refactor/reference-trips-db-first`). The flip made reference trips
+  serve from `reference_trips`; the `TRIPS` fixture no longer shadows the DB but
+  the reference literals still sit in the module. To fully remove them: empty
+  `seed()` of the reference literals, reroute `ensureAlaskaUpgraded`'s 4
+  waypoint-helper callers (`repository.ts:94,108,120,181`, which read
+  `TRIPS["la-to-deadhorse"]`) to the DB reader, then delete `ensureAlaskaUpgraded`,
+  and drop `la-to-portland` from `FIXTURE_TRIPS` in
+  `api/trip-browse/[tripId]/[dayId]/route.ts` (so it goes live/federated instead
+  of the curated `BROWSE_PLACES` catalog — verify the browse path still resolves).
+  **Open question that decides its size (investigate before scoping):** are those
+  4 helpers pure lookups, or does any back a WRITE? A DB reader returns a fresh
+  object, so rerouting a write path silently no-ops. **Likely wants to land with
+  or after the remove-✕ affordance gating** — same in-memory write paths. Do NOT
+  bundle on tired assumptions; every dig this session found another coupling.
+  Note: `TRIPS` must SURVIVE this — it is also the anon-wizard store (below).
+- **`TRIPS` is the anon-wizard persistence layer** (not just reference fixtures).
+  `createTrip` (`plan/actions.ts:786`, anon finalize, gated `ENABLE_PLANNER_WIZARD`)
+  writes `trip-<8char>` drafts into the `globalThis`-pinned `TRIPS` store;
+  `listAnonTrips` lists them (`id.startsWith("trip-")`); the repository slug-write
+  paths edit them; `getTrip` resolves them (last, after the DB reference readers).
+  Ephemeral — lost on server restart, never persisted to Supabase. Not part of the
+  reference-trip migration; recorded so the next person doesn't mistake it for
+  dead fixture code. Deleting the `TRIPS` module would remove this feature.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
