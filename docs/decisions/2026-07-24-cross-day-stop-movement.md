@@ -127,8 +127,20 @@ for the durable versions.
   "+ ADD DAY" / "Insert Day Above/Below").
 - **Deferred:** the add-to case (a place on two days) for LA→Deadhorse return legs;
   persisting rail day-reorder (today local-only).
-- **Do not touch** the scroll/windowing/map layer while building this — it is built and
-  working (`docs/architecture/itinerary-model.md` §4).
+- **Leave the RAIL scroll and the shared MAP alone — those ARE built and working**
+  (the rail is a plain `overflow-y-auto` list of ALL day cards; one shared Mapbox
+  instance the selected day drives). **But there is NO windowing/virtualization** — the
+  center is a **single-day conditional swap** (`day-detail-corridor-column.tsx:122`),
+  not a continuous windowed scroll. A continuous windowed day-scroll is **Design A —
+  scoped but NEVER BUILT** (see the fork above); if you build it, you are building it
+  from scratch, not touching an existing thing.
+  - **Correction (2026-07-24, direct code check on `main` 8883f97):** an earlier draft
+    of this line read "do not touch the scroll/**windowing**/map layer — it is built and
+    working (`itinerary-model.md` §4)." That was FALSE — it conflated the real rail+map
+    with nonexistent windowing, sourced from an unverified earlier report. Verified: no
+    `react-window`/`react-virtual`, no virtualization, no `IntersectionObserver`
+    mount/unmount, no scroll-driven mounting anywhere in the trip components. (The
+    `itinerary-model.md` reference also dangles — that doc was dropped from main by #133.)
 
 ## `dayAssignment` overlay — Adam's decision (2026-07-24)
 
@@ -170,10 +182,11 @@ session doesn't re-derive them. Each: what it was, why it's dead.
 
 - **Cross-day DRAG (any distance).** Impossible as the primary gesture: the detail
   column mounts ONE day at a time (single-day conditional swap, no
-  virtualization/windowing — `day-detail-corridor-column.tsx:637`; see
-  `itinerary-model.md` §4), so a distant day is never on screen to be a drop
-  target. That is why the move is a PICKER, not a drag. (NB: the reason is the
-  single-day mount, not IntersectionObserver windowing — there is none.)
+  virtualization/windowing — `day-detail-corridor-column.tsx:122`), so a distant day
+  is never on screen to be a drop target. **That is why the move is a PICKER, not a
+  drag** — the reason is the **single-day mount** (no second day to drop into), NOT
+  windowing/unmounting (there is none). STILL TRUE on `main` 8883f97, re-verified by
+  direct code check 2026-07-24.
 - **Moving a ROUTE WAYPOINT between days.** A waypoint is part of the routed line
   (`recompute-day.ts` routes `start → waypoints → end`), so moving it re-cuts trip
   geometry and reshapes every day's mileage — fighting the base regenerator. The
