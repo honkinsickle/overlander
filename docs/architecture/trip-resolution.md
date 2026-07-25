@@ -1,10 +1,9 @@
 # Trip resolution — how `getTrip` serves a trip
 
 **Point-in-time: 2026-07-25.** Written at the end of the reference-trips DB-first
-migration ([PR #143](https://github.com/honkinsickle/overlander/pull/143), OPEN
-at time of writing — the flip is on the branch, not yet merged; the residual
-fixture removal is backlogged). Re-verify against source before trusting a claim
-that has aged.
+migration ([PR #143](https://github.com/honkinsickle/overlander/pull/143),
+MERGED — the flip is on `main`; the residual fixture removal is backlogged).
+Re-verify against source before trusting a claim that has aged.
 
 ## Why this doc states its evidence
 

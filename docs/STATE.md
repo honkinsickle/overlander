@@ -27,8 +27,9 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 
 ## IN FLIGHT
 - **Reference trips serve DB-first** — [PR #143](https://github.com/honkinsickle/overlander/pull/143)
-  OPEN (Adam merges). Resolves the docs-say-DB-first / code-was-fixture-first
-  contradiction. `getTrip` is now DB-first + reader-aware: `la-to-deadhorse` →
+  **MERGED** to `main` (auto-deploys to prod via Vercel). Resolves the
+  docs-say-DB-first / code-was-fixture-first contradiction. `getTrip` is now
+  DB-first + reader-aware: `la-to-deadhorse` →
   `getReferenceTrip` (snapshot fallback + memo); other reference slugs →
   `getPersistedReferenceTrip`; anon trips last. `la-to-portland` migrated into
   `reference_trips` (raw payload) on TEST + PROD (idempotent
