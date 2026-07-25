@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TRIPS, ensureAlaskaUpgraded } from "./fixtures";
-import { getPersistedReferenceTrip } from "./reference";
+import { getPersistedReferenceTrip, getReferenceTrip } from "./reference";
 import {
   getUserTrip,
   isUserTripId,
@@ -78,12 +78,21 @@ function applyDerivedToDay(day: Day, derived: DayDerived | null): void {
  */
 
 export async function getTrip(id: string): Promise<Trip | null> {
-  if (id === "la-to-deadhorse") await ensureAlaskaUpgraded();
-  if (TRIPS[id]) return TRIPS[id];
+  // User-owned trips (UUID) → DB under RLS.
   if (isUserTripId(id)) return getUserTrip(id);
-  // Generated/persisted reference trips (e.g. a YoTrippin itinerary upserted
-  // into reference_trips). Null on miss — unknown ids still 404.
-  return getPersistedReferenceTrip(id);
+  // THE FLIP (2026-07-25): reference trips serve DB-FIRST — `reference_trips`
+  // is the source of truth, not the in-memory fixture (resolving the docs-say-
+  // DB-first / code-was-fixture-first contradiction). la-to-deadhorse keeps the
+  // snapshot-backed reader (committed-snapshot fallback + per-process memo);
+  // every other reference slug reads `reference_trips` directly (null on miss
+  // → 404). See docs/decisions for the migration record.
+  if (id === "la-to-deadhorse") return getReferenceTrip(id);
+  const ref = await getPersistedReferenceTrip(id);
+  if (ref) return ref;
+  // Anon wizard trips (`trip-<8char>`) live only in the in-memory store and are
+  // NOT reference trips — resolve them last so a DB reference row always wins,
+  // but an in-progress anon draft still renders.
+  return TRIPS[id] ?? null;
 }
 
 /** Look up a waypoint anywhere in a trip by slug. */

@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-07-24
+# STATE — `main` · 2026-07-25
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -26,6 +26,19 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
+- **Reference trips serve DB-first** — [PR #143](https://github.com/honkinsickle/overlander/pull/143)
+  OPEN (Adam merges). Resolves the docs-say-DB-first / code-was-fixture-first
+  contradiction. `getTrip` is now DB-first + reader-aware: `la-to-deadhorse` →
+  `getReferenceTrip` (snapshot fallback + memo); other reference slugs →
+  `getPersistedReferenceTrip`; anon trips last. `la-to-portland` migrated into
+  `reference_trips` (raw payload) on TEST + PROD (idempotent
+  `scripts/seed-reference-la-to-portland.ts`). **RESIDUAL:** the `TRIPS` module
+  survives — it is now ONLY the anon-wizard store (`createTrip`/`listAnonTrips`/
+  slug-write paths); the reference literals still sit in it but no longer shadow
+  the DB; `ensureAlaskaUpgraded` still has 4 waypoint-helper callers. Finishing
+  the fixture removal is backlogged (gated on lookup-vs-write of those helpers;
+  lands with the remove-✕ affordance gating). Accepted: federated-fold-as-
+  convergence, 404-on-DB-failure for the demo slug.
 - **Curated-POI editing (kebab)** — MERGED (#131) and **DEPLOYED to prod** (Vercel
   auto-deploys `main`; the prod deployment on the #131 SHA completed successfully). Live
   now on user-owned UUID trips. A ⋮ kebab on each curated-POI card in the day detail:
