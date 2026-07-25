@@ -53,6 +53,30 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   scroll↔`?day=` settle-debounce with max-wait, dead-zone hysteresis). Not built
   — the fixture-shadow cleanup preempted it. No code; findings live in the
   session transcript for when it resumes.
+- **#143 and #144 both merged.** (Corrects the "open" on the first bullet —
+  append-only, so noted here rather than rewritten.)
+- **Process lesson — a doc commit pushed AFTER the merge was in flight got
+  orphaned.** `trip-resolution.md` was committed one commit *after* #143's merge
+  point, so it never landed on `main`; merging #143 auto-deleted the branch, and
+  the later push *re-created* it as a stray branch stranding the doc there.
+  Recovered via #144 (cherry-picked the doc onto a fresh branch + synced STATE's
+  now-stale "OPEN" → "MERGED"). Takeaway: once a PR is merging, don't push more
+  commits to its branch — open a follow-up.
+- **Doc placement corrected to the taxonomy (#144 + the session doc-pass).**
+  Premise-checked first (no existing architecture doc overlaps
+  `trip-resolution.md`, so it earns its own file). Then split single-homed: the
+  `reference_trips` RLS + per-DB row inventory → `DATA_INVENTORY.md`; the three
+  payload shapes → `itinerary-model.md` §7 (where the scroll work gets bitten);
+  cross-linked all three both ways; recorded the bidirectional dependency so the
+  fixture-removal backlog item knows it must update `trip-resolution.md`.
+- **Cleanup:** landed the long-floating "plotting-on-map architecture" BACKLOG
+  edit (stashed across the whole migration) as #145; deleted the merged
+  `docs/trip-resolution-and-state-sync` and the stray
+  `refactor/reference-trips-db-first` branches (local + remote).
+- **Tooling:** installed the Superpowers plugin (`superpowers@claude-plugins-official`
+  v5.1.0, user scope). The CLI install was blocked by the permission classifier;
+  ran from the terminal instead. Plugin skills load at session start, so it's
+  active next session, not this one.
 
 ## 2026-07-24
 
