@@ -271,22 +271,72 @@ geometry-stable key like `nodeId`. Scoped in
 
 ---
 
-## 7. The three payload shapes (fixture-degraded · reference-derived · regenerated)
+## 7. The payload shapes (fixture-degraded · reference-derived · generated · wizard-pool)
 
-A trip's day payload arrives in one of three shapes. This matters to the
+A trip's day payload arrives in one of several shapes. This matters to the
 scroll/windowing layer (§4): each shape renders different per-day content, so a
 degraded fixture is not a representative test instrument for dense days.
+
+**Corrected 2026-07-26.** This section previously described three shapes and
+called the third "Regenerated — `segmentSuggestions` up to
+`MAX_SEGMENT_SUGGESTIONS = 30`", tagged `[UNVERIFIED]` because no generated trip
+had ever been inspected. One was generated and inspected; **that description was
+wrong**. It describes a *different producer* than the one a generated trip goes
+through, so the rung is split in two below.
 
 - **Fixture-degraded** — no `corridorCities`, no `segmentSuggestions`; renders the
   two-node fallback (§1). Exercised by **`la-to-portland`**. `[grep fixtures.ts: corridorCities count 0, 2026-07-25]`
 - **Reference-derived (baked)** — a persisted `reference_trips` payload carrying
   `corridorCities` (baked at seed time; see §2d). Exercised by the
   **`la-to-deadhorse` family**. `[script: web/scripts/prove-la-to-deadhorse-neutral.ts, 2026-07-25]`
-- **Regenerated** — `segmentSuggestions` populated up to
-  `MAX_SEGMENT_SUGGESTIONS = 30` per day (§2d fold). `[grep: web/src/lib/routing/day-suggestions.ts]`
-  **Which specific test trip exercises the 30-cap rung was NOT confirmed** `[UNVERIFIED]`
-  — a regenerated trip was never inspected. (The 66-day user fork is the likely
-  instrument but was not inspected.)
+- **Generated (the expedition pipeline) — MEASURED.** What `/plan/expedition`
+  actually produces: form → `preComputeFacts` → `generateAndAudit` →
+  `bakeGeneratedDays` → `itineraryToTrip` → persisted to `reference_trips`.
+  `[read: src/lib/plan/expedition-actions.ts]` Standing instrument:
+  **`expedition-ms28y793`** (15 days, "Los Angeles, CA → Moab, UT", generated on
+  TEST 2026-07-26 — left in place deliberately, as `05b346df…` is for the
+  reference-derived rung). Measured from the stored payload
+  `[queried TEST: reference_trips.payload, 2026-07-26]`:
+  - `segmentSuggestions` **populated on all 15/15 days** — but **min 2, max 7,
+    median 3** (48 tiles total), *not* a 30-item pool. That is FEWER per day than
+    the reference-derived rung's ~5–8, not more.
+  - **Baked:** `routePolyline` present (44,891 chars); `corridorCities` on all
+    15/15 days (2–5 nodes each).
+  - No legacy `day.suggestions`, no `waypoints`, and `placeOverrides` /
+    `placeRanks` / `nodeSeeds` all empty on a fresh generation.
+  - **41/48 tiles (85%) are flagged `curated`** — the LLM's key stops — so this
+    shape is a small curated set, not a discovery pool.
+  - **Tiles are essentials-only:** 44/48 carry a `placeId`, but **0 carry
+    `photoUrl` and 0 carry `rating`**. Ratings/photos are grafted at render by
+    the `/api/places/details` hydration, not stored.
+  - Provenance: 44/48 ids are `google:` (tier-2 live-resolved), 4/48 are `mp:`
+    corpus rows — **all four on day 1**.
+  - **COVERAGE CAVEAT — do not read the counts as intrinsic.** Tile count is
+    `per-day corpus fold ∪ tier-2 resolved places` `[read: src/lib/itinerary/bake.ts]`,
+    and TEST's corpus is the LA/Joshua-Tree reseed only (`docs/DATA_INVENTORY.md`),
+    which is why the corpus contributed exactly 4 tiles, all on the one day inside
+    that footprint. The same generation against PROD's 13,629-place corridor
+    corpus would fold in more. These numbers are a TEST-coverage floor.
+    `[UNVERIFIED on PROD — not run there]`
+- **Wizard-pool (the 30-cap rung) — producer confirmed, no trip inspected.**
+  `MAX_SEGMENT_SUGGESTIONS = 30` lives in `routing/day-suggestions.ts` and is
+  reached only via `buildDaySuggestions`, whose sole caller is the legacy 5-step
+  wizard `plan/actions.ts`. `[grep: buildDaySuggestions, 2026-07-26]` The
+  generation path above never calls it and applies **no cap**. So the old "up to
+  30" text belonged to this producer, not to a generated trip. **No trip from
+  this path was inspected** `[UNVERIFIED]`.
+
+**Scroll consequence of the generated shape** (§4): generated trips carry a
+`DayBriefingCard`, which `estimateDayHeight` (`520 + 96 × poolCount`,
+`[read: src/lib/trips/continuous-scroll.ts]`) does not model — so it
+**under-estimates every day** on this shape: 12,408 px estimated vs 20,056 px
+measured across 15 days (**38% low, ~510 px/day**; every day under, range
++346…+700 px). Measured anyway: visible jump stayed **0 px scrolling down** (17
+mount events) and **≤1 px scrolling up** (20 events), because mounts happen in
+the off-screen buffer and above-fold growth is absorbed into `scrollTop`.
+Content parity between reaching a day by scrolling and loading `?day=` directly
+was **exact** (same card count, same rendered text incl. ratings, same 1,346 px
+slot height). `[browser-measured in the slideup on TEST, 2026-07-26]`
 
 How a trip is *served* into one of these shapes (which reader, read-time
 derivation, baked-vs-unbaked short-circuit):
