@@ -80,6 +80,29 @@ key (no session, RLS-subject): TEST returned 7 rows, PROD read succeeded.
 How `getTrip` serves these rows (reader split, derivation, caching):
 [`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).
 
+## `public.trips` — notable rows
+
+User trips (owner-scoped RLS). Not an exhaustive listing — only rows worth
+knowing about are recorded here.
+
+**PROD: two rows share the title "Tok, AK to Dawson, YT"** (point-in-time
+2026-07-26, service-role read, **read-only**) `[queried PROD]`:
+- **`24f14ecc-a209-45e7-a414-16ecc816bab0` — POPULATED.** 2 days, **63**
+  `segmentSuggestions` (all `mp:` corpus tiles), 0 `day.suggestions`, 0
+  `waypoints`. This is the row behind the place-card research; its shape is
+  described in
+  [`architecture/itinerary-model.md` §7](architecture/itinerary-model.md#7-the-payload-shapes-fixture-degraded--reference-derived--regenerated--corpus-dense-fork).
+- **`81865432-7a18-4f18-beaa-d6d95e6da249` — EMPTY POOL.** 2 days, same title,
+  `routePolyline` present, but **0 tiles** across all three pool sources.
+  Whether it is user-reachable and what it renders is **UNVERIFIED** — recorded
+  in `docs/BACKLOG.md`, not investigated.
+
+**TEST:** `05b346df-3bb5-4c46-8ff1-e0c5cfe26301` (66d fork of `la-to-deadhorse`,
+owned by `seed-owner`) and the 1-day `7e6774b9…` seed harness row. The fork
+carries **0** `segmentSuggestions` where the PROD equivalent carries 63 — reason
+**UNVERIFIED**, consequences for its use as a test instrument in `CLAUDE.md`
+§RUNBOOK gotchas. `[queried TEST]`
+
 ## STAGING — `gjzqlsyusmtrwbaluuho` ("overlander-staging") — DELETED
 
 A pre-cutover prod clone (created 2026-06-04, master_place 12,242). **Deleted**

@@ -7,7 +7,8 @@ is deliberately empty** — it is a separate research pass, and the split is the
 point: two models measured at once produce a muddle instead of a comparison.
 
 Trip shapes are NOT restated here — see
-[`itinerary-model.md` §7](itinerary-model.md#7-the-payload-shapes-fixture-degraded--reference-derived--generated--wizard-pool).
+[`itinerary-model.md` §7](itinerary-model.md) (§7 is the single home for trip
+shapes; it is not restated here).
 
 Evidence convention per [`trip-resolution.md`](trip-resolution.md): every claim
 states how it was verified — `[read source]`, `[grep]`, `[queried TEST]`,

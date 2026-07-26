@@ -271,11 +271,14 @@ geometry-stable key like `nodeId`. Scoped in
 
 ---
 
-## 7. The three payload shapes (fixture-degraded · reference-derived · regenerated)
+## 7. The payload shapes (fixture-degraded · reference-derived · regenerated · corpus-dense fork)
 
-A trip's day payload arrives in one of three shapes. This matters to the
+A trip's day payload arrives in one of several shapes. This matters to the
 scroll/windowing layer (§4): each shape renders different per-day content, so a
 degraded fixture is not a representative test instrument for dense days.
+
+**This section is the single home for trip shapes** — other docs link here
+rather than restating them.
 
 - **Fixture-degraded** — no `corridorCities`, no `segmentSuggestions`; renders the
   two-node fallback (§1). Exercised by **`la-to-portland`**. `[grep fixtures.ts: corridorCities count 0, 2026-07-25]`
@@ -287,6 +290,18 @@ degraded fixture is not a representative test instrument for dense days.
   **Which specific test trip exercises the 30-cap rung was NOT confirmed** `[UNVERIFIED]`
   — a regenerated trip was never inspected. (The 66-day user fork is the likely
   instrument but was not inspected.)
+- **Corpus-dense fork (PROD) — a DISTINCT profile, not one of the rungs above.**
+  Recorded rather than filed under the nearest rung. Exercised by PROD
+  `public.trips` row **`24f14ecc-a209-45e7-a414-16ecc816bab0`** ("Tok, AK to
+  Dawson, YT"): **63 `mp:` corpus tiles across just 2 days**, `generated`
+  **unset**, `routePolyline` present, 2 `corridorCities` per day, and the title
+  is **STORED** (both the `trips.title` column and `payload.startLocation` /
+  `endLocation`) — *not* derived at render. Dense because PROD carries the real
+  corridor corpus, where the equivalent TEST fork carries none.
+  `[queried PROD, 2026-07-26]` The exact write path that produced it was not
+  traced `[UNVERIFIED]`. What its tiles contain, and how the day-detail card
+  renders them, is documented in
+  [`place-render-model.md`](place-render-model.md).
 
 How a trip is *served* into one of these shapes (which reader, read-time
 derivation, baked-vs-unbaked short-circuit):
