@@ -346,5 +346,88 @@ thing worked, it moves into STATE.md §Queued.
     - Interaction with the continuous-scroll settle-debounce (the scroll→`?day=` sync in
       the Design-A continuous day-detail scroll).
 
+- **DATA-SOURCE COVERAGE GAPS (US-first).** Not scoped. **No implementation
+  authorized.** Layer audit of the corpus sources, scoped to US-first. The POI
+  layer is well covered by existing sources. Two layers are absent entirely:
+  **terrain** and **route legality**. For a road-trip product those are optional;
+  for an overlanding product they are load-bearing, because grade, pass elevation,
+  and "may I legally drive and camp here" are first-order questions the product
+  currently cannot answer from grounded data.
+  - **Sources currently in use (data):** OSM/Overpass, Google Places, Foursquare,
+    NPS API, Recreation.gov, RIDB/USFS Recreation, PAD-US; Canada — DataBC,
+    GeoYukon, Parks Canada, GNWT. Mapbox for display, routing, geocoding.
+    `[read: userMemories/approved-source list — confirm against repo config before
+    relying on this list]`
+  - **Banned:** iOverlander. Note: iOverlander appears as a recommended source in
+    pre-ban session history. **Do not treat historical chat recommendations as
+    authorization.**
+  - **Gaps, ranked:**
+    1. **USFS MVUM feature layers** — designated routes with vehicle class and
+       season of use, published per administrative unit through USFS Geospatial
+       Data Discovery as downloadable feature layers (not only the PDF/Avenza
+       products). Provides the legality primitive PAD-US does not: PAD-US gives
+       ownership and managing agency; MVUM gives whether a route is open to public
+       motor vehicle travel. Routes absent from the MVUM are not open. MVUMs
+       commonly permit driving within ~150 ft of a designated road to reach a
+       dispersed campsite — the exact claim the product currently cannot ground.
+       `[verified 2026-07-26, web: USFS Geospatial Data Discovery /
+       data-usfs.hub.arcgis.com; per-unit refresh cadence NOT verified]`
+       **Dependency:** partial unblock of the Wilderness-designation override
+       item. Partial only — MVUM is Forest Service land, not BLM. Record the
+       reciprocal reference on that entry. *(Reciprocal NOT placed: no
+       "Wilderness-designation override" item exists in this file or in
+       `docs/decisions/2026-06-02-land-status-and-dispersed-camping-sources.md`.
+       `[grep: docs/, 2026-07-26 — no match for an override item]` Place the
+       reciprocal when that entry is written or located.)*
+    2. **BLM surface management + travel management** — largest dispersed-camping
+       surface in the West; currently no route-legality coverage there at all.
+       Believed to be less uniformly digitized than USFS. `[unverified —
+       publication format, coverage, and licensing all unchecked]`
+    3. **USGS 3DEP** — national elevation. Would supply grade, pass elevation,
+       terrain context. No terrain layer exists in the corpus today. `[unverified
+       — resolution, coverage, and access method unchecked]`
+    4. **NAIP imagery** — aerial imagery for verifying a dispersed site exists and
+       can fit a rig, without a site visit. `[unverified — resolution, refresh
+       cycle, and licensing unchecked]`
+    5. **NWS / NOAA** — forecast and climate normals. Also feeds the zone-relevance
+       strategy in the alerts framework. See the weather-provenance item below.
+       `[unverified]`
+    6. **AirNow, InciWeb/NIFC, state 511 feeds** — concrete adapters for the
+       travel-alerts framework, which is designed but has no live sources.
+       `[unverified]`
+    7. **National Register of Historic Places (nr.nps.gov), Wikidata** — both
+       appear in the cross-reference source doc but never entered the
+       approved-source list. Candidate enrichment from openly licensed facts only,
+       per the Atlas Obscura rule: facts yes, third-party descriptive copy never.
+       `[unverified]`
+  - **Not authorized by this entry:** any fetch, ingest, materialize, schema
+    change, or approved-source-list edit. Adding a source to the approved list is
+    an Adam decision.
+  - **Before scoping any item above:** verify the source's real coverage, format,
+    refresh cadence, and license against the source itself. Every `[unverified]`
+    tag above is a claim that has not been checked.
+
+- **OPEN QUESTION: provenance of itinerary weather values** — investigation, not
+  implementation. Day records and the temp pill in the day-detail header display
+  high/low temperature values. **The source of those values is not established.**
+  `[open question]`
+  - Three possibilities, materially different in severity:
+    - A real weather/climate source exists and is simply undocumented →
+      documentation gap, **low** severity.
+    - The values are baked into reference-trip snapshots from an original
+      generation pass → stale-data problem, **medium** severity.
+    - The values are LLM-generated → **grounding violation in user-visible UI**,
+      **high** severity. "Every field real or absent" does not permit a
+      plausible-looking temperature.
+  - **Investigation, read-only:** trace the temp values in the day-detail header
+    back to their origin — component, then payload field, then whatever writes
+    that field. Determine which of the three cases holds. Report the finding. Do
+    not fix anything, do not change any display, do not add a source.
+  - **If the third case holds,** raise it immediately rather than filing it — a
+    fabricated field shipping in the UI outranks the rest of this backlog.
+  - Possibly relevant to the trace, NOT checked and NOT an answer: the
+    live-weather rescue item above describes `Day.weather` as a placeholder field
+    on `main` with no live fetch. `[unverified — not re-read for this entry]`
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
