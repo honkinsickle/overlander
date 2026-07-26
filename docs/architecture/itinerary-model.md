@@ -271,18 +271,22 @@ geometry-stable key like `nodeId`. Scoped in
 
 ---
 
-## 7. The payload shapes (fixture-degraded · reference-derived · generated · wizard-pool)
+## 7. The payload shapes (fixture-degraded · reference-derived · generated · wizard-pool · corpus-dense fork)
 
 A trip's day payload arrives in one of several shapes. This matters to the
 scroll/windowing layer (§4): each shape renders different per-day content, so a
 degraded fixture is not a representative test instrument for dense days.
+
+**This section is the single home for trip shapes** — other docs link here
+rather than restating them.
 
 **Corrected 2026-07-26.** This section previously described three shapes and
 called the third "Regenerated — `segmentSuggestions` up to
 `MAX_SEGMENT_SUGGESTIONS = 30`", tagged `[UNVERIFIED]` because no generated trip
 had ever been inspected. One was generated and inspected; **that description was
 wrong**. It describes a *different producer* than the one a generated trip goes
-through, so the rung is split in two below.
+through, so the rung is split in two below. A fifth profile (corpus-dense fork)
+was recorded the same day from PROD.
 
 - **Fixture-degraded** — no `corridorCities`, no `segmentSuggestions`; renders the
   two-node fallback (§1). Exercised by **`la-to-portland`**. `[grep fixtures.ts: corridorCities count 0, 2026-07-25]`
@@ -337,6 +341,19 @@ the off-screen buffer and above-fold growth is absorbed into `scrollTop`.
 Content parity between reaching a day by scrolling and loading `?day=` directly
 was **exact** (same card count, same rendered text incl. ratings, same 1,346 px
 slot height). `[browser-measured in the slideup on TEST, 2026-07-26]`
+
+- **Corpus-dense fork (PROD) — a DISTINCT profile, not one of the rungs above.**
+  Recorded rather than filed under the nearest rung. Exercised by PROD
+  `public.trips` row **`24f14ecc-a209-45e7-a414-16ecc816bab0`** ("Tok, AK to
+  Dawson, YT"): **63 `mp:` corpus tiles across just 2 days**, `generated`
+  **unset**, `routePolyline` present, 2 `corridorCities` per day, and the title
+  is **STORED** (both the `trips.title` column and `payload.startLocation` /
+  `endLocation`) — *not* derived at render. Dense because PROD carries the real
+  corridor corpus, where the equivalent TEST fork carries none.
+  `[queried PROD, 2026-07-26]` The exact write path that produced it was not
+  traced `[UNVERIFIED]`. What its tiles contain, and how the day-detail card
+  renders them, is documented in
+  [`place-render-model.md`](place-render-model.md).
 
 How a trip is *served* into one of these shapes (which reader, read-time
 derivation, baked-vs-unbaked short-circuit):

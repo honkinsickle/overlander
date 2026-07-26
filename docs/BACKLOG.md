@@ -346,5 +346,58 @@ thing worked, it moves into STATE.md §Queued.
     - Interaction with the continuous-scroll settle-debounce (the scroll→`?day=` sync in
       the Design-A continuous day-detail scroll).
 
+- **DEFINE "yoTrippin Verified" — what it means and what earns it.** Needs a
+  **product decision before it can be scoped.** The label currently on place
+  cards is a **PLACEHOLDER**: it presents Google Places data under a yoTrippin
+  name. That is a deliberate interim choice, **not a bug**. What is missing is a
+  definition — what does yoTrippin actually verify, and what earns the badge?
+  - **Current mechanical state** `[verified this session — see
+    docs/architecture/place-render-model.md §5]`: the `verified` prop **defaults
+    to `true`**; **no call site on the day-detail card surface passes it**; **no
+    `verified` field exists** in `BrowsePlace`, `Waypoint`, or `CorridorPlace`;
+    therefore **no code path can set it false**. Distribution: **0 true / 0 false
+    / 100% undefined in data; 100% true at render.**
+  - **The concrete defect, independent of how the definition lands.** Because the
+    gate never closes, the label renders on tiles carrying NO Google data at all:
+    - **Klondike River** — no `placeId` field whatsoever; a corpus tile whose row
+      has no `google_place_id`, so it can never enrich.
+    - **Fixture waypoints** — the displayed rating is a stored constant, not a
+      fetched value.
+    So even under the "Google Places renamed" reading, the label is applied to
+    things that are not that. True regardless of what "Verified" ends up meaning.
+  - **Open question — the parameters.** Candidate inputs, **none decided**:
+    source tier (corpus-materialized `mp:` vs live-resolved `google:` vs
+    LLM-suggested); presence of required fields vs inferred/defaulted ones;
+    coordinate confirmation against a second source; freshness / last-checked
+    date of the underlying record; human ground-truthing — someone has actually
+    been there.
+  - **Binding design constraint.** "Verified" is a provenance assertion, and the
+    project rule is **every field real or absent**. Whatever the definition,
+    **it must be capable of being false** — otherwise the badge carries no
+    information and is decoration wearing the costume of a claim.
+  - **Known dependency.** There is currently **no field in the tile types to hang
+    this on**. Any real definition likely requires a **new field on the tile
+    schema** — which per prior decisions sits at the grammar ceiling and needs
+    deliberate planning, not casual addition. Scope this only **after** the
+    definition exists.
+
+- **Empty-pool trip on PROD — is it user-reachable?** Two PROD `public.trips`
+  rows share the title "Tok, AK to Dawson, YT":
+  `24f14ecc-a209-45e7-a414-16ecc816bab0` is populated (63 tiles, 2 days) and
+  `81865432-7a18-4f18-beaa-d6d95e6da249` has an **EMPTY pool** (0 tiles).
+  `[queried PROD, 2026-07-26]` Open question: **is that row user-reachable, and
+  if so what does it render?** Nobody has looked. Not investigated — recorded.
+  When picked up: **read-only; PROD writes are not authorized.** Row facts live
+  in `docs/DATA_INVENTORY.md`.
+
+- **TEST fork vs PROD `segmentSuggestions` discrepancy — the fork may not
+  represent the shape it stands in for.** TEST fork `05b346df…` carries **0**
+  `segmentSuggestions` (its pool is 43 `day.suggestions` + 92 `waypoints`), while
+  the PROD equivalent carries **63**. **Reason UNVERIFIED.** Consequence: the
+  TEST fork may not represent the reference-derived shape *as actually served on
+  PROD*, which affects its value as a test instrument — see the instrument
+  caveat in `CLAUDE.md` §RUNBOOK gotchas and
+  `docs/architecture/place-render-model.md` §2.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

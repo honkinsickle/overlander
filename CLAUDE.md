@@ -89,6 +89,18 @@ actually touched what they describe. The `/wrap` command runs this pass.
     drag harness in the #146 verify. **Probe for the error banner, not just the
     expected placement**, and **re-mint before concluding an interaction is
     broken.**
+  - **The two TEST instruments exercise DISJOINT pool sources — a conclusion on
+    one does NOT transfer to the other.** Measured 2026-07-26:
+    `expedition-ms28y793` (generated) = **48 segmentSuggestions / 0
+    day.suggestions / 0 waypoints**; fork `05b346df` (reference-derived) =
+    **0 / 43 / 92**. Only `fromSuggestions` tiles carry a `placeId`, so
+    **nothing on fork `05b346df` can enrich at all** — no card on it will ever
+    show a photo or rating from `/api/places/details`. Any measurement of
+    enrichment behaviour taken on the fork is measuring a trip that
+    structurally has none. Note the scroll height calibration (#146) was
+    performed on this fork, so it was calibrated against days that never
+    enrich — not wrong, but narrower than assumed. Details:
+    `docs/architecture/place-render-model.md` §2.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
