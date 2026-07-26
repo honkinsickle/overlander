@@ -377,6 +377,11 @@ is used by the column only when building the `trip:openDetail` event payload
 is fixed and maximal, and the card displays a subset of what it already has in
 memory. Two of six returned fields are unused on this surface.
 
+*(Cross-reference: "on this surface" is load-bearing. `priceTier` **is** consumed
+elsewhere — `browsePlaceToWaypoint` → `priceTierToEntry` → `logistics.entry` —
+but off the **stored tile**, never grafted from the enrichment. See Part 2 §10;
+the two statements are consistent, not contradictory.)*
+
 ---
 
 ## 5. "yoTrippin Verified" — the gate never closes
@@ -438,6 +443,15 @@ Signals present on a stored tile, from the type and from real records:
 `mvumCorridor`, `milesFromStart`, and whether `rating`/`photoUrl` are already
 stored. `[read source: places.ts:33-93]` `[queried TEST]` `[queried PROD]`
 
+**`source: undefined` on a `google:` tile is STRUCTURAL, not a bug.** The id
+prefix and the `source` field are written by two different code paths that were
+never meant to agree: `resolvedToTile` (`lib/itinerary/bake.ts`) mints
+`id: "google:<place_id>"` for a tier-2 live-resolved place and **never sets
+`source`**, while `source: "master_place"` is set only by the corpus mapper
+(`lib/trip-browse/federated.ts`). Neither path is broken — but it means **`source`
+is not a reliable discriminator** for provenance on generated trips; the id prefix
+is. `[read source: lib/itinerary/bake.ts, lib/trip-browse/federated.ts]`
+
 **The narrow question: can any combination distinguish a tile that legitimately
 has no Google presence from one that should have enriched and failed?**
 
@@ -482,8 +496,13 @@ diagnostic:
   each was baked against differs (TEST is the LA-only reseed). **UNVERIFIED.**
 - Whether a `google:`-prefixed tile can lack a `placeId`. **UNVERIFIED.**
 - The failure *rate* of `placeId` resolution across a trip's tiles is
-  deliberately not measured here — that is the queued unresolvable-placeId
-  diagnostic, which needs its own session and clean context.
+  deliberately not measured here — that was the queued unresolvable-placeId
+  diagnostic, which needed its own session and clean context. **That sweep has
+  since run (2026-07-26) and RETRACTED its own premise: 103 of 104 id-bearing
+  tiles resolve, and the one "failure" is a real live place with no enrichable
+  fields.** Findings — including that the endpoint reports *dead id* and *nothing
+  to add* identically — are in `docs/BACKLOG.md` §"Places enrichment: empty vs
+  missing is indistinguishable". Do not re-open this as an id-quality problem.
 - `24f14ecc…` has `generated` unset yet a dense `segmentSuggestions` pool; it is
   described above as "fork-baked" from its `mp:`/`master_place` tiles, but the
   exact write path was not traced. **UNVERIFIED.**

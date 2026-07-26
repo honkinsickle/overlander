@@ -101,6 +101,15 @@ actually touched what they describe. The `/wrap` command runs this pass.
     performed on this fork, so it was calibrated against days that never
     enrich — not wrong, but narrower than assumed. Details:
     `docs/architecture/place-render-model.md` §2.
+  - **`/api/places/details` caches `null` for 15 MINUTES on failure — a transient
+    upstream error reads as a permanent dead id.** `cacheSet(id, null)` on any
+    failure, `CACHE_TTL_MS = 15 * 60 * 1000`, so one momentary blip is replayed
+    as failure for the rest of the window. **Re-measure after the window before
+    concluding an id is bad.** This produced a retracted finding on 2026-07-26
+    (an inferred "population of dead placeIds" that measured 103/104 resolving).
+    Note the same cache also stores `{}` for a place that resolves with no rich
+    fields, which is why "dead id" and "nothing to add" look identical — see
+    `docs/BACKLOG.md` §Places enrichment.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
