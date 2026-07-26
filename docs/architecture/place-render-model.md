@@ -490,10 +490,226 @@ diagnostic:
 
 ---
 
-# PART 2 — THE DETAIL SLIDEUP — *reserved*
+# PART 2 — THE DETAIL SLIDEUP
 
-Deliberately empty. The slideup opens from the card's "Details →", which
-dispatches `trip:openDetail` from the column (`day-detail-corridor-column.tsx`);
-that dispatch is the boundary of Part 1 and no slideup component was read for
-this document. Append the second model here, then add a Part 3 comparison —
-the two parts are structured to make that diff mechanical.
+The surface that opens from a card's "Details →". Identified by entry point, not
+by filename: it is **`components/trip/map-detail-overlay.tsx`** (`MapDetailOverlay`),
+the component that listens for `trip:openDetail`. **`trip-slideup-body.tsx` is a
+different component** — the three-column container from the scroll work — and is
+not this surface. `[grep: "trip:openDetail" across src/, 2026-07-26]`
+
+## 8. THE LEAD — where the slideup gets its data
+
+**It renders directly from the dispatched payload. It issues no request of its
+own, and there is no store, context, or provider between the two.**
+
+The listener is three lines of state assignment
+`[read source: map-detail-overlay.tsx:87-96]`:
+
+```tsx
+const [place, setPlace] = useState<DetailPlace | null>(null);
+…
+const onOpen = (e: Event) => {
+  const detail = (e as CustomEvent<{ place: DetailPlace | null }>).detail;
+  const next = detail?.place ?? null;
+  setPlace(next);
+  setSheet(next ? "half" : "closed");
+};
+window.addEventListener("trip:openDetail", onOpen);
+```
+
+**The fast tell confirms it.** Across all 1,052 lines of `map-detail-overlay.tsx`
+there is **no `fetch(`, no `await`, no `useSWR`/`useQuery`, no `<Suspense>`, no
+`isLoading`, no skeleton and no spinner**. The only three `useEffect`s are the
+`trip:openDetail` listener, a `trip:addedSync` listener, and an Escape-key
+handler. `[grep: fetch\(|useSWR|useQuery|isLoading|Skeleton|Suspense|await |useEffect\( in map-detail-overlay.tsx, 2026-07-26]`
+There is nothing to put a loading state *on* — the data has already arrived by
+the time the component renders. It also unmounts entirely when closed
+(`if (sheet === "closed") return null;`, `:139`), so each open is a fresh render
+of whatever the event carried.
+
+**The event payload, enumerated** (`DetailPlace`,
+`[read source: map-detail-overlay.tsx:40-57]`):
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `string` | also the add/remove key |
+| `title` | `string` | |
+| `photoUrl?` | `string` | |
+| `dayNumber?` | `number` | |
+| `dayId?` | `string` | |
+| `coords?` | `[number, number]` | |
+| `description?` | `string` | |
+| **`waypoint?`** | `Waypoint` | **the whole rich record — this is what carries every detail section** |
+| `dayRelative?` | `boolean` | gates the detour block and Directions mode |
+
+The column dispatches from two branches `[read source: day-detail-corridor-column.tsx:597-675]`:
+- **A trip waypoint** (`:601`) — passes the stored `Waypoint` through as-is
+  (`waypoint: wp`).
+- **A `segmentSuggestion`** (`:659`) — has no `Waypoint`, so one is
+  **synthesised at click time**: `browsePlaceToWaypoint(enriched, ctx,
+  computeCardStats(enriched, ctx))`, where
+  `enriched = { ...sug, rating: rich?.rating ?? sug.rating, reviewCount: …,
+  photoUrl: … }` and `rich = hydrated[sug.placeId]` — **the column's own
+  enrichment cache from Part 1 §4.1**. Then `hours` is grafted on top:
+  `rich?.hours ? { ...wp, logistics: { ...wp.logistics, hours: rich.hours } } : wp`
+  (`:653-655`).
+
+So the lead in Part 1 §4.2 is confirmed and completed: **the column hands
+enrichment data to the slideup at dispatch time.** `hours` is fetched by the
+card path, never rendered by the card, and reaches the user only here.
+
+**Latency implication.** Opening the detail costs **zero network round-trips** —
+it is a state write against data already in memory. On bad connectivity the
+panel opens at full fidelity as long as the *column's* hydration landed earlier;
+it degrades by showing fewer sections (§10), never by hanging or spinning. The
+failure mode is silent thinness, not a stall. Conversely there is no refetch: a
+detail opened an hour into a session shows whatever the column cached, bounded
+by that cache's lifetime (component state on the parent column, discarded on
+unmount — Part 1 §4.1).
+
+## 9. What the slideup displays
+
+Every section is read off `place.waypoint` with a fallback to the flat payload
+`[read source: map-detail-overlay.tsx:228-250]`:
+
+```tsx
+const wp = place.waypoint;
+const tags = wp?.tags ?? [];          const reliability = wp?.reliability;
+const sim = wp?.simulator;            const factual = wp?.factualNote;
+const logistics = wp?.logistics;      const community = wp?.community;
+const amenities = wp?.amenities ?? []; const sources = wp?.dataSources ?? [];
+const description = wp?.description ?? place.description;
+const photoUrl = wp?.photoUrl ?? place.photoUrl;
+const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
+const routeOffset = wp?.routeOffsetMi;
+const bookingStatus = wp?.bookingStatus ?? [];
+const directionsCoord = place.waypoint?.coords ?? place.coords;
+```
+
+| Rendered | Source field | Gate |
+|---|---|---|
+| Hero image, 458×150 | `wp.photoUrl ?? place.photoUrl` | else a fallback block (`:255-262`) |
+| Title | `place.title` (`:294`) | always |
+| Tag pills | `wp.tags` | `tags.length > 0` (`:297`) |
+| Reliability score box | `wp.reliability` (`.score`, `.label`, `.sourceCount`) | `reliability` present (`:374`) |
+| **ROUTE line** — "Day N · X.X mi on route" | `place.dayNumber` + `wp.routeOffsetMi` (`:444`) | **both** non-null (`:421`) |
+| **DIRECTIONS** button | dispatches `trip:openDirections` with `directionsCoord` (`:459`) | always |
+| **"IF YOU STOP HERE"** — `Adds Xm`, stop time, entry cost | `wp.simulator.{addsTime,stopTime,entryCost,newEtaPlace,withStopEta}` (`:554-581`) | `sim` present (`:482`) |
+| **ADD TO DAY N** CTA | `onToggleAdded`; dims via `isAdded` (`:487-488`, `:660`) | always |
+| DESCRIPTION | `wp.description ?? place.description` | `description` (`:690`) |
+| LOGISTICS — Hours / Entry / Address / Phone / Website | `wp.logistics.*` | section gated on any one present (`:740-745`), each cell on its own |
+| COMMUNITY — rating bar, rating, review count, tips, last-verified | `wp.community.*` (`:802-853`) | `community` present (`:790`) |
+| Amenities | `wp.amenities` | `length > 0` (`:870`) |
+| DATA SOURCES | `wp.dataSources` | `length > 0` |
+
+The screenshot list was accurate as far as it went; source adds reliability,
+tags, amenities, data sources, and booking status.
+
+## 10. Data lineage per field
+
+**The open question — which coordinates feed the route/detour math — is
+ANSWERED: the STORED TILE's coords. Routing and Places are INDEPENDENT.**
+`[read source: lib/trip-browse/card-stats.ts:106-130]`
+
+```ts
+const detourMi = offRouteMi(place.coords, ctx) * ROAD_FACTOR;
+const detourMin = Math.round((detourMi / AVG_MPH) * 60);
+const addsMin = detourMin * 2;   // real out-and-back only
+```
+
+- `place` here is `enriched = { ...sug, rating, reviewCount, photoUrl }` — the
+  spread carries `sug.coords`, and **`coords` is never overwritten from the
+  enrichment** (`day-detail-corridor-column.tsx:640-645`).
+- `ctx.dayCoords` / `ctx.dayStartCoords` come from the **Day** (itinerary
+  geometry), not from Places (`:629-638`).
+- Structurally decisive: **`PlaceRich` has no coordinate field at all** — its six
+  members are `rating`, `reviewCount`, `priceTier`, `photoUrl`, `hours`,
+  `category` (Part 1 §4.2). Enrichment *cannot* supply a coordinate.
+
+**Therefore a place that fails to enrich keeps its detour figures unchanged.**
+The two lineages are separable; the failure of one does not shift the other.
+
+Grouped by lineage:
+
+| Lineage | Fields |
+|---|---|
+| **Places enrichment** (via the column's cache, grafted at dispatch) | `community.rating`, `community.reviewCount`, hero `photoUrl`, `logistics.hours` |
+| **Route / itinerary math** (stored tile coords × Day coords) | ROUTE line `routeOffsetMi`, `simulator.addsTime`, `subtitle` ("Day N / X mi off") |
+| **Stored tile** (`BrowsePlace` fields, unmodified) | `title`, `description`, `logistics.address` / `phone` / `website`, `tags` (`overlanderTags`), `dataSources`, `logistics.entry` + `simulator.entryCost` (from `priceTier`), category |
+| **Trip payload** | `dayNumber`, `dayId`, `dayRelative` |
+| **Not populated on this path** | `reliability`, `amenities`, `factualNote`, `bookingStatus`, `community.tips`, `community.lastVerified`, `simulator.stopTime` — `browsePlaceToWaypoint` omits them deliberately ("no real source backs them", `card-stats.ts:259-270`). They render only for **stored trip waypoints**, whose fixture records carry them. |
+
+**A wiring gap worth recording.** `browsePlaceToWaypoint` *does* consume
+`priceTier` — `priceTierToEntry(place.priceTier)` → `logistics.entry` and
+`simulator.entryCost` (`card-stats.ts:216, 244-258`). But `place` is the
+`enriched` object, and **`priceTier` is not grafted from `rich`** at
+`day-detail-corridor-column.tsx:640-645`, so it is read off the stored tile only.
+Part 1 §4.2 found the endpoint *returns* `priceTier` (observed: `2` for Moab
+Brewery) and that the card references it nowhere. The consumer exists here; the
+two ends are simply not connected. Generated tiles store no `priceTier`
+(Part 1 §1.2), so on that shape the Entry row cannot render at all.
+
+## 11. Capability vs request vs display — **not applicable**
+
+Skipped by the terms of the question. The slideup has **no data source distinct
+from the column's enrichment** (§8), so there is nothing separate to measure;
+the capability was already measured in Part 1 §4.2 and re-asking it here would be
+a category error.
+
+## 12. THE COMPARISON
+
+**Do card and slideup share ONE enrichment source?** **Yes — one source, one
+cache, one fetch.** Both are served by `hydrated` (component state on
+`DayDetailCorridorColumn`, keyed by `place_id`, Part 1 §4.1). The card reads it
+in `hydratePlaces`; the slideup receives a projection of it inside the event
+payload. There is no second endpoint, no second cache, and no second request.
+
+**So is the difference DEPTH or PRESENTATION?** **Both, and the split is
+clean:**
+
+- **Presentation** for the fields the card already has: `rating`, `reviewCount`,
+  `photoUrl` are the same values, merely shown larger and with a rating bar.
+- **Depth** for the rest: the slideup renders `logistics.hours` — **fetched by
+  the card path and displayed nowhere else** — plus address/phone/website, tags,
+  data sources, the detour block, and the ROUTE line. The card's five-field
+  `Pick<>` (Part 1 §3.1) is the narrower projection of a record that the slideup
+  reads much more of.
+
+The accurate summary: **one fetch, two projections of different width** — the
+card is the narrow projection, the slideup the wide one.
+
+**Is anything fetched TWICE for the same place across the two surfaces?**
+**No.** One `/api/places/details` call per uncached `placeId`, made by the
+column; the slideup makes none.
+
+**Can the two copies disagree?** **No — they cannot diverge**, and the reason is
+structural rather than incidental:
+
+1. There is only one fetch, so there is no second value to disagree with.
+2. The slideup's copy is not a live read — it is a **snapshot taken at click
+   time** from the same `hydrated` entry the card rendered from.
+3. The entry is written once and never revised: the hydration effect skips ids
+   already in `hydrated` (`t.placeId && !t.photoUrl && !hydrated[t.placeId]`,
+   Part 1 §4.1), so a given `place_id` is fetched at most once per column
+   lifetime.
+
+The only way the two could show different values is if the cache entry changed
+between the card's render and the click — which the write-once guard prevents.
+**This is therefore a performance-neutral, correctness-safe arrangement, not a
+divergence risk.** Recorded explicitly because the opposite finding (two fetches
+that *can* diverge — same place, different ratings, nothing flagging it) would
+have been a correctness bug; it is not present here.
+
+**One caveat on that guarantee.** It holds *within* a column lifetime. `hydrated`
+is component state discarded on unmount (Part 1 §4.1) and the server cache is a
+15-minute in-process LRU, so the same place opened in a later session can show a
+different rating than it did earlier. That is staleness across sessions, not
+disagreement between the two surfaces at one moment.
+
+---
+
+# PART 3 — comparison — *folded into §12*
+
+No separate section: §12 is the comparison. Left as a heading so the document's
+three-part structure stays legible.
