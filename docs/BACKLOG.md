@@ -399,5 +399,104 @@ thing worked, it moves into STATE.md §Queued.
   caveat in `CLAUDE.md` §RUNBOOK gotchas and
   `docs/architecture/place-render-model.md` §2.
 
+- **PLACES ENRICHMENT: EMPTY vs MISSING IS INDISTINGUISHABLE.** The original
+  premise was **WRONG** and is corrected here. *(No prior BACKLOG item existed to
+  replace — the diagnostic was only ever referenced in session prompts and in
+  `place-render-model.md` §7.)*
+  - **Original premise (RETRACTED).** An earlier session found day-2 of
+    `expedition-ms28y793` returning **0 of 3** from `/api/places/details` while
+    day-13 returned 3 of 3, and inferred a population of dead or never-verified
+    `placeId`s.
+  - **What measurement found** `[swept 2026-07-26, both trips, 2 batched calls]`:
+    - `expedition-ms28y793` (TEST): **43 of 44** id-bearing tiles resolved
+      (97.7%); 4 tiles carry no `placeId`.
+    - `24f14ecc-a209-45e7-a414-16ecc816bab0` (PROD): **60 of 60** (100%); 3 tiles
+      carry no `placeId`.
+    - **Day-2's three ids ALL RESOLVED on re-measurement.** The earlier 0/3 was
+      **TRANSIENT**. Cause **UNVERIFIED**.
+    - **No cluster, no scatter** — one failure across 104 id-bearing tiles is an
+      absence of the phenomenon, not a distribution.
+    - **No differential** between the corpus path (`mp:`) and the live-resolution
+      path (`google:`). Nothing localizes to one path.
+  - **Why a transient blip looked permanent.** On FAILURE `placeDetails` returns
+    `null` and the route calls `cacheSet(id, null)`, cached **15 minutes**
+    (`CACHE_TTL_MS`). One momentary upstream error is replayed as failure for the
+    rest of that window. `[read source: app/api/places/details/route.ts:20,84-86]`
+    Worth remembering as a general property of this endpoint.
+  - **SETTLED — empty results ARE cached, as `{}`.** `placeDetails` returns an
+    object built entirely of conditional spreads, so a 200 with no rich fields
+    yields **`{}`, not `null`** (`google-places.ts:333-347`). The route then runs
+    `if (!cached) cacheSet(id, rich)` — unconditional on the *value*, and
+    `cacheSet(id, value: PlaceRich | null)` accepts either — so `{}` is stored
+    under the same 15-minute TTL. A subsequent request inside the window hits
+    `cacheGet`, re-drops it from `details`, and **does not call Google**.
+    `[read source: app/api/places/details/route.ts:35-53, 84-89]`
+  - **The actual finding — a MEASUREMENT defect, not a data defect.** The single
+    failure, `ChIJJeKtgR9ySYcRa30K1fgPrTw` ("Chimney Rock", day-10, `curated`,
+    `google:` prefix), is a **REAL LIVE PLACE**. Queried Google directly: HTTP
+    200, id matches exactly, coordinates match the stored tile exactly,
+    `displayName` "Chimney Rock". It carries no `rating`, no `userRatingCount`,
+    no `photos`, no `priceLevel`, no hours, and `types: ["route"]` maps to no
+    category. So `placeDetails` builds `{}` and the route drops it via
+    `if (rich && Object.keys(rich).length > 0)`. **Therefore the endpoint reports
+    "this id is dead" and "this place exists and has nothing to add" IDENTICALLY
+    — both as a missing key.** Neither ordinary staleness nor a grounding
+    violation: a third thing nobody had named.
+  - **Why it matters disproportionately for this product.** Field-poor places —
+    routes, natural features, trailheads, river access, dispersed sites — are
+    exactly what an overlanding product drives past. Google has nothing to say
+    about them and never will. The ambiguous case is not an edge case here; it is
+    a substantial share of the corpus.
+  - **THE THREE STATES** (the basis for any UI decision):
+    1. **No `placeId` at all** — can never enrich, correctly. TEST's 4 are `mp:`
+       corpus rows with `mention.secondary` `"osm"`; PROD's 3 are water features.
+       **Klondike River** is the canonical example.
+    2. **Resolves, nothing to add** — **Chimney Rock**. Real place, empty response.
+    3. **Genuinely fails** — measured at effectively zero.
+
+    States 1 and 2 are **honest thinness**. Only 3 warrants error treatment, and
+    it barely occurs. An "Offline / Limited Data" indicator would have fired
+    wrongly nearly every time.
+  - **LIVE BUG — retry leak (client-side only; billing is capped).** Failures
+    never enter the client cache: `setHydrated` merges only RETURNED keys, so a
+    failed id leaves `hydrated[id]` `undefined`. The guard is
+    `t.placeId && !t.photoUrl && !hydrated[t.placeId]`, so the id **re-fires on
+    every mounted-set change, indefinitely**.
+    `[read source: day-detail-corridor-column.tsx:306-345]`
+    - **CLIENT-SIDE: real regardless.** The browser issues a POST containing
+      those ids on every windowing change — network, battery and latency cost on
+      a device used in the field.
+    - **BILLING: capped, NOT recurring-billable.** Because `{}` and `null` are
+      both cached (above), the server absorbs the retries: at most **one upstream
+      Google call per id per 15-minute TTL window, per server instance**. Caveat:
+      the cache is in-process (`globalThis.__placeDetailsCache`, LRU
+      `CACHE_MAX_ENTRIES = 1000`), so cold starts and evictions re-fetch — the cap
+      is per instance per window, not a global guarantee.
+    - **Scope.** `hydrated` is React state on the parent column, **ephemeral per
+      session**, persisted nowhere — so there is nothing to clean up
+      retroactively and a reload clears it. That is also why this **recurs rather
+      than accumulates**.
+  - **Nothing distinguishes "not yet fetched" from "fetched and returned
+    nothing"** — both are `hydrated[id] === undefined`. No negative cache, no
+    error state, and per `place-render-model.md` Part 2 no loading or error state
+    in the slideup either.
+  - **Proposed fix (NOT authorized here — separate PR).** Have the endpoint
+    distinguish resolved-but-empty from not-found, and let the client stop
+    re-requesting the former for a long interval — **not permanently**: a
+    dispersed site or small business can gain a Google listing later, and a
+    permanent cache would leave the app silently wrong with nothing to flag it.
+    Kills the retry leak, caps the spend, gives the UI an honest signal.
+
+- **UX: honest copy for thin places (supersedes any "Offline / Limited Data"
+  framing).** No such entry previously existed; recorded now because the
+  three-state taxonomy above changes what the question even is. The distinction
+  is **not connectivity** — it is whether Google has anything to say about the
+  place. For states 1 and 2 (no `placeId`; resolves-but-empty) the honest copy is
+  something like *"Google has no listing for this place"* rather than a blank
+  slot or an "Offline" indicator that misattributes the cause. For state 3
+  (genuine failure, measured at effectively zero) show **no indicator** — it is
+  too rare to design around and indistinguishable from state 2 until the endpoint
+  separates them (see the proposed fix above). Depends on that fix landing first.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
