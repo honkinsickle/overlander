@@ -399,7 +399,18 @@ thing worked, it moves into STATE.md §Queued.
   caveat in `CLAUDE.md` §RUNBOOK gotchas and
   `docs/architecture/place-render-model.md` §2.
 
-- **PLACES ENRICHMENT: EMPTY vs MISSING IS INDISTINGUISHABLE.** The original
+- **PLACES ENRICHMENT: EMPTY vs MISSING IS INDISTINGUISHABLE — LARGELY RESOLVED
+  BY [#149](https://github.com/honkinsickle/overlander/pull/149) (merged
+  2026-07-26).** Status first so this stops reading as open: the route now emits
+  resolved-but-empty `{}` instead of dropping it (`if (rich)`), which **closes
+  the retry leak described below** on both paths and gives the client a
+  distinguishable signal. Google's not-found shape was verified in the process
+  (invalid id → HTTP 400 → `null`), so failures remain separable. Mechanics and
+  the accepted trade now live in
+  `docs/architecture/place-render-model.md` §4.3. **Still open from this item:**
+  the UX copy decision (next item), and the retry-ceasing leg is `[UNVERIFIED]`
+  by observation. The body below is retained as the original analysis.
+  The original
   premise was **WRONG** and is corrected here. *(No prior BACKLOG item existed to
   replace — the diagnostic was only ever referenced in session prompts and in
   `place-render-model.md` §7.)*
@@ -457,7 +468,9 @@ thing worked, it moves into STATE.md §Queued.
     States 1 and 2 are **honest thinness**. Only 3 warrants error treatment, and
     it barely occurs. An "Offline / Limited Data" indicator would have fired
     wrongly nearly every time.
-  - **LIVE BUG — retry leak (client-side only; billing is capped).** Failures
+  - **~~LIVE BUG~~ — retry leak (client-side only; billing is capped). FIXED by
+    #149** — kept for the analysis; the guard behaviour described here is what
+    the fix exploits. Failures
     never enter the client cache: `setHydrated` merges only RETURNED keys, so a
     failed id leaves `hydrated[id]` `undefined`. The guard is
     `t.placeId && !t.photoUrl && !hydrated[t.placeId]`, so the id **re-fires on
@@ -480,7 +493,11 @@ thing worked, it moves into STATE.md §Queued.
     nothing"** — both are `hydrated[id] === undefined`. No negative cache, no
     error state, and per `place-render-model.md` Part 2 no loading or error state
     in the slideup either.
-  - **Proposed fix (NOT authorized here — separate PR).** Have the endpoint
+  - **~~Proposed fix (NOT authorized here — separate PR)~~ — SHIPPED as #149**,
+    in the minimal form: the endpoint stops dropping `{}`. The "stop
+    re-requesting for a long interval" half was deliberately NOT taken — TTL was
+    left at 15 minutes because the client-side repeat was the actual cost and
+    this removes it (reasoning in the #149 PR description). Original text: Have the endpoint
     distinguish resolved-but-empty from not-found, and let the client stop
     re-requesting the former for a long interval — **not permanently**: a
     dispersed site or small business can gain a Google listing later, and a
@@ -497,6 +514,20 @@ thing worked, it moves into STATE.md §Queued.
   (genuine failure, measured at effectively zero) show **no indicator** — it is
   too rare to design around and indistinguishable from state 2 until the endpoint
   separates them (see the proposed fix above). Depends on that fix landing first.
+
+- **`MAX_IDS = 40` truncation does not self-heal — dense trips can render
+  partially thin until the user scrolls.** `parsePlaceIds` dedupes then
+  `.slice(0, 40)` with **no error and no signal**, and the hydration effect
+  **re-fires only on mounted-set change, never when `hydrated` updates** — its
+  dep array is `[hydrateKey]` and `hydrated` is deliberately excluded with an
+  `eslint-disable` `[read source: app/api/places/details/route.ts:19,55-63;
+  day-detail-corridor-column.tsx:283-291, 340-343]`. So ids past the 40th are
+  dropped and **wait** for the next mounted-set change rather than converging in
+  place. Reachable on the corpus-dense shape: `24f14ecc…` carries 41 tiles on
+  day-1 alone, so a ~3-day window can exceed 40 unhydrated ids in one pass.
+  Recorded during the #149 doc pass, **not fixed** — no measurement of how often
+  a real window actually exceeds the cap `[UNVERIFIED]`. Mechanics:
+  `docs/architecture/place-render-model.md` §4.4.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

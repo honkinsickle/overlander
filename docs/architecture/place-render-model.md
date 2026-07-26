@@ -296,9 +296,10 @@ Measured split per sample `[queried TEST]` `[queried PROD]`:
 
 `POST /api/places/details` — body `{ placeIds: string[] }`, response
 `{ details: { [placeId]: PlaceRich } }`; de-duped and **capped at 40 ids**;
-15-minute in-process LRU cache (max 1000), per-lambda; a null/empty result is
-omitted so the tile "stays essentials"; the route's own docstring states
-**"NOTHING is persisted to the DB"**. `[read source: app/api/places/details/route.ts:19-93]`
+15-minute in-process LRU cache (max 1000), per-lambda; ~~a null/empty result is
+omitted so the tile "stays essentials"~~ **(changed by #149 — see §4.3)**; the
+route's own docstring states **"NOTHING is persisted to the DB"**.
+`[read source: app/api/places/details/route.ts:19-93]`
 
 Client side, in the column (not the card): one batched POST per mounted-day
 change, filtered to `t.placeId && !t.photoUrl && !hydrated[t.placeId]`
@@ -381,6 +382,65 @@ memory. Two of six returned fields are unused on this surface.
 elsewhere — `browsePlaceToWaypoint` → `priceTierToEntry` → `logistics.entry` —
 but off the **stored tile**, never grafted from the enrichment. See Part 2 §10;
 the two statements are consistent, not contradictory.)*
+
+### 4.3 Current behaviour after #149 — empty vs missing
+
+**Google's not-found shape** `[called endpoint: one live call, 2026-07-26]`. An
+**invalid** `place_id` returns **HTTP 400 `INVALID_ARGUMENT`**, so `placeDetails`
+takes its `!res.ok` branch and returns **`null`** — *not* `{}`. Failure and
+resolved-but-empty therefore remain **DISTINGUISHABLE** inside the route, which
+is the empirical fact the #149 design rests on.
+**Bound:** this exercised an *invalid* id. A **well-formed-but-retired** id was
+**not tested**; it would most likely return 404 — also non-2xx, also the `null`
+branch — but that is an **inference, UNVERIFIED**. Only a 200 for a nonexistent
+place would break the design, and that is not what was observed.
+
+**The change (#149).** `if (rich && Object.keys(rich).length > 0)` → `if (rich)`
+`[read source: app/api/places/details/route.ts]`. A resolved-but-empty `{}` now
+**rides through** into `hydrated` via the existing spread merge. Because `{}` is
+truthy, both retry guards stop asking: the windowing hydrate
+(`!hydrated[t.placeId]`) and the fetch-on-open fallback (`!cached`, Part 2 §8
+CORRECTION). `null` is falsy, so genuine failures **still stay out and still
+retry**. No client change and no type change — every `PlaceRich` field is
+optional, so `{}` is a valid `PlaceRich` and the merge sites fall back with `??`.
+
+**The accepted trade.** A **transient** empty — a place that does have data but
+momentarily returned none — is now recorded for the rest of the session, so that
+tile stays thin **until reload** rather than recovering on a later pass. Accepted
+knowingly: the staleness is **bounded** (`hydrated` is ephemeral React state on
+the parent column, persisted nowhere, cleared by a reload), whereas the behaviour
+it replaces was an **unbounded** retry for the whole session that still rendered
+thin anyway.
+
+**UNMEASURED LEG.** That the retry actually *ceases across mounted-set changes*
+rests on **code reading, not observation** `[UNVERIFIED]`. The 424px preview pane
+never remounted neighbouring days, so the hydration effect had no opportunity to
+re-fire and "zero requests" proved nothing. The code-level argument: `{}` is
+truthy, `setHydrated` is a plain spread merge, and both guards test truthiness —
+there is no branch where present-but-empty behaves as absent. A taller viewport
+settles it in one pass.
+
+### 4.4 `MAX_IDS = 40` does NOT self-heal in place
+
+`parsePlaceIds` dedupes then `.slice(0, MAX_IDS)` with **no error and no signal**
+— ids past the 40th are silently dropped `[read source:
+app/api/places/details/route.ts:19, 55-63]`.
+
+**The hydration effect re-fires ONLY on mounted-set change, never on `hydrated`
+updating.** Its dependency array is `[hydrateKey]`, where
+`hydrateKey = hydrateDayIds.join("|")` (the mounted day-id set in view mode, the
+selected day in edit mode); `hydrated` is **deliberately excluded**, with an
+explicit comment and an `eslint-disable` for `react-hooks/exhaustive-deps`
+`[read source: day-detail-corridor-column.tsx:283-291, 340-343]`.
+
+**Consequence.** Truncation does not converge within a stable mounted set: the
+dropped ids simply **wait**. They are re-asked only when the mounted set next
+changes — at which point the already-hydrated ids drop out of the filter, so the
+previously-truncated ones may fit. It converges **as the user scrolls**, not on
+its own. On the corpus-dense shape this is reachable in practice: `24f14ecc…`
+carries 41 tiles on day-1 alone (Part 1 §0), so a window of ~3 dense days exceeds
+40 unhydrated ids in one pass and renders **partially thin until the user
+scrolls**. Recorded, not fixed.
 
 ---
 
@@ -578,14 +638,52 @@ So the lead in Part 1 §4.2 is confirmed and completed: **the column hands
 enrichment data to the slideup at dispatch time.** `hours` is fetched by the
 card path, never rendered by the card, and reaches the user only here.
 
-**Latency implication.** Opening the detail costs **zero network round-trips** —
-it is a state write against data already in memory. On bad connectivity the
-panel opens at full fidelity as long as the *column's* hydration landed earlier;
-it degrades by showing fewer sections (§10), never by hanging or spinning. The
-failure mode is silent thinness, not a stall. Conversely there is no refetch: a
-detail opened an hour into a session shows whatever the column cached, bounded
-by that cache's lifetime (component state on the parent column, discarded on
-unmount — Part 1 §4.1).
+**Latency implication.** *(Original claim, retained — it is correct **about
+`map-detail-overlay.tsx`**, which is what it was scoped to. The scope was drawn
+at the wrong boundary; the correction follows immediately below.)* Opening the
+detail costs **zero network round-trips** — it is a state write against data
+already in memory. On bad connectivity the panel opens at full fidelity as long
+as the *column's* hydration landed earlier; it degrades by showing fewer sections
+(§10), never by hanging or spinning. The failure mode is silent thinness, not a
+stall. Conversely there is no refetch: a detail opened an hour into a session
+shows whatever the column cached, bounded by that cache's lifetime (component
+state on the parent column, discarded on unmount — Part 1 §4.1).
+
+> ### CORRECTION (2026-07-26) — "zero round-trips" is WRONG as a statement about *opening a detail*
+>
+> The **overlay** issues no fetch — that part stands `[read source:
+> map-detail-overlay.tsx]`. But the boundary was drawn at the component instead
+> of at the behaviour: **the fetch lives in the column.** `dispatchPlaceDetail`
+> has a fetch-on-open fallback that fires a **single-id POST** to
+> `/api/places/details` whenever the tapped tile has a `placeId` that is not in
+> `hydrated` `[read source: day-detail-corridor-column.tsx:677-704]`.
+>
+> **The real cost of opening a detail:**
+> - **Zero round-trips** when the tile is already in `hydrated` — the common case
+>   once the column's windowed hydration has landed, and (post-#149) also for
+>   resolved-but-empty tiles, whose `{}` is truthy and therefore counts as cached.
+> - **One round-trip** when it is not — for a tile not yet fetched, or one whose
+>   earlier fetch failed.
+>
+> **It opens BEFORE the fetch resolves, not after.** The order is explicit in
+> source: `emit(synth(cached))` runs **synchronously first**, and only then does
+> the `if (sug.placeId && !cached)` block fire; the fetch re-emits later via
+> `emit(synth(got))`, and only `if (openDetailIdRef.current === sug.id)` — i.e.
+> only if the sheet is still open on that same place `[read source:
+> day-detail-corridor-column.tsx:677-700]`.
+>
+> So the user-visible behaviour is **"opens thin, may fill"** — never *"tap does
+> nothing until Google answers."* The tap is always responsive. Combined with
+> §8's finding that there is **no loading state anywhere**, the consequence is a
+> silent **pop-in**: the panel opens with fewer sections and content appears
+> later with nothing having indicated it was coming — and if the fetch fails or
+> returns nothing, it simply stays thin, indistinguishable from a place that
+> never had the data. Those are different bugs from a stall, and milder, but they
+> are not "zero round-trips".
+>
+> Applies only to `segmentSuggestion` tiles: the waypoint branch of
+> `dispatchPlaceDetail` emits the full stored waypoint and never fetches
+> `[read source: day-detail-corridor-column.tsx:597-618]`.
 
 ## 9. What the slideup displays
 
