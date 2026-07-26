@@ -27,11 +27,25 @@ existing single-day swap verbatim (the bridge). Pure scroll math
 (`lib/trips/continuous-scroll.ts`) is unit-tested away from the DOM.
 
 Key rule, caught by the falsification pass: **values cross the bridge, machinery
-does not.** Every mounted day gets server-truth `placeOverrides` / `placeRanks`
+does not.** Every mounted day gets the trip-level `placeOverrides` / `placeRanks`
 (they drive pin placement + cluster order in VIEW mode, with no editMode guard),
 with `editMode={false}` and `onMovePlace`/`onReorderPlace` absent. The optimistic
-edit machinery (localOverrides, drag handlers, pending/error) stays out of the
-windowed path — deferred to PR2.
+edit machinery (drag handlers, pending/error state) stays out of the windowed
+path — deferred to PR2.
+
+**AMENDED 2026-07-25 (review round 2) — which VALUES cross.** The build spec said
+pass *server truth* (`trip.placeOverrides` / `trip.placeRanks`). Doing so proved
+NOT behaviour-neutral: `main`'s view render passes the OPTIMISTIC `localOverrides`
+(they survive the editMode toggle because the column stays mounted), so under the
+spec a just-made pin visibly snapped back the moment the user clicked Done. A
+presentation-only refactor must not introduce a user-visible behaviour change, so
+the stack now passes the **optimistic trip-level values** (`localOverrides` /
+`ranksMap`) instead — the same objects `main` passes. The principle is intact:
+these are still trip-level VALUES; no machinery crosses. What `main` displays
+here is known-false (the pre-existing seed-id pin bug), but reproducing it is
+what makes this PR blameless for a defect it did not cause. **Revert to server
+truth when the seed-id fix lands** — the dependency is recorded on both ends in
+`docs/BACKLOG.md`.
 
 Mechanics (all view-only):
 - **Mount/unmount:** IO with a ~1.5-viewport off-screen buffer, so a day is
@@ -125,14 +139,17 @@ unusable from dev — PROD/TEST wall).
     a `nodeSeed`-keyed override that the read spine can't resolve against
     plain-slug `corridorCities`) is genuinely **pre-existing**; `main` reverts on
     reload exactly as the branch does. Backlogged.
-  - **Post-edit transient DIFFERS — a real regression this PR introduces:**
-    after Done, `main` still shows the pin re-homed (its view render passes the
-    OPTIMISTIC `localOverrides`, which survive the toggle because the column
-    stays mounted); the stack shows server truth, so the pin visibly snaps back
-    to its original node. Per the build spec ("values cross the bridge,
-    machinery does not"), but the user-visible effect reads as a lost edit.
-    Open for Adam's call with three options (accept / pass the optimistic
-    trip-level values / fix the seed-id resolution) — see `docs/BACKLOG.md`.
+  - **Post-edit transient DIFFERED — a real regression, now FIXED.** After Done,
+    `main` still showed the pin re-homed (optimistic `localOverrides` survive the
+    toggle); the stack showed server truth, so the pin visibly snapped back.
+    Adam's call: pass the optimistic trip-level values (option b), with the
+    seed-id fix (option c) as its own PR. Re-measured after the change — the
+    three-point A/B now matches exactly:
+
+    | | fresh serve | in edit, after drag | after Done |
+    |---|---|---|---|
+    | `main` | original node | re-homed | re-homed |
+    | #146 | original node | re-homed | re-homed |
 - **Upward-scroll jump: FOUND and FIXED.** First mount of a never-measured day
   (estimate→measured) was uncompensated — the `heights` cache had no prior
   entry, so the guard skipped exactly the largest correction class; scrolling

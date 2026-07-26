@@ -144,6 +144,25 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   **`762577ca…` is a PROD trip**, unusable from dev — TEST replacement
   `05b346df…` recorded.
 
+- **#146 round 3 — behaviour-neutrality chosen over spec-literalism.** Adam's
+  call on the post-edit divergence: **option (b)** (stack passes the optimistic
+  trip-level values), with the seed-id pin fix as its own PR since the tripwire
+  forbids the read spine consuming `nodeSeeds` inside this one. Rationale worth
+  keeping: a presentation-only refactor matching `main` IS neutrality even when
+  what `main` shows is known-false — otherwise the refactor becomes blameable for
+  a pre-existing defect. Re-ran the three-point A/B after the change; `main` and
+  the branch now match at all three (`original` / `re-homed` / `re-homed`).
+  Dependency recorded on BOTH ends: the seed-id fix dissolves the divergence and
+  its PR must revert `renderViewDay` to server truth.
+- **Debugging lesson that cost the most time this session: a stale auth session
+  looks exactly like broken drag tooling.** Four consecutive "synthetic drags
+  stopped working" failures were the minted session expiring — the drags fired,
+  the server action refused (*"Couldn't move: Sign in to edit this trip."*), and
+  the optimistic overlay reverted, so the DOM read as "drag did nothing". Only a
+  screenshot showed the error banner; every JS probe I had written looked at
+  placement, not at errors. **Read the screen before re-engineering the tool** —
+  and probe for error banners, not just expected state.
+
 ## 2026-07-24
 
 - **`rescopeOverlays` landed (#130)** — a pure keep/drop core for overlays across

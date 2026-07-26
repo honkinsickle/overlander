@@ -276,14 +276,6 @@ export function DayDetailCorridorColumn({
   // ratings/photos by place_id. Keyed by place_id, accumulated across days.
   const [hydrated, setHydrated] = useState<Record<string, PlaceRich>>({});
 
-  // Server-truth rank map (Trip.placeRanks). The continuous view render passes
-  // THIS (not the optimistic localRanks) — values cross the bridge, the
-  // optimistic edit machinery does not.
-  const serverRanksMap = useMemo(
-    () => new Map(Object.entries(trip.placeRanks ?? {})),
-    [trip.placeRanks],
-  );
-
   // Days currently mounted in the continuous stack (reported by the stack).
   // Drives the hydration union below so scroll-back is free and approaching
   // days are already hydrated when they reach the viewport.
@@ -772,24 +764,44 @@ export function DayDetailCorridorColumn({
     );
   };
 
-  // View-mode cities: server overrides only (no optimistic overlay). base
-  // already carries server overrides; applyPlaceOverrides is idempotent on them.
-  const viewCities = (d: Day): CorridorCity[] =>
-    d.corridorCities
-      ? applyPlaceOverrides({
-          cities: d.corridorCities,
-          overrides: trip.placeOverrides ?? [],
-        })
-      : fallbackCorridor(d);
+  // View-mode cities for ONE mounted day. Mirrors `effectiveCities` (the
+  // single-day path) exactly, on that day's spine: un-bake places whose SERVER
+  // override was locally removed (an unpin — base still carries it baked, so
+  // dropping the override alone wouldn't move it), then apply the optimistic
+  // override list.
+  //
+  // DEVIATION FROM THE BUILD SPEC, deliberate (Adam's call, review round 2):
+  // the spec said pass server truth (`trip.placeOverrides`/`placeRanks`) with no
+  // optimistic layer. Doing so made a just-made pin visibly snap back on leaving
+  // edit mode, because `main` renders the optimistic list here — a user-visible
+  // behaviour change this presentation-only PR should not introduce. So the
+  // stack passes the OPTIMISTIC trip-level values for parity with `main`. The
+  // Claim-2 principle is intact: these are still trip-level VALUES; no machinery
+  // crosses (handlers stay undefined, `editMode={false}`). REVERT THIS TO SERVER
+  // TRUTH once the seed-id pin fix lands — see docs/BACKLOG.md.
+  const viewCities = (d: Day): CorridorCity[] => {
+    const base = d.corridorCities;
+    if (!base) return fallbackCorridor(d);
+    const removed = new Set(
+      serverOverrides
+        .filter((so) => !localOverrides.some((lo) => lo.placeId === so.placeId))
+        .map((so) => so.placeId),
+    );
+    const stripped = removed.size
+      ? base.map((c) => ({ ...c, placeIds: c.placeIds.filter((pid) => !removed.has(pid)) }))
+      : base;
+    return applyPlaceOverrides({ cities: stripped, overrides: localOverrides });
+  };
 
   const dayStartMileForId = (id: string): number => {
     const idx = trip.days.findIndex((d) => d.id === id);
     return idx >= 0 ? dayStartMiles(trip.days)[idx] : 0;
   };
 
-  // One mounted day in the continuous VIEW stack. Values cross the bridge
-  // (server-truth overrides/ranks); the optimistic edit machinery does NOT —
-  // editMode is false and the move/reorder handlers are absent (deferred to PR2).
+  // One mounted day in the continuous VIEW stack. VALUES cross the bridge
+  // (trip-level overrides/ranks, optimistic — see `viewCities` for why); the
+  // MACHINERY does NOT — editMode is false and the move/reorder handlers are
+  // absent (optimistic edit machinery is deferred to PR2).
   const renderViewDay = (d: Day) => (
     <DayDetailCorridor
       dayLabel={`Day ${d.dayNumber} — ${formatDayDate(d.date)}`}
@@ -804,12 +816,12 @@ export function DayDetailCorridorColumn({
       onExploreDay={() => openBrowseFor(d)}
       briefing={trip.generated ? <DayBriefingCard day={d} /> : undefined}
       editMode={false}
-      placeOverrides={trip.placeOverrides ?? []}
+      placeOverrides={localOverrides}
       dayMiles={d.miles}
       dayDriveHours={d.driveHours}
       routeLine={routeLine}
       dayStartMile={dayStartMileForId(d.id)}
-      ranks={serverRanksMap}
+      ranks={ranksMap}
       buildCuratedMenu={(p) => buildCuratedMenuFor(d, p)}
     />
   );

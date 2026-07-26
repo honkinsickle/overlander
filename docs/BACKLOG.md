@@ -114,7 +114,15 @@ thing worked, it moves into STATE.md §Queued.
   DO render in view. Fix directions: teach the view spine to resolve seed ids
   (inject promoted seeds into the render spine, as the edit spine does), or bake
   seed nodes into `corridorCities` at write time. Touches verified bucketing
-  code — needs its own pass, not a drive-by.
+  code — needs its own pass, not a drive-by. **Scoped as its own PR** (Adam,
+  2026-07-25): it cannot ride inside #146, whose tripwire forbids the read spine
+  consuming `nodeSeeds`.
+  **↔ DEPENDENCY (both ends):** landing this **dissolves** the post-edit
+  divergence recorded below, because server truth and the optimistic list then
+  agree. When it lands, **revert the continuous stack to server truth** —
+  `placeOverrides={trip.placeOverrides}` / `ranks` from `trip.placeRanks` in
+  `renderViewDay` (`day-detail-corridor-column.tsx`), which is the build spec's
+  original rule and drops the optimistic coupling from the view path.
 
 - **The seeded TEST password is hardcoded in 4 tracked scripts of a PUBLIC repo**
   (`web/scripts/seed-test-user.ts`, `verify-trip-collapse.ts`,
@@ -128,10 +136,11 @@ thing worked, it moves into STATE.md §Queued.
   one), then rotate the TEST user's password. Deliberately NOT done as a
   drive-by inside a scroll PR — it touches the verify harness Adam runs.
 
-- **POST-EDIT VIEW DIVERGENCE: the continuous stack drops the optimistic overlay,
-  so a just-made pin visibly snaps back on exiting edit mode** (#146, view mode
-  only). Measured A/B, same trip + same drag, editMode asserted by the toggle's
-  own label:
+- **POST-EDIT VIEW DIVERGENCE — RESOLVED in #146 by passing the optimistic
+  trip-level values; REVISIT when the seed-id fix above lands.** Recorded because
+  the resolution is a deliberate spec deviation with a scheduled undo, not a
+  finished story. Original divergence (measured A/B, same trip + same drag,
+  editMode asserted by the toggle's own label):
   | | fresh serve | in edit, after drag | after Done (view) |
   |---|---|---|---|
   | `main` | original node | re-homed | **re-homed** |
@@ -144,14 +153,19 @@ thing worked, it moves into STATE.md §Queued.
   deferred to PR2). Where the two disagree is exactly the seed-id case above:
   the persisted override cannot resolve, so server truth renders the pre-pin
   position. **Neither is durable** — `main`'s re-homing is a transient illusion
-  that also reverts on reload; the branch is arguably more honest but shows the
-  revert one step earlier (immediately, not on refresh), which reads as "my edit
-  was lost". **Decision for Adam:** (a) accept (honest, and the underlying pin
-  bug is what actually needs fixing), (b) pass `localOverrides`/`localRanks`
-  instead of `trip.*` to the stack — a 2-line change, same trip-level values,
-  still no handlers, restores parity with `main`, but deviates from the build
-  spec's literal "server truth, no optimistic layer", or (c) fix the seed-id
-  resolution above, which makes the divergence disappear on its own.
+  that also reverts on reload; the branch was arguably more honest but showed the
+  revert one step earlier, which reads as "my edit was lost".
+
+  **RESOLUTION (Adam, 2026-07-25): option (b)** — the stack passes the optimistic
+  trip-level values (`localOverrides` / `ranksMap`), handlers still undefined.
+  Reasoning: this PR is presentation-only, so matching `main` IS
+  behaviour-neutrality; a pin that snaps back on Done makes the refactor
+  blameable for a defect it did not cause, and `main`'s falseness is the
+  pre-existing pin bug, already tracked above. Re-verified after the change —
+  all three points match (`original` / `re-homed` / `re-homed` on both).
+  **↔ UNDO CONDITION:** when the seed-id fix above lands, revert
+  `renderViewDay` to `trip.placeOverrides` / `trip.placeRanks` (the build spec's
+  original rule). This item closes at that point.
 
 - **`find_master_place_candidates` is not exercised end-to-end by the ER corpus
   run** — the phase3a D4 `beforeAll` calls `reset_phase3a_test_state`, leaving
