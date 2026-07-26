@@ -124,17 +124,45 @@ thing worked, it moves into STATE.md §Queued.
   `renderViewDay` (`day-detail-corridor-column.tsx`), which is the build spec's
   original rule and drops the optimistic coupling from the view path.
 
-- **The seeded TEST password is hardcoded in 4 tracked scripts of a PUBLIC repo**
-  (`web/scripts/seed-test-user.ts`, `verify-trip-collapse.ts`,
-  `verify-trip-step4.ts`, `verify-trip-version.ts` — each `const PW = "…"`).
-  Pre-existing, surfaced during the #146 credential-hygiene sweep; the docs and
-  the new `mint-dev-session.ts` are clean (it reads `SEED_PASSWORD` from env).
-  It is TEST-only and TEST holds no real user data, so this is hygiene rather
-  than an incident — but it is a real credential in a public repo, and the
-  pattern invites the next script to copy it. Fix: read from
-  `process.env.SEED_PASSWORD` in all four (the seed script can generate + print
-  one), then rotate the TEST user's password. Deliberately NOT done as a
-  drive-by inside a scroll PR — it touches the verify harness Adam runs.
+- **Seeded TEST password hardcoded in 4 tracked scripts of a PUBLIC repo —
+  DECIDED: ACCEPT, DO NOT ROTATE (Adam, 2026-07-25).** Not an oversight; a
+  considered accept. Do not re-litigate without new facts.
+
+  **The credential:** `const PW = "…"` in `web/scripts/seed-test-user.ts`,
+  `verify-trip-collapse.ts`, `verify-trip-step4.ts`, `verify-trip-version.ts`
+  (both seeded users share it). Surfaced by the #146 hygiene sweep. Permanent in
+  git history, so stripping HEAD would not undo the exposure — only rotation
+  would.
+
+  **Why accept — measured blast radius** (read from
+  `supabase/migrations/20260513000000_init_identity.sql` + the Phase-1 corpus
+  migration, not assumed):
+  - `public.trips` — owner-scoped RLS, so **only that account's own trips**.
+  - `public.users` — its own row only.
+  - `public.reference_trips` — read only, and the policy is `using (true)`:
+    **anon can already read it without any credential**, so the password adds
+    nothing.
+  - `public.master_place` / corpus — **nothing**. RLS enabled with *no policies*;
+    service-role only.
+  - PROD — **nothing**. Scoped to the TEST ref `znldzjdatkogdktymtvi`.
+
+  TEST holds no real user data. Weighed against that: rotation costs four script
+  edits plus a cascade-risky user update (below). Not worth it.
+
+  **⚠️ CASCADE HAZARD — read this before ever rotating.** `trips.owner_id` is
+  `references public.users(id) **on delete cascade**`. Rotating by
+  delete-and-recreate the seeded users **destroys the seed harness trip AND the
+  66-day TEST fork `05b346df-3bb5-4c46-8ff1-e0c5cfe26301`**. Any real rotation
+  must add an `admin.auth.admin.updateUserById(id, { password })` path to
+  `seed-test-user.ts` — its current existing-user branch only *looks the user up*
+  and never updates the password — and switch all four scripts to
+  `process.env.SEED_PASSWORD`. CI is unaffected either way (it runs the data
+  suite + web typecheck + build; never the seed or verify scripts).
+
+  **FORWARD RULE (binding on new code):** TEST seed credentials come from **env**,
+  never committed literals. The four scripts above are **grandfathered**; new
+  scripts are not. `web/scripts/mint-dev-session.ts` is the pattern to copy — it
+  reads `SEED_PASSWORD` and refuses to run against a non-TEST project ref.
 
 - **POST-EDIT VIEW DIVERGENCE — RESOLVED in #146 by passing the optimistic
   trip-level values; REVISIT when the seed-id fix above lands.** Recorded because

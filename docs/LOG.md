@@ -163,6 +163,25 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   placement, not at errors. **Read the screen before re-engineering the tool** —
   and probe for error banners, not just expected state.
 
+- **Credential decision: ACCEPT, do not rotate (Adam).** The seeded TEST password
+  in 4 tracked scripts of a public repo stays. Measured blast radius is one TEST
+  account's own trips — RLS blocks the corpus (enabled, no policies) and PROD is a
+  different ref, and `reference_trips` is anon-readable regardless, so the
+  credential buys an attacker nothing there. Weighed against a cascade-risky
+  rotation (`trips.owner_id` is ON DELETE CASCADE — delete-and-recreate would
+  destroy the seed harness trip and the `05b346df…` fork) plus four script edits.
+  Recorded in BACKLOG as a considered accept with the cascade hazard and a
+  binding forward rule: new scripts read seed creds from env; the four existing
+  ones are grandfathered.
+- **#146 closed out and merged.** Final shape: continuous view-mode scroll,
+  optimistic trip-level values crossing the bridge (with a scheduled revert), the
+  seed-id pin fix queued as its own PR. Three review rounds, and each one caught
+  something the previous round's summary had smoothed over — the unauthenticated
+  verification, then the equivalence-by-inference, then the deferred edge that was
+  actually a small fix. The durable lesson from all three: **an untested claim
+  dressed as a verified one is worse than an admitted gap**, because it spends the
+  reviewer's trust to hide exactly the work that still needed doing.
+
 ## 2026-07-24
 
 - **`rescopeOverlays` landed (#130)** — a pure keep/drop core for overlays across

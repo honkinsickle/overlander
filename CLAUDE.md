@@ -81,6 +81,14 @@ actually touched what they describe. The `/wrap` command runs this pass.
   TEST `public.trips` is otherwise empty — these are the ONLY way to exercise the
   RLS write path off PROD.
 - **Gotchas (hard-won):**
+  - **A minted dev session expires ~1h, and expiry MASQUERADES as broken drag
+    tooling.** After expiry the drag still fires, the server action refuses
+    (*"Couldn't move: Sign in to edit this trip."*), and the optimistic overlay
+    reverts — so the DOM reads as "nothing happened" and looks exactly like a
+    synthetic-drag that failed to activate. Cost an hour of re-engineering the
+    drag harness in the #146 verify. **Probe for the error banner, not just the
+    expected placement**, and **re-mint before concluding an interaction is
+    broken.**
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
