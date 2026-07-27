@@ -115,6 +115,59 @@ carries **0** `segmentSuggestions` where the PROD equivalent carries 63 — reas
 **UNVERIFIED**, consequences for its use as a test instrument in `CLAUDE.md`
 §RUNBOOK gotchas. `[queried TEST]`
 
+## `auth.users` vs `public.users` — PROD shape, and why the counts differ (2026-07-27)
+
+All `[queried PROD]`, read-only, aggregates only — no addresses recorded here.
+
+**PROD auth shape:**
+
+| | count |
+|---|---:|
+| `auth.users` (all active, none soft-deleted) | **4** |
+| `auth.identities` | 4 — **2 `google`, 2 `email`** |
+| distinct users holding a `google` identity | 2 |
+| `public.users` | **1** |
+| `auth.users` with **no** `public.users` row | **3** |
+
+Per user (id prefixes only):
+
+| user | providers | `public.users` row | trips owned |
+|---|---|---|---:|
+| `37d4b860` | email | no | 0 |
+| `fdec63b2` | email | no | 0 |
+| **`762639cf`** | **google** | **yes** | **11** |
+| `18f5e726` | google | no | 0 |
+
+**Every trip on PROD belongs to one Google account.** No PROD user holds more
+than one identity.
+
+### `public.users` lags `auth.users` — this is application state, not a defect
+
+**Do not "fix" this.** There is no broken trigger, no missing FK cascade, and no
+failed backfill. The gap is by design:
+
+- `auth.users` gains a row the moment someone completes sign-in with a provider.
+- **`public.users` is written by the `/welcome` onboarding flow**
+  (`web/src/app/welcome/actions.ts`), not by sign-up. So a row appears there only
+  after a user finishes onboarding.
+- `public.users` is therefore an **onboarding-completion proxy**, and
+  `auth.users − public.users` is the count of accounts **pending `/welcome`** —
+  currently 3.
+
+The consequence is structural, and worth knowing before reading trip ownership:
+`trips.owner_id` references **`public.users(id)`**, not `auth.users(id)`
+`[read: supabase/migrations/20260513000000_init_identity.sql]`. So a signed-in
+user with no `public.users` row **cannot own a trip at all** — the FK forbids it.
+That is why 3 of 4 PROD accounts show 0 trips: not because they never made one,
+but because they never could until onboarding completed.
+
+The proxy also runs through the edge hook: `updateSupabaseSession`
+(`web/src/lib/supabase/middleware.ts`) redirects a signed-in user **with no
+profile row** to `/welcome`, exempting `/auth`, `/welcome`, `/api` and `/_next`
+`[read source]`. So the lag is self-healing on next visit, by design.
+
+---
+
 ## RLS posture per project — read from the catalog, not inferred (2026-07-27)
 
 Previously every RLS claim in the doc set rested on reading migrations. These were
