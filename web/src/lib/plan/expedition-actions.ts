@@ -7,9 +7,6 @@
  *
  * SAFETY (hard requirements):
  *   - GATED: refuses unless ENABLE_PLANNER_WIZARD=true (dev opt-in).
- *   - TEST-ONLY: refuses to persist unless the app is pointed at the TEST
- *     project — a generation can NEVER write to prod, even if the route were
- *     somehow reached with a prod-configured env.
  *   - SIGNED-IN: refuses without a session. Generation produces an OWNED trip —
  *     a `public.trips` row carrying `owner_id` from the session, so it is
  *     editable and appears in the user's listing
@@ -17,6 +14,18 @@
  *     page carries the same gate, but that is not enough on its own: per
  *     `web/src/proxy.ts`, Server Actions are POSTs to the page they live on, so
  *     a session that lapses between render and submit still reaches this action.
+ *
+ * The action-level TEST-ONLY refusal is GONE (2026-07-27). It existed because
+ * generation used to upsert into `reference_trips` — the curated-content table —
+ * under a SERVICE-ROLE client, unauthenticated and RLS-bypassing. Refusing to run
+ * against prod was correct for that shape. It no longer describes this action:
+ * the trip write is now a session-scoped insert into `public.trips` with
+ * `owner_id` from `getUser()`, validated by `trips_insert_owner`
+ * (`auth.uid() = owner_id`). A user can only ever create their own row.
+ *
+ * ONE service-role write survives and KEEPS a TEST-only gate — the corpus
+ * write-back below. See the comment at that call site; the gate moved rather
+ * than disappeared, because that path's blast radius is unchanged.
  */
 
 import { preComputeFacts } from "@/lib/itinerary/facts";
@@ -49,20 +58,9 @@ export async function generateExpeditionTripAction(
     return { ok: false, error: "The planner wizard is disabled (set ENABLE_PLANNER_WIZARD=true)." };
   }
 
-  // TEST-only guard — the single most important safety check.
-  const { ref, label } = currentProjectRef();
-  if (label !== "TEST") {
-    return {
-      ok: false,
-      error: `Refusing to run: the app is pointed at ${label} (${ref}), not TEST. Point dev at the TEST project before generating.`,
-    };
-  }
-
   // Sign-in guard. Same shape as `node-actions.ts`'s `guard`: explicit
-  // getUser, clean error the wizard can render. Deliberately AFTER the flag and
-  // TEST-ref checks — those are cheap refusals that should not depend on a
-  // session, and the ref check confirms the env is pointed somewhere real
-  // before we construct a cookie-backed client.
+  // getUser, clean error the wizard can render. Deliberately AFTER the flag
+  // check — that is a cheap refusal that should not depend on a session.
   //
   // The session is also what makes the write below possible: the trip is
   // inserted into `public.trips` with `owner_id = user.id`, and
@@ -138,10 +136,31 @@ export async function generateExpeditionTripAction(
 
     // Corpus feedback (spec §8.3): enqueue this generation's tier-2 live-resolved
     // places as google_resolved source_records so a later `materialize` can
-    // promote them (self-densifying). Only reachable on TEST — the guard at the
-    // top of this action refuses any non-TEST project. Non-fatal: a corpus-write
-    // failure must never fail the user's generation.
-    const resolvedPlaces = audited.days.flatMap((d) => d.audit?.resolvedPlaces ?? []);
+    // promote them (self-densifying). Non-fatal: a corpus-write failure must
+    // never fail the user's generation.
+    //
+    // TEST-ONLY, and this gate is LOAD-BEARING — do not fold it into the removal
+    // of the action-level rail. Unlike the trip insert above, this is a
+    // SERVICE-ROLE write to a SHARED, curated table: `upsert_source_record` is
+    // SECURITY INVOKER and `source_record` has RLS enabled with zero policies, so
+    // it only works under the service client and bypasses nothing else's rules.
+    // The blast radius the old rail protected is therefore unchanged HERE.
+    //
+    // `ingest.ts`'s own docstring states the invariant this preserves: "a PROD
+    // corpus write would need a SEPARATE deliberate gate (its own flag + a PROD
+    // field_precedence apply)". Neither exists yet, and PROD carries zero
+    // google_resolved rows. Dropping this check would silently turn every prod
+    // generation into an unreviewed write to prod curated data — see
+    // `docs/decisions/2026-07-23-corpus-writeback-dormant.md`
+    // ("generation-triggered prod corpus writes need earned trust first").
+    //
+    // Promotion to `master_place` stays a manual `npm run -w data materialize`
+    // either way; this gate governs CAPTURE, not promotion.
+    const { label: projectLabel } = currentProjectRef();
+    const resolvedPlaces =
+      projectLabel === "TEST"
+        ? audited.days.flatMap((d) => d.audit?.resolvedPlaces ?? [])
+        : [];
     if (resolvedPlaces.length > 0) {
       try {
         const enq = await enqueueResolvedPlaces(resolvedPlaces, supabase);
