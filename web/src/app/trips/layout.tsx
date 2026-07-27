@@ -95,8 +95,11 @@ function EmptyState() {
         >
           Browse the reference trip
         </Link>
+        {/* Points at the EXPEDITION wizard, not the legacy 5-step `/plan` flow.
+         *  `prefetch={false}` is retained but no longer load-bearing — see the
+         *  same note on the home CTA in `components/plan/entry-scene.tsx`. */}
         <Link
-          href="/plan"
+          href="/plan/expedition"
           prefetch={false}
           className="h-10 px-5 rounded-full border border-border-subtle text-text-primary font-sans text-sm hover:border-amber/60 transition-colors flex items-center"
         >

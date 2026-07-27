@@ -113,10 +113,11 @@ export async function generateExpeditionTripAction(
     // This is the ONLY call site that changes hands; `bakeGeneratedDays` and
     // `enqueueResolvedPlaces` below keep the service client deliberately.
     //
-    // `state: "active"`, NOT the `'draft'` default: `trip-card.tsx` routes
-    // `state === "draft"` to `/plan/${id}/${wizardStep}`, a legacy wizard route
-    // being removed — a generated trip left at the default would deep-link into
-    // a dead surface.
+    // `state: "active"`, NOT the `'draft'` default. The original reason —
+    // `trip-card.tsx` deep-linking `state === "draft"` into the legacy wizard —
+    // no longer applies (as of 2026-07-27 every card opens `/trips/<id>`), but
+    // the choice stands on its own: a generated trip is finished, not a
+    // half-filled wizard draft, and `state` is what `/trips` renders it as.
     //
     // `reference_id: null` — a generated trip derives from no reference.
     const { data: inserted, error } = await authClient

@@ -104,12 +104,13 @@ export function TripCard({ trip }: { trip: UserTripSummary }) {
           />
         ) : (
           <div className="flex items-start justify-between gap-3 pr-10">
+            {/* Every card — draft included — opens the trip slideup. Drafts
+             *  used to deep-link to `/plan/<id>/<wizardStep>`, the legacy
+             *  5-step wizard being removed; a draft is a real `public.trips`
+             *  row, so it renders as an (often empty) trip rather than a dead
+             *  link once that route is gone. */}
             <Link
-              href={
-                trip.state === "draft"
-                  ? `/plan/${trip.id}/${trip.wizardStep ?? "going"}`
-                  : `/trips/${trip.id}`
-              }
+              href={`/trips/${trip.id}`}
               className="font-display text-lg leading-tight truncate text-text-primary hover:text-amber transition-colors"
             >
               {title}

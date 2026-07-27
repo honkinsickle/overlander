@@ -113,7 +113,29 @@ marker. That marker is now discharged — the entries below are reconciled from
   - No database was written. `expedition-ms28y793` is untouched and remains the
     only artifact of the unfixed pipeline.
 
-- **The wizard swap — decided, not started. NOT blocked on auth.** The legacy
+- **The wizard swap — IN PROGRESS, 4 of 5 steps landed. NOT blocked on auth.**
+  Merged this session: **#159** auth-gated `/plan/expedition`; **#160** moved
+  generation's write target from `reference_trips` to an owned `public.trips`
+  row (`owner_id` from the session, RLS `trips_insert_owner`); **#161** repointed
+  the home CTA to `/plan/expedition`. **On this branch (4a):** the last two
+  in-app links into the legacy wizard are gone — the `/trips` empty-state CTA now
+  points at `/plan/expedition`, and draft cards open `/trips/<id>` instead of
+  deep-linking `/plan/<id>/<wizardStep>`. **Zero `<Link href="/plan">` remain in
+  `web/src`** `[grep]`; the route is reachable only by typing it. Nothing was
+  deleted.
+  - **Deferred to 4b/4c, gated on PROD:** deleting the `/plan/*` routes, the anon
+    `TRIPS` store, and the now-dead `wizardStep` field (populated in
+    `list-user-trips.ts`, read by nobody). These wait until
+    `ENABLE_PLANNER_WIZARD` is flipped on PROD and a real sign-in is verified
+    there.
+  - **Known cosmetic consequence of 4a**, measured on TEST against a
+    deliberately-constructed 0-day draft: a dateless draft renders in the slideup
+    as `NaN/NaN-NaN/NaN • 0 Days • 0 mi` (the `/trips` card already showed
+    `Invalid Date` before this change). It renders — no crash, no dead link —
+    but **PROD has 7 such draft rows**, so 7 users would see that header. A date
+    guard is unscoped; decide it with 4b.
+
+  The legacy
   5-step wizard is to be **replaced** by the expedition (LLM) wizard, and
   generation will **require sign-in** so a generated trip is an owned, editable,
   findable `trips` row. Trips created by the legacy wizard can be discarded; the
@@ -176,9 +198,11 @@ marker. That marker is now discharged — the entries below are reconciled from
   `test:er` run is the true gate.
 
 ## NEXT (ordered)
-1. **Resolve the auth blocker.** It gates the entire wizard swap, and the swap is
-   the largest decided-but-unstarted piece of work. Until sign-in is exercisable,
-   nothing downstream of it can be verified.
+1. **Finish the wizard swap — flip `ENABLE_PLANNER_WIZARD` on PROD, verify a real
+   sign-in there, then land 4b/4c** (delete `/plan/*`, the anon `TRIPS` store,
+   and the dead `wizardStep`). Steps 1–4a are merged or in review; the teardown
+   is the only part left, and it is deliberately gated on PROD rather than on
+   auth. Decide the dateless-draft header (7 PROD rows) as part of 4b.
 2. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
    accept regen orphan-drop. Then apply at pool-assembly, extend `rescopeOverlays`,
    carry through regen, and re-wire the kebab's move-to-day to write it.
