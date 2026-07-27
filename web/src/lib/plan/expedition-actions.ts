@@ -10,6 +10,11 @@
  *   - TEST-ONLY: refuses to persist unless the app is pointed at the TEST
  *     project — a generation can NEVER write to prod, even if the route were
  *     somehow reached with a prod-configured env.
+ *   - SIGNED-IN: refuses without a session. Generation must produce an OWNED
+ *     trip (`docs/decisions/2026-07-27-generation-requires-sign-in.md`). The
+ *     page carries the same gate, but that is not enough on its own: per
+ *     `web/src/proxy.ts`, Server Actions are POSTs to the page they live on, so
+ *     a session that lapses between render and submit still reaches this action.
  */
 
 import { preComputeFacts } from "@/lib/itinerary/facts";
@@ -18,7 +23,10 @@ import { enqueueResolvedPlaces } from "@/lib/itinerary/ingest";
 import { bakeGeneratedDays } from "@/lib/itinerary/bake";
 import { itineraryToTrip } from "@/lib/itinerary/to-trip";
 import { attachHeroPhotos } from "@/lib/imagery/destination-photo";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 import {
   currentProjectRef,
   expeditionToGenerationInput,
@@ -47,6 +55,24 @@ export async function generateExpeditionTripAction(
       error: `Refusing to run: the app is pointed at ${label} (${ref}), not TEST. Point dev at the TEST project before generating.`,
     };
   }
+
+  // Sign-in guard. Same shape as `node-actions.ts`'s `guard`: explicit
+  // getUser, clean error the wizard can render. Deliberately AFTER the flag and
+  // TEST-ref checks — those are cheap refusals that should not depend on a
+  // session, and the ref check confirms the env is pointed somewhere real
+  // before we construct a cookie-backed client.
+  //
+  // PR 1 scope: this gates generation. It does NOT change the write target —
+  // the upsert below still goes to `reference_trips`. PR 2 moves it to
+  // `public.trips` with an owner.
+  // Named `authClient`, not `supabase`: the pipeline below uses a SERVICE-role
+  // client under that name. Two differently-privileged clients sharing one
+  // identifier is exactly the confusion worth not introducing here.
+  const authClient = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to generate a trip." };
 
   const invalid = validateExpeditionForm(form);
   if (invalid) return { ok: false, error: invalid };
