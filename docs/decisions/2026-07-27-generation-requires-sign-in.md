@@ -1,9 +1,16 @@
 # Trip generation will require sign-in, and the legacy wizard is replaced rather than migrated
 
-**Status:** Decided 2026-07-27. **Not started — and NOT blocked on auth.** The
-originally-recorded auth blocker was based on a false claim about PROD's Google
-provider; corrected the same day (see §The blocker). What remains is a product
-decision about whether to ship Google-only, not a prerequisite.
+**Status:** Decided 2026-07-27; **IMPLEMENTED the same day.** All five code steps
+merged — #159 (auth gate), #160 (owned-row write target), #161 (root CTA), #162
+(de-link legacy), #163 (TEST-only rail removed from the trip write, narrowed to
+the corpus call). **Not yet exercised on PROD:** `ANTHROPIC_API_KEY` is unset in
+Vercel Production, so no PROD generation has succeeded. The teardown (4b/4c) is
+gated on that plus a verified post-sign-in return — see `STATE.md`.
+
+The originally-recorded auth blocker was based on a false claim about PROD's
+Google provider; corrected the same day (see §The blocker). What remains of that
+thread is a product decision about whether to ship Google-only, not a
+prerequisite.
 **Date:** 2026-07-27.
 
 ## Context
@@ -208,7 +215,11 @@ accounts that provably have one. Fetch users **individually**
   path**, separate from auth and not resolved by this decision: no degradation
   signal reaches any component (the action returns a `note` that nothing reads,
   and it does not fire for the missing-`GOOGLE_PLACES_API_KEY` case at all), and
-  generated trips carry inflated `milesFromStart`.
+  generated trips carry inflated `milesFromStart`. **Both are being shipped
+  knowingly** (#163). Scope note added 2026-07-27: the degradation blocker's worst
+  case is **not armed on Production** — `GOOGLE_PLACES_API_KEY` **is** set there
+  `[vercel env ls production]`, so tier-2 names will resolve. The missing signal
+  is still a real defect; it simply is not the one that bites first.
 - **The corpus-feedback call must stay on a service client** regardless of what
   the trip write uses — `upsert_source_record` is SECURITY INVOKER and
   `source_record` has RLS with zero policies. See `docs/BACKLOG.md` §Client

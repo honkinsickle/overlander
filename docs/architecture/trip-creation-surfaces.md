@@ -4,6 +4,32 @@
 trip creation: the forms, what they collect, what the code renders while a trip
 is being made, and what it does when creation degrades.
 
+> ## ⚠️ SUPERSEDED IN PART — 2026-07-27 (the wizard swap, #159–#163)
+>
+> **This file traced the world one day before it inverted.** The trace itself was
+> accurate; five PRs then changed the exact facts it centres on. The structural
+> analysis (form intake, step model, degradation behaviour, the anon-branch
+> finding) still holds. **These specific claims do not:**
+>
+> | Claim as written | Actual, 2026-07-27 |
+> |---|---|
+> | Expedition writes to `reference_trips` (§ intro, § write target, § "no way to find it") | Writes an **owned `public.trips` row** — `owner_id` from the session, `state: "active"`, `reference_id: null` (#160). It **is** editable and findable. |
+> | Legacy has **3 UI entry points** | **Zero.** #161 moved the root CTA; #162 repointed the `/trips` empty state and draft cards. No `<Link href="/plan">` remains in `web/src` `[grep]`. |
+> | Expedition is **unlinked** | It is the **only** linked creation path. |
+> | Expedition persists **TEST project only** | Runs on **PROD** (#163). The TEST-only rail was removed from the trip write and **narrowed to the corpus call**. |
+> | Expedition **not live in production** | `ENABLE_PLANNER_WIZARD` **is set in Vercel Production** and `/plan/expedition` returns 307 → sign-in there. Generation still fails with `missing_key` — `ANTHROPIC_API_KEY` is unset. |
+>
+> **What is still true and load-bearing:** `/plan` remains a live route handler
+> that **mints a draft on GET** (verified on PROD: `GET /plan` → 307 →
+> `/plan/<id>/going`). It is simply unreachable from the UI now. That is why the
+> prefetch guard below still matters, and why deleting the route is 4b — a
+> separate, gated step.
+>
+> **The "naive expectation is inverted" observation below has itself inverted.**
+> It is now the ordinary arrangement: the LLM wizard is the fronted path and the
+> legacy wizard is the vestigial one. Corrected in place in the table; the
+> original sentence is left so the reversal is legible.
+
 ## Why this is its own file
 
 [`generation-pipeline.md`](generation-pipeline.md) traces the **server** half of
@@ -116,11 +142,13 @@ wizard's finalize action** (§1.3).
 |---|---|---|
 | Entry route | `/plan` (route handler) → `/plan/[id]/<step>` | `/plan/expedition` |
 | Feature gate | **none** | `ENABLE_PLANNER_WIZARD`, else `notFound()` |
-| Linked from the UI | **yes, 3 entry points** | **no — zero links** |
+| Linked from the UI *(as of 2026-07-26)* | **yes, 3 entry points** | **no — zero links** |
+| **Linked from the UI (2026-07-27, #161+#162)** | **no — zero links** | **yes — the only linked path** |
 | Day-building pipeline | `buildRouteAwareDays` → `buildDaySuggestions` | `preComputeFacts` → `generateAndAudit` → `bakeGeneratedDays` |
 | Calls an LLM | no | yes |
-| Write target | authed: `public.trips` UPDATE · anon: in-memory `TRIPS` | `reference_trips` (TEST project only) |
-| Live in production | **yes** | no |
+| Write target *(as of 2026-07-26)* | authed: `public.trips` UPDATE · anon: in-memory `TRIPS` | `reference_trips` (TEST project only) |
+| **Write target (2026-07-27, #160+#163)** | unchanged | **owned `public.trips` row** — `owner_id` from session, `state:"active"`, `reference_id:null`; runs on PROD |
+| Live in production | **yes** (route live; unlinked) | **flag ON in Production**; renders, but generation fails `missing_key` |
 
 The naive expectation is inverted: **the newer, LLM-backed expedition wizard is
 the gated, unlinked one; the legacy 5-step wizard is unflagged and fronted by the
@@ -148,13 +176,16 @@ web/src/proxy.ts]`. *(Called out explicitly because the obvious grep — for
 `middleware.ts` — finds only the Supabase helper under `lib/supabase/` and
 wrongly suggests there is no edge hook at all.)*
 
-**Three UI entry points** `[grep for `href="/plan"`]`:
+**Three UI entry points** `[grep for `href="/plan"`]` — **all three removed
+2026-07-27; see the superseded block at the top. Zero remain.**
 
-1. `EntryScene` — the `"Create a Trip"` CTA, rendered by `Home` at the site root.
-   **This is the root route's primary call to action** `[read source: app/page.tsx]`.
-2. `app/trips/layout.tsx` — the `"Plan a new trip"` empty-state link.
-3. `components/trips/trip-card.tsx` — draft cards deep-link back *into* the
-   wizard mid-flow at `/plan/<id>/<wizardStep>`.
+1. ~~`EntryScene` — the `"Create a Trip"` CTA, rendered by `Home` at the site
+   root.~~ **Repointed to `/plan/expedition` (#161.)**
+2. ~~`app/trips/layout.tsx` — the `"Plan a new trip"` empty-state link.~~
+   **Repointed to `/plan/expedition` (#162.)**
+3. ~~`components/trips/trip-card.tsx` — draft cards deep-link back *into* the
+   wizard mid-flow at `/plan/<id>/<wizardStep>`.~~ **Now open `/trips/<id>`
+   (#162.)** The `wizardStep` field that fed this is dead but not yet deleted.
 
 Both `/plan` links set `prefetch={false}`, paired with a prefetch guard in the
 route handler: `GET` returns a bare 204 when
@@ -448,6 +479,13 @@ and returned only after the upsert. So if the action runs to completion after th
 client is gone, the trip persists to `reference_trips` and **the user has no way
 to learn its id** — it appears in no listing (§6).
 
+> **Superseded 2026-07-27 (#160).** The id is no longer minted in the action —
+> `public.trips.id` is `uuid default gen_random_uuid()` and the DB value is
+> authoritative (`payload.id` is a `""` placeholder). The orphan case is now
+> **benign**: a trip completed after the client disconnects is an owned row with
+> the user's `owner_id`, so it **does** appear in `listUserTrips` and the user
+> simply finds it on `/trips`. This was one of the concrete harms the swap fixed.
+
 Whether the Next.js runtime actually aborts an in-flight server action when the
 client disconnects is platform behaviour, not repo behaviour, and was not
 determined `[UNVERIFIED]`.
@@ -562,7 +600,15 @@ The same is true of anon legacy trips: `WizardFinalizeSlideup` passes
 `[read source]`. **Only the authed legacy path produces an editable trip**,
 because only it writes a UUID row to `public.trips`.
 
-### Does it appear in any listing? No.
+### Does it appear in any listing? No. — **REVERSED 2026-07-27 (#160): yes, it does.**
+
+> A generated trip is now an owned `public.trips` row with `owner_id` set and
+> `state: "active"`, so `listUserTrips` returns it and it renders on `/trips` as
+> an ordinary active trip card. `canEdit` is also true now — the id is a real
+> UUID, so `isUserTrip` passes. Verified end-to-end on TEST
+> (`ea1f51f7-5e58-47cf-b430-b02d868988cc`). **The analysis below describes the
+> pre-#160 world; it is retained because it is the reasoning that justified the
+> change.**
 
 `listUserTrips` queries `.from("trips")` — the UUID table `[read source:
 list-user-trips.ts]`. A generated expedition trip is written to

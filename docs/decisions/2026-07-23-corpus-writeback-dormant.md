@@ -1,5 +1,38 @@
 # Corpus write-back (`enqueueResolvedPlaces`) is built and deliberately dormant — do not delete it
 
+> ## ⚠️ MECHANISM CHANGED — 2026-07-27 (PR #163)
+>
+> **The conclusion is unchanged: corpus write-back is still TEST-only. What
+> changed is what enforces it on the generation path.**
+>
+> The correction block below says *"Both callers refuse unless the project
+> resolves to TEST."* That was true when the whole generation action refused a
+> non-TEST ref. **#163 removed that action-level rail** — generation now runs on
+> PROD, because the trip write became a session-scoped, RLS-enforced insert into
+> `public.trips` (#159 + #160) and the rail no longer described it.
+>
+> The rail was **not** deleted wholesale. It was **narrowed to the
+> `enqueueResolvedPlaces` call site** in `expedition-actions.ts`, precisely
+> because this ADR's reasoning still holds for *that* write and only that one:
+> service-role, into a shared curated table, with `source_record` RLS-enabled and
+> policy-free. So the enforcement moved from "the action refuses" to "the corpus
+> call is skipped unless the project is TEST".
+>
+> **Current enforcement, per caller:**
+> - `expedition-actions.ts` (generation) — **own TEST check at the call site**;
+>   the surrounding action runs anywhere.
+> - `edit-actions.ts` (NL re-plan) — still gated by the whole action, via
+>   `checkNlRails` → `checkRailsWithFlag`, which carries its own hardcoded
+>   `TEST_REF` **separate from `currentProjectRef`** (a `currentProjectRef` grep
+>   will not find it). That surface is also dark on PROD — `NEXT_PUBLIC_NL_EDIT`
+>   is unset `[vercel env ls production]`.
+>
+> **Net effect on PROD:** a successful PROD generation will produce a trip and
+> **zero `google_resolved` rows**. That is this decision working as intended, not
+> a failure — expect it, and do not "fix" it by removing the call-site check.
+> Opening it still requires what the docstring has always demanded: its own flag
+> plus a PROD `field_precedence` apply.
+
 > ## ⚠️ SUPERSEDED IN PART — 2026-07-27
 >
 > **The factual premise below is stale. `enqueueResolvedPlaces` no longer has zero
@@ -17,6 +50,14 @@
 > writes on TEST — but "dormant" is the wrong word for it now. Measured 2026-07-27:
 > TEST carries 47 `google_resolved` `source_record` rows; PROD carries zero
 > `[queried catalog, TEST + PROD]`.
+>
+> **Count refreshed later the same day: TEST is now 103** `[queried TEST]`, after
+> the post-#163 verification generation. **PROD remains zero** — not re-measured
+> in that pass, but it cannot have changed: the call-site gate skips non-TEST
+> projects, and no PROD generation has ever succeeded (`ANTHROPIC_API_KEY` is
+> unset in Vercel Production). Recorded because a bare row count is exactly the
+> kind of claim that goes stale silently — which is what this correction block
+> exists to document.
 >
 > **What still holds:** everything below about *why* the write is
 > `source_record`-only, why promotion to `master_place` stays a manual

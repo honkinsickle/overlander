@@ -85,6 +85,44 @@ defect. Measurements and context:
   `ok: true`. No distinct error separates "no key" from "genuinely not found" at
   the action boundary. Worth a fail-fast check before the (paid) LLM call.
 
+## Vercel Production env — measured 2026-07-27
+
+All `[vercel env ls production]`. Names only; no values were read or printed.
+
+- **`ANTHROPIC_API_KEY` is NOT set in Production — the only thing blocking a first
+  PROD generation.** `ENABLE_PLANNER_WIZARD` is already set (and the wizard
+  verifiably renders: `/plan/expedition` → 307 → sign-in on the public alias),
+  so the code path is reachable and stops at `generate.ts`'s key check. It
+  throws before the SDK import, so the failure is free — no Anthropic spend, no
+  partial trip, no DB row. **Fix is one env var + a redeploy.**
+
+- **`GOOGLE_PLACES_API_KEY` IS set in Production** (49d old, Preview+Production).
+  Recorded because the obvious worry does **not** apply: the silent-degradation
+  defect above (a missing key drops every tier-2 name while the action still
+  returns `ok: true`) **will not bite the first PROD generation.** Tier-2
+  resolution has a key to work with. The defect remains real; it is simply not
+  armed on Production today. Re-check if that var is ever rotated or scoped away
+  — nothing would tell you.
+
+- **The `missing_key` error tells a PROD user to edit a file they do not have.**
+  `generate.ts:60` throws *"ANTHROPIC_API_KEY is not set — add it to
+  `web/.env.local` to run generation."* That string is developer-facing advice
+  written for a local checkout, and it reaches the browser: the action returns
+  `{ ok: false, error }` and the wizard renders `error` verbatim. On Production
+  the fix is a Vercel env var and a redeploy — `web/.env.local` does not exist
+  and could not help. Two sibling throws differ again (`edit.ts`: "required to
+  parse edit requests"; `interpret.ts`: bare "is not set."), so the same
+  condition surfaces three different messages. Worth one shared, deploy-aware
+  string — and worth deciding whether raw internal env-var names should reach an
+  end user at all.
+
+- **`GooglePlaces` (70d, Production+Preview) appears vestigial.** It sits
+  alongside the real `GOOGLE_PLACES_API_KEY`, and **nothing in `web/src` or
+  `data/` reads `process.env.GooglePlaces`** `[grep]`. Likely a first-attempt
+  name left behind. Not urgent and NOT auto-removable — an unread env var is
+  cheap, and deleting a credential-bearing var deserves a human check that no
+  out-of-repo consumer (a Vercel function, a cron, a script) depends on it.
+
 ## Schema & infra hygiene (found 2026-07-27)
 
 - **Migration review gap — a table shipped without RLS and nothing caught it.**
@@ -136,7 +174,39 @@ defect. Measurements and context:
     environment, checking the key **prefix** (`sb_publishable_` vs `sb_secret_`)
     rather than assuming the variable name implies the value.
 
-## Wizard swap — decided, NOT blocked on auth
+## Wizard swap — ALL FIVE CODE STEPS MERGED (2026-07-27); 4b/4c gated on PROD
+
+> **STATUS UPDATE 2026-07-27 — this section is no longer forward-looking.**
+> #159, #160, #161, #162 and #163 are all merged
+> `[gh pr list --state all]`. The scoping below is kept because it is the record
+> of *why* the sequence was ordered as it was, and because 4b/4c have not run.
+> Current position and the two remaining gates live in
+> [`STATE.md`](STATE.md); the one blocker is `ANTHROPIC_API_KEY` missing from
+> Vercel Production (see §"Vercel Production env" above).
+
+### Corpus capture on PROD — deliberately still gated
+
+#163 removed the TEST-only rail from the trip write but **kept it on the
+`enqueueResolvedPlaces` call site**, so the first PROD generation will produce a
+trip and **zero `google_resolved` rows**. That is intended, not a bug.
+
+The two writes have different shapes and only one of them changed:
+
+| | Trip write | Corpus write-back |
+|---|---|---|
+| Client | session (`authClient`) | **service-role** |
+| Target | `public.trips`, owner's own row | `source_record` — **shared, curated** |
+| Enforced by | `trips_insert_owner` (`auth.uid() = owner_id`) | nothing — RLS on, **zero policies**; `upsert_source_record` is SECURITY INVOKER |
+
+`ingest.ts`'s own docstring sets the bar for opening it: *"a PROD corpus write
+would need a SEPARATE deliberate gate (its own flag + a PROD `field_precedence`
+apply)"*. Neither exists, and PROD carries zero `google_resolved` rows. Promotion
+to `master_place` would still be a manual `materialize` either way — this gates
+**capture**, not promotion. To open it later, decide the flag and apply
+`field_precedence` on PROD first; see
+[`decisions/2026-07-23-corpus-writeback-dormant.md`](decisions/2026-07-23-corpus-writeback-dormant.md).
+
+### Original scoping (retained)
 
 The legacy 5-step wizard is to be **replaced** by the expedition (LLM) wizard.
 Generation will **require sign-in**, so a generated trip is an owned, editable,
@@ -193,15 +263,27 @@ Sequence, smallest first, each independently mergeable:
 4. **Legacy removal** — routes, legacy-only components, `buildDaySuggestions` (and
    transitively `suggestions-for-segment.ts`), and the anon `TRIPS` store.
 
-**Ordering constraint:** the legacy path is the only creation surface with a UI
-entry point today, and `/plan/expedition` 404s without its flag. **Legacy must
-survive until the expedition path is both flag-on and linked** — step 4 is
-strictly last. Step 4 also overlaps the reference-fixture removal residual (both
-delete the `TRIPS` store); do not start them independently.
+**Ordering constraint — partially discharged 2026-07-27.** As written, this said
+*"legacy must survive until the expedition path is both flag-on and linked."*
+**Both of those now hold**: `ENABLE_PLANNER_WIZARD` is set in Vercel Production
+and `/plan/expedition` returns 307 → sign-in there (flag-on, verified), and #161 +
+#162 made it the only linked path (linked, `[grep]`).
 
-Two known blockers to shipping this as the *primary* creation path, separate from
-the auth blocker and not scoped here: no degradation signal reaches any component,
-and generated trips carry inflated `milesFromStart`.
+**The constraint still binds anyway**, on a condition the original wording did not
+name: flag-on and linked prove the wizard *renders*, not that it *generates*. With
+`ANTHROPIC_API_KEY` unset in Production, no PROD generation has ever succeeded —
+so legacy is still the only creation path demonstrated to work there. **4b's real
+gate is a successful PROD generation plus a verified post-sign-in return**, not
+reachability. Step 4b remains strictly last. It also overlaps the
+reference-fixture removal residual (both delete the `TRIPS` store); do not start
+them independently.
+
+Two known defects ship with the first PROD generation, accepted knowingly (see
+#163's PR body): **no degradation signal reaches any component**, and generated
+trips carry **inflated `milesFromStart`** (~2.18×; fix parked unmerged on
+`fix/generated-day-miles`). Note the degradation defect's worst case — a missing
+`GOOGLE_PLACES_API_KEY` — is **not** armed on Production: that var is set
+(§"Vercel Production env").
 
 ## Client boundary — which operations need service-role (settled 2026-07-27)
 
