@@ -1,9 +1,46 @@
 # Corpus write-back (`enqueueResolvedPlaces`) is built and deliberately dormant — do not delete it
 
-**Status:** Decided. `enqueueResolvedPlaces`
-(`web/src/lib/itinerary/ingest.ts:36`) is built, correct, tested-shaped, and has
-**zero callers on purpose**. It is not dead code and must not be deleted as such.
-Promotion of what it would write is a manual, human-gated step by design.
+> ## ⚠️ SUPERSEDED IN PART — 2026-07-27
+>
+> **The factual premise below is stale. `enqueueResolvedPlaces` no longer has zero
+> callers; it has two**, and has had since it was wired at the two TEST-guarded
+> persist points:
+>
+> - `generateExpeditionTripAction` (`web/src/lib/plan/expedition-actions.ts`) —
+>   after a successful persist
+> - the NL re-plan path (`web/src/lib/itinerary/edit-actions.ts`) — same shape
+>
+> `[grep: three hits repo-wide — the definition and these two call sites]`.
+> `ingest.ts`'s own module docstring now says so explicitly: *"**WIRED** at the two
+> TEST-guarded persist points … each AFTER its successful persist"* `[read source]`.
+> Both callers refuse unless the project resolves to TEST, so this still only ever
+> writes on TEST — but "dormant" is the wrong word for it now. Measured 2026-07-27:
+> TEST carries 47 `google_resolved` `source_record` rows; PROD carries zero
+> `[queried catalog, TEST + PROD]`.
+>
+> **What still holds:** everything below about *why* the write is
+> `source_record`-only, why promotion to `master_place` stays a manual
+> `materialize`, why the shape is grounded, and why the function must not be
+> deleted. The reasoning is intact. Only the call-count claim is wrong.
+>
+> **Why this correction is recorded rather than the original being edited:** this
+> ADR was cited as authoritative during the 2026-07-27 client-boundary
+> investigation and produced a wrong conclusion — the investigation nearly
+> declared half its own scope moot on the strength of "zero callers". A decision
+> record that asserts a call count is a claim with a shelf life, and this one
+> outlived its accuracy silently. See `docs/LOG.md` 2026-07-27.
+>
+> **Also settled on 2026-07-27, and relevant to any future wiring decision:**
+> `upsert_source_record` (the RPC this function calls) is SECURITY INVOKER, and
+> `source_record` has RLS enabled with **zero policies**. So write-back works only
+> under a service-role client; a `GRANT` to `authenticated` would not help.
+> Details: `docs/BACKLOG.md` §Client boundary.
+
+**Status:** Decided 2026-07-23; **call-count premise superseded 2026-07-27 (see
+above)**. `enqueueResolvedPlaces` (`web/src/lib/itinerary/ingest.ts`) is built,
+correct, tested-shaped, and was at the time of writing wired to nothing. It is not
+dead code and must not be deleted as such. Promotion of what it would write is a
+manual, human-gated step by design.
 **Date:** 2026-07-23.
 
 ---

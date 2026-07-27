@@ -166,4 +166,72 @@ this doc:
 - `web/scripts/seed-reference-la-to-portland.ts` — `--verify` deep-equals the
   stored payload against the fixture literal; `--revert` deletes the row.
 
-For RLS/read: `createClient(url, ANON_KEY)` with no session, `.from("reference_trips").select("id")`.
+For RLS/read: `createClient(url, ANON_KEY)` with no session,
+`.from("reference_trips").select("id")`.
+
+> **⚠️ Correction, 2026-07-27 — that recipe was NOT RLS-subject on TEST.** The
+> value in `NEXT_PUBLIC_SUPABASE_ANON_KEY` on TEST was a **secret** (`sb_secret_…`)
+> key, not the publishable one, so a client built from it authenticated as
+> service-role and **bypassed RLS entirely**. Any TEST read taken this way
+> measured service-role behaviour while being labelled anon. The PROD half was
+> fine — PROD's variable held a genuine publishable key. The local env has been
+> corrected and the key rotated. **When re-running this recipe, check the key's
+> prefix (`sb_publishable_` vs `sb_secret_`) first** — the variable name does not
+> guarantee the value. See §"The RLS drift that wasn't" below.
+
+## The RLS drift that wasn't — a retraction (2026-07-27)
+
+**There is no RLS drift between the migrations and either database. The migrations
+are an accurate description of both projects.** This section exists because a
+previous session concluded the opposite, loudly, and that conclusion was wrong.
+
+Verified from the live catalog `[queried catalog, TEST + PROD, 2026-07-27]`:
+
+- **Policies match migrations exactly.** Both projects carry the same **8**
+  policies — 4 on `trips`, 3 on `users`, 1 on `reference_trips` — and those are
+  precisely the 8 declared in `20260513000000_init_identity.sql`. Nothing in the
+  DB that is not in migrations; nothing in migrations that is not in the DB; no
+  logical differences beyond Postgres' standard re-parenthesisation.
+- **Grants are identical across roles.** `anon`, `authenticated` and
+  `service_role` hold the same table privileges on every table checked.
+- **No structural drift.** Every live application table is declared in migrations;
+  `trips` and `reference_trips` match column-for-column on names, types,
+  nullability and defaults; indexes and triggers match.
+
+### What actually produced the anomaly
+
+The reported symptom was that `anon` could read `master_place` and `source_record`
+while `authenticated` could not — which no policy configuration explains, since
+both tables have RLS enabled with **zero** policies and should deny both roles.
+
+The cause was **one misconfigured environment variable, not the database**. The
+probe's "anon" client was built from `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which on TEST
+held a secret key (above). That client therefore ran as service-role and bypassed
+RLS, returning rows. The "authenticated" client sent a real user JWT in
+`Authorization`, which PostgREST honours over the `apikey` header, so *that* one
+genuinely ran as `authenticated` and was correctly denied. The "split" was an
+artifact of comparing a service-role client against an authenticated one while
+believing both were unprivileged.
+
+The definitive test, which settles it in one query and should have been run first:
+
+```sql
+SET ROLE anon;           -- master_place 0, source_record 0, reference_trips 9
+SET ROLE authenticated;  -- master_place 0, source_record 0, reference_trips 9
+```
+
+Both roles, identical, exactly as the migrations predict.
+
+### The durable lesson
+
+**A probe is only as trustworthy as the identity it ran under.** Role-differentiated
+behaviour was reported across four turns without once verifying which role the
+client actually authenticated as. Before concluding anything from a client-side
+query — especially anything shaped like "role X can do Y and role Z cannot" —
+establish the effective role, either by decoding the key or with `SET ROLE` against
+the catalog. `current_user` is one column and it is cheap.
+
+A corollary, since this cut the other way in the same investigation: **migrations
+are not authoritative about live state, but neither is a client probe.** The
+catalog is. Where this doc's claims rest on migrations rather than a catalog read,
+they are tagged as such.

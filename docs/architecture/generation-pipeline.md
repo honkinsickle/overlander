@@ -778,10 +778,69 @@ against code that has not merged. Whichever lands second must reconcile them.
 
 ---
 
+## 8. The client boundary — which operations need service-role
+
+**Point-in-time: 2026-07-27.** Traced because the wizard swap moves the trip write
+to a session-scoped client (`docs/BACKLOG.md` §Wizard swap), which raised the
+question of what else in this pipeline would break under one. Terminology: a
+session-scoped client uses the **anon key plus a user JWT**, so the Postgres role
+is `authenticated`, not `anon`.
+
+The action performs exactly **three** distinct database operations. Everything
+else in the pipeline touches no database at all — `generateAndAudit`, `resolve`,
+`itineraryToTrip` take no client, and `attachHeroPhotos` calls Wikipedia over HTTP
+`[grep: no client param or `.rpc(` in generate.ts, audit.ts, resolve.ts,
+to-trip.ts; no supabase reference in lib/imagery/]`.
+
+| # | Operation | Mechanism | Works session-scoped? | Evidence |
+|---|---|---|---|---|
+| 1 | Corpus folds ×2 in `preComputeFacts` | RPC `pois_along_corridor` | **N/A — unreachable.** `facts.ts` creates its **own** service client (`const supabase = createSupabaseServiceClient()`); it does not receive one | `[read source]` |
+| 2 | Per-day corpus fold in `bakeGeneratedDays` | same RPC, via `fetchCorpusForSegment` | **Yes** | `SECURITY DEFINER`, owner `postgres`, `EXECUTE` granted to `anon, authenticated` `[queried catalog]`; verified returning rows under a real `authenticated` JWT |
+| 3 | The trip write | `.from("reference_trips").upsert()` | **No** — one `SELECT … USING (true)` policy, no write policy | `[queried catalog]` |
+| 4 | Corpus feedback in `enqueueResolvedPlaces` | RPC `upsert_source_record` | **No — fails at RLS** | see below |
+
+**Operation 1 is the one that surprises.** Changing the action's client does not
+change how Stage 1's corpus folds authenticate, because `facts.ts` never used the
+action's client in the first place.
+
+**Operation 4 fails at RLS, not at grants — and the distinction decides the
+remedy.** `upsert_source_record` is `SECURITY INVOKER` (no `security definer`
+clause, so it defaults), which means under a user JWT it executes as
+`authenticated`. `EXECUTE` *is* granted to that role, and `authenticated` holds
+full table privileges on `source_record` — but `source_record` has **RLS enabled
+with zero policies**, so every statement is denied `[queried catalog]`. **A `GRANT`
+therefore changes nothing.** Consequence for the wizard swap: the action needs a
+service client for corpus feedback regardless of what the trip write uses.
+
+### The silent-degradation asymmetry
+
+The two failure-shaped operations behave **oppositely**, and the safe-looking one
+is the dangerous one.
+
+**Operation 2 would degrade SILENTLY if it ever failed.** `fetchCorpusForPolyline`
+is `if (error || !data) return []` wrapped in `try { … } catch { return [] }`
+`[read source: bake-corridors.ts]`. So a denied RPC, a thrown error, and a
+genuinely empty corridor are **indistinguishable** — all three produce `[]`. The
+day loses its corpus tiles, the LLM free-runs on its own knowledge for those names
+(§2), and nothing anywhere records why. **It is safe today precisely because of
+the `SECURITY DEFINER` + grant, which is worth not disturbing.**
+
+**Operation 4 errors, but only to the server console.** `enqueueResolvedPlaces`
+collects failures into `result.errors[]` rather than throwing; the action logs
+`console.warn` and continues `[read source]`. A total failure of corpus write-back
+does not fail the generation and does not change the trip the user receives —
+write-back only accumulates `source_record` rows for a later manual `materialize`.
+So it is quiet from the user's perspective but loud in logs, and it does **not**
+thin the delivered trip. That makes it a smaller problem than it first appears.
+
 ## Related
 
 - [`itinerary-model.md` §7](itinerary-model.md) — **the** home for trip payload
   shapes, including this pipeline's measured output profile and the 30-cap rung.
+- **The client half of this doc** — the wizard form, its inputs, the in-flight
+  render, and the post-creation landing — is
+  `docs/architecture/trip-creation-surfaces.md`, **PR #153, not yet merged**.
+  Cross-link becomes live when it lands.
 - [`place-render-model.md`](place-render-model.md) — the READ path: how tiles
   render as cards and how the detail slideup is dispatched and enriched.
 - [`trip-resolution.md`](trip-resolution.md) — how a stored trip is served.

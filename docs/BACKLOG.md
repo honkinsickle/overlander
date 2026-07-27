@@ -85,6 +85,201 @@ defect. Measurements and context:
   `ok: true`. No distinct error separates "no key" from "genuinely not found" at
   the action boundary. Worth a fail-fast check before the (paid) LLM call.
 
+## Schema & infra hygiene (found 2026-07-27)
+
+- **Migration review gap — a table shipped without RLS and nothing caught it.**
+  `public.mvum_roads` was created by `20260603010000_phase2_mvum_corridor.sql`
+  with no `enable row level security`, while `master_place`, `source_record`,
+  `place_match`, `legality_overlay` and `field_precedence` all enable it in their
+  own creating migrations. No later migration picked it up, so it stood from
+  creation until #154. **Treat this as a review gap, not a one-off:** nothing in
+  CI or the migration workflow compares a new table against the RLS posture of
+  its siblings, so the next one would land the same way.
+  - **Cheap standing check:** sweep `pg_class.relrowsecurity = false` over the
+    `public` schema and diff against an expected allowlist. Both projects are
+    currently clean (`spatial_ref_sys` is PostGIS-owned and expected)
+    `[queried catalog, TEST + PROD, 2026-07-27]`. This is one query; it belongs
+    either in `drift:check` or in the `db:push-verify` wrapper, which already
+    exists to catch migrations that report success without doing their work.
+  - Related lesson already carried into the migration itself: **revoking function
+    `EXECUTE` needs both the `from public` and the `from anon, authenticated`
+    forms**, because a revoke against a grant a role never individually held is a
+    silent no-op. See `supabase/migrations/20260727120000_mvum_roads_rls.sql`.
+
+- **Migration history gap — PROD is missing `20260723120000_google_resolved_field_precedence`.**
+  TEST has it; PROD does not, in both the ledger and the effect — the three
+  `field_precedence` rows for `source_id = 'google_resolved'` are absent from PROD
+  `[queried catalog, TEST + PROD, 2026-07-27]`. Note PROD's ledger and PROD's
+  actual state **agree with each other**; the divergence is between PROD and the
+  repo, so there is no phantom record to reconcile and no double-insert risk.
+  - **No current operational impact:** PROD has zero `google_resolved`
+    `source_record` rows and cannot accumulate them under current code, since both
+    callers of `enqueueResolvedPlaces` refuse unless the project resolves to TEST.
+  - **The risk is latent.** `web/src/lib/itinerary/ingest.ts` states that enabling
+    PROD write-back needs "its own flag + a PROD `field_precedence` apply" — this
+    migration *is* that second prerequisite, and it must be in place **before** the
+    first such record lands, or a solo-resolved place promotes with attribution
+    `{}` and violates the "never display a field without its attribution"
+    invariant. Noticed, not investigated further, not applied.
+
+- **Vercel env audit — UNCHECKED and not visible from source.** On TEST,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the local dev env file held a **secret** key
+  rather than the publishable one. Fixed locally and the key rotated. `NEXT_PUBLIC_*`
+  is inlined into the client bundle by Next, so the same swap in a deployed
+  environment would ship a secret key to browsers.
+  - **Whether Vercel's preview/dev environment has the same swap is `[UNVERIFIED]`** —
+    dashboard environment variables are not in the repo and cannot be read from
+    source. PROD's local env file was correctly configured (publishable anon key,
+    separate secret service key), which is evidence about the local file only, not
+    about Vercel.
+  - Worth a one-time audit of every `NEXT_PUBLIC_*` value in every Vercel
+    environment, checking the key **prefix** (`sb_publishable_` vs `sb_secret_`)
+    rather than assuming the variable name implies the value.
+
+## Wizard swap — decided, BLOCKED on auth
+
+The legacy 5-step wizard is to be **replaced** by the expedition (LLM) wizard.
+Generation will **require sign-in**, so a generated trip is an owned, editable,
+findable `public.trips` row — the same shape a fork already produces. Trips created
+by the legacy wizard can be discarded; the anon `TRIPS` store is deleted, not
+replaced. Client-side surface trace: `docs/architecture/trip-creation-surfaces.md`
+(PR #153, **not yet on `main`**).
+
+**THE BLOCKER — nothing below can move until this is resolved.** Google OAuth is
+the only wired sign-in method (`web/src/app/auth/actions.ts` `signInWithGoogle`;
+the sign-in page's own copy reads "Google · only sign-in method for v1")
+`[read source]`. **TEST has no Google provider configured** and **PROD's provider
+is disabled.** So gating generation on sign-in makes the primary creation path
+unreachable in dev without hand-minting a session cookie, and unreachable in prod
+outright. Note `app/trips/layout.tsx` already carries its user gate **commented
+out** for this same reason ("Re-enable the user gate when OAuth is back")
+`[read source]` — so the two gates should move together.
+
+Sequence, smallest first, each independently mergeable:
+1. **Auth gate on `/plan/expedition`** — page-level `getUser()` → redirect to
+   `/auth/sign-in?next=…` (the repo's existing `next=` convention), plus a
+   `getUser()` check in `generateExpeditionTripAction` returning a clean error
+   (the `node-actions.ts` `guard` pattern). Purely additive.
+2. **Move the write target** — service client → session-scoped client for the trip
+   write, `reference_trips` upsert → `trips` insert using the fork route's exact
+   column set (`owner_id`, `reference_id: null`, `title`, `state: "active"`,
+   `payload`), id from the DB default. **No migration or RLS change is needed** —
+   `public.trips` already has the id default, the `state` check and all four
+   owner-scoped policies `[queried catalog]`. The generated payload already carries
+   baked `corridorCities`, so no bake step is required `[queried TEST]`.
+3. **Entry point + landing** — repoint the root CTA from `/plan` to
+   `/plan/expedition`; flip `ENABLE_PLANNER_WIZARD` where it should be live.
+4. **Legacy removal** — routes, legacy-only components, `buildDaySuggestions` (and
+   transitively `suggestions-for-segment.ts`), and the anon `TRIPS` store.
+
+**Ordering constraint:** the legacy path is the only creation surface with a UI
+entry point today, and `/plan/expedition` 404s without its flag. **Legacy must
+survive until the expedition path is both flag-on and linked** — step 4 is
+strictly last. Step 4 also overlaps the reference-fixture removal residual (both
+delete the `TRIPS` store); do not start them independently.
+
+Two known blockers to shipping this as the *primary* creation path, separate from
+the auth blocker and not scoped here: no degradation signal reaches any component,
+and generated trips carry inflated `milesFromStart`.
+
+## Client boundary — which operations need service-role (settled 2026-07-27)
+
+Scoping input for the wizard swap's step 2. All `[queried catalog, TEST]` unless
+noted.
+
+- **The corpus write-back question is SETTLED: `upsert_source_record` fails at
+  RLS, not at grants.** The function is SECURITY INVOKER, so under a user JWT it
+  executes as `authenticated`. `EXECUTE` *is* granted to that role, and
+  `authenticated` holds full table privileges on `source_record` — but
+  `source_record` has **RLS enabled with zero policies**, so every statement is
+  denied. **A `GRANT` therefore changes nothing;** only a policy (or service-role)
+  would. Consequence for step 2: **the action needs a service client for corpus
+  feedback regardless of what the trip write uses.**
+- **`preComputeFacts` creates its own service client internally** and does not
+  receive one from the action (`web/src/lib/itinerary/facts.ts`,
+  `const supabase = createSupabaseServiceClient()`) `[read source]`. It is
+  therefore **unreachable by any change to the action's client** — changing the
+  action does not change how the two corpus folds in Stage 1 authenticate.
+- **The corpus READ works session-scoped.** `pois_along_corridor` is SECURITY
+  DEFINER owned by `postgres`, with `EXECUTE` granted to `anon` and
+  `authenticated`, so it bypasses RLS on `master_place` by design — its own
+  comment calls it "the only consumer door into master_place". Verified returning
+  rows under a real `authenticated` JWT.
+- **`fetchCorpusForPolyline` swallows every failure into `[]`** — see
+  `docs/architecture/generation-pipeline.md` §8 for why that matters.
+
+## Decision records carrying stale factual claims (swept 2026-07-27)
+
+`docs/decisions/` is append-only by convention, which is right for *reasoning* but
+means **factual assertions inside a record silently outlive their accuracy**. A
+sweep of all 12 records for claim-shaped statements — call counts, named callers,
+flag values, existence/absence of a code path — found **7 with at least one stale
+claim**. Only the most damaging was corrected this session; the rest are recorded
+here, **not fixed**.
+
+The failure mode is specific and worth naming: a record that says *"verified,
+still true on `main` <sha>"* is the one most likely to be trusted without
+re-checking, and is therefore the most dangerous when it ages.
+
+Ranked by how misleading, most first:
+
+- **`2026-07-24-cross-day-stop-movement.md`** — asserts, emphatically and with a
+  re-verification stamp, that there is **no windowing/virtualization**, "no
+  `IntersectionObserver` mount/unmount, no scroll-driven mounting anywhere", and
+  that Design A is "scoped but NEVER BUILT — you are building it from scratch".
+  Design A shipped the next day (#146). `continuous-day-stack.tsx` exists and uses
+  `IntersectionObserver` `[grep: 3 references]`. The cited line anchors have also
+  drifted.
+- **`2026-07-23-search-architecture-resolved.md`** — states the corpus holds
+  "1,749 searchable rows … zero rows above 34.5°N" as a claim about *the* corpus.
+  Those are **TEST** numbers; PROD is the real corpus and spans the full corridor.
+  Two of the file's own "revisit when…" trigger conditions have therefore
+  **already fired**, so a reader trusting it concludes the question is still
+  parked when it is not.
+- **`2026-07-20-place-card-order-is-route-derived.md`** — its *correction* block
+  is now itself wrong: it says the drop index "does not" exist and is only
+  *derivable*. `computeInsertIndex` was subsequently built and is wired into both
+  the drag preview and the authored drop `[grep: `lib/corridor/insert-index`,
+  imported by `day-detail-node-blocks.tsx`]`.
+- **`2026-07-18-living-plan-productionization-scope.md`** — `checkRails` no longer
+  exists as a symbol (split into `checkManualRails`/`checkNlRails` over a shared
+  `checkRailsWithFlag` in `lib/itinerary/rails.ts`) `[grep: no `checkRails`
+  export]`, and the flag claim is wrong for the paid surface: the NL path this
+  document is *about* is now gated by `NEXT_PUBLIC_NL_EDIT`, not
+  `NEXT_PUBLIC_LIVING_PLAN_EDIT`. Its §4 ungating plan is written against a flag
+  that no longer governs that path. **Its substantive risk claims all still hold**
+  — `usage` still discarded, `REGEN_BUDGET = 2`, no spend/quota infrastructure
+  anywhere.
+- **`2026-06-02-land-status-and-dispersed-camping-sources.md`** — Status says "no
+  code, ingestion, or schema has been written against it yet". All three now
+  exist (`padus.ts`, `usfs.ts`, three migrations, `lib/esri.ts`).
+- **`2026-05-21-offline-tile-caching-architecture.md`** — Context says "no
+  existing service worker … or PWA scaffold" in the present tense; both exist.
+  One downstream item is half-done: the `web/CLAUDE.md` non-goals cleanup removed
+  the offline entry but left "Active turn-by-turn navigation".
+- **`2026-07-23-typesense-collection-per-env.md`** — minor: describes the old
+  `places` collection as retained-and-safe-to-delete; it was deleted 2026-07-23.
+
+**Verified clean:** `2026-07-23-corridor-rollback-by-id-snapshot.md`,
+`2026-07-23-pinned-er-fixture.md`, `2026-07-23-place-identity-and-ordering.md`,
+`2026-07-25-continuous-day-detail-scroll.md`,
+`2026-07-25-reference-trips-db-first.md` (the most accurate in the set — every
+count and line anchor checked out; one cosmetic nit, it says `FIXTURE_TRIPS` where
+`fixtures.ts` exports `TRIPS`).
+
+**Corrected this session:** `2026-07-23-corpus-writeback-dormant.md` — see its
+superseded block. It asserted zero callers; there are two, and it was cited as
+authoritative during the client-boundary investigation and produced a wrong
+conclusion.
+
+**Two candidate conventions, neither adopted:**
+1. Scope factual claims at write time — "as of `<date>`/`<sha>`" — so an aged
+   claim reads as a snapshot rather than a standing fact. Cheap; the records that
+   already do this (`corridor-rollback`, which writes *"Measured on TEST before
+   Slice-1"*) are the ones that did not go stale.
+2. Prefer linking to the architecture doc over restating the fact, so there is one
+   home to update.
+
 ## Deferred / parked
 - **dnd-kit `SortableContext`** — parked. Pointer-vs-rect (`computeInsertIndex`)
   was chosen instead, no model change. Revisit only if pointer-vs-rect proves

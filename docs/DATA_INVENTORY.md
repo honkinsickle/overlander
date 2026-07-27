@@ -64,18 +64,30 @@ baseline.)
 
 ## `reference_trips` — RLS + rows per DB
 
-App data (canonical seed trips), not corpus. **RLS:** `create policy
-"reference_trips_public_read" on public.reference_trips for select using (true)`
-— no role restriction, so **anon can read**. Confirmed empirically with the anon
-key (no session, RLS-subject): TEST returned 7 rows, PROD read succeeded.
-`[read: supabase/migrations/20260513000000_init_identity.sql:50-52; queried TEST + PROD, anon key, 2026-07-25]`
+App data (canonical seed trips), not corpus. **RLS:** exactly one policy,
+`reference_trips_public_read … for select using (true)` — no role restriction, so
+**anon can read**, and **no insert/update/delete policy exists**, making it
+service-role-write-only by omission. Confirmed against the live catalog on both
+projects `[queried catalog, TEST + PROD, 2026-07-27]`.
 
-**Rows present (point-in-time 2026-07-25):**
-- **TEST:** `alaska-south-final`, `alaska-south-regen`, `dawson-cassiar-livingplan-test`,
-  `expedition-mri4puxo`, `expedition-mri5tv6g`, `la-to-deadhorse`, `yotrippin-demo`,
-  `la-to-portland` (added 2026-07-25). `[queried TEST]`
-- **PROD:** `dawson-vancouver-cassiar`, `la-to-deadhorse`, `la-to-portland`
-  (added 2026-07-25; 2 → 3 rows). `[queried PROD; hash-reference-trips.ts before/after]`
+> **⚠️ Correction, 2026-07-27.** The earlier version of this line said the read was
+> "confirmed empirically with the anon key (no session, RLS-subject)". **On TEST
+> that was not RLS-subject** — `NEXT_PUBLIC_SUPABASE_ANON_KEY` held a `sb_secret_…`
+> key, so the client authenticated as service-role and bypassed RLS. The PROD half
+> was correct. The local env has been fixed and the key rotated. The policy claim
+> itself stands, now on a catalog read rather than a client probe. Why this
+> matters beyond one line: `architecture/trip-resolution.md` §"The RLS drift that
+> wasn't".
+
+**Rows present (point-in-time 2026-07-27) `[queried catalog]`:**
+- **TEST — 9 rows** (was 7 on 2026-07-25): `alaska-south-final`,
+  `alaska-south-regen`, `dawson-cassiar-livingplan-test`, `expedition-mri4puxo`,
+  `expedition-mri5tv6g`, `expedition-ms28y793`, `la-to-deadhorse`,
+  `la-to-portland`, `yotrippin-demo`. Three are `expedition-*` — wizard-generated,
+  TEST-only by the action's project guard.
+- **PROD — 3 rows:** `dawson-vancouver-cassiar`, `la-to-deadhorse`,
+  `la-to-portland`. **Zero `expedition-*` rows** — generation cannot write to PROD.
+  `[queried catalog; hash-reference-trips.ts before/after for the 2026-07-25 add]`
 
 How `getTrip` serves these rows (reader split, derivation, caching):
 [`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).
@@ -102,6 +114,59 @@ owned by `seed-owner`) and the 1-day `7e6774b9…` seed harness row. The fork
 carries **0** `segmentSuggestions` where the PROD equivalent carries 63 — reason
 **UNVERIFIED**, consequences for its use as a test instrument in `CLAUDE.md`
 §RUNBOOK gotchas. `[queried TEST]`
+
+## RLS posture per project — read from the catalog, not inferred (2026-07-27)
+
+Previously every RLS claim in the doc set rested on reading migrations. These were
+read from the live catalog on **both** projects `[queried catalog, TEST + PROD,
+2026-07-27]`, and the two are **identical**.
+
+**Policies: exactly 8, same on both projects, and they match the migrations
+exactly** — no policy in either DB that is absent from migrations, none in
+migrations absent from the DB, no logical differences beyond Postgres'
+re-parenthesisation:
+
+| table | policies |
+|---|---|
+| `trips` | 4 — `select`/`insert`/`update`/`delete`, all `auth.uid() = owner_id` |
+| `users` | 3 — `select`/`insert`/`update`, all `auth.uid() = id` |
+| `reference_trips` | 1 — `select using (true)`; **no write policy** |
+
+**Grants are identical across `anon`, `authenticated` and `service_role`** on every
+table checked — so role-differentiated behaviour, where it exists, comes from RLS
+policies, never from a missing grant. (This mattered: a suspected grant asymmetry
+turned out to be a misconfigured client. See
+[`architecture/trip-resolution.md`](architecture/trip-resolution.md) §"The RLS
+drift that wasn't".)
+
+**Service-role-only by omission** — RLS enabled with **zero** policies, so no
+non-service role can read or write: `master_place`, `source_record`, `place_match`,
+`place_relationships`, `legality_overlay`, `ingestion_corridor`, `field_precedence`,
+`test_marker`, and (since #154) `mvum_roads`.
+
+**Tables with RLS disabled: none on either project** — `spatial_ref_sys` excluded
+as PostGIS-owned. Before #154, `mvum_roads` was the sole exception on both.
+
+**`mvum_roads` post-#154 state, both projects** `[queried catalog]`:
+
+| | value |
+|---|---|
+| `relrowsecurity` | `true` |
+| policies | 0 (deliberate — consumers are service-role only) |
+| `anon` / `authenticated` table privileges | none |
+| `anon` / `authenticated` EXECUTE on `upsert_mvum_road(text, jsonb)` | none |
+| `service_role` | full DML, retains EXECUTE |
+| `pg_proc.proacl` | `postgres=X/postgres \| service_role=X/postgres` |
+
+Rows: TEST 308, PROD 8,585 — unchanged by the migration.
+
+**Migration-history divergence:** PROD's ledger is missing
+`20260723120000_google_resolved_field_precedence`, and the effect is absent too
+(the three `field_precedence` rows for `google_resolved`). PROD's ledger and PROD's
+actual state agree with each other; the divergence is between PROD and the repo.
+Recorded in `docs/BACKLOG.md` §Schema & infra hygiene — noticed, not applied.
+
+---
 
 ## STAGING — `gjzqlsyusmtrwbaluuho` ("overlander-staging") — DELETED
 

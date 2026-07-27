@@ -56,6 +56,65 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **Noticed in passing, not investigated: PROD's migration history is missing
   `20260723120000_google_resolved_field_precedence`, which TEST has.** Recorded
   because a history gap between the two projects goes unnoticed until it bites.
+- **End-of-day doc pass — STATE reconciled from five PRs of staleness.** The
+  previous STATE carried a "stale below this line" marker covering #146–#150; that
+  is now discharged and the file rewritten to actual position from `gh pr view` +
+  `git log` rather than carried forward. **#153 is still OPEN** — I had assumed it
+  merged with the rest, which is exactly the kind of thing the marker existed to
+  prevent. `docs/architecture/trip-creation-surfaces.md` is therefore not on
+  `main`, and cross-links to it will 404 until it lands.
+- **Decision: generation will require sign-in, and the legacy wizard is replaced
+  rather than migrated** —
+  `docs/decisions/2026-07-27-generation-requires-sign-in.md`. **Blocked, not
+  started.** Google OAuth is the only wired sign-in method; TEST has no Google
+  provider and PROD's is disabled, so gating generation on sign-in makes the
+  primary creation path unreachable in dev without a hand-minted cookie and
+  unreachable in prod outright. Note `app/trips/layout.tsx` already carries its
+  user gate commented out for the same reason — the two gates should move
+  together. Sequence + ordering constraint in `docs/BACKLOG.md` §Wizard swap.
+- **Swept `docs/decisions/` for stale factual claims: 7 of 12 records carry at
+  least one.** Only the corpus-writeback ADR was corrected; the rest are recorded
+  in `docs/BACKLOG.md`, not fixed. The pattern worth naming: **a record that says
+  "verified, still true on `main` <sha>" is the one most likely to be trusted
+  without re-checking, and therefore the most dangerous when it ages.** The worst
+  offender asserts there is no windowing anywhere in the trip components; Design A
+  shipped the next day as #146.
+
+### Retractions — three claims that did not survive checking
+
+Recorded because each cost real time, and the record is more useful with them
+than without.
+
+- **The "population of dead placeIds" did not exist.** Inferred from a cache that
+  stores `null` on failure for 15 minutes, so one transient upstream blip replays
+  as a permanent dead id for the rest of the window. Measured properly:
+  **103 of 104 resolved.** The lesson is already in CLAUDE.md — re-measure after
+  the TTL before calling an id dead.
+- **The RLS drift did not exist.** A previous session reported that live policies
+  diverged from migrations on three tables, on the strength of `anon` reading rows
+  that `authenticated` could not. The live catalog says otherwise: **policies match
+  migrations exactly on both projects, grants are identical across roles, and there
+  is no structural drift.** The entire anomaly was **one misconfigured env var** —
+  the "anon" probe client was built from a key that was actually a secret key, so
+  it ran as service-role and bypassed RLS, while the "authenticated" client used a
+  real JWT and was correctly denied. `SET ROLE anon` / `SET ROLE authenticated`
+  settles it in one query and returns identical results. **The durable lesson: a
+  probe is only as trustworthy as the identity it ran under** — role-differentiated
+  behaviour was reported across four turns without once checking `current_user`.
+  Full retraction: `docs/architecture/trip-resolution.md` §"The RLS drift that
+  wasn't"; it is now also a STATE invariant.
+- **The day-mile fix's magnitude was overstated by roughly 16×.** It was scoped as
+  though the `where === "keyStop"` via filter would remove most of the geometry
+  inflation. Measured, it removes **~6%** (2.25× → 2.18× vs the direct line) — the
+  dominant term is key-stop vias being genuine off-route excursions in LLM emission
+  order, which the filter does not touch. The branch is parked on that measurement
+  rather than on a guess, which is the right outcome; the cost was scoping it first
+  and measuring second.
+
+All three share one shape: **a conclusion reached by inference from a partial
+signal, stated with more confidence than the evidence carried.** The corrective in
+each case was cheap and available up front — re-measure after a TTL, check
+`current_user`, compute the delta before scoping the fix.
 
 ## 2026-07-26
 
