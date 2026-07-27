@@ -3,27 +3,55 @@
  * day's POIs into the drive STRETCHES between its nodes, positioned by
  * along-route mile. Pure, no I/O.
  *
- * WHY POSITIONS COME FROM COORDS, NOT `milesFromStart`: on the current
- * generated trips the stored `segmentSuggestions.milesFromStart` is unreliable —
- * a constant ~+589-mi FOREIGN OFFSET vs the true route-relative position (day 1
- * of dawson-cassiar-livingplan-test: stored 625/744/857 vs true 37/155/267). It
- * was baked against a different/longer route origin. So a POI's real position is
- * recovered here by projecting its `coords` onto the trip route polyline. This
- * is a render-time STOPGAP — the coords the corridor engine needs were dropped
- * at persist (itineraryToTrip; see docs/findings/2026-07-20-generated-day-coords-
- * discarded.md), which is also why nodes fall back to a 2-node day spine. Once
- * that persistence bug is fixed and the engine runs at serve, this same pair of
- * functions can be called there instead of in the presenter.
+ * WHY POSITIONS COME FROM COORDS, NOT `milesFromStart`: on generated trips the
+ * stored `segmentSuggestions.milesFromStart` is unreliable, so a POI's real
+ * position is recovered here by projecting its `coords` onto the trip route
+ * polyline, offset by `dayStartMiles`.
  *
- * TODO(scope): `milesFromStart` is now corrected at persist — bake.ts stamps a
- * day-relative mile on EVERY on-corridor tile (not just curated), and the
- * reseed backfills existing trips (both 2026-07-20). With a correct, day-relative
- * mile stored (present ⇒ on-corridor per the BrowsePlace contract),
- * `positionPlacesOnDay` is DELETABLE — but only after `day-detail-node-blocks.tsx`
- * is refactored to build its PositionedPlace map from stored `milesFromStart`
- * (present → {dayMile, onCorridor:true}; absent → alongTheWay) instead of
- * projecting. Not done in this slice: the stopgap stays until that refactor and
- * until every served trip carries corrected miles (old trips need the reseed).
+ * CORRECTED 2026-07-26 — the two claims this block used to carry were BOTH
+ * false. They are restated here so the next reader does not act on them:
+ *
+ *   1. WRONG: "a constant ~+589-mi FOREIGN OFFSET … baked against a different/
+ *      longer route origin", citing dawson-cassiar-livingplan-test day 1 as
+ *      "stored 625/744/857 vs true 37/155/267". That trip stores 37/155/267 on
+ *      day 1 TODAY — i.e. the values the old note called "true" — so it was
+ *      backfilled after the note was written, and the note described a state
+ *      that no longer exists. The constant-offset model never fit anyway: the
+ *      real distortion is NON-UNIFORM, x1.3 to x59 on a single trip.
+ *
+ *      The actual mechanism: `bakeGeneratedDays` threads EVERY entry of
+ *      `day.audit.resolvedPlaces` through `routeBetween` as an excursion via —
+ *      including the entries tagged `where: "endpoint"` and `"overnight"`, and
+ *      in AUDIT PUSH ORDER rather than geographic order. The resulting line
+ *      zigzags (out to the destination, back to a key stop, out to the lodge),
+ *      and `alongRouteMiles` measures against that zigzag while `day.miles`
+ *      comes from the audit's DIRECT start->end measurement. The two are
+ *      measured on different geometry, which is why a tile can sit "further
+ *      along" than its day is long. The zigzag line itself is transient — it
+ *      is never persisted, so the DRAWN route is unaffected.
+ *
+ *   2. WRONG: "`milesFromStart` is now corrected at persist … the reseed
+ *      backfills existing trips". True of the reference/fold path; false of the
+ *      generated path, which is the one this block is about.
+ *
+ * THE DELETION PRECONDITION IS NOT MERELY UNMET — IT IS LARGER THAN STATED.
+ * `positionPlacesOnDay` is only deletable once `day-detail-node-blocks.tsx`
+ * reads stored miles instead of projecting AND every served trip carries
+ * correct ones. Measured 2026-07-26: NO trip on PROD carries a stored
+ * `milesFromStart` at all — every PROD trip renders purely through this
+ * projection path, correctly. So deleting it would require backfilling every
+ * trip on BOTH databases first, not just re-running a reseed. Executing this
+ * refactor today would move the three currently-correct surfaces (here,
+ * day-detail-node-blocks, and the edit render) onto the broken values and turn
+ * a partial defect into a total one.
+ *
+ * Measure before trusting either side rather than taking this block's word for
+ * it. The measurements, and a `check-payload-invariants.ts` script that
+ * reproduces them, are NOT on `main` — they live on the parked branch
+ * `fix/generated-day-miles` (pushed, unmerged) and in
+ * `docs/architecture/generation-pipeline.md` §7, which lands with the
+ * generation-trace docs PR. Both paths are stated so they can be found, not
+ * because they resolve here today.
  */
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";
