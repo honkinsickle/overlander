@@ -61,19 +61,37 @@ marker. That marker is now discharged — the entries below are reconciled from
   non-comment lines changed. Cherry-picked out of the parked `fix/generated-day-miles`
   because the hazard was live on `main` and shouldn't wait on a decision about the
   fix itself.
+- **#153 — `docs/architecture/trip-creation-surfaces.md`.** The client half of
+  trip creation, companion to `generation-pipeline.md` (#151, the server half):
+  the wizard form and every input, what actually reaches the pipeline, the
+  in-flight render, and the post-creation landing. Read-only — the form was
+  **never submitted**, so every in-flight/error/landing claim is static code
+  analysis and no duration is estimated anywhere. Three findings carried forward:
+  - **No degradation signal reaches any component.** The action returns
+    `{ ok, tripId, days, note? }`; the wizard reads `ok`/`error`/`tripId` only, so
+    `note` and `days` are dropped on arrival. `note` keys off surviving structural
+    violations, so the **missing-`GOOGLE_PLACES_API_KEY` case emits no signal at
+    all**. There is no toast/banner/alert system anywhere in the repo to surface
+    one.
+  - **The live creation path is the LEGACY 5-step wizard, not this pipeline** — it
+    has no feature flag and is the root page's primary CTA, while the expedition
+    wizard is flag-gated with zero links. The anon `TRIPS` path is not a third
+    surface; it is the legacy wizard's anonymous finalize branch. This is what the
+    wizard-swap decision below acts on.
+  - **A generated trip is neither editable nor findable** — `expedition-<base36>`
+    is not a UUID so `canEdit === false`, and it is written to `reference_trips`
+    while the listings query `trips` / filter `trip-`, so it appears in no listing
+    on any surface.
+  - Also recorded: the only timeout in the whole generation chain is
+    `AbortSignal.timeout(8000)` on the Google fetch — nothing on the LLM call, no
+    `maxDuration`, no error retry. `ENABLE_PLANNER_WIZARD`'s **production** value
+    is `[UNVERIFIED]` (no `vercel.json`; dashboard env is not in source), which is
+    weaker than the previously-recorded "prod never sets it."
 - **#154 — `fix(db)`: enforce RLS and explicit grants on `mvum_roads`.** It was
   created by migration without `enable row level security` while every sibling
   reference table enables it. Migration `20260727120000_mvum_roads_rls.sql`: RLS
   on, zero policies, explicit revokes on the table and on `upsert_mvum_road`.
   Applied and catalog-verified on both projects.
-
-## OPEN
-
-- **#153 — `docs/architecture/trip-creation-surfaces.md`, STILL OPEN.** The client
-  half of trip creation: the wizard form, what it collects, the in-flight render,
-  the post-creation landing. Companion to `generation-pipeline.md` (#151, merged),
-  which covers only the server half. **Not on `main`** — anything referencing
-  `trip-creation-surfaces.md` will 404 until this merges.
 
 ## PARKED / BLOCKED
 
@@ -108,7 +126,7 @@ marker. That marker is now discharged — the entries below are reconciled from
     generation makes the primary creation path unreachable in dev without
     hand-minting a session cookie, and unreachable in prod outright.
   - Sequence and the full scoping live in `docs/BACKLOG.md` §Wizard swap. The
-    client-side surface trace is #153 (still open).
+    client-side surface trace is `docs/architecture/trip-creation-surfaces.md` (#153).
 
 ## RESIDUALS (known, deliberate, not defects)
 

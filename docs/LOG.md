@@ -59,10 +59,12 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **End-of-day doc pass — STATE reconciled from five PRs of staleness.** The
   previous STATE carried a "stale below this line" marker covering #146–#150; that
   is now discharged and the file rewritten to actual position from `gh pr view` +
-  `git log` rather than carried forward. **#153 is still OPEN** — I had assumed it
-  merged with the rest, which is exactly the kind of thing the marker existed to
-  prevent. `docs/architecture/trip-creation-surfaces.md` is therefore not on
-  `main`, and cross-links to it will 404 until it lands.
+  `git log` rather than carried forward. **#153 turned out to still be open** — I
+  had assumed it merged with the rest, which is exactly the kind of thing the
+  marker existed to prevent. (It landed later the same session, rebased onto main
+  after #155; the cross-links marked provisional at the time are now live. The
+  assumption is recorded because it was wrong when made, not because it stayed
+  wrong.)
 - **Decision: generation will require sign-in, and the legacy wizard is replaced
   rather than migrated** —
   `docs/decisions/2026-07-27-generation-requires-sign-in.md`. **Blocked, not
@@ -210,6 +212,58 @@ each case was cheap and available up front — re-measure after a TTL, check
   payload before persist) and `enqueueResolvedPlaces` (after persist); and the
   tier-2 cap is **not** `RESOLVE_CAP = 15` — the audit constructs
   `PlaceResolver(Math.max(80, days * 8))` = 120 for a 15-day trip.
+- **Trip creation's CLIENT half traced — new
+  `docs/architecture/trip-creation-surfaces.md`.** Companion to
+  `generation-pipeline.md` (#151, now merged), which covers only the server. Read-only,
+  and deliberately never submitted the form: every claim about in-flight state,
+  errors, and the landing is static code analysis, with no duration estimated
+  anywhere.
+- **The headline: no degradation signal reaches any component.** The action
+  returns `{ ok, tripId, days, note? }`; `ExpeditionWizard.submit` destructures
+  `ok`/`error`/`tripId` only, so `note` and `days` are computed, returned across
+  the server-action boundary, and dropped. Worse, `note` keys off `unresolved`
+  (surviving structural violations) — so the **no-`GOOGLE_PLACES_API_KEY` case
+  sets no signal at all**, not merely an unread one. And there is no toast /
+  banner / alert system anywhere in the repo (no library, four `components/ui/`
+  primitives, root layout mounts no provider), so there is no host component to
+  hang one on.
+- **The expectation was inverted: the LEGACY 5-step wizard is the live one.** It
+  is behind **no** feature flag and is fronted by the root page's primary CTA
+  ("Create a Trip" → `/plan`), plus the `/trips` empty state and draft-card
+  deep-links. The newer expedition wizard is flag-gated (404s without
+  `ENABLE_PLANNER_WIZARD`) and has **zero** links anywhere — URL-only. Also: the
+  anon `TRIPS` path is **not** a third surface, it is the anonymous branch of the
+  legacy wizard's `finalizeTripAction`.
+- **A generated trip is neither editable nor findable.** `canEdit` is
+  `isUserTrip(id)`, a UUID regex; the minted id is `expedition-<base36>`, a slug
+  → `canEdit === false` on both serving routes. And it is written to
+  `reference_trips` while `listUserTrips` queries `trips` and `listAnonTrips`
+  filters `trip-` — so it appears in **no listing on any surface**. The redirect
+  URL is the only route back to it.
+- **One timeout exists in the whole generation call chain, and it is not on the
+  LLM.** `AbortSignal.timeout(8000)` on the Google Places fetch in `resolve.ts`
+  is the only hit; the Anthropic call, `preComputeFacts`, and the upsert have
+  none, and there is no `maxDuration` export. `REGEN_BUDGET = 2` is a quality
+  re-prompt loop, not an error retry.
+- **Recorded fragments checked: 5 held, 3 were wrong.** Wrong: the in-flight
+  label is "Generating your expedition…" — `Rendering` has **zero** occurrences
+  repo-wide; the date-field claim is half wrong (the hidden inputs are *dead* on
+  this path and the wizard *does* contain a native `<input type="date">` for
+  per-destination FIXED dates); and "prod never sets `ENABLE_PLANNER_WIZARD`" is
+  stronger than the evidence — no `vercel.json` exists and dashboard env vars
+  aren't in source, so prod's value is UNVERIFIED.
+- **A subagent's "there is no Next.js middleware" was caught wrong by the build
+  gate.** Next 16 renamed `middleware.ts` → `proxy.ts`; `web/src/proxy.ts` exists
+  and runs on every navigation (the build prints `ƒ Proxy (Middleware)`). Its
+  body is only `updateSupabaseSession` — no gating — so the conclusion held but
+  the evidence didn't. Recorded in the doc so the same grep doesn't mislead
+  again.
+- **Dead code + misleading copy found in passing (not fixed).** `OffCacheBanner`
+  is rendered nowhere — the identifier appears only in its own definition and two
+  doc-comments. And the wizard's "Saved on the vehicle — reused across trips."
+  overstates an in-memory garage that resets on restart; there is **no**
+  user-facing copy anywhere warning that anon trips are ephemeral (every hit for
+  "temporary/unsaved/will be lost" is a developer comment).
 
 ## 2026-07-25
 

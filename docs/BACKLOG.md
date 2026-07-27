@@ -142,8 +142,8 @@ The legacy 5-step wizard is to be **replaced** by the expedition (LLM) wizard.
 Generation will **require sign-in**, so a generated trip is an owned, editable,
 findable `public.trips` row — the same shape a fork already produces. Trips created
 by the legacy wizard can be discarded; the anon `TRIPS` store is deleted, not
-replaced. Client-side surface trace: `docs/architecture/trip-creation-surfaces.md`
-(PR #153, **not yet on `main`**).
+replaced. Client-side surface trace:
+[`architecture/trip-creation-surfaces.md`](architecture/trip-creation-surfaces.md).
 
 **THE BLOCKER — nothing below can move until this is resolved.** Google OAuth is
 the only wired sign-in method (`web/src/app/auth/actions.ts` `signInWithGoogle`;
