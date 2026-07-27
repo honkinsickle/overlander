@@ -80,6 +80,30 @@ actually touched what they describe. The `/wrap` command runs this pass.
   `cd web && npx tsx --env-file=.env.development.local scripts/seed-test-user.ts`.
   TEST `public.trips` is otherwise empty — these are the ONLY way to exercise the
   RLS write path off PROD.
+- **TEST dev account for BROWSER sign-in: `adam@acwcreative.com`** (auth id
+  `cb55024a…`, created 2026-07-27 via the real `signInWithOtp` client path).
+  Recorded because the runbook's standing gap is that there is no dev sign-in
+  path for verifying authed browser surfaces — the seeded `@overlander.test`
+  accounts cannot receive mail (`.test` is a reserved TLD, and GoTrue rejects
+  undeliverable domains at `/auth/v1/otp` anyway).
+  - ⚠️ **THIS ADDRESS DOES NOT RECEIVE BUILT-IN SMTP MAIL ON TEST, AND THE SEND
+    REPORTS SUCCESS.** Measured 2026-07-27: `signInWithOtp` returned **no error**,
+    the rate limiter **counted** the send, and **nothing ever arrived**. A second
+    address (`acwcreative@gmail.com`) delivered fine from the same project
+    minutes later, so built-in SMTP is not broken — this address specifically
+    fails, cause **UNVERIFIED**. It is the Supabase account owner address, which
+    makes it stranger, not more explicable.
+  - **So: do not use it to drive a magic-link browser verification.** You will
+    get a clean success, an empty inbox, and no signal that anything went wrong.
+    Use a different real address, or wire a real SMTP provider first.
+  - The row is deliberately left **unconfirmed with an `email` identity** — it has
+    no `public.users` row and owns no trips, so it cannot be a trip owner until
+    someone completes `/welcome`.
+  - **`rate_limit_email_sent` is `2`** (unit not in the config payload). Two sends
+    within ~10 minutes tripped it; the window had reset ~81 minutes later. Those
+    are bounds, not the window. A send/read/fix debugging loop hits the limiter on
+    the second iteration — use `web/scripts/test-magic-link-pkce.ts --dry`, which
+    transmits nothing.
 - **Gotchas (hard-won):**
   - **A minted dev session expires ~1h, and expiry MASQUERADES as broken drag
     tooling.** After expiry the drag still fires, the server action refuses

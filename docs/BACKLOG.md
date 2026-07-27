@@ -252,10 +252,23 @@ All `[queried Management API config/auth, 2026-07-27]`.
   before/after on any future config write.
 - **Both projects run built-in SMTP** — every `smtp_*` field is null (no host,
   user, sender or credentials). **`rate_limit_email_sent` is `2` on both; the unit
-  is not present in the payload** and is deliberately not supplied here.
-  `mailer_autoconfirm` is `false` on both, so email confirmation is required.
-  **Relevant if magic link or email signup is ever chosen: built-in SMTP is not
-  production-grade**, and that combination would need a real provider first.
+  is not present in the payload** and is deliberately not supplied here. Measured
+  behaviour: two sends inside ~10 minutes tripped the limiter, and the window had
+  reset ~81 minutes later `[tested on TEST]` — bounds, not the actual window.
+  `mailer_autoconfirm` is `false` on both, so email confirmation is required — but
+  **the magic link itself satisfies it**: verifying flips the user to confirmed and
+  creates the `email` identity in one step `[tested on TEST]`.
+- **Built-in SMTP delivery on TEST — state this precisely, the distinction decides
+  what PR 4 must prove.** It delivered to **at least one address**
+  (`acwcreative@gmail.com`, arrived, link read, `?code=` confirmed) and **failed
+  for one** (`adam@acwcreative.com` — accepted, quota spent, never arrived).
+  - So built-in SMTP is **not systemically broken** on TEST, and it is **not**
+    restricted to the account-owner address — `adam@acwcreative.com` *is* the
+    Supabase account owner address, which makes its failure stranger rather than
+    more explicable.
+  - **Why one address fails is `[UNVERIFIED]`.** Do not round this up to "built-in
+    SMTP delivers to external addresses"; that is stronger than the evidence and
+    would let PR 4 ship without proving the case that actually failed.
 
 Two operational gotchas found while testing the magic-link path
 `[tested on TEST, 2026-07-27]`:
@@ -269,15 +282,39 @@ Two operational gotchas found while testing the magic-link path
   Exercising it end to end needs a real deliverable address, which on built-in
   SMTP means a real inbox. Budget for that when the work is scoped; do not assume
   a throwaway address will do.
-- **`admin/generate_link` + `/verify` exercises the identical path without
-  sending mail.** `POST /auth/v1/admin/generate_link` (service-role) returns the
-  `hashed_token` without dispatching an email; `POST /auth/v1/verify` with that
-  token completes exactly the flow a user performs by clicking the link. This
-  sends nothing and **does not spend the `rate_limit_email_sent` budget** (which
-  is `2` on both projects). It is how the identity result in
-  `docs/decisions/2026-07-27-generation-requires-sign-in.md` was measured, and it
-  is the technique to reach for when testing auth flows. Note `generate_link`
-  alone changes no state — the user record only moves at `verify`.
+- **`admin/generate_link` + `/verify` exercises the VERIFICATION path only — NOT
+  the redirect path. CORRECTED 2026-07-27; the original claim here was mine and it
+  was wrong.** It previously read "exercises the identical path", which is false in
+  the way that matters: **admin-generated links carry no PKCE `code_challenge`**,
+  because the challenge is produced by the *client* calling `signInWithOtp`. So
+  GoTrue falls back to the **implicit** flow and redirects with a `#fragment` a
+  server route cannot read — while a real client-initiated link redirects with
+  `?code=` `[tested on TEST]`. Using `generate_link` to design a callback would
+  have produced the wrong architecture.
+  - **Still true and still useful:** it sends no mail, spends none of the
+    `rate_limit_email_sent` budget, and correctly exercises verification, user
+    creation and identity behaviour. It is the right tool for those.
+  - **Not usable for:** redirect shape, `?code=` vs `#fragment`, or anything that
+    depends on the PKCE handshake. Use the real client path
+    (`web/scripts/test-magic-link-pkce.ts`) for those.
+  - `generate_link` alone changes no state — the user record only moves at
+    `verify`.
+
+- **`signInWithOtp` fails SILENTLY when mail is not delivered — must be handled in
+  PR 3, not discovered in production.** Measured `[tested on TEST]`: a send to
+  `adam@acwcreative.com` returned **no error**, the rate limiter **counted it**
+  (the next send was refused with `email rate limit exceeded`), and **nothing ever
+  arrived**. Nothing anywhere in the call surfaces the failure.
+  - A magic-link UI built naively on this tells the user "check your inbox" and is
+    lying, with no signal available to the app to know better. That is the same
+    class of defect as the generation path's dropped `note` — a failure the code
+    cannot see.
+  - There is no delivery receipt available at the API boundary, so the UI cannot
+    truthfully promise arrival. Copy and retry affordance should be designed for
+    that, and a real SMTP provider's own delivery logs become the only place a
+    failure is visible.
+  - Cause of that one address's failure is **`[UNVERIFIED]`** — see §Auth
+    configuration.
 
 ## Decision records carrying stale factual claims (swept 2026-07-27)
 

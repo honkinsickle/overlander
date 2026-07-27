@@ -140,6 +140,15 @@ marker. That marker is now discharged — the entries below are reconciled from
     `signInWithPassword` scripts rely on (`mint-dev-session.ts`,
     `seed-test-user.ts`, the three `verify-trip-*.ts` harnesses). The only
     friction is the ~1h session expiry already documented in CLAUDE.md §RUNBOOK.
+  - **Magic-link callback shape RESOLVED 2026-07-27 — it is `?code=`.** A real
+    client-initiated `signInWithOtp` redirects with a query param, not a fragment,
+    so `exchangeCodeForSession` serves both flows and the callback change is
+    **additive**. An earlier `#fragment` measurement was an artifact of using
+    `admin/generate_link`, which carries no PKCE challenge. Two link types exist
+    (`signup` first-time, `magiclink` returning) and the current route sees
+    neither. Mechanics + instrument:
+    `docs/decisions/2026-07-27-generation-requires-sign-in.md` §Magic-link
+    mechanics.
   - Sequence and the full scoping live in `docs/BACKLOG.md` §Wizard swap. The
     client-side surface trace is `docs/architecture/trip-creation-surfaces.md` (#153).
 
