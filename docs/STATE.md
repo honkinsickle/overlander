@@ -113,18 +113,33 @@ marker. That marker is now discharged — the entries below are reconciled from
   - No database was written. `expedition-ms28y793` is untouched and remains the
     only artifact of the unfixed pipeline.
 
-- **BLOCKED: the wizard swap — decided, cannot start.** The legacy 5-step wizard
-  is to be **replaced** by the expedition (LLM) wizard, and generation will
-  **require sign-in** so a generated trip is an owned, editable, findable `trips`
-  row. Trips created by the legacy wizard can be discarded; the anon `TRIPS` store
-  is to be deleted rather than replaced.
-  - **The blocker is auth, and nothing in the sequence moves until it is
-    resolved.** Google OAuth is the only wired sign-in method
-    (`web/src/app/auth/actions.ts`, `signInWithGoogle`; the sign-in page's own copy
-    says "Google · only sign-in method for v1"). **TEST has no Google provider
-    configured**, and **PROD's provider is disabled**. So requiring sign-in for
-    generation makes the primary creation path unreachable in dev without
-    hand-minting a session cookie, and unreachable in prod outright.
+- **The wizard swap — decided, not started. NOT blocked on auth.** The legacy
+  5-step wizard is to be **replaced** by the expedition (LLM) wizard, and
+  generation will **require sign-in** so a generated trip is an owned, editable,
+  findable `trips` row. Trips created by the legacy wizard can be discarded; the
+  anon `TRIPS` store is to be deleted rather than replaced.
+  - **CORRECTION 2026-07-27 — the recorded blocker was wrong.** This was written
+    as *"TEST has no Google provider configured, and PROD's provider is
+    disabled."* The first half holds; **the second is false.** Actual state
+    `[queried Management API config/auth, 2026-07-27]`: **TEST has no Google
+    provider configured. PROD has Google enabled, with a client id and secret
+    set. Email is enabled on both.** The original claim was recorded from a
+    verbal report without an evidence tag and without being checked.
+  - **What actually remains is a UI gap, not missing infrastructure.**
+    **Sign-in works on PROD today.** No email, magic-link, OTP or password-reset
+    form exists anywhere in `web/src` — a repo-wide grep for `signInWithPassword`,
+    `signInWithOtp`, `signUp`, `verifyOtp`, `resetPasswordForEmail` and
+    `signInAnonymously` returns **zero hits** in app code, and
+    `web/src/app/auth/actions.ts` exports only `signInWithGoogle` and `signOut`
+    `[grep]`. So *"should the product ship Google-only?"* is a **product
+    decision**, not a prerequisite — the sequence can start whenever that is
+    settled.
+  - **Scriptable dev login already works — confirmed, not inferred.**
+    `external_email_enabled` is `true` on TEST `[queried Management API
+    config/auth, 2026-07-27]`, which is exactly what the committed
+    `signInWithPassword` scripts rely on (`mint-dev-session.ts`,
+    `seed-test-user.ts`, the three `verify-trip-*.ts` harnesses). The only
+    friction is the ~1h session expiry already documented in CLAUDE.md §RUNBOOK.
   - Sequence and the full scoping live in `docs/BACKLOG.md` §Wizard swap. The
     client-side surface trace is `docs/architecture/trip-creation-surfaces.md` (#153).
 
