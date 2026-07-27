@@ -84,9 +84,21 @@ export async function POST(req: Request) {
       const cached = cacheGet(id);
       const rich = cached ? cached.value : await placeDetails(id, req.signal);
       if (!cached) cacheSet(id, rich);
-      // Only surface ids that yielded rich fields; a null/empty result leaves
-      // the tile on essentials.
-      if (rich && Object.keys(rich).length > 0) details[id] = rich;
+      // Surface RESOLVED ids — including a resolved-but-EMPTY `{}`, which is a
+      // real place Google simply has nothing to add about (a route, a natural
+      // feature, a trailhead: exactly what this product drives past). Only
+      // `null` — missing key, network error, or non-OK HTTP — stays out.
+      //
+      // Why `{}` must ride through: omitting it made "this id is dead" and
+      // "this place has nothing to add" arrive identically as a missing key, so
+      // the client re-requested it forever (the `!hydrated[id]` guard reads a
+      // missing key as "not yet fetched"). Letting `{}` land in `hydrated`
+      // stops both retry paths — the windowing hydrate and the fetch-on-open
+      // fallback — while `null` still retries, which is what we want for a
+      // genuine failure. Every reader tolerates an empty PlaceRich: its fields
+      // are all optional and the merge sites fall back with `??`.
+      // See docs/BACKLOG.md § "Places enrichment: empty vs missing".
+      if (rich) details[id] = rich;
     }),
   );
 
