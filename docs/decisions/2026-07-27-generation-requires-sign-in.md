@@ -1,6 +1,9 @@
 # Trip generation will require sign-in, and the legacy wizard is replaced rather than migrated
 
-**Status:** Decided 2026-07-27. **Not started — blocked on auth (below).**
+**Status:** Decided 2026-07-27. **Not started — and NOT blocked on auth.** The
+originally-recorded auth blocker was based on a false claim about PROD's Google
+provider; corrected the same day (see §The blocker). What remains is a product
+decision about whether to ship Google-only, not a prerequisite.
 **Date:** 2026-07-27.
 
 ## Context
@@ -72,24 +75,48 @@ required** — `public.trips` already has `id uuid default gen_random_uuid()`, t
 The generated payload already carries baked `corridorCities`, so it needs no bake
 step either `[queried TEST]`.
 
-## The blocker
+## The blocker — CORRECTED 2026-07-27, and it is not what was recorded
 
-**Sign-in is not currently exercisable on either project, and nothing in the
-sequence can move until that is resolved.**
+> **This section originally read:** *"Sign-in is not currently exercisable on
+> either project … TEST has no Google provider configured, and PROD's provider is
+> disabled."* The first half of that provider claim holds. **The second is false.**
+> It was recorded from a verbal report, written into three documents without an
+> evidence tag, and not checked until the day after. Corrected in place rather
+> than left standing, because it framed the entire sequence below as blocked.
 
-Google OAuth is the only wired method — no email/password, no magic link
-(`web/src/app/auth/actions.ts`, `signInWithGoogle`; the sign-in page's own copy
-reads *"Google · only sign-in method for v1"*) `[read source]`. **TEST has no
-Google provider configured**, and **PROD's provider is disabled.** So requiring
-sign-in for generation makes the primary creation path unreachable in dev without
-hand-minting a session cookie (`web/scripts/mint-dev-session.ts`, with its ~1h
-expiry that masquerades as broken tooling), and unreachable in prod outright.
+**Actual provider state** `[queried Management API config/auth, 2026-07-27]`:
 
-This is not a side issue to route around. It means every future verification of
-the primary creation path runs through a hand-minted cookie, and it is why
-`app/trips/layout.tsx` already carries its user gate **commented out** with
-*"Re-enable the user gate when OAuth is back"* `[read source]`. **The two gates
-should move together.**
+| | TEST | PROD |
+|---|---|---|
+| Google | **not configured** | **enabled** (client id + secret set) |
+| Email | **enabled** | **enabled** |
+
+**So sign-in works on PROD today, and this decision is not blocked on auth
+infrastructure.**
+
+**What actually remains is a UI gap.** Google OAuth is the only wired method —
+`web/src/app/auth/actions.ts` exports exactly `signInWithGoogle` and `signOut`,
+the sign-in page reads *"Google · only sign-in method for v1"*, and a repo-wide
+grep for `signInWithPassword`, `signInWithOtp`, `signUp`, `verifyOtp`,
+`resetPasswordForEmail` and `signInAnonymously` returns **zero hits in `web/src`**
+`[grep]`. No email, magic-link, OTP or password-reset form exists anywhere in the
+app.
+
+That makes *"ship Google-only, or build a second sign-in form?"* a **product
+decision, not a prerequisite.** The sequence can begin as soon as it is settled.
+
+**Scriptable dev login already works — confirmed rather than inferred.**
+`external_email_enabled` is `true` on TEST, which is what the committed
+`signInWithPassword` scripts rely on (`mint-dev-session.ts`, `seed-test-user.ts`,
+the three `verify-trip-*.ts` harnesses). Account *creation* in those scripts goes
+through `admin.createUser`, which bypasses provider config and so proved nothing
+by itself — the sign-in call is what needed the API to confirm. Only friction is
+the ~1h session expiry already documented in CLAUDE.md §RUNBOOK.
+
+`app/trips/layout.tsx` still carries its user gate **commented out** with
+*"Re-enable the user gate when OAuth is back"* `[read source]`. That comment rests
+on the same false premise and is now stale; the two gates should still move
+together, but neither is waiting on OAuth.
 
 ## Consequences
 
@@ -114,8 +141,15 @@ should move together.**
 
 ## What would revisit this
 
-If a non-Google sign-in method is wired (email/password or magic link), the
-blocker dissolves and the sequence can start immediately. If anonymous trips are
-ever wanted as a product feature, this decision needs reopening rather than
-extending — the anon store is deleted here, and re-adding one would need durable
-persistence and honest UI about it, neither of which exists today.
+The sequence is not waiting on auth. What it waits on is the product call:
+**ship Google-only, or build a second sign-in form first.** If the answer is
+Google-only, step 1 can start now. If a second method is wanted, note that email
+is already enabled on both projects but `mailer_autoconfirm` is `false` and both
+run on **built-in SMTP** (every SMTP field null) `[queried Management API
+config/auth, 2026-07-27]` — so magic link or email confirmation would need a real
+SMTP provider before it could be relied on. See `docs/BACKLOG.md`.
+
+If anonymous trips are ever wanted as a product feature, this decision needs
+reopening rather than extending — the anon store is deleted here, and re-adding
+one would need durable persistence and honest UI about it, neither of which
+exists today.

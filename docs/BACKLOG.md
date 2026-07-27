@@ -136,7 +136,7 @@ defect. Measurements and context:
     environment, checking the key **prefix** (`sb_publishable_` vs `sb_secret_`)
     rather than assuming the variable name implies the value.
 
-## Wizard swap — decided, BLOCKED on auth
+## Wizard swap — decided, NOT blocked on auth
 
 The legacy 5-step wizard is to be **replaced** by the expedition (LLM) wizard.
 Generation will **require sign-in**, so a generated trip is an owned, editable,
@@ -145,15 +145,36 @@ by the legacy wizard can be discarded; the anon `TRIPS` store is deleted, not
 replaced. Client-side surface trace:
 [`architecture/trip-creation-surfaces.md`](architecture/trip-creation-surfaces.md).
 
-**THE BLOCKER — nothing below can move until this is resolved.** Google OAuth is
-the only wired sign-in method (`web/src/app/auth/actions.ts` `signInWithGoogle`;
-the sign-in page's own copy reads "Google · only sign-in method for v1")
-`[read source]`. **TEST has no Google provider configured** and **PROD's provider
-is disabled.** So gating generation on sign-in makes the primary creation path
-unreachable in dev without hand-minting a session cookie, and unreachable in prod
-outright. Note `app/trips/layout.tsx` already carries its user gate **commented
-out** for this same reason ("Re-enable the user gate when OAuth is back")
-`[read source]` — so the two gates should move together.
+**NOT BLOCKED ON AUTH — corrected 2026-07-27.** This section previously read
+*"THE BLOCKER — nothing below can move until this is resolved … TEST has no Google
+provider configured and PROD's provider is disabled."* The first half of that
+claim holds; **the second is false**, and it was recorded from a verbal report
+without an evidence tag or a check.
+
+Actual provider state `[queried Management API config/auth, 2026-07-27]`:
+**TEST has no Google provider configured. PROD has Google enabled, with a client
+id and secret set. Email is enabled on both projects.** So **sign-in works on PROD
+today** and the sequence below is not gated on standing up auth infrastructure.
+
+**What remains is a UI gap.** Google OAuth is the only wired method
+(`web/src/app/auth/actions.ts` exports only `signInWithGoogle` and `signOut`; the
+sign-in page reads "Google · only sign-in method for v1"), and a repo-wide grep
+for `signInWithPassword`, `signInWithOtp`, `signUp`, `verifyOtp`,
+`resetPasswordForEmail` and `signInAnonymously` returns **zero hits in `web/src`**
+`[grep]`. Whether to ship Google-only or build a second sign-in form is a
+**product decision**, not a prerequisite. Note `app/trips/layout.tsx` still
+carries its user gate **commented out** ("Re-enable the user gate when OAuth is
+back") `[read source]` — that comment is now stale on the same grounds, and the
+two gates should move together.
+
+**Scriptable dev login already works — confirmed, not inferred.**
+`external_email_enabled` is `true` on TEST `[queried Management API config/auth,
+2026-07-27]`, which is what the committed `signInWithPassword` scripts depend on
+(`mint-dev-session.ts`, `seed-test-user.ts`, the three `verify-trip-*.ts`
+harnesses). Account *creation* in those scripts uses `admin.createUser`, which
+bypasses provider config and therefore proved nothing on its own; the sign-in call
+is the part that needed the API to confirm it. Only friction is the ~1h session
+expiry already in CLAUDE.md §RUNBOOK.
 
 Sequence, smallest first, each independently mergeable:
 1. **Auth gate on `/plan/expedition`** — page-level `getUser()` → redirect to
@@ -207,6 +228,34 @@ noted.
   rows under a real `authenticated` JWT.
 - **`fetchCorpusForPolyline` swallows every failure into `[]`** — see
   `docs/architecture/generation-pipeline.md` §8 for why that matters.
+
+## Auth configuration — measured, and what's left (2026-07-27)
+
+All `[queried Management API config/auth, 2026-07-27]`.
+
+- **Provider state.** TEST has no Google provider configured; **PROD has Google
+  enabled** with a client id and secret set. **Email is enabled on both.** This
+  corrects a claim carried in three docs that PROD's provider was disabled — see
+  §Wizard swap.
+- **TEST `site_url` is `http://localhost:3000`, but the dev server runs on 3210.**
+  Left alone deliberately — only `uri_allow_list` was in scope for the authorized
+  write. Recorded as a remaining mismatch: anything that redirects via `site_url`
+  rather than an explicit `redirectTo` will land on the wrong port in dev.
+- **TEST `uri_allow_list` was empty and is now `http://localhost:3210`** (authorized
+  write, TEST only). PROD's list already contained `localhost:3210`, `localhost:3000`,
+  the prod origin and the preview glob — the reverse of what you'd expect.
+- **A minimal PATCH had a side effect.** Sending a body of exactly
+  `{"uri_allow_list": …}` to TEST also flipped **`custom_oauth_max_providers`
+  from `3` to `32767`** — a field that was not in the request. Not reverted (that
+  would be a second unauthorized write). Recorded because it means
+  **`PATCH /config/auth` cannot be assumed to change only what you send**; diff
+  before/after on any future config write.
+- **Both projects run built-in SMTP** — every `smtp_*` field is null (no host,
+  user, sender or credentials). **`rate_limit_email_sent` is `2` on both; the unit
+  is not present in the payload** and is deliberately not supplied here.
+  `mailer_autoconfirm` is `false` on both, so email confirmation is required.
+  **Relevant if magic link or email signup is ever chosen: built-in SMTP is not
+  production-grade**, and that combination would need a real provider first.
 
 ## Decision records carrying stale factual claims (swept 2026-07-27)
 
