@@ -11,9 +11,14 @@
  *   bucketPlacesIntoCorridor.
  *
  * Fed by the audit: it already routed every day (for distance), so we reuse
- * its polylines and only re-route days whose EXCURSIONS need threading — the
- * tier-2 resolvedPlaces coords become the route vias AND bucket as tiles, so
- * a spur like Salmon Glacier lands under the right node.
+ * its polylines and only re-route days whose EXCURSIONS need threading — a
+ * tier-2 KEY STOP's coords become a route via, so a spur like Salmon Glacier
+ * lands on the line and buckets under the right node.
+ *
+ * Endpoint- and overnight-tagged resolutions are NOT vias (they would double
+ * the line back on a place it has already reached) but ARE still tiles, and a
+ * place resolved in several roles yields ONE merged tile. Both rules, and why
+ * they differ, live in `resolvedContributions` below.
  */
 
 import { geocode } from "@/lib/routing/geocode";
@@ -63,6 +68,59 @@ function resolvedToTile(rp: ResolvedPlace): BrowsePlace {
 }
 
 /**
+ * What one day's tier-2 resolutions contribute to the bake: the excursion vias
+ * to thread through the route, and the tiles to render. Pure, so the two rules
+ * below are testable without routing, geocoding, or a database.
+ *
+ * Tier-2 resolution runs PER ROLE, so one real place can appear in
+ * `resolvedPlaces` more than once — named as this day's endpoint AND as a key
+ * stop, or as the overnight AND a key stop. Both outputs are derived from
+ * placeId-collapsed groups, never the raw array.
+ *
+ * VIAS — key stops only. The endpoint is where the day already ends and the
+ * overnight sits at or beside it, so routing through them sends the line back
+ * to a place it has already reached: a doubling-back zigzag strictly longer
+ * than the day's real drive. Every mile downstream (tile `milesFromStart`, the
+ * derived spine's node miles, and the `maxAttachMi` bucketing gate) is measured
+ * against that line, so the zigzag inflated all of them and evicted tiles from
+ * their clusters.
+ *
+ * TILES — one per real place, roles MERGED, nothing filtered. The endpoint tile
+ * is how the day's destination gets a card and the overnight is deliberately
+ * carried, so this collapses rather than drops. Precedence: the base tile comes
+ * from the FIRST role encountered, which is safe because every base field
+ * (`placeId`, `displayName`, `coords`) is Google's single answer for that
+ * placeId and is identical across roles — only the role tag differs. `curated`
+ * and `keyStopNote` are then UNIONED in: if ANY contributing role is a keyStop,
+ * the merged tile carries both, keyed on the name the LLM used for that role.
+ */
+export function resolvedContributions(
+  resolved: ResolvedPlace[],
+  noteByRef: Map<string, string>,
+): { vias: [number, number][]; tiles: BrowsePlace[] } {
+  const rolesByPlaceId = new Map<string, ResolvedPlace[]>();
+  for (const r of resolved) {
+    const group = rolesByPlaceId.get(r.placeId);
+    if (group) group.push(r);
+    else rolesByPlaceId.set(r.placeId, [r]);
+  }
+  const groups = [...rolesByPlaceId.values()];
+
+  return {
+    vias: groups
+      .filter((roles) => roles.some((r) => r.where === "keyStop"))
+      .map((roles) => roles[0].coords),
+    tiles: groups.map((roles) => {
+      const tile = resolvedToTile(roles[0]);
+      const keyStop = roles.find((r) => r.where === "keyStop");
+      return keyStop
+        ? { ...tile, curated: true, keyStopNote: noteByRef.get(keyStop.name) }
+        : tile;
+    }),
+  };
+}
+
+/**
  * Bake spine + bucketed tiles onto each generated day. `dayRoutes` (from the
  * audit) supplies already-computed endpoints/polylines; days with excursion
  * vias are re-routed through them so the spur is on the line.
@@ -79,7 +137,16 @@ export async function bakeGeneratedDays(
     audited.days.map(async (day): Promise<BakedDay> => {
       const dr = routeByN.get(day.n);
       const resolved = day.audit?.resolvedPlaces ?? [];
-      const vias = resolved.map((r) => r.coords);
+      // Post-audit each keyStop's `name` holds the resolved ref (corpus id on a
+      // pool-hit, the place name on a live-resolve); `note` is the inline
+      // context. Key the note by that ref so it reaches the matching tile.
+      const noteByRef = new Map(day.keyStops.map((k) => [k.name, k.note]));
+      // Excursion vias (key stops only) + one merged tile per real place —
+      // see `resolvedContributions` for both rules and why they differ.
+      const { vias, tiles: resolvedTiles } = resolvedContributions(
+        resolved,
+        noteByRef,
+      );
 
       // Endpoints: reuse the audit's geocoded coords; geocode as a fallback.
       let start = dr?.startCoord ?? null;
@@ -109,22 +176,13 @@ export async function bakeGeneratedDays(
       // not flagged here.)
       const corpus =
         start && end ? await fetchCorpusForSegment(start, end, supabase) : [];
-      // Post-audit each keyStop's `name` holds the resolved ref (corpus id on a
-      // pool-hit, the place name on a live-resolve); `note` is the inline
-      // context. Key the note by that ref so it reaches the matching tile.
-      const noteByRef = new Map(day.keyStops.map((k) => [k.name, k.note]));
       const tiles: BrowsePlace[] = [
         ...corpus.map((t) =>
           noteByRef.has(t.id)
             ? { ...t, curated: true, keyStopNote: noteByRef.get(t.id) }
             : t,
         ),
-        ...resolved.map((r) => {
-          const tile = resolvedToTile(r);
-          return r.where === "keyStop"
-            ? { ...tile, curated: true, keyStopNote: noteByRef.get(r.name) }
-            : tile;
-        }),
+        ...resolvedTiles,
       ];
 
       // Position EVERY tile by along-route mile so on-corridor POIs render IN
