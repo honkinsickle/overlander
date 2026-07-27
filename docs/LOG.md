@@ -14,6 +14,50 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 ## 2026-07-27
 
+- **The wizard swap went from "decided, not started" to fully merged in one
+  session — five PRs
+  ([#159](https://github.com/honkinsickle/overlander/pull/159),
+  [#160](https://github.com/honkinsickle/overlander/pull/160),
+  [#161](https://github.com/honkinsickle/overlander/pull/161),
+  [#162](https://github.com/honkinsickle/overlander/pull/162),
+  [#163](https://github.com/honkinsickle/overlander/pull/163)).** Auth gate →
+  owned-row write target → root CTA → de-link legacy → remove the TEST-only rail.
+  Deliberately sequenced so nothing was deleted while the replacement was
+  unproven: #162 removed the *links* to the legacy wizard while leaving the route
+  working, which is what makes the eventual teardown reversible-by-inaction.
+
+- **#163's real finding: the TEST-only rail was doing two jobs, and only one of
+  them had expired.** The brief's premise — that #159/#160 made the rail obsolete
+  because the trip write is now session-scoped and RLS-enforced — was verified
+  correct *for the trip write*. But `enqueueResolvedPlaces` is still a
+  **service-role write to a shared curated table** (`upsert_source_record` →
+  `source_record`, SECURITY INVOKER, RLS on with **zero policies**), and its blast
+  radius was unchanged. Deleting the rail wholesale would have silently converted
+  every prod generation into an unreviewed write to prod curated data —
+  contradicting `ingest.ts`'s own docstring (*"a PROD corpus write would need a
+  SEPARATE deliberate gate"*). **The gate moved to that call site instead of being
+  deleted.** Lesson worth keeping: *"this guard is obsolete"* is a claim about a
+  specific code path, not about the guard — enumerate every path it covers before
+  removing it.
+
+- **Verified the PROD env rather than accepting the report — and one worry turned
+  out to be unfounded.** `[vercel env ls production]`: `ANTHROPIC_API_KEY` is
+  **missing** (the one real blocker to a first PROD generation), but
+  `GOOGLE_PLACES_API_KEY` **is set** (49d, Preview+Production). So the feared
+  interaction with the silent-degradation defect **does not apply** to the first
+  PROD generation. Also confirmed the flag positively rather than by assertion:
+  `/plan/expedition` on the public alias returns **307 → sign-in**, and with the
+  flag off that path 404s (`notFound()` runs first) — so the redirect proves both
+  the flag and the auth gate. `/plan` still mints a draft on PROD, by design.
+
+- **A dev-facing error string is reaching production users.** `generate.ts:60`
+  throws *"ANTHROPIC_API_KEY is not set — add it to `web/.env.local` to run
+  generation."* The action returns that verbatim as `{ ok: false, error }` and the
+  wizard renders it, so the first PROD user to hit generate is told to edit a file
+  that does not exist in their browser. Three sibling throws produce three
+  different strings for the same condition. Filed, not fixed — this pass was
+  docs-only.
+
 - **`mvum_roads` brought into line with the other reference tables — RLS enforced
   on TEST and PROD ([#154](https://github.com/honkinsickle/overlander/pull/154)).**
   It was created by `20260603010000_phase2_mvum_corridor.sql` without

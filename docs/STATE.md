@@ -113,21 +113,59 @@ marker. That marker is now discharged — the entries below are reconciled from
   - No database was written. `expedition-ms28y793` is untouched and remains the
     only artifact of the unfixed pipeline.
 
-- **The wizard swap — IN PROGRESS, 4 of 5 steps landed. NOT blocked on auth.**
-  Merged this session: **#159** auth-gated `/plan/expedition`; **#160** moved
-  generation's write target from `reference_trips` to an owned `public.trips`
-  row (`owner_id` from the session, RLS `trips_insert_owner`); **#161** repointed
-  the home CTA to `/plan/expedition`. **On this branch (4a):** the last two
-  in-app links into the legacy wizard are gone — the `/trips` empty-state CTA now
-  points at `/plan/expedition`, and draft cards open `/trips/<id>` instead of
-  deep-linking `/plan/<id>/<wizardStep>`. **Zero `<Link href="/plan">` remain in
-  `web/src`** `[grep]`; the route is reachable only by typing it. Nothing was
-  deleted.
-  - **Deferred to 4b/4c, gated on PROD:** deleting the `/plan/*` routes, the anon
-    `TRIPS` store, and the now-dead `wizardStep` field (populated in
-    `list-user-trips.ts`, read by nobody). These wait until
-    `ENABLE_PLANNER_WIZARD` is flipped on PROD and a real sign-in is verified
-    there.
+- **The wizard swap — ALL FIVE code steps MERGED. Blocked on one missing PROD env
+  var, not on code.** Every PR below is confirmed merged
+  `[gh pr list --state all, 2026-07-27]` — not assumed; #153 was assumed merged a
+  day early and was not.
+  - **#159** — auth gate on `/plan/expedition`, both halves (page redirect +
+    action `getUser()`). The flag check runs FIRST so a disabled wizard 404s
+    rather than leaking its existence.
+  - **#160** — write target moved from `reference_trips` to an owned
+    `public.trips` row: `owner_id` from the session, `state: "active"`,
+    `reference_id: null`, enforced by `trips_insert_owner`
+    (`auth.uid() = owner_id`). Generated trips are now editable and findable.
+  - **#161** — root CTA repointed to `/plan/expedition`.
+  - **#162 (4a)** — de-linked the remaining legacy entry points (the `/trips`
+    empty state and draft trip cards). **Deletes nothing.** Zero
+    `<Link href="/plan">` remain in `web/src` `[grep]`.
+  - **#163** — removed the TEST-only rail from the trip write, and **narrowed it
+    to the `enqueueResolvedPlaces` call site** rather than deleting it. The trip
+    insert is session-scoped and RLS-enforced, so the rail no longer described
+    it; the corpus write is still service-role into a shared curated table, so
+    the gate stays there. See BACKLOG §"Corpus capture on PROD".
+
+- **PROD state — VERIFIED, not reported.** `[vercel env ls production +
+  unauthenticated probe of the public alias, 2026-07-27]`
+  - **`ENABLE_PLANNER_WIZARD` is set in Production** (1h before this pass) and the
+    wizard is live: `GET /plan/expedition` returns **307 →
+    `/auth/sign-in?next=/plan/expedition`**. With the flag off that path 404s
+    (`notFound()` runs before the auth check), so the redirect is positive proof
+    the flag is on AND the auth gate works on PROD.
+  - **`ANTHROPIC_API_KEY` is NOT set in Production.** This is the ONE blocker to a
+    first PROD generation — the action throws `missing_key` before any spend.
+  - **`GOOGLE_PLACES_API_KEY` IS set in Production** (49d, Preview+Production).
+    This matters: the feared interaction with the silent-degradation defect
+    **does not apply** to the first PROD generation. Tier-2 resolution will work.
+  - `NEXT_PUBLIC_NL_EDIT` remains unset — the intended prod end state, unchanged.
+  - **`/plan` still mints on PROD**: `GET /plan` → 307 →
+    `/plan/<id>/going`. The legacy route is fully live; #162 only removed the
+    links to it, by design. Direct-URL entry still works — which is exactly what
+    makes 4b safe to defer.
+
+- **PR 4b (delete routes + legacy-only modules) and 4c (unwind the trips-domain
+  residue) are SCOPED and GATED.** Both gates must clear first, and neither has:
+  1. **A successful PROD generation** — currently impossible; needs
+     `ANTHROPIC_API_KEY` in Production.
+  2. **A verified post-sign-in return** on PROD — the redirect back from
+     `/auth/sign-in?next=/plan/expedition` actually landing the user in the
+     wizard, signed in.
+
+  Until both clear, the legacy wizard is the only creation path that is *proven*
+  to work on PROD, so deleting it would remove the fallback before the
+  replacement is demonstrated.
+  - **Residue 4c will unwind:** the anon `TRIPS` store, and the now-dead
+    `wizardStep` field (populated in `list-user-trips.ts`, read by nobody since
+    #162 — marked dead in its docstring rather than deleted).
   - **Known cosmetic consequence of 4a**, measured on TEST against a
     deliberately-constructed 0-day draft: a dateless draft renders in the slideup
     as `NaN/NaN-NaN/NaN • 0 Days • 0 mi` (the `/trips` card already showed
@@ -198,20 +236,28 @@ marker. That marker is now discharged — the entries below are reconciled from
   `test:er` run is the true gate.
 
 ## NEXT (ordered)
-1. **Finish the wizard swap — flip `ENABLE_PLANNER_WIZARD` on PROD, verify a real
-   sign-in there, then land 4b/4c** (delete `/plan/*`, the anon `TRIPS` store,
-   and the dead `wizardStep`). Steps 1–4a are merged or in review; the teardown
-   is the only part left, and it is deliberately gated on PROD rather than on
-   auth. Decide the dateless-draft header (7 PROD rows) as part of 4b.
-2. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
+1. **Set `ANTHROPIC_API_KEY` in Vercel Production.** One env var is the whole
+   distance between here and a first PROD generation. The flag is already on and
+   the wizard already renders; the action throws `missing_key` before any spend,
+   so nothing else can be learned until this is set. Everything below step 1 in
+   the wizard swap is gated behind it.
+2. **Do the first PROD generation, then verify the post-sign-in return.** These
+   are 4b/4c's two gates. Expect the two known defects to be visible (no
+   degradation signal; inflated `milesFromStart`) — they are shipping knowingly.
+   Expect **no** corpus rows: #163 keeps `enqueueResolvedPlaces` TEST-only on
+   purpose. That is the gate working, not a failure.
+3. **Then land 4b/4c** — delete `/plan/*` and the legacy-only modules, unwind the
+   anon `TRIPS` store and the dead `wizardStep`. Decide the dateless-draft header
+   (7 PROD rows) as part of 4b.
+4. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
    accept regen orphan-drop. Then apply at pool-assembly, extend `rescopeOverlays`,
    carry through regen, and re-wire the kebab's move-to-day to write it.
-3. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
+5. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
    is the source of truth for what data lives where.
-4. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
+6. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
    and works. The open question narrows to Google-primary vs corpus-first
    ranking/precedence, and whether audit-resolved Google records write back.
-5. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+7. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
