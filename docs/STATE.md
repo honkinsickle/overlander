@@ -26,6 +26,31 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
+- **`mvum_roads` — RLS enforced on TEST and PROD (2026-07-27), PR #154 open.**
+  `public.mvum_roads` was created without `enable row level security` while every
+  sibling reference table has it, and no later migration picked it up. Migration
+  `20260727120000_mvum_roads_rls.sql` brings it into line: RLS on, **zero
+  policies**, plus explicit revokes on the table and on `upsert_mvum_road`.
+  Applied and catalog-verified on both projects; neither has an RLS-disabled
+  table now.
+  - **Zero policies is correct** — consumers are service-role only (`data/`
+    ingestion + `recompute_master_place`, which is SECURITY INVOKER but only ever
+    called from that path). Nothing in `web/src` reads the table. Same posture as
+    `reference_trips`' write side.
+  - **Carry forward — revoking function EXECUTE needs BOTH forms.**
+    `revoke … from anon, authenticated` misses Postgres' default `PUBLIC` grant;
+    `revoke … from public` misses explicit per-role grants in `pg_proc.proacl`.
+    Our two projects differed in which applied, so each form alone was a silent
+    no-op on one of them. Do both, `grant … to service_role`, and **verify
+    against `pg_proc.proacl` rather than trusting the DDL** — two drafts read as
+    correct and were not.
+  - TEST proofs green: `mvum:load --dry-run` (371 features / 308 routes / 0
+    errors) and a `recompute_master_place` smoke where `mvum_corridor` stayed
+    `true` — that value derives from the `mvum_roads` read, so it would have
+    flipped had RLS blocked it. Not run against PROD by design.
+  - **Applied via the Management API** (Docker absent, so `db push`/`pg_dump` are
+    unavailable); `supabase_migrations.schema_migrations` was written by hand on
+    both so file and applied state do not diverge.
 - **Generation (WRITE path) architecture record —
   [PR #151](https://github.com/honkinsickle/overlander/pull/151), open.**
   First deliberate end-to-end trace of the expedition pipeline: form →
