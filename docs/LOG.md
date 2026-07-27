@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-07-27
+
+- **`mvum_roads` brought into line with the other reference tables — RLS enforced
+  on TEST and PROD ([#154](https://github.com/honkinsickle/overlander/pull/154)).**
+  It was created by `20260603010000_phase2_mvum_corridor.sql` without
+  `enable row level security`, while `master_place`, `source_record`,
+  `place_match`, `legality_overlay` and `field_precedence` all enable it, and no
+  later migration picked it up. Migration `20260727120000_mvum_roads_rls.sql`:
+  RLS on, **zero policies**, plus explicit revokes on the table and on
+  `upsert_mvum_road`.
+- **Zero policies is correct because every consumer is service-role.**
+  `data/ingestion/lib/db.ts` (`getDb()` → service-role key), `mvum:load`, and
+  `recompute_master_place` — which reads `mvum_roads` and is SECURITY INVOKER,
+  but is only ever called from that same service-role path. Nothing in `web/src`
+  reads the table (`mvumCorridor` there is a derived `master_place` column). Same
+  posture as `reference_trips`' write side.
+- **Migration-authoring lesson: revoking function EXECUTE needs BOTH forms.**
+  Two mechanisms can grant it and a revoke only clears the one it names —
+  Postgres' default grant to `PUBLIC`, and explicit per-role grants visible in
+  `pg_proc.proacl`. `revoke … from anon, authenticated` misses the first;
+  `revoke … from public` misses the second. Our two projects differed in exactly
+  that way, so each form alone was a silent no-op on one of them — a revoke
+  against a grant a role never individually held succeeds and changes nothing,
+  with no error. Do both, grant back to the one role that needs it, and **verify
+  against `pg_proc.proacl` rather than trusting the DDL**. Two successive drafts
+  of this migration read as correct and were not; post-apply catalog checks are
+  the only reason that was caught.
+- **Proofs on TEST, both green.** `mvum:load --dry-run` → 371 features / 308
+  routes / 0 errors. `recompute_master_place` smoke → `mvum_corridor` stayed
+  `true` on a dispersed-camping place. That is the sharp assertion: the value is
+  *derived from the `mvum_roads` read*, so it would have flipped to `false` had
+  RLS blocked it. Proving the value survived beats asserting "no error raised".
+  Not run against PROD by design.
+- **`mvum:load` with no `--bbox` fails on TEST for an unrelated pre-existing
+  reason** — `ingestion_corridor` is empty, so `resolveCorridorFilter` aborts
+  before reaching `mvum_roads`. Not an RLS regression; the code comment
+  anticipates it ("e.g. fresh database"). The documented `--bbox` form runs fine.
+- **Applied via the Supabase Management API, not `supabase db push`** — Docker is
+  not installed on this machine and both `db push` and `pg_dump` require it. The
+  `supabase_migrations.schema_migrations` row was written by hand on both
+  projects so the migration history is not left out of sync with the file.
+- **Noticed in passing, not investigated: PROD's migration history is missing
+  `20260723120000_google_resolved_field_precedence`, which TEST has.** Recorded
+  because a history gap between the two projects goes unnoticed until it bites.
+
 ## 2026-07-26
 
 - **Generation (the WRITE path) traced end to end for the first time
