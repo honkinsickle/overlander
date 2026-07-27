@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-07-25
+# STATE — `main` · 2026-07-27
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -14,10 +14,12 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   off, the prod end state; DO NOT set it.** (It had been per-interaction Opus spend with
   no quota/rate-limit infra, which is why it's dark until that infra exists.)
 - **Corpus search works over the full LA→Deadhorse corridor.** Federated
-  `/api/search-area` returns PROD's 13,629-place corpus (lat ~30→70.2, US +
-  Canada sources) via Typesense `places_prod`. Restored 2026-07-23 after a
-  rotated prod service key Vercel never received had silently broken hydrate.
-  Counts and the full picture live in `docs/DATA_INVENTORY.md`.
+  `/api/search-area` returns PROD's corpus (US + Canada sources) via Typesense
+  `places_prod`. Restored 2026-07-23 after a rotated prod service key Vercel never
+  received had silently broken hydrate. Counts and the full picture live in
+  `docs/DATA_INVENTORY.md`.
+- **Curated-POI kebab (Move to day / Delete)** — live on user-owned UUID trips
+  (#131). See the caveat under RESIDUALS.
 
 ## DEV GATES
 - `main` is protected — direct pushes rejected (deletion, non_fast_forward,
@@ -25,192 +27,125 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## IN FLIGHT
-- **`mvum_roads` — RLS enforced on TEST and PROD (2026-07-27), PR #154 open.**
-  `public.mvum_roads` was created without `enable row level security` while every
-  sibling reference table has it, and no later migration picked it up. Migration
-  `20260727120000_mvum_roads_rls.sql` brings it into line: RLS on, **zero
-  policies**, plus explicit revokes on the table and on `upsert_mvum_road`.
-  Applied and catalog-verified on both projects; neither has an RLS-disabled
-  table now.
-  - **Zero policies is correct** — consumers are service-role only (`data/`
-    ingestion + `recompute_master_place`, which is SECURITY INVOKER but only ever
-    called from that path). Nothing in `web/src` reads the table. Same posture as
-    `reference_trips`' write side.
-  - **Carry forward — revoking function EXECUTE needs BOTH forms.**
-    `revoke … from anon, authenticated` misses Postgres' default `PUBLIC` grant;
-    `revoke … from public` misses explicit per-role grants in `pg_proc.proacl`.
-    Our two projects differed in which applied, so each form alone was a silent
-    no-op on one of them. Do both, `grant … to service_role`, and **verify
-    against `pg_proc.proacl` rather than trusting the DDL** — two drafts read as
-    correct and were not.
-  - TEST proofs green: `mvum:load --dry-run` (371 features / 308 routes / 0
-    errors) and a `recompute_master_place` smoke where `mvum_corridor` stayed
-    `true` — that value derives from the `mvum_roads` read, so it would have
-    flipped had RLS blocked it. Not run against PROD by design.
-  - **Applied via the Management API** (Docker absent, so `db push`/`pg_dump` are
-    unavailable); `supabase_migrations.schema_migrations` was written by hand on
-    both so file and applied state do not diverge.
-- **Generation (WRITE path) architecture record —
-  [PR #151](https://github.com/honkinsickle/overlander/pull/151), open.**
-  First deliberate end-to-end trace of the expedition pipeline: form →
-  `preComputeFacts` → `generateAndAudit` → `bakeGeneratedDays` →
-  `itineraryToTrip` → `attachHeroPhotos` → persist → `enqueueResolvedPlaces`.
-  Landed as its own `docs/architecture/generation-pipeline.md` (not a Part 3 of
-  `place-render-model.md`, which is scoped to the READ path); cross-linked from
-  both neighbours. Read-only research — no code changed, no trip generated, no
-  LLM called.
-  - **The finding that needs a product call: `day.weather` is LLM-authored prose
-    presented as measurement**, rendering specific Fahrenheit ranges under a
-    WEATHER heading with no advisory marker. There is no weather or climate
-    source anywhere in the repo. Violates the grounding invariant below. Parked
-    in `docs/BACKLOG.md` §Grounding defects with three exits; **not fixed here.**
-  - The day-detail temp pill is a **separate** origin (hardcoded `70`/`45`) whose
-    only renderer, `TripDetailHeader`, is **dead code** — so it does not
-    currently reach users. The two were assumed related; they are not.
-  - Also recorded: audit failure is advisory (never blocks persistence), the
-    `AuditReport`/`DayAudit` are never persisted, generation's Google field mask
-    omits rating/photo/price/hours (the upstream cause of essentials-only
-    tiles), and a missing `GOOGLE_PLACES_API_KEY` degrades a trip invisibly.
+## MERGED THIS SESSION (2026-07-26 → 07-27)
+
+The previous STATE was stale by five PRs and carried a "stale below this line"
+marker. That marker is now discharged — the entries below are reconciled from
+`gh pr view` and `git log`, not carried forward.
+
+- **#146 — continuous day-detail scroll (Design A, view mode).** The day-detail
+  centre is a continuous river of days when NOT in edit mode; `ContinuousDayStack`
+  IO-windows near-viewport days. Presentation layer only, zero diff to the
+  day-partitioned model. `editMode` + Overview keep the single-day swap as a
+  bridge, to be deleted in PR2.
+- **#147 — `docs/architecture/place-render-model.md` Part 1.** What a place record
+  carries vs what the day-detail card renders; §7 shape corrections; the
+  disjoint-instruments caveat.
+- **#148 — place-render-model Part 2.** The detail slideup is
+  `map-detail-overlay.tsx` and renders directly from the dispatched payload — no
+  fetch, no store, no loading state. Routing and Places are independent: a place
+  that fails to enrich keeps its detour figures.
+- **#149 — `fix(places/details)`: surface resolved-but-empty results.** One-line
+  behaviour change: `if (rich)` instead of `if (rich && Object.keys(rich).length > 0)`,
+  so a place that resolves with no rich fields is cached as hydrated rather than
+  re-fetched forever.
+- **#150 — corrected the "zero round-trips" claim.** Opening a detail costs zero
+  round-trips when the tile is already hydrated (post-#149 that includes
+  resolved-but-empty), one when it isn't. The original claim was scoped at the
+  component; the fetch lives in the column.
+- **#151 — `docs/architecture/generation-pipeline.md`.** First end-to-end trace of
+  the expedition WRITE path: form → `preComputeFacts` → `generateAndAudit` →
+  `bakeGeneratedDays` → `itineraryToTrip` → `attachHeroPhotos` → persist →
+  `enqueueResolvedPlaces`.
+- **#152 — `stretches.ts` stale-comment correction.** Comment-only, zero
+  non-comment lines changed. Cherry-picked out of the parked `fix/generated-day-miles`
+  because the hazard was live on `main` and shouldn't wait on a decision about the
+  fix itself.
+- **#154 — `fix(db)`: enforce RLS and explicit grants on `mvum_roads`.** It was
+  created by migration without `enable row level security` while every sibling
+  reference table enables it. Migration `20260727120000_mvum_roads_rls.sql`: RLS
+  on, zero policies, explicit revokes on the table and on `upsert_mvum_road`.
+  Applied and catalog-verified on both projects.
+
+## OPEN
+
+- **#153 — `docs/architecture/trip-creation-surfaces.md`, STILL OPEN.** The client
+  half of trip creation: the wizard form, what it collects, the in-flight render,
+  the post-creation landing. Companion to `generation-pipeline.md` (#151, merged),
+  which covers only the server half. **Not on `main`** — anything referencing
+  `trip-creation-surfaces.md` will 404 until this merges.
+
+## PARKED / BLOCKED
+
 - **PARKED: `fix/generated-day-miles`** — pushed to remote, **unmerged, no PR**,
   awaiting a decision. Carries (1) `web/scripts/check-payload-invariants.ts`, a
   read-only TEST-only measurement instrument, deliberately **not** in CI —
   baseline on `expedition-ms28y793` is 1/6 assertions passing; (2) a
   `where === "keyStop"` via filter + `placeId`-keyed role merge in `bake.ts`,
-  12 unit tests, mutation-checked; (3) a correction to the stale comment block
-  in `lib/corridor/stretches.ts`.
+  12 unit tests, mutation-checked.
   - **Parked because the fix was measured and is small:** the via filter removes
     **~6%** of the geometry inflation (2.25× → 2.18× vs the direct line). The
     dominant term is key-stop vias being genuine off-route excursions in LLM
     emission order, which the filter does not touch. Numbers:
     `docs/architecture/generation-pipeline.md` §7.
-  - **(3) is a HAZARD FIX that is NOT on `main`.** That comment's `TODO(scope)`
-    gates a refactor deleting `positionPlacesOnDay` — one of the three
-    consumers that currently compute miles *correctly*. Executing it against
-    today's data would move every correct surface onto broken values. Until the
-    branch lands, **do not act on that TODO.**
+  - **Its third component has already landed separately as #152** — the
+    `stretches.ts` hazard-fix comment. The branch still contains that commit, so
+    expect it to be a no-op on rebase. The `TODO(scope)` hazard it describes is
+    now correctly documented on `main`.
   - No database was written. `expedition-ms28y793` is untouched and remains the
     only artifact of the unfixed pipeline.
-- ⚠️ **This file is stale below this line.** It is dated 2026-07-25; #146, #147,
-  #148, #149 and #150 have since merged to `main` and are not reflected in the
-  entries below. Not reconciled here — the generation trace did not touch that
-  work, and silently rewriting another session's position is worse than flagging
-  it. Next session should re-derive this section from `git log`.
-- **Continuous day-detail scroll (Design A) — BUILT (view mode),
-  [PR #146](https://github.com/honkinsickle/overlander/pull/146) approved, CI
-  green, merging.** The day-detail center is a continuous river of days when NOT
-  in edit mode: `ContinuousDayStack` (`components/trip/continuous-day-stack.tsx`)
-  IO-windows the near-viewport days (far days are height-holding placeholders),
-  the scroll writes `?day=` settle-debounced (140ms) with a 400ms max-wait
-  ceiling, and the one shared map follows the scroll-centered day on settle.
-  Hysteresis (±15% vp dead zone) + a measured-height cache seeded with the model
-  estimate, so BOTH unmount and first-mount are jump-free (0px measured in both
-  directions). **PRESENTATION LAYER ONLY** — zero diff to the day-partitioned
-  model (tripwire held). `editMode` + Overview keep the single-day swap VERBATIM
-  (the bridge; delete it once edit mode moves inside the container — PR2).
-  - **VALUES that cross the bridge are the OPTIMISTIC trip-level
-    `localOverrides`/`ranksMap`, NOT server truth** — a deliberate, scheduled
-    deviation from the build spec (Adam's call). Server truth was not
-    behaviour-neutral: it made a just-made pin snap back on Done, because `main`
-    renders the optimistic list. **Revert `renderViewDay` to server truth when
-    the seed-id pin fix lands** (below). Machinery still does not cross.
-  - Verified authed on the editable 66-day TEST fork `05b346df…`: edit-mode
-    bridge (mid-scroll toggle lands the reader's day), freeze intact byte-level
-    (1 of 66 days changed on a real edit), three-point A/B matching `main`,
-    windowing + no-jump both directions, 60-transition sweep with flat DOM
-    (2393→2393). Why + mechanics + the full verification record:
-    `docs/decisions/2026-07-25-continuous-day-detail-scroll.md`; §4 of
-    `docs/architecture/itinerary-model.md` updated.
-- **NEXT PR (queued, scoped): seed-id pin resolution.** Cross-node drag-pins
-  write a `nodeSeed`-keyed override the read spine can't resolve against
-  plain-slug `corridorCities`, so pins render un-homed in view on `main` AND
-  #146 (pre-existing, proven by direct A/B). It could not ride inside #146 —
-  the tripwire forbids the read spine consuming `nodeSeeds`. Landing it also
-  **reverts the view stack to server truth**; dependency recorded on both ends
-  in `docs/BACKLOG.md`.
-- **Reference trips serve DB-first** — [PR #143](https://github.com/honkinsickle/overlander/pull/143)
-  **MERGED** to `main` (auto-deploys to prod via Vercel). Resolves the
-  docs-say-DB-first / code-was-fixture-first contradiction. `getTrip` is now
-  DB-first + reader-aware: `la-to-deadhorse` →
-  `getReferenceTrip` (snapshot fallback + memo); other reference slugs →
-  `getPersistedReferenceTrip`; anon trips last. `la-to-portland` migrated into
-  `reference_trips` (raw payload) on TEST + PROD (idempotent
-  `scripts/seed-reference-la-to-portland.ts`). **RESIDUAL:** the `TRIPS` module
-  survives — it is now ONLY the anon-wizard store (`createTrip`/`listAnonTrips`/
-  slug-write paths); the reference literals still sit in it but no longer shadow
-  the DB; `ensureAlaskaUpgraded` still has 4 waypoint-helper callers. Finishing
-  the fixture removal is backlogged (gated on lookup-vs-write of those helpers;
-  lands with the remove-✕ affordance gating). Accepted: federated-fold-as-
-  convergence, 404-on-DB-failure for the demo slug. Why + how:
-  `docs/decisions/2026-07-25-reference-trips-db-first.md`; the serving model
-  (readers, derivation, caching) is documented in
-  `docs/architecture/trip-resolution.md`; `reference_trips` rows per DB live in
-  `docs/DATA_INVENTORY.md`.
-- **Curated-POI editing (kebab)** — MERGED (#131) and **DEPLOYED to prod** (Vercel
-  auto-deploys `main`; the prod deployment on the #131 SHA completed successfully). Live
-  now on user-owned UUID trips. A ⋮ kebab on each curated-POI card in the day detail:
-  **Move to day** (curated/`segmentSuggestions` tiles) + **Delete**; route-waypoint
-  tiles get Delete only. Gated on `canEdit` (user UUID trips; reference/frozen never
-  show it). **Move-to-day is FUNCTIONAL, not a stub** — `moveCuratedPlace`
-  (`web/src/lib/trips/curated-place.ts`) splices the POI between days'
-  `segmentSuggestions` + `rescopeOverlays` drops its now-orphaned pin/rank, persisted
-  in one guarded `updateUserTripPayload` write. **Geometry-free** (routing runs over
-  `waypoints` only). CAVEAT: the move is an **array-splice**, so it **sticks on serve
-  but does NOT survive a regenerate** — day membership is geographically re-derived at
-  bake/regen (see `docs/architecture/itinerary-model.md` §2d, restored to main via #138).
-  Durable cross-day assignment needs `dayAssignment` (below), NOT yet built.
-- **`rescopeOverlays`** — MERGED (#130). Pure keep/drop core: given the trip-level
-  `placeRanks`/`placeOverrides` + a NEW day layout, drops overlays whose stop lost its
-  home, keeps the rest, never rewrites a `nodeId`. The kebab move uses it; `dayAssignment`
-  will extend it.
-- **`dayAssignment` — DESIGN OPEN, NOT resolved, NOT built.** Would make manual
-  cross-day assignment authoritative + durable (survive regen), parallel to
-  `placeOverrides`/`placeRanks`. **The anchor-seed-uuid key is DEAD** (verified from
-  code, not assumed): `nodeSeed` ids are coord-deduped (`SEED_DEDUPE_MI=0.25`,
-  `node-edits.ts:24,77,150`) → a revisited city collides (per-city, NOT per-instance),
-  and `nodeSeeds` is trip-level + empty on fresh trips (never stamped per day). A **plain
-  positional day key** breaks on reorder/regen renumber. Recommendation: **mint a genuine
-  per-day uuid** (unique + reorder/remove-durable); **regen-survival remains a separate
-  open problem** — days are regenerated content, not a carried coords-projected overlay,
-  so no key survives regen for free (needs a re-attach rule). Scope +
-  rejected-alternatives in `docs/decisions/2026-07-24-cross-day-stop-movement.md`.
-- **Pinned ER fixture** — MERGED (#128). Replaces
-  the ER seed's "copy every prod `source_record`" (silently tracked prod, 219 →
-  20,384, baselines drifted) with a ~17-record hand-built fixture
-  (`data/entity-resolution/fixtures/er-corpus.ts`), loaded via `upsertSourceRecord`;
-  the seed no longer needs prod credentials. Assertions re-keyed to per-case
-  outcomes; +4 `scoreMatch` unit tests (previously untested). Path values checked
-  by pure computation. **The corpus block is UNVERIFIED end-to-end** — `test:er`
-  is inert while `SUPABASE_TEST_URL` and `SUPABASE_URL` share a ref (the disposable
-  ER project doesn't exist yet); first real `test:er` run is the true gate. The
-  trade (and what a small fixture can't catch) is in
-  `docs/decisions/2026-07-23-pinned-er-fixture.md`.
+
+- **BLOCKED: the wizard swap — decided, cannot start.** The legacy 5-step wizard
+  is to be **replaced** by the expedition (LLM) wizard, and generation will
+  **require sign-in** so a generated trip is an owned, editable, findable `trips`
+  row. Trips created by the legacy wizard can be discarded; the anon `TRIPS` store
+  is to be deleted rather than replaced.
+  - **The blocker is auth, and nothing in the sequence moves until it is
+    resolved.** Google OAuth is the only wired sign-in method
+    (`web/src/app/auth/actions.ts`, `signInWithGoogle`; the sign-in page's own copy
+    says "Google · only sign-in method for v1"). **TEST has no Google provider
+    configured**, and **PROD's provider is disabled**. So requiring sign-in for
+    generation makes the primary creation path unreachable in dev without
+    hand-minting a session cookie, and unreachable in prod outright.
+  - Sequence and the full scoping live in `docs/BACKLOG.md` §Wizard swap. The
+    client-side surface trace is #153 (still open).
+
+## RESIDUALS (known, deliberate, not defects)
+
+- **Reference-fixture removal (residual of #143).** The `TRIPS` module survives as
+  the anon-wizard store only; reference literals still sit in it but no longer
+  shadow the DB. `ensureAlaskaUpgraded` still has 4 waypoint-helper callers.
+  Gated on lookup-vs-write of those helpers. **Note the interaction:** the wizard
+  swap deletes the anon `TRIPS` store, so these two items are the same work and
+  should not be started independently.
+- **Curated kebab move-to-day is an array-splice** — sticks on serve but does NOT
+  survive a regenerate, because day membership is geographically re-derived at
+  bake/regen. Durable cross-day assignment needs `dayAssignment`, not yet built.
+- **`dayAssignment` — DESIGN OPEN, NOT built.** The anchor-seed-uuid key is ruled
+  out (coord-deduped, so a revisited city collides). Recommendation: mint a
+  genuine per-day uuid; regen-survival remains a separate open problem. Scope and
+  rejected alternatives:
+  `docs/decisions/2026-07-24-cross-day-stop-movement.md`.
+- **Seed-id pin resolution — queued, scoped, not built.** Cross-node drag-pins
+  write a `nodeSeed`-keyed override the read spine can't resolve. Landing it also
+  reverts the #146 view stack from optimistic values to server truth.
+- **Pinned ER fixture (#128) corpus block is UNVERIFIED end-to-end** — `test:er`
+  is inert while `SUPABASE_TEST_URL` and `SUPABASE_URL` share a ref. First real
+  `test:er` run is the true gate.
 
 ## NEXT (ordered)
-1. **`dayAssignment` — decide the day-key, then build.** First call: mint a per-day
-   uuid vs accept regen orphan-drop (the anchor-seed key is ruled out — see IN FLIGHT).
-   Then build `dayAssignment` (a third overlay), apply at pool-assembly
-   (`resolve-corridor-cities.ts`), extend `rescopeOverlays`, carry through regen, and
-   **re-wire the kebab's move-to-day to write it** (replacing today's array-splice) so a
-   move survives regeneration. Geographically-foreign assigned POIs render "Along the
-   way", no fabricated mileage.
-2. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured and
-   current. It is the source of truth for what data lives where.
-3. **Search architecture (reframed)** — the corridor corpus already EXISTS on
-   PROD (13,629, federated + working). The open question narrows to
-   Google-primary vs corpus-first ranking/precedence and whether audit-resolved
-   Google records write back — NOT whether to build the corpus.
-4. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
-5. **Reference-fixture removal (residual of #143)** — empty the reference `seed()`,
-   reroute `ensureAlaskaUpgraded`'s 4 waypoint-helper reads to the DB reader, drop
-   `la-to-portland` from `FIXTURE_TRIPS`. Gated on lookup-vs-write of those helpers;
-   `TRIPS` must survive (it is the anon-wizard store). Full item + open question in
-   `docs/BACKLOG.md`; updating `docs/architecture/trip-resolution.md` is part of it.
-
-_Design-A continuous day-detail scroll is no longer parked — **BUILT (view
-mode)**, see IN FLIGHT above. Remaining: PR2 brings edit mode inside the windowed
-container (per-day optimistic overlays + drag) and deletes the single-day-swap
-bridge._
+1. **Resolve the auth blocker.** It gates the entire wizard swap, and the swap is
+   the largest decided-but-unstarted piece of work. Until sign-in is exercisable,
+   nothing downstream of it can be verified.
+2. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
+   accept regen orphan-drop. Then apply at pool-assembly, extend `rescopeOverlays`,
+   carry through regen, and re-wire the kebab's move-to-day to write it.
+3. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
+   is the source of truth for what data lives where.
+4. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
+   and works. The open question narrows to Google-primary vs corpus-first
+   ranking/precedence, and whether audit-resolved Google records write back.
+5. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
@@ -225,3 +160,7 @@ bridge._
 - `data/.env` points at ONE project (TEST) and is NOT the whole picture. The
   corpus lives on PROD. Read `docs/DATA_INVENTORY.md` before drawing any
   conclusion about coverage or "what data exists."
+- **A probe is only as trustworthy as the identity it ran under.** Before
+  concluding anything from a client-side query, verify which role it actually
+  authenticated as. See `docs/architecture/trip-resolution.md` §"The RLS drift
+  that wasn't".
