@@ -21,12 +21,20 @@ import type { DraftTrip } from "@/lib/plan/types";
  * Components can read cookies but not write them.
  */
 export async function GET(req: Request) {
-  // CRITICAL: skip prefetches. Next.js auto-prefetches every visible
-  // `<Link href="/plan">` (Plan-a-new-trip CTAs in the layout and home
-  // page), which would otherwise mint a new draft and overwrite the
-  // user's in-flight wizard cookie on every hover/render. Real clicks
-  // and direct navigations do NOT send `Next-Router-Prefetch`; only
-  // the framework's prefetcher does.
+  // CRITICAL: skip prefetches. Next.js auto-prefetches visible
+  // `<Link href="/plan">`, which would mint a new draft and overwrite the
+  // user's in-flight wizard cookie on every hover/render. Real clicks and
+  // direct navigations do NOT send `Next-Router-Prefetch`; only the
+  // framework's prefetcher does.
+  //
+  // As of 2026-07-27 this guard has no live trigger: exactly one
+  // `<Link href="/plan">` remains (the "Plan a new trip" CTA in the
+  // `/trips` empty-state layout) and it sets `prefetch={false}`. The home
+  // page's "Create a Trip" button moved to `/plan/expedition`.
+  //
+  // Keep it anyway — it is the backstop for a future `<Link href="/plan">`
+  // added without `prefetch={false}`, which is a silent, data-corrupting
+  // failure rather than a visible one.
   //
   // Returning a 204 with no Set-Cookie keeps Next's prefetch happy
   // without side effects. The real navigation still hits this handler

@@ -100,8 +100,20 @@ function EntryLeft({ muted }: { muted: boolean }) {
       {/* Create a Trip CTA — Paper CRG-0 / CRK-0 · 52h · rounded-full ·
        *  px 32 · gap 10 · bg --button-primary · border --button-primary-border
        *  · shadow.  Label: Barlow 700 · 14/18 · tracking 0.06em · uppercase. */}
+      {/* Points at the EXPEDITION wizard, not the legacy 5-step `/plan` flow
+       *  (`docs/decisions/2026-07-27-generation-requires-sign-in.md`). The
+       *  expedition route is auth-gated and 404s unless
+       *  ENABLE_PLANNER_WIZARD=true, so with the flag off this CTA lands on a
+       *  404 rather than the old wizard — that is the intended dark state, and
+       *  flipping the flag is a separate, deliberate act.
+       *
+       *  `prefetch={false}` is retained but no longer load-bearing: it existed
+       *  because `/plan` is a route handler that MINTS a draft on GET, so
+       *  Next's automatic prefetch would create drafts on hover. The expedition
+       *  route is a plain page with no such side effect. Kept to keep this diff
+       *  to the href. */}
       <Link
-        href="/plan"
+        href="/plan/expedition"
         prefetch={false}
         tabIndex={muted ? -1 : 0}
         className="flex items-center mt-2 h-[52px] px-8 rounded-full bg-button-primary hover:bg-button-primary-hover border border-button-primary-border"
