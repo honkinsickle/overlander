@@ -149,6 +149,43 @@ run on **built-in SMTP** (every SMTP field null) `[queried Management API
 config/auth, 2026-07-27]` — so magic link or email confirmation would need a real
 SMTP provider before it could be relied on. See `docs/BACKLOG.md`.
 
+**Adding a second method will NOT orphan existing Google users — tested, not
+reasoned about** `[tested on TEST, 2026-07-27]`. This was the open question that
+could have turned the swap from a UI change into a migration, so it was settled
+experimentally rather than from the schema or the config flags.
+
+Method: a throwaway user was created on TEST holding **one `google` identity and
+no `email` identity**, a magic link was generated for that same address, and the
+token was verified — the moment a real user clicks the link. Result:
+
+| | before | after |
+|---|---|---|
+| `auth.users` total | 3 | **3** |
+| `auth.identities` total | 3 | **3** |
+| rows for that address | 1 | **1** |
+| that user's identities | `google` | **`google`** |
+
+**The magic link resolved to the SAME `auth.users` row and issued a session for
+it.** No second user, no collision, and therefore no orphaned trips — trip
+ownership is `trips.owner_id → public.users(id) → auth.users(id)`, so an
+unchanged user id means unchanged ownership.
+
+**State the mechanism precisely, because the obvious reading is wrong.** No
+`email` identity was added alongside the Google one — the identity count stayed
+at **1** and stayed `google`. GoTrue matched on the **`auth.users.email` column**
+and did not touch `auth.identities` at all. So this is **email-matching, not
+identity linking.** `security_manual_linking_enabled` is `false` on both projects
+and was never involved, which is exactly why inspecting that flag could not have
+answered the question.
+
+Someone who expects identity *linking* will look for a second `auth.identities`
+row, not find one, and may read that absence as a failed test. It is not — it is
+the mechanism working as designed. The property that matters is the stable user
+id, not the identity row count.
+
+*(The experiment ran on TEST only. PROD was read-only throughout; the throwaway
+user was deleted afterwards and TEST confirmed back to its 2-user baseline.)*
+
 If anonymous trips are ever wanted as a product feature, this decision needs
 reopening rather than extending — the anon store is deleted here, and re-adding
 one would need durable persistence and honest UI about it, neither of which

@@ -257,6 +257,28 @@ All `[queried Management API config/auth, 2026-07-27]`.
   **Relevant if magic link or email signup is ever chosen: built-in SMTP is not
   production-grade**, and that combination would need a real provider first.
 
+Two operational gotchas found while testing the magic-link path
+`[tested on TEST, 2026-07-27]`:
+
+- **GoTrue rejects undeliverable domains at the API boundary, before any user
+  lookup happens.** Both `@overlander.test` and `@example.com` were refused with
+  `400 email_address_invalid` from `POST /auth/v1/otp`. The seeded
+  `@overlander.test` accounts exist only because the **Admin API bypasses that
+  validation** — `admin/users` accepts what `/otp` will not. **Consequence: no
+  future email or magic-link path can be smoke-tested against a fake domain.**
+  Exercising it end to end needs a real deliverable address, which on built-in
+  SMTP means a real inbox. Budget for that when the work is scoped; do not assume
+  a throwaway address will do.
+- **`admin/generate_link` + `/verify` exercises the identical path without
+  sending mail.** `POST /auth/v1/admin/generate_link` (service-role) returns the
+  `hashed_token` without dispatching an email; `POST /auth/v1/verify` with that
+  token completes exactly the flow a user performs by clicking the link. This
+  sends nothing and **does not spend the `rate_limit_email_sent` budget** (which
+  is `2` on both projects). It is how the identity result in
+  `docs/decisions/2026-07-27-generation-requires-sign-in.md` was measured, and it
+  is the technique to reach for when testing auth flows. Note `generate_link`
+  alone changes no state — the user record only moves at `verify`.
+
 ## Decision records carrying stale factual claims (swept 2026-07-27)
 
 `docs/decisions/` is append-only by convention, which is right for *reasoning* but
