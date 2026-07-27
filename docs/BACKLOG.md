@@ -5,6 +5,45 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Grounding defects (found by the generation trace, #151)
+
+- **`day.weather` is LLM-authored prose presented as measurement — a fabricated
+  field in user-visible UI.** It is a `required` property of the LLM's output
+  `json_schema`; the prompt payload contains no weather input; `auditItinerary`
+  never reads or writes it; and there is **no weather or climate source anywhere
+  in the repo**. It renders under a **WEATHER** heading carrying specific
+  Fahrenheit ranges (observed on TEST: *"Arrive · Hot desert, 95–105°F"*), with
+  no advisory marker and no provenance tag. This violates the standing grounding
+  rule (*every field real or absent, never invented*). Three exits, not yet
+  chosen: (a) drop the field from the schema and the render; (b) mark it
+  advisory in the UI so it reads as a model estimate, not a reading; (c) back it
+  with a real source — see the live-weather rescue item below, which would make
+  the field honest rather than removing it. **A product call, not a code fix.**
+  Full trace: `docs/architecture/generation-pipeline.md` §4.
+- **`trip.weatherHiF`/`weatherLoF` are hardcoded `70`/`45` on every generated
+  trip**, and `overnight.selected.detourMiles` is a hardcoded `0` — both numeric
+  fields that read as measurements. Currently harmless *only because* their
+  renderer is dead code (below); they are in the persisted payload and would
+  become visible the moment anything mounted it.
+- **`TripDetailHeader` is dead code.** `web/src/components/trip/trip-detail-header.tsx`
+  is the only component rendering the `{weatherHiF}° / {weatherLoF}°F` pill and
+  has **no call site** — superseded by `DayDetailOverview`. Two stale comments
+  still reference it (`day-detail-corridor-column.tsx`,
+  `imagery/mapbox-static.ts`). Deleting it also deletes the only consumer of the
+  hardcoded pill values. Low risk, not done here (trace was read-only).
+- **Tier-2 tiles are not deduped by `placeId` before `resolvedToTile`.** A place
+  the LLM names as both a day endpoint and a key stop persists as two identical
+  `segmentSuggestions` entries and appears twice in a node's `placeIds`
+  (verified on `expedition-ms28y793` day 6). `stripNodeIdentical` does not catch
+  it when the spine node's name differs from the place's Google `displayName`
+  ("Bryce Canyon, UT" vs "Bryce Canyon National Park"). This is the documented
+  "renders twice" outcome, so it is cosmetic, not a wrong-place bug.
+- **A missing `GOOGLE_PLACES_API_KEY` degrades every generated trip invisibly.**
+  `PlaceResolver.resolve` returns and caches `no-key`; every name that is not an
+  exact pool match is dropped with a per-day flag, but the action still returns
+  `ok: true`. No distinct error separates "no key" from "genuinely not found" at
+  the action boundary. Worth a fail-fast check before the (paid) LLM call.
+
 ## Deferred / parked
 - **dnd-kit `SortableContext`** — parked. Pointer-vs-rect (`computeInsertIndex`)
   was chosen instead, no model change. Revisit only if pointer-vs-rect proves
