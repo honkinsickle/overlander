@@ -837,10 +837,12 @@ thin the delivered trip. That makes it a smaller problem than it first appears.
 
 - [`itinerary-model.md` §7](itinerary-model.md) — **the** home for trip payload
   shapes, including this pipeline's measured output profile and the 30-cap rung.
-- **The client half of this doc** — the wizard form, its inputs, the in-flight
-  render, and the post-creation landing — is
-  `docs/architecture/trip-creation-surfaces.md`, **PR #153, not yet merged**.
-  Cross-link becomes live when it lands.
+- [`trip-creation-surfaces.md`](trip-creation-surfaces.md) — **the client half of
+  this doc**: the wizard form and every input, what actually reaches the pipeline,
+  the in-flight render, and the post-creation landing. Records that the `note`
+  this action returns on a degraded generation is read by no component, and that
+  the legacy 5-step wizard — not this pipeline — is the creation path that is
+  live in production.
 - [`place-render-model.md`](place-render-model.md) — the READ path: how tiles
   render as cards and how the detail slideup is dispatched and enriched.
 - [`trip-resolution.md`](trip-resolution.md) — how a stored trip is served.

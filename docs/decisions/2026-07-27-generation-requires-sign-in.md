@@ -19,8 +19,7 @@ inverted from what the names suggest `[read source; grep]`:
 
 The newer, LLM-backed wizard is the gated, unlinked one. The legacy wizard is
 unflagged and fronts the site. Full client-side trace:
-`docs/architecture/trip-creation-surfaces.md` — **PR #153, not yet merged**, so
-that path does not resolve on `main` yet.
+[`../architecture/trip-creation-surfaces.md`](../architecture/trip-creation-surfaces.md).
 
 A generated trip today is **neither editable nor findable**: its id is
 `expedition-<base36>`, not a UUID, so `canEdit` is false on both serving routes;
