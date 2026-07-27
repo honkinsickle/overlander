@@ -26,6 +26,51 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## IN FLIGHT
+- **Generation (WRITE path) architecture record —
+  [PR #151](https://github.com/honkinsickle/overlander/pull/151), open.**
+  First deliberate end-to-end trace of the expedition pipeline: form →
+  `preComputeFacts` → `generateAndAudit` → `bakeGeneratedDays` →
+  `itineraryToTrip` → `attachHeroPhotos` → persist → `enqueueResolvedPlaces`.
+  Landed as its own `docs/architecture/generation-pipeline.md` (not a Part 3 of
+  `place-render-model.md`, which is scoped to the READ path); cross-linked from
+  both neighbours. Read-only research — no code changed, no trip generated, no
+  LLM called.
+  - **The finding that needs a product call: `day.weather` is LLM-authored prose
+    presented as measurement**, rendering specific Fahrenheit ranges under a
+    WEATHER heading with no advisory marker. There is no weather or climate
+    source anywhere in the repo. Violates the grounding invariant below. Parked
+    in `docs/BACKLOG.md` §Grounding defects with three exits; **not fixed here.**
+  - The day-detail temp pill is a **separate** origin (hardcoded `70`/`45`) whose
+    only renderer, `TripDetailHeader`, is **dead code** — so it does not
+    currently reach users. The two were assumed related; they are not.
+  - Also recorded: audit failure is advisory (never blocks persistence), the
+    `AuditReport`/`DayAudit` are never persisted, generation's Google field mask
+    omits rating/photo/price/hours (the upstream cause of essentials-only
+    tiles), and a missing `GOOGLE_PLACES_API_KEY` degrades a trip invisibly.
+- **PARKED: `fix/generated-day-miles`** — pushed to remote, **unmerged, no PR**,
+  awaiting a decision. Carries (1) `web/scripts/check-payload-invariants.ts`, a
+  read-only TEST-only measurement instrument, deliberately **not** in CI —
+  baseline on `expedition-ms28y793` is 1/6 assertions passing; (2) a
+  `where === "keyStop"` via filter + `placeId`-keyed role merge in `bake.ts`,
+  12 unit tests, mutation-checked; (3) a correction to the stale comment block
+  in `lib/corridor/stretches.ts`.
+  - **Parked because the fix was measured and is small:** the via filter removes
+    **~6%** of the geometry inflation (2.25× → 2.18× vs the direct line). The
+    dominant term is key-stop vias being genuine off-route excursions in LLM
+    emission order, which the filter does not touch. Numbers:
+    `docs/architecture/generation-pipeline.md` §7.
+  - **(3) is a HAZARD FIX that is NOT on `main`.** That comment's `TODO(scope)`
+    gates a refactor deleting `positionPlacesOnDay` — one of the three
+    consumers that currently compute miles *correctly*. Executing it against
+    today's data would move every correct surface onto broken values. Until the
+    branch lands, **do not act on that TODO.**
+  - No database was written. `expedition-ms28y793` is untouched and remains the
+    only artifact of the unfixed pipeline.
+- ⚠️ **This file is stale below this line.** It is dated 2026-07-25; #146, #147,
+  #148, #149 and #150 have since merged to `main` and are not reflected in the
+  entries below. Not reconciled here — the generation trace did not touch that
+  work, and silently rewriting another session's position is worse than flagging
+  it. Next session should re-derive this section from `git log`.
 - **Continuous day-detail scroll (Design A) — BUILT (view mode),
   [PR #146](https://github.com/honkinsickle/overlander/pull/146) approved, CI
   green, merging.** The day-detail center is a continuous river of days when NOT

@@ -12,6 +12,101 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-07-26
+
+- **Generation (the WRITE path) traced end to end for the first time
+  ([#151](https://github.com/honkinsickle/overlander/pull/151), open).** New
+  `docs/architecture/generation-pipeline.md` rather than a third section of
+  `place-render-model.md` — that doc is scoped to the READ path and generation
+  shares almost no code with it. Cross-linked both ways; trip-shape facts stay
+  in `itinerary-model.md` §7, not duplicated. Read-only: no trip generated, no
+  LLM called, no failure induced, nothing written.
+- **`day.weather` is a fabricated field in user-visible UI.** It is a `required`
+  property of the LLM's output `json_schema`, the prompt payload carries no
+  weather input, `auditItinerary` spreads it through untouched, and an
+  exhaustive sweep found **no weather or climate source anywhere in the repo**
+  (source, 3 × package.json, 15 × .env*, 38 migrations, every external hostname
+  literal, every local dataset). It renders under a WEATHER heading carrying
+  specific Fahrenheit ranges — observed in-browser on TEST: *"Arrive · Hot
+  desert, 95–105°F"*. The schema docstring, the prompt, and the `FactConfidence`
+  union all call weather "advisory", but that tag is only ever attached to
+  `distanceConfidence` — nothing marks weather advisory in the payload or the UI.
+  Parked in `docs/BACKLOG.md`.
+- **The temp pill is a DIFFERENT origin, and is dead code.** Nobody had checked
+  whether the two shared a source; they don't. `weatherHiF`/`weatherLoF` are
+  hardcoded `70`/`45` literals in `itineraryToTrip` — identical on every
+  generated trip regardless of route, season, or latitude — but the only
+  component that renders the pill, `TripDetailHeader`, has **no call site**
+  (superseded by `DayDetailOverview`). Confirmed in-browser: no hi/lo pill on
+  any live surface. So the handoff's premise that a pill "appears in the
+  day-detail header" did not survive checking.
+- **Generation never asks Google for rating/photo/price/hours.** `RESOLVE_FIELD_MASK`
+  (searchText, by name) and the render-time `DETAILS_FIELD_MASK` (details, by id)
+  are both server-fixed constants but disjoint in exactly those fields. That is
+  the *upstream* cause of essentials-only tiles — not a stripping step later, as
+  the shape record alone might suggest.
+- **Corpus fold ∪ tier-2 is a true union with no cross-source dedup.** Precedence
+  lives one stage earlier as the audit's pool-first grounding. Consequence in
+  stored data: day 6 of `expedition-ms28y793` persists the same `placeId` twice
+  (endpoint-resolved + keyStop-resolved), and that id appears twice in a node's
+  `placeIds` — the "renders twice" failure mode `node-identity.ts` documents as
+  its intended-safe outcome, occurring for real.
+- **Nothing about the audit survives persistence.** `AuditReport` and per-day
+  `DayAudit` are both transient, so a dropped key stop leaves **no trace in the
+  payload at all** (`SILENT_FLAG_KINDS` also hides it from `notes`). Six
+  generated `ItineraryOutput` sections (`routeSummary`, `phases`, `variants`,
+  `permits`, `borders`, `anchorsHonored`) are generated, paid for, and dropped.
+- **Audit failure is advisory, not blocking** — after `REGEN_BUDGET = 2` the trip
+  persists with structural violations and a soft note. The largest silent
+  degradation found: a missing `GOOGLE_PLACES_API_KEY` makes every tier-2 name
+  drop while the action still returns `ok: true` (44 of 48 tiles on the
+  instrument came from tier-2).
+- **The day-mile fix was built, measured, and PARKED — the measurement is why.**
+  Branch `fix/generated-day-miles` (pushed, unmerged, no PR). Rebuilding all
+  three per-day lines with `routeBetween` on `expedition-ms28y793`: direct
+  **899 mi**, corrected (keyStop vias only) **1,960 mi**, old (all resolved
+  vias) **2,019 mi**. So filtering vias to `where === "keyStop"` removes
+  **~6%** of the inflation, not most of it — day 6 is the only day it
+  materially changes. The dominant term is key-stop vias being genuine
+  off-route excursions threaded in LLM emission order. A backfill would have
+  written miles measured against a still-2.18×-inflated line, so it was not
+  run and nothing was written.
+- **The map was never affected — checked because it would have changed the
+  priority of everything.** `routePolyline` is the audit's DIRECT geometry;
+  `BakedDay` has no polyline field and the re-routed line is a discarded local.
+  Stored polyline measures 899 mi, matching direct exactly. The zigzag is
+  transient.
+- **Two separate defects fell out and are now in BACKLOG.** (a) `routePolyline`
+  omits ~25% of the trip — 899 mi drawn vs 1,200 mi claimed, because
+  `isOutAndBack` never routes a start==end day (6 of 15 days, 300 mi). This one
+  IS visible on the map. (b) 30/48 tiles belong to no node; re-bucketing on a
+  corrected line only reaches 17/48, because `maxAttachMi = 25` against node
+  gaps up to 148 mi, and round-trip days derive both nodes at mile 0. The
+  remaining 17 are structural — no mile fix reaches them. The 63% figure had
+  sat in a baseline for two sessions unexamined.
+- **The read path already does it right.** `positionPlacesOnDay` projects onto
+  the correct 899-mi polyline with a round-trip-aware offset. Three consumers
+  use it and are correct; four trust stored miles and are wrong. Pointing the
+  four at what the three do needs **no write** and fixes existing trips — an
+  option that was never priced, now recorded rather than skipped by default.
+- **No PROD trip is affected** — zero stored miles anywhere on PROD, including
+  the FROZEN `dawson-vancouver-cassiar` (417 tiles, 0 miles). The frozen-trip
+  risk that shaped the earlier scoping does not exist.
+- **Three unmeasured claims of mine were caught this session, all the same
+  shape** — stating a magnitude without computing it: "A3/A4 will pass" (they
+  failed, and A4 failing is the zigzag's own signature, which my own report had
+  already measured two sections earlier); "A6 will flip after the bake fix" (it
+  reads stored data, so it cannot); "residual inflation is much smaller" (it is
+  2.18× vs 2.25×). Recorded because the pattern, not any one instance, is the
+  thing to watch.
+- **Recorded fragments checked against source.** Four verified correct (bake.ts
+  union + uncapped, the 30-cap's real owner, the corpus mapper's
+  `placeId`/`source`, `resolvedToTile`'s `google:` prefix). Two corrections: the
+  recorded pipeline omits `attachHeroPhotos` (a network call that mutates the
+  payload before persist) and `enqueueResolvedPlaces` (after persist); and the
+  tier-2 cap is **not** `RESOLVE_CAP = 15` — the audit constructs
+  `PlaceResolver(Math.max(80, days * 8))` = 120 for a 15-day trip.
+
 ## 2026-07-25
 
 - **Reference trips now serve DB-first — the fixture no longer shadows the DB

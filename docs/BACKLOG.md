@@ -5,6 +5,86 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Geometry defects (measured by the day-mile pass, 2026-07-26)
+
+Both surfaced while scoping the generated-day mile defect; neither IS that
+defect. Measurements and context:
+[`docs/architecture/generation-pipeline.md`](architecture/generation-pipeline.md) §7.
+
+- **`routePolyline` omits ~25% of a generated trip — the drawn route is
+  incomplete.** On `expedition-ms28y793` the stored polyline decodes to
+  **899 mi** against **1,200 mi** of claimed `day.miles` `[measured 2026-07-26]`.
+  The 301-mile shortfall resolves exactly: `auditItinerary`'s `isOutAndBack`
+  branch (`day.startPlace === day.endPlace`) sets `measuredMi = null` and
+  **never routes the day**, so `dayPolyline` stays null and
+  `concatDayRouteCoords` skips it `[read source: audit.ts, to-trip.ts]`. Six of
+  fifteen days are start==end and their miles sum to **300** (1 mi rounding).
+  Includes a 110-mile day-2 loop that contributes no geometry at all.
+  **This one is genuinely visible on the map** — the line jumps between the days
+  that do have geometry — unlike the mile-label problem, which is invisible
+  there (§7.2). How the map renders that discontinuity was not checked
+  `[UNVERIFIED]`. Note `day.miles` on those days is the LLM's *stated* value,
+  never measured, so the 1,200 figure is itself ungrounded on 6 of 15 days.
+
+- **63% of tiles belong to no node — three causes, only one mile-driven.**
+  30 of 48 tiles on `expedition-ms28y793` appear in no `corridorCities[].placeIds`
+  `[queried TEST]`. Every tile carries a mile, so all passed gate 1
+  (`offsetMi <= bufferMi`); every orphan failed **gate 2**,
+  `bestDist > maxAttachMi = 25` `[read source: corridor/bucket.ts]`. Measured
+  gaps to the nearest node run **26.1 mi to 310.8 mi**. Re-deriving the spine and
+  re-bucketing on a corrected line takes it to **17/48** `[measured]` — so:
+  1. **mile inflation** — 13 tiles, fixable by correcting the line;
+  2. **node sparsity vs `maxAttachMi = 25`** — measured max node gaps of
+     148/119/106/104/103 mi (days 1/3/8/11/14). A tile at the midpoint of a
+     148-mile gap sits 74 mi from both nodes and **cannot attach at any mile
+     value**. 9 of 15 days have a gap whose midpoint exceeds 25;
+  3. **round-trip degenerate spines** — days 7, 10 and 15 derive *both* nodes at
+     mile 0, so any tile past mile 25 orphans unconditionally (5 of the 17).
+
+  **The remaining 17 are structural and no mile fix reaches them.** Comparable
+  in size to the defect that was being fixed, and previously unexamined — the
+  63% figure sat in a baseline for two sessions without analysis. Needs a
+  decision on `maxAttachMi` / spine density, not a mile correction.
+
+## Grounding defects (found by the generation trace, #151)
+
+- **`day.weather` is LLM-authored prose presented as measurement — a fabricated
+  field in user-visible UI.** It is a `required` property of the LLM's output
+  `json_schema`; the prompt payload contains no weather input; `auditItinerary`
+  never reads or writes it; and there is **no weather or climate source anywhere
+  in the repo**. It renders under a **WEATHER** heading carrying specific
+  Fahrenheit ranges (observed on TEST: *"Arrive · Hot desert, 95–105°F"*), with
+  no advisory marker and no provenance tag. This violates the standing grounding
+  rule (*every field real or absent, never invented*). Three exits, not yet
+  chosen: (a) drop the field from the schema and the render; (b) mark it
+  advisory in the UI so it reads as a model estimate, not a reading; (c) back it
+  with a real source — see the live-weather rescue item below, which would make
+  the field honest rather than removing it. **A product call, not a code fix.**
+  Full trace: `docs/architecture/generation-pipeline.md` §4.
+- **`trip.weatherHiF`/`weatherLoF` are hardcoded `70`/`45` on every generated
+  trip**, and `overnight.selected.detourMiles` is a hardcoded `0` — both numeric
+  fields that read as measurements. Currently harmless *only because* their
+  renderer is dead code (below); they are in the persisted payload and would
+  become visible the moment anything mounted it.
+- **`TripDetailHeader` is dead code.** `web/src/components/trip/trip-detail-header.tsx`
+  is the only component rendering the `{weatherHiF}° / {weatherLoF}°F` pill and
+  has **no call site** — superseded by `DayDetailOverview`. Two stale comments
+  still reference it (`day-detail-corridor-column.tsx`,
+  `imagery/mapbox-static.ts`). Deleting it also deletes the only consumer of the
+  hardcoded pill values. Low risk, not done here (trace was read-only).
+- **Tier-2 tiles are not deduped by `placeId` before `resolvedToTile`.** A place
+  the LLM names as both a day endpoint and a key stop persists as two identical
+  `segmentSuggestions` entries and appears twice in a node's `placeIds`
+  (verified on `expedition-ms28y793` day 6). `stripNodeIdentical` does not catch
+  it when the spine node's name differs from the place's Google `displayName`
+  ("Bryce Canyon, UT" vs "Bryce Canyon National Park"). This is the documented
+  "renders twice" outcome, so it is cosmetic, not a wrong-place bug.
+- **A missing `GOOGLE_PLACES_API_KEY` degrades every generated trip invisibly.**
+  `PlaceResolver.resolve` returns and caches `no-key`; every name that is not an
+  exact pool match is dropped with a per-day flag, but the action still returns
+  `ok: true`. No distinct error separates "no key" from "genuinely not found" at
+  the action boundary. Worth a fail-fast check before the (paid) LLM call.
+
 ## Deferred / parked
 - **dnd-kit `SortableContext`** — parked. Pointer-vs-rect (`computeInsertIndex`)
   was chosen instead, no model change. Revisit only if pointer-vs-rect proves
