@@ -650,6 +650,134 @@ This is where a silently-degraded trip can be produced. Every one of these fails
 
 ---
 
+## 7. The day-mile defect — measured 2026-07-26
+
+A follow-up pass measured the geometry `bakeGeneratedDays` produces. The
+numbers are recorded here because a fix attempt was scoped against them and
+then **parked** — the measurements are what a future session needs, and they
+would otherwise exist only in a chat transcript.
+
+**This section does not describe a change to `main`.** §1 and §2 above describe
+the code as it stands on `main` and remain accurate. The parked branch is noted
+at the end.
+
+### 7.1 The three lines
+
+`bakeGeneratedDays` re-routes a day through its excursion vias and measures
+every tile's `milesFromStart` against that line, while `day.miles` comes from
+the audit's **direct** `start → end` measurement — so the two are measured on
+different geometry. All three lines rebuilt per day with `routeBetween` on
+`expedition-ms28y793` `[measured 2026-07-26, Mapbox Directions; payload queried TEST]`:
+
+| Line | Total |
+|---|---|
+| **direct** — `start → end`, the audit's geometry | **899 mi** |
+| **corrected** — `start → keyStop vias → end` | **1,960 mi** |
+| **old** — `start → all resolved vias → end` (what `main` builds) | **2,019 mi** |
+
+**Filtering vias to `where === "keyStop"` removes ~6% of the inflation, not
+most of it** (2.25× → 2.18× against direct). The endpoint- and
+overnight-as-via problem is real but small: **day 6 is the only day the filter
+materially changes** (old 158 → corrected 99 against a direct 81).
+
+**The dominant term is different, and is NOT addressed by that filter:**
+key-stop vias are genuine off-route excursions threaded in **LLM emission
+order**, not geographic order. Worst days: day 9 `62 → 198` (3.18×), day 5
+`57 → 139` (2.45×), day 4 `46 → 93` (2.03×).
+
+Consequence for any future fix: **miles measured against a corrected line are
+still measured against a 2.18×-inflated line.** A backfill that stores them
+would be an improvement, not a correction, and the read spine trusting them
+would still be trusting a distorted axis.
+
+### 7.2 The map is NOT affected
+
+`routePolyline` comes from `assembleRoutePolyline(dayRoutes)` — the audit's
+**direct** geometry `[read source: to-trip.ts]`. `BakedDay` carries no polyline
+field; the re-routed `line` is a local inside the per-day callback and is
+discarded when it returns `[read source: bake.ts]`. Measured: the stored
+`routePolyline` decodes to **899 mi**, matching the direct total exactly and
+nowhere near the 2,019-mi old line `[measured]`.
+
+**The map has never drawn the zigzag.** This is a mile-label and
+tile-clustering defect, not a route-rendering one.
+
+### 7.3 The read path already projects correctly
+
+`stretches.ts` → `positionPlacesOnDay` projects a tile's `coords` onto the trip
+`routePolyline` — the correct 899-mi geometry — offset by `dayStartMiles`,
+which skips round-trip days exactly as the polyline itself omits them
+`[read source]`. Offset and geometry agree by construction.
+
+Two populations of consumers, and they disagree:
+
+| Trusts **stored** miles (wrong) | **Projects** coords (correct) |
+|---|---|
+| `day-detail-corridor.tsx` → `buildSpineItems` | `stretches.ts` → `positionPlacesOnDay` |
+| `curated-placement.ts` | `day-detail-node-blocks.tsx` |
+| `backtrack.ts` → `positionOf` | the edit render (`routeLine` + `dayStartMile`) |
+| `bucket.ts` (bake-time) | |
+
+**Unpriced option worth evaluating before any write:** point the four at what
+the three already do. It needs **no database write**, fixes trips that already
+exist, and sidesteps 7.1 entirely by never trusting a stored mile. Its known
+gap is that baked `corridorCities[].placeIds` stays as-is — but see the orphan
+item in [`BACKLOG.md`](../BACKLOG.md), where 17 of 48 orphans turn out to be
+structural and unreachable by any mile fix. **Not evaluated further
+`[UNVERIFIED]`** — recorded so it is not skipped by default next session.
+
+### 7.4 No PROD trip is affected
+
+`[queried PROD, 2026-07-26 — read-only]` **No trip on PROD carries a stored
+`milesFromStart` at all.** `dawson-vancouver-cassiar` (FROZEN, generated) has
+417 tiles and **0** stored miles; `24f14ecc-…` has 63 tiles and **0**. Every
+PROD trip therefore renders through the coord-projection path (7.3), correctly.
+
+**The frozen-trip risk does not exist** — `dawson-vancouver-cassiar` needs no
+correction and no regeneration. On TEST the affected population is
+**`expedition-ms28y793` alone**; `dawson-cassiar-livingplan-test` has 8/86
+over-limit miles but **zero `corridorCities` trip-wide**, which is a different
+condition (no spine to bucket into), not this defect.
+
+### 7.5 Two defects filed separately
+
+Both were surfaced by this pass, neither is the mile-label problem, and each is
+logged in [`BACKLOG.md`](../BACKLOG.md):
+
+- **`routePolyline` omits ~25% of the trip** — 899 mi drawn against 1,200 mi of
+  claimed `day.miles`, because `isOutAndBack` never routes a start==end day.
+  Genuinely visible on the map.
+- **63% of tiles belong to no node** — three causes, only one mile-driven.
+
+### 7.6 Parked branch
+
+**`fix/generated-day-miles`** — pushed, **unmerged, no PR**, parked pending a
+decision. It carries:
+
+1. `web/scripts/check-payload-invariants.ts` — a read-only, TEST-only
+   measurement instrument (six assertions). **Deliberately not in CI**; nothing
+   gates on its exit code. Baseline on `expedition-ms28y793`: **1/6 pass**.
+2. The `where === "keyStop"` via filter + a `placeId`-keyed role merge in
+   `bake.ts`, with 12 unit tests, mutation-checked (reverting the logic fails 7
+   of the 12). Per 7.1 this addresses ~6% of the inflation — which is why the
+   branch is parked rather than merged.
+3. **A HAZARD FIX not yet on `main`.** The comment block in
+   `lib/corridor/stretches.ts` asserts a "constant ~+589-mi FOREIGN OFFSET"
+   (false — the distortion is non-uniform, ×1.3 to ×59) and a `TODO(scope)`
+   claiming `milesFromStart` "is now corrected at persist" (false for the
+   generated path). That TODO **gates a refactor that would delete
+   `positionPlacesOnDay`** — one of the three currently-correct consumers in
+   7.3. Executing it against today's data would move every correct surface onto
+   the broken values. **The correction is on the parked branch only; the
+   hazard is live on `main`.**
+
+**Conflicts with this doc, deliberately not resolved here:** §2 and §5 describe
+`bake.ts` as it is on `main`, and the parked branch changes it. Those
+descriptions are accurate today and were left alone rather than rewritten
+against code that has not merged. Whichever lands second must reconcile them.
+
+---
+
 ## Related
 
 - [`itinerary-model.md` §7](itinerary-model.md) — **the** home for trip payload

@@ -61,6 +61,44 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   degradation found: a missing `GOOGLE_PLACES_API_KEY` makes every tier-2 name
   drop while the action still returns `ok: true` (44 of 48 tiles on the
   instrument came from tier-2).
+- **The day-mile fix was built, measured, and PARKED — the measurement is why.**
+  Branch `fix/generated-day-miles` (pushed, unmerged, no PR). Rebuilding all
+  three per-day lines with `routeBetween` on `expedition-ms28y793`: direct
+  **899 mi**, corrected (keyStop vias only) **1,960 mi**, old (all resolved
+  vias) **2,019 mi**. So filtering vias to `where === "keyStop"` removes
+  **~6%** of the inflation, not most of it — day 6 is the only day it
+  materially changes. The dominant term is key-stop vias being genuine
+  off-route excursions threaded in LLM emission order. A backfill would have
+  written miles measured against a still-2.18×-inflated line, so it was not
+  run and nothing was written.
+- **The map was never affected — checked because it would have changed the
+  priority of everything.** `routePolyline` is the audit's DIRECT geometry;
+  `BakedDay` has no polyline field and the re-routed line is a discarded local.
+  Stored polyline measures 899 mi, matching direct exactly. The zigzag is
+  transient.
+- **Two separate defects fell out and are now in BACKLOG.** (a) `routePolyline`
+  omits ~25% of the trip — 899 mi drawn vs 1,200 mi claimed, because
+  `isOutAndBack` never routes a start==end day (6 of 15 days, 300 mi). This one
+  IS visible on the map. (b) 30/48 tiles belong to no node; re-bucketing on a
+  corrected line only reaches 17/48, because `maxAttachMi = 25` against node
+  gaps up to 148 mi, and round-trip days derive both nodes at mile 0. The
+  remaining 17 are structural — no mile fix reaches them. The 63% figure had
+  sat in a baseline for two sessions unexamined.
+- **The read path already does it right.** `positionPlacesOnDay` projects onto
+  the correct 899-mi polyline with a round-trip-aware offset. Three consumers
+  use it and are correct; four trust stored miles and are wrong. Pointing the
+  four at what the three do needs **no write** and fixes existing trips — an
+  option that was never priced, now recorded rather than skipped by default.
+- **No PROD trip is affected** — zero stored miles anywhere on PROD, including
+  the FROZEN `dawson-vancouver-cassiar` (417 tiles, 0 miles). The frozen-trip
+  risk that shaped the earlier scoping does not exist.
+- **Three unmeasured claims of mine were caught this session, all the same
+  shape** — stating a magnitude without computing it: "A3/A4 will pass" (they
+  failed, and A4 failing is the zigzag's own signature, which my own report had
+  already measured two sections earlier); "A6 will flip after the bake fix" (it
+  reads stored data, so it cannot); "residual inflation is much smaller" (it is
+  2.18× vs 2.25×). Recorded because the pattern, not any one instance, is the
+  thing to watch.
 - **Recorded fragments checked against source.** Four verified correct (bake.ts
   union + uncapped, the 30-cap's real owner, the corpus mapper's
   `placeId`/`source`, `resolvedToTile`'s `google:` prefix). Two corrections: the

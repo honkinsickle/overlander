@@ -47,6 +47,25 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
     `AuditReport`/`DayAudit` are never persisted, generation's Google field mask
     omits rating/photo/price/hours (the upstream cause of essentials-only
     tiles), and a missing `GOOGLE_PLACES_API_KEY` degrades a trip invisibly.
+- **PARKED: `fix/generated-day-miles`** — pushed to remote, **unmerged, no PR**,
+  awaiting a decision. Carries (1) `web/scripts/check-payload-invariants.ts`, a
+  read-only TEST-only measurement instrument, deliberately **not** in CI —
+  baseline on `expedition-ms28y793` is 1/6 assertions passing; (2) a
+  `where === "keyStop"` via filter + `placeId`-keyed role merge in `bake.ts`,
+  12 unit tests, mutation-checked; (3) a correction to the stale comment block
+  in `lib/corridor/stretches.ts`.
+  - **Parked because the fix was measured and is small:** the via filter removes
+    **~6%** of the geometry inflation (2.25× → 2.18× vs the direct line). The
+    dominant term is key-stop vias being genuine off-route excursions in LLM
+    emission order, which the filter does not touch. Numbers:
+    `docs/architecture/generation-pipeline.md` §7.
+  - **(3) is a HAZARD FIX that is NOT on `main`.** That comment's `TODO(scope)`
+    gates a refactor deleting `positionPlacesOnDay` — one of the three
+    consumers that currently compute miles *correctly*. Executing it against
+    today's data would move every correct surface onto broken values. Until the
+    branch lands, **do not act on that TODO.**
+  - No database was written. `expedition-ms28y793` is untouched and remains the
+    only artifact of the unfixed pipeline.
 - ⚠️ **This file is stale below this line.** It is dated 2026-07-25; #146, #147,
   #148, #149 and #150 have since merged to `main` and are not reflected in the
   entries below. Not reconciled here — the generation trace did not touch that

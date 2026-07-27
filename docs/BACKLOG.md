@@ -5,6 +5,47 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Geometry defects (measured by the day-mile pass, 2026-07-26)
+
+Both surfaced while scoping the generated-day mile defect; neither IS that
+defect. Measurements and context:
+[`docs/architecture/generation-pipeline.md`](architecture/generation-pipeline.md) §7.
+
+- **`routePolyline` omits ~25% of a generated trip — the drawn route is
+  incomplete.** On `expedition-ms28y793` the stored polyline decodes to
+  **899 mi** against **1,200 mi** of claimed `day.miles` `[measured 2026-07-26]`.
+  The 301-mile shortfall resolves exactly: `auditItinerary`'s `isOutAndBack`
+  branch (`day.startPlace === day.endPlace`) sets `measuredMi = null` and
+  **never routes the day**, so `dayPolyline` stays null and
+  `concatDayRouteCoords` skips it `[read source: audit.ts, to-trip.ts]`. Six of
+  fifteen days are start==end and their miles sum to **300** (1 mi rounding).
+  Includes a 110-mile day-2 loop that contributes no geometry at all.
+  **This one is genuinely visible on the map** — the line jumps between the days
+  that do have geometry — unlike the mile-label problem, which is invisible
+  there (§7.2). How the map renders that discontinuity was not checked
+  `[UNVERIFIED]`. Note `day.miles` on those days is the LLM's *stated* value,
+  never measured, so the 1,200 figure is itself ungrounded on 6 of 15 days.
+
+- **63% of tiles belong to no node — three causes, only one mile-driven.**
+  30 of 48 tiles on `expedition-ms28y793` appear in no `corridorCities[].placeIds`
+  `[queried TEST]`. Every tile carries a mile, so all passed gate 1
+  (`offsetMi <= bufferMi`); every orphan failed **gate 2**,
+  `bestDist > maxAttachMi = 25` `[read source: corridor/bucket.ts]`. Measured
+  gaps to the nearest node run **26.1 mi to 310.8 mi**. Re-deriving the spine and
+  re-bucketing on a corrected line takes it to **17/48** `[measured]` — so:
+  1. **mile inflation** — 13 tiles, fixable by correcting the line;
+  2. **node sparsity vs `maxAttachMi = 25`** — measured max node gaps of
+     148/119/106/104/103 mi (days 1/3/8/11/14). A tile at the midpoint of a
+     148-mile gap sits 74 mi from both nodes and **cannot attach at any mile
+     value**. 9 of 15 days have a gap whose midpoint exceeds 25;
+  3. **round-trip degenerate spines** — days 7, 10 and 15 derive *both* nodes at
+     mile 0, so any tile past mile 25 orphans unconditionally (5 of the 17).
+
+  **The remaining 17 are structural and no mile fix reaches them.** Comparable
+  in size to the defect that was being fixed, and previously unexamined — the
+  63% figure sat in a baseline for two sessions without analysis. Needs a
+  decision on `maxAttachMi` / spine density, not a mile correction.
+
 ## Grounding defects (found by the generation trace, #151)
 
 - **`day.weather` is LLM-authored prose presented as measurement — a fabricated
