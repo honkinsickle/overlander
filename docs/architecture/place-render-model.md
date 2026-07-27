@@ -830,3 +830,16 @@ disagreement between the two surfaces at one moment.
 
 No separate section: §12 is the comparison. Left as a heading so the document's
 three-part structure stays legible.
+
+---
+
+## Related — the WRITE path
+
+This document is scoped to the READ path: how an already-stored tile becomes a
+card, and how a card becomes a detail slideup. The subsystem that *produces*
+those tiles is traced separately in
+[`generation-pipeline.md`](generation-pipeline.md) — including why generated
+tiles never carry a `rating` or `photoUrl` (generation's Google field mask
+does not request them, so it is an upstream omission, not a stripping step),
+and why the `google:` / `mp:` id prefix rather than `source` is the reliable
+provenance discriminator on a generated trip.

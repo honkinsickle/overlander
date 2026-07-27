@@ -365,6 +365,10 @@ derivation, baked-vs-unbaked short-circuit):
 
 - `docs/architecture/trip-resolution.md` — how `getTrip` resolves and serves a
   trip (reader split, read-time derivation, caching).
+- `docs/architecture/generation-pipeline.md` — how a trip is WRITTEN: the
+  expedition pipeline stage by stage, the LLM boundary and field provenance,
+  what persists vs what is computed and discarded, and the failure modes. §7's
+  "Generated" rung is that pipeline's output.
 - `docs/decisions/` — why calls were made (append-only). In particular
   `docs/decisions/2026-07-24-cross-day-stop-movement.md` for the in-flight cross-day
   move / add-day feature and its open questions.
