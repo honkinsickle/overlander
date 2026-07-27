@@ -118,6 +118,81 @@ the ~1h session expiry already documented in CLAUDE.md §RUNBOOK.
 on the same false premise and is now stale; the two gates should still move
 together, but neither is waiting on OAuth.
 
+## Magic-link mechanics — measured 2026-07-27, replaces Google
+
+The decision above is to replace Google with magic link. These are the mechanics,
+established by driving the real client path end to end on TEST. Instrument:
+`web/scripts/test-magic-link-pkce.ts`.
+
+### The callback lands as `?code=` — server-readable, PR 2 is additive
+
+A client-initiated `signInWithOtp` produces the **same shape as Google OAuth**
+`[tested on TEST]`:
+
+```
+HTTP/2 303
+location: http://localhost:3210/auth/callback?code=c45c972f-…&next=%2Ftrips
+```
+
+Query string, not fragment. So `exchangeCodeForSession` handles **both** flows and
+the existing callback route needs an *additive* branch, not a redesign. The
+`?code=` happy path may need no change at all.
+
+**Why an earlier probe said `#fragment`, and why that was an artifact.** Measuring
+this with `admin/generate_link` first produced an implicit-flow fragment
+(`#access_token=…`), which a server route cannot read. That result was **wrong for
+the client case** and nearly drove a much larger redesign. The cause: PKCE requires
+a `code_challenge` that the *client* generates when calling `signInWithOtp`, and
+**admin-generated links carry no challenge**, so GoTrue falls back to implicit.
+Anyone re-deriving this with `generate_link` will reach the same wrong conclusion —
+which is why the instrument checks, and prints, whether `code_challenge` is
+actually on the wire before trusting its own result.
+
+Corroborating detail: a challenge-bearing token is **prefixed `pkce_`** in the
+email link (`?token=pkce_07c443…`). That prefix is a readable signal for telling
+the two flows apart when debugging.
+
+`@supabase/ssr` 0.10.3 hardcodes `flowType: "pkce"` **after** the options spread in
+both `createBrowserClient` and `createServerClient`, so it cannot be overridden
+`[read node_modules]`. Versions in play: `@supabase/ssr` 0.10.3,
+`@supabase/supabase-js` / `@supabase/auth-js` 2.106.2.
+
+`next` survives the email hop intact — it rides in `redirect_to`'s query string,
+and GoTrue **appends** `code` with `&` rather than clobbering it. The existing
+`startsWith("/")` sanitizer applies unchanged at the point it lands.
+
+### There are TWO types, and the current route sees neither
+
+`[tested on TEST]` — the type depends on whether the account already exists:
+
+| | first-time address | returning user |
+|---|---|---|
+| template | **confirmation** ("Confirm your email address") | magic link ("Your sign-in link") |
+| link `type=` | **`signup`** | `magiclink` |
+
+The observed link was `type=signup`, because `shouldCreateUser` defaults to `true`
+and the address had no account. **A `verifyOtp` branch must handle both**, and the
+two arrive via different email templates — a split easy to miss when only ever
+testing with one address.
+
+### User-creation state differs by path — do not generalise across them
+
+Two rows created minutes apart ended in **different** states `[tested on TEST]`:
+
+| created via | confirmed | identities |
+|---|---|---|
+| `admin/generate_link` | no | **`[]`** |
+| client `signInWithOtp` | no | **`['email']`** |
+
+So "a new user starts with zero identities" is true of the *admin* path only. A
+prediction carried over from the admin throwaway to the client rows was wrong on
+exactly this point. Verify the path you actually ship.
+
+**Tooling caveat that caused it:** the bulk `GET /auth/v1/admin/users` endpoint
+**under-reports `identities`** — it returned `[]` for every user, including seed
+accounts that provably have one. Fetch users **individually**
+(`/auth/v1/admin/users/{id}`) when identity state matters.
+
 ## Consequences
 
 - **The sequence is fixed and legacy removal is strictly last** — the legacy path
