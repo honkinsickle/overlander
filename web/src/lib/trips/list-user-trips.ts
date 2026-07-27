@@ -18,9 +18,10 @@ export type UserTripSummary = {
   endLocation: string;
   heroImage?: string;
   dayCount: number;
-  /** Wizard-step deeplink for draft cards. Drafts on /trips link to
-   *  /plan/<id>/<wizardStep> so the user lands back on the step they
-   *  left off. Active / logged trips ignore this field. */
+  /** DEAD as of 2026-07-27 — populated below but read by nobody. It existed
+   *  so draft cards could deep-link to /plan/<id>/<wizardStep>; `trip-card.tsx`
+   *  now sends every card to /trips/<id>. Left in place deliberately: removing
+   *  it belongs to the legacy-wizard teardown, which is gated on prod. */
   wizardStep?: PlanStep;
 };
 

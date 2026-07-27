@@ -27,10 +27,12 @@ export async function GET(req: Request) {
   // direct navigations do NOT send `Next-Router-Prefetch`; only the
   // framework's prefetcher does.
   //
-  // As of 2026-07-27 this guard has no live trigger: exactly one
-  // `<Link href="/plan">` remains (the "Plan a new trip" CTA in the
-  // `/trips` empty-state layout) and it sets `prefetch={false}`. The home
-  // page's "Create a Trip" button moved to `/plan/expedition`.
+  // As of 2026-07-27 this guard has no live trigger: ZERO
+  // `<Link href="/plan">` remain anywhere in `web/src`. The home page's
+  // "Create a Trip" button and the `/trips` empty-state CTA both moved to
+  // `/plan/expedition`, and draft trip cards now open `/trips/<id>` instead
+  // of deep-linking into the wizard. Nothing in the app links here at all;
+  // the route is reachable only by typing it.
   //
   // Keep it anyway — it is the backstop for a future `<Link href="/plan">`
   // added without `prefetch={false}`, which is a silent, data-corrupting

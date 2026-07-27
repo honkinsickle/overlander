@@ -11,9 +11,9 @@ import { UpcomingEventsCard } from "@/components/home/upcoming-events-card";
  *
  * It previously pointed at `/plan`, the legacy 5-step wizard, which
  * seeds a draft and redirects into the Going modal step. That route
- * still exists and is still reachable — from the `/trips` empty state
- * and from draft trip cards — but it is no longer the home funnel and
- * is scheduled for removal.
+ * still exists but as of 2026-07-27 nothing in the app links to it —
+ * the `/trips` empty state and draft trip cards were both repointed —
+ * so it is reachable only by typing the URL, pending removal.
  *
  * UpcomingEventsCard is server-only (reads the markdown via node:fs) so
  * it's mounted here rather than inside EntryScene — `wizard-backdrop` is
