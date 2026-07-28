@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { WizardSlices } from "@/lib/plan/types";
 import type { Trip } from "./types";
 import { isUserTrip } from "./is-user-trip";
 
@@ -59,91 +58,6 @@ export async function getUserTrip(
   } catch {
     return null;
   }
-}
-
-/** Create a fresh wizard-backed trip in public.trips for the authed
- *  user. Inserts with state='draft', reference_id=null, empty days[],
- *  and a wizard sub-object pre-stamped with currentStep='going'.
- *  Returns the new trip id, or null on auth / config failure.
- *
- *  The placeholder fields (Untitled Trip, today/today date, empty
- *  start/end location, 0 weather) get filled in by the going step.
- *  Until then, the row shows on /trips as "Untitled Trip · Draft". */
-export async function createUserWizardTrip(): Promise<string | null> {
-  if (!isConfigured()) return null;
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const wizard: WizardSlices = { currentStep: "going" };
-    const payload: Trip = {
-      id: "",
-      title: "Untitled Trip",
-      startDate: today,
-      endDate: today,
-      startLocation: "",
-      endLocation: "",
-      weatherHiF: 0,
-      weatherLoF: 0,
-      days: [],
-      wizard,
-    };
-
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        owner_id: user.id,
-        reference_id: null,
-        title: "Untitled Trip",
-        state: "draft",
-        payload,
-      })
-      .select("id")
-      .single();
-    if (error || !data) return null;
-    return data.id as string;
-  } catch {
-    return null;
-  }
-}
-
-/** Merge a partial wizard slice into `Trip.wizard` for a user trip.
- *  Reuses `updateUserTripPayload` so RLS + the read-modify-write
- *  envelope are identical to other UUID writers.
- *
- *  If the patch includes `going`, top-level `Trip.startLocation` /
- *  `endLocation` / `startDate` / `endDate` are denormalized off it so
- *  the /trips card summary (which reads top-level fields, not the
- *  wizard sub-object) shows the right pair as soon as the user moves
- *  past the going step. */
-export async function writeWizardSlice(
-  id: string,
-  patch: Partial<WizardSlices>,
-): Promise<Trip | TripConflict | null> {
-  // refuse: a per-key merge composes only when keys differ, and nothing
-  // enforces that — so a same-key concurrent edit would be silently dropped by
-  // a retry. Surface the conflict instead.
-  return updateUserTripPayload(
-    id,
-    (trip) => {
-      const prev = (trip.wizard as WizardSlices | undefined) ?? {};
-      const wizard: WizardSlices = { ...prev, ...patch };
-      const next: Trip = { ...trip, wizard };
-      if (patch.going) {
-        next.startLocation =
-          patch.going.startLocation?.label ?? next.startLocation;
-        next.endLocation = patch.going.destination?.label ?? next.endLocation;
-        next.startDate = patch.going.startDate ?? next.startDate;
-        next.endDate = patch.going.endDate ?? next.endDate;
-      }
-      return next;
-    },
-    { onConflict: "refuse" },
-  );
 }
 
 /** Replace one day of a user trip with the same-id day from the

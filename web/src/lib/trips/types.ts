@@ -39,18 +39,27 @@ export type Trip = {
    *  scratch via the wizard have it null. Drives whether the
    *  "Reset to reference" affordance is offered. */
   referenceId?: string | null;
-  /** Wizard state captured during /plan/[id]/* flow. Present only for
-   *  trips created via the wizard. Shape follows `WizardSlices` in
-   *  lib/plan/types.ts; stored loose here (Record) to avoid a circular
-   *  type import between lib/trips and lib/plan. */
-  wizard?: Record<string, unknown>;
+  /* `wizard?: Record<string, unknown>` was removed 2026-07-28 (PR 4c). It held
+   * the legacy 5-step wizard's state; its only writers (`createUserWizardTrip`,
+   * `writeWizardSlice`) and its only reader (`UserTripSummary.wizardStep`) all
+   * died with PR 4b.
+   *
+   * IT IS STILL IN THE DATA. Removing the field from this type does not remove
+   * it from stored rows, and nothing migrates it away — reads are a bare
+   * `data.payload as Trip` cast with no zod and no field allowlist, and writes
+   * spread (`{ ...rawPayload }` → mutate → `{ ...updated }`), so an unknown
+   * `wizard` key is preserved on every rewrite rather than dropped. Rows that
+   * carry it keep carrying it, and nothing breaks either way. Measured
+   * 2026-07-28: TEST 1 of 5 rows (the seed draft, `{"currentStep":"going"}`).
+   * If you need it, read `payload->'wizard'` in SQL — not through this type. */
+
   /** The full GenerationInput (anchors + params + rig + objective) that
    *  produced a generated trip — persisted so the trip is EDITABLE: the
    *  living-plan loop edits these anchors and re-runs the pipeline. Shape
    *  follows `GenerationInput` in lib/itinerary/facts.ts; stored loose here
    *  (Record) to avoid a circular type import between lib/trips and
-   *  lib/itinerary (same pattern as `wizard`). Absent on reference/fork
-   *  trips and on generated trips persisted before this field existed. */
+   *  lib/itinerary. Absent on reference/fork trips and on generated trips
+   *  persisted before this field existed. */
   generationInput?: Record<string, unknown>;
   /** Living-plan apply provenance — stamped when a living-plan edit is
    *  promoted onto this trip, so "what changed and when" is a lookup, not a

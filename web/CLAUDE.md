@@ -196,8 +196,12 @@ Existing:
 
 ## Known gotchas (durable)
 
-- **`Trip.wizard` is typed `Record<string, unknown>`** to avoid a circular
-  import with `lib/plan`. The looseness is load-bearing — don't tighten it.
+- **`Trip.generationInput` is typed `Record<string, unknown>`** to avoid a
+  circular import with `lib/itinerary`. The looseness is load-bearing — don't
+  tighten it. (`Trip.wizard` carried the same note until PR 4c removed the field;
+  **stored rows still contain `payload.wizard`** — reads are a bare cast and
+  writes spread the payload, so the key survives untyped. See the block where it
+  used to be declared in `lib/trips/types.ts`.)
 - **`Trip.referenceId`** is the `reference_id` text-FK column on `public.trips`,
   pointing at `reference_trips.id` slugs (e.g. `la-to-deadhorse`). Slug-as-FK
   — the comment in `types.ts` is accurate but non-obvious.

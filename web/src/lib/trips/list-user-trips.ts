@@ -1,6 +1,5 @@
 import { isConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { WizardSlices, PlanStep } from "@/lib/plan/types";
 import type { Trip } from "./types";
 import { TRIPS } from "./fixtures";
 
@@ -18,11 +17,6 @@ export type UserTripSummary = {
   endLocation: string;
   heroImage?: string;
   dayCount: number;
-  /** DEAD as of 2026-07-27 — populated below but read by nobody. It existed
-   *  so draft cards could deep-link to /plan/<id>/<wizardStep>; `trip-card.tsx`
-   *  now sends every card to /trips/<id>. Left in place deliberately: removing
-   *  it belongs to the legacy-wizard teardown, which is gated on prod. */
-  wizardStep?: PlanStep;
 };
 
 /** List the authed user's trips. RLS scopes to auth.uid() === owner_id,
@@ -49,7 +43,6 @@ export async function listUserTrips(): Promise<UserTripSummary[]> {
     if (error || !data) return [];
     return data.map((row) => {
       const p = row.payload as Trip;
-      const wizard = p.wizard as WizardSlices | undefined;
       return {
         id: row.id,
         title: row.title,
@@ -62,7 +55,6 @@ export async function listUserTrips(): Promise<UserTripSummary[]> {
         endLocation: p.endLocation,
         heroImage: p.heroImage,
         dayCount: p.days?.length ?? 0,
-        wizardStep: wizard?.currentStep,
       };
     });
   } catch {
