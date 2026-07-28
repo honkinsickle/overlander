@@ -10,7 +10,14 @@ import {
   type AnchorLike,
 } from "@/lib/corridor/anchor-match";
 import { classifyCuratedPicks } from "@/lib/corridor/curated-placement";
-import { scopeRankKey, sortClusterByRank } from "@/lib/corridor/stretches";
+import {
+  scopeRankKey,
+  sortClusterByRank,
+  positionPlacesOnDay,
+  isRoundTripCorridor,
+  type PositionedPlace,
+} from "@/lib/corridor/stretches";
+import { haversineMi } from "@/lib/routing/point-to-polyline";
 import type { PlaceNodeOverride } from "@/lib/trips/types";
 import type { PlaceMove } from "@/components/trip/day-detail-node-blocks";
 import type { CuratedMenu } from "@/components/trip/curated-kebab";
@@ -149,11 +156,26 @@ function toAnchorLike(p: CorridorPlace): AnchorLike {
   return { id: p.id, name: p.title, coords: p.coords };
 }
 
-/** One entry on the rendered spine, in along-route order. */
+/** One entry on the rendered spine, in along-route order. A key stop's `mile` is
+ *  null when no honest along-route figure exists for it (round-trip days — see
+ *  `spinePosition`); the tick renders without a number rather than inventing one. */
 export type SpineItem =
   | { type: "city"; city: CorridorCity; last: boolean }
-  | { type: "keystop"; place: CorridorPlace; mile: number; last: boolean }
+  | { type: "keystop"; place: CorridorPlace; mile: number | null; last: boolean }
   | { type: "marker"; mile: number; tiles: CorridorPlace[]; last: boolean };
+
+/** Where a curated pick sits on the spine, and what (if anything) to label it. */
+export type SpinePos = {
+  /** Primary sort key — day-relative along-route mile on a normal day, radial
+   *  distance from the anchor on a round-trip day. */
+  sort: number;
+  /** Secondary key, applied only to entries sharing a `sort` value. Perpendicular
+   *  offset from the route: at a polyline-end clamp this IS the distance beyond
+   *  the terminus, so it orders points that all projected onto the final vertex. */
+  tiebreak: number;
+  /** The gutter tick, or null to render the stop with no mile. */
+  label: number | null;
+};
 
 /**
  * Merge the city spine, the positioned curated key stops, and any (demo) mile
@@ -172,40 +194,53 @@ export function buildSpineItems(input: {
   pinnedKeyStops?: { place: CorridorPlace; nodeMile: number }[];
   mileMarkers: { mile: number; placeIds?: string[] }[];
   byId: Map<string, CorridorPlace>;
+  /** Resolve a curated pick's spine position. Injected rather than read off the
+   *  place so this merge stays pure and the geometry source stays in ONE place
+   *  (`spinePosition`); the stored `milesFromStart` is never consulted here. */
+  placeMile: (place: CorridorPlace) => SpinePos;
 }): SpineItem[] {
-  const { cities, keyStops, pinnedKeyStops = [], mileMarkers, byId } = input;
+  const { cities, keyStops, pinnedKeyStops = [], mileMarkers, byId, placeMile } = input;
   const RANK = { city: 0, keystop: 1, marker: 2 };
-  type Entry = { mile: number; rank: number; make: (last: boolean) => SpineItem };
+  type Entry = {
+    mile: number;
+    rank: number;
+    tiebreak: number;
+    make: (last: boolean) => SpineItem;
+  };
   const entries: Entry[] = [];
   cities.forEach((city) =>
     entries.push({
       mile: city.milesFromStart,
       rank: RANK.city,
+      tiebreak: 0,
       make: (last) => ({ type: "city", city, last }),
     }),
   );
   keyStops.forEach((place) => {
-    const mile = place.milesFromStart as number;
+    const pos = placeMile(place);
     entries.push({
-      mile,
+      mile: pos.sort,
       rank: RANK.keystop,
-      make: (last) => ({ type: "keystop", place, mile, last }),
+      tiebreak: pos.tiebreak,
+      make: (last) => ({ type: "keystop", place, mile: pos.label, last }),
     });
   });
   // Pinned picks sort at their NODE's mile (lands just after that node, tie →
   // city first) but show their own mile in the gutter.
   pinnedKeyStops.forEach(({ place, nodeMile }) => {
-    const display = place.milesFromStart ?? nodeMile;
+    const pos = placeMile(place);
     entries.push({
       mile: nodeMile,
       rank: RANK.keystop,
-      make: (last) => ({ type: "keystop", place, mile: display, last }),
+      tiebreak: pos.tiebreak,
+      make: (last) => ({ type: "keystop", place, mile: pos.label, last }),
     });
   });
   mileMarkers.forEach((mk) =>
     entries.push({
       mile: mk.mile,
       rank: RANK.marker,
+      tiebreak: 0,
       make: (last) => ({
         type: "marker",
         mile: mk.mile,
@@ -216,8 +251,60 @@ export function buildSpineItems(input: {
       }),
     }),
   );
-  entries.sort((a, b) => a.mile - b.mile || a.rank - b.rank);
+  // Mile → type → tiebreak. The third key only ever separates entries that
+  // landed on the SAME mile: without it, picks clamped to the polyline's final
+  // vertex all share a sort value and Array#sort (stable) leaves them in input
+  // order, which is not a route order.
+  entries.sort((a, b) => a.mile - b.mile || a.rank - b.rank || a.tiebreak - b.tiebreak);
   return entries.map((e, i) => e.make(i === entries.length - 1));
+}
+
+/**
+ * The ONE place the read spine decides where a curated pick sits — by projecting
+ * its coords onto the day's route, never by trusting the stored `milesFromStart`
+ * (which `bakeGeneratedDays` measures against a zigzag line that threads the day's
+ * own destination and overnight as vias, in audit push order; measured 2026-07-28,
+ * that inflates PROD tiles up to x2.3 of their own day's miles).
+ *
+ * ROUND-TRIP DAYS GET NO MILE LABEL, DELIBERATELY. Where start == end the day's
+ * driving is absent from `Trip.routePolyline` entirely — measured on
+ * `expedition-ms28y793`, the polyline runs 899 mi against 1,200 mi of claimed
+ * `day.miles`, and the 301-mi shortfall is exactly the six round-trip days' miles
+ * (300). Projection there returns whatever main-route vertex happens to be
+ * nearest, which is how three stops up to 30 road miles apart all landed on the
+ * same -8mi. So there is no along-route figure to show. We order the stops
+ * near→far from the anchor (the outbound sequence, matching the edit spine's
+ * `orderKey`) and render the tick WITHOUT a number. A radial crow-flies distance
+ * would put a different quantity behind the same "mi" as every other day, with
+ * nothing on screen to distinguish them — an invented field, not a display choice.
+ * `day-detail-node-blocks.tsx` reaches the same place from the other side: it
+ * labels from `city.milesFromStart` and uses projection ONLY for placement.
+ */
+export function spinePosition(input: {
+  roundTrip: boolean;
+  anchor?: [number, number];
+  positioned: Map<string, PositionedPlace>;
+}): (place: CorridorPlace) => SpinePos {
+  const { roundTrip, anchor, positioned } = input;
+  return (place) => {
+    if (roundTrip) {
+      const radial =
+        place.coords && anchor ? haversineMi(place.coords, anchor) : Number.POSITIVE_INFINITY;
+      return { sort: radial, tiebreak: 0, label: null };
+    }
+    const pos = positioned.get(place.id);
+    if (!pos) return { sort: Number.POSITIVE_INFINITY, tiebreak: 0, label: null };
+    // A pick can project UPSTREAM of the day's start on an ordinary day too —
+    // an off-route stop whose nearest point on the trip line falls before this
+    // day begins (measured: Fremont Indian State Park at -23 on day 9 of
+    // expedition-ms28y793, a Richfield->Torrey day that is NOT a round trip).
+    // Keep its true position, which correctly sorts it ahead of the start node
+    // and tells the reader it is behind them, but claim no mile: "-23mi" is
+    // noise and clamping it to "0mi" would assert it sits at the day's start,
+    // which is false by 23 miles.
+    if (pos.dayMile < 0) return { sort: pos.dayMile, tiebreak: pos.offsetMi, label: null };
+    return { sort: pos.dayMile, tiebreak: pos.offsetMi, label: pos.dayMile };
+  };
 }
 
 export function DayDetailCorridor({
@@ -306,8 +393,25 @@ export function DayDetailCorridor({
   const spinePicks = unpinnedPicks.filter(
     (p) => !coincidesWithAnchor(toAnchorLike(p), cities),
   );
-  const positionedPicks = spinePicks.filter((p) => p.milesFromStart != null);
-  const unpositionedPicks = spinePicks.filter((p) => p.milesFromStart == null);
+  // Project EVERY curated pick, not just the spine ones: `pinnedKeyStops` are
+  // disjoint from `spinePicks` (classifyCuratedPicks splits pinned out first)
+  // and they need a mile for their gutter tick too. curatedPicks is the superset
+  // of both, so one pass covers the lot.
+  const roundTrip = isRoundTripCorridor(cities);
+  const positioned = positionPlacesOnDay({
+    line: routeLine ?? [],
+    places: curatedPicks,
+    dayStartMile: dayStartMile ?? 0,
+  });
+  const placeMile = spinePosition({ roundTrip, anchor: cities[0]?.coords, positioned });
+  // In-spine vs the fallback block: a pick is positionable when the geometry can
+  // place it — projected onto the day's route, or (round-trip) measurable from
+  // the anchor. Everything else keeps its card in the fallback block, exactly as
+  // an unpositioned pick did when this read stored miles.
+  const canPosition = (p: CorridorPlace) =>
+    roundTrip ? !!p.coords && !!cities[0]?.coords : positioned.has(p.id);
+  const positionedPicks = spinePicks.filter(canPosition);
+  const unpositionedPicks = spinePicks.filter((p) => !canPosition(p));
   // Pinned picks render at their node's position (carrying their true mile).
   const pinnedKeyStops = cities.flatMap((c) =>
     (pinnedByNode.get(c.id) ?? []).map((place) => ({ place, nodeMile: c.milesFromStart })),
@@ -323,6 +427,7 @@ export function DayDetailCorridor({
     pinnedKeyStops,
     mileMarkers,
     byId,
+    placeMile,
   });
 
   return (
@@ -704,31 +809,35 @@ function KeyStopNode({
   buildCuratedMenu,
 }: {
   place: CorridorPlace;
-  mile: number;
+  /** null on a round-trip day — the stop keeps its dot and its place in the
+   *  order, but no mile is claimed for it (see `spinePosition`). */
+  mile: number | null;
   last: boolean;
   onOpenPlace?: (placeId: string) => void;
   editMode?: boolean;
   buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
 }) {
-  const m = Math.round(mile);
+  const m = mile == null ? null : Math.round(mile);
   return (
     <div className="flex" style={{ paddingBottom: 22 }}>
       {/* Gutter — mile label + amber dot/connector (featured pick). */}
       <div className="relative shrink-0" style={{ width: GUTTER_W }}>
-        <span
-          className="absolute"
-          style={{
-            top: 1,
-            left: 4,
-            fontFamily: "var(--ff-mono)",
-            fontSize: 12,
-            lineHeight: "16px",
-            letterSpacing: "-0.02em",
-            color: "var(--amber)",
-          }}
-        >
-          {m}mi
-        </span>
+        {m != null && (
+          <span
+            className="absolute"
+            style={{
+              top: 1,
+              left: 4,
+              fontFamily: "var(--ff-mono)",
+              fontSize: 12,
+              lineHeight: "16px",
+              letterSpacing: "-0.02em",
+              color: "var(--amber)",
+            }}
+          >
+            {m}mi
+          </span>
+        )}
         {/* Amber 8px dot (centered on the 13px spine line) + connector. */}
         <div className="absolute" style={{ left: 10, top: 22, bottom: last ? undefined : -22, width: 6 }}>
           <div style={{ width: 8, height: 8, marginLeft: -1, borderRadius: 100, backgroundColor: "var(--amber)" }} />
