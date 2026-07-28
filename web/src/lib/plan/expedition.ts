@@ -39,7 +39,10 @@ export type ExpeditionForm = {
   destinations: ExpeditionDestination[];
   // Trip params (§01)
   startDate: string;
-  /** Binds to the end destination's FIXED date (same value). */
+  /** Trip end date. Reaches the pipeline as `TripParams.endDate`, independently
+   *  of any anchor's `datePin` — the start and end destinations carry no date
+   *  pin of their own (the wizard hides the toggle for them and normalizes both
+   *  to flexible/null), because the trip's date range already pins them. */
   endDate: string;
   /** Free-text trip intent/vibe (§01 Objective) → prompt context only. */
   objective: string;
