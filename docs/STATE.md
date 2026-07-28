@@ -152,20 +152,52 @@ marker. That marker is now discharged — the entries below are reconciled from
     links to it, by design. Direct-URL entry still works — which is exactly what
     makes 4b safe to defer.
 
-- **PR 4b (delete routes + legacy-only modules) and 4c (unwind the trips-domain
-  residue) are SCOPED and GATED.** Both gates must clear first, and neither has:
-  1. **A successful PROD generation** — currently impossible; needs
-     `ANTHROPIC_API_KEY` in Production.
-  2. **A verified post-sign-in return** on PROD — the redirect back from
-     `/auth/sign-in?next=/plan/expedition` actually landing the user in the
-     wizard, signed in.
+- **PR 4b MERGED (#166) — the legacy wizard is GONE.** Both gates cleared first:
+  `ANTHROPIC_API_KEY` is set in Vercel Production, a PROD generation succeeded end
+  to end, and the post-sign-in return was verified. 32 deletions — `app/plan/route.ts`
+  + `app/plan/[id]/**`, 14 legacy-only components, `lib/plan/*` except `types.ts`,
+  `lib/routing/day-suggestions.ts` + `suggestions-for-segment.ts`, and the smoke
+  test for the last of those. `/plan` now 404s.
+  - **Two orphans 4b created are still noted-not-acted-on:**
+    `components/ui/checkbox` and `lib/imagery/mapbox-static` both dropped to
+    **zero** importers across all of `web/`. Neither was in 4b's scope and
+    neither is in 4c's. Decide them deliberately or leave them.
+  - **Runbook lesson recorded in `CLAUDE.md` §RUNBOOK gotchas**, not just in the
+    PR: a dependency sweep must walk `web/scripts`, not only `web/src` — the
+    build gate type-checks both, and 4b's group 4 broke on exactly that.
 
-  Until both clear, the legacy wizard is the only creation path that is *proven*
-  to work on PROD, so deleting it would remove the fallback before the
-  replacement is demonstrated.
-  - **Residue 4c will unwind:** the anon `TRIPS` store, and the now-dead
-    `wizardStep` field (populated in `list-user-trips.ts`, read by nobody since
-    #162 — marked dead in its docstring rather than deleted).
+- **PR 4c — trips-domain residue unwound (this branch).** `createUserWizardTrip`,
+  `writeWizardSlice`, `UserTripSummary.wizardStep`, and `Trip.wizard` all deleted;
+  each verified dead against the post-4b graph first.
+  - **`Trip.wizard` is gone from the TYPE but still in the DATA**, and that is
+    fine by construction: reads are a bare `data.payload as Trip` cast (no zod,
+    no allowlist) and writes spread (`{...rawPayload}` → mutate → `{...updated}`),
+    so an unknown `wizard` key is **preserved on rewrite, never dropped**.
+    Measured 2026-07-28 on TEST: the **only** row carrying it is the seed draft
+    `7e6774b9`, `{"currentStep":"going"}`; no generated trip has ever written the
+    key. (Named as which row rather than a ratio — a bare count goes stale the
+    next time anyone generates.) **PROD NOT MEASURED** — the Supabase
+    access token has been revoked and no PROD credentials exist locally. The 7
+    PROD draft rows were previously reported as `wizardStep=going`, which implies
+    they carry it; treat that as prior report, not a fresh measurement.
+  - **CORRECTION — drafts can still be created.** The 4c scoping assumed
+    `createUserWizardTrip` was the only writer of `state='draft'`. It was not.
+    Three live paths remain `[read source]`: **duplicate-trip**
+    (`app/trips/actions.ts:110` inserts `state:"draft"`), **`setTripState`**
+    (`app/trips/actions.ts:16`, user-settable via the StatePill), and the **DB
+    default** (`state text not null default 'draft'` — any insert omitting state).
+    Draft is a live product concept independent of the wizard; do not treat it as
+    vestigial.
+  - **`lib/plan/types.ts` stays, and is now down to ONE consumer:**
+    `components/plan/planning-topbar.tsx`, using 4 of its 17 exports
+    (`PLAN_STEPS`, `STEP_DISPLAY_NUMBER`, `TOTAL_DISPLAY_STEPS`, `PlanStep`). The
+    other 13 — `PlanWith`, `PlanLocation`, `Pace`, `PACE_BOUNDS`, `GoingData`,
+    `VehicleData`, `InterestsData`, `PlannedStop`, `StopsData`, `DraftStatus`,
+    `DraftTrip`, `WizardSlices` — now have **zero** consumers. Reported, not
+    deleted. Note the topbar derives its step from the URL segment, so with
+    `/plan/[id]/<step>` deleted **the STEP counter can no longer activate** on any
+    surviving route; it renders its blank state on home. That whole file is a
+    candidate for a later pass.
   - **Known cosmetic consequence of 4a**, measured on TEST against a
     deliberately-constructed 0-day draft: a dateless draft renders in the slideup
     as `NaN/NaN-NaN/NaN • 0 Days • 0 mi` (the `/trips` card already showed
@@ -236,28 +268,25 @@ marker. That marker is now discharged — the entries below are reconciled from
   `test:er` run is the true gate.
 
 ## NEXT (ordered)
-1. **Set `ANTHROPIC_API_KEY` in Vercel Production.** One env var is the whole
-   distance between here and a first PROD generation. The flag is already on and
-   the wizard already renders; the action throws `missing_key` before any spend,
-   so nothing else can be learned until this is set. Everything below step 1 in
-   the wizard swap is gated behind it.
-2. **Do the first PROD generation, then verify the post-sign-in return.** These
-   are 4b/4c's two gates. Expect the two known defects to be visible (no
-   degradation signal; inflated `milesFromStart`) — they are shipping knowingly.
-   Expect **no** corpus rows: #163 keeps `enqueueResolvedPlaces` TEST-only on
-   purpose. That is the gate working, not a failure.
-3. **Then land 4b/4c** — delete `/plan/*` and the legacy-only modules, unwind the
-   anon `TRIPS` store and the dead `wizardStep`. Decide the dateless-draft header
-   (7 PROD rows) as part of 4b.
-4. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
+1. **The wizard swap is DONE through 4c.** 4a–4c merged or in review; the legacy
+   wizard's routes, modules, and trips-domain residue are gone. What remains of
+   the teardown is deliberately parked, not forgotten:
+   - The **anon `TRIPS` store** — still out of scope, entangled with the
+     reference-fixture removal, and inert now that legacy is gone.
+   - **`lib/plan/types.ts`** — 13 of 17 exports have zero consumers (see above).
+   - **4b's two orphans** — `components/ui/checkbox`, `lib/imagery/mapbox-static`.
+   - The **dateless-draft header** (`NaN/NaN-NaN/NaN • 0 Days • 0 mi`) on PROD's
+     7 draft rows. Still undecided, and drafts are still creatable via
+     duplicate-trip, so this is not self-limiting.
+2. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
    accept regen orphan-drop. Then apply at pool-assembly, extend `rescopeOverlays`,
    carry through regen, and re-wire the kebab's move-to-day to write it.
-5. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
+3. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
    is the source of truth for what data lives where.
-6. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
+4. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
    and works. The open question narrows to Google-primary vs corpus-first
    ranking/precedence, and whether audit-resolved Google records write back.
-7. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+5. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.
