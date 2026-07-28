@@ -71,6 +71,54 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   is revoked and no PROD credentials exist locally. Treat it as last-known, not
   current.
 
+- **The wizard swap finished: [#167](https://github.com/honkinsickle/overlander/pull/167)
+  and [#168](https://github.com/honkinsickle/overlander/pull/168) merged.** 4a
+  de-linked, 4b deleted the routes and legacy-only modules, 4c unwound the
+  trips-domain residue (`createUserWizardTrip`, `writeWizardSlice`,
+  `UserTripSummary.wizardStep`, `Trip.wizard`). The expedition wizard is now the
+  only creation path in the codebase. `main` at `86e3acf`.
+
+- **Repo hygiene: 52 merged local branches deleted, 2 stale remote-tracking refs
+  pruned.** Done with `git branch -d` rather than `-D` on purpose — that makes git
+  itself the guard, so a branch that isn't fully merged cannot be removed by a
+  filtering mistake. One branch (`feat/manual-trip-edit`) was refused because its
+  *upstream* sat a commit behind it; confirmed an ancestor of `main` before
+  forcing, so nothing was lost. **`fix/generated-day-miles` was excluded
+  deliberately** and still has no PR — parked on a real decision (fix `bake.ts` vs
+  project on the read path), not forgotten.
+  - Worth keeping: the first pass computed merged-status against a `main` that was
+    **six commits stale**, because #167 and #168 merged mid-task. Acting on that
+    list would have spared two branches that were in fact merged. Fetch before you
+    classify — "merged" is a claim about a moving target.
+
+- **A premise I asserted was wrong, and the code said so.** I recorded that
+  `createUserWizardTrip` was *likely the only writer* of `state='draft'`, implying
+  drafts might become uncreatable once 4b deleted it. **Three live paths remain** —
+  `duplicateTrip`, `setTripState`, and the DB default `[read source]`. Now in
+  `docs/BACKLOG.md` §"Draft trips after the wizard swap", with the consequence:
+  nothing branches on `state === "draft"` any more, so drafts stay creatable while
+  nothing consumes them *as* drafts. A loose end to decide, not a bug to fix.
+
+- **The #166 false claim was caught by re-audit, not by review.** Nobody
+  challenged the "identical, including the per-day distribution" sentence — it
+  surfaced only on a second pass re-reading this session's own output against the
+  measurements. Two things follow. **The correction convention held:** a dated
+  entry (above) plus a superseding section in `generation-pipeline.md` §9, with
+  #166's body and commit message left intact — same posture as the
+  corpus-writeback ADR. **And the failure mode is the durable lesson:** a
+  verification script that prints one side of a comparison invites you to assert
+  the other. Print both sides, or claim only what was measured.
+
+- **The run-to-run variance baseline now has a home:**
+  `docs/architecture/generation-pipeline.md` §9. Three generations of the
+  byte-identical form — 20 tiles at `4/4/4/4/4`, 20 at `4/3/5/4/4`, 21 at
+  `4/5/4/5/3`. Two agree on the total and disagree on the shape, which is what
+  makes it evidence: **identical input does not produce an identical trip**, so a
+  future shape difference is not prima facie a regression. It went in the pipeline
+  doc rather than `place-render-model.md` because that file's tile-count caveat is
+  about *disjoint instruments*, whereas this is the *same instrument regenerated*
+  — a different question about the same numbers.
+
 ## 2026-07-27
 
 - **The wizard swap went from "decided, not started" to fully merged in one

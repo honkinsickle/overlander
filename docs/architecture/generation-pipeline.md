@@ -833,6 +833,50 @@ write-back only accumulates `source_record` rows for a later manual `materialize
 So it is quiet from the user's perspective but loud in logs, and it does **not**
 thin the delivered trip. That makes it a smaller problem than it first appears.
 
+## 9. Run-to-run variance — the baseline for reading any future comparison
+
+**Measured 2026-07-28 `[queried TEST]`.** Three generations, all from the
+**byte-identical form** (Moab → Grand Junction → Durango, same dates, same rig,
+same objective), run at three different code states:
+
+| Trip | Code state | days | `segmentSuggestions` | per-day |
+|---|---|---|---|---|
+| `ea1f51f7-5e58-47cf-b430-b02d868988cc` | pre-4b | 5 | 20 | **4 / 4 / 4 / 4 / 4** |
+| `b67680c0-03e1-456e-b9f4-00c1f8ede733` | post-4b | 5 | 20 | **4 / 3 / 5 / 4 / 4** |
+| `ab7e8a73-3709-430d-9464-66953b9e8a2f` | post-4c | 5 | 21 | **4 / 5 / 4 / 5 / 3** |
+
+All three remain on TEST deliberately, so the comparison stays reproducible.
+
+### What this establishes
+
+**Identical input does NOT produce an identical trip.** The two 20-tile runs
+differ in *shape* from each other while agreeing on the total — so the
+distribution varies run-to-run with no code change between them that touches the
+suggestion path. The generation chain runs an LLM; nondeterminism is expected,
+and this is the measurement that says so.
+
+**Why it is worth a section:** without this baseline, a future shape difference
+reads as a regression. It is not one. Judge a comparison on whether the totals
+and the day count are in family, not on whether the per-day arrays match.
+
+### The method — comparing against a different route is uninterpretable
+
+The valid instrument is the **byte-identical form, run before and after the
+change**. A comparison against a *different* route proves nothing: the older
+`expedition-ms28y793` (15 days, 48 tiles, 3.2/day) is a different corridor over a
+different length, so any delta against it confounds the change with the route.
+That is why it was NOT used as the baseline for the 4b/4c verifications.
+
+### A correction this section supersedes
+
+PR #166 characterised the first two runs as *"identical, including the per-day
+distribution."* **That was false** — the totals matched, the distributions did
+not (see the table). The verification script had printed the per-day breakdown
+for the new trip only, and the match was asserted without baseline data. The
+*conclusion* of #166 survives (group 4 did not thin the trip; the deleted
+suggestion modules were never in the expedition path), but the characterisation
+did not. Recorded rather than rewritten — `docs/LOG.md` 2026-07-28.
+
 ## Related
 
 - [`itinerary-model.md` §7](itinerary-model.md) — **the** home for trip payload
@@ -840,9 +884,10 @@ thin the delivered trip. That makes it a smaller problem than it first appears.
 - [`trip-creation-surfaces.md`](trip-creation-surfaces.md) — **the client half of
   this doc**: the wizard form and every input, what actually reaches the pipeline,
   the in-flight render, and the post-creation landing. Records that the `note`
-  this action returns on a degraded generation is read by no component, and that
-  the legacy 5-step wizard — not this pipeline — is the creation path that is
-  live in production.
+  this action returns on a degraded generation is read by no component. **Its
+  "the legacy 5-step wizard is the live creation path" finding is SUPERSEDED** —
+  the legacy wizard was deleted in PR 4b (#166) and **this pipeline is now the
+  only creation path**; that file carries its own dated correction block.
 - [`place-render-model.md`](place-render-model.md) — the READ path: how tiles
   render as cards and how the detail slideup is dispatched and enriched.
 - [`trip-resolution.md`](trip-resolution.md) — how a stored trip is served.
