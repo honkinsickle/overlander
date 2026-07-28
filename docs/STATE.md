@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-07-27
+# STATE — `main` · 2026-07-28
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -166,7 +166,27 @@ marker. That marker is now discharged — the entries below are reconciled from
     PR: a dependency sweep must walk `web/scripts`, not only `web/src` — the
     build gate type-checks both, and 4b's group 4 broke on exactly that.
 
-- **PR 4c — trips-domain residue unwound (this branch).** `createUserWizardTrip`,
+- **THE WIZARD SWAP IS COMPLETE.** All of 4a–4c merged
+  `[gh pr view, 2026-07-28]`: **4a (#162)** de-linked the last two in-app entry
+  points; **4b (#166)** deleted the routes and legacy-only modules; **4c (#167)**
+  unwound the trips-domain residue. **#168** recorded the #166 correction and
+  widened the search-boundary runbook lesson. `main` is at `86e3acf`. The
+  expedition wizard is now the **only** creation path in the codebase.
+
+- **Repo hygiene, 2026-07-28.** **52 merged local branches deleted, 2 stale
+  remote-tracking refs pruned** (`origin/feat/remove-legacy-wizard-4b`,
+  `origin/fix/no-datepin-on-start-end`). Deleted with `git branch -d` so git
+  itself refused anything not fully merged; the one branch that needed `-D`
+  (`feat/manual-trip-edit`) was confirmed an ancestor of `main` first, so nothing
+  was lost. 16 local branches remain — 15 unmerged plus `main`.
+  - **`fix/generated-day-miles` SURVIVED THE CLEANUP DELIBERATELY.** Still
+    pushed, still **no PR** `[gh pr list --head, 2026-07-28]`, remote tip
+    `37faabb`. It is parked pending a decision between fixing `bake.ts` and
+    projecting on the read path — see PARKED above and
+    `generation-pipeline.md` §7.6. It was explicitly excluded from the prune;
+    do not treat it as debris.
+
+- **PR 4c — trips-domain residue unwound (MERGED, #167).** `createUserWizardTrip`,
   `writeWizardSlice`, `UserTripSummary.wizardStep`, and `Trip.wizard` all deleted;
   each verified dead against the post-4b graph first.
   - **`Trip.wizard` is gone from the TYPE but still in the DATA**, and that is
@@ -193,8 +213,10 @@ marker. That marker is now discharged — the entries below are reconciled from
     (`PLAN_STEPS`, `STEP_DISPLAY_NUMBER`, `TOTAL_DISPLAY_STEPS`, `PlanStep`). The
     other 13 — `PlanWith`, `PlanLocation`, `Pace`, `PACE_BOUNDS`, `GoingData`,
     `VehicleData`, `InterestsData`, `PlannedStop`, `StopsData`, `DraftStatus`,
-    `DraftTrip`, `WizardSlices` — now have **zero** consumers. Reported, not
-    deleted. Note the topbar derives its step from the URL segment, so with
+    `DraftTrip`, `WizardSlices`, `STEP_TITLE` — now have **zero** consumers
+    `[re-verified 2026-07-28: 1 consumer, 17 exports, 4 used]`. Reported, not
+    deleted. (`STEP_TITLE` was missing from this list as first written — the
+    count said 13 while the enumeration held 12.) Note the topbar derives its step from the URL segment, so with
     `/plan/[id]/<step>` deleted **the STEP counter can no longer activate** on any
     surviving route; it renders its blank state on home. That whole file is a
     candidate for a later pass.

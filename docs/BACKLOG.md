@@ -85,6 +85,59 @@ defect. Measurements and context:
   `ok: true`. No distinct error separates "no key" from "genuinely not found" at
   the action boundary. Worth a fail-fast check before the (paid) LLM call.
 
+## Draft trips after the wizard swap — a loose end, not a bug (2026-07-28)
+
+### Correction: `createUserWizardTrip` was NOT the only writer of `state='draft'`
+
+Recorded because the premise was asserted during 4c scoping and disproved against
+source. **Three live paths remain**, all `[read source, re-verified 2026-07-28
+against post-4b/4c `main`]`:
+
+| # | Writer | Trigger |
+|---|---|---|
+| 1 | `app/trips/actions.ts:80` `duplicateTrip` — inserts `state: "draft"` at :110 | `components/trips/trip-card.tsx:76` `submitDuplicate()` — the card's **Duplicate** control |
+| 2 | `app/trips/actions.ts:16` `setTripState` — `.update({ state })` at :23 | `trip-card.tsx:358` `choose(next)` — the **StatePill** dropdown; `"draft"` is one of three user-selectable states |
+| 3 | DB default `state text not null default 'draft'` (`20260513000000_init_identity.sql:63`) | **any** insert omitting `state` |
+
+Writer 3 is currently unreachable in app code: the only other two inserts into
+`public.trips` both set `state` explicitly — `app/api/trips/fork/route.ts`
+(`"active"`) and `lib/plan/expedition-actions.ts:127` (`"active"`). It is a
+latent default, not a live path.
+
+### The loose end
+
+**Nothing branches on `state === "draft"` anymore.** A repo-wide grep finds the
+type union in two places and one comment — no behaviour keys off it `[grep]`.
+Since #162 every card links to `/trips/{id}`, so a draft renders as an ordinary
+trip carrying a "Draft" pill.
+
+That is **coherent**, and it is deliberately recorded as a loose end rather than
+a defect: drafts remain **creatable** while nothing consumes them **as drafts**.
+The state is now a label the user can set and nothing acts on. Either give it
+meaning or retire it — but decide, rather than letting it drift.
+
+### The `NaN` header is narrower than it looks
+
+The `NaN/NaN-NaN/NaN • 0 Days • 0 mi` slideup header affects only **dateless,
+0-day** drafts. **No surviving path creates that shape**: `duplicateTrip` copies
+a real `source.payload` (real days and dates), and `setTripState` only relabels
+an existing trip. The instances are PROD's legacy rows — **7, LAST-KNOWN and NOT
+currently measurable** (the Supabase access token is revoked and no PROD
+credentials exist locally). Treat that 7 as last-known, not current.
+
+## Orphans created by PR 4b — noted, not acted on (2026-07-28)
+
+Both dropped to **zero importers across all of `web/`** when 4b deleted the
+legacy components, and neither was in 4b's or 4c's scope
+`[grep, re-verified 2026-07-28]`:
+
+- `web/src/components/ui/checkbox.tsx`
+- `web/src/lib/imagery/mapbox-static.ts`
+
+Left deliberately. An unimported module is cheap, and deleting one is the kind of
+decision that deserves a human check that no out-of-repo consumer depends on it —
+the same posture taken for the vestigial `GooglePlaces` env var above.
+
 ## Vercel Production env — measured 2026-07-27
 
 All `[vercel env ls production]`. Names only; no values were read or printed.
