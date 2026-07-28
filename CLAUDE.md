@@ -139,6 +139,29 @@ actually touched what they describe. The `/wrap` command runs this pass.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an
     edited day re-persists it via the client.
   - `rm -rf web/.next` when compile errors don't match what's on disk.
+  - **A dependency sweep must walk `web/scripts`, not just `web/src` — the build
+    gate type-checks both.** Surfaced by PR 4b (2026-07-28): the deletion scoping
+    enumerated importers under `web/src` only, found the set self-contained, and
+    deleted `lib/routing/suggestions-for-segment.ts`. `next build` then failed on
+    `scripts/smoke-suggestions-for-segment.ts`, a one-off smoke test importing it
+    via `../src/...`. **`web/scripts/` is inside the tsconfig's type-check scope**,
+    so a script importing a deleted module fails the gate exactly like app code —
+    but it is invisible to any grep rooted at `src/`, and its relative `../src/`
+    specifier does not match an `@/`-alias search either.
+    - **Search the whole of `web/` and resolve BOTH specifier forms** (`@/…`
+      alias and `../src/…` relative) before concluding a module is unimported.
+    - Watch for the mirror-image false positive: matching on **basename** finds
+      `lib/trips/actions` when looking for `lib/plan/actions`. Resolve specifiers
+      to real paths; do not match on filename.
+    - Expect `scripts/smoke-*.ts` to shadow the module it smoke-tests — deleting
+      a module usually orphans its smoke script, and the script is the thing that
+      breaks the gate. Check for a same-named smoke script first.
+  - **`next build` is the only self-sufficient gate; bare `npx tsc --noEmit` is
+    not.** After `rm -rf .next`, tsc reports phantom `Cannot find name 'PageProps'`
+    errors across the app — `PageProps` is a Next-**generated** global living in
+    `.next/types`, which only `next build` regenerates. Conversely, a STALE
+    `.next` reports phantom `Cannot find module '../../src/app/…/page.js'` for
+    routes you just deleted. Both are artifacts, not source errors. Run the build.
 
 ---
 
