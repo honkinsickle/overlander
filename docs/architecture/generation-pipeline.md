@@ -161,17 +161,46 @@ Returns `{ n, corridorCities, segmentSuggestions: cardTiles }`.
 `ItineraryOutput` + `BakedDay[]` → a normal `Trip` `[read source]`. Then, still
 inside the action `[read source: expedition-actions.ts]`:
 
-- `tripId = \`expedition-${Date.now().toString(36)}\``
 - `attachHeroPhotos(trip)` — per-day and trip hero images resolved from
   **Wikipedia/Wikimedia Commons** by destination name
   (`web/src/lib/imagery/destination-photo.ts`). This is a **network call that
   mutates the payload after `itineraryToTrip`** and before persist.
-- `supabase.from("reference_trips").upsert({ id, title, payload: trip,
-  source_version: \`yotrippin-wizard@<YYYY-MM-DD>\` })` with the **service**
-  client.
 
-Verified on the instrument: `source_version` = `yotrippin-wizard@2026-07-26`
-`[queried TEST]`.
+> **CORRECTED 2026-07-28 — the write target below changed in #160 and this
+> section described the pre-#160 shape.** As written it said the action minted
+> `` tripId = `expedition-${Date.now().toString(36)}` `` and called
+> `supabase.from("reference_trips").upsert({ id, title, payload, source_version })`
+> with the **service** client. **All four of those are now false**
+> `[read source: expedition-actions.ts]`:
+>
+> | was | is |
+> |---|---|
+> | `reference_trips` | **`public.trips`** |
+> | service client | **`authClient`** — session-scoped, RLS-enforced by `trips_insert_owner` (`auth.uid() = owner_id`) |
+> | `expedition-<base36>` id | **DB-generated UUID**, read back via `.select("id").single()` |
+> | `source_version` | not written; the row carries `owner_id`, `reference_id: null`, `state: "active"`, `title`, `payload` |
+>
+> The `expedition-<base36>` id shape survives only on the pre-#160 instruments
+> (`expedition-ms28y793` and the other `expedition-*` slugs in `reference_trips`).
+> Those are frozen artifacts of the old path, not what the pipeline produces now.
+>
+> Two consequences the old text drew are also void: a generated trip **is** now
+> editable (`canEdit` sees a UUID) and **is** findable (the listings query
+> `trips`). See `trip-creation-surfaces.md`'s superseded block.
+
+The persist, as it stands `[read source: expedition-actions.ts]`:
+
+```ts
+await authClient.from("trips").insert({
+  owner_id: user.id, reference_id: null,
+  title: trip.title, state: "active", payload: trip,
+}).select("id").single()
+```
+
+`state: "active"` is deliberate rather than the `'draft'` column default — a
+generated trip is finished, not a half-filled wizard draft, and `state` is what
+`/trips` renders it as. `enqueueResolvedPlaces` afterwards keeps the **service**
+client deliberately: it writes a shared curated corpus table, not the user's row.
 
 ### Stage 5 — corpus feedback (after persist, non-fatal)
 
@@ -505,10 +534,15 @@ currently a live defect.
 
 ## 5. What persists, and what is thrown away
 
-### Persisted — `reference_trips` row
+### Persisted — `public.trips` row (was `reference_trips` before #160)
 
-`{ id, title, payload: <full Trip>, source_version }` `[read source]`. Top-level
-payload keys on the instrument `[queried TEST]`: `days`, `endDate`,
+`{ id (uuid), owner_id, reference_id: null, title, state: "active", payload:
+<full Trip> }` `[read source: expedition-actions.ts]`. The shape below —
+`{ id, title, payload, source_version }` in `reference_trips` — is what the
+**instrument** carries, because `expedition-ms28y793` predates #160. See the
+correction block in §4 before quoting this section for current behaviour.
+
+Top-level payload keys on the instrument `[queried TEST]`: `days`, `endDate`,
 `endLocation`, `foodThread`, `generated`, `generationInput`, `heroImage`, `id`,
 `kicker`, `routePolyline`, `startCoords`, `startDate`, `startLocation`, `title`,
 `weatherHiF`, `weatherLoF`.

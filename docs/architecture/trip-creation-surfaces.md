@@ -19,11 +19,25 @@ is being made, and what it does when creation degrades.
 > | Expedition persists **TEST project only** | Runs on **PROD** (#163). The TEST-only rail was removed from the trip write and **narrowed to the corpus call**. |
 > | Expedition **not live in production** | `ENABLE_PLANNER_WIZARD` **is set in Vercel Production** and `/plan/expedition` returns 307 → sign-in there. Generation still fails with `missing_key` — `ANTHROPIC_API_KEY` is unset. |
 >
-> **What is still true and load-bearing:** `/plan` remains a live route handler
-> that **mints a draft on GET** (verified on PROD: `GET /plan` → 307 →
-> `/plan/<id>/going`). It is simply unreachable from the UI now. That is why the
-> prefetch guard below still matters, and why deleting the route is 4b — a
-> separate, gated step.
+> **SUPERSEDED AGAIN 2026-07-28 — the legacy wizard is DELETED, not merely
+> unreachable.** The paragraph that stood here said `/plan` "remains a live route
+> handler that mints a draft on GET … deleting the route is 4b, a separate, gated
+> step." 4b landed as **#166** and 4c as **#167**: `app/plan/route.ts` and
+> `app/plan/[id]/**` are gone, `/plan` **404s**, and the trips-domain residue
+> (`createUserWizardTrip`, `writeWizardSlice`, `UserTripSummary.wizardStep`,
+> `Trip.wizard`) is unwound. **The expedition wizard is the only creation path in
+> the codebase.** The prefetch guard discussed below therefore guards nothing;
+> read that section as history.
+>
+> `ANTHROPIC_API_KEY` **is** now set in Vercel Production and a PROD generation
+> has succeeded end to end, so the `missing_key` blocker in the table above is
+> also discharged.
+>
+> Two things the deletion did **not** settle, both live: `state = 'draft'` is
+> still creatable by three paths that have nothing to do with the wizard
+> (`duplicateTrip`, `setTripState`, the column default) — see `BACKLOG.md`
+> §"Draft trips after the wizard swap"; and `lib/plan/types.ts` survives with one
+> consumer using 4 of its 17 exports.
 >
 > **The "naive expectation is inverted" observation below has itself inverted.**
 > It is now the ordinary arrangement: the LLM wizard is the fronted path and the

@@ -27,7 +27,58 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## MERGED THIS SESSION (2026-07-26 → 07-27)
+## 2026-07-28 — ONE CAUSAL CHAIN, plus one separate thread
+
+`[gh pr view #153–#175, 2026-07-28]` — nine PRs merged today (**#165–#173**);
+**#159–#164 were yesterday**; #174/#175 do not exist. Nothing from today is open
+or stranded. The only open PR in the repo is **#24** (May, unrelated). Verified
+rather than assumed — #153 was once taken as merged a day early, and **#172
+merged mid-correction today**, stranding a fix on its branch until it was
+cherry-picked as #173.
+
+**Read this as a chain, because it was one.** Each link caused the next:
+
+1. **The wizard swap completed** (#166 4b, #167 4c) → the expedition wizard is
+   the only creation path, and generation went live on PROD.
+2. **Generated trips started landing in `public.trips`** — three of them, all
+   created 2026-07-28 by the same owner.
+3. **The `milesFromStart` pricing pass discovered them**, which **falsified the
+   recorded claim that no PROD trip carried stored miles** (true when measured
+   2026-07-26; the table held no generated rows then).
+4. That turned a TEST curiosity into a **live production defect** and settled
+   option (a) vs (b) **in favour of (b), the read-path fix**.
+5. **(b) shipped as #170.**
+
+**MAX_IDS ran separately** — measured, scoped, and deliberately **not built**.
+
+### SHIPPED (live on `main`)
+- **#165** — no date-pin toggle on start/end destinations.
+- **#166 (4b) / #167 (4c)** — legacy 5-step wizard **deleted**, trips-domain
+  residue unwound. `/plan` 404s.
+- **#170 — the read spine projects coordinates, never stored miles.** Ordering
+  and labels now come from `positionPlacesOnDay`; round-trip days claim **no**
+  mile (their driving is absent from `routePolyline`); same-mile ties break on
+  `offsetMi`, which at a polyline-end clamp is distance past the terminus.
+  Ships with `web/scripts/verify-projection-delta.ts`. Mechanics:
+  `docs/architecture/itinerary-model.md` §2c-i.
+- **#168 / #169 / #171 / #172 / #173** — doc passes and corrections, including
+  the three-site correction of the stale "no PROD trip stores `milesFromStart`"
+  claim (#171) and two rounds of MAX_IDS corrections (#172, #173).
+
+### DECIDED BUT NOT BUILT
+- **MAX_IDS = 40 → chunk server-side.** Measured, scoped, tripwired, unbuilt.
+  Do **not** raise the cap until someone establishes what 40 protected; ordering
+  by proximity is the wrong tool because the measured failures are single-day.
+  Full entry with the failing-day table: `docs/BACKLOG.md`.
+
+### PARKED
+- **`fix/generated-day-miles` — LOWER urgency after #170, but not closed.**
+  Both halves matter: **nothing renders the bad miles any more** (the read path
+  stopped trusting them), **and new generations still write them**. That is
+  data-quality debt rather than a render bug. See PARKED below and
+  `docs/BACKLOG.md`.
+
+## MERGED EARLIER (2026-07-26 → 07-27)
 
 The previous STATE was stale by five PRs and carried a "stale below this line"
 marker. That marker is now discharged — the entries below are reconciled from
@@ -96,7 +147,20 @@ marker. That marker is now discharged — the entries below are reconciled from
 ## PARKED / BLOCKED
 
 - **PARKED: `fix/generated-day-miles`** — pushed to remote, **unmerged, no PR**,
-  awaiting a decision. Carries (1) `web/scripts/check-payload-invariants.ts`, a
+  remote tip `37faabb`.
+  - **The decision it was awaiting has been made, and it went the other way.**
+    Option (b) — fix the read path — shipped as **#170**. So this branch is no
+    longer the pending choice; it is a separate, lower-urgency question.
+  - **Nothing renders the bad miles now.** #170 pointed every read-path consumer
+    at coordinate projection, so the stored field is inert at the surfaces that
+    used to trust it.
+  - **But new generations still write it.** Every trip created from here on
+    accumulates an inflated `milesFromStart` that nothing validates. Data-quality
+    debt, not a render defect — and the reason this stays open rather than closed.
+  - Merge check `[2026-07-28]`: merges onto `main` with one **comment-only**
+    conflict in `stretches.ts` (take main's paragraph); its 12 tests pass on the
+    merged tree.
+  - Carries (1) `web/scripts/check-payload-invariants.ts`, a
   read-only TEST-only measurement instrument, deliberately **not** in CI —
   baseline on `expedition-ms28y793` is 1/6 assertions passing; (2) a
   `where === "keyStop"` via filter + `placeId`-keyed role merge in `bake.ts`,
