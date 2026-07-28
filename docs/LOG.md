@@ -12,6 +12,65 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-07-28
+
+- **CORRECTION to [#166](https://github.com/honkinsickle/overlander/pull/166) —
+  "identical, including the per-day distribution" was FALSE.** The PR body and the
+  commit message both claimed the pre- and post-deletion generations were
+  identical. **The totals matched at 20; the distributions did not**
+  `[re-measured 2026-07-28]`:
+  - `ea1f51f7` (pre-4b baseline): 20 tiles, per-day **4 / 4 / 4 / 4 / 4**
+  - `b67680c0` (post-4b): 20 tiles, per-day **4 / 3 / 5 / 4 / 4**
+
+  **How it happened:** the verification script printed the per-day breakdown for
+  the NEW trip only. There was **no per-day data for the baseline at all**, and
+  the match was asserted anyway. Same failure mode this project keeps hitting — a
+  conclusion stated with more confidence than the evidence carried — committed, in
+  this instance, inside a PR whose stated purpose was rigor about that very
+  number.
+
+  **What survives:** the CONCLUSION of #166 still holds. Totals matched exactly,
+  group 4 demonstrably did not thin the trip, and the deleted suggestion modules
+  were never in the expedition path (`buildDaySuggestions` had one caller,
+  `lib/plan/actions.ts`, itself deleted). It is the CHARACTERIZATION of the
+  evidence that was false, not the finding.
+
+  **[#167](https://github.com/honkinsickle/overlander/pull/167) contradicts #166
+  on this point, and #167 is the correct one.** It argues run-to-run variance from
+  the fact that "the two baselines already differ in shape from each other" —
+  which is true, and which is precisely what makes #166's sentence wrong. Read
+  #167.
+
+  Recorded rather than rewritten: #166 is merged, and this repo's convention (see
+  `docs/decisions/2026-07-23-corpus-writeback-dormant.md`) is a dated correction
+  over an edited history. The PR body and commit message are left as they are.
+
+- **The runbook lesson written in #166 was itself under-generalized, and is
+  widened here.** It told the next person to "search the whole of `web/`" — one
+  rung up from the "search `web/src`" mistake that caused the break, and still
+  wrong for the same reason. **This is a multi-workspace repo and the gates are
+  per-workspace:** `cd web && npx next build` does not run `data/`'s
+  `tsc --noEmit`, so a deletion that breaks `data/` passes the gate the runbook
+  names and fails elsewhere. Verified `data/` references none of the modules 4b
+  deleted `[grep]`, so nothing was actually broken — the lesson simply would not
+  have prevented the next instance. `CLAUDE.md` §RUNBOOK now enumerates the
+  workspaces and their gates.
+
+- **Swept `STATE.md` and `BACKLOG.md` for other counts that drift the same way.
+  Nothing is currently stale**, so nothing was changed. Both checkable claims
+  re-verified: `ensureAlaskaUpgraded` still has exactly **4** call sites
+  (`repository.ts` 103/117/129/190) `[grep]`, and the auth-method sweep
+  (`signInWithPassword`, `signInWithOtp`, `signUp`, `verifyOtp`,
+  `resetPasswordForEmail`, `signInAnonymously`) still returns **zero hits** in
+  `web/src` `[grep]`. `BACKLOG.md`'s ratios are pinned to named, frozen artifacts
+  (`expedition-ms28y793`, PROD `24f14ecc…`), which is what makes them safe — the
+  denominator can't move. The one genuinely drift-prone figure is **"PROD has 7
+  such draft rows"**: it is a live DB count, it is now MORE fragile because 4c
+  established drafts are still creatable (`duplicateTrip`, `setTripState`, the DB
+  default), and it **cannot currently be re-measured** — the Supabase access token
+  is revoked and no PROD credentials exist locally. Treat it as last-known, not
+  current.
+
 ## 2026-07-27
 
 - **The wizard swap went from "decided, not started" to fully merged in one
