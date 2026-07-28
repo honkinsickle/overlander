@@ -64,6 +64,58 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
     returned live Google data. An inference-shaped claim nearly shipped **while
     auditing inference-shaped claims**.
 
+- **THREE MORE CORRECTIONS, found by re-reading the MAX_IDS work rather than by
+  new investigation.** Two of them had already reached `main`; the third reached
+  a PR body.
+  - **"Two 19-day TEST trips scrolled end to end with instrumented `fetch`" was
+    WRONG — one was.** `alaska-south-final` was instrumented;
+    `yotrippin-demo` was window-sampled from the DOM and replayed offline. Both
+    stay under the cap, so the conclusion held, but the headline figure came from
+    one trip while being attributed to two — in a commit message, a PR body, and
+    three docs. Fixed in #173.
+  - **"React double-invokes effects in dev, which can add a mount-time
+    request/abort pair" was WRONG for this repo.** `web/next.config.ts` sets no
+    `reactStrictMode`, there is no `StrictMode` wrapper anywhere in `web/src`,
+    and selecting a day issues exactly **one** hydration request
+    `[measured 2026-07-28]`. The guess was written **inside the runbook entry
+    about naming mechanisms without checking for them** — the lesson and its
+    violation in the same commit. Replaced with the negative finding, since
+    double-invoke is the obvious hypothesis and re-checking costs a measurement.
+  - **"A dropped id is never in the cache to begin with" was WRONG.**
+    `cacheStore` is keyed by `place_id` globally, so a dropped id may well be
+    cached from an earlier window in which it survived the cut. The accurate
+    statement is that it is never **looked up**: `parsePlaceIds` truncates before
+    the handler consults the cache. (`place-render-model.md` had it right; only
+    `BACKLOG.md` was wrong.)
+  - **"Verified the remount empirically" — the conclusion held, the evidence did
+    not.** The test called `history.back()` **in the same script** as the close
+    click, so the resulting `/` could not be attributed to the close; it was
+    marked `(observed)` in two docs anyway. Re-run with the close click alone,
+    then the full cycle: open → select day 1 → **28 ids**; Close, nothing else →
+    lands on `/` with a fresh document; reopen → select day 1 → **28 ids again**.
+    `hydrated` does reset per open. Galling detail: that claim was written in the
+    sentence *"verified rather than assumed, after last round's lesson."**
+  - **#172 merged mid-correction**, taking `44c7f42` and stranding the fix on the
+    branch, so `main` briefly carried two known-false statements. Recovered by
+    cherry-picking onto a fresh branch (**#173**). Worth remembering that an open
+    PR is not a safe place to park a known error — land the correction or say so
+    in the PR before it can be merged out from under you.
+
+- **WHAT THE DAY ACTUALLY DEMONSTRATED — the sharper finding.** Across three
+  re-analysis passes over the MAX_IDS work, **every payload count held** — 91 /
+  57 / 57 / 42 distinct eligible ids, `24f14ecc` at exactly 40, 51 dropped,
+  zero-windows-over-40, 0 of 51 carrying a stored rating. Not one number moved
+  under repeated scrutiny.
+  **Every single error was a claim about MECHANISM or PROVENANCE:** "ids resolve
+  to null" (it was request abort), "React double-invokes" (not in this repo),
+  "never cached" (it may be — it is never looked up), "two trips instrumented"
+  (one was), "observed" (confounded by my own `history.back()`).
+  That is a more useful diagnosis than "we made mistakes": the counting
+  discipline this project has built is working, and the failure has moved
+  entirely to *why* and *how we know*. Both new `CLAUDE.md` runbook lines exist
+  for that — validate the apparatus before trusting the instrument, and don't
+  name a mechanism you haven't checked for.
+
 - **The stale example this replaced had propagated to two docs**, both corrected
   in place: `BACKLOG.md`'s entry and `place-render-model.md` §4.4 both claimed
   *"`24f14ecc` carries 41 tiles on day-1 alone, so a ~3-day window exceeds 40."*

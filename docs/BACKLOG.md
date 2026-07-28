@@ -1104,5 +1104,56 @@ conclusion.
     prefer it.
   - Measurement detail: `docs/architecture/place-render-model.md` §4.4.1.
 
+- **Option (a) — fix the bake (`fix/generated-day-miles`). PARKED, and LOWER
+  urgency after [#170](https://github.com/honkinsickle/overlander/pull/170), but
+  not closed.** The branch carries a `where === "keyStop"` via filter +
+  `placeId`-keyed role merge in `bake.ts` (12 unit tests, mutation-checked) and
+  `check-payload-invariants.ts`. Remote tip `37faabb`, **still no PR**.
+  - **Why urgency dropped:** #170 pointed the read spine at coordinate
+    projection, so **nothing renders the bad miles any more**. The stored field
+    is inert at every surface that used to trust it.
+  - **Why it is not closed:** **new generations still write the inflated field.**
+    Every trip created from now on accumulates a payload column that is wrong and
+    that nothing validates. That is a data-quality debt, not a render bug.
+  - **What it would and would not buy:** the via filter removes ~6% of the
+    inflation (2.25× → 2.18× against the direct line) — the dominant term is
+    key-stop vias being genuine off-route excursions in LLM emission order, which
+    the filter does not touch. So (a) makes stored miles *less wrong*, never
+    trustworthy. Anything that re-trusts them after (a) is still wrong.
+  - **Do not pair it with a backfill.** A backfill after (a) writes miles measured
+    on the 1,960-mi corrected line while the read path projects the 899-mi direct
+    one — trading a loud disagreement for a silent one. Detail:
+    `generation-pipeline.md` §7.
+  - Merge check `[2026-07-28]`: `37faabb` merges onto `main` with **one
+    comment-only conflict** in `stretches.ts` (the known divergence — take main's
+    paragraph); its 12 tests pass on the merged tree.
+
+- **Day 9's backtrack stop renders ABOVE the "Start" node — a design question,
+  not a bug.** On `expedition-ms28y793` day 9 (Richfield → Torrey, *not* a
+  round-trip day) Fremont Indian State Park projects to `-23mi`: its nearest point
+  on the trip line falls before the day begins. Post-#170 it keeps that true
+  position — so it sorts ahead of the Start node — and claims no mile
+  `[measured 2026-07-28, rendered DOM]`.
+  - That is geometrically honest: the stop **is** behind you. But nothing else in
+    the product puts content above a Start node, so it reads as novel.
+  - The alternatives are both worse on their own terms: clamping to `0mi` asserts
+    it sits at the day's start (false by 23 miles), and dropping it to the
+    fallback block hides a real stop. Left as-is deliberately; decide the
+    treatment, don't "fix" the position.
+
+- **Harness output is not literal DOM — `verify-projection-delta.ts` does not
+  model the anchor split.** The harness feeds every curated pick to
+  `buildSpineItems` as a key stop. The app first routes picks matching
+  `coincidesWithAnchor` into a **featured card under the start/end city node**,
+  so they never reach the spine as separate entries.
+  - Observed divergence: on `expedition-ms28y793` day 6 the harness prints
+    `80mi Bryce Canyon National Park` as its own spine row, while the app renders
+    it as a featured card under the `Bryce Canyon, UT` end node at 81mi
+    `[measured 2026-07-28, rendered DOM]`. Same user-visible outcome (destination
+    last), different structure.
+  - Consequence for whoever next reads harness output: treat it as a projection
+    check, not a render snapshot. If the anchor behaviour ever needs asserting,
+    that is a browser check, not a harness change.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

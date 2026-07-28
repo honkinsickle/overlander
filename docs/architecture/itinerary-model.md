@@ -98,6 +98,63 @@ generator can rewrite it freely); the overlay is durable user intent that must
 outlive regeneration. Keeping them separate is what lets a regenerate replace every
 day while the pins/order survive (§5).
 
+### 2c-i. The read spine positions from COORDS, not stored miles (#170)
+
+The read spine used to order and label curated key stops from the baked
+`segmentSuggestions.milesFromStart`. It no longer reads that field at all
+`[read source: day-detail-corridor.tsx — spinePosition, buildSpineItems]`.
+
+**Why.** `bakeGeneratedDays` threads every `day.audit.resolvedPlaces` entry
+through `routeBetween` as a via — including the entries tagged `endpoint` and
+`overnight`, in audit push order — so the stored figure is measured against a
+zigzag while `day.miles` comes from the audit's direct start→end measurement.
+Measured 2026-07-28 on PROD: 18 curated tiles across the three generated trips
+carry a mile beyond their own day's length, worst ×2.3. Full trace and the
+failing-day table: `generation-pipeline.md` §7.
+
+**The rule now.** `spinePosition` returns `{ sort, tiebreak, label }` and
+`buildSpineItems` sorts on `mile → type → tiebreak`:
+
+| case | sort key | gutter label |
+|---|---|---|
+| ordinary day | projected `dayMile` (`positionPlacesOnDay`) | that mile |
+| ties at the same mile | `offsetMi` — at a polyline-end clamp this **is** distance past the terminus | that mile |
+| round-trip day (`start == end`) | radial `haversineMi` from the anchor, near→far | **none** |
+| projects upstream of the day start | its true negative `dayMile` (sorts ahead of the Start node) | **none** |
+| unprojectable (no coords) | `+Infinity`, falls to the "Today's Key Stops" block | **none** |
+
+**Why round-trip days claim no mile.** Where start == end the day's driving is
+absent from `Trip.routePolyline` entirely — on `expedition-ms28y793` the line
+runs 899 mi against 1,200 mi of `day.miles`, and the 301-mi shortfall is exactly
+the six round-trip days' 300. Projection there returns whichever main-route
+vertex is nearest, which is how three stops 30 road miles apart all landed on the
+same `-8mi`. A radial crow-flies label would put a *different quantity* behind
+the same "mi" as every other day, so the honest option is absent, not
+approximate. `day-detail-node-blocks.tsx` reaches the same place from the other
+side: it labels nodes from `city.milesFromStart` and uses projection only for
+placement.
+
+**`isRoundTripCorridor` is shared, not copied** — lifted out of node-blocks'
+private `sameCoords` into `stretches.ts` so both spines cannot drift on which
+days are degenerate. Its label-based sibling `isRoundTripDay` feeds
+`dayStartMiles` and answers a different question; measured 2026-07-28 the two
+agree on every round-trip day of `expedition-ms28y793` and the three PROD
+generated trips, but they are not interchangeable.
+
+**Untouched by #170, deliberately:** the city-node read of
+`city.milesFromStart` (that is `CorridorCity` from `derive.ts`, and node-blocks
+reads it too), `curated-placement.ts` (its `milesFromStart` appears only in a
+generic constraint the body never reads), `backtrack.ts` → `positionOf` (no
+production caller), and everything bake-time. The PR wrote nothing to any
+database.
+
+**Gate.** `web/scripts/verify-projection-delta.ts` drives the shipped
+`spinePosition` + `buildSpineItems` over three states (stored / naive projection
+/ corrected) and asserts zero negative labels. It exists because
+`check-payload-invariants.ts` asserts on the stored payload and reads
+`reference_trips` only, so it is structurally incapable of measuring a read-path
+fix on trips that live in `public.trips`.
+
 ### 2d. Which DAY a POI belongs to is geographically DERIVED (not authored)
 
 §2a says day membership is "array-based" — but the array itself is **populated by

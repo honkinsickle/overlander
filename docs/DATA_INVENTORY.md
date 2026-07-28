@@ -130,6 +130,60 @@ Left in place deliberately. `[queried TEST]`
 > `reference_trips` write target. `CLAUDE.md` §RUNBOOK's disjoint-instruments
 > caveat still applies to it.
 
+**PROD now holds GENERATED trips in `public.trips` — three as of 2026-07-28,**
+all created that day, all owned by `762639cf-8e90-4648-b387-f73729ee2e18`
+`[queried PROD, read-only]`. This is the first time PROD has carried any row
+produced by the generation pipeline, and it is what falsified the previously
+recorded "no PROD trip stores `milesFromStart`" claim.
+
+| id | days | tiles carrying a stored mile | curated tiles beyond their own day's `miles` | worst |
+|---|---|---|---|---|
+| `a54c5c65-0120-4a3e-bd55-0756cdd506ae` | 3 | 774 | 3 | ×2.3 |
+| `cefc94e0-9d2a-47ba-b90b-057f407cc41e` | 4 | 552 | 3 | ×1.5 |
+| `7e3e088a-6b60-497f-b509-2dd19d8ee48f` | 4 | 776 | 4 | ×2.3 |
+
+Day 1 of `a54c5c65…` is a **268-mile day whose spine reached 626mi** before #170.
+Post-#170 nothing renders these values; they are still being written. Do not
+delete these rows — they are the only PROD artifacts of the pre-#170 read path.
+
+**TEST, generated 2026-07-28** (all `public.trips`, owned by `seed-owner`,
+`state: "active"`) `[queried TEST]`:
+
+| id | days | purpose |
+|---|---|---|
+| `b67680c0-03e1-456e-b9f4-00c1f8ede733` | 5 | post-4b generation, the #166 distribution check (20 tiles, per-day 4/3/5/4/4) |
+| `ab7e8a73-3709-430d-9464-66953b9e8a2f` | 5 | post-4c confirmation the pipeline survived the residue unwind |
+| `5bd75b52-a75d-4298-a238-cce8f61d76a4` | 15 | a long generated trip for windowing/hydration work |
+
+`ea1f51f7…` (above) is the pre-4b baseline those compare against — 20 tiles,
+per-day **4/4/4/4/4**. The #166 claim that the two were "identical, including the
+per-day distribution" was false; totals matched, distributions did not. See
+`LOG.md` 2026-07-28.
+
+### The `MAX_IDS` instrument — per-day hydration-eligible id counts
+
+A tile is hydration-eligible when it carries a `placeId` and no `photoUrl`
+(**only** `day.segmentSuggestions` ever carries a `placeId` — `day.suggestions`
+and `waypoints` never set one). These are the only trips in either database whose
+**single-day** eligible count exceeds `MAX_IDS = 40`, so they are the instrument
+for that defect `[queried PROD, read-only, 2026-07-28]`:
+
+| trip | day | distinct eligible ids | dropped by `.slice(0, 40)` |
+|---|---|---|---|
+| `la-to-deadhorse` (PROD `reference_trips`, 66d) | 1 | **91** | **51** |
+| " | 2 | 57 | 17 |
+| " | 3 | 57 | 17 |
+| " | 9 | 42 | 2 |
+| `dawson-vancouver-cassiar` (PROD, FROZEN, 14d) | 1 | 42 | 2 |
+
+Whole-trip totals: `la-to-deadhorse` **907 eligible tiles / 423 distinct ids**;
+`dawson-vancouver-cassiar` 182 / 115. For contrast, the two trips previously
+assumed to be the problem cannot trigger it — `24f14ecc` is **exactly 40 distinct
+trip-wide** against a cap of 40 (a boundary, not a margin), and
+`expedition-ms28y793`'s whole-trip union is **39**. Analysis:
+`architecture/place-render-model.md` §4.4.1; scoping and recommendation:
+`BACKLOG.md`.
+
 ## `auth.users` vs `public.users` — PROD shape, and why the counts differ (2026-07-27)
 
 All `[queried PROD]`, read-only, aggregates only — no addresses recorded here.
