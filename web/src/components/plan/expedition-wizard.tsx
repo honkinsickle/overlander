@@ -169,22 +169,28 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
     if (v) setRig(v.rig ?? DEFAULT_RIG);
   };
 
-  // Dates from the shared range picker; end binds to the end destination's
-  // FIXED date (same value).
+  // Dates come from the shared range picker and reach the pipeline as
+  // `TripParams.startDate/endDate`. This used to ALSO copy the end date onto the
+  // end destination's anchor when that anchor was pinned FIXED; that mirroring is
+  // gone with the start/end date-pin toggle, which was the only way to pin them.
   const onDates = (s: string, e: string) => {
     setStartDate(s);
     setEndDate(e);
-    setDestinations((ds) =>
-      ds.map((d, j) =>
-        j === ds.length - 1 && d.datePin === "fixed" ? { ...d, date: e || null } : d,
-      ),
-    );
   };
 
   const form: ExpeditionForm = useMemo(() => {
     const v = vehicles.find((x) => x.id === vehicleId);
+    const end = destinations.length - 1;
     return {
-      destinations: destinations.map(({ id: _id, ...d }) => d),
+      // START and END are normalized to flexible/null, matching the hidden
+      // toggle below. This is not just tidiness: rows are REORDERABLE, so a
+      // middle stop set to FIXED can be moved into first/last position, where
+      // its control is no longer rendered. Without this, `validateExpeditionForm`
+      // could reject "A FIXED destination needs a date" for a row the user can
+      // no longer see or edit — an unfixable form.
+      destinations: destinations.map(({ id: _id, ...d }, i) =>
+        i === 0 || i === end ? { ...d, datePin: "flexible" as const, date: null } : d,
+      ),
       startDate,
       endDate,
       objective,
@@ -300,34 +306,44 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
                       pick a suggestion
                     </span>
                   )}
-                  <div className="inline-flex rounded-full border border-input-border overflow-hidden text-xs">
-                    {(["fixed", "flexible"] as const).map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() =>
-                          setDest(d.id, {
-                            datePin: p,
-                            date: p === "fixed" ? d.date : null,
-                          })
-                        }
-                        className={`px-3 h-7 ${
-                          d.datePin === p
-                            ? "bg-amber text-bg-base font-semibold"
-                            : "text-text-muted"
-                        }`}
-                      >
-                        {p === "fixed" ? "FIXED date" : "flexible"}
-                      </button>
-                    ))}
-                  </div>
-                  {d.datePin === "fixed" && (
-                    <input
-                      type="date"
-                      className={`${fieldCls} h-7 text-xs`}
-                      value={d.date ?? ""}
-                      onChange={(e) => setDest(d.id, { date: e.target.value })}
-                    />
+                  {/* Date pin is for INTERMEDIATE stops only. START and END are
+                   *  already pinned by the trip's date range: `expeditionToGenerationInput`
+                   *  puts those on `TripParams.startDate/endDate`, which reach the
+                   *  pipeline independently of any anchor's `datePin`. Offering the
+                   *  toggle here asked the user to re-state a date they had already
+                   *  given, and let them state a DIFFERENT one. */}
+                  {i !== 0 && i !== lastIdx && (
+                    <>
+                      <div className="inline-flex rounded-full border border-input-border overflow-hidden text-xs">
+                        {(["fixed", "flexible"] as const).map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() =>
+                              setDest(d.id, {
+                                datePin: p,
+                                date: p === "fixed" ? d.date : null,
+                              })
+                            }
+                            className={`px-3 h-7 ${
+                              d.datePin === p
+                                ? "bg-amber text-bg-base font-semibold"
+                                : "text-text-muted"
+                            }`}
+                          >
+                            {p === "fixed" ? "FIXED date" : "flexible"}
+                          </button>
+                        ))}
+                      </div>
+                      {d.datePin === "fixed" && (
+                        <input
+                          type="date"
+                          className={`${fieldCls} h-7 text-xs`}
+                          value={d.date ?? ""}
+                          onChange={(e) => setDest(d.id, { date: e.target.value })}
+                        />
+                      )}
+                    </>
                   )}
                   <label className="inline-flex items-center gap-1.5 text-xs text-text-muted">
                     dwell
