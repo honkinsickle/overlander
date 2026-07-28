@@ -134,6 +134,27 @@ actually touched what they describe. The `/wrap` command runs this pass.
     Note the same cache also stores `{}` for a place that resolves with no rich
     fields, which is why "dead id" and "nothing to add" look identical — see
     `docs/BACKLOG.md` §Places enrichment.
+  - **When an instrument disagrees with a model, validate the APPARATUS before
+    trusting the instrument.** A measurement has machinery, and the machinery can
+    be what you are measuring. Cost a retraction *of a correction* on 2026-07-28:
+    a hydration model predicted 19 requests totalling 142 ids; an instrumented
+    browser scroll reported 27 requests totalling 203. The instrument was
+    believed, the model was declared wrong, and "partial accumulation, ~43%
+    overhead from ids resolving to null" was written into three docs as a
+    finding. **The model was right.** The scripted scroll stepped every ~200 ms
+    while each request took longer than that, so the effect's `() => ctrl.abort()`
+    cleanup was cancelling in-flight requests and their ids were re-asked. Re-run
+    at 820–1200 ms per step: 19 requests, exactly 142 ids, **0 aborted**.
+    - **Instrument the apparatus alongside the subject.** Counting requests was
+      not enough; counting **completions and aborts** next to them would have
+      caught it on the first run. Whenever you patch `fetch` (or any driver),
+      record outcomes as well as invocations.
+    - **A disagreement between model and measurement is a question, not a
+      verdict.** Ask what the harness is doing before deciding which side is
+      wrong — especially when the "measurement" is a scripted loop whose timing
+      you chose.
+    - Note dev-mode React double-invokes effects, which can add a mount-time
+      request/abort pair on top of this. Another reason to read abort counts.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an

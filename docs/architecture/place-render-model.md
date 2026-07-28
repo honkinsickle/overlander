@@ -453,6 +453,18 @@ changes — at which point the already-hydrated ids drop out of the filter, so t
 previously-truncated ones may fit. It converges **as the user scrolls**, not on
 its own.
 
+**And that convergence does not persist.** `hydrated` is
+`useState<Record<string, PlaceRich>>({})` **inside `DayDetailCorridorColumn`** —
+plain component state, not a cache, not a ref, not lifted. Closing the slideup
+navigates away from the intercepting route and tears the component down
+(observed 2026-07-28: the close control lands on `/` with a fresh document), so
+reopening the trip starts from `{}`. **Every fresh open re-issues the cold
+request for whatever day is selected**, and re-drops whatever the cap cuts. The
+15-min server-side `cacheStore` absorbs the upstream cost on a warm lambda, but
+it sits *behind* `parsePlaceIds` — the truncation has already happened by then,
+so the cache never restores a dropped id. On `la-to-deadhorse` day 1 that is 51
+ids dropped again on every open, not once per user.
+
 #### 4.4.1 Measured 2026-07-28 — where it actually bites
 
 > **CORRECTION.** The example this section used to carry was wrong twice:

@@ -1056,7 +1056,14 @@ conclusion.
     request is always cold, so accumulation cannot help it. On day 1 that is
     **51 dropped ids, all of which render as visible cards** (day 1 has zero
     curated tiles → `curatedMode` false → nothing collapses behind "Explore
-    more").
+    more"), and none of the 51 carries a stored `rating` or `reviewCount`, so
+    they render with no photo *and* no rating.
+  - **It recurs on every fresh open, not once per user.** `hydrated` is plain
+    `useState({})` inside `DayDetailCorridorColumn`; closing the slideup tears
+    the component down (the close control lands on `/` with a fresh document), so
+    reopening starts cold and re-drops the same ids. The 15-min server
+    `cacheStore` does not help — it sits *behind* `parsePlaceIds`, so truncation
+    has already happened and a dropped id is never in the cache to begin with.
   - **The trips this entry used to name cannot trip it.** `24f14ecc` is exactly
     **40 distinct** against a cap of 40 — a boundary, not a margin; one more
     corpus row on either day truncates it. `expedition-ms28y793`'s whole-trip
@@ -1086,6 +1093,13 @@ conclusion.
     `placeIds.length > 40` is the signal locally. Diffing sent ids against
     returned `details` keys would be worse — `details` also omits ids that
     resolved `null`, reintroducing exactly the ambiguity #149 removed.
+    **Caveat on the local check:** it requires the client to hardcode `40`, which
+    lives server-side in `route.ts` and is not exported. That is a duplicated
+    constant with no link between the copies — move the cap and the client's
+    inference goes silently wrong rather than failing. If a client-side check is
+    ever wanted, export the constant rather than retyping it; if chunking lands
+    server-side the client never needs to know, which is one more reason to
+    prefer it.
   - Measurement detail: `docs/architecture/place-render-model.md` §4.4.1.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
