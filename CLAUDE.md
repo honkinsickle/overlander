@@ -153,8 +153,13 @@ actually touched what they describe. The `/wrap` command runs this pass.
       verdict.** Ask what the harness is doing before deciding which side is
       wrong — especially when the "measurement" is a scripted loop whose timing
       you chose.
-    - Note dev-mode React double-invokes effects, which can add a mount-time
-      request/abort pair on top of this. Another reason to read abort counts.
+    - **Do not reach for "React StrictMode double-invokes effects" to explain a
+      surprising count in THIS app.** It was hypothesised for an unexplained
+      request pair and is wrong: `web/next.config.ts` sets no `reactStrictMode`
+      and there is no `StrictMode` wrapper anywhere in `web/src`, and selecting a
+      day issues exactly **one** hydration request `[measured 2026-07-28]`.
+      Recorded because it is the obvious guess and it costs a re-measure. Name a
+      mechanism only after checking for it.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an

@@ -1061,9 +1061,11 @@ conclusion.
   - **It recurs on every fresh open, not once per user.** `hydrated` is plain
     `useState({})` inside `DayDetailCorridorColumn`; closing the slideup tears
     the component down (the close control lands on `/` with a fresh document), so
-    reopening starts cold and re-drops the same ids. The 15-min server
-    `cacheStore` does not help — it sits *behind* `parsePlaceIds`, so truncation
-    has already happened and a dropped id is never in the cache to begin with.
+    reopening starts cold and re-drops the same ids `[measured 2026-07-28: open
+    → select day 1 → 28 ids; close → reopen → select day 1 → 28 ids again]`. The
+    15-min server `cacheStore` does not help — it sits *behind* `parsePlaceIds`,
+    so a dropped id is **never looked up**, whether or not it happens to be
+    cached from an earlier window in which it survived the cut.
   - **The trips this entry used to name cannot trip it.** `24f14ecc` is exactly
     **40 distinct** against a cap of 40 — a boundary, not a margin; one more
     corpus row on either day truncates it. `expedition-ms28y793`'s whole-trip
