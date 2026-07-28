@@ -726,7 +726,35 @@ item in [`BACKLOG.md`](../BACKLOG.md), where 17 of 48 orphans turn out to be
 structural and unreachable by any mile fix. **Not evaluated further
 `[UNVERIFIED]`** — recorded so it is not skipped by default next session.
 
-### 7.4 No PROD trip is affected
+### 7.4 No PROD trip is affected ~~— SUPERSEDED 2026-07-28~~
+
+> **CORRECTED 2026-07-28 — the heading and the claim below are both false now.**
+> `[queried PROD 2026-07-28, read-only]` **Three generated trips in PROD
+> `public.trips`, all created 2026-07-28, carry stored `milesFromStart`:**
+>
+> | trip | days | tiles carrying a mile | tiles beyond their day's `miles` | worst |
+> |---|---|---|---|---|
+> | `a54c5c65-…` | 3 | 774 | 3 curated (366 all-tile) | ×2.3 |
+> | `cefc94e0-…` | 4 | 552 | 3 curated (28 all-tile) | ×1.5 |
+> | `7e3e088a-…` | 4 | 776 | 4 curated (15 all-tile) | ×2.3 |
+>
+> Day 1 of `a54c5c65-…` is a **268-mile day whose spine reached 626mi**. So this
+> is a live production defect, not a TEST-only curiosity, and §7.3's "unpriced
+> option" was subsequently priced, built and shipped as
+> [#170](https://github.com/honkinsickle/overlander/pull/170).
+>
+> **What still holds:** the `dawson-vancouver-cassiar` measurement itself (417
+> tiles, 0 stored miles) — the FROZEN trip is still unaffected and still needs no
+> correction or regeneration, which was the load-bearing part of this section.
+> Same for `24f14ecc-…` (63 tiles, 0). What changed is the *population*: those two
+> were every PROD trip on 2026-07-26; they are not every PROD trip now.
+>
+> **Why the generalisation failed:** it quantified over a table that was empty of
+> generated rows at measurement time, and nothing re-checked it when generation
+> started writing to `public.trips`. A row count is exactly the claim that goes
+> stale silently. The original is kept below because it was cited as the basis for
+> a deletion precondition in `lib/corridor/stretches.ts`, and acting on it today
+> would delete the function that now fixes the bug.
 
 `[queried PROD, 2026-07-26 — read-only]` **No trip on PROD carries a stored
 `milesFromStart` at all.** `dawson-vancouver-cassiar` (FROZEN, generated) has

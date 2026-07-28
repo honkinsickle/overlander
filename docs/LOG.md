@@ -14,6 +14,29 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 ## 2026-07-28
 
+- **CORRECTION, superseding the 2026-07-26 bullet "No PROD trip is affected —
+  zero stored miles anywhere on PROD".** That is false as of today.
+  `[queried PROD 2026-07-28, read-only]` **Three generated trips now live in PROD
+  `public.trips`, all created today**, all carrying stored `milesFromStart`:
+  `a54c5c65-…` (774 tiles), `cefc94e0-…` (552), `7e3e088a-…` (776). **18 curated
+  tiles sit beyond their own day's `miles`, up to ×2.3** — day 1 of `a54c5c65-…`
+  is a 268-mile day whose spine reached **626mi**. The mile defect is therefore a
+  live production defect, not a TEST curiosity.
+  - **The earlier bullet was not wrong when written** — it quantified over a table
+    that held no generated rows at the time. Nothing re-checked it when generation
+    began writing to `public.trips`. A bare row count is the claim that goes stale
+    silently, which is the second time this shape has bitten (cf. the corpus-ADR
+    `enqueueResolvedPlaces` "zero callers" correction, 2026-07-27).
+  - **It had propagated to two other places**, both corrected in place rather than
+    overwritten: `lib/corridor/stretches.ts`'s deletion-precondition block and
+    `docs/architecture/generation-pipeline.md` §7.4. The `stretches.ts` copy was
+    the dangerous one — it was the stated basis for deleting
+    `positionPlacesOnDay`, and [#170](https://github.com/honkinsickle/overlander/pull/170)
+    has just made that function load-bearing, so acting on it would have deleted
+    the thing that fixes the bug.
+  - **What still holds:** `dawson-vancouver-cassiar` (FROZEN) remains unaffected —
+    417 tiles, 0 stored miles. The frozen-trip risk still does not exist.
+
 - **CORRECTION to [#166](https://github.com/honkinsickle/overlander/pull/166) —
   "identical, including the per-day distribution" was FALSE.** The PR body and the
   commit message both claimed the pre- and post-deletion generations were

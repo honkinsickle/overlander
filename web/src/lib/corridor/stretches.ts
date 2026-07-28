@@ -8,6 +8,32 @@
  * position is recovered here by projecting its `coords` onto the trip route
  * polyline, offset by `dayStartMiles`.
  *
+ * CORRECTED 2026-07-28 — THE PROD CLAIM BELOW IS STALE AND THE DELETION
+ * PRECONDITION NO LONGER HOLDS. Read this before the 2026-07-26 block.
+ *
+ * "Measured 2026-07-26: NO trip on PROD carries a stored `milesFromStart` at
+ * all" was true when it was written. It is false now. `[queried PROD
+ * 2026-07-28, read-only]` THREE generated trips in PROD `public.trips`, all
+ * created 2026-07-28, carry stored miles: `cefc94e0-…` (552 tiles carrying
+ * one), `a54c5c65-…` (774), `7e3e088a-…` (776). Eighteen of their curated
+ * tiles sit beyond their own day's `miles`, up to x2.3 — day 1 of
+ * `a54c5c65-…` is a 268-mile day whose spine reached 626mi.
+ *
+ * Two consequences. The conclusion "every PROD trip renders purely through
+ * this projection path, correctly" no longer follows from its premise. And the
+ * precondition it guarded is moot in the opposite direction from the one the
+ * paragraph anticipated: PR #170 pointed the read spine AT `positionPlacesOnDay`,
+ * so it is now LOAD-BEARING, not merely not-yet-deletable. Deleting it today
+ * would reintroduce on every trip at once the defect it was just used to fix.
+ * Do not act on the deletion paragraph below as written.
+ *
+ * WHAT STILL HOLDS, unchanged: the mechanism in (1), the reseed correction in
+ * (2), and the reasoning for why deletion is unsafe. Only the PROD row count —
+ * and the "backfill BOTH databases first" framing that rested on it — are
+ * wrong. The original is kept below rather than rewritten because it was cited
+ * as the basis for a deletion precondition; a reader who meets only the
+ * correction cannot tell what was believed, or why it was reasonable.
+ *
  * CORRECTED 2026-07-26 — the two claims this block used to carry were BOTH
  * false. They are restated here so the next reader does not act on them:
  *
@@ -52,6 +78,11 @@
  * `docs/architecture/generation-pipeline.md` §7, which lands with the
  * generation-trace docs PR. Both paths are stated so they can be found, not
  * because they resolve here today.
+ *
+ * (2026-07-28: `check-payload-invariants.ts` reads `reference_trips` ONLY, so it
+ * cannot see the three PROD trips above — they live in `public.trips`. The
+ * instrument that can is `web/scripts/verify-projection-delta.ts`, landing with
+ * PR #170, which compares stored miles against the projection per day.)
  */
 import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";
