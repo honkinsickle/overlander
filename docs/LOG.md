@@ -14,6 +14,68 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 ## 2026-07-28
 
+- **`MAX_IDS = 40` scoped and measured.** `alaska-south-final` scrolled end to
+  end in a live browser with instrumented `fetch`: **19 requests, max 28 ids,
+  zero windows over 40** (`yotrippin-demo` was sampled + simulated, not
+  instrumented — it also stays under). The failures are single-day, not
+  windowing: PROD
+  `la-to-deadhorse` days 1/2/3/9 (**91**/57/57/42 distinct eligible) and
+  `dawson-vancouver-cassiar` day 1 (42). Any window containing day 1 requests
+  ≥91 cold, and a first request is always cold, so accumulation cannot rescue it.
+  On day 1 all **51 dropped ids render as visible cards** — the day has zero
+  curated tiles, so `curatedMode` is false and nothing collapses behind "Explore
+  more". Recommendation: chunk server-side; do not raise the cap until someone
+  establishes what 40 protected. Detail in `place-render-model.md` §4.4.1 and
+  `BACKLOG.md`.
+
+- **THREE CORRECTIONS from that pass — the more useful half of the session.**
+  - **"The first hydration request on `la-to-deadhorse` drops 51 of 91" was
+    WRONG.** Overview issues **zero** requests (`selectedDayId` is null without
+    `?day=` → `hydrateDayIds` is `[]`); the 91 requires selecting day 1 first.
+    Common, but not automatic, and it was stated as automatic. Caught by
+    instrumenting `fetch` and watching 0 calls at Overview.
+  - **The first pass simulated where measurement was available.** That part
+    stands: with a browser open, the first attempt replayed sampled windows
+    offline instead of instrumenting `fetch`.
+  - **RETRACTED — the correction to that, written the same day, was itself
+    wrong, and it reached the docs before being caught.** It read: *"the model
+    was wrong — observed sum 203 against 142 distinct ids, an excess the model
+    could not produce, because it treated accumulation as binary; reality is
+    partial, ids resolving to `null` are re-requested every window, ≈43%
+    overhead."* Re-measured at a realistic scroll speed (820–1200 ms per step
+    rather than ~200 ms): **19 requests totalling exactly 142 ids against 142
+    distinct, 0 aborted, 0 failed.** Every id resolved. **The simulation had been
+    right** (it predicted 19 requests / 142) and the fast-scroll *measurement*
+    was the artifact. The 203 came from the effect's `() => ctrl.abort()`
+    cleanup cancelling in-flight requests during a scripted scroll faster than
+    the network, so their ids were re-asked — a real behavior under flick-scroll,
+    but nothing to do with null resolution.
+  - **The lesson is not "measure instead of model."** It is that a measurement
+    has an apparatus, and the apparatus can be the thing you are measuring. I
+    distrusted a model because it disagreed with an instrument, without asking
+    what the instrument was doing — and then wrote the instrument's artifact into
+    three docs as a finding.
+  - **Sampling at 0.5-viewport steps can skip transient mounted states.** The
+    bias is conservative — a skipped window makes the next simulated request
+    larger, not smaller — so "zero over 40" survives it. It went unstated.
+  - Same shape as the near-miss inside the audit itself: inferring "dev has no
+    `GOOGLE_PLACES_API_KEY`" from its absence in `.env.development.local`, when
+    `next dev` also loads `.env.local` where the key lives. Probing the endpoint
+    returned live Google data. An inference-shaped claim nearly shipped **while
+    auditing inference-shaped claims**.
+
+- **The stale example this replaced had propagated to two docs**, both corrected
+  in place: `BACKLOG.md`'s entry and `place-render-model.md` §4.4 both claimed
+  *"`24f14ecc` carries 41 tiles on day-1 alone, so a ~3-day window exceeds 40."*
+  `24f14ecc` has **2 days** — a ~3-day window cannot exist on it — and 41 is its
+  `placePool` count, not the hydration-eligible set. Its true figure is **exactly
+  40 distinct trip-wide against a cap of 40**: nothing dropped, but a boundary
+  rather than a margin.
+
+- **`GOOGLE_PLACES_API_KEY` confirmed set in Vercel Production**
+  `[confirmed via Vercel dashboard, 2026-07-28]`, so the accumulating path is
+  production behavior and the TEST measurements are representative.
+
 - **CORRECTION, superseding the 2026-07-26 bullet "No PROD trip is affected —
   zero stored miles anywhere on PROD".** That is false as of today.
   `[queried PROD 2026-07-28, read-only]` **Three generated trips now live in PROD
