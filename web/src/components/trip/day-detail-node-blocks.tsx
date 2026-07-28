@@ -44,6 +44,7 @@ import {
   positionPlacesOnDay,
   assignPlacesToStretches,
   scopeRankKey,
+  isRoundTripCorridor,
   type PositionedPlace,
 } from "@/lib/corridor/stretches";
 import { haversineMi } from "@/lib/routing/point-to-polyline";
@@ -54,12 +55,6 @@ import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
 const GUTTER_W = 48;
 const noop = () => {};
-
-/** Two coords within ~11 m — used to spot a round-trip day (start node == end
- *  node), where the fallback spine's endpoints coincide. */
-function sameCoords(a?: [number, number], b?: [number, number]): boolean {
-  return !!a && !!b && Math.abs(a[0] - b[0]) < 1e-4 && Math.abs(a[1] - b[1]) < 1e-4;
-}
 
 /** A drag drop resolved to an intent. `toNodeId: null` = dropped on the drive
  *  → unpin (return to geometry). Otherwise pin the place under that node; the
@@ -165,8 +160,7 @@ export function DayDetailNodeBlocks({
     // route backwards — summit first). Order the leg near→far by distance from
     // the anchor — the outbound drive sequence — until authored sequence exists.
     const anchor = cities[0]?.coords;
-    const roundTrip =
-      cities.length >= 2 && sameCoords(anchor, cities[cities.length - 1]?.coords);
+    const roundTrip = isRoundTripCorridor(cities);
     // CLUSTER order (rankKey): a place's authored rank is honored ONLY in the
     // cluster its rank was scoped to (scopeRankKey walks server placeIds and keeps
     // a rank only when entry.nodeId === c.id) — the shared scoping the read spine

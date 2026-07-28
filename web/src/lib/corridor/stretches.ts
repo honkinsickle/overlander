@@ -93,6 +93,27 @@ function isRoundTripDay(label?: string): boolean {
   return a.length > 0 && a === b;
 }
 
+/** Two coords within ~11 m. */
+function sameCoords(a?: [number, number], b?: [number, number]): boolean {
+  return !!a && !!b && Math.abs(a[0] - b[0]) < 1e-4 && Math.abs(a[1] - b[1]) < 1e-4;
+}
+
+/**
+ * Round-trip day detector, COORDS-based: the corridor's first and last node are
+ * the same point (a dwell, or an out-and-back excursion). Lifted out of
+ * `day-detail-node-blocks.tsx` so the edit spine and the read spine share ONE
+ * rule and cannot drift on which days are degenerate.
+ *
+ * The sibling `isRoundTripDay(label)` above answers a different question (parse
+ * the label) and feeds `dayStartMiles`. Measured 2026-07-28 on
+ * `expedition-ms28y793` + the three PROD generated trips, the two agree on every
+ * round-trip day — but they are not interchangeable, so both stay.
+ */
+export function isRoundTripCorridor(cities: { coords?: [number, number] }[]): boolean {
+  if (cities.length < 2) return false;
+  return sameCoords(cities[0]?.coords, cities[cities.length - 1]?.coords);
+}
+
 /** Project each place's coords onto the route → day-relative mile + offset. */
 export function positionPlacesOnDay(input: {
   line: LngLat[];
