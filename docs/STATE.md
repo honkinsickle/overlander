@@ -173,8 +173,10 @@ marker. That marker is now discharged — the entries below are reconciled from
     fine by construction: reads are a bare `data.payload as Trip` cast (no zod,
     no allowlist) and writes spread (`{...rawPayload}` → mutate → `{...updated}`),
     so an unknown `wizard` key is **preserved on rewrite, never dropped**.
-    Measured 2026-07-28: **TEST 1 of 6 rows** carries it — the seed draft
-    `7e6774b9`, `{"currentStep":"going"}`. **PROD NOT MEASURED** — the Supabase
+    Measured 2026-07-28 on TEST: the **only** row carrying it is the seed draft
+    `7e6774b9`, `{"currentStep":"going"}`; no generated trip has ever written the
+    key. (Named as which row rather than a ratio — a bare count goes stale the
+    next time anyone generates.) **PROD NOT MEASURED** — the Supabase
     access token has been revoked and no PROD credentials exist locally. The 7
     PROD draft rows were previously reported as `wizardStep=going`, which implies
     they carry it; treat that as prior report, not a fresh measurement.
