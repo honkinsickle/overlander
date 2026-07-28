@@ -148,8 +148,21 @@ actually touched what they describe. The `/wrap` command runs this pass.
     so a script importing a deleted module fails the gate exactly like app code —
     but it is invisible to any grep rooted at `src/`, and its relative `../src/`
     specifier does not match an `@/`-alias search either.
-    - **Search the whole of `web/` and resolve BOTH specifier forms** (`@/…`
-      alias and `../src/…` relative) before concluding a module is unimported.
+    - **Sweep EVERY WORKSPACE, and resolve BOTH specifier forms** (`@/…` alias
+      and `../src/…` relative) before concluding a module is unimported.
+      **"Search the whole of `web/`" is NOT the lesson** — that was the first
+      correction written after this break, and it is the same class of
+      under-generalization as "search `web/src`", just one rung up. **The gates
+      are per-workspace and no single command runs them all:**
+
+      | Workspace | Its gate | Run by `cd web && npx next build`? |
+      |---|---|---|
+      | `web/` (incl. `web/scripts/`) | `npx next build` | yes |
+      | `data/` | `npm run -w data typecheck` (`tsc --noEmit`) + `vitest` | **NO** |
+
+      So a deletion that breaks `data/` passes the build gate and fails in CI
+      instead. Grep the repo root, not a workspace root, then run each affected
+      workspace's own gate.
     - Watch for the mirror-image false positive: matching on **basename** finds
       `lib/trips/actions` when looking for `lib/plan/actions`. Resolve specifiers
       to real paths; do not match on filename.
