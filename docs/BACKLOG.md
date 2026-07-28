@@ -1033,19 +1033,54 @@ conclusion.
   too rare to design around and indistinguishable from state 2 until the endpoint
   separates them (see the proposed fix above). Depends on that fix landing first.
 
-- **`MAX_IDS = 40` truncation does not self-heal — dense trips can render
-  partially thin until the user scrolls.** `parsePlaceIds` dedupes then
-  `.slice(0, 40)` with **no error and no signal**, and the hydration effect
-  **re-fires only on mounted-set change, never when `hydrated` updates** — its
-  dep array is `[hydrateKey]` and `hydrated` is deliberately excluded with an
-  `eslint-disable` `[read source: app/api/places/details/route.ts:19,55-63;
-  day-detail-corridor-column.tsx:283-291, 340-343]`. So ids past the 40th are
-  dropped and **wait** for the next mounted-set change rather than converging in
-  place. Reachable on the corpus-dense shape: `24f14ecc…` carries 41 tiles on
-  day-1 alone, so a ~3-day window can exceed 40 unhydrated ids in one pass.
-  Recorded during the #149 doc pass, **not fixed** — no measurement of how often
-  a real window actually exceeds the cap `[UNVERIFIED]`. Mechanics:
-  `docs/architecture/place-render-model.md` §4.4.
+- **`MAX_IDS = 40` truncation — MEASURED 2026-07-28, and it is narrower than this
+  entry used to claim.** `parsePlaceIds` dedupes then `.slice(0, 40)` with **no
+  error and no signal**, and the hydration effect re-fires only on mounted-set
+  change (dep array `[hydrateKey]`; `hydrated` deliberately excluded with an
+  `eslint-disable`) `[read source: app/api/places/details/route.ts` —
+  `MAX_IDS`, `parsePlaceIds`; `day-detail-corridor-column.tsx` — `hydrateKey`
+  and the hydration `useEffect]`.
+  - **Scrolling windows do NOT exceed the cap.** Two 19-day TEST trips scrolled
+    end to end in a live browser with instrumented `fetch` and a live API key:
+    **27 requests, max 28 ids, zero windows over 40.** Measured, not simulated.
+  - **The real failures are single-day and windowing-independent.** Four days on
+    PROD `la-to-deadhorse` (**91** / 57 / 57 / 42 distinct eligible ids) and one
+    on `dawson-vancouver-cassiar` (42) exceed 40 on their own. Any window
+    containing day 1 requests ≥ 91 cold, because supersets only add — and a first
+    request is always cold, so accumulation cannot help it. On day 1 that is
+    **51 dropped ids, all of which render as visible cards** (day 1 has zero
+    curated tiles → `curatedMode` false → nothing collapses behind "Explore
+    more").
+  - **The trips this entry used to name cannot trip it.** `24f14ecc` is exactly
+    **40 distinct** against a cap of 40 — a boundary, not a margin; one more
+    corpus row on either day truncates it. `expedition-ms28y793`'s whole-trip
+    union is **39**. The prior "41 tiles on day-1, so a ~3-day window exceeds 40"
+    was wrong on both counts (41 is the pool, not the eligible set; `24f14ecc`
+    has only 2 days).
+  - **`MAX_IDS = 40` is unexplained.** No comment; introduced in `79c8cb2`, whose
+    message never mentions it; never modified since; the two sibling routes use
+    50. It is **not** an upstream batch limit — `placeDetails` issues one Google
+    `GET` per id and the route runs `Promise.all`, so 40 bounds *this route's own
+    fan-out and per-request cost*, nothing external.
+  - **Recommendation: chunk server-side** — batch the ids 40 at a time inside the
+    route. It removes the drop, holds fan-out at today's ceiling, leaves the
+    response shape unchanged, and **does not touch the hydration effect's
+    dependency array** (the guarded thing). Do **not** raise the cap until
+    someone establishes what 40 protected. Ordering by proximity to the centered
+    day is the wrong tool: the measured failures are single-day, so ordering does
+    nothing for the only case that breaks.
+  - **Tripwire for the fix:** touches `app/api/places/details/route.ts` only
+    (`POST` and `parsePlaceIds`), plus a test. Zero diff required in
+    `day-detail-corridor-column.tsx`, `continuous-day-stack.tsx`,
+    `lib/trips/continuous-scroll.ts`, `lib/discovery/google-places.ts`, the two
+    sibling hydrate routes, and anything under `lib/itinerary/`. Any shape that
+    needs the effect's dep array raises the risk class of the whole change.
+  - **Signalling truncation needs no response field** and nothing would consume
+    one: the client builds `placeIds` and the cap is a deterministic prefix, so
+    `placeIds.length > 40` is the signal locally. Diffing sent ids against
+    returned `details` keys would be worse — `details` also omits ids that
+    resolved `null`, reintroducing exactly the ambiguity #149 removed.
+  - Measurement detail: `docs/architecture/place-render-model.md` §4.4.1.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

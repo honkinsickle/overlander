@@ -14,6 +14,54 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 ## 2026-07-28
 
+- **`MAX_IDS = 40` scoped and measured.** Two 19-day TEST trips scrolled end to
+  end in a live browser with instrumented `fetch`: **27 requests, max 28 ids,
+  zero windows over 40**. The failures are single-day, not windowing: PROD
+  `la-to-deadhorse` days 1/2/3/9 (**91**/57/57/42 distinct eligible) and
+  `dawson-vancouver-cassiar` day 1 (42). Any window containing day 1 requests
+  ≥91 cold, and a first request is always cold, so accumulation cannot rescue it.
+  On day 1 all **51 dropped ids render as visible cards** — the day has zero
+  curated tiles, so `curatedMode` is false and nothing collapses behind "Explore
+  more". Recommendation: chunk server-side; do not raise the cap until someone
+  establishes what 40 protected. Detail in `place-render-model.md` §4.4.1 and
+  `BACKLOG.md`.
+
+- **THREE CORRECTIONS from that pass — the more useful half of the session.**
+  - **"The first hydration request on `la-to-deadhorse` drops 51 of 91" was
+    WRONG.** Overview issues **zero** requests (`selectedDayId` is null without
+    `?day=` → `hydrateDayIds` is `[]`); the 91 requires selecting day 1 first.
+    Common, but not automatic, and it was stated as automatic. Caught by
+    instrumenting `fetch` and watching 0 calls at Overview.
+  - **The first pass simulated where measurement was available, and the model
+    was wrong.** Observed request sum was **203 against 142 distinct ids on the
+    trip** — an excess the model could not produce, because it treated
+    accumulation as binary (all ids resolve or none). Reality is partial: ids
+    resolving to `null` never enter `hydrated` and are re-requested every window,
+    ≈43% overhead. The conclusion (max 28, zero over 40) survived, but it had
+    been asserted on a model that did not describe the system. In a session whose
+    premise was that a structural argument is not a substitute for a count, the
+    first attempt produced a simulation with a browser sitting open.
+  - **Sampling at 0.5-viewport steps can skip transient mounted states.** The
+    bias is conservative — a skipped window makes the next simulated request
+    larger, not smaller — so "zero over 40" survives it. It went unstated.
+  - Same shape as the near-miss inside the audit itself: inferring "dev has no
+    `GOOGLE_PLACES_API_KEY`" from its absence in `.env.development.local`, when
+    `next dev` also loads `.env.local` where the key lives. Probing the endpoint
+    returned live Google data. An inference-shaped claim nearly shipped **while
+    auditing inference-shaped claims**.
+
+- **The stale example this replaced had propagated to two docs**, both corrected
+  in place: `BACKLOG.md`'s entry and `place-render-model.md` §4.4 both claimed
+  *"`24f14ecc` carries 41 tiles on day-1 alone, so a ~3-day window exceeds 40."*
+  `24f14ecc` has **2 days** — a ~3-day window cannot exist on it — and 41 is its
+  `placePool` count, not the hydration-eligible set. Its true figure is **exactly
+  40 distinct trip-wide against a cap of 40**: nothing dropped, but a boundary
+  rather than a margin.
+
+- **`GOOGLE_PLACES_API_KEY` confirmed set in Vercel Production**
+  `[confirmed via Vercel dashboard, 2026-07-28]`, so the accumulating path is
+  production behavior and the TEST measurements are representative.
+
 - **CORRECTION, superseding the 2026-07-26 bullet "No PROD trip is affected —
   zero stored miles anywhere on PROD".** That is false as of today.
   `[queried PROD 2026-07-28, read-only]` **Three generated trips now live in PROD

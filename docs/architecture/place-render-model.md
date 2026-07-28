@@ -433,14 +433,83 @@ selected day in edit mode); `hydrated` is **deliberately excluded**, with an
 explicit comment and an `eslint-disable` for `react-hooks/exhaustive-deps`
 `[read source: day-detail-corridor-column.tsx:283-291, 340-343]`.
 
+The comment's stated reason is **intent, not loop-avoidance**, and it is worth
+quoting because the two get conflated:
+
+```js
+    // hydrated is intentionally omitted: re-run only when the mounted set
+    // changes, using the in-filter guard to skip already-hydrated ids.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrateKey]);
+```
+
+Self-retriggering *is* a real consequence — `setHydrated` on every successful
+response would re-fire the effect — but that is not what the comment says. Any
+fix that touches this dep array is therefore changing a guarded thing.
+
 **Consequence.** Truncation does not converge within a stable mounted set: the
 dropped ids simply **wait**. They are re-asked only when the mounted set next
 changes — at which point the already-hydrated ids drop out of the filter, so the
 previously-truncated ones may fit. It converges **as the user scrolls**, not on
-its own. On the corpus-dense shape this is reachable in practice: `24f14ecc…`
-carries 41 tiles on day-1 alone (Part 1 §0), so a window of ~3 dense days exceeds
-40 unhydrated ids in one pass and renders **partially thin until the user
-scrolls**. Recorded, not fixed.
+its own.
+
+#### 4.4.1 Measured 2026-07-28 — where it actually bites
+
+> **CORRECTION.** The example this section used to carry was wrong twice:
+> *"`24f14ecc…` carries 41 tiles on day-1 alone, so a window of ~3 dense days
+> exceeds 40."* `24f14ecc` is a **2-day** trip — a ~3-day window cannot exist on
+> it — and 41 is its `placePool` count, not the hydration-eligible count. Its
+> eligible ids are **40 on day 1, 20 on day 2, and exactly 40 distinct
+> trip-wide**, so the single request it can ever make is 40 against a cap of 40:
+> **nothing is dropped**. The claim was a structural argument standing in for a
+> count, which is what this measurement replaces.
+
+**Method.** Two 19-day TEST trips (`alaska-south-final`, `yotrippin-demo`)
+scrolled end to end in a live browser at 1440×900, with `window.fetch`
+instrumented to capture the actual `placeIds` bodies, and a live
+`GOOGLE_PLACES_API_KEY`. **Measured, not simulated.**
+
+- **27 requests, max 28 ids, ZERO windows over 40** across a full scroll.
+- Overview issues **no request at all** — `selectedDayId` is `null` without
+  `?day=`, so `hydrateDayIds` is `[]`. Hydration begins only once a day is
+  selected.
+
+**Partial accumulation is the mechanism that keeps requests small — and it is
+not binary.** Ids resolving to `null` never enter `hydrated` and are re-requested
+on every subsequent window. Measured overhead ≈ **43%**: 203 ids requested across
+the scroll against 142 distinct on the trip. A model that assumes ids either all
+resolve or none do does not describe this.
+
+**The real failures are single-day and windowing-independent** `[queried PROD,
+read-only]`. Any window containing the day requests at least its own count when
+cold, because supersets only add — and a first request is always cold:
+
+| trip | day | distinct eligible ids | dropped |
+|---|---|---|---|
+| `la-to-deadhorse` | 1 | **91** | **51** |
+| `la-to-deadhorse` | 2 | 57 | 17 |
+| `la-to-deadhorse` | 3 | 57 | 17 |
+| `la-to-deadhorse` | 9 | 42 | 2 |
+| `dawson-vancouver-cassiar` | 1 | 42 | 2 |
+
+`expedition-ms28y793`'s whole-trip union is **39** — under the cap even if all 15
+days mounted at once.
+
+**On `la-to-deadhorse` day 1 the disclosure does not soften this.** `curatedMode`
+is `places.some((p) => p.curated)`, and day 1 carries **zero** curated tiles
+(curation is a generated-trip concept; this is a reference trip). So
+`curatedMode` is `false`, `showRest` is `true`, and nothing collapses behind
+"Explore more" — every tile renders inline. All **51 dropped ids belong to tiles
+that are clustered under a `corridorCity` and therefore render**: 51 visible
+cards with no photo and no rating until the user scrolls the mounted set. The
+"collapsed behind a disclosure" caveat raises the visible harm here rather than
+reducing it.
+
+**`GOOGLE_PLACES_API_KEY` is set in Vercel Production** `[confirmed via Vercel
+dashboard, 2026-07-28]`, so the accumulating path above is production behavior,
+not an artifact of a local key.
+
+Recorded, not fixed. Recommendation and tripwire: `docs/BACKLOG.md`.
 
 ---
 
