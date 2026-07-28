@@ -50,7 +50,10 @@ export type Trip = {
    * spread (`{ ...rawPayload }` → mutate → `{ ...updated }`), so an unknown
    * `wizard` key is preserved on every rewrite rather than dropped. Rows that
    * carry it keep carrying it, and nothing breaks either way. Measured
-   * 2026-07-28: TEST 1 of 5 rows (the seed draft, `{"currentStep":"going"}`).
+   * 2026-07-28 on TEST: the ONLY row carrying it is the seed draft `7e6774b9`,
+   * `{"currentStep":"going"}`; no generated trip has ever written the key.
+   * (Stated as which row rather than a ratio — a bare count goes stale the next
+   * time anyone generates a trip, which is exactly how this one went stale.)
    * If you need it, read `payload->'wizard'` in SQL — not through this type. */
 
   /** The full GenerationInput (anchors + params + rig + objective) that
