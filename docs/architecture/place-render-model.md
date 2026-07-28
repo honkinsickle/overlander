@@ -464,21 +464,36 @@ its own.
 > **nothing is dropped**. The claim was a structural argument standing in for a
 > count, which is what this measurement replaces.
 
-**Method.** Two 19-day TEST trips (`alaska-south-final`, `yotrippin-demo`)
-scrolled end to end in a live browser at 1440×900, with `window.fetch`
-instrumented to capture the actual `placeIds` bodies, and a live
-`GOOGLE_PLACES_API_KEY`. **Measured, not simulated.**
+**Method — and be precise about which trip carries which evidence.**
+`alaska-south-final` (19d) was scrolled end to end in a live browser at 1440×900
+with `window.fetch` instrumented to capture the actual `placeIds` bodies, under a
+live `GOOGLE_PLACES_API_KEY` — **directly measured**. `yotrippin-demo` (19d) was
+window-sampled from the DOM and replayed offline against its payload —
+**simulated**, not instrumented. Both land under the cap; only the first is a
+measurement.
 
-- **27 requests, max 28 ids, ZERO windows over 40** across a full scroll.
+- `alaska-south-final`, **normal scroll speed**: **19 requests, max 28 ids
+  (the mount request; 23 thereafter), ZERO over 40.** Total ids requested across
+  the scroll = **142**, exactly the trip's distinct-id count — perfect
+  accumulation, **0 aborted, 0 failed**.
+- `yotrippin-demo` (simulated): 11 requests, max 23, zero over 40.
 - Overview issues **no request at all** — `selectedDayId` is `null` without
   `?day=`, so `hydrateDayIds` is `[]`. Hydration begins only once a day is
   selected.
 
-**Partial accumulation is the mechanism that keeps requests small — and it is
-not binary.** Ids resolving to `null` never enter `hydrated` and are re-requested
-on every subsequent window. Measured overhead ≈ **43%**: 203 ids requested across
-the scroll against 142 distinct on the trip. A model that assumes ids either all
-resolve or none do does not describe this.
+**Fast scrolling re-requests ids, and the mechanism is ABORT, not failed
+resolution.** The effect's cleanup is `() => ctrl.abort()`, so a mounted-set
+change cancels the in-flight request; its ids never reach `setHydrated` and are
+re-asked in the next window. Scripted at ~200 ms per scroll step the same trip
+produced **27 requests totalling 203 ids against 142 distinct (≈43% re-request
+overhead)**; at 820–1200 ms per step, **zero aborts and zero overhead**. The
+excess is a function of scroll speed versus request latency — real, since users
+can flick-scroll, but it is not evidence that ids fail to resolve. On this trip
+every id resolved.
+
+Note the direction: aborting fills `hydrated` more slowly, so fast scrolling
+makes requests **larger**, not smaller. The fast run is therefore the pessimistic
+bound, and it still peaked at 28.
 
 **The real failures are single-day and windowing-independent** `[queried PROD,
 read-only]`. Any window containing the day requests at least its own count when

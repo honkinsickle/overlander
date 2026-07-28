@@ -1040,9 +1040,15 @@ conclusion.
   `eslint-disable`) `[read source: app/api/places/details/route.ts` —
   `MAX_IDS`, `parsePlaceIds`; `day-detail-corridor-column.tsx` — `hydrateKey`
   and the hydration `useEffect]`.
-  - **Scrolling windows do NOT exceed the cap.** Two 19-day TEST trips scrolled
-    end to end in a live browser with instrumented `fetch` and a live API key:
-    **27 requests, max 28 ids, zero windows over 40.** Measured, not simulated.
+  - **Scrolling windows do NOT exceed the cap.** `alaska-south-final` (19d)
+    scrolled end to end in a live browser with instrumented `fetch` and a live
+    API key — **directly measured**: **19 requests, max 28 ids, zero over 40**,
+    totalling 142 ids against 142 distinct on the trip (perfect accumulation,
+    zero aborts). `yotrippin-demo` (19d) was window-sampled and replayed offline
+    — **simulated**: 11 requests, max 23. Only the first is a measurement.
+    Fast-scrolling the same trip (~200 ms/step) inflates this to 27 requests /
+    203 ids because the effect's `() => ctrl.abort()` cleanup cancels in-flight
+    requests and their ids are re-asked — larger requests, still peaking at 28.
   - **The real failures are single-day and windowing-independent.** Four days on
     PROD `la-to-deadhorse` (**91** / 57 / 57 / 42 distinct eligible ids) and one
     on `dawson-vancouver-cassiar` (42) exceed 40 on their own. Any window

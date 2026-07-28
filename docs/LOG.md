@@ -14,9 +14,11 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 ## 2026-07-28
 
-- **`MAX_IDS = 40` scoped and measured.** Two 19-day TEST trips scrolled end to
-  end in a live browser with instrumented `fetch`: **27 requests, max 28 ids,
-  zero windows over 40**. The failures are single-day, not windowing: PROD
+- **`MAX_IDS = 40` scoped and measured.** `alaska-south-final` scrolled end to
+  end in a live browser with instrumented `fetch`: **19 requests, max 28 ids,
+  zero windows over 40** (`yotrippin-demo` was sampled + simulated, not
+  instrumented — it also stays under). The failures are single-day, not
+  windowing: PROD
   `la-to-deadhorse` days 1/2/3/9 (**91**/57/57/42 distinct eligible) and
   `dawson-vancouver-cassiar` day 1 (42). Any window containing day 1 requests
   ≥91 cold, and a first request is always cold, so accumulation cannot rescue it.
@@ -32,15 +34,27 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
     `?day=` → `hydrateDayIds` is `[]`); the 91 requires selecting day 1 first.
     Common, but not automatic, and it was stated as automatic. Caught by
     instrumenting `fetch` and watching 0 calls at Overview.
-  - **The first pass simulated where measurement was available, and the model
-    was wrong.** Observed request sum was **203 against 142 distinct ids on the
-    trip** — an excess the model could not produce, because it treated
-    accumulation as binary (all ids resolve or none). Reality is partial: ids
-    resolving to `null` never enter `hydrated` and are re-requested every window,
-    ≈43% overhead. The conclusion (max 28, zero over 40) survived, but it had
-    been asserted on a model that did not describe the system. In a session whose
-    premise was that a structural argument is not a substitute for a count, the
-    first attempt produced a simulation with a browser sitting open.
+  - **The first pass simulated where measurement was available.** That part
+    stands: with a browser open, the first attempt replayed sampled windows
+    offline instead of instrumenting `fetch`.
+  - **RETRACTED — the correction to that, written the same day, was itself
+    wrong, and it reached the docs before being caught.** It read: *"the model
+    was wrong — observed sum 203 against 142 distinct ids, an excess the model
+    could not produce, because it treated accumulation as binary; reality is
+    partial, ids resolving to `null` are re-requested every window, ≈43%
+    overhead."* Re-measured at a realistic scroll speed (820–1200 ms per step
+    rather than ~200 ms): **19 requests totalling exactly 142 ids against 142
+    distinct, 0 aborted, 0 failed.** Every id resolved. **The simulation had been
+    right** (it predicted 19 requests / 142) and the fast-scroll *measurement*
+    was the artifact. The 203 came from the effect's `() => ctrl.abort()`
+    cleanup cancelling in-flight requests during a scripted scroll faster than
+    the network, so their ids were re-asked — a real behavior under flick-scroll,
+    but nothing to do with null resolution.
+  - **The lesson is not "measure instead of model."** It is that a measurement
+    has an apparatus, and the apparatus can be the thing you are measuring. I
+    distrusted a model because it disagreed with an instrument, without asking
+    what the instrument was doing — and then wrote the instrument's artifact into
+    three docs as a finding.
   - **Sampling at 0.5-viewport steps can skip transient mounted states.** The
     bias is conservative — a skipped window makes the next simulated request
     larger, not smaller — so "zero over 40" survives it. It went unstated.
