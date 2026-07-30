@@ -325,7 +325,11 @@ export type Waypoint = {
   tags?: string[];
   /** Reliability score box (0–100) + caption. */
   reliability?: { score: number; label: string; sourceCount: number };
-  /** Distance from the route line (e.g. 0.4 = "0.4 mi on route"). */
+  /** PERPENDICULAR distance from the route line — how far OFF the route the
+   *  place sits (e.g. 0.4 = "0.4 mi off route"). The example here read
+   *  "0.4 mi on route" until 2026-07-30, contradicting the sentence in front
+   *  of it; `map-detail-overlay.tsx` had been rendering it that way. Not to be
+   *  confused with `CorridorCity.milesFromStart`, which is ALONG-route. */
   routeOffsetMi?: number;
   /** "If you stop here" simulator block. Every field is optional: the
    *  browse/search path supplies only the real detour (`addsTime`), while
