@@ -441,7 +441,14 @@ function TrappersDetailPanel({
                   color: "var(--amber)",
                 }}
               >
-                Day {dayNumberLabel} · {routeOffset.toFixed(1)} mi on route
+                {/* `routeOffsetMi` is the PERPENDICULAR distance from the day's
+                    route line (`offRouteMi` in card-stats.ts, × ROAD_FACTOR) —
+                    i.e. how far OFF the route the place sits. This read "mi on
+                    route" until 2026-07-30, which inverted its meaning: a place
+                    measured 25 mi off the route rendered as "25.0 mi on route".
+                    "mi off route" matches find-nearby-panel and replan-sheet,
+                    which already render this same quantity that way. */}
+                Day {dayNumberLabel} · {routeOffset.toFixed(1)} mi off route
               </span>
             </div>
           )}
