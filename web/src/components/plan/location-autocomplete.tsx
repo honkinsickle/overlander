@@ -2,20 +2,32 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
+import { isInPlanningRegion } from "@/lib/plan/planning-region";
 
 /**
  * Location input with Mapbox geocoding autocomplete. Debounces queries
  * to the Mapbox Geocoding v6 forward endpoint, shows a dropdown of
- * suggestions, and lets the user pick. On pick, fills the visible
- * input with the formatted address and emits hidden `${name}Lat` and
- * `${name}Lng` fields with coordinates from Mapbox — so the wizard's
- * finalize action can skip a geocode call and resolve to the exact
- * place the user picked, not whatever Mapbox guesses on submit.
+ * suggestions, and lets the user pick. On pick it fills the visible input
+ * and calls `onSelect` with the label, coords, and region code.
+ *
+ * PLANNING REGION: suggestions outside `PLANNING_REGION_CODES` are dropped
+ * before they render, so an out-of-region place is never offered as an option.
+ * The filter is strict — a suggestion Mapbox did not tag with a `region_code`
+ * is also dropped, because we cannot prove it is in region. See
+ * `lib/plan/planning-region.ts`.
  *
  * Token: NEXT_PUBLIC_MAPBOX_TOKEN (already exposed for map rendering).
  *
- * Falls back to plain freeform behavior if the user types but doesn't
- * pick a suggestion — finalize will geocode the label as before.
+ * Freeform typing (no pick) leaves `coords` null. `validateExpeditionForm`
+ * refuses a destination without coords on both the client and the server, so
+ * freeform text cannot reach generation.
+ *
+ * ORPHANED — the hidden `${name}Lat` / `${name}Lng` inputs below have **zero
+ * consumers**. They fed the legacy 5-step wizard's finalize action, which #166
+ * deleted; this docstring claimed they still did until 2026-07-31. The one
+ * remaining consumer (the expedition wizard) is controlled and reads `onSelect`
+ * instead. Left in place deliberately — removing them is unrelated cleanup and
+ * belongs in its own change. Do not build on them.
  */
 
 type Suggestion = {
@@ -33,6 +45,12 @@ type Suggestion = {
   secondary: string;
   /** `[lng, lat]`. */
   coords: [number, number];
+  /** Mapbox `context.region.region_code` — "CA", "OR", … Carried as a DISCRETE
+   *  value, never parsed back out of `label`: the label falls back to the full
+   *  region name when the code is missing, so it has three shapes and is a
+   *  display string, not data. Non-optional because a suggestion without a code
+   *  never becomes a `Suggestion` — the region filter drops it first. */
+  regionCode: string;
 };
 
 export function LocationAutocomplete({
@@ -53,9 +71,14 @@ export function LocationAutocomplete({
   defaultLng?: number;
   required?: boolean;
   /** Fired when the user picks a real suggestion — gives the controlled
-   *  caller the resolved label + `[lng,lat]` so it can bind them (the going-
-   *  form ignores this and reads the hidden fields instead). */
-  onSelect?: (label: string, coords: [number, number]) => void;
+   *  caller the resolved label, `[lng,lat]`, and the Mapbox region code. The
+   *  region is guaranteed in-region: out-of-region suggestions are filtered
+   *  before they can be picked. */
+  onSelect?: (
+    label: string,
+    coords: [number, number],
+    regionCode: string,
+  ) => void;
   /** Fired on freeform typing (coords are now stale/cleared). */
   onTextChange?: (text: string) => void;
   /** Error ring (controlled validation). */
@@ -119,13 +142,22 @@ export function LocationAutocomplete({
             // Rosa, CA" beats just "Santa Rosa". Falls back to the
             // place name alone when context is missing.
             const region = f.properties?.context?.region;
-            const regionCode = region?.region_code ?? region?.name ?? "";
+            // DISPLAY suffix — keeps the existing `?? name` fallback so the
+            // dropdown still disambiguates when Mapbox omits the code.
+            const labelSuffix = region?.region_code ?? region?.name ?? "";
+            // DATA — the code only. Never the name: admitting names would need
+            // a name→code mapping table, and there is deliberately none.
+            const regionCode = region?.region_code ?? null;
             if (!c || c.length < 2 || !primary) return null;
+            // Planning region: drop out-of-region places, and drop places we
+            // cannot prove are in region (no code), before they ever render.
+            if (!isInPlanningRegion(regionCode)) return null;
             return {
-              label: regionCode ? `${primary}, ${regionCode}` : primary,
+              label: labelSuffix ? `${primary}, ${labelSuffix}` : primary,
               primary,
               secondary,
               coords: [c[0], c[1]] as [number, number],
+              regionCode: regionCode as string,
             };
           })
           .filter((s): s is Suggestion => s !== null);
@@ -158,7 +190,7 @@ export function LocationAutocomplete({
     setCoords(s.coords);
     setOpen(false);
     setActiveIndex(-1);
-    onSelect?.(s.label, s.coords);
+    onSelect?.(s.label, s.coords, s.regionCode);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {

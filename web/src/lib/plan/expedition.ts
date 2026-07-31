@@ -14,6 +14,7 @@ import type {
   TripParams,
 } from "@/lib/itinerary/facts";
 import type { RigProfile } from "@/lib/vehicles/types";
+import { isInPlanningRegion, PLANNING_REGION_NAMES } from "./planning-region";
 
 /** One row of the destinations list (reference-doc §01 start/end + §03 events).
  *  "window" from spec §8.1 is intentionally dropped — a window needs a date
@@ -24,6 +25,15 @@ export type ExpeditionDestination = {
   /** `[lng,lat]` bound when the user PICKED a suggestion — null when the
    *  field holds unresolved freeform text. */
   coords: [number, number] | null;
+  /** Mapbox region code ("CA", "OR", …) from the picked suggestion, null for
+   *  unresolved freeform text. Set together with `coords` and by the same
+   *  event, so `coords != null` implies `region != null`.
+   *
+   *  DROPPED AT THE PIPELINE BOUNDARY, deliberately: `expeditionToGenerationInput`
+   *  builds each `Anchor` field by field and does not copy this, so the region
+   *  never reaches `GenerationInput` or anything under `lib/itinerary/`. It
+   *  exists to be checked before generation, not to be planned with. */
+  region: string | null;
   /** FIXED = hard schedule anchor; flexible = the planner may place it. */
   datePin: "fixed" | "flexible";
   /** ISO date; used only when datePin === "fixed". */
@@ -137,6 +147,19 @@ export function validateExpeditionForm(form: ExpeditionForm): string | null {
   if (form.destinations.some((d) => !d.place.trim())) return "Every destination needs a place.";
   if (form.destinations.some((d) => !d.coords))
     return "Pick each destination from the suggestions so it resolves to a real place.";
+  // Planning region. This runs on BOTH sides: the wizard calls it to gate the
+  // submit control, and `generateExpeditionTripAction` calls it server-side
+  // before any spend — which is what makes it a real backstop rather than a
+  // client-side courtesy. A Server Action is a POST to the page, so the page's
+  // own gating does not cover it (same reasoning as the flag and getUser
+  // guards there).
+  //
+  // Reached only for destinations that already have coords, and coords are
+  // only ever set by picking a filtered suggestion — so in practice this
+  // catches a hand-crafted POST, not a user.
+  const outOfRegion = form.destinations.find((d) => !isInPlanningRegion(d.region));
+  if (outOfRegion)
+    return `Trip planning currently covers ${PLANNING_REGION_NAMES}. "${outOfRegion.place.trim()}" is outside that region.`;
   if (form.destinations.some((d) => d.datePin === "fixed" && !d.date))
     return "A FIXED destination needs a date.";
   if (!form.startDate) return "Set a start date.";
