@@ -15,6 +15,7 @@ import {
   isInPlanningRegion,
 } from "./planning-region";
 import { validateExpeditionForm, type ExpeditionForm } from "./expedition";
+import { DEFAULT_RIG } from "@/lib/vehicles/types";
 
 // ── isInPlanningRegion ─────────────────────────────────────────────────────
 
@@ -80,14 +81,11 @@ const base = (
   returnRouting: "shortest",
   vehicleId: "v1",
   vehicleTitle: "Truck",
-  rig: {
-    build: [],
-    fuelRangeMi: 300,
-    capability: "mild",
-    groupSize: 2,
-    skill: "intermediate",
-    preferences: [],
-  } as ExpeditionForm["rig"],
+  // The real default, not a hand-written shape. A literal here needs an `as`
+  // to compile, and that assertion hid a wrong `groupSize` (it is a string,
+  // "1–2 travelers", not a number) past `next build` — which does not
+  // type-check this file. CI's separate `typecheck` step does.
+  rig: DEFAULT_RIG,
 });
 
 const dest = (place: string, region: string | null) => ({

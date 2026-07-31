@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
-import { isInPlanningRegion } from "@/lib/plan/planning-region";
+import {
+  isInPlanningRegion,
+  type PlanningRegionCode,
+} from "@/lib/plan/planning-region";
 
 /**
  * Location input with Mapbox geocoding autocomplete. Debounces queries
@@ -45,12 +48,15 @@ type Suggestion = {
   secondary: string;
   /** `[lng, lat]`. */
   coords: [number, number];
-  /** Mapbox `context.region.region_code` — "CA", "OR", … Carried as a DISCRETE
-   *  value, never parsed back out of `label`: the label falls back to the full
-   *  region name when the code is missing, so it has three shapes and is a
-   *  display string, not data. Non-optional because a suggestion without a code
-   *  never becomes a `Suggestion` — the region filter drops it first. */
-  regionCode: string;
+  /** Mapbox `context.region.region_code`, narrowed to the six planning-region
+   *  codes. Carried as a DISCRETE value, never parsed back out of `label`: the
+   *  label falls back to the full region name when the code is missing, so it
+   *  has three shapes and is a display string, not data.
+   *
+   *  The type — not a comment — is what guarantees a suggestion outside the
+   *  region never becomes a `Suggestion`: `isInPlanningRegion` is a type
+   *  predicate, so the only way to populate this field is to pass that check. */
+  regionCode: PlanningRegionCode;
 };
 
 export function LocationAutocomplete({
@@ -133,7 +139,13 @@ export function LocationAutocomplete({
         if (!res.ok) return;
         const json = (await res.json()) as MapboxGeocodingResponse;
         const next: Suggestion[] = (json.features ?? [])
-          .map((f) => {
+          // The `: Suggestion | null` annotation is load-bearing. Without it
+          // the `.filter((s): s is Suggestion => …)` predicate below LAUNDERS
+          // this callback's inferred return type — deleting the region guard
+          // then compiles cleanly and the constraint silently disappears.
+          // Verified by mutation: with the annotation, removing the guard is a
+          // compile error; without it, it is not.
+          .map((f): Suggestion | null => {
             const c = f.geometry?.coordinates;
             const primary = f.properties?.name ?? "";
             const secondary = f.properties?.place_formatted ?? "";
@@ -152,12 +164,14 @@ export function LocationAutocomplete({
             // Planning region: drop out-of-region places, and drop places we
             // cannot prove are in region (no code), before they ever render.
             if (!isInPlanningRegion(regionCode)) return null;
+            // `regionCode` is narrowed to PlanningRegionCode by the predicate
+            // above — no assertion needed, and none should be reintroduced.
             return {
               label: labelSuffix ? `${primary}, ${labelSuffix}` : primary,
               primary,
               secondary,
               coords: [c[0], c[1]] as [number, number],
-              regionCode: regionCode as string,
+              regionCode,
             };
           })
           .filter((s): s is Suggestion => s !== null);

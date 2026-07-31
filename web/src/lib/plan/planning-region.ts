@@ -12,7 +12,15 @@
  * contain Colorado or New Mexico: Utah's and Arizona's eastern border is the
  * Four Corners meridian at −109.045°, which is exactly CO's and NM's western
  * border.) A box is the wrong instrument, and it is unnecessary — Mapbox
- * already returns the admin region on every suggestion.
+ * returns the admin region in the response we already parse.
+ *
+ * HOW OFTEN IS `region_code` ACTUALLY PRESENT? Measured on 2026-07-31: present
+ * on all 26 features returned by six live forward queries. That is six
+ * well-known US city names, NOT the whole `country=us,ca&types=place` space, so
+ * it does not establish a rate. It matters because the filter is strict-refuse:
+ * an untagged feature is dropped SILENTLY, with no error and no log. If places
+ * start going missing from the dropdown, an absent `region_code` is the first
+ * thing to check — there will be no other signal.
  *
  * WHY NO GEO DEPENDENCY. Resolving coords → state would need polygon data plus
  * a point-in-polygon library in `web/`, which has neither and would need
@@ -51,7 +59,16 @@ export const PLANNING_REGION_NAMES =
  * value read anywhere in this feature, so no name→code mapping table exists —
  * see the note on `regionCode` in `location-autocomplete.tsx` for why the
  * label's `?? region.name` fallback is display-only and never reaches here.
+ *
+ * A TYPE PREDICATE, not a plain boolean, so the narrowing is the compiler's job
+ * rather than a comment's. The caller in `location-autocomplete.tsx` needs a
+ * non-null code after the check; with a boolean return that needed an `as`
+ * assertion, which would have silently kept compiling if this contract ever
+ * loosened. Note the predicate narrows the ARGUMENT only — it says nothing
+ * about the object the code was read from.
  */
-export function isInPlanningRegion(regionCode: string | null | undefined): boolean {
+export function isInPlanningRegion(
+  regionCode: string | null | undefined,
+): regionCode is PlanningRegionCode {
   return regionCode != null && ALLOWED.has(regionCode);
 }
