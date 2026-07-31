@@ -1,7 +1,53 @@
-# STATE — `main` · 2026-07-28
+# STATE — `main` · 2026-07-31
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
+
+## COLD START (read this first, in this order)
+
+Written 2026-07-31 for an agent arriving in a **different environment** — work is
+moving off Claude Code on Adam's desktop. Do not assume your harness loads
+anything automatically.
+
+1. **Read `CLAUDE.md` at the repo root FIRST — load it by hand if your
+   environment does not.** It is not background reading; it carries the standing
+   instructions you will otherwise violate: `main` is protected and every change
+   goes branch → PR → **Adam merges** (never merge your own); the git hygiene
+   rule (`git add` explicit paths only — no `add .`, no `-A`, no `commit -a`);
+   the tripwire discipline (state the paths that must show ZERO diff, then verify
+   it); PROD/TEST separation (`dawson-vancouver-cassiar` is **FROZEN**);
+   iOverlander is a **banned data source**; and the RUNBOOK, whose gotchas are
+   measured, expensive, and not re-derivable from source — which test trip to
+   reach for, the ~1h dev-session expiry that masquerades as broken drag
+   tooling, the 15-minute negative cache on `/api/places/details`, and the
+   apparatus-validation lessons.
+   - `web/CLAUDE.md` and `web/AGENTS.md` carry the web-specific conventions
+     (slideup-not-full-page, design tokens, the repository layer).
+2. **Then this file** for position — what is live, what merged, what is decided
+   but unbuilt, what is parked.
+3. **Then the architecture doc for your task.** There are five and the filenames
+   do **not** make the split obvious:
+
+| Doc | Read it when you are working on |
+|---|---|
+| `docs/architecture/trip-resolution.md` | **How an id becomes a payload** — `getTrip`'s resolution order, the two reference readers, fork, caching. Also the source of the **evidence-tag convention** every doc here uses. |
+| `docs/architecture/itinerary-model.md` | **The data model as it stands** — `Day`/waypoint/corridor-spine shape, the route-vs-overlay two-layer model, nodeId keying, guarded single-write persistence. §7 is the single home for the five trip payload shapes. |
+| `docs/architecture/generation-pipeline.md` | **The WRITE path** — the server-side generation run (gates → `preComputeFacts` → LLM → `bakeGeneratedDays` → persist), LLM field provenance, failure modes. |
+| `docs/architecture/trip-creation-surfaces.md` | **The client/UI half of creation** — which surfaces create a trip, every expedition-wizard input, the destination autocomplete, what `expeditionToGenerationInput` forwards. |
+| `docs/architecture/place-render-model.md` | **The READ/render path for one place** — what a stored tile carries vs what the day-detail card and the detail slideup each show, enrichment via `/api/places/details`. |
+
+4. **`docs/BACKLOG.md`** for parked work, **`docs/LOG.md`** for why things are the
+   way they are (append-only, newest at top), **`docs/DATA_INVENTORY.md`** for
+   which data lives in which database.
+
+**Conventions that are easy to miss.** Every factual claim in `docs/` carries an
+inline evidence tag — `` `[read source]` ``, `` `[grep]` ``, `` `[queried TEST]` ``,
+`` `[queried PROD]` ``, `` `[script]` ``, `` `[measured YYYY-MM-DD]` ``, or
+`` `[UNVERIFIED]` ``. The convention exists because a confident doc once recreated
+a false belief (`trip-resolution.md` §"Why this doc states its evidence"). **Add a
+claim only with its evidence, and mark what you could not verify.** Superseded
+text is struck through with `~~` and annotated **in place**, never deleted — a
+later entry corrects an earlier one and the earlier one stays.
 
 ## LIVE ON PROD (what a user can do today)
 - **Manual drag editing on user-owned trips.** `NEXT_PUBLIC_LIVING_PLAN_EDIT=1`
@@ -28,6 +74,18 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
   (`cd web && npx next build`) must pass before merge.
 
 ## 2026-07-31 — planning scope narrowed; out-of-region trips de-linked
+
+**Three PRs merged, all on `main`, nothing stranded** `[gh pr list, verified
+2026-07-31 — each confirmed present on origin/main by grep, not by the merge
+banner]`. The only open PR in the repo is **#24** (May, unrelated).
+
+- **#176** — `/api/places/details` **chunks instead of truncating**. No id is
+  dropped. `BATCH_SIZE = 40` is now a fan-out chunk size, not an input cap.
+- **#177** — the three out-of-region reference trips de-linked; `4534add5`
+  adopted as the standing instrument (this section).
+- **#178** — **trip creation restricted to the six-state planning region**, in
+  code. Two commits: the constraint, then a correction making the invariant
+  actually compiler-enforced (see §PLANNING REGION below).
 
 **Scope is now CA, NV, UT, AZ, WA, OR.** Three reference trips sit outside it and
 were test fixtures serving as product content. Their in-product pointers are gone.
@@ -59,12 +117,74 @@ were test fixtures serving as product content. Their in-product pointers are gon
   re-verified in a second pass before recording: `docs/DATA_INVENTORY.md`.
 - **Two cases lost their default instrument:** the 91-id / three-batch MAX_IDS
   case and the `curatedMode = false` render mode. Both probably want a synthetic
-  fixture. Recorded, not built.
+  fixture. Recorded, not built — fixture design in `docs/BACKLOG.md`.
+
+### PLANNING REGION — the constraint is in code, not just policy (#178)
+
+- **One constant, one place:** `web/src/lib/plan/planning-region.ts` holds
+  `PLANNING_REGION_CODES` and the display string. Widening the region is a
+  one-line diff there; nothing else hardcodes a state code `[grep, 2026-07-31]`.
+- **Codes, not a bounding box** — deliberate. A box over the six states contains
+  **Idaho entirely**, western Montana, western Wyoming, and a strip of
+  Baja/Sonora. (It does **not** meaningfully contain Colorado or New Mexico —
+  UT/AZ's eastern border *is* CO/NM's western border, the Four Corners meridian
+  at −109.045°. An earlier claim that it leaked into those two states was wrong;
+  see `docs/LOG.md` 2026-07-31.)
+- **The region STOPS at `expeditionToGenerationInput`** `[read source]`. That
+  mapper builds each `Anchor` field by field and does not copy `region`, so it
+  never reaches `GenerationInput` or anything under `lib/itinerary/`. It exists
+  to be *checked* before generation, not to be planned with.
+- **The check lives in `validateExpeditionForm`, not in the action.** A
+  deliberate deviation from "add a third guard in
+  `generateExpeditionTripAction`": the action calls the validator, so one
+  implementation covers both the client gate and the server backstop.
+  `generateExpeditionTripAction`'s guards, in order, are **flag → sign-in →
+  `validateExpeditionForm`** `[read source]`; there is no fourth guard before
+  spend.
+- **Strict by design:** a Mapbox suggestion with no `region_code` is dropped
+  too — we admit only what we can positively prove is in region. The failure
+  mode is **silent** (no error, no log), so if places start vanishing from the
+  autocomplete, an absent `region_code` is the first thing to check.
+
+### DECIDED BUT NOT BUILT (current, as of 2026-07-31)
+
+Decided means the shape is settled and the next person can build it without
+re-litigating. Full entries in `docs/BACKLOG.md`; one line each here.
+
+- **Badge gate on `placeId`.** Gate the "yoTrippin Verified" badge on whether the
+  tile carries a `placeId`. Scoped; the enrichment-gated alternative was
+  **rejected on measurement** (506 ms flicker) and on provenance.
+- **Synthetic fixture replacing the de-linked instruments.** One fixture — a
+  ~90-tile `placeId`-bearing day with no curated flags — covers both the
+  three-batch chunking case and `curatedMode = false`.
+- **Remove the orphaned `${name}Lat` / `${name}Lng` hidden inputs** in
+  `location-autocomplete.tsx`. Dead since #166; zero consumers `[grep across
+  both workspaces incl. `web/scripts`, 2026-07-31]`. Deliberately left in #178 as
+  unrelated cleanup.
+
+### PARKED (current, as of 2026-07-31)
+
+Parked means blocked, deferred, or waiting on a decision that is **not** made.
+
+- **`fix/generated-day-miles`** — new generations still write bad
+  `milesFromStart`; nothing renders them since #170. Data-quality debt.
+- **`USE_FEDERATED_POIS` is unset**, so the browse route's corpus merge never
+  runs. Whether it is set in **Vercel Production is `[UNVERIFIED]`** — no
+  committed file records it.
+- **Unbounded request size at `/api/places/details`** (introduced by #176).
+  Nothing can currently send an absurd request, but that is a property of the
+  client, not the endpoint.
+- **`yotrippin-demo` spine/label divergence** — cause unestablished; not
+  checkable from source.
+- **"yoTrippin Verified" still has no definition.** The badge gate above is
+  mechanical; what the label *means* remains an unmade product decision.
 
 ## 2026-07-28 — ONE CAUSAL CHAIN, plus one separate thread
 
 `[gh pr view #153–#175, 2026-07-28]` — nine PRs merged today (**#165–#173**);
-**#159–#164 were yesterday**; #174/#175 do not exist. Nothing from today is open
+**#159–#164 were yesterday**; ~~#174/#175 do not exist~~ **— true when written;
+#174/#175 merged later on 07-28 and 07-30 respectively, and #176–#178 on 07-31
+`[gh pr list, 2026-07-31]`.** Nothing from today is open
 or stranded. The only open PR in the repo is **#24** (May, unrelated). Verified
 rather than assumed — #153 was once taken as merged a day early, and **#172
 merged mid-correction today**, stranding a fix on its branch until it was
@@ -83,7 +203,8 @@ cherry-picked as #173.
    option (a) vs (b) **in favour of (b), the read-path fix**.
 5. **(b) shipped as #170.**
 
-**MAX_IDS ran separately** — measured, scoped, and deliberately **not built**.
+**MAX_IDS ran separately** — measured, scoped, and deliberately not built *that
+day*; **shipped 2026-07-31 as #176**.
 
 ### SHIPPED (live on `main`)
 - **#165** — no date-pin toggle on start/end destinations.
@@ -100,10 +221,13 @@ cherry-picked as #173.
   claim (#171) and two rounds of MAX_IDS corrections (#172, #173).
 
 ### DECIDED BUT NOT BUILT
-- **MAX_IDS = 40 → chunk server-side.** Measured, scoped, tripwired, unbuilt.
-  Do **not** raise the cap until someone establishes what 40 protected; ordering
-  by proximity is the wrong tool because the measured failures are single-day.
-  Full entry with the failing-day table: `docs/BACKLOG.md`.
+- **~~MAX_IDS = 40 → chunk server-side. Measured, scoped, tripwired, unbuilt.~~
+  BUILT AND MERGED as #176 on 2026-07-31.** `parsePlaceIds` no longer slices;
+  the route chunks all ids at `BATCH_SIZE = 40`. The cap was **not** raised and
+  nothing was reordered by proximity, as the scoping required. Kept here struck
+  rather than deleted because the reasoning still governs the next change to
+  this route. **One consequence to know about: removing the `.slice` removed the
+  only bound on request size** — see `docs/BACKLOG.md`.
 
 ### PARKED
 - **`fix/generated-day-miles` — LOWER urgency after #170, but not closed.**
@@ -417,7 +541,17 @@ marker. That marker is now discharged — the entries below are reconciled from
 - `retry` is correct ONLY if the mutate recomputes inside the closure. A
   precomputed full-structure overlay is refuse mislabeled as retry — it clobbers.
 - Schema before the code that reads it. Always.
-- The real gate is `cd web && npx next build`, exit 0. No tolerated errors.
+- Trip creation is restricted to **CA/NV/UT/AZ/WA/OR**, and the six-state list
+  lives in exactly one module (`web/src/lib/plan/planning-region.ts`). Do not
+  hardcode a state code anywhere else, and do not replace it with a bounding box.
+- ~~The real gate is `cd web && npx next build`, exit 0. No tolerated errors.~~
+  **CORRECTED 2026-07-31 — necessary but NOT sufficient.** `next build` does
+  **not** type-check every file in the tsconfig scope; a real type error in
+  `web/src/lib/plan/planning-region.test.ts` sat behind a green `next build`
+  and would have failed CI `[measured 2026-07-31]`. **CI runs three separate
+  jobs — `typecheck`, `test`, `build`.** Before pushing, run
+  `npm run -w web typecheck` **as well as** `cd web && npx next build`. Note
+  `data/` has its own gate that neither covers (`npm run -w data typecheck`).
 - `data/.env` points at ONE project (TEST) and is NOT the whole picture. The
   corpus lives on PROD. Read `docs/DATA_INVENTORY.md` before drawing any
   conclusion about coverage or "what data exists."

@@ -138,6 +138,30 @@ Left deliberately. An unimported module is cheap, and deleting one is the kind o
 decision that deserves a human check that no out-of-repo consumer depends on it —
 the same posture taken for the vestigial `GooglePlaces` env var above.
 
+**A third orphan, found 2026-07-31 — it is not a module, which is why the 4b
+sweep missed it.** The hidden `<input type="hidden" name={`${name}Lng`}>` /
+`` `${name}Lat` `` pair emitted by
+`web/src/components/plan/location-autocomplete.tsx` has **zero consumers**.
+
+- They fed the legacy 5-step wizard's finalize action, which **#166 deleted**.
+  The component's docstring claimed they were still live until it was corrected
+  in #178; the inputs themselves were deliberately left in place as unrelated
+  cleanup.
+- The sole remaining call site (`expedition-wizard.tsx`) is fully controlled — it
+  reads the `onSelect` callback into React state and **never submits an HTML
+  form**, so the emitted `dest-<uuid>Lat` / `dest-<uuid>Lng` keys go nowhere.
+- `[grep across `web/src`, `web/scripts`, `data/`, `supabase/` for the form-data
+  keys, for `FormData`/`formData.get`, and for both `@/…` and `../src/…`
+  specifier forms, 2026-07-31]` — the only three `FormData` consumers in the repo
+  are `app/auth/actions.ts`, `app/welcome/actions.ts`, and a comment in
+  `selectable-chip.tsx`; none touch a `*Lat`/`*Lng` key.
+- **Why it evaded the module-level sweep:** an orphaned *DOM attribute* has no
+  import to count. The 4b lesson ("resolve both specifier forms, sweep every
+  workspace") is about modules; this is a category the technique cannot reach.
+- `docs/architecture/trip-creation-surfaces.md` justified these inputs as
+  existing "for the legacy `GoingForm`" — corrected 2026-07-31, since that form
+  no longer exists.
+
 ## Vercel Production env — measured 2026-07-27
 
 All `[vercel env ls production]`. Names only; no values were read or printed.
@@ -1033,6 +1057,17 @@ conclusion.
   too rare to design around and indistinguishable from state 2 until the endpoint
   separates them (see the proposed fix above). Depends on that fix landing first.
 
+> **STATUS UPDATE 2026-07-31 — the truncation is FIXED; this entry is retained
+> for its reasoning, not its status.** Shipped as **#176**: `parsePlaceIds` no
+> longer slices, and the route chunks every id at `BATCH_SIZE = 40`
+> (`web/src/app/api/places/details/batch.ts`, new file — the tripwire below did
+> not anticipate it). The cap was **not** raised and nothing was reordered by
+> proximity, as the scoping required. Everything below about *what 40 protected*
+> and *why ordering is the wrong tool* still governs the next change to this
+> route. **The fix introduced one new defect — see "Unbounded request size"
+> below.** The three-batch case (91 ids) still has **no instrument**; see the
+> synthetic-fixture entry.
+
 - **`MAX_IDS = 40` truncation — MEASURED 2026-07-28, and it is narrower than this
   entry used to claim.** `parsePlaceIds` dedupes then `.slice(0, 40)` with **no
   error and no signal**, and the hydration effect re-fires only on mounted-set
@@ -1154,6 +1189,108 @@ conclusion.
   - Consequence for whoever next reads harness output: treat it as a projection
     check, not a render snapshot. If the anchor behaviour ever needs asserting,
     that is a browser check, not a harness change.
+
+## Surfaced 2026-07-31 (the planning-region / chunking session)
+
+- **Badge gate on `placeId` — DECIDED and SCOPED, unbuilt.** Gate the "yoTrippin
+  Verified" badge on whether the tile carries a `placeId` at all. This is the
+  *mechanical* half only; it does **not** answer what the label means.
+  - **Tension to resolve first, deliberately flagged rather than buried:** the
+    older `DEFINE "yoTrippin Verified"` entry above closes with "Scope this only
+    **after** the definition exists." This entry scopes a gate before that
+    decision. The justification is that the gate is **strictly a narrowing** — it
+    can only *remove* the badge from tiles that demonstrably carry no Google
+    data, which is true under every candidate definition. If that reasoning does
+    not hold for a reader, the older entry wins and this one waits.
+  - **Why NOT the fuller, enrichment-gated version** — rejected on two
+    independent grounds, both worth keeping because each alone is sufficient:
+    1. **Measured ~506 ms of flicker** `[measured in an earlier session — NOT
+       re-verified 2026-07-31]`. Gating on *enrichment* means the badge cannot
+       resolve until `/api/places/details` returns, so it pops in after paint.
+       Gating on `placeId` resolves synchronously from data already in hand.
+    2. **Provenance is already destroyed one component above the render.**
+       `hydratePlaces` grafts with `rich.rating ?? t.rating`, so by the time a
+       tile reaches the badge there is **no way to tell a fetched rating from a
+       stored constant** — the enrichment gate would be reading a field that has
+       already lost the distinction it depends on. Documented mechanically as
+       "the merge is explicit and lossy" in
+       `docs/architecture/place-render-model.md` §4.1; the *provenance*
+       consequence is the part that is new here.
+  - Do **not** implement this by adding a `verified` field to the tile schema —
+    per the older entry, the schema sits at the grammar ceiling.
+
+- **Unbounded request size at `/api/places/details` — introduced by #176.**
+  Removing `.slice(0, MAX_IDS)` removed the **only** bound on how many ids a
+  caller may send. `[read source, 2026-07-31]` `parsePlaceIds` rejects non-object
+  bodies, rejects a non-array `placeIds`, type-checks every element is a
+  non-empty string, and dedupes — but does **not** bound array length, validate
+  id *format*, or bound body size. `BATCH_SIZE = 40` is fan-out only; the loop
+  iterates all ids, so N ids still mean N upstream `GET`s, just 40 at a time.
+  - **Not currently exploitable, and the distinction matters:** the only caller
+    is the app's own hydration effect, whose id set is bounded by what a day
+    holds. **That is a property of the client, not of the endpoint.** The route
+    is a public `POST` and nothing about it enforces the bound.
+  - Deliberate, not an oversight — the fix's brief was "do not raise the cap,"
+    and adding a *different* cap was out of scope. Recorded so the next person
+    sees it as a known edge rather than rediscovering it.
+  - If bounded later, it should **413/400 explicitly**, not silently truncate —
+    the silent drop is exactly what #176 removed.
+
+- **`USE_FEDERATED_POIS` is unset, so the browse route's corpus merge never
+  runs.** `[read source, 2026-07-31]` Read once, at
+  `web/src/app/api/trip-browse/[tripId]/[dayId]/route.ts`, as
+  `process.env.USE_FEDERATED_POIS === "true"` — no default, so unset is `false`.
+  It gates two things: the Supabase client is never constructed, and the
+  per-category fan-out early-returns before `fetchFederatedPois`
+  (`lib/trip-browse/federated.ts`). Consequence: the `pois_along_corridor` RPC is
+  never issued from this route and no `master_place` row enters the merge.
+  - **Whether it is set in Vercel Production is `[UNVERIFIED]`.** No committed
+    file records it — there is no `vercel.json`, `web/.env.local.example` does
+    not mention it, and the "Vercel Production env — measured 2026-07-27" section
+    above enumerates other vars but not this one. **Check the dashboard before
+    concluding anything about production behaviour.**
+  - **Do not confuse it with `USE_FEDERATED_CORRIDOR`** — a *separate* flag
+    (`lib/trips/reference.ts`, `lib/trips/bake-corridors.ts`) gating the corpus
+    fold into `segmentSuggestions`. The source is explicit that flipping one
+    cannot affect the other's surfaces. "The corpus half of trip-browse" means
+    the **browse-day route's** merge specifically; the corpus reaches day-detail
+    by the other lever.
+  - This narrows the FED-MERGE entry above, which reasons about the browse-route
+    merge being "purely additive" — a merge that never executes is not additive,
+    it is absent.
+
+- **`yotrippin-demo` — its `corridorCities` describe a different route than its
+  day labels. CAUSE UNESTABLISHED.** Recorded as an observation, not a diagnosis.
+  - **Not checkable from this repo** `[grep, 2026-07-31]`. The trip exists only
+    as a DB row: the sole source reference is `DEMO_TRIP_ID` in
+    `web/scripts/generate-itinerary.ts`, whose `DEMO` input holds **four anchors**
+    (Chicken AK → Dawson City → Watson Lake → Vancouver BC) and no days — days
+    and `corridorCities` are pipeline *outputs*. There is no committed fixture or
+    snapshot for it (`.alaska-snapshot.json` is a different trip). **Diagnosing
+    this requires a DB query.**
+  - **Discount it as an instrument until this is understood.** It is already
+    known to be a July 12–13 generation that ran **without `dayRoutes`** (no
+    polyline, `coords` on 1 of 19 days), and it was **de-linked 2026-07-31**.
+    Measurements taken against it may be measuring that breakage.
+
+- **Synthetic fixture to replace the de-linked instruments — RECORDED, not
+  built.** `docs/DATA_INVENTORY.md` states the cost of de-linking and says the
+  replacement is "separate work"; this is that entry. Counts live there — do not
+  restate them here.
+  - **One fixture covers both lost cases.** A day carrying **~90
+    `placeId`-bearing tiles** and **no curated flags** is simultaneously the
+    three-batch chunking case (90 ids → three `BATCH_SIZE = 40` batches, the case
+    `4534add5` cannot reach at 45) and the **`curatedMode = false`** render mode
+    (zero curated tiles → nothing collapses behind "Explore more", everything
+    renders inline). They were only ever separate because they happened to live
+    on the same real trip's day 1.
+  - **Synthetic, not a live trip, and that is the point.** Both properties are
+    incidental to any real itinerary, so a live trip can lose them to a reseed.
+    A fixture makes them **stated invariants** of the instrument.
+  - Ids need not resolve — the chunking path is exercised by id *count*. A
+    fixture of non-resolving ids also exercises the `null`-cache path, but see
+    the 15-minute negative cache in `CLAUDE.md` before drawing conclusions from
+    it.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

@@ -253,13 +253,19 @@ and `waypoints` never set one). These are the only trips in either database whos
 **single-day** eligible count exceeds `MAX_IDS = 40`, so they are the instrument
 for that defect `[queried PROD, read-only, 2026-07-28]`:
 
-| trip | day | distinct eligible ids | dropped by `.slice(0, 40)` |
-|---|---|---|---|
-| `la-to-deadhorse` (PROD `reference_trips`, 66d) | 1 | **91** | **51** |
-| " | 2 | 57 | 17 |
-| " | 3 | 57 | 17 |
-| " | 9 | 42 | 2 |
-| `dawson-vancouver-cassiar` (PROD, FROZEN, 14d) | 1 | 42 | 2 |
+**The `dropped` column is HISTORICAL.** #176 (2026-07-31) replaced truncation
+with chunking, so **nothing is dropped today** — the same counts now describe how
+many `BATCH_SIZE = 40` batches a day costs. Retained because these are still the
+only trips that cross the boundary, and the batch column is what an instrument is
+now chosen for.
+
+| trip | day | distinct eligible ids | ~~dropped by `.slice(0, 40)`~~ (pre-#176) | batches today |
+|---|---|---|---|---|
+| `la-to-deadhorse` (PROD `reference_trips`, 66d) | 1 | **91** | ~~51~~ | **3** |
+| " | 2 | 57 | ~~17~~ | 2 |
+| " | 3 | 57 | ~~17~~ | 2 |
+| " | 9 | 42 | ~~2~~ | 2 |
+| `dawson-vancouver-cassiar` (PROD, FROZEN, 14d) | 1 | 42 | ~~2~~ | 2 |
 
 Whole-trip totals: `la-to-deadhorse` **907 eligible tiles / 423 distinct ids**;
 `dawson-vancouver-cassiar` 182 / 115. For contrast, the two trips previously
