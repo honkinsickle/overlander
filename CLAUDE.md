@@ -141,6 +141,28 @@ actually touched what they describe. The `/wrap` command runs this pass.
     the second iteration — use `web/scripts/test-magic-link-pkce.ts --dry`, which
     transmits nothing.
 - **Gotchas (hard-won):**
+  - **Paper MCP binds at SESSION START — it is NOT broken if the tools are
+    missing.** `[diagnosed 2026-07-31]` If `Paper.app` is not running when the
+    session launches, the `mcp__paper__*` tools are never registered and
+    **cannot be added mid-session** (re-searching the tool registry will not
+    surface them). **Remedy: restart the session with `Paper.app` already
+    open.** Do NOT conclude the server is down:
+    - **The server itself is healthy and tool-capable** — verified by a live
+      MCP `initialize` handshake against `http://127.0.0.1:29979/mcp`:
+      `paper-desktop 0.4.4`, protocol `2025-06-18`, `tools` capability
+      advertised.
+    - **A bare `GET` to that URL returns 404 and looks like a dead endpoint. It
+      is not.** The server wants a JSON-RPC **POST** with
+      `Accept: application/json, text/event-stream`. Do not diagnose from the
+      `GET`.
+    - **Config is global, not per-project:** `~/.claude.json` top-level
+      `mcpServers`, key `paper`, two fields only — `type: "http"` and
+      `url: "http://127.0.0.1:29979/mcp"`. **No credentials.** (Distinct from
+      the `paper-desktop@paper` plugin/marketplace entry in
+      `~/.claude/settings.json`, which is the source of the `paper-desktop:*`
+      skills, not the MCP server.)
+    - **Paper is DESIGN-ONLY here:** create new frames only when authorized,
+      never overwrite an existing frame, never commit, never deploy.
   - **A minted dev session expires ~1h, and expiry MASQUERADES as broken drag
     tooling.** After expiry the drag still fires, the server action refuses
     (*"Couldn't move: Sign in to edit this trip."*), and the optimistic overlay
