@@ -138,15 +138,14 @@ function EntryLeft({ muted }: { muted: boolean }) {
         </span>
       </Link>
 
-      {/* Browse link — Paper CRL-0 · Barlow 400 · 13/16 · text-muted */}
-      <Link
-        href="/trip/la-to-deadhorse"
-        tabIndex={muted ? -1 : 0}
-        className="font-sans text-text-muted hover:text-text-primary"
-        style={{ fontSize: "13px", lineHeight: "16px" }}
-      >
-        Los Angeles to Deadhorse →
-      </Link>
+      {/* De-linked 2026-07-31: a "Los Angeles to Deadhorse →" browse link sat
+       *  here (Paper CRL-0 · Barlow 400 · 13/16 · text-muted), pointing at
+       *  /trip/la-to-deadhorse. Planning scope narrowed to CA/NV/UT/AZ/WA/OR
+       *  and that trip is out of region — a test fixture serving as the home
+       *  page's only content pointer. The row is NOT deleted and the URL still
+       *  renders; only this pointer is gone, leaving "Create a Trip" as the
+       *  single CTA. If a browse affordance returns, it should point at an
+       *  in-region trip rather than be restored as-is. */}
     </div>
   );
 }

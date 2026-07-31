@@ -67,6 +67,27 @@ actually touched what they describe. The `/wrap` command runs this pass.
     editable UUID owned by `seed-owner`, forked from `la-to-deadhorse` via the
     app's own `POST /api/trips/fork`. The windowing/edit instrument. Re-create
     with that same endpoint (authed) if TEST is ever reset.
+  - **STANDING INSTRUMENT for current pipeline output (2026-07-31):**
+    **`4534add5-3787-4b5f-ade6-584ce0fc27e7`** — PROD `public.trips`, San Diego →
+    Portland, 11d. Healthy `dayRoutes` shape (11/11 `coords`, 11/11 `startCoord`,
+    a 126k-char `routePolyline`), 770 tiles, 104 distinct eligible ids, day 2 at
+    45 (over the MAX_IDS cap), two round-trip days, `curatedMode` TRUE.
+    **RLS-scoped — NOT anon-readable**, so browser DOM measurement needs a minted
+    session; service-role payload reads are fine. Density is lopsided (263 tiles
+    on day 1, 4 on day 7) — never quote its mean. Full shape:
+    `docs/DATA_INVENTORY.md`.
+  - **DE-LINKED 2026-07-31 — `la-to-deadhorse`, `alaska-south-final`,
+    `yotrippin-demo`.** Out of the CA/NV/UT/AZ/WA/OR planning scope. Their
+    in-product links are removed, but **the rows still exist and the URLs still
+    render** — reach them directly if a recorded measurement needs them. Two
+    cases have NO replacement instrument: the **91-id / three-batch** MAX_IDS case
+    (`la-to-deadhorse` day 1) and the **`curatedMode = false`** render mode. Note
+    `alaska-south-final` and `yotrippin-demo` are July 12–13 generations that ran
+    **without `dayRoutes`** — no polyline, `coords` on 1 of 19 days, and
+    `/api/trip-browse` early-returns empty on the other 18. Measurements taken
+    against them were largely measurements of that breakage.
+  - `dawson-vancouver-cassiar` is out of region too but **FROZEN and untouched** —
+    the freeze is a separate, deliberate decision. Every guard stands.
   - Reference slugs (`la-to-deadhorse`, `yotrippin-demo` 19d) render anonymously
     — fine for read-only work, but they are NOT editable, so `canEdit` surfaces
     (edit toggle, drag, kebab) are invisible on them. Reaching for a slug to

@@ -92,6 +92,35 @@ projects `[queried catalog, TEST + PROD, 2026-07-27]`.
 How `getTrip` serves these rows (reader split, derivation, caching):
 [`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).
 
+### DE-LINKED 2026-07-31 — out of region, still reachable
+
+Planning scope narrowed to **CA, NV, UT, AZ, WA, OR**. Three reference trips sit
+outside it and were test fixtures serving as product content. Their in-product
+pointers are removed:
+
+| trip | pointers removed | remaining references |
+|---|---|---|
+| `la-to-deadhorse` | **2** — the `/trips` empty state (`app/trips/layout.tsx`) and the home browse link (`components/plan/entry-scene.tsx`) | ~9 maintenance/seed scripts under `web/scripts`, and `repository.ts`'s fixture-serving path |
+| `alaska-south-final` | **0 — none existed** | docs only |
+| `yotrippin-demo` | **0 — none existed** | one script constant (`scripts/generate-itinerary.ts` `DEMO_TRIP_ID`) |
+
+**De-linked, NOT retired and NOT deleted.** No row was removed, nothing was made
+unreachable, and `reference_trips` is still anon-readable — `/trip/la-to-deadhorse`
+renders for anyone with the URL. Only the in-product navigation is gone.
+
+**`dawson-vancouver-cassiar` is deliberately untouched.** It is also out of region,
+but it is FROZEN by an earlier decision, and every guard referencing it
+(`rails.ts` `FORBIDDEN_IDS`, the verify scripts, `edit-actions.ts`) stands
+unchanged. De-linking must not reverse a freeze by implication.
+
+**`REFERENCE_TRIP_IDS` was deliberately NOT changed.** It is duplicated in
+`app/trip/[id]/page.tsx` and `app/@modal/(.)trip/[id]/page.tsx`, and despite the
+name it is not a link table — nothing navigates through it. It marks *reference
+behaviour*: `isReference` drives the fork CTA and forces `canEdit` false.
+Reachability comes from `getTrip()`, not from this Set. Removing the id would
+leave the trip reachable but strip its reference treatment — a behaviour change
+dressed as a de-link. Left intact.
+
 ## `public.trips` — notable rows
 
 User trips (owner-scoped RLS). Not an exhaustive listing — only rows worth
@@ -129,6 +158,62 @@ Left in place deliberately. `[queried TEST]`
 > for edit-path work — it predates the swap and is the last artifact of the
 > `reference_trips` write target. `CLAUDE.md` §RUNBOOK's disjoint-instruments
 > caveat still applies to it.
+
+### STANDING INSTRUMENT for current pipeline output — `4534add5` (adopted 2026-07-31)
+
+**`4534add5-3787-4b5f-ade6-584ce0fc27e7`** — PROD `public.trips`, San Diego, CA →
+Portland, OR, **11 days**, 2026-08-01 → 08-11, `state: active`,
+`reference_id: null`, generated via the wizard with `generationInput` present,
+created 2026-07-31T14:23Z, owner `762639cf-…`.
+Every figure below was **re-verified in a second independent pass** before being
+recorded here `[queried PROD, read-only, 2026-07-31]`; all 11 checks matched.
+
+**It is on the healthy side of the `dayRoutes` split** — the thing that killed the
+old instruments:
+
+| | `4534add5` | `alaska-south-final` / `yotrippin-demo` |
+|---|---|---|
+| `day.coords` | **11/11** | 1/19 |
+| `day.startCoord` | **11/11** | 1/19 |
+| `routePolyline` | **present, 126,045 chars** | absent |
+
+**Shape:** 770 tiles · **104 distinct eligible ids** · 31 curated · 0 waypoints ·
+0 legacy `day.suggestions`. **602 of 770 tiles (78%) carry no `placeId`** and can
+never enrich.
+
+**Its density is LOPSIDED — do not quote "70 tiles/day".** That is a mean over a
+very uneven distribution and is representative of no day on the trip:
+
+```
+per-day tiles    : 263, 164, 61, 114, 31, 93, 4, 4, 7, 14, 15
+per-day eligible :  33,  45, 18,  26,  3, 31, 2, 3, 3,  4,  0
+```
+
+**What it exercises.** Day 2 carries **45 distinct eligible ids** — over the
+`MAX_IDS = 40` cap, so it reaches the chunking boundary (two batches). Two
+**round-trip days** (d3 Big Bear Lake, d5 Lone Pine) exercise #170's
+label-suppression. **`curatedMode` is TRUE** (31 curated tiles), so non-curated
+tiles collapse behind "Explore more". Route is entirely CA/OR, where BLM, USFS
+and Google all have coverage — unlike the Yukon dead zone.
+
+**It is RLS-scoped and NOT anon-readable.** Verified: **0 rows via the anon key,
+1 via service-role.** The de-linked reference trips are `reference_trips`, which
+anon *can* read. Consequence for tooling: **service-role payload analysis is
+unaffected; browser-rendered DOM measurement now needs a minted session** (~1h
+expiry, and per CLAUDE.md §RUNBOOK expiry reads as broken tooling). Several
+measurement passes this week ran anonymously in a browser precisely because a
+public slug was available — that technique does not transfer to this trip.
+
+**What de-linking costs — no surviving default instrument for either:**
+- **The 91-id / three-batch case.** `la-to-deadhorse` day 1 is 91 distinct
+  eligible ids; `4534add5` peaks at 45 (two batches). Nothing else in either
+  database exceeds 45.
+- **The `curatedMode = false` case.** `la-to-deadhorse` day 1 has *zero* curated
+  tiles, so everything renders inline; `4534add5` has 31 and renders collapsed.
+  These are different render modes and do not substitute.
+
+Both probably want a **synthetic fixture** rather than a live trip. Not built —
+recorded as separate work.
 
 **PROD now holds GENERATED trips in `public.trips` — three as of 2026-07-28,**
 all created that day, all owned by `762639cf-8e90-4648-b387-f73729ee2e18`

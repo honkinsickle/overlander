@@ -84,24 +84,24 @@ function EmptyState() {
       <div className="flex flex-col gap-2 max-w-sm">
         <h2 className="font-display text-2xl">No trips yet.</h2>
         <p className="font-sans text-sm text-text-secondary">
-          Start by forking the LA to Deadhorse reference itinerary — or
-          plan a new one from scratch.
+          Plan your first trip.
         </p>
       </div>
+      {/* De-linked 2026-07-31: this used to lead with "Browse the reference
+       *  trip" -> /trip/la-to-deadhorse. Planning scope narrowed to
+       *  CA/NV/UT/AZ/WA/OR, and LA->Deadhorse is out of region — a test fixture
+       *  standing in as product content. The row is NOT deleted and the trip is
+       *  NOT unreachable: /trip/la-to-deadhorse still renders for anyone with
+       *  the URL. Only the in-product pointer is gone, so the wizard is now the
+       *  single call to action here rather than the second of two. */}
       <div className="flex gap-3">
-        <Link
-          href="/trip/la-to-deadhorse"
-          className="h-10 px-5 rounded-full bg-amber text-bg-base font-sans text-sm font-medium hover:opacity-90 transition-opacity flex items-center"
-        >
-          Browse the reference trip
-        </Link>
         {/* Points at the EXPEDITION wizard, not the legacy 5-step `/plan` flow.
          *  `prefetch={false}` is retained but no longer load-bearing — see the
          *  same note on the home CTA in `components/plan/entry-scene.tsx`. */}
         <Link
           href="/plan/expedition"
           prefetch={false}
-          className="h-10 px-5 rounded-full border border-border-subtle text-text-primary font-sans text-sm hover:border-amber/60 transition-colors flex items-center"
+          className="h-10 px-5 rounded-full bg-amber text-bg-base font-sans text-sm font-medium hover:opacity-90 transition-opacity flex items-center"
         >
           Plan a new trip
         </Link>
