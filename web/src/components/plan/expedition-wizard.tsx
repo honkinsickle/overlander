@@ -17,6 +17,7 @@ import {
   type ExpeditionForm,
 } from "@/lib/plan/expedition";
 import { generateExpeditionTripAction } from "@/lib/plan/expedition-actions";
+import { PLANNING_REGION_NAMES } from "@/lib/plan/planning-region";
 
 const CAPABILITIES = ["mild", "moderate", "avoid-hardcore"] as const;
 const BUDGETS = ["budget", "mid", "premium"] as const;
@@ -134,8 +135,8 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
 
   const firstVehicle = vehicles[0];
   const [destinations, setDestinations] = useState<Dest[]>([
-    { id: 0, place: "", coords: null, datePin: "flexible", date: null, dwell: 0, note: null },
-    { id: 1, place: "", coords: null, datePin: "flexible", date: null, dwell: 0, note: null },
+    { id: 0, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
+    { id: 1, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
   ]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -238,9 +239,14 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
       </header>
 
       {/* ── Destinations — the primary control ─────────────────────── */}
+      {/* The planning-region sentence is appended to the EXISTING hint rather
+       *  than given its own element: `Section`'s `hint` is the established
+       *  helper-text slot in this wizard. A silent filter is the failure mode
+       *  here — someone typing "Boise" gets an empty list and no reason why.
+       *  "for now" marks it as the current limit, not a permanent policy. */}
       <Section
         title="Your destinations"
-        hint="Type a city and PICK it from the list so it lands on the real place. Start, the stops you want, and where you end."
+        hint={`Type a city and PICK it from the list so it lands on the real place. Start, the stops you want, and where you end. Planning covers ${PLANNING_REGION_NAMES} for now — places outside those states won't appear in the list.`}
       >
         <div className="flex flex-col gap-3">
           {destinations.map((d, i) => {
@@ -260,8 +266,14 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
                       placeholder="City or destination (e.g. Dawson City)"
                       defaultValue={d.place}
                       invalid={unresolved}
-                      onSelect={(label, coords) => setDest(d.id, { place: label, coords })}
-                      onTextChange={(t) => setDest(d.id, { place: t, coords: null })}
+                      onSelect={(label, coords, region) =>
+                        setDest(d.id, { place: label, coords, region })
+                      }
+                      // Freeform typing invalidates the resolved pick — clear the
+                      // region with the coords so the two never disagree.
+                      onTextChange={(t) =>
+                        setDest(d.id, { place: t, coords: null, region: null })
+                      }
                     />
                   </div>
                   <button
@@ -372,7 +384,7 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
                   const id = nextId.current++;
                   return [
                     ...ds.slice(0, -1),
-                    { id, place: "", coords: null, datePin: "flexible", date: null, dwell: 0, note: null },
+                    { id, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
                     ds[ds.length - 1],
                   ];
                 })
