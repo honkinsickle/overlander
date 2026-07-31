@@ -27,6 +27,40 @@ review gate; update in the SAME commit as the work. No SHAs — deliberately.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-07-31 — planning scope narrowed; out-of-region trips de-linked
+
+**Scope is now CA, NV, UT, AZ, WA, OR.** Three reference trips sit outside it and
+were test fixtures serving as product content. Their in-product pointers are gone.
+
+- **DE-LINKED, not retired and not deleted.** No row removed, nothing made
+  unreachable. `reference_trips` is still anon-readable, so
+  `/trip/la-to-deadhorse` renders for anyone with the URL. Deleting rows is a
+  separate decision and a separate authorization.
+- **Pointers found and removed — two, not the one expected.** The `/trips` empty
+  state (`app/trips/layout.tsx`) *and* the home browse link
+  (`components/plan/entry-scene.tsx`). **`alaska-south-final` and `yotrippin-demo`
+  had zero pointers** — de-linking them was doc-only.
+- **Both surfaces already carried a wizard CTA**, so neither goes empty; the
+  wizard link is simply now the only one. The `/trips` copy changed from "Start by
+  forking the LA to Deadhorse reference itinerary" to "Plan your first trip."
+- **`REFERENCE_TRIP_IDS` deliberately NOT changed** (duplicated in
+  `app/trip/[id]/page.tsx` and `app/@modal/(.)trip/[id]/page.tsx`). It is not a
+  link table — nothing navigates through it. It marks reference *behaviour*
+  (`isReference` → fork CTA, forces `canEdit` false); reachability comes from
+  `getTrip()`. Removing the id would strip the trip's reference treatment while
+  leaving it reachable — a behaviour change dressed as a de-link.
+- **`dawson-vancouver-cassiar` untouched.** Out of region, but FROZEN by an
+  earlier deliberate decision; every guard stands.
+- **NEW STANDING INSTRUMENT: `4534add5-3787-4b5f-ade6-584ce0fc27e7`** (PROD
+  `public.trips`, San Diego → Portland, 11d). Healthy `dayRoutes` shape, 770
+  tiles, day 2 over the MAX_IDS cap at 45, two round-trip days, `curatedMode`
+  true. **RLS-scoped, so NOT anon-readable** — browser DOM measurement now needs a
+  minted session. Density is lopsided; its mean is not representative. Shape
+  re-verified in a second pass before recording: `docs/DATA_INVENTORY.md`.
+- **Two cases lost their default instrument:** the 91-id / three-batch MAX_IDS
+  case and the `curatedMode = false` render mode. Both probably want a synthetic
+  fixture. Recorded, not built.
+
 ## 2026-07-28 — ONE CAUSAL CHAIN, plus one separate thread
 
 `[gh pr view #153–#175, 2026-07-28]` — nine PRs merged today (**#165–#173**);

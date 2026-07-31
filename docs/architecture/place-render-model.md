@@ -467,6 +467,23 @@ ids dropped again on every open, not once per user.
 
 #### 4.4.1 Measured 2026-07-28 — where it actually bites
 
+> **The instruments below were DE-LINKED 2026-07-31** (out of the CA/NV/UT/AZ/WA/OR
+> planning scope). The measurements STAND and the trips are still reachable by
+> URL — `reference_trips` remains anon-readable; only the in-product links are
+> gone. Two caveats for anyone re-running them:
+>
+> - **`alaska-south-final` and `yotrippin-demo` are broken artifacts.** They are
+>   July 12–13 generations that ran without `dayRoutes`: no `routePolyline`, and
+>   `day.coords` on 1 of 19 days. So `/api/trip-browse` early-returns empty on 18
+>   of 19 days for both. The scroll/hydration figures below are still valid (that
+>   path does not depend on `day.coords`), but anything browse-related measured on
+>   them was measuring the breakage.
+> - **`la-to-deadhorse` day 1 (91 ids) has no replacement.** The new standing
+>   instrument, `4534add5`, peaks at 45 — enough to cross the cap, not enough to
+>   reach the three-batch case. Same for `curatedMode = false`: day 1 of
+>   `la-to-deadhorse` has zero curated tiles, `4534add5` has 31. See
+>   `docs/DATA_INVENTORY.md`.
+
 > **CORRECTION.** The example this section used to carry was wrong twice:
 > *"`24f14ecc…` carries 41 tiles on day-1 alone, so a window of ~3 dense days
 > exceeds 40."* `24f14ecc` is a **2-day** trip — a ~3-day window cannot exist on
