@@ -19,7 +19,20 @@
 - iOverlander is a banned data source.
 - The standing unstaged `.gitignore` is never committed.
 - Stop for review at every gate.
-- The gate is `cd web && npx next build`, exit 0.
+- ~~The gate is `cd web && npx next build`, exit 0.~~ **CORRECTED 2026-07-31 —
+  necessary but NOT sufficient.** `next build` does **not** type-check every file
+  in the tsconfig scope. A real type error in `web/src/lib/plan/planning-region.test.ts`
+  (`RigProfile.groupSize` is a string; the fixture passed a number and forced it
+  with `as`) sat behind a green `next build` and **would have failed CI**
+  `[measured 2026-07-31]`. **The local gate is BOTH, each exit 0:**
+  1. `npm run -w web typecheck`
+  2. `cd web && npx next build`
+  Use the npm script, **not** bare `npx tsc --noEmit` — the script runs
+  `next typegen` first, which is exactly what makes it safe on a cold `.next`
+  (verified both ways 2026-07-31; see the RUNBOOK gotcha on phantom `PageProps`
+  errors). `data/` has its own gate that neither of these covers:
+  `npm run -w data typecheck`. CI runs `typecheck`, `test`, and `build` as three
+  separate jobs — matching them locally is the point.
 
 ## END-OF-DAY DOC PASS
 The doc set and what each is for (this replaces/reconciles the old POINTERS list):
@@ -44,7 +57,9 @@ actually touched what they describe. The `/wrap` command runs this pass.
 ## RUNBOOK — how to run (stable reference)
 - **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
   (per lib-dir).
-- **Build gate:** `cd web && npx next build`, exit 0.
+- **Gate (BOTH, each exit 0):** `npm run -w web typecheck` **and**
+  `cd web && npx next build`. The build alone is not sufficient — see
+  §STANDING RULES. Never bare `npx tsc --noEmit`.
 - **Drift check:** `npm run -w data drift:check` — probes deployed prod and every stored service key. Run when search looks broken or after rotating credentials. Not part of session start.
 - **Dev server:** `preview_start` name `web` (port 3210, talks to TEST via
   `.env.development.local`; flag from `.env.local`). A UUID trip needs an authed
@@ -236,8 +251,15 @@ actually touched what they describe. The `/wrap` command runs this pass.
     - Expect `scripts/smoke-*.ts` to shadow the module it smoke-tests — deleting
       a module usually orphans its smoke script, and the script is the thing that
       breaks the gate. Check for a same-named smoke script first.
-  - **`next build` is the only self-sufficient gate; bare `npx tsc --noEmit` is
-    not.** After `rm -rf .next`, tsc reports phantom `Cannot find name 'PageProps'`
+  - **~~`next build` is the only self-sufficient gate~~; bare `npx tsc --noEmit`
+    is not.** The second half stands and is re-verified below. The first half is
+    **wrong twice over** `[both measured 2026-07-31]`: `next build` misses type
+    errors in files it does not compile (§STANDING RULES), and it is not the
+    *only* self-sufficient command — `npm run -w web typecheck` runs
+    `next typegen` first, so it is clean on a cold `.next` where bare `tsc`
+    is not. **The real rule is narrower: never run bare `npx tsc --noEmit`; run
+    the npm script.** After `rm -rf .next`, bare
+    tsc reports phantom `Cannot find name 'PageProps'`
     errors across the app — `PageProps` is a Next-**generated** global living in
     `.next/types`, which only `next build` regenerates. Conversely, a STALE
     `.next` reports phantom `Cannot find module '../../src/app/…/page.js'` for
