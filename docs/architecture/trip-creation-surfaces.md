@@ -302,7 +302,52 @@ tree contains `main` → `region`s → a bare `button`, no form]`.
 All validation is `validateExpeditionForm`, a pure function returning the **first**
 failure message or `null` `[read source: expedition.ts]`. It runs on every render
 to drive `isValid` (which disables the submit button) and again inside the server
-action `[read source]`.
+action `[read source]`. **Since #178 it also enforces the planning region — §2a.**
+
+### 2a. The planning-region constraint (added #178, 2026-07-31)
+
+Trip creation is restricted to **CA, NV, UT, AZ, WA, OR**. Three facts about
+*where* the constraint lives, because each was a deliberate choice:
+
+**One constant, one module.** `web/src/lib/plan/planning-region.ts` exports
+`PLANNING_REGION_CODES` and a display string. Widening the region is a one-line
+diff there and nothing else hardcodes a state code `[grep, 2026-07-31]`.
+
+**Region codes, not a bounding box.** The check reads Mapbox's
+`context.region.region_code` — already present in the geocoding response this
+component parses. A box over the six states would contain **Idaho entirely**,
+western Montana, western Wyoming, and a strip of Baja/Sonora. (It would *not*
+meaningfully contain Colorado or New Mexico: UT/AZ's eastern border **is**
+CO/NM's western border, the Four Corners meridian at −109.045°.) Resolving
+coords → state properly would need polygon data and a point-in-polygon
+dependency in `web/`, which it does not have.
+
+**Two enforcement points, one implementation.**
+
+1. **The autocomplete filters before render** — an out-of-region suggestion is
+   dropped in `location-autocomplete.tsx` and never becomes an option, so it
+   cannot be picked. The filter is **strict**: a suggestion Mapbox did not tag
+   with a `region_code` is dropped too, because it cannot be *proved* in region.
+2. **`validateExpeditionForm` is the backstop**, and
+   `generateExpeditionTripAction` calls it server-side before any spend. Its
+   guards run **flag → sign-in → `validateExpeditionForm`**; there is no separate
+   region guard in the action `[read source, 2026-07-31]`. Putting the check in
+   the shared validator rather than duplicating it in the action was deliberate —
+   one implementation covers the client gate and the server backstop.
+
+**The region stops here and does not reach the pipeline.** `region` is carried on
+`ExpeditionDestination` purely so it can be checked; `expeditionToGenerationInput`
+does not copy it onto `Anchor` (§3). It exists to be *checked* before generation,
+not to be planned with.
+
+**Failure mode to know about: it is silent.** A dropped suggestion produces no
+error and no log — an out-of-region search and a geocoder returning untagged
+features look identical (an empty dropdown). The wizard's destination hint states
+the six states so a user is not left guessing, but if places start vanishing
+unexpectedly, an **absent `region_code`** is the first thing to check.
+Availability was measured at **26/26 features across six live forward queries
+`[measured 2026-07-31]`** — six well-known US city names, which is a sample, not
+a rate over the whole `country=us,ca&types=place` space.
 
 ### The destination autocomplete
 
@@ -329,10 +374,16 @@ Mapbox feature geometry.
 
 The component also emits hidden `<name>Lng` / `<name>Lat` inputs. **These are
 vestigial on the expedition path** — that wizard reads the `onSelect` callback
-into React state and never submits an HTML form. The hidden inputs exist for the
+into React state and never submits an HTML form. ~~The hidden inputs exist for the
 legacy `GoingForm`, which the component's own docstring says "ignores this and
-reads the hidden fields" `[read source; observed in browser — static DOM only:
-`dest-0Lng`, `dest-0Lat`, `dest-1Lng`, `dest-1Lat` are present in the DOM]`.
+reads the hidden fields".~~ **CORRECTED 2026-07-31: `GoingForm` no longer exists
+— #166 deleted the legacy 5-step wizard, so the inputs now have ZERO consumers**
+`[grep across `web/src`, `web/scripts`, `data/`, `supabase/` for the form-data
+keys and for `FormData`/`formData.get`, both specifier forms, 2026-07-31]`. They
+are **orphaned DOM, not vestigial-but-used**; the component's docstring was
+corrected in #178 and the inputs deliberately left in place as unrelated cleanup.
+Removal is backlogged — `docs/BACKLOG.md` §"Orphans created by PR 4b". Do not
+build on them.
 
 ### The date picker
 
@@ -392,8 +443,13 @@ comment that "saved" persists only until server restart `[read source]`.
 ## 3. What reaches the pipeline
 
 `expeditionToGenerationInput` is pure and total — it maps every collected field
-into `GenerationInput` `[read source]`. Nothing is dropped in the mapping *except*
-`vehicleId` (§2). But "reaches the pipeline" and "influences generation" are
+into `GenerationInput` `[read source]`. ~~Nothing is dropped in the mapping
+*except* `vehicleId` (§2).~~ **CORRECTED 2026-07-31 (#178): TWO fields are now
+dropped — `vehicleId` (§2) and `ExpeditionDestination.region` (§2a).** The
+mapper builds each `Anchor` field by field (`place`, `role`, `datePin`, `date`,
+`dwell`, `note`, and conditionally `coords`) and does not copy `region`
+`[read source, 2026-07-31]`. That omission is **deliberate and load-bearing** —
+see §2a. But "reaches the pipeline" and "influences generation" are
 different questions:
 
 | Field | Reaches `GenerationInput` | How it is consumed |

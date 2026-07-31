@@ -12,6 +12,72 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-07-31
+
+- **Three PRs merged: #176 (chunking), #177 (de-link), #178 (planning region).**
+  Verified on `origin/main` by grepping for the actual symbols, not by trusting
+  the merge banner — #172 merged mid-correction on 07-28 and stranded a fix on
+  its branch, so "merged" is checked, not assumed. Nothing stranded this time;
+  #178's second, corrective commit is on `main`. Also merged **#175** on 07-30
+  (the `mi off route` relabel), which no LOG entry covers.
+- **The planning region is a constraint in code now, not a policy sentence**
+  (#178). Codes from Mapbox's `context.region.region_code`, one constant module,
+  no bounding box and no geo dependency. The region is checked in
+  `validateExpeditionForm` and **dropped at `expeditionToGenerationInput`** — it
+  never reaches the pipeline. Detail in `docs/STATE.md`.
+- **CORRECTION — the Four Corners bbox error was MINE, not Claude Code's.** I
+  asserted a six-state bounding box would leak into "western Colorado, most of
+  New Mexico." That is wrong, and it is wrong in an embarrassing direction:
+  **Utah's and Arizona's eastern border IS Colorado's and New Mexico's western
+  border** (the Four Corners meridian, −109.045°), so a box over the six states
+  contains essentially **none** of either. The real leakage is **Idaho
+  entirely**, western Montana, western Wyoming, and a strip of Baja/Sonora — and
+  Idaho alone is the stronger argument against a box, since it is exactly the
+  neighbour a US-West trip planner would most plausibly be asked for. The
+  argument survived; the evidence for it was fabricated. Recorded because the
+  *conclusion* being right is what let a false premise stand unexamined.
+- **CORRECTION — two of #178's verifications were vacuous, and I reported both
+  as evidence.** Neither was a wrong measurement; both were measurements of
+  nothing.
+  - The **listbox-presence check** used a document-wide
+    `querySelector('ul[role="listbox"]')` while destination **row 2 still had an
+    open listbox** from a prior probe run. It would have read "present" even if
+    row 1's listbox never rendered. The filtered-not-broken finding actually
+    rests on `offered[0]` being row 1's option in DOM order — which held, so the
+    conclusion stood on evidence other than the one I cited for it.
+  - The **"no out-of-region error shown"** check ran against a form that was
+    **never submitted**, and the error renders only behind `submitted &&
+    validationError`. It was guaranteed to pass. In-region acceptance is covered
+    by unit test; no browser observation established it.
+- **CORRECTION — #177 shipped a UI change without anyone looking at it**,
+  including an unrequested restyle of the `/trips` empty state that no brief
+  asked for. Both surfaces were rendered and checked afterwards. A de-link is a
+  content change, and a content change is a UI change.
+- **The pattern under all three: an instrument scoped wider than the thing under
+  test.** Distinct from the 07-28 lesson (validate the apparatus) — here the
+  apparatus worked fine and the *query* pointed at the wrong element. Written up
+  as a runbook line in `CLAUDE.md`.
+- **CORRECTION — enumeration claims described a wider search than was run.**
+  Several statements of the form "X has zero consumers" / "nothing else does Y"
+  were made from a search narrower than the claim implied. Where re-run properly
+  they held (the orphaned `${name}Lat`/`${name}Lng` inputs really do have zero
+  consumers across both workspaces), but they were true by luck of scope, not by
+  the search actually performed. **State the search that was run, then the
+  conclusion — not the conclusion in language that implies a bigger search.**
+- **`next build` is NOT a sufficient gate, and this cost a nearly-red CI.** A
+  real type error in `planning-region.test.ts` (`RigProfile.groupSize` is a
+  string; the fixture passed a number and forced it with `as`) sat behind a green
+  `next build`. **CI runs `typecheck` as its own job** and would have failed.
+  Corrected in `docs/STATE.md` §INVARIANTS. The same insufficient claim is still
+  in `CLAUDE.md` §STANDING RULES — flagged, not edited.
+- **A type predicate alone enforced nothing.** Making `isInPlanningRegion` a
+  predicate to drop an `as string` looked like it moved an invariant into the
+  type system. Mutation-checking it — delete the guard, expect a compile error —
+  produced **no error**: the `.filter((s): s is Suggestion => …)` predicate
+  launders the `.map()` callback's inferred return type. Annotating the callback
+  is the load-bearing part. Without the mutation check I would have replaced a
+  prose claim with a *more confident* prose claim.
+
 ## 2026-07-28
 
 - **`MAX_IDS = 40` scoped and measured.** `alaska-south-final` scrolled end to

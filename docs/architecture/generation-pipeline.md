@@ -64,7 +64,11 @@ expedition.ts]`:
 3. **Form validation** — `validateExpeditionForm` returns the first failure
    message. Notably it requires **every destination to carry `coords`** ("Pick
    each destination from the suggestions"), because a freeform label can
-   fuzzy-geocode to the wrong place.
+   fuzzy-geocode to the wrong place. **Since #178 it also enforces the
+   CA/NV/UT/AZ/WA/OR planning region** — this is the *only* place that
+   constraint is enforced server-side; there is no separate region guard in
+   `generateExpeditionTripAction` `[read source, 2026-07-31]`. Mechanics:
+   `docs/architecture/trip-creation-surfaces.md` §2a.
 
 Then `expeditionToGenerationInput` maps the form → `GenerationInput`
 (`anchors`, `params`, `rig`, `objective`). Pure, no I/O `[read source]`.

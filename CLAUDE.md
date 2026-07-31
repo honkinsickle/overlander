@@ -181,6 +181,26 @@ actually touched what they describe. The `/wrap` command runs this pass.
       day issues exactly **one** hydration request `[measured 2026-07-28]`.
       Recorded because it is the obvious guess and it costs a re-measure. Name a
       mechanism only after checking for it.
+  - **SCOPE THE QUERY TO THE ELEMENT UNDER TEST. An instrument aimed wider than
+    its subject reports on something else and reads as a pass.** Distinct from
+    the apparatus lesson above: there, the machinery misbehaved; here the
+    machinery works perfectly and is **pointed at the wrong thing**. Three
+    instances, all 2026-07-28 → 07-31:
+    - **The abort artifact** — a scripted scroll stepping faster than the network
+      measured its own cancellations, not the app's requests.
+    - **The `history.back()` confound** — the driver navigated back inside the
+      same script that was testing whether a remount occurred, so **the test
+      produced the observation it was looking for.**
+    - **The document-wide listbox query** — `querySelector('ul[role="listbox"]')`
+      with a second row's listbox still open, so **row 2 answered for row 1** and
+      the check would have passed with row 1 entirely broken.
+    - The rule: **scope the selector to the subject** (query within the row/
+      component under test, never `document`), and before believing a green
+      result ask **"what would this measurement show if the thing I am testing
+      did not exist at all?"** If the answer is "the same thing", the check is
+      vacuous — a check that cannot fail is not evidence. Pair it with a
+      deliberate negative: break the subject on purpose and confirm the
+      instrument goes red.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an

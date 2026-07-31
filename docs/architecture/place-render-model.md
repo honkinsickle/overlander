@@ -420,7 +420,22 @@ truthy, `setHydrated` is a plain spread merge, and both guards test truthiness �
 there is no branch where present-but-empty behaves as absent. A taller viewport
 settles it in one pass.
 
-### 4.4 `MAX_IDS = 40` does NOT self-heal in place
+### 4.4 `MAX_IDS = 40` did NOT self-heal in place — FIXED 2026-07-31 (#176)
+
+> **READ THIS FIRST. The truncation described in §4.4 and §4.4.1 no longer
+> exists.** #176 removed the `.slice` and the route now **chunks** every id at
+> `BATCH_SIZE = 40` (`web/src/app/api/places/details/batch.ts`) — no id is
+> dropped. The cap was **not** raised and nothing was reordered by proximity.
+>
+> **Everything below is retained as the measurement that motivated the fix, and
+> because the reasoning still governs this route.** Read it in the past tense.
+> The line cites below are **stale** — `route.ts` was rewritten. What remains
+> true today: `BATCH_SIZE = 40` still bounds this route's **own fan-out**
+> (`Promise.all` per batch), the 15-minute negative cache still sits behind
+> `parsePlaceIds`, and the **91-id / three-batch case still has no instrument**
+> (`la-to-deadhorse` was de-linked; `4534add5` peaks at 45). One defect was
+> introduced: removing the `.slice` removed the only bound on request size —
+> `docs/BACKLOG.md`.
 
 `parsePlaceIds` dedupes then `.slice(0, MAX_IDS)` with **no error and no signal**
 — ids past the 40th are silently dropped `[read source:
@@ -553,7 +568,9 @@ reducing it.
 dashboard, 2026-07-28]`, so the accumulating path above is production behavior,
 not an artifact of a local key.
 
-Recorded, not fixed. Recommendation and tripwire: `docs/BACKLOG.md`.
+~~Recorded, not fixed.~~ **FIXED 2026-07-31 as #176** — chunked server-side, cap
+not raised. See the banner at §4.4. Reasoning and the new unbounded-request-size
+defect: `docs/BACKLOG.md`.
 
 ---
 
