@@ -4,7 +4,7 @@ import {
   type LngLat,
   type Route,
 } from "@/lib/routing/route-between";
-import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
+import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 import { deriveCorridorCities } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import gazetteer from "@/lib/corridor/data/gazetteer";
@@ -33,12 +33,21 @@ import gazetteer from "@/lib/corridor/data/gazetteer";
  */
 export type DayDerived = {
   miles: number;
-  driveHours: number;
+  /** Null ONLY on the unroutable fallback (deps.unroutableFallback) — a
+   *  routing failure has no honest hours, and 0 would claim instant travel.
+   *  Never null on a routed day. */
+  driveHours: number | null;
   /** Undefined when the corridor couldn't be derived (unsplittable
-   *  label, degenerate spine). Callers should PERSIST the undefined —
-   *  the old corridor described the pre-edit route and is wrong now;
-   *  clients fall back to the two-node corridor (spec decision F). */
+   *  label, degenerate spine, or an unroutable fallback). Callers should
+   *  PERSIST the undefined — the old corridor described the pre-edit route
+   *  and is wrong now; clients fall back to the two-node corridor (spec
+   *  decision F). */
   corridorCities?: CorridorCity[];
+  /** True when `deps.unroutableFallback` caught a routeBetween failure and
+   *  `miles` is a straight-line Haversine estimate with `driveHours: null`.
+   *  Not a Day field — callers read it to REPORT the fallback, never swallow
+   *  it (`applyDerivedToDay` ignores it). */
+  fellBack?: boolean;
 };
 
 const METERS_PER_MILE = 1609.34;
@@ -48,7 +57,16 @@ const STOP_CAP = 25;
 export async function recomputeDay(
   trip: Trip,
   dayId: string,
-  deps: { route?: (coords: LngLat[]) => Promise<Route> } = {},
+  deps: {
+    route?: (coords: LngLat[]) => Promise<Route>;
+    /** When set, a routeBetween throw / empty-routes is caught and turned
+     *  into an honest straight-line fallback (`miles` = Haversine start→end,
+     *  `driveHours: null`, `corridorCities: undefined`, `fellBack: true`)
+     *  instead of propagating. Used by the day split, where a new half-day
+     *  has no prior values to fall back to. Default (unset) keeps the throw
+     *  so existing callers (add/removeWaypoint) leave stale values. */
+    unroutableFallback?: boolean;
+  } = {},
 ): Promise<DayDerived | null> {
   const i = trip.days.findIndex((d) => d.id === dayId);
   if (i === -1) return null;
@@ -83,7 +101,21 @@ export async function recomputeDay(
   }
   if (deduped.length < 2 || deduped.length > STOP_CAP) return null;
 
-  const route = await (deps.route ?? routeBetween)(deduped);
+  let route: Route;
+  try {
+    route = await (deps.route ?? routeBetween)(deduped);
+  } catch (err) {
+    if (!deps.unroutableFallback) throw err;
+    // Unroutable leg: honest straight-line miles, NO hours (0 would claim
+    // instant travel), no spine (can't derive without a line). fellBack so
+    // the caller reports it rather than silently degrading.
+    return {
+      miles: Math.round(haversineMi(startCoord, day.coords)),
+      driveHours: null,
+      corridorCities: undefined,
+      fellBack: true,
+    };
+  }
 
   const derived: DayDerived = {
     miles: Math.round(route.distanceM / METERS_PER_MILE),

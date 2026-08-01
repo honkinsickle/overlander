@@ -229,8 +229,11 @@ export type Day = {
   startCoord?: [number, number];
   /** Total driving miles for the day (sidebar stat). */
   miles?: number;
-  /** Estimated driving hours for the day (sidebar stat). */
-  driveHours?: number;
+  /** Estimated driving hours for the day (sidebar stat). `null` marks an
+   *  unroutable leg (the day split's Haversine fallback) — honest "unknown",
+   *  never 0 (which would claim instant travel). Renderers degrade null to
+   *  "—"/absent. */
+  driveHours?: number | null;
   /** Optional hero image URL. If absent, `heroGradient` drives the panel. */
   heroImage?: string;
   /** CSS `background` value used when `heroImage` is absent (Paper's

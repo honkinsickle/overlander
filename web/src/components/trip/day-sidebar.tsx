@@ -203,8 +203,10 @@ function DayCard({
               : "text-text-muted group-hover:text-text-primary",
           )}
         >
-          {day.miles !== undefined && day.driveHours !== undefined
-            ? `${day.miles} mi | ${day.driveHours} hrs`
+          {day.miles !== undefined
+            ? day.driveHours != null
+              ? `${day.miles} mi | ${day.driveHours} hrs`
+              : `${day.miles} mi` // unroutable leg: honest miles, no hours
             : "\u00A0"}
         </span>
         <span

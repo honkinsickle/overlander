@@ -103,7 +103,7 @@ type Props = {
   dayStartMile: number;
   /** Day totals — label the whole-day drive on a 2-node day. */
   dayMiles?: number;
-  dayDriveHours?: number;
+  dayDriveHours?: number | null;
   onOpenPlace?: (placeId: string) => void;
   onRemovePlace?: (placeId: string) => void;
   editMode?: boolean;
@@ -790,7 +790,7 @@ function StretchContainer({
   poiCtx,
 }: {
   miles: number;
-  hours?: number;
+  hours?: number | null;
   wholeDayMiles?: number;
   placeIds: string[];
   byId: Map<string, CorridorPlace>;

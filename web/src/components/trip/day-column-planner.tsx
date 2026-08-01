@@ -441,8 +441,10 @@ function DayCard({
     day: "numeric",
   });
   const meta =
-    day.miles !== undefined && day.driveHours !== undefined
-      ? `${day.miles}mi ~ ${day.driveHours}hrs`
+    day.miles !== undefined
+      ? day.driveHours != null
+        ? `${day.miles}mi ~ ${day.driveHours}hrs`
+        : `${day.miles}mi` // unroutable leg: honest miles, no fabricated hours
       : " ";
   const dcode = `d${String(day.dayNumber).padStart(2, "0")}`;
   const subColor = active ? "var(--type-300)" : "var(--text-muted)";
