@@ -125,7 +125,7 @@ type Props = {
   /** Day driving total — labels the drive connector on a 2-node day (the
    *  single connector IS the whole day's drive). Edit render only. */
   dayMiles?: number;
-  dayDriveHours?: number;
+  dayDriveHours?: number | null;
   /** Decoded trip route polyline + this day's cumulative start mile — the edit
    *  render projects POI coords onto the route to position them in stretches
    *  (the stored milesFromStart is unreliable; see lib/corridor/stretches.ts). */

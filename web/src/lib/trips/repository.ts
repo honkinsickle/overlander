@@ -11,6 +11,12 @@ import {
 } from "./user-trips";
 import { recomputeDay, type DayDerived } from "./recompute-day";
 import * as curated from "./curated-place";
+import {
+  buildSplitStructure,
+  rescopeTripOverlays,
+  type SplitPoint,
+} from "./split-day";
+import { rebuildRoutePolyline } from "./route-rebuild";
 import { resolveCorridorCities } from "./resolve-corridor-cities";
 import type { LngLat, Route } from "@/lib/routing/route-between";
 import type {
@@ -349,6 +355,99 @@ export async function removeCuratedPlace(
     { onConflict: "retry", client: deps.client },
   );
   return updated !== null;
+}
+
+export type SplitDayResult =
+  | {
+      ok: true;
+      halfAId: string;
+      halfBId: string;
+      /** Which half (if any) fell back to straight-line miles + null driveHours
+       *  because its leg was unroutable — reported, never swallowed. */
+      fellBack: { halfA: boolean; halfB: boolean };
+    }
+  | {
+      ok: false;
+      reason:
+        | "not-user-trip"
+        | "not-found"
+        | "day-not-found"
+        | "conflict"
+        | "write-failed";
+    };
+
+/**
+ * Subdivide a leg: cut day `dayId` (A→B) at interior point `split` into two
+ * sequential days A→M and M→B. All days after B keep their exact endpoints; the
+ * tail renumbers `day-N → day-N+1` and redates `+1`. Two `recomputeDay` calls
+ * (one per half, with the unroutable→Haversine fallback), a full parallel
+ * `routePolyline` rebuild, and a SINGLE guarded write.
+ *
+ * `onConflict: "refuse"` — this is a positional/structural rewrite (insert +
+ * renumber), which a blind retry could tear; a concurrent edit returns a conflict
+ * rather than risking a torn insert. Geometry is precomputed OUTSIDE the write
+ * (STEP-3 collapse); under `refuse` the write lands only when the version still
+ * matches the snapshot the geometry was computed against, so it is never stale.
+ * UUID user trips only.
+ */
+export async function splitDay(
+  tripId: string,
+  dayId: string,
+  split: SplitPoint,
+  deps: {
+    client?: SupabaseClient;
+    route?: (coords: LngLat[]) => Promise<Route>;
+  } = {},
+): Promise<SplitDayResult> {
+  if (!isUserTripId(tripId)) return { ok: false, reason: "not-user-trip" };
+  const current = await getUserTrip(tripId, deps.client);
+  if (!current) return { ok: false, reason: "not-found" };
+
+  const structured = buildSplitStructure(current, dayId, split);
+  if (!structured) return { ok: false, reason: "day-not-found" };
+  const { trip: staged, halfAId, halfBId } = structured;
+
+  // Precompute geometry OUTSIDE the guarded write (STEP-3 collapse).
+  const rc = { route: deps.route, unroutableFallback: true } as const;
+  const derivedA = await recomputeDay(staged, halfAId, rc);
+  const derivedB = await recomputeDay(staged, halfBId, rc);
+  applyDerivedToDay(staged.days.find((d) => d.id === halfAId)!, derivedA);
+  applyDerivedToDay(staged.days.find((d) => d.id === halfBId)!, derivedB);
+  // Rescope overlays AFTER both halves have their rebuilt corridorCities.
+  const withOverlays = rescopeTripOverlays(staged);
+  const routePolyline = await rebuildRoutePolyline(withOverlays, {
+    route: deps.route,
+  });
+
+  const fellBack = {
+    halfA: derivedA?.fellBack ?? false,
+    halfB: derivedB?.fellBack ?? false,
+  };
+  if (fellBack.halfA || fellBack.halfB) {
+    const legs = [fellBack.halfA && halfAId, fellBack.halfB && halfBId]
+      .filter(Boolean)
+      .join(", ");
+    console.warn(
+      `[splitDay] unroutable leg(s) ${legs} — straight-line miles, driveHours=null`,
+    );
+  }
+
+  const written = await updateUserTripPayload(
+    tripId,
+    (fresh) => {
+      const s = buildSplitStructure(fresh, dayId, split);
+      if (!s) return null;
+      applyDerivedToDay(s.trip.days.find((d) => d.id === halfAId)!, derivedA);
+      applyDerivedToDay(s.trip.days.find((d) => d.id === halfBId)!, derivedB);
+      const rescoped = rescopeTripOverlays(s.trip);
+      rescoped.routePolyline = routePolyline;
+      return rescoped;
+    },
+    { onConflict: "refuse", client: deps.client },
+  );
+  if (written === TRIP_CONFLICT) return { ok: false, reason: "conflict" };
+  if (!written) return { ok: false, reason: "write-failed" };
+  return { ok: true, halfAId, halfBId, fellBack };
 }
 
 /** Reset a single day in a user trip back to its reference content.
