@@ -142,11 +142,14 @@ actually touched what they describe. The `/wrap` command runs this pass.
     transmits nothing.
 - **Gotchas (hard-won):**
   - **Paper MCP binds at SESSION START — it is NOT broken if the tools are
-    missing.** `[diagnosed 2026-07-31]` If `Paper.app` is not running when the
-    session launches, the `mcp__paper__*` tools are never registered and
-    **cannot be added mid-session** (re-searching the tool registry will not
-    surface them). **Remedy: restart the session with `Paper.app` already
-    open.** Do NOT conclude the server is down:
+    missing.** `[diagnosed 2026-07-31]` What was actually measured: with
+    `Paper.app` not running at launch, the `mcp__paper__*` tools were **not
+    registered for that session** — three in-session tool-registry lookups did
+    not surface them `[measured 2026-07-31]`. That shows they were **not
+    available**, NOT that they **cannot** be added mid-session — the stronger
+    claim is `[UNVERIFIED]`. **Likely remedy (not yet verified): restart the
+    session with `Paper.app` already open** so the local server is reachable at
+    bind time. Do NOT conclude the server is down:
     - **The server itself is healthy and tool-capable** — verified by a live
       MCP `initialize` handshake against `http://127.0.0.1:29979/mcp`:
       `paper-desktop 0.4.4`, protocol `2025-06-18`, `tools` capability
