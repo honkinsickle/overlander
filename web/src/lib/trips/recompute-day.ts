@@ -35,7 +35,10 @@ export type DayDerived = {
   miles: number;
   /** Null ONLY on the unroutable fallback (deps.unroutableFallback) — a
    *  routing failure has no honest hours, and 0 would claim instant travel.
-   *  Never null on a routed day. */
+   *  Never null on a routed day. (A LAYOVER is a third case this function does
+   *  not produce: `recomputeDay` refuses a `start === end` day at the `< 2`
+   *  dedup guard, so `insertRestDay` sets `driveHours: 0` directly — zero hours
+   *  driving is TRUE there, not the "cannot say" that null marks.) */
   driveHours: number | null;
   /** Undefined when the corridor couldn't be derived (unsplittable
    *  label, degenerate spine, or an unroutable fallback). Callers should

@@ -74,6 +74,23 @@ actually touched what they describe. The `/wrap` command runs this pass.
   - `verify-trip-step4.ts` — ADR §1 node-action dispatch onto `public.trips`
     (UUID) under RLS: bake-at-write, closure-recompute concurrency, ownership +
     frozen-slug refusal.
+  - `verify-split-day.ts` / `verify-rest-day.ts` — the day-insert writes (split +
+    layover) against a temp UUID row cloned from `expedition-ms28y793`; self-clean.
+  - ⚠️ **`NEXT_PUBLIC_MAPBOX_TOKEN` is NOT in `.env.development.local`
+    `[measured 2026-08-03]`.** Any verify script whose path routes through Mapbox
+    (`recomputeDay`/`route-between`/`rebuildRoutePolyline` — so `verify-split-day.ts`,
+    `verify-trip-collapse.ts`) **silently falls back to Haversine on every leg**:
+    `routeBetween` throws `NEXT_PUBLIC_MAPBOX_TOKEN is not set`, the unroutable
+    fallback catches it, and you get `driveHours: null` + `corridorCities:
+    undefined` on every day. **This reads exactly like a code defect** (a split whose
+    halves carry no real miles/hours/spine) but it is the missing token. The token
+    lives in `.env.local` (the PROD env file). **Workaround — inject ONLY the token,
+    keep TEST Supabase from `--env-file`:**
+    `export NEXT_PUBLIC_MAPBOX_TOKEN=$(grep '^NEXT_PUBLIC_MAPBOX_TOKEN=' .env.local | cut -d= -f2-)`
+    then run the script with `--env-file=.env.development.local` as usual. TEST
+    `SUPABASE_URL`/key still come from the env file, so no PROD DB is touched — you
+    are borrowing the token only. `insertRestDay` makes zero route calls, so
+    `verify-rest-day.ts` needs no token.
 - **Test trips — which instrument to reach for (verified 2026-07-25):**
   - **`762577ca-5ca0-417a-be05-58b17b63bd19` is a PROD trip — NOT usable from
     dev.** Older handoffs call it "the 66-day fork"; dev talks to TEST, so it

@@ -38,7 +38,14 @@ import {
   removeWaypointAction,
   moveCuratedPlaceAction,
   removeCuratedPlaceAction,
+  splitDayAction,
+  insertRestDayAction,
 } from "@/lib/trips/actions";
+import { KebabMenu, type KebabMenuItem } from "@/components/primitives/kebab-menu";
+import { SplitPointPicker } from "@/components/trip/split-point-picker";
+import { splitEligibility } from "@/lib/trips/split-day";
+import { isRestDay } from "@/lib/trips/rest-day";
+import { Scissors, Tent } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CuratedMenu } from "@/components/trip/curated-kebab";
 import type { AddedPlace } from "@/lib/trips/added-place";
@@ -589,6 +596,53 @@ export function DayDetailCorridorColumn({
   const buildCuratedMenu = (place: CorridorPlace): CuratedMenu | undefined =>
     day ? buildCuratedMenuFor(day, place) : undefined;
 
+  // ── Day-level structural edits (Split this day / Add a rest day) ──────────
+  // A new day-level kebab: no day-level menu existed in the live corridor view
+  // (DayHeader — the old rename/delete kebab — is orphaned; see PR notes), so
+  // this is the minimal host. Same run pattern as runCurated: guarded action →
+  // router.refresh() (revalidatePath is unreliable through the slideup intercept).
+  const [splitPickerDay, setSplitPickerDay] = useState<Day | null>(null);
+  const splitElig = useMemo(
+    () => (splitPickerDay ? splitEligibility(trip, splitPickerDay.id) : null),
+    [splitPickerDay, trip],
+  );
+  const runDayAction = useCallback(
+    (action: () => Promise<{ ok: boolean; error?: string }>) => {
+      setCuratedError(null);
+      startTransition(async () => {
+        const res = await action();
+        if (!res.ok) {
+          setCuratedError(res.error ?? "Something went wrong.");
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [router, startTransition],
+  );
+  const buildDayMenuItems = useCallback(
+    (d: Day): KebabMenuItem[] => {
+      const elig = splitEligibility(trip, d.id);
+      return [
+        {
+          id: "split",
+          label: "Split this day",
+          icon: Scissors,
+          disabled: elig.disabledReason !== null,
+          disabledReason: elig.disabledReason ?? undefined,
+          onSelect: () => setSplitPickerDay(d),
+        },
+        {
+          id: "rest",
+          label: "Add a rest day",
+          icon: Tent,
+          onSelect: () => runDayAction(() => insertRestDayAction(trip.id, d.id)),
+        },
+      ];
+    },
+    [trip, runDayAction],
+  );
+
   // Resolve a placeId within a given day to its source (waypoint or
   // segmentSuggestion) and open the shared MapDetailOverlay via
   // trip:openDetail, exactly as the browse cards do. Waypoints pass the
@@ -803,27 +857,38 @@ export function DayDetailCorridorColumn({
   // MACHINERY does NOT — editMode is false and the move/reorder handlers are
   // absent (optimistic edit machinery is deferred to PR2).
   const renderViewDay = (d: Day) => (
-    <DayDetailCorridor
-      dayLabel={`Day ${d.dayNumber} — ${formatDayDate(d.date)}`}
-      dayNumber={d.dayNumber}
-      routeLabel={d.label}
-      heroImageUrl={heroFor(d)}
-      heroAlt={d.label}
-      cities={viewCities(d)}
-      places={hydratePlaces(d)}
-      onRemovePlace={(id) => removePlaceFor(d, id)}
-      onOpenPlace={(id) => dispatchPlaceDetail(d, id)}
-      onExploreDay={() => openBrowseFor(d)}
-      briefing={trip.generated ? <DayBriefingCard day={d} /> : undefined}
-      editMode={false}
-      placeOverrides={localOverrides}
-      dayMiles={d.miles}
-      dayDriveHours={d.driveHours}
-      routeLine={routeLine}
-      dayStartMile={dayStartMileForId(d.id)}
-      ranks={ranksMap}
-      buildCuratedMenu={(p) => buildCuratedMenuFor(d, p)}
-    />
+    <div className="relative">
+      {canEdit && (
+        <div className="absolute top-3 right-3 z-20">
+          <KebabMenu
+            triggerLabel={`Day ${d.dayNumber} options`}
+            items={buildDayMenuItems(d)}
+          />
+        </div>
+      )}
+      <DayDetailCorridor
+        dayLabel={`Day ${d.dayNumber} — ${formatDayDate(d.date)}`}
+        dayNumber={d.dayNumber}
+        routeLabel={d.label}
+        heroImageUrl={heroFor(d)}
+        heroAlt={d.label}
+        cities={viewCities(d)}
+        places={hydratePlaces(d)}
+        onRemovePlace={(id) => removePlaceFor(d, id)}
+        onOpenPlace={(id) => dispatchPlaceDetail(d, id)}
+        onExploreDay={() => openBrowseFor(d)}
+        briefing={trip.generated ? <DayBriefingCard day={d} /> : undefined}
+        editMode={false}
+        restDay={isRestDay(d)}
+        placeOverrides={localOverrides}
+        dayMiles={d.miles}
+        dayDriveHours={d.driveHours}
+        routeLine={routeLine}
+        dayStartMile={dayStartMileForId(d.id)}
+        ranks={ranksMap}
+        buildCuratedMenu={(p) => buildCuratedMenuFor(d, p)}
+      />
+    </div>
   );
 
   const overviewEl = (
@@ -843,6 +908,22 @@ export function DayDetailCorridorColumn({
 
   return (
     <div className="relative h-full">
+      {splitPickerDay && splitElig && (
+        <SplitPointPicker
+          open
+          onOpenChange={(o) => {
+            if (!o) setSplitPickerDay(null);
+          }}
+          dayLabel={`Day ${splitPickerDay.dayNumber} — ${splitPickerDay.label}`}
+          dayMiles={splitElig.dayMiles}
+          candidates={splitElig.candidates}
+          onPick={(point) => {
+            const d = splitPickerDay;
+            setSplitPickerDay(null);
+            runDayAction(() => splitDayAction(trip.id, d.id, point));
+          }}
+        />
+      )}
       {curatedError && (
         <div
           role="alert"
@@ -1030,7 +1111,7 @@ function formatDayDate(iso: string): string {
  *  finalized before the engine, or a cleared post-edit corridor):
  *  Start (label first half, 0 mi) → End (label last half, Day.miles).
  *  No tiles — bucketing needs geometry the client doesn't have. */
-function fallbackCorridor(day: Day): CorridorCity[] {
+export function fallbackCorridor(day: Day): CorridorCity[] {
   const parts = day.label.split(" — ");
   const startName = parts[0] || day.label;
   const endName = parts.length > 1 ? parts[parts.length - 1] : day.label;
@@ -1064,7 +1145,7 @@ function fallbackCorridor(day: Day): CorridorCity[] {
  *  (an added suggestion's tile becomes removable). The one category-union
  *  mismatch: BrowsePlace's "overnight" slide key has no card palette —
  *  render those tiles with the camping treatment. */
-function placePool(day: Day): CorridorPlace[] {
+export function placePool(day: Day): CorridorPlace[] {
   const fromSuggestions: CorridorPlace[] = (day.segmentSuggestions ?? []).map(
     (p) => ({
       id: p.id,

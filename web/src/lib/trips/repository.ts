@@ -16,8 +16,12 @@ import {
   rescopeTripOverlays,
   type SplitPoint,
 } from "./split-day";
+import { buildRestDayStructure, rankNearbySuggestions } from "./rest-day";
+import { fetchCorpusForSegment } from "./bake-corridors";
 import { rebuildRoutePolyline } from "./route-rebuild";
 import { resolveCorridorCities } from "./resolve-corridor-cities";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { BrowsePlace } from "@/lib/trip-browse/places";
 import type { LngLat, Route } from "@/lib/routing/route-between";
 import type {
   Day,
@@ -448,6 +452,111 @@ export async function splitDay(
   if (written === TRIP_CONFLICT) return { ok: false, reason: "conflict" };
   if (!written) return { ok: false, reason: "write-failed" };
   return { ok: true, halfAId, halfBId, fellBack };
+}
+
+export type InsertRestDayResult =
+  | {
+      ok: true;
+      restDayId: string;
+      /** How many nearby corpus suggestions the layover carries (post rank + cap).
+       *  Zero is legitimate — a sparse-corpus stop (or a corpus RPC hiccup, which
+       *  fails soft) still inserts the rest day. */
+      suggestionCount: number;
+    }
+  | {
+      ok: false;
+      reason:
+        | "not-user-trip"
+        | "not-found"
+        | "day-not-found"
+        | "conflict"
+        | "write-failed";
+    };
+
+/** Injectable corpus seam — parallels the `route` seam on the waypoint writers so
+ *  the ranking + structure are unit-testable offline. `client` drives the read +
+ *  guarded write; `fetchNearby` overrides the corridor-corpus fetch. Both default
+ *  to production behavior. */
+type RestDayDeps = {
+  client?: SupabaseClient;
+  fetchNearby?: (stop: LngLat) => Promise<BrowsePlace[]>;
+};
+
+/**
+ * Insert a sparse LAYOVER (rest day) at `dayId`'s overnight stop: a `start === end`
+ * day slotted in as `N+1`, the tail renumbered `day-N → day-N+1` and redated `+1`.
+ *
+ * ZERO route calls by construction: a layover is unroutable (`recomputeDay` returns
+ * null on the `< 2` dedup guard before any Mapbox call — measured 2026-08-03), so
+ * `buildRestDayStructure` sets `{ miles: 0, driveHours: 0, corridorCities:
+ * undefined }` directly. The layover contributes no driving geometry, so
+ * `routePolyline` is left untouched (rebuildRoutePolyline skips `start === end`
+ * days — the stored line stays byte-correct).
+ *
+ * The only IO is the corridor corpus RPC for `segmentSuggestions`, distance-ranked
+ * nearest-first and capped (`rankNearbySuggestions`). It fails soft — a corpus miss
+ * leaves an empty suggestion list, never blocks the insert.
+ *
+ * `onConflict: "refuse"` — like `splitDay`, this is a positional/structural rewrite
+ * (insert + renumber) a blind retry could tear; suggestions are precomputed OUTSIDE
+ * the write and re-applied inside the closure against the fresh version. Overlays
+ * are rescoped AFTER the structure is assembled — the layover holds no nodes, and a
+ * pure insert leaves every existing day's `corridorCities` intact, so the rescope is
+ * a no-op for survivors (the #182 sequencing hazard: rescoping over node-less days
+ * would drop every overlay). UUID user trips only.
+ */
+export async function insertRestDay(
+  tripId: string,
+  dayId: string,
+  deps: RestDayDeps = {},
+): Promise<InsertRestDayResult> {
+  if (!isUserTripId(tripId)) return { ok: false, reason: "not-user-trip" };
+  const current = await getUserTrip(tripId, deps.client);
+  if (!current) return { ok: false, reason: "not-found" };
+
+  const structured = buildRestDayStructure(current, dayId);
+  if (!structured) return { ok: false, reason: "day-not-found" };
+  const { restDayId } = structured;
+  const stop = current.days.find((d) => d.id === dayId)!.coords!; // non-null: builder returned
+
+  // Nearby corpus suggestions, distance-ranked + capped — precomputed OUTSIDE the
+  // guarded write. Fail soft: a corpus RPC error leaves the layover suggestion-less
+  // rather than blocking the insert.
+  const fetchNearby =
+    deps.fetchNearby ??
+    (async (s: LngLat): Promise<BrowsePlace[]> => {
+      const supabase = deps.client ?? (await createSupabaseServerClient());
+      // fetchCorpusForSegment types its client as the SSR server client; a seeded
+      // SupabaseClient (verify path) is structurally compatible — only `.rpc` is
+      // used, and pois_along_corridor is SECURITY DEFINER (anon-granted), so no
+      // user JWT is required.
+      return fetchCorpusForSegment(
+        s,
+        s,
+        supabase as Parameters<typeof fetchCorpusForSegment>[2],
+      );
+    });
+  let suggestions: BrowsePlace[] = [];
+  try {
+    suggestions = rankNearbySuggestions(stop, await fetchNearby(stop));
+  } catch {
+    suggestions = [];
+  }
+
+  const written = await updateUserTripPayload(
+    tripId,
+    (fresh) => {
+      const s = buildRestDayStructure(fresh, dayId);
+      if (!s) return null;
+      s.trip.days.find((d) => d.id === s.restDayId)!.segmentSuggestions =
+        suggestions;
+      return rescopeTripOverlays(s.trip);
+    },
+    { onConflict: "refuse", client: deps.client },
+  );
+  if (written === TRIP_CONFLICT) return { ok: false, reason: "conflict" };
+  if (!written) return { ok: false, reason: "write-failed" };
+  return { ok: true, restDayId, suggestionCount: suggestions.length };
 }
 
 /** Reset a single day in a user trip back to its reference content.

@@ -126,6 +126,12 @@ type Props = {
    *  single connector IS the whole day's drive). Edit render only. */
   dayMiles?: number;
   dayDriveHours?: number | null;
+  /** True when this day is a layover (rest day). View mode renders the inline
+   *  "Nearby" block from `places` instead of the corridor spine — a layover has
+   *  no curated key stops and no corridorCities to bucket its suggestions under,
+   *  so without this they'd be stored and never seen. Computed by the caller
+   *  (isRestDay). */
+  restDay?: boolean;
   /** Decoded trip route polyline + this day's cumulative start mile — the edit
    *  render projects POI coords onto the route to position them in stretches
    *  (the stored milesFromStart is unreliable; see lib/corridor/stretches.ts). */
@@ -324,6 +330,7 @@ export function DayDetailCorridor({
   placeOverrides = [],
   dayMiles,
   dayDriveHours,
+  restDay = false,
   routeLine,
   dayStartMile,
   onMovePlace,
@@ -524,6 +531,13 @@ export function DayDetailCorridor({
           errorMessage={errorMessage}
           onDismissError={onDismissError}
         />
+      ) : restDay ? (
+        <RestDayNearby
+          places={places}
+          onOpenPlace={onOpenPlace}
+          buildCuratedMenu={buildCuratedMenu}
+          editMode={editMode}
+        />
       ) : (
       <>
       {/* ── Fallback block — curated picks the bake couldn't position on the
@@ -647,6 +661,77 @@ export function DayDetailCorridor({
         </button>
       </div>
       </div>
+    </div>
+  );
+}
+
+/** A layover's inline "Nearby" block: the day's own segmentSuggestions (corpus
+ *  tiles near the stop, ranked by distance, capped at 10) as place cards. A rest
+ *  day has no curated key stops and no corridor spine to bucket these under, so
+ *  without this block they'd be stored and never seen. Copy is deliberately NOT
+ *  "walkable" — the 16 km corridor buffer means some sit ~10 miles out. */
+function RestDayNearby({
+  places,
+  onOpenPlace,
+  buildCuratedMenu,
+  editMode,
+}: {
+  places: CorridorPlace[];
+  onOpenPlace?: (id: string) => void;
+  buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
+  editMode: boolean;
+}) {
+  return (
+    <div className="flex flex-col" style={{ paddingTop: 16, gap: 10 }}>
+      <div className="flex flex-col" style={{ gap: 2 }}>
+        <span
+          className="uppercase"
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: 11,
+            lineHeight: "14px",
+            letterSpacing: "0.16em",
+            color: "var(--amber-dark)",
+          }}
+        >
+          Nearby
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--ff-sans)",
+            fontSize: 12,
+            lineHeight: "16px",
+            color: "var(--text-muted)",
+          }}
+        >
+          Within about 10 miles of your stop, closest first
+        </span>
+      </div>
+      {places.length > 0 ? (
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          {places.map((p) => (
+            <CategoryListCard
+              key={p.id}
+              place={p}
+              category={p.category}
+              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+              curatedMenu={buildCuratedMenu?.(p)}
+              editMode={editMode}
+            />
+          ))}
+        </div>
+      ) : (
+        <span
+          style={{
+            fontFamily: "var(--ff-sans)",
+            fontSize: 13,
+            lineHeight: "17px",
+            color: "var(--text-muted)",
+          }}
+        >
+          No places found near this stop.
+        </span>
+      )}
     </div>
   );
 }

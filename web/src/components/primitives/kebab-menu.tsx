@@ -17,6 +17,12 @@ export type KebabMenuItem = {
   onSelect?: () => void;
   /** Render a divider above this item. */
   dividerBefore?: boolean;
+  /** Non-actionable: dimmed, not clickable. */
+  disabled?: boolean;
+  /** Shown under the label (and as a title tooltip) when `disabled` — the
+   *  reason the action isn't available, so the item says no in place rather
+   *  than opening a surface just to refuse. */
+  disabledReason?: string;
 };
 
 export type KebabMenuProps = {
@@ -62,23 +68,39 @@ export function KebabMenu({ items, triggerLabel, className }: KebabMenuProps) {
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={item.onSelect}
+                  onClick={item.disabled ? undefined : item.onSelect}
+                  disabled={item.disabled}
+                  aria-disabled={item.disabled || undefined}
+                  title={item.disabled ? item.disabledReason : undefined}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2 rounded text-left text-sm font-sans",
-                    item.danger
-                      ? "text-input-error hover:bg-input-error/10"
-                      : "text-text-primary hover:bg-bg-card",
+                    "w-full flex items-start gap-3 px-3 py-2 rounded text-left text-sm font-sans",
+                    item.disabled
+                      ? "opacity-50 cursor-not-allowed text-text-muted"
+                      : item.danger
+                        ? "text-input-error hover:bg-input-error/10"
+                        : "text-text-primary hover:bg-bg-card",
                   )}
                 >
                   {item.icon && (
                     <item.icon
                       className={cn(
-                        "w-4 h-4 shrink-0",
-                        item.danger ? "text-input-error" : "text-text-muted",
+                        "w-4 h-4 shrink-0 mt-0.5",
+                        item.disabled
+                          ? "text-text-muted"
+                          : item.danger
+                            ? "text-input-error"
+                            : "text-text-muted",
                       )}
                     />
                   )}
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">
+                    {item.label}
+                    {item.disabled && item.disabledReason && (
+                      <span className="block text-[11px] leading-tight text-text-muted/80 mt-0.5">
+                        {item.disabledReason}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </li>
             </React.Fragment>

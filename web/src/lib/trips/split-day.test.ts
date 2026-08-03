@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Trip, Day } from "./types";
-import { buildSplitStructure, rescopeTripOverlays } from "./split-day";
+import { buildSplitStructure, rescopeTripOverlays, splitEligibility } from "./split-day";
 import { recomputeDay, type DayDerived } from "./recompute-day";
 import { rebuildRoutePolyline } from "./route-rebuild";
 import type { LngLat, Route } from "@/lib/routing/route-between";
@@ -180,6 +180,53 @@ test("invariant 4 (partial): routePolyline rebuilt non-null", async () => {
   const { polyline } = await doSplit(baseTrip());
   assert.equal(typeof polyline, "string");
   assert.ok((polyline ?? "").length > 0, "polyline is a non-empty encoded string");
+});
+
+test("eligibility: a day with interior stops is splittable, candidates ordered start→end", () => {
+  const e = splitEligibility(baseTrip(), "day-1");
+  assert.equal(e.disabledReason, null, "splittable");
+  assert.ok(e.candidates.length >= 2, "several interior stops offered");
+  assert.ok(e.dayMiles > 0, "day length reported");
+  const miles = e.candidates.map((c) => c.atMile);
+  assert.deepEqual(miles, [...miles].sort((a, b) => a - b), "ordered by along-mile");
+  // Every candidate is strictly interior (0 < atMile < dayMiles).
+  assert.ok(e.candidates.every((c) => c.atMile > 0 && c.atMile < e.dayMiles));
+  // Names come from the stops' titles, coords passed straight to SplitPoint.
+  assert.ok(e.candidates.every((c) => c.point.name && Array.isArray(c.point.coords)));
+});
+
+test("eligibility: a layover (start === end) is not splittable, with the layover reason", () => {
+  const trip = baseTrip();
+  const stop: LngLat = trip.days[0].coords as LngLat;
+  const layover: Day = {
+    id: "day-x", dayNumber: 9, date: "2026-08-09",
+    label: "Rest day — Las Vegas, NV",
+    startCoord: stop, coords: stop, miles: 0, driveHours: 0, waypoints: [],
+    segmentSuggestions: [tile("mp:near", [stop[0] + 0.01, stop[1]])],
+  };
+  trip.days.push(layover);
+  const e = splitEligibility(trip, "day-x");
+  assert.deepEqual(e.candidates, []);
+  assert.equal(e.disabledReason, "A rest day can't be split.");
+});
+
+test("eligibility: a day with no coord-bearing interior stop reports the no-stop reason", () => {
+  const trip = baseTrip();
+  // Day-2 (Vegas→SLC) keeps only a stop that projects OUTSIDE the chord (far NE),
+  // plus a coord-less tile — neither is an interior split point.
+  trip.days[1].waypoints = [];
+  trip.days[1].segmentSuggestions = [tile("mp:nocoord"), tile("mp:far", [-108, 45])];
+  const e = splitEligibility(trip, "day-2");
+  assert.deepEqual(e.candidates, []);
+  assert.equal(e.disabledReason, "No stop on this day to split at.");
+});
+
+test("eligibility: a day with no end coord can't be split", () => {
+  const trip = baseTrip();
+  delete trip.days[1].coords;
+  const e = splitEligibility(trip, "day-2");
+  assert.deepEqual(e.candidates, []);
+  assert.equal(e.disabledReason, "This day has no route to split.");
 });
 
 test("authored content stays with A; B is sparse", async () => {
