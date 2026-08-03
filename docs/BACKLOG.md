@@ -5,6 +5,59 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Day-insert (#184) — follow-ups (2026-08-03)
+
+Shipped feature in `STATE.md` §2026-08-03; mechanics in
+`architecture/itinerary-model.md` §6 and `architecture/place-render-model.md`.
+
+- **FOUR BROWSER-ONLY CHECKS — UNVERIFIED (no browser/preview reachable this
+  session).** Server-side + `renderToString` was the ceiling. All need the running
+  app + map canvas:
+  1. Map **draws** the rebuilt split `routePolyline` and shows **no phantom
+     segment** for a layover; per-day highlighting still correct.
+  2. **Slideup re-renders the renumbered tail** after `router.refresh()`. This is
+     **structural, not cosmetic** — a split/insert shifts day ids, numbers and
+     dates across the whole tail. **`deleteDayAction` is also structural on the
+     same `/trip/{id}` revalidate path**, so a gap here may be two things, not one.
+  3. Kebab ↔ `Day.heroTag` (compass tag, top-right) **overlap**.
+  4. **Edit-mode drive connector** on a layover (`DayDetailNodeBlocks`) would show
+     `0 mi` / `0 hrs` from `dayMiles`/`dayDriveHours`.
+- **`DayHeader` and `DaySidebar` are ORPHANED — imported nowhere** `[git grep on
+  all of `src`: only their own definitions + stale comments, 2026-08-03]`.
+  Independent of this work. The old day-level rename/delete/reset kebab
+  (`day-header.tsx`, incl. a `console.log`-stubbed "Add" item) and the
+  `"95 mi | 2.3 hrs"` sidebar stat (`day-sidebar.tsx`) are **not in the live UI** —
+  the live day view is `DayDetailCorridor` via `day-detail-corridor-column.tsx`.
+  This is why #184 added a *new* kebab host. Decide: mount or delete; do not leave
+  two dead day components implying a surface that isn't there. **Cost this session:
+  two checkpoints of render analysis reasoned against dead `day-sidebar.tsx` before
+  the mount was grepped** (LOG 2026-08-03).
+- **`fallbackCorridor` produces a corridor node literally named "Rest day"** for a
+  layover — it parses the label `"Rest day — X"` on `" — "` and takes the first
+  half as the start-node name `[observed in the renderToString probe, 2026-08-03]`.
+  The checkpoint-1 label caveat, now observed. **Harmless today** because a layover
+  renders the `isRestDay` "Nearby" block, not that degenerate spine. Becomes visible
+  only if a layover ever renders its spine, or if a waypoint is added to a rest day
+  (turning it into an excursion `recomputeDay` would name from the label).
+- **`pois_along_corridor` has no `LIMIT` and orders by `prominence_score`, not
+  distance** `[read source: `supabase/migrations/…pois_along_corridor…`]`. Affects
+  **every corpus fold**, not just rest days. At Moab all 12 returned rows tie at
+  `prominence = 5`, so their order is arbitrary `[queried PROD, 2026-08-03]`. The
+  rest-day path works around it client-side (`rankNearbySuggestions` re-ranks by
+  `haversineMi` and caps at 10); other folds do not. A distance-order + limit in the
+  RPC would fix it at the source — a migration, deliberately **not** done in #184.
+- **Overlay survival on split / rest-day insert is UNIT-ONLY.** The live TEST
+  instrument (`expedition-ms28y793`) has **empty `placeOverrides` / `placeRanks`**
+  `[queried TEST, 2026-08-03]`, so the renumber's overlay-survival is exercised only
+  by the `rest-day` / `split-day` unit tests, never against real overlays on TEST.
+  Needs a trip carrying real overlays (or a synthetic fixture).
+- **APPEND — extend a trip past its end. Not built.** Cheap now the machinery
+  exists: one route call, no renumber (unlike a mid-trip insert). Deliberately out
+  of #184's scope (it belongs at the end of the itinerary, not in a day's kebab).
+- **Stale `overnight` on half A after a split.** `splitDay` leaves half A's
+  `overnight` naming what is now half B's endpoint (authored content stays with A;
+  the endpoint moved to M). Kept literal and flagged in #182; still open.
+
 ## Geometry defects (measured by the day-mile pass, 2026-07-26)
 
 Both surfaced while scoping the generated-day mile defect; neither IS that

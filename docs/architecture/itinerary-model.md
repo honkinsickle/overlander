@@ -325,6 +325,42 @@ geometry-stable key like `nodeId`. Scoped in
 - **`retry` requires by-id operations** (splice/push by id, not by index) so they
   compose; index-based position writes are `refuse`-class and were removed (see the
   `reorderWaypoints` note in `docs/BACKLOG.md`).
+- **Structural day inserts (split + rest day, #182 / #184)** — a THIRD write shape:
+  positional (insert a day + renumber/redate the whole tail), so **`refuse`-class**
+  — a blind retry could tear the insert. Geometry is precomputed OUTSIDE the write
+  and re-applied INSIDE the closure against the fresh snapshot; under `refuse` the
+  write lands only when the version still matches the snapshot the geometry was
+  computed against, so it is never stale (`src/lib/trips/repository.ts`).
+  - **`splitDay`** cuts a leg A→B at an interior point M into A→M / M→B.
+    `buildSplitStructure` (`src/lib/trips/split-day.ts`) partitions the day's tiles
+    by the along-corridor predicate over the start→end **chord** (the same API-free
+    ordering proxy `recomputeDay` uses): tile with `alongMile <= mSplit` → half A,
+    else half B — a total function, **zero loss / zero duplication**. Authored
+    content stays with A; B is sparse. Then two `recomputeDay` calls (one per half,
+    unroutable→Haversine fallback), a full `rebuildRoutePolyline`, and the single
+    guarded write. `splitEligibility` derives the picker's candidate stops and the
+    disabled reason (a split needs an interior stop; a layover / no-route / no-stop
+    day is un-splittable).
+  - **`insertRestDay`** inserts a sparse **layover** after a day, at that day's
+    overnight stop, so `start === end`. **`recomputeDay` REFUSES a `start === end`
+    day** — its stop-dedup collapses the two identical coords to length 1, tripping
+    the `< 2` guard and returning null *before any Mapbox call* `[measured
+    2026-08-03]`. So the layover's `DayDerived` is set **directly**: `miles: 0`,
+    `driveHours: 0` (an honest zero — distinct from the unroutable fallback's `null`,
+    which means "cannot say"), `corridorCities: undefined`. **Zero route calls**, and
+    `routePolyline` is left **intact** (a layover adds no driving geometry;
+    `rebuildRoutePolyline` already skips `start === end` days). The only IO is the
+    corridor-corpus RPC for `segmentSuggestions`, distance-ranked + capped at 10
+    (`rankNearbySuggestions`), fail-soft to `[]`.
+  - **`isRestDay(day)`** = `start === end && miles === 0 && no corridorCities`
+    (`src/lib/trips/rest-day.ts`). A round-trip *excursion* (`start === end` but
+    `miles > 0`) is NOT a rest day. It gates the render home — see
+    `place-render-model.md`.
+  - **Overlays rescope AFTER the structure is assembled** (`rescopeTripOverlays`).
+    For a pure insert every existing day keeps its `corridorCities`, so the rescope
+    is a no-op for survivors: the #182 sequencing hazard (rescoping over node-less
+    freshly-split halves drops every overlay) is **live for `splitDay`** but only a
+    **precondition** for `insertRestDay`, which never rebuilds existing nodes.
 
 ---
 

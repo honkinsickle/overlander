@@ -12,6 +12,55 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-03
+
+- **#184 shipped the day-insert UX** on top of #182's `splitDay` (which merged
+  2026-08-01 wired to nothing). Kebab (Split this day / Add a rest day),
+  BottomSheet split-point picker, `insertRestDay` layover, both actions behind
+  `checkNotFrozen`, and an `isRestDay` "Nearby" render home. Position in
+  `STATE.md`; mechanics in `architecture/itinerary-model.md` §6; follow-ups in
+  `BACKLOG.md` §Day-insert. Adam merged it same day.
+- **The priority finding, caught before ship: a rest day rendered nothing.** The
+  suggestions were fetched, ranked, and stored, but the corridor view had no
+  render home for a layover's non-curated tiles (no curated key stops, no spine to
+  bucket under) — and "Explore more of Day N" does NOT surface them either (that
+  endpoint runs a fresh live-discovery query and never reads `segmentSuggestions`
+  `[grep: 0 refs in the trip-browse route]`). Verified by `renderToString`, not
+  reasoning: **0/4 tiles → 4/4** after the Nearby block, against an unchanged 2/7
+  normal-day control. This was exactly the artifact ("a rest day that shows
+  nothing to do") we'd decided against.
+- **CORRECTION — two checkpoints of render analysis were reasoned against
+  `day-sidebar.tsx`, which is DEAD CODE.** I fixated on its `"0 mi | 0 hrs"`
+  render as the rest-day surface problem across checkpoints 2–3; only on the UI
+  checkpoint did I grep the mount and find `DaySidebar` (and `DayHeader`) are
+  orphaned. **Lesson: confirm a component is mounted before reasoning about its
+  render.** The live per-day miles stat is edit-only; view mode carries the
+  semantic in the label.
+- **CORRECTION — I reported a "blocker" that was a build step.** "No day-level
+  kebab exists" is not a halt — creating one is implementation. The genuinely
+  decision-worthy fork was narrow (revive the orphaned `DayHeader`, which drags
+  rename/delete/reset + a `console.log` stub, vs. a new minimal kebab). I
+  over-escalated a normal build decision into an A/B/C question.
+- **CORRECTION — the overlay-rescope sequencing test was framed as guarding a
+  live #182 hazard; for the rest-day op it guards a PRECONDITION.** `insertRestDay`
+  never recomputes or clears existing days' `corridorCities`, so the "rescope over
+  node-less days drops overlays" hazard cannot fire on that path. Re-labelled the
+  test as a precondition guard so a future reader doesn't delete it as guarding a
+  phantom.
+- **`NEXT_PUBLIC_MAPBOX_TOKEN` is absent from `.env.development.local`** — split
+  routing falls back to Haversine on every leg and reads as a code defect (a split
+  whose halves carry null `driveHours` / no spine). Recorded in `CLAUDE.md`
+  §RUNBOOK with the workaround (inject only the token from `.env.local`, keep TEST
+  Supabase from `--env-file`) — cross-reference, not duplicated here.
+- **Verified the four ageing BACKLOG items are still accurate** (MAX_IDS, the
+  #176 request-size cap, the `placeId` badge gate, `USE_FEDERATED_POIS`): this
+  session touched none of those paths, and the `USE_FEDERATED_POIS` gate in the
+  trip-browse route reads exactly as recorded `[read source, 2026-08-03]`. No
+  correction needed; not re-written.
+- **TEST writes: temp UUID rows cloned from `expedition-ms28y793` by the two
+  verify scripts, all self-cleaned — 0 leftover** `[queried TEST, 2026-08-03]`.
+  See `DATA_INVENTORY.md`.
+
 ## 2026-07-31
 
 - **Three PRs merged: #176 (chunking), #177 (de-link), #178 (planning region).**
