@@ -231,8 +231,9 @@ export type Day = {
   miles?: number;
   /** Estimated driving hours for the day (sidebar stat). `null` marks an
    *  unroutable leg (the day split's Haversine fallback) — honest "unknown",
-   *  never 0 (which would claim instant travel). Renderers degrade null to
-   *  "—"/absent. */
+   *  never 0, which on a leg that HAS distance would claim instant travel.
+   *  A LAYOVER (rest day, `start === end`) is the one honest `0`: no distance,
+   *  no travel. Renderers degrade null to "—"/absent. */
   driveHours?: number | null;
   /** Optional hero image URL. If absent, `heroGradient` drives the panel. */
   heroImage?: string;

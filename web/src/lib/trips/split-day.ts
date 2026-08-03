@@ -31,6 +31,75 @@ import { rescopeOverlays } from "@/lib/corridor/rescope-overlays";
 
 type LngLat = [number, number];
 
+/** One offered split point plus where along the day it falls (for the picker). */
+export type SplitCandidate = { point: SplitPoint; atMile: number };
+
+export type SplitEligibility = {
+  /** Interior stops the day can be cut at, ordered start→end. Empty ⇒ un-splittable. */
+  candidates: SplitCandidate[];
+  /** The day's start→end length in miles — positioning context for the picker. */
+  dayMiles: number;
+  /** Null when the day is splittable; otherwise the reason to show on the DISABLED
+   *  "Split this day" kebab item (rather than opening an overlay just to say no). */
+  disabledReason: string | null;
+};
+
+const SPLIT_NO_ROUTE = "This day has no route to split.";
+const SPLIT_IS_LAYOVER = "A rest day can't be split.";
+const SPLIT_NO_INTERIOR_STOP = "No stop on this day to split at.";
+
+/**
+ * Which of a day's OWN stops can serve as a split point — and, when none can, why
+ * "Split this day" is disabled. A split needs an INTERIOR cut: a stop that projects
+ * strictly between the day's start and end along the start→end chord (the same
+ * API-free proxy `buildSplitStructure` partitions on). A stop at an endpoint, and a
+ * zero-length (layover) day, yield nothing. Stop-sourced only — no geocoding — so a
+ * day with no interior stop is honestly un-splittable here, not silently broken.
+ *
+ * Pure. The eligibility test the disabled-kebab and the picker both read from.
+ */
+export function splitEligibility(trip: Trip, dayId: string): SplitEligibility {
+  const empty = (disabledReason: string): SplitEligibility => ({
+    candidates: [],
+    dayMiles: 0,
+    disabledReason,
+  });
+  const i = trip.days.findIndex((d) => d.id === dayId);
+  if (i === -1) return empty(SPLIT_NO_ROUTE);
+  const day = trip.days[i];
+  const end = day.coords;
+  const start =
+    day.startCoord ?? (i === 0 ? trip.startCoords : trip.days[i - 1].coords);
+  if (!start || !end) return empty(SPLIT_NO_ROUTE);
+  if (start[0] === end[0] && start[1] === end[1]) return empty(SPLIT_IS_LAYOVER);
+  const chord: LngLat[] = [start, end];
+  const L = alongRouteMiles(end, chord)?.miles ?? 0;
+  if (L <= 0) return empty(SPLIT_IS_LAYOVER);
+
+  const EPS = 1e-6;
+  const seen = new Set<string>();
+  const candidates: SplitCandidate[] = [];
+  const stops: { coords?: LngLat; name: string }[] = [
+    ...day.waypoints.map((w) => ({ coords: w.coords, name: w.title })),
+    ...(day.segmentSuggestions ?? []).map((p) => ({ coords: p.coords, name: p.title })),
+  ];
+  for (const s of stops) {
+    if (!s.coords) continue;
+    const m = alongRouteMiles(s.coords, chord)?.miles ?? 0;
+    if (m <= EPS || m >= L - EPS) continue; // endpoint or outside → not interior
+    const key = `${s.coords[0]},${s.coords[1]}`;
+    if (seen.has(key)) continue; // one candidate per location
+    seen.add(key);
+    candidates.push({ point: { coords: s.coords, name: s.name }, atMile: Math.round(m) });
+  }
+  candidates.sort((a, b) => a.atMile - b.atMile);
+  return {
+    candidates,
+    dayMiles: Math.round(L),
+    disabledReason: candidates.length === 0 ? SPLIT_NO_INTERIOR_STOP : null,
+  };
+}
+
 /** The interior cut point. `coords` drives routing + partition; `name` names both
  *  halves' shared endpoint. */
 export type SplitPoint = { coords: LngLat; name: string };

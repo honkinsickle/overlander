@@ -10,6 +10,7 @@ import {
   TRIP_CHANGED_ERROR,
 } from "./user-trips";
 import { checkNotFrozen } from "@/lib/itinerary/rails";
+import type { SplitPoint } from "./split-day";
 import type { OfflinePhase } from "./types";
 
 /**
@@ -131,6 +132,73 @@ export async function removeWaypointAction(
   if (!ok) return { ok: false, error: "Could not remove stop." };
   revalidatePath(`/trip/${tripId}`);
   return { ok: true };
+}
+
+/** Shared reason → user message for the structural day-insert actions (split +
+ *  rest day). Both repository results carry the identical reason union. Note there
+ *  is NO explicit `getUser()` here — as with `addWaypointAction`, ownership is
+ *  enforced at the repo write by the RLS-scoped client (an anon or non-owner caller
+ *  reads null and surfaces "not-found"), so no shipped mutation action gates on the
+ *  session directly. (The handoff's "getUser()" describes intent, not the pattern.) */
+function dayInsertError(
+  reason: "not-user-trip" | "not-found" | "day-not-found" | "conflict" | "write-failed",
+): string {
+  switch (reason) {
+    case "not-user-trip":
+      return "You can only edit your own trips.";
+    case "not-found":
+      return "Trip not found.";
+    case "day-not-found":
+      return "Day not found.";
+    case "conflict":
+      return TRIP_CHANGED_ERROR;
+    case "write-failed":
+      return "Could not save. Please try again.";
+  }
+}
+
+/** Split a day at an interior point into two sequential days (A→M, M→B). The
+ *  `split` point is a stop the caller already has on the day, so the common path
+ *  needs no geocoding. PROPERTY guard only — a structural rewrite must never touch
+ *  the frozen PROD trip. `fellBack` is surfaced so the UI can warn when a half's
+ *  leg was unroutable (straight-line miles, no drive time). */
+export async function splitDayAction(
+  tripId: string,
+  dayId: string,
+  split: SplitPoint,
+): Promise<ActionResult<{ halfAId: string; halfBId: string; fellBack: { halfA: boolean; halfB: boolean } }>> {
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
+  if (!split?.name || !Array.isArray(split.coords) || split.coords.length !== 2) {
+    return { ok: false, error: "Pick a point to split at." };
+  }
+  const result = await repo.splitDay(tripId, dayId, split);
+  if (!result.ok) return { ok: false, error: dayInsertError(result.reason) };
+  revalidatePath(`/trip/${tripId}`);
+  return {
+    ok: true,
+    data: { halfAId: result.halfAId, halfBId: result.halfBId, fellBack: result.fellBack },
+  };
+}
+
+/** Insert a rest day (layover) after `dayId`, at that day's overnight stop. Zero
+ *  route calls; the layover carries nearby corpus suggestions (distance-ranked).
+ *  PROPERTY guard only — a structural insert must never touch the frozen PROD trip.
+ *  `suggestionCount` is surfaced so the UI can note how many nearby POIs were found
+ *  (zero is legitimate on a sparse-corpus stop). */
+export async function insertRestDayAction(
+  tripId: string,
+  dayId: string,
+): Promise<ActionResult<{ restDayId: string; suggestionCount: number }>> {
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
+  const result = await repo.insertRestDay(tripId, dayId);
+  if (!result.ok) return { ok: false, error: dayInsertError(result.reason) };
+  revalidatePath(`/trip/${tripId}`);
+  return {
+    ok: true,
+    data: { restDayId: result.restDayId, suggestionCount: result.suggestionCount },
+  };
 }
 
 export async function resetDayToReferenceAction(
