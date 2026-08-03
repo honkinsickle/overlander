@@ -159,6 +159,15 @@ Left in place deliberately. `[queried TEST]`
 > `reference_trips` write target. `CLAUDE.md` §RUNBOOK's disjoint-instruments
 > caveat still applies to it.
 
+**TEST writes this session (#184 verification) — nothing left behind.**
+`web/scripts/verify-split-day.ts` and `verify-rest-day.ts` each `INSERT` a temp
+UUID `public.trips` row cloned from the `expedition-ms28y793` payload (owned by
+`seed-owner`, titled `SPLIT VERIFY` / `REST-DAY VERIFY`), run the real
+`splitDay` / `insertRestDay`, then `DELETE` the temp row in a `finally` — the
+snapshot is "the row did not exist." **Confirmed 0 rows with those titles remain**
+`[queried TEST, 2026-08-03]`, so nothing was stranded. These scripts are the
+committed way to exercise the day-insert write path on TEST without a browser.
+
 ### STANDING INSTRUMENT for current pipeline output — `4534add5` (adopted 2026-07-31)
 
 **`4534add5-3787-4b5f-ade6-584ce0fc27e7`** — PROD `public.trips`, San Diego, CA →

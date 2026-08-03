@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-07-31
+# STATE — `main` · 2026-08-03
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -72,6 +72,58 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-03 — day-insert UX shipped (#182 · #183 · #184)
+
+Three PRs merged this week, all on `main`, nothing stranded `[gh pr list +
+git grep for the symbols on origin/main, 2026-08-03]`. My branch's content is
+fully in `main` (empty diff vs `origin/main`). The only open PR is **#24** (May,
+live-weather salvage — unrelated).
+
+- **#182** — `splitDay` (subdivide a leg A→B at an interior point M into A→M /
+  M→B). Merged 2026-08-01; at merge it was **wired to nothing** — repo + routing
+  machinery only, no action or UI. This session's STATE was four days stale and
+  did not know #182 existed — the day-insert work built directly on it.
+- **#183** — doc-only: softened the Paper MCP RUNBOOK gotcha to what was measured.
+- **#184** — **the day-insert feature.** Wires #182 to an action + UI and builds
+  "add a rest day" on the same machinery.
+
+### SHIPPED on `main` (#184)
+- **Two day-level kebab items** on each day in the live corridor view, gated on
+  `canEdit` (user-owned editable UUID trips), **no feature flag**. The kebab is
+  NEW — the old day-level `DayHeader` kebab (rename/delete/reset) is orphaned
+  (§below), so there was no host to add to.
+- **Split this day** → a `BottomSheet` split-point picker listing the day's own
+  interior stops (`splitEligibility`), **disabled with a reason** when a day has
+  no interior stop (layover / no route / no stop). Calls `splitDay` via
+  `splitDayAction` behind the `checkNotFrozen` rail.
+- **Add a rest day** → `insertRestDay`: a sparse `start === end` layover (miles 0
+  / driveHours 0, no spine), nearby corpus suggestions distance-ranked + capped
+  at 10, one guarded write, **zero route calls**. `insertRestDayAction`, same rail.
+- **Render home** — a layover renders its suggestions inline (an `isRestDay`-gated
+  "Nearby" block in `DayDetailCorridor`). Without it the tiles are stored and
+  never seen — they are non-curated with no corridor spine to bucket under.
+  Observed 0/4 → 4/4 against a 2/7 normal-day control `[renderToString probe,
+  2026-08-03]`.
+- Actions use **no `getUser()`** — RLS enforces ownership at the write (a
+  non-owner reads null → not-found), matching `addWaypointAction`. The handoff's
+  "getUser()" was intent, not the shipped pattern.
+- Mechanics: `docs/architecture/itinerary-model.md` §6 (write) and
+  `docs/architecture/place-render-model.md` (the Nearby render home). Follow-ups:
+  `docs/BACKLOG.md` §Day-insert.
+
+### NOT verified — four browser-only checks (carried to `docs/BACKLOG.md`)
+No browser/preview was reachable this session; server-side + `renderToString` was
+the ceiling. **Unobserved:** map draws the rebuilt split polyline / no phantom
+layover segment / per-day highlighting; slideup re-render after `router.refresh()`
+when day ids shift across the whole tail (**structural**, not cosmetic — and
+`deleteDayAction` shares the same path, so a gap may be two things); kebab↔`heroTag`
+overlap; edit-mode drive connector on a layover.
+
+### Deploy status — `[UNVERIFIED]`
+#184 is on `main`; whether Vercel Production has redeployed since is **not checked
+from here**. The kebab carries no flag, so it is live on any `canEdit` trip
+wherever #184 is deployed. Not added to §LIVE ON PROD until deploy is confirmed.
 
 ## 2026-07-31 — planning scope narrowed; out-of-region trips de-linked
 

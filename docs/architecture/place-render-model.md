@@ -963,6 +963,38 @@ three-part structure stays legible.
 
 ---
 
+## 13. The rest-day "Nearby" render home (#184)
+
+A layover (rest day) has no curated key stops and **no `corridorCities`**, so its
+`segmentSuggestions` land in **none** of the day-detail card's normal tile paths:
+they are not curated picks (so not in the "Today's Key Stops" fallback block), and
+there is no spine node to bucket a non-curated pool tile under. Without a dedicated
+surface they are **stored and never seen** — measured `0/4` tiles in the rendered
+HTML `[renderToString probe, 2026-08-03]`. (This is not unique to layovers: a
+*normal* generated day renders only its curated/positioned tiles inline — `2/7` in
+the same probe — the rest of the pool is reachable only via "Explore more". A
+layover has no curated tiles at all, so it renders empty.)
+
+- **`RestDayNearby`** (`src/components/trip/day-detail-corridor.tsx`) renders the
+  day's `placePool` tiles as ordinary `CategoryListCard`s below the hero, **gated
+  on the `restDay` prop** and independent of curated-ness or nodes. The column
+  computes `restDay={isRestDay(d)}` (`isRestDay` lives in `rest-day.ts`; see
+  `itinerary-model.md` §6). With the block: `4/4` tiles render, control unchanged
+  at `2/7`.
+- **Copy is deliberately not "walkable."** Heading **"Nearby"**, sub-line *"Within
+  about 10 miles of your stop, closest first"* — the tiles come from the 16 km
+  corridor buffer (`pois_along_corridor`), distance-ranked and capped at 10, so
+  some sit ~10 mi out. Empty state: *"No places found near this stop."*
+- **"Explore more of Day N" does NOT surface these tiles** — that endpoint
+  (`/api/trip-browse/{tripId}/{dayId}`) runs a fresh live-discovery query for the
+  day's bbox and never reads `segmentSuggestions` `[grep: 0 refs in the route,
+  2026-08-03]`. So the inline block is the only surface for a rest day's stored
+  suggestions. The `estimateDayHeight` chrome (520 px, models a briefing + spine a
+  layover lacks) over-estimates a rest day — the safe direction — so no special
+  case was needed.
+
+---
+
 ## Related — the WRITE path
 
 This document is scoped to the READ path: how an already-stored tile becomes a
