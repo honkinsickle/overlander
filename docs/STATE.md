@@ -73,6 +73,28 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-04 — scoping: plot day-detail places on the map (research done, build UNSTARTED)
+
+Read-only scoping pass. Nothing built, no design produced. Full record —
+the load-bearing four, the per-source coords table, the find-nearby
+evidence, the tripwire, every UNVERIFIED — lives in ONE place:
+`docs/proposals/2026-08-04-plot-day-detail-places-research.md`. Build item
+in `docs/BACKLOG.md` §Plot day-detail places. Not restated here.
+
+Headline for position: corridor cards carry no `data-place-id` (marker→card
+is the real cost); every plotted point is a DOM marker, so a tile layer is
+the first point layer and sits beneath the pins; the map already follows the
+140/400 ms settle signal; the coords gap is confined to editorially-authored
+reference **waypoints** (seg 9,567/100%, sug 172/100%, waypoints 81/400 =
+20% — waypoint-share, not the `generated` flag, is the causal variable), so
+every generated trip a user can now create plots at 100%.
+
+**Harnesses relocated out of the (gitignored, workspace-only) `.context/`
+into `web/scripts/`** so they survive: `scoping-daydetail-pool.mjs` (per-day
+pool + placeId coverage) and `scoping-daydetail-coords.mjs` (coords by
+source/shape, enumerates both DBs). Run-instructions + env specifics in the
+proposal doc's last section.
+
 ## 2026-08-03 — day-insert UX shipped (#182 · #183 · #184)
 
 Three PRs merged this week, all on `main`, nothing stranded `[gh pr list +

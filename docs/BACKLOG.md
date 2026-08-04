@@ -5,6 +5,24 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Plot day-detail places on the map — scoped, UNBUILT (2026-08-04)
+
+Scoped read-only; nothing built. The full scoping — feasibility, the four
+layer-vs-DOM costs, the coords answer, the tripwire, every UNVERIFIED — is
+`docs/proposals/2026-08-04-plot-day-detail-places-research.md`; not restated
+here. Two fixed decisions going in: GeoJSON symbol/circle layer (not DOM
+markers — a day carries up to 263 tiles), map follows the active day (`?day=`),
+not the mounted set.
+
+- **The build's real cost is card addressing, not dots.** Corridor cards carry
+  no `data-place-id`; the marker↔card mechanism exists only on the find-nearby
+  surface (evidence the pattern is in-repo). Adding it touches
+  `category-list-card.tsx`/`day-detail-corridor.tsx`.
+- **Open before building:** browser-verify the z-order claim (a point layer
+  renders beneath the existing DOM pins — architectural, UNVERIFIED on-screen).
+- **Measurement harnesses:** `web/scripts/scoping-daydetail-{pool,coords}.mjs`
+  (relocated from the workspace-only `.context/`).
+
 ## Day-insert (#184) — follow-ups (2026-08-03)
 
 Shipped feature in `STATE.md` §2026-08-03; mechanics in
