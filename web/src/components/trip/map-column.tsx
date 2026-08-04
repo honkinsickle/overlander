@@ -21,8 +21,16 @@ import { UserLocationLayer } from "./user-location-layer";
 import { DirectionsButton } from "./directions-button";
 import { DirectionsPanel } from "./directions-panel";
 import { NavGoButton } from "./nav-go-button";
+import { placePool } from "./day-detail-corridor-column";
+import { placesToFeatureCollection } from "@/lib/trips/place-layer";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+/** Active-day place layer (PR1 — plot only, no interaction). GeoJSON point
+ *  source + circle layer, distinct from every existing point on this map (all
+ *  DOM markers). */
+const PLACES_SOURCE = "active-day-places";
+const PLACES_LAYER = "active-day-places-circles";
 
 /** Build a DOM marker showing the active day's leg endpoint label
  *  ("Lake Louise", "Jasper, AB"). `anchor` controls which side of the
@@ -901,6 +909,70 @@ export function MapColumn({
       return () => window.removeEventListener("trip:routeReady", onReady);
     }
   }, [activeDay, days, startCoords]);
+
+  // Plot the active day's places (placePool) as a GeoJSON point layer. PR1 is
+  // PLOT ONLY — no marker click, card scroll, focus highlight, or data-place-id
+  // (that is PR2). Keyed on `activeDay`, so it inherits the 140/400ms settle
+  // debounce that writes ?day=: fly-by days never become active, so the source
+  // is not rebuilt mid-scroll. Overview (activeDay null) → empty collection.
+  //
+  // Coords-guarded in placesToFeatureCollection — coordless tiles (editorially
+  // authored reference waypoints; la-to-portland is entirely coordless) are
+  // skipped, never errored. The layer is a GeoJSON source + circle layer, the
+  // FIRST point layer on this map; every existing point (day/waypoint pins,
+  // browse/suggested dots, the user-location dot) is a DOM Marker and renders
+  // ABOVE canvas layers, so these dots sit beneath the pins by construction.
+  // Provisional UNIFORM style — deliberately NO category vocabulary here (that
+  // would be a third copy of DOT_BADGE_BY_CATEGORY/CAT_SVG); category-aware
+  // styling is deferred to PR2.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const data = placesToFeatureCollection(
+      activeDay ? placePool(activeDay) : [],
+    );
+
+    const apply = () => {
+      const existing = map.getSource(PLACES_SOURCE) as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (existing) {
+        existing.setData(data);
+        return;
+      }
+      map.addSource(PLACES_SOURCE, { type: "geojson", data });
+      map.addLayer({
+        id: PLACES_LAYER,
+        type: "circle",
+        source: PLACES_SOURCE,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            6,
+            2.5,
+            13,
+            5,
+          ],
+          "circle-color": "#E8DEC9",
+          "circle-stroke-color": "#1A1A1A",
+          "circle-stroke-width": 1,
+          "circle-opacity": 0.9,
+        },
+      });
+    };
+
+    if (map.isStyleLoaded()) {
+      apply();
+    } else {
+      map.once("load", apply);
+      return () => {
+        map.off("load", apply);
+      };
+    }
+  }, [activeDay, days]);
 
   // Fly to a specific place when the browse panel or a Suggested Stops
   // card emits trip:flyTo. Also "pins" the destination marker's label
