@@ -5,6 +5,14 @@
 > #189 (marker→card). Current position: `STATE.md` §2026-08-04 → 08-05; follow-ups
 > (expand-on-focus, and the deliberately-unwired reverse direction): `BACKLOG.md`.
 > The research below stands as written — read it for the *why*, not current state.
+>
+> **UPDATE 2026-08-05 (late) — DIRECTION UNDER RECONSIDERATION.** A premise here is
+> partly invalidated: this doc scoped a GeoJSON layer on the assumption that **pool
+> count** was the binding constraint (up to 263–386 tiles), but the *visible* count
+> is **≤ 4** — the scroll shows only curated tiles inline, the rest collapse behind
+> "Explore more". That reopened layer-vs-DOM-markers, then category filtering
+> reopened it the other way. Do NOT take this doc's layer reasoning as settled —
+> see `STATE.md` §2026-08-05 late and `BACKLOG.md` §Open direction.
 
 **Status: RESEARCH ONLY — nothing built.** Read-only pass. No component, event,
 or layer was designed; this records what exists, what a build would cost, and
