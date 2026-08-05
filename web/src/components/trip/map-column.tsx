@@ -22,7 +22,7 @@ import { DirectionsButton } from "./directions-button";
 import { DirectionsPanel } from "./directions-panel";
 import { NavGoButton } from "./nav-go-button";
 import { placePool } from "./day-detail-corridor-column";
-import { placesToFeatureCollection } from "@/lib/trips/place-layer";
+import { placesToFeatureCollection, placeBounds } from "@/lib/trips/place-layer";
 import { PIN_STROKE_SVG } from "./category-map-icons";
 import {
   registerPlaceLayerIcons,
@@ -55,6 +55,37 @@ const PLACES_LAYERS = [PLACES_POOL_LAYER, PLACES_PROMINENT_LAYER] as const;
 // must never be the icon Mapbox chooses to hide.
 const POOL_OVERLAP = { allow: false, ignorePlacement: false } as const;
 const PROMINENT_OVERLAP = { allow: true, ignorePlacement: true } as const;
+
+/** The day-activation camera fits the day's plottable places (not endpoints —
+ *  those degenerate to a point on rest/round-trip days). This clamps the zoom so
+ *  a single place, or an ultra-tight cluster, lands at a neighborhood zoom instead
+ *  of Mapbox's default (~22) on a zero-extent box. */
+const DAY_FIT_MAX_ZOOM = 14;
+
+/** Padding (px) so the day-fit centers in the VISIBLE map, clear of the left
+ *  overlays (day rail + corridor) and the top filter harness. Measured from the
+ *  DOM via `offsetLeft/offsetWidth` — intrinsic, NOT `getBoundingClientRect`,
+ *  which reads mid-transition-wrong while the panels animate (the gotcha
+ *  `user-location-layer.tsx` documents). Clamped so padding never eats the whole
+ *  viewport — a narrow window keeps a ≥160px visible strip. Collapsed (fullscreen
+ *  map) → the overlay is absent → zero padding, full-viewport fit. */
+function readDayFitPadding(map: mapboxgl.Map): mapboxgl.PaddingOptions {
+  const GUTTER = 24;
+  const occ = document.querySelector<HTMLElement>("[data-map-occludes-left]");
+  const harness = document.querySelector<HTMLElement>(
+    '[aria-label="Category filter test harness"]',
+  );
+  const w = map.getContainer().clientWidth;
+  const h = map.getContainer().clientHeight;
+  const rawLeft = occ ? occ.offsetLeft + occ.offsetWidth + GUTTER : 0;
+  const rawTop = harness ? harness.offsetTop + harness.offsetHeight + GUTTER : 0;
+  return {
+    left: Math.min(rawLeft, Math.max(0, w - 160)),
+    top: Math.min(rawTop, Math.max(0, h - 160)),
+    right: 0,
+    bottom: 0,
+  };
+}
 
 /** Compound filter for one layer: the prominence half AND the enabled-category
  *  half. Complementary on `prominent` so no feature renders in both layers. */
@@ -701,11 +732,11 @@ export function MapColumn({
         // changes and updates the source if the map is loaded.
         window.dispatchEvent(new CustomEvent("trip:routeReady"));
 
-        // Intentionally NOT fitBounds-ing the whole route here. The
-        // map's initial center + the active-day effect frame Day 1's
-        // start, which matches the highlighted day card and the day's
-        // hero image. A whole-trip "Overview" view belongs to a future
-        // sidebar mode, not the default first-paint.
+        // Intentionally NOT fitBounds-ing the whole ROUTE here. The initial
+        // center is a provisional Day-1 start; the active-day effect then FITS
+        // Day 1's plottable places (same as every other day — consistency), so
+        // first paint frames the day's stops, not a bare origin point. A
+        // whole-trip "Overview" view belongs to a future sidebar mode.
       });
     }
 
@@ -755,26 +786,38 @@ export function MapColumn({
     }
   }, [routePolyline]);
 
-  // Fly to the active day whenever ?day= changes. Prefer the day's
-  // *start* coord — `coords` is the end-of-day overnight, so without
-  // this Day 1 lands at the first night's stop instead of the origin
-  // city. Backfill for trips finalized before `startCoord` existed:
-  // Day 1 → trip.startCoords, other days → `coords` (the prior day's
-  // end is also this day's start in segment chains).
+  // Frame the active day whenever ?day= changes. FIT to the day's plottable
+  // PLACES, not an endpoint — a fixed zoom (was 8) is too far out for a tight
+  // cluster (a Portland rest day's 10 tiles span ~66px at z8 → they collide and
+  // the pool declutters to ~2). Endpoints degenerate to a single point on rest/
+  // round-trip days, so fit the place bounds instead; the route line keeps
+  // continuity when the start pin falls outside frame on a long driving day.
+  // Same [activeDay] deps → same settle signal (SETTLE_MS 140 / MAX_WAIT_MS 400);
+  // same duration/easing so motion is unchanged.
+  //
+  // Fallback (no plottable place — coordless-waypoint days on de-linked reference
+  // trips): the prior behavior, flyTo the day's *start* at zoom 8 (`coords` is the
+  // end-of-day overnight; backfill Day 1 → trip.startCoords for pre-startCoord trips).
   useEffect(() => {
     const map = mapRef.current;
-    if (!activeDay) return;
-    const flyCoord =
+    if (!map || !activeDay) return;
+    const bounds = placeBounds(placePool(activeDay));
+    if (bounds) {
+      map.fitBounds(bounds, {
+        padding: readDayFitPadding(map),
+        maxZoom: DAY_FIT_MAX_ZOOM,
+        duration: 1500,
+        essential: true,
+      });
+      return;
+    }
+    const fallback =
       activeDay.startCoord ??
       (activeDay.dayNumber === 1 ? startCoords : undefined) ??
       activeDay.coords;
-    if (!map || !flyCoord) return;
-    map.flyTo({
-      center: flyCoord,
-      zoom: 8,
-      duration: 1500,
-      essential: true,
-    });
+    if (fallback) {
+      map.flyTo({ center: fallback, zoom: 8, duration: 1500, essential: true });
+    }
   }, [activeDay, startCoords]);
 
   // Highlight the active day's leg (sliced from the road-following
