@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-03
+# STATE — `main` · 2026-08-05
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,7 +73,45 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-05 (late) — curated finding reframes the map direction (OPEN)
+## 2026-08-05 — two-layer category map SHIPPED (#192, on `main`)
+
+The OPEN direction below is now RESOLVED and built. **Keep the layer, add category
+filtering** — the ≤10-DOM-marker revert is off the table. #192 (merged) replaces
+#188's uniform `active-day-places-circles` with **two symbol layers over the one
+`active-day-places` source**: POOL (browse-dot glyphs) below, PROMINENT (pin
+glyphs) above, split by a complementary `prominent` filter, with 9 category toggles
+narrowing both. On `main`; **not yet confirmed deployed to Vercel Production**, and
+still behind the Google-licensing gate before it should be a user-facing surface.
+
+- **Discriminator, no schema change:** `prominent = curated OR fromWaypoints`,
+  computed in `placesToFeatureCollection` (`removable` is placePool's waypoint
+  marker). `lib/trips/types.ts` untouched.
+  - **KNOWN LIMITATION (accepted):** on forks of `la-to-deadhorse` the 93
+    editorially-authored waypoints promote to prominent — nobody added them. Correct
+    on every trip a user can create today (generation writes `waypoints: []`); wrong
+    only on de-linked legacy trips, still URL-reachable.
+- **Image pipeline (new machinery — nothing rasterized SVG before):**
+  `place-layer-icons.ts` builds 18 icons (SVG→data-URI→`addImage`, pixelRatio 2) at
+  map load. Reuses BOTH existing sets, no third invented: pin stroke set lifted to
+  `category-map-icons.ts` (`PIN_STROKE_SVG`, shared with the DOM pins); pool = filled
+  `CategoryIconV2` art; colors from `--cat-*` tokens (read at register time).
+- **Collision — decided by looking** (dense 263-tile day, both binaries): per-layer,
+  not one flag. Pool DECLUTTERS (`icon-allow-overlap: false`); prominent ALWAYS
+  renders (`true` + `ignore-placement`) so the important, always-small set is never
+  the icon Mapbox hides.
+- **Toggle panel is a TEMPORARY TEST HARNESS** (`place-category-toggles.tsx`), 9
+  checkboxes, center-top of the map, marked in-code. Ships so real trips can be
+  tested; the real filter UX is a separate decision. Delete with that surface.
+- **Verified in-browser** (headless Chrome + CDP): both layers, complementary split,
+  toggle removes from both, #189 marker-click still fires `trip:placeFocus`, pins/
+  dots/route unaffected. Gates green (`typecheck` + `next build`), 12/12 unit tests.
+- **Still GATED by the UNANSWERED Google Places licensing question** (below /
+  BACKLOG) before this can be a user-facing surface.
+- **No dense TEST instrument exists** — the dense screenshot used a synthetic
+  `reference_trips` row, since deleted; standing TEST trips are sparse. Recorded in
+  `docs/BACKLOG.md`.
+
+## 2026-08-05 (late) — curated finding reframes the map direction (~~OPEN~~ RESOLVED above)
 
 Three measurements today, taken for different reasons, converged and change the
 direction of the shipped map work (#188/#189). Position only; the open direction
@@ -100,12 +138,11 @@ generation produces well-formed tiles (coords, categories, curated key stops);
 legacy fixtures are patchy on all three. **Scope map decisions to current-pipeline
 shapes, not legacy fixtures.**
 
-**OPEN:** whether to revert #188's layer for ≤10 DOM markers reusing the existing
-category icons, OR keep the layer to enable **category filtering** (one `setFilter`
-call; makes the dense pool useful, not noisy) plus the `addImage` icon pipeline.
-Not decided — see `docs/BACKLOG.md`. **Gated by an UNANSWERED Google Places
-licensing question** (displaying `google:`-sourced tier-2 tiles on a non-Google
-map), also in BACKLOG.
+**~~OPEN~~ RESOLVED (PR #192, above):** keep the layer, add **category filtering**
+(the two-layer symbol map + `addImage` pipeline). The ≤10-DOM-marker revert was
+rejected. **Still gated by an UNANSWERED Google Places licensing question**
+(displaying `google:`-sourced tier-2 tiles on a non-Google map) before it becomes a
+user-facing surface — also in BACKLOG.
 
 ## 2026-08-04 → 08-05 — plot day-detail places on the map: SHIPPED (both halves)
 

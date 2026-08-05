@@ -271,6 +271,19 @@ actually touched what they describe. The `/wrap` command runs this pass.
       vacuous — a check that cannot fail is not evidence. Pair it with a
       deliberate negative: break the subject on purpose and confirm the
       instrument goes red.
+  - **A DOM-driven interaction test verifies WIRING, not REACHABILITY**
+    `[measured 2026-08-05]`. Firing a control's handler — `querySelector(sel).click()`
+    or dispatching its event — passes even when the control renders **behind another
+    overlay and no human can reach it**. The two-layer-map category-toggle "works"
+    check clicked the checkbox via the DOM and the filters updated on both layers —
+    but the panel was rendering under the itinerary overlay (`elementFromPoint` at its
+    centre returned the itinerary `<span>`, not the panel), so it was invisible +
+    unusable. Same shape as the apparatus misses above: the check couldn't
+    distinguish **"works" from "works but unreachable."** For any control a HUMAN must
+    operate, don't just fire the handler — assert **reachability**: check
+    `getBoundingClientRect` is on-screen AND `document.elementFromPoint(cx,cy)` is
+    inside the control (not occluded). A handler that fires is necessary, not
+    sufficient.
   - Synthetic drags: one tool call per phase (grab / move / drop), never fused.
   - Keep drag targets mid-viewport — the top edge triggers auto-scroll.
   - Close the browser tab BEFORE restoring the DB baseline: a tab left open on an

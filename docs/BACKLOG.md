@@ -46,16 +46,49 @@ because there is **no in-scope card trigger** — hover is out of scope, and a
 card-body click opens the slideup (out of scope to change). Not "too expensive":
 there is simply nothing to hang it on until a card-side interaction is decided.
 
-### OPEN DIRECTION — category filtering + icon layer vs DOM-marker revert (2026-08-05)
+### ~~OPEN DIRECTION~~ RESOLVED + BUILT — two-layer category map (PR #192, 2026-08-05)
 
-The curated finding (`STATE.md` §2026-08-05 late) first suggested reverting #188's
-layer for ≤10 DOM markers reusing the existing category icons. Then category
-**filtering** (toggle place types on/off, so a camping-seeker sees only camping)
-reframed it: `setFilter` on a GeoJSON layer is one call; the same on DOM markers is
-create/destroy per toggle; and filtering makes the dense pool USEFUL not noisy
-(`4534add5` day 1 = scenic 128 / camping 72 / fuel 30 / food 26 / interest 5
-`[measured 2026-08-05]`). So the layer — and the `addImage` icon pipeline — may earn
-their place after all. **Open direction, not a decision.** Four threads:
+**Decided, built, and MERGED** (#192): keep the layer, add category filtering. Two symbol layers over the one `active-day-places` source (POOL below,
+PROMINENT above), `prominent = curated OR fromWaypoints`, 9 category toggles, the
+`addImage` icon pipeline. Discriminator computed at render, no schema change. See
+`STATE.md` §2026-08-05 for the full record. The four threads below, resolved:
+
+- **Category filtering + the `addImage` pipeline — BUILT.** `place-layer-icons.ts`
+  registers 18 icons at load; `place-layer.ts` adds `prominent` to feature props.
+- **Collision — DECIDED by on-screen comparison** (a dense 263-tile synthetic day,
+  both binaries): **per-layer**, not one flag. Pool `icon-allow-overlap: false`
+  (declutters); prominent `true` + `ignore-placement` (always renders — the
+  important, always-small set is never the icon Mapbox culls). No longer UNVERIFIED.
+- **Three-treatment coherence — answered.** Prominent layer matches the waypoint-pin
+  language (stroke `CAT_SVG` in a tailed disc); pool matches the browse-dot language
+  (filled `CategoryIconV2` in a rounded square). Reuses both existing sets, invents
+  no third. The new layer sits alongside the DOM pins whenever a day is active.
+- **Plots POOL (both layers), not curated-only** — filtering's value is the long
+  tail, so the whole pool plots; prominent/pool is the render split, not a cull.
+
+**STILL GATED — Google Places licensing (UNANSWERED).** Unchanged and still the real
+gate before this is user-facing: Google Places terms restrict displaying Places
+content on a non-Google map. Corpus rows (NPS/OSM/RIDB/BLM/USFS) carry their own
+coords — probably unaffected — but `google:`-prefixed tier-2 tiles came from a Google
+lookup. Needs a real read of the CURRENT Places terms, not a recollection.
+`[UNANSWERED]`
+
+### NO DENSE TEST INSTRUMENT ON TEST — one synthetic fixture wanted (2026-08-05)
+
+**There is nothing on TEST that exercises a dense (263-tile) day.** The dense
+verification for PR #192 used a synthetic `reference_trips` row
+(`dense-collision-tmp`, 263 tiles), **now deleted**. The `la-to-deadhorse` fork was
+de-linked (#177); the standing TEST instruments are sparse (`expedition-ms28y793` =
+2/3/7 pool per day; the reference slug `la-to-deadhorse` = ≤5 prominent + ~8 pool on
+day 1). So every future browser check of dense-day behaviour (collision, filter
+performance, prominent-above-pool at scale) has to re-stage a throwaway row.
+
+**Shape (still the right one, from the earlier session):** ONE committed synthetic
+fixture — a `web/scripts/` seed or a TEST `reference_trips` row created by a checked-in
+script — that covers BOTH edge cases in one trip: (a) a **dense day** (≥250 tiles,
+mixed categories, a handful `curated`) and (b) a **`curatedMode = false`** day (a rest
+day / all-pool). Anon-readable (a reference slug) so it needs no session. Then dense +
+rest-day render checks are reproducible without hand-inserting data. Not yet built.
 
 - **Category filtering + the `addImage` icon pipeline.** Icon scoping already done
   today (chat + `LOG.md` 2026-08-05, not a standalone doc): the vocabulary EXISTS
