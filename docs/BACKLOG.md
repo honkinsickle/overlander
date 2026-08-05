@@ -5,23 +5,46 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
-## Plot day-detail places on the map — scoped, UNBUILT (2026-08-04)
+## Plot day-detail places on the map — SHIPPED; follow-ups (2026-08-05)
 
-Scoped read-only; nothing built. The full scoping — feasibility, the four
-layer-vs-DOM costs, the coords answer, the tripwire, every UNVERIFIED — is
-`docs/proposals/2026-08-04-plot-day-detail-places-research.md`; not restated
-here. Two fixed decisions going in: GeoJSON symbol/circle layer (not DOM
-markers — a day carries up to 263 tiles), map follows the active day (`?day=`),
-not the mounted set.
+The feature shipped in #187 (scoping + harnesses), #188 (tile layer + runbook
+correction), #189 (marker→card). Position + PR breakdown: `STATE.md`
+§2026-08-04 → 08-05. Full scoping: `docs/proposals/2026-08-04-plot-day-detail-places-research.md`.
+The two decisions that held: GeoJSON circle layer (not DOM markers — a day
+carries up to 263 tiles), map follows the active day (`?day=`), not the mounted
+set. Two follow-ups below.
 
-- **The build's real cost is card addressing, not dots.** Corridor cards carry
-  no `data-place-id`; the marker↔card mechanism exists only on the find-nearby
-  surface (evidence the pattern is in-repo). Adding it touches
-  `category-list-card.tsx`/`day-detail-corridor.tsx`.
-- **Open before building:** browser-verify the z-order claim (a point layer
-  renders beneath the existing DOM pins — architectural, UNVERIFIED on-screen).
-- **Measurement harnesses:** `web/scripts/scoping-daydetail-{pool,coords}.mjs`
-  (relocated from the workspace-only `.context/`).
+### EXPAND-ON-FOCUS — the #189 gap (needs its own scoping)
+
+On **curated** trips, `CityNode` collapses non-key-stop pool tiles behind
+"Explore N more", so **those cards are not in the DOM**. The marker layer plots
+the FULL pool, so clicking a collapsed tile's marker is a **graceful no-op** — no
+scroll, no error, `?day=` unchanged (measured, not inferred).
+
+- **The measured ratio and the LIMIT of that number:** on `expedition-ms28y793`
+  day 1, **3 of 7 markers have a card** `[browser, 2026-08-05]`. That is the
+  clean, **SPARSE** instrument — do NOT read 3-of-7 as a general figure. On a
+  **dense curated day the ratio is far worse**: `4534add5` day 1 is **263 tiles**
+  with only a handful of curated key stops, so the large majority of its markers
+  would be no-ops there.
+- **Cause is IN-DAY COLLAPSE, not continuous-stack windowing.** The active day is
+  ALWAYS mounted, so the stack's IO windowing is NOT the issue — the missing cards
+  are the collapsed pool *inside* the mounted day (`day-detail-corridor.tsx`,
+  `CityNode`'s `showRest` / `expanded`). These would be fixed in different files;
+  conflating them would send someone to the wrong place.
+- **Candidate fix:** expand the containing cluster before scrolling (open the
+  collapsed `CityNode`, then `scrollIntoView`). Needs scoping — where the expand
+  state lives and how the `trip:placeFocus` listener reaches it without new
+  cross-component coupling.
+
+### Reverse direction (card → marker highlight) — UNWIRED, by design
+
+Highlighting a MARKER from a CARD is not built, deliberately. The mechanism would
+be `feature-state` + `promoteId` on the GeoJSON source + a data-driven paint
+property (the layer analog of find-nearby's `dataset` pulse). It is unwired
+because there is **no in-scope card trigger** — hover is out of scope, and a
+card-body click opens the slideup (out of scope to change). Not "too expensive":
+there is simply nothing to hang it on until a card-side interaction is decided.
 
 ## Day-insert (#184) — follow-ups (2026-08-03)
 
