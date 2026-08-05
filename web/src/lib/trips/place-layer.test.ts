@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placesToFeatureCollection } from "./place-layer";
+import {
+  placesToFeatureCollection,
+  placeBounds,
+  isPlottableCoord,
+} from "./place-layer";
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
 
 /** Minimal CorridorPlace with optional coords — only the fields the layer reads. */
@@ -112,4 +116,51 @@ test("category: an unknown category clamps to interest so icon-image resolves", 
     { ...tile("x", [-122, 45]), category: "gas" as CorridorPlace["category"] },
   ]);
   assert.equal(fc.features[0].properties.category, "interest");
+});
+
+// ── isPlottableCoord (the shared guard) ─────────────────────────────────────
+// The day-bounds camera fit and placesToFeatureCollection must agree on what is
+// plottable, so both read this one predicate.
+test("isPlottableCoord: accepts a valid [lng,lat], rejects absent/NaN/short", () => {
+  assert.equal(isPlottableCoord([-122, 45]), true);
+  assert.equal(isPlottableCoord(undefined), false);
+  assert.equal(isPlottableCoord([NaN, 45]), false);
+  assert.equal(isPlottableCoord([-122] as unknown), false);
+  assert.equal(isPlottableCoord([-122, 45, 100]), true); // elevation tolerated
+});
+
+// ── placeBounds (day-bounds camera fit input) ───────────────────────────────
+test("placeBounds: no plottable places → null (caller falls back to flyTo)", () => {
+  assert.equal(placeBounds([]), null);
+  assert.equal(placeBounds([tile("a"), tile("b")]), null); // all coordless
+});
+
+test("placeBounds: a single place → a zero-extent bbox at that point", () => {
+  assert.deepEqual(placeBounds([tile("a", [-122, 45])]), [
+    [-122, 45],
+    [-122, 45],
+  ]);
+});
+
+test("placeBounds: all places at the same coord → zero-extent bbox", () => {
+  assert.deepEqual(
+    placeBounds([tile("a", [-122, 45]), tile("b", [-122, 45])]),
+    [
+      [-122, 45],
+      [-122, 45],
+    ],
+  );
+});
+
+test("placeBounds: multiple → [[minLng,minLat],[maxLng,maxLat]], coordless skipped, order-independent", () => {
+  const b = placeBounds([
+    tile("a", [-120, 47]),
+    tile("b"), // coordless — skipped
+    tile("c", [-122, 45]),
+    tile("d", [-121, 48]),
+  ]);
+  assert.deepEqual(b, [
+    [-122, 45],
+    [-120, 48],
+  ]);
 });

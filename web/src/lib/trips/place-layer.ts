@@ -15,6 +15,54 @@ function normalizeCategory(c: string): BrowseCardCategory {
 }
 
 /**
+ * The ONE coords guard. A tile is plottable iff `coords` is a real `[lng, lat]`
+ * (elevation `[lng, lat, ele]` tolerated). Absent/malformed/NaN → not plottable,
+ * skipped, never an error. Shared by `placesToFeatureCollection` (what draws) and
+ * `placeBounds` (what the camera fits) so the two can never disagree.
+ */
+export function isPlottableCoord(c: unknown): c is [number, number] {
+  return (
+    Array.isArray(c) &&
+    c.length >= 2 &&
+    typeof c[0] === "number" &&
+    typeof c[1] === "number" &&
+    !Number.isNaN(c[0]) &&
+    !Number.isNaN(c[1])
+  );
+}
+
+/**
+ * Bounding box of a day's plottable places, `[[minLng,minLat],[maxLng,maxLat]]`,
+ * for the day-activation camera fit. `null` when the day has NO plottable place
+ * (coordless-waypoint days on de-linked reference trips) — the caller then falls
+ * back to the old `flyTo(start, zoom 8)`. A single place (or all-same-coord) yields
+ * a valid ZERO-EXTENT box; the caller clamps that with `fitBounds({ maxZoom })`.
+ * Pure; no map. Unit-tested in place-layer.test.ts.
+ */
+export function placeBounds(
+  places: CorridorPlace[],
+): [[number, number], [number, number]] | null {
+  let w = Infinity;
+  let s = Infinity;
+  let e = -Infinity;
+  let n = -Infinity;
+  let count = 0;
+  for (const p of places) {
+    if (!isPlottableCoord(p.coords)) continue;
+    const [lng, lat] = p.coords;
+    count += 1;
+    if (lng < w) w = lng;
+    if (lng > e) e = lng;
+    if (lat < s) s = lat;
+    if (lat > n) n = lat;
+  }
+  return count === 0 ? null : [
+    [w, s],
+    [e, n],
+  ];
+}
+
+/**
  * Build the GeoJSON FeatureCollection for the active day's place pool, plotted
  * on the map as a point layer (PR1 — plot only; marker interaction is PR2).
  *
@@ -49,14 +97,7 @@ export function placesToFeatureCollection(
   const features: GeoJSON.Feature<GeoJSON.Point, PlaceFeatureProps>[] = [];
   for (const p of places) {
     const c = p.coords;
-    if (
-      !Array.isArray(c) ||
-      c.length < 2 ||
-      typeof c[0] !== "number" ||
-      typeof c[1] !== "number" ||
-      Number.isNaN(c[0]) ||
-      Number.isNaN(c[1])
-    ) {
+    if (!isPlottableCoord(c)) {
       continue; // coords-guard: skip coordless/malformed tiles, never throw
     }
     features.push({

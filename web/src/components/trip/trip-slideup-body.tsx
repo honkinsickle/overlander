@@ -335,8 +335,13 @@ export function TripSlideupBody({
           </div>
 
           {/* Day Detail column — single-day corridor view (v4) or the
-           *  Overview state; translucent overlay matched to Day Column. */}
+           *  Overview state; translucent overlay matched to Day Column.
+           *  data-map-occludes-left: the rightmost left overlay over the map —
+           *  MapColumn measures its right edge for the day-fit camera padding so
+           *  a tight cluster doesn't land under the rail+corridor. Its left edge
+           *  covers the day rail too, so this one element is the whole occlusion. */}
           <div
+            data-map-occludes-left
             className={`absolute top-[72px] bottom-[10px] ${
               editMode ? "left-[239px] w-[511px]" : "left-[192px] w-[478px]"
             } z-20 overflow-hidden rounded-br-[15px]`}
