@@ -73,22 +73,56 @@ coords — probably unaffected — but `google:`-prefixed tier-2 tiles came from
 lookup. Needs a real read of the CURRENT Places terms, not a recollection.
 `[UNANSWERED]`
 
-### NO DENSE TEST INSTRUMENT ON TEST — one synthetic fixture wanted (2026-08-05)
+### COMMITTED MULTI-SHAPE TEST FIXTURE — a synthetic map instrument (2026-08-05)
 
-**There is nothing on TEST that exercises a dense (263-tile) day.** The dense
-verification for PR #192 used a synthetic `reference_trips` row
-(`dense-collision-tmp`, 263 tiles), **now deleted**. The `la-to-deadhorse` fork was
-de-linked (#177); the standing TEST instruments are sparse (`expedition-ms28y793` =
-2/3/7 pool per day; the reference slug `la-to-deadhorse` = ≤5 prominent + ~8 pool on
-day 1). So every future browser check of dense-day behaviour (collision, filter
-performance, prominent-above-pool at scale) has to re-stage a throwaway row.
+**A synthetic TEST `reference_trips` row has now been inserted and deleted THREE
+times** to verify map behaviour (#192 collision `dense-collision-tmp`; #194's
+day-fit `fit-test-tmp`, twice). The standing TEST trips don't exercise the shapes:
+the `la-to-deadhorse` fork was de-linked (#177); `expedition-ms28y793` = 2/3/7 pool
+per day; the reference slug `la-to-deadhorse` = ≤5 prominent + ~8 pool on day 1. So
+every map render check re-stages a throwaway row.
 
-**Shape (still the right one, from the earlier session):** ONE committed synthetic
-fixture — a `web/scripts/` seed or a TEST `reference_trips` row created by a checked-in
-script — that covers BOTH edge cases in one trip: (a) a **dense day** (≥250 tiles,
-mixed categories, a handful `curated`) and (b) a **`curatedMode = false`** day (a rest
-day / all-pool). Anon-readable (a reference slug) so it needs no session. Then dense +
-rest-day render checks are reproducible without hand-inserting data. Not yet built.
+**Shape wanted:** ONE committed fixture — a `web/scripts/` seed or a TEST
+`reference_trips` row from a checked-in script — with **five days, one per shape**,
+covering every map-render path in one trip:
+1. **dense day** — ≥250 tiles, mixed categories, a handful `curated` (collision /
+   clustering / prominent-above-pool at scale).
+2. **rest day** — `start==end`, `miles==0`, ~10 all-pool tiles ringing one point
+   (`curatedMode = false`; the camera-fit spread case).
+3. **round-trip day** — `start==end`, `miles>0`, tiles spread ~50km, some `curated`.
+4. **driving day** — `start≠end` hundreds of mi apart, tiles strung along.
+5. **coordless day** — a waypoint with no `coords`, zero plottable (the camera
+   fallback + coords-guard path).
+
+**Anon-readability matters** — it must be a **reference slug** so browser
+verification runs without a session (b97d06bf and other UUID trips are RLS-scoped,
+unrenderable in dev). ⚠️ Gotcha found building `fit-test-tmp`: synthetic
+`corridorCities` MUST carry `placeIds: []` or `classifyCuratedPicks` throws
+`c.placeIds is not iterable` and the map never mounts — set `corridorCities: []`.
+Not yet built.
+
+### CLUSTERING / EXPANSION FOR DENSE DAYS — the day-fit floor (2026-08-05)
+
+The #194 day-bounds camera **helps but does not solve** a genuinely dense day: 263
+tiles tight in downtown LA render **124 after the fit, up from 2** at the old zoom 8
+`[measured 2026-08-05]`. That 124 is the measured floor — the cluster is tight at any
+zoom, so fitting just zooms into the same blob and the pool `icon-allow-overlap:
+false` declutter still hides ~half. A real fix is **clustering or expand-on-focus**,
+separate scope.
+
+**Two levers were priced and NOT taken (neither is exclusive with clustering):**
+- **Scale `icon-size` with zoom** (as browse dots do, `max(12, 30·z/13)`) — smaller
+  icons collide less when zoomed out, but coincident/tight tiles still overlap and
+  the icons go illegibly small; a partial mid-density relief, not a dense-day fix.
+- **Flip `icon-allow-overlap: true` on the pool** — renders all tiles (nothing
+  hidden) but re-breaks the dense day into the overlapping mess #192's collision
+  decision deliberately decluttered. A straight trade, not a fix.
+
+**Driving-day note (one day is not a general result):** places-only fit was accepted
+knowing the **start pin might leave frame** on a driving day whose stops cluster at
+the destination. On the one driving day tested (`fit-test-tmp` day 1) the start
+stayed in frame because its stops reached the start — `[UNVERIFIED as a general
+claim]`. The route line was accepted as the continuity fallback.
 
 - **Category filtering + the `addImage` icon pipeline.** Icon scoping already done
   today (chat + `LOG.md` 2026-08-05, not a standalone doc): the vocabulary EXISTS

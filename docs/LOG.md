@@ -102,6 +102,29 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   commit made the squash cut; this end-of-session doc commit did not, so it went out
   as its own docs-only PR. Lesson: after a squash-merge, verify late branch commits
   by CONTENT on `main` (`git diff origin/main HEAD`, two-dot), not SHA-ancestry.
+- **DIAGNOSED then FIXED: day-detail places "not plotting" on PROD — a visibility
+  interaction, not a broken layer (#194).** The symptom read as a dead layer. It was
+  not: the source was populated, both symbol layers were in the style, and the
+  filters passed — established by MEASURING **in-viewport vs rendered** feature counts
+  (a Portland rest day: **8 pool in the viewport, 2 rendered** at zoom 8), not by
+  inspecting code. Cause: fixed ~30px icons × a fixed zoom-8 fly-to too far out for a
+  ~66px cluster × the pool's `icon-allow-overlap: false` declutter × DOM-marker
+  occlusion. That in-viewport-vs-rendered measurement is what distinguished a
+  visibility interaction from a data/filter failure — worth repeating whenever a
+  layer "isn't showing."
+- **Corrected the premise mid-diagnosis:** the handoff called b97d06bf day 3 a rest
+  day; the exact `isRestDay` predicate (`start==end && miles==0 && corridorCities==0`)
+  says day 3 is a round-trip (it drove); the real rest days are 4–11 `[queried PROD]`.
+- **SHIPPED the fix (#194): day-bounds camera.** Fit the day's plottable PLACES
+  (`placeBounds` sharing the one `isPlottableCoord` guard with
+  `placesToFeatureCollection`), not endpoints (they degenerate to a point on rest/
+  round-trip days) nor union (re-introduces the zoom-out). Rest day now z10.37 /
+  10-of-10; dense day 2→124 (helps, doesn't solve — clustering is the follow-up).
+  Guards + reasoning in `docs/architecture/map-day-render.md`.
+- **Third synthetic-fixture insert+delete of the day** (`fit-test-tmp`) — the
+  committed multi-shape fixture is now clearly wanted (`docs/BACKLOG.md`). Gotcha:
+  synthetic `corridorCities` need `placeIds: []` or `classifyCuratedPicks` throws and
+  the map never mounts.
 
 ## 2026-08-03
 
