@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { CategoryListCard } from "@/components/trip/category-list-card";
 import { DayDetailNodeBlocks } from "@/components/trip/day-detail-node-blocks";
 import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
@@ -153,6 +153,9 @@ type Props = {
    *  to show no kebab. Wired only on editable (user) trips; read-only otherwise.
    *  The read spine renders this on every curated-POI card. */
   buildCuratedMenu?: (place: CorridorPlace) => CuratedMenu | undefined;
+  /** PR2 marker→card: the place id the map marker last focused. The matching
+   *  place card highlights (via FocusContext + PlaceSlot). */
+  focusedId?: string | null;
 };
 
 const GUTTER_W = 48;
@@ -313,6 +316,41 @@ export function spinePosition(input: {
   };
 }
 
+/** The place id the map marker focused (PR2 marker→card). Provided by
+ *  DayDetailCorridor and read by every PlaceSlot, so the sub-components (CityNode,
+ *  KeyStopNode, MileTick, RestDayNearby) need no prop threading. */
+const FocusContext = createContext<string | null>(null);
+
+/** Wraps one place card with a `data-place-id` handle (found by the map-marker
+ *  focus listener via querySelector) and the focus highlight. Mirrors
+ *  find-nearby's card wrapper exactly: the glow is a box-shadow on the WRAPPER,
+ *  not on the card's own `overflow-clip` root (which would clip it). `fit-content`
+ *  keeps the wrapper hugging the fixed-width card inside a stretch flex column. */
+function PlaceSlot({
+  placeId,
+  children,
+}: {
+  placeId: string;
+  children: React.ReactNode;
+}) {
+  const focused = placeId === useContext(FocusContext);
+  return (
+    <div
+      data-place-id={placeId}
+      style={{
+        width: "fit-content",
+        borderRadius: 8,
+        transition: "box-shadow 160ms ease",
+        boxShadow: focused
+          ? "0 0 0 2px var(--amber), 0 0 18px 2px color-mix(in srgb, var(--amber) 55%, transparent)"
+          : "none",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function DayDetailCorridor({
   dayLabel,
   dayNumber,
@@ -341,6 +379,7 @@ export function DayDetailCorridor({
   errorMessage,
   onDismissError,
   buildCuratedMenu,
+  focusedId,
 }: Props) {
   const byId = new Map(places.map((p) => [p.id, p]));
   // Read-spine cluster order: the SAME node-scoped rank key the edit spine builds
@@ -438,6 +477,7 @@ export function DayDetailCorridor({
   });
 
   return (
+    <FocusContext.Provider value={focusedId ?? null}>
     <div
       className="flex flex-col items-center"
       style={{
@@ -559,15 +599,16 @@ export function DayDetailCorridor({
           </span>
           <div className="flex flex-col" style={{ gap: 8 }}>
             {unpositionedPicks.map((p) => (
-              <CategoryListCard
-                key={p.id}
-                place={p}
-                category={p.category}
-                status={p.keyStopNote}
-                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-                curatedMenu={buildCuratedMenu?.(p)}
-                editMode={editMode}
-              />
+              <PlaceSlot key={p.id} placeId={p.id}>
+                <CategoryListCard
+                  place={p}
+                  category={p.category}
+                  status={p.keyStopNote}
+                  onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                  curatedMenu={buildCuratedMenu?.(p)}
+                  editMode={editMode}
+                />
+              </PlaceSlot>
             ))}
           </div>
         </div>
@@ -662,6 +703,7 @@ export function DayDetailCorridor({
       </div>
       </div>
     </div>
+    </FocusContext.Provider>
   );
 }
 
@@ -710,14 +752,15 @@ function RestDayNearby({
       {places.length > 0 ? (
         <div className="flex flex-col" style={{ gap: 8 }}>
           {places.map((p) => (
-            <CategoryListCard
-              key={p.id}
-              place={p}
-              category={p.category}
-              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-              curatedMenu={buildCuratedMenu?.(p)}
-              editMode={editMode}
-            />
+            <PlaceSlot key={p.id} placeId={p.id}>
+              <CategoryListCard
+                place={p}
+                category={p.category}
+                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                curatedMenu={buildCuratedMenu?.(p)}
+                editMode={editMode}
+              />
+            </PlaceSlot>
           ))}
         </div>
       ) : (
@@ -825,20 +868,21 @@ function CityNode({
         {featured.length > 0 && (
           <div className="flex flex-col" style={{ gap: 8 }}>
             {featured.map((p) => (
-              <CategoryListCard
-                key={p.id}
-                place={p}
-                category={p.category}
-                status={p.keyStopNote}
-                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-                onRemove={
-                  p.removable && onRemovePlace
-                    ? () => onRemovePlace(p.id)
-                    : undefined
-                }
-                curatedMenu={buildCuratedMenu?.(p)}
-                editMode={editMode}
-              />
+              <PlaceSlot key={p.id} placeId={p.id}>
+                <CategoryListCard
+                  place={p}
+                  category={p.category}
+                  status={p.keyStopNote}
+                  onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                  onRemove={
+                    p.removable && onRemovePlace
+                      ? () => onRemovePlace(p.id)
+                      : undefined
+                  }
+                  curatedMenu={buildCuratedMenu?.(p)}
+                  editMode={editMode}
+                />
+              </PlaceSlot>
             ))}
           </div>
         )}
@@ -846,20 +890,21 @@ function CityNode({
         <div className="flex flex-col" style={{ gap: 8 }}>
           {showRest &&
             rest.map((p) => (
-              <CategoryListCard
-                key={p.id}
-                place={p}
-                category={p.category}
-                status={p.keyStopNote}
-                onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-                onRemove={
-                  p.removable && onRemovePlace
-                    ? () => onRemovePlace(p.id)
-                    : undefined
-                }
-                curatedMenu={buildCuratedMenu?.(p)}
-                editMode={editMode}
-              />
+              <PlaceSlot key={p.id} placeId={p.id}>
+                <CategoryListCard
+                  place={p}
+                  category={p.category}
+                  status={p.keyStopNote}
+                  onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+                  onRemove={
+                    p.removable && onRemovePlace
+                      ? () => onRemovePlace(p.id)
+                      : undefined
+                  }
+                  curatedMenu={buildCuratedMenu?.(p)}
+                  editMode={editMode}
+                />
+              </PlaceSlot>
             ))}
         </div>
 
@@ -934,14 +979,16 @@ function KeyStopNode({
 
       {/* Content — the curated tile at its spine position (mile in the gutter). */}
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
-        <CategoryListCard
-          place={place}
-          category={place.category}
-          status={place.keyStopNote}
-          onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
-          curatedMenu={buildCuratedMenu?.(place)}
-          editMode={editMode}
-        />
+        <PlaceSlot placeId={place.id}>
+          <CategoryListCard
+            place={place}
+            category={place.category}
+            status={place.keyStopNote}
+            onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
+            curatedMenu={buildCuratedMenu?.(place)}
+            editMode={editMode}
+          />
+        </PlaceSlot>
       </div>
     </div>
   );
@@ -993,15 +1040,16 @@ function MileTick({
       </div>
       <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
         {tiles.map((p) => (
-          <CategoryListCard
-            key={p.id}
-            place={p}
-            category={p.category}
-            status={p.keyStopNote}
-            onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
-            curatedMenu={buildCuratedMenu?.(p)}
-            editMode={editMode}
-          />
+          <PlaceSlot key={p.id} placeId={p.id}>
+            <CategoryListCard
+              place={p}
+              category={p.category}
+              status={p.keyStopNote}
+              onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
+              curatedMenu={buildCuratedMenu?.(p)}
+              editMode={editMode}
+            />
+          </PlaceSlot>
         ))}
       </div>
     </div>

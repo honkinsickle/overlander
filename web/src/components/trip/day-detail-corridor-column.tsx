@@ -424,6 +424,38 @@ export function DayDetailCorridorColumn({
     return () => window.removeEventListener("trip:openDetail", onOpen);
   }, []);
 
+  // ── PR2 marker→card ─────────────────────────────────────────────────────────
+  // The map dispatches trip:placeFocus with a place id when a dot is clicked;
+  // scroll that card into view and highlight it (find-nearby's marker→card link,
+  // adapted). Markers plot the ACTIVE day only, and the active day is always
+  // mounted in the continuous stack, so the card is findable. The query is scoped
+  // to the active day's [data-day-id] slot so a same-id card on another mounted
+  // day can't answer for it. Scrolling to a card WITHIN the active day keeps the
+  // stack's centered-day = active day, so its settle writer is a no-op (?day=
+  // unchanged) — no programmaticUntil guard needed; verified in the browser.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const selectedDayIdRef = useRef(selectedDayId);
+  selectedDayIdRef.current = selectedDayId;
+  useEffect(() => {
+    const onPlaceFocus = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      setFocusedId(id);
+      const sel = selectedDayIdRef.current;
+      const el =
+        (sel &&
+          document.querySelector(
+            `[data-day-id="${CSS.escape(sel)}"] [data-place-id="${CSS.escape(id)}"]`,
+          )) ||
+        document.querySelector(`[data-place-id="${CSS.escape(id)}"]`);
+      if (el) {
+        (el as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+    window.addEventListener("trip:placeFocus", onPlaceFocus);
+    return () => window.removeEventListener("trip:placeFocus", onPlaceFocus);
+  }, []);
+
   // Optimistic set of the selected day's added place ids. Seeded from
   // server waypoints and flipped IMMEDIATELY on add/remove so the browse
   // panel's "Added ✓" state updates without waiting on revalidation — the
@@ -887,6 +919,7 @@ export function DayDetailCorridorColumn({
         dayStartMile={dayStartMileForId(d.id)}
         ranks={ranksMap}
         buildCuratedMenu={(p) => buildCuratedMenuFor(d, p)}
+        focusedId={focusedId}
       />
     </div>
   );
@@ -1000,6 +1033,7 @@ export function DayDetailCorridorColumn({
               errorMessage={moveError?.message ?? null}
               onDismissError={() => setMoveError(null)}
               buildCuratedMenu={buildCuratedMenu}
+              focusedId={focusedId}
             />
           </div>
         ) : (
