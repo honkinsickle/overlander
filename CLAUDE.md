@@ -91,6 +91,19 @@ actually touched what they describe. The `/wrap` command runs this pass.
     `SUPABASE_URL`/key still come from the env file, so no PROD DB is touched — you
     are borrowing the token only. `insertRestDay` makes zero route calls, so
     `verify-rest-day.ts` needs no token.
+  - ⚠️ **SCOPE OF THE ABOVE — a real map DOES render under `next dev`
+    `[verified 2026-08-04]`.** The "token absent" fact is scoped to **verify
+    scripts**, which load a SINGLE file via `--env-file=.env.development.local`.
+    `next dev` instead loads **both** `.env.development.local` AND `.env.local`
+    (Next's env cascade), and since the token is defined only in `.env.local`,
+    `next dev` resolves it — while Supabase stays on **TEST**
+    (`.env.development.local` wins for `SUPABASE_URL`). So the browser map renders
+    in dev on a TEST **reference slug** (anon-readable). Verified via
+    `@next/env` `loadEnvConfig(cwd, true)` (token present, `SUPABASE_URL` = TEST)
+    **and** a headless-Chrome Mapbox render + a CDP query of the live map
+    (`active-day-places-circles` layer present, source features drawn). The narrow
+    "token absent" line once hardened into a false "a map is unreachable in dev"
+    claim in a scoping pass — it is NOT; only the `--env-file` verify path is.
 - **Test trips — which instrument to reach for (verified 2026-07-25):**
   - **`762577ca-5ca0-417a-be05-58b17b63bd19` is a PROD trip — NOT usable from
     dev.** Older handoffs call it "the 66-day fork"; dev talks to TEST, so it
