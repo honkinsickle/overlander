@@ -47,11 +47,14 @@ const PLACES_PROMINENT_LAYER = "active-day-places-prominent";
 /** Both symbol layers, pool first (paints below the prominent layer). */
 const PLACES_LAYERS = [PLACES_POOL_LAYER, PLACES_PROMINENT_LAYER] as const;
 
-/** COLLISION MODE (the deliberate decision): `true` = every icon renders and
- *  overlaps at low zoom on dense days; `false` = Mapbox declutters, hiding
- *  overlapping icons by its own priority. Set from the on-screen comparison on a
- *  dense day (263 tiles) — see the PR. */
-const ICON_ALLOW_OVERLAP = true;
+// COLLISION (decided by looking at a dense 263-tile day, both binaries — see PR):
+// per-layer, not one flag. The pool DECLUTTERS (allow-overlap false) so a dense
+// day stays readable; the prominent layer ALWAYS renders (allow-overlap true,
+// and ignore-placement so it never suppresses a pool icon) — it is the important,
+// always-small set (curated key stops ≤~4/day, or the day's waypoints), so it
+// must never be the icon Mapbox chooses to hide.
+const POOL_OVERLAP = { allow: false, ignorePlacement: false } as const;
+const PROMINENT_OVERLAP = { allow: true, ignorePlacement: true } as const;
 
 /** Compound filter for one layer: the prominence half AND the enabled-category
  *  half. Complementary on `prominent` so no feature renders in both layers. */
@@ -997,8 +1000,8 @@ export function MapColumn({
             "-pool",
           ] as unknown as mapboxgl.DataDrivenPropertyValueSpecification<string>,
           "icon-size": 1,
-          "icon-allow-overlap": ICON_ALLOW_OVERLAP,
-          "icon-ignore-placement": ICON_ALLOW_OVERLAP,
+          "icon-allow-overlap": POOL_OVERLAP.allow,
+          "icon-ignore-placement": POOL_OVERLAP.ignorePlacement,
         },
       });
       map.addLayer({
@@ -1015,8 +1018,8 @@ export function MapColumn({
           ] as unknown as mapboxgl.DataDrivenPropertyValueSpecification<string>,
           "icon-size": 1,
           "icon-anchor": "bottom",
-          "icon-allow-overlap": ICON_ALLOW_OVERLAP,
-          "icon-ignore-placement": ICON_ALLOW_OVERLAP,
+          "icon-allow-overlap": PROMINENT_OVERLAP.allow,
+          "icon-ignore-placement": PROMINENT_OVERLAP.ignorePlacement,
         },
       });
     };
