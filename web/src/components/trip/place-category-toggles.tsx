@@ -25,10 +25,12 @@ export function PlaceCategoryToggles({
     <div
       // Intentionally raw inline styles — this is throwaway test chrome.
       style={{
+        // Center-top of the map: the itinerary panel overlays the left ~half,
+        // so top-left is occluded. This is throwaway harness placement.
         position: "absolute",
         top: 8,
-        left: 8,
-        zIndex: 5,
+        left: "50%",
+        zIndex: 20,
         background: "rgba(10,11,12,0.85)",
         border: "1px solid #444",
         borderRadius: 4,
