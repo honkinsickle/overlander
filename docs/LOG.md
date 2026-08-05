@@ -56,6 +56,52 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   Markers plot the active day only, so centering an in-day card leaves the centered
   day unchanged and `?day=` stayed `day-1` across a marker-driven scroll — so
   `continuous-day-stack.tsx` was left untouched, not modified to expose its guard.
+- **Two-layer category map SHIPPED — #192 (merged, squash `bd39db4`).** Replaces #188's
+  circle layer with two symbol layers (POOL/PROMINENT) over the one source, split by
+  `prominent = curated OR fromWaypoints`, 9 category toggles, an `addImage` icon
+  pipeline (the first SVG-rasterizing machinery in the repo). Discriminator computed
+  at render — no schema change, `lib/trips/types.ts` untouched. Reuses both existing
+  icon sets (stroke `CAT_SVG` lifted to a shared module for pins + prominent; filled
+  `CategoryIconV2` for pool); invents no third set.
+- **FOUND: not all `day.waypoints` are user-added** — the discriminator question.
+  Traced every writer: add-to-day (user), generation (`waypoints: []`), fork (copies
+  the source verbatim), reference trips (`alaska.ts` hand-authors them). PROD measured:
+  `la-to-deadhorse` = 93 editorial waypoints (`wp-eggslut`…), `la-to-portland` = 14.
+  So `fromWaypoints` means "user-added" on generated trips but "reference author wrote
+  it" on forks — recorded as an accepted KNOWN LIMITATION in the PR (editorial
+  waypoints promote to prominent on legacy forks).
+- **Collision DECIDED by looking, not reasoning** (per the spec). Rendered a dense
+  263-tile synthetic day under both `icon-allow-overlap` binaries: `true` = all 267
+  paint into an unreadable mass; `false` = clean but Mapbox picks winners. Chose
+  **per-layer** (pool declutters, prominent always renders) — better than either
+  binary, which the two-layer split makes free. Screenshots in `.context/`.
+- **APPARATUS LESSON — a DOM-driven interaction test verifies WIRING, not
+  REACHABILITY.** The category-toggle "works" check clicked the checkbox via
+  `querySelector(...).click()` and passed — but the panel was rendering BEHIND the
+  itinerary overlay (`elementFromPoint` at its centre returned the itinerary, not the
+  panel), so no human could reach it. Same shape as this week's other apparatus
+  misses: the check couldn't distinguish "works" from "works but invisible." Fix:
+  probe `elementFromPoint`/visibility for a control a HUMAN must use, not just fire
+  its handler. Moved the harness to centre-top; runbook note added to `CLAUDE.md`.
+- **APPARATUS LESSON (repeat, cost a retraction mid-session) — synthetic
+  `trip:browseResults`/`trip:flyTo` RESET the active-day place source.** A feature
+  count taken right after firing them read **0 features** and looked like a broken
+  layer; a clean reload showed 13. Reload and pan via `map.jumpTo` (direct, no app
+  events) when measuring the layer. Already in the build spec; re-confirmed live.
+- **NO DENSE TEST INSTRUMENT** — the dense verification used a synthetic
+  `reference_trips` row, inserted and deleted (TEST restored). Standing TEST trips are
+  sparse. One committed synthetic fixture (dense + `curatedMode=false` in one
+  anon-readable trip) is wanted → `docs/BACKLOG.md`.
+- **Browser-verification harness recorded to memory** — no `node_modules`/puppeteer
+  by default in a fresh Conductor workspace; drive headless Chrome via raw CDP over
+  Node's global `WebSocket`, reach the live `map` via a React-fiber walk, stage a
+  dense trip as a temp TEST reference row.
+- **This doc pass was STRANDED by the squash-merge and re-PR'd.** #192 merged as a
+  squash (`bd39db4`), so the branch commits are not ancestors of `main` — checked by
+  grepping origin/main for the actual symbols, not the PR banner. The panel-fix
+  commit made the squash cut; this end-of-session doc commit did not, so it went out
+  as its own docs-only PR. Lesson: after a squash-merge, verify late branch commits
+  by CONTENT on `main` (`git diff origin/main HEAD`, two-dot), not SHA-ancestry.
 
 ## 2026-08-03
 
