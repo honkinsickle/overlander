@@ -974,6 +974,42 @@ export function MapColumn({
     }
   }, [activeDay, days]);
 
+  // PR2 — marker → card. Clicking a place dot dispatches trip:placeFocus with the
+  // feature's id (carried in properties by placesToFeatureCollection); the day
+  // column scrolls that card into view + highlights it. Mirrors the find-nearby
+  // marker→card link, adapted to a GeoJSON layer: the id rides in feature
+  // properties and the click path is map.on("click", layerId) + e.features
+  // rather than a DOM dataset. No camera move (this is a navigation aid, not a
+  // second route to the slideup — the card's own Details button still opens it).
+  // Layer-scoped listeners are safe to register before the layer exists; they
+  // only fire once it does. Registered once (mapRef is set by the init effect).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const onClick = (e: mapboxgl.MapLayerMouseEvent) => {
+      const id = e.features?.[0]?.properties?.id;
+      if (typeof id === "string" && id) {
+        window.dispatchEvent(
+          new CustomEvent("trip:placeFocus", { detail: { id } }),
+        );
+      }
+    };
+    const onEnter = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const onLeave = () => {
+      map.getCanvas().style.cursor = "";
+    };
+    map.on("click", PLACES_LAYER, onClick);
+    map.on("mouseenter", PLACES_LAYER, onEnter);
+    map.on("mouseleave", PLACES_LAYER, onLeave);
+    return () => {
+      map.off("click", PLACES_LAYER, onClick);
+      map.off("mouseenter", PLACES_LAYER, onEnter);
+      map.off("mouseleave", PLACES_LAYER, onLeave);
+    };
+  }, []);
+
   // Fly to a specific place when the browse panel or a Suggested Stops
   // card emits trip:flyTo. Also "pins" the destination marker's label
   // so it stays visible after the camera animation — otherwise the dot
