@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-05
+
+- **Plot-day-detail places SHIPPED across four PRs.** #187 (scoping doc +
+  relocated the two measurement harnesses out of gitignored `.context/` into
+  `web/scripts/`), #188 (the GeoJSON circle layer `active-day-places-circles`,
+  keyed on active day, coords-guarded), #189 (marker click → `trip:placeFocus` →
+  card scroll + highlight), #190 (docs wrap). All verified on `main` by grep, not
+  banner. Position: `STATE.md`.
+- **Established a map DOES render in dev** — the token comes from `.env.local`,
+  which `next dev` loads alongside `.env.development.local`; the "token absent"
+  gotcha is scoped to `--env-file` verify scripts. Runbook corrected in `CLAUDE.md`
+  (#188). This unblocked real browser verification via headless Chrome + a CDP
+  query of the live map object (fiber-walk to the map instance — a throwaway
+  diagnostic, nothing committed).
+- **The curated finding — three measurements converged.** Max curated on any day
+  of any trip is **4** (`4534add5` day 1 = 263-tile pool, 4 curated); the scroll
+  shows curated inline and collapses the rest. `curatedMode = false` is LIVE via
+  **rest days** (PROD `b97d06bf`, current pipeline, 8/15 days), not legacy-only.
+  The 386-tile blowup is legacy-only (`generationInput = n`). **This is the THIRD
+  independent measurement to land on the current-pipeline-good / legacy-patchy
+  boundary**, after coords and category coverage — a pattern now named in
+  `STATE.md`. Open direction (layer + category filtering + `addImage` icons vs a
+  DOM-marker revert) and the UNANSWERED Google Places licensing question:
+  `BACKLOG.md` §Open direction.
+- **Noted (did not write): the map rendering model is undocumented.** Every point
+  is a DOM marker, the polyline was the only GeoJSON layer until #188 added the
+  first point layer, and four category vocabularies exist (`CategoryIconV2` 9,
+  `CAT_SVG` 9, `DOT_BADGE_BY_CATEGORY` 6, `category-icons.tsx` 7).
+  `place-render-model.md` covers the CARD, not the map. It warrants a doc — but
+  NOT while the layer's future is unsettled; documenting mid-flux would need
+  rewriting.
+- **CORRECTION — "the 263-degradation check is PROD-gated" was false.** Disproved
+  by loading **386 features on an anonymous TEST trip** (`yotrippin-demo` day-19)
+  in dev. The claim came from the build handoff and was inherited rather than
+  checked; the dense case was reachable all along.
+- **CORRECTION — a grep near-miss read as MISSING.** Checking whether the runbook
+  correction was on `main`, the grep used `"a map DOES render"` but the text says
+  `"a REAL map DOES render"` → false MISSING. Re-grepping with the exact string
+  found it. Same shape as every near-miss this week: a check that could not confirm
+  what it was looking for. (Also caught by the `[verified 2026-08-04]` tag.)
+- **LEARNED — the #189 scroll guard was unnecessary, established by measurement.**
+  Markers plot the active day only, so centering an in-day card leaves the centered
+  day unchanged and `?day=` stayed `day-1` across a marker-driven scroll — so
+  `continuous-day-stack.tsx` was left untouched, not modified to expose its guard.
+
 ## 2026-08-03
 
 - **#184 shipped the day-insert UX** on top of #182's `splitDay` (which merged

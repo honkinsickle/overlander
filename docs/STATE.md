@@ -73,6 +73,40 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-05 (late) — curated finding reframes the map direction (OPEN)
+
+Three measurements today, taken for different reasons, converged and change the
+direction of the shipped map work (#188/#189). Position only; the open direction
+and the four backlog items live in `docs/BACKLOG.md` §Plot-day-detail.
+
+1. **Curated counts are TINY** — max curated on any day of any trip is **4**
+   `[queried TEST+PROD, 2026-08-05]`. `4534add5` day 1 = a **263-tile pool with 4
+   curated**. The scroll features curated inline and collapses the rest behind
+   "Explore N more", so the map plots the whole pool while the scroll shows a
+   handful — which is also why **#189's marker→card no-ops on most markers**.
+2. **`curatedMode = false` is LIVE, via REST DAYS** — not legacy-only. A layover
+   has no LLM key stops by construction, so every rest day is `curatedMode = false`;
+   PROD **`b97d06bf`** (current pipeline, `generationInput` present) has **8 of 15
+   days as rest days**, each pool ≤ `REST_DAY_SUGGESTION_CAP = 10`, rendered fully
+   inline `[queried PROD, 2026-08-05]`.
+3. **The 386-tile blowup is LEGACY-only** — every whole-trip zero-curated trip
+   (`yotrippin-demo`, `alaska-south-*`, `dawson-vancouver-cassiar`) is
+   `generationInput = n`, pre-current-pipeline.
+
+**Pattern worth naming:** this is the THIRD independent measurement to land on the
+**current-pipeline-good / legacy-patchy** boundary, after coords coverage
+(`docs/proposals/2026-08-04…` §Coords) and category coverage. The current
+generation produces well-formed tiles (coords, categories, curated key stops);
+legacy fixtures are patchy on all three. **Scope map decisions to current-pipeline
+shapes, not legacy fixtures.**
+
+**OPEN:** whether to revert #188's layer for ≤10 DOM markers reusing the existing
+category icons, OR keep the layer to enable **category filtering** (one `setFilter`
+call; makes the dense pool useful, not noisy) plus the `addImage` icon pipeline.
+Not decided — see `docs/BACKLOG.md`. **Gated by an UNANSWERED Google Places
+licensing question** (displaying `google:`-sourced tier-2 tiles on a non-Google
+map), also in BACKLOG.
+
 ## 2026-08-04 → 08-05 — plot day-detail places on the map: SHIPPED (both halves)
 
 Scoped then built in three PRs, all merged and **verified present on `main` by

@@ -46,6 +46,41 @@ because there is **no in-scope card trigger** — hover is out of scope, and a
 card-body click opens the slideup (out of scope to change). Not "too expensive":
 there is simply nothing to hang it on until a card-side interaction is decided.
 
+### OPEN DIRECTION — category filtering + icon layer vs DOM-marker revert (2026-08-05)
+
+The curated finding (`STATE.md` §2026-08-05 late) first suggested reverting #188's
+layer for ≤10 DOM markers reusing the existing category icons. Then category
+**filtering** (toggle place types on/off, so a camping-seeker sees only camping)
+reframed it: `setFilter` on a GeoJSON layer is one call; the same on DOM markers is
+create/destroy per toggle; and filtering makes the dense pool USEFUL not noisy
+(`4534add5` day 1 = scenic 128 / camping 72 / fuel 30 / food 26 / interest 5
+`[measured 2026-08-05]`). So the layer — and the `addImage` icon pipeline — may earn
+their place after all. **Open direction, not a decision.** Four threads:
+
+- **Category filtering + the `addImage` icon pipeline.** Icon scoping already done
+  today (chat + `LOG.md` 2026-08-05, not a standalone doc): the vocabulary EXISTS
+  (`CategoryIconV2`, 9, gap-covered), the layer source already carries `category`
+  in feature properties, and the ONLY new machinery is the SVG→`addImage`
+  registration pipeline (nothing in-repo rasterizes SVG or registers a map image
+  `[grep, 2026-08-05]`). **Collision decision is UNVERIFIED on-screen:**
+  `icon-allow-overlap: true` renders all 386 but they overlap badly; `false` lets
+  Mapbox declutter but *it* picks the winners, not the day's logic.
+- **Three-treatment coherence — a design call.** The map would then show three
+  category-icon treatments at once: waypoint pins (stroke icon in a tailed circle),
+  browse/suggested dots (filled `CategoryIconV2` in a rounded square), and a new
+  symbol layer (a third). Whether they read as one language or three competing
+  systems is a design decision.
+- **Google Places licensing — UNANSWERED, and it GATES filtering.** Google Places
+  terms restrict displaying Places content on non-Google maps. Most plotted tiles
+  are corpus rows (NPS/OSM/RIDB/BLM/USFS) with their own coordinates — probably
+  unaffected — but `google:`-prefixed tier-2 tiles originated from a Google lookup,
+  which is a different question. Needs a real read of the CURRENT Places terms, not
+  a recollection. `[UNANSWERED]`
+- **Whether #188's layer plots pool or curated** — now contingent on the filtering
+  decision above. Curated-only plotting would DEFEAT filtering (the value is the
+  long tail behind "Explore more"), which makes #189's collapsed-card gap
+  (§EXPAND-ON-FOCUS) *more* visible, not less.
+
 ## Day-insert (#184) — follow-ups (2026-08-03)
 
 Shipped feature in `STATE.md` §2026-08-03; mechanics in
