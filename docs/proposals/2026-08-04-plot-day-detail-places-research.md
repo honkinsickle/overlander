@@ -1,5 +1,11 @@
 # SCOPING — plot day-detail places on the map
 
+> **UPDATE 2026-08-05 — SHIPPED (both halves).** This is the pre-build scoping
+> record; the feature shipped in #187 (scoping + harnesses), #188 (tile layer),
+> #189 (marker→card). Current position: `STATE.md` §2026-08-04 → 08-05; follow-ups
+> (expand-on-focus, and the deliberately-unwired reverse direction): `BACKLOG.md`.
+> The research below stands as written — read it for the *why*, not current state.
+
 **Status: RESEARCH ONLY — nothing built.** Read-only pass. No component, event,
 or layer was designed; this records what exists, what a build would cost, and
 what must not move. Evidence tags per `docs/architecture/trip-resolution.md`
