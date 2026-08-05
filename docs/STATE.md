@@ -35,6 +35,7 @@ anything automatically.
 | `docs/architecture/generation-pipeline.md` | **The WRITE path** — the server-side generation run (gates → `preComputeFacts` → LLM → `bakeGeneratedDays` → persist), LLM field provenance, failure modes. |
 | `docs/architecture/trip-creation-surfaces.md` | **The client/UI half of creation** — which surfaces create a trip, every expedition-wizard input, the destination autocomplete, what `expeditionToGenerationInput` forwards. |
 | `docs/architecture/place-render-model.md` | **The READ/render path for one place** — what a stored tile carries vs what the day-detail card and the detail slideup each show, enrichment via `/api/places/details`. |
+| `docs/architecture/map-day-render.md` | **How the active day draws on the MAP** — the two-layer place symbol map (#192, one source + pool/prominent split), and the day-bounds camera (#194, fit places-not-endpoints, guards, settle inheritance). Distinct from place-render-model (that is a place's *data*; this is the *map*). |
 
 4. **`docs/BACKLOG.md`** for parked work, **`docs/LOG.md`** for why things are the
    way they are (append-only, newest at top), **`docs/DATA_INVENTORY.md`** for
@@ -72,6 +73,25 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-05 — day-bounds camera fit SHIPPED (#194, on `main`)
+
+The day-activation camera now **fits the day's plottable places** instead of a fixed
+`zoom: 8`. Architecture: `docs/architecture/map-day-render.md` §2.
+
+- **The bug (present-but-suppressed, not absent):** fixed ~30px icons + a zoom too
+  far out for the spread + pool declutter combined so a Portland rest day's 10 tiles
+  spanning ~66px at zoom 8 rendered **2 of 8 in-viewport** features — source
+  populated, both layers in the style, filters passing `[measured 2026-08-05]`.
+- **After:** the rest day frames at **zoom 10.37** and renders **10 of 10**; a
+  round-trip day (13 tiles) fits z9.93, 13/13; a coordless day falls back to
+  `flyTo(start, zoom 8)` `[measured, synthetic fixture]`.
+- **Fits PLACES, not endpoints** (endpoints degenerate to a point on rest/round-trip
+  days); fits on every day incl. day 1; same `[activeDay]` effect → same settle
+  signal; `maxZoom 14` clamps the zero-extent box; padding measured intrinsically.
+- **Does NOT solve dense days.** 263 tiles in downtown LA go **2 → 124** rendered —
+  substantial, and the measured floor for the clustering gap (`docs/BACKLOG.md`).
+- On `main`; **not yet confirmed deployed to Vercel Production**.
 
 ## 2026-08-05 — two-layer category map SHIPPED (#192, on `main`)
 
