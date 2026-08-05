@@ -23,14 +23,51 @@ import { DirectionsPanel } from "./directions-panel";
 import { NavGoButton } from "./nav-go-button";
 import { placePool } from "./day-detail-corridor-column";
 import { placesToFeatureCollection } from "@/lib/trips/place-layer";
+import { PIN_STROKE_SVG } from "./category-map-icons";
+import {
+  registerPlaceLayerIcons,
+  poolImageName,
+  promImageName,
+} from "./place-layer-icons";
+import { PlaceCategoryToggles } from "./place-category-toggles";
+import {
+  BROWSE_CARD_CATEGORIES,
+  type BrowseCardCategory,
+} from "@/lib/trip-browse/palette";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
-/** Active-day place layer (PR1 — plot only, no interaction). GeoJSON point
- *  source + circle layer, distinct from every existing point on this map (all
- *  DOM markers). */
+/** Active-day place map — ONE GeoJSON source, TWO symbol layers reading it via a
+ *  complementary `prominent` filter (below: POOL, above: PROMINENT). Category
+ *  glyphs come from `registerPlaceLayerIcons`; these are the FIRST point layers
+ *  on this map (every existing point is a DOM Marker and paints above canvas). */
 const PLACES_SOURCE = "active-day-places";
-const PLACES_LAYER = "active-day-places-circles";
+const PLACES_POOL_LAYER = "active-day-places-pool";
+const PLACES_PROMINENT_LAYER = "active-day-places-prominent";
+/** Both symbol layers, pool first (paints below the prominent layer). */
+const PLACES_LAYERS = [PLACES_POOL_LAYER, PLACES_PROMINENT_LAYER] as const;
+
+// COLLISION (decided by looking at a dense 263-tile day, both binaries — see PR):
+// per-layer, not one flag. The pool DECLUTTERS (allow-overlap false) so a dense
+// day stays readable; the prominent layer ALWAYS renders (allow-overlap true,
+// and ignore-placement so it never suppresses a pool icon) — it is the important,
+// always-small set (curated key stops ≤~4/day, or the day's waypoints), so it
+// must never be the icon Mapbox chooses to hide.
+const POOL_OVERLAP = { allow: false, ignorePlacement: false } as const;
+const PROMINENT_OVERLAP = { allow: true, ignorePlacement: true } as const;
+
+/** Compound filter for one layer: the prominence half AND the enabled-category
+ *  half. Complementary on `prominent` so no feature renders in both layers. */
+function placesFilter(
+  prominent: boolean,
+  enabled: Iterable<BrowseCardCategory>,
+): mapboxgl.FilterSpecification {
+  return [
+    "all",
+    ["==", ["get", "prominent"], prominent],
+    ["in", ["get", "category"], ["literal", [...enabled]]],
+  ];
+}
 
 /** Build a DOM marker showing the active day's leg endpoint label
  *  ("Lake Louise", "Jasper, AB"). `anchor` controls which side of the
@@ -469,35 +506,16 @@ export function MapColumn({
 
     // Per-waypoint pins — category-colored circle head with a stroked SVG
     // category icon and a downward tail. Mapbox anchor:"bottom" lands the
-    // tip on the coord. Paths come from category-icons.tsx (24×24 viewBox,
-    // stroke-only) so they render crisply at any zoom and stay on-brand.
-    // Pushed onto the same ref as trip-day markers so they hide together
-    // when the browse panel opens (otherwise they compete with browse dots).
-    const CAT_SVG: Record<string, string> = {
-      fuel:
-        '<rect x="4" y="3" width="10" height="18" rx="1"/><line x1="6" y1="7" x2="12" y2="7"/><path d="M14 9 h4 v9 a2 2 0 0 1 -2 2 a2 2 0 0 1 -2 -2 V9z"/><path d="M16 4 v3"/>',
-      camping:
-        '<path d="M3 20 L12 4 L21 20 Z"/><path d="M10 20 L12 14 L14 20"/>',
-      scenic:
-        '<polygon points="3 20 9 9 13 15 16 11 21 20"/><circle cx="17" cy="6" r="1.5"/>',
-      urban:
-        '<rect x="3" y="3" width="7" height="18"/><rect x="14" y="8" width="7" height="13"/><line x1="6" y1="7" x2="7" y2="7"/><line x1="6" y1="11" x2="7" y2="11"/><line x1="6" y1="15" x2="7" y2="15"/><line x1="17" y1="12" x2="18" y2="12"/><line x1="17" y1="16" x2="18" y2="16"/>',
-      food:
-        '<path d="M17 8h1a3 3 0 0 1 0 6h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><line x1="6" y1="2" x2="6" y2="5"/><line x1="10" y1="2" x2="10" y2="5"/><line x1="14" y1="2" x2="14" y2="5"/>',
-      oddity:
-        '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
-      attraction:
-        '<polygon points="12 2 14.39 8.26 21 8.27 15.45 12.14 17.82 18.4 12 14.77 6.18 18.4 8.55 12.14 3 8.27 9.61 8.26"/>',
-      interest: '<circle cx="12" cy="12" r="5"/>',
-      // hotel is browse-chip-only (no waypoint is ever `hotel`); included for
-      // parity with the canonical Category so the legend stays exhaustive.
-      hotel:
-        '<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>',
-    };
+    // tip on the coord. Stroke paths are `PIN_STROKE_SVG` (24×24 viewBox,
+    // stroke-only) — the SAME set the PROMINENT map layer rasterizes, so pins
+    // and prominent map icons stay one source. Pushed onto the same ref as
+    // trip-day markers so they hide together when the browse panel opens.
     days.forEach((d) => {
       for (const wp of d.waypoints) {
         if (!wp.coords) continue;
-        const iconPaths = CAT_SVG[wp.category] ?? CAT_SVG.interest;
+        const iconPaths =
+          PIN_STROKE_SVG[wp.category as BrowseCardCategory] ??
+          PIN_STROKE_SVG.interest;
         const el = document.createElement("div");
         el.setAttribute("aria-label", wp.title);
         el.style.cssText =
@@ -910,21 +928,33 @@ export function MapColumn({
     }
   }, [activeDay, days, startCoords]);
 
-  // Plot the active day's places (placePool) as a GeoJSON point layer. PR1 is
-  // PLOT ONLY — no marker click, card scroll, focus highlight, or data-place-id
-  // (that is PR2). Keyed on `activeDay`, so it inherits the 140/400ms settle
-  // debounce that writes ?day=: fly-by days never become active, so the source
-  // is not rebuilt mid-scroll. Overview (activeDay null) → empty collection.
+  // ── Two-layer category place map ─────────────────────────────────────────
+  // The active day's places (placePool) plotted as TWO symbol layers over ONE
+  // GeoJSON source: POOL below (browse-dot glyphs), PROMINENT above (pin glyphs).
+  // `prominent = curated OR fromWaypoints` is computed in placesToFeatureCollection;
+  // the two layers filter complementarily (`prominent == false` / `== true`) so
+  // no feature renders twice. Category toggles narrow BOTH via a compound filter.
   //
-  // Coords-guarded in placesToFeatureCollection — coordless tiles (editorially
-  // authored reference waypoints; la-to-portland is entirely coordless) are
-  // skipped, never errored. The layer is a GeoJSON source + circle layer, the
-  // FIRST point layer on this map; every existing point (day/waypoint pins,
-  // browse/suggested dots, the user-location dot) is a DOM Marker and renders
-  // ABOVE canvas layers, so these dots sit beneath the pins by construction.
-  // Provisional UNIFORM style — deliberately NO category vocabulary here (that
-  // would be a third copy of DOT_BADGE_BY_CATEGORY/CAT_SVG); category-aware
-  // styling is deferred to PR2.
+  // Keyed on `activeDay`, so it inherits the 140/400ms settle debounce that writes
+  // ?day= (fly-by days never rebuild the source). Overview (activeDay null) → empty.
+  // Coords-guarded in placesToFeatureCollection (coordless tiles skipped). These
+  // are the first point layers on this map; every existing point is a DOM Marker
+  // and paints ABOVE canvas layers, so these icons sit beneath the pins/dots.
+  const [enabledCats, setEnabledCats] = useState<Set<BrowseCardCategory>>(
+    () => new Set(BROWSE_CARD_CATEGORIES),
+  );
+  const enabledCatsRef = useRef(enabledCats);
+  useEffect(() => {
+    enabledCatsRef.current = enabledCats;
+  }, [enabledCats]);
+  const toggleCat = (cat: BrowseCardCategory) =>
+    setEnabledCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -933,7 +963,8 @@ export function MapColumn({
       activeDay ? placePool(activeDay) : [],
     );
 
-    const apply = () => {
+    let cancelled = false;
+    const apply = async () => {
       const existing = map.getSource(PLACES_SOURCE) as
         | mapboxgl.GeoJSONSource
         | undefined;
@@ -941,48 +972,87 @@ export function MapColumn({
         existing.setData(data);
         return;
       }
+      // First build: register the 18 category icons before the symbol layers'
+      // icon-image can resolve. Idempotent + awaited.
+      await registerPlaceLayerIcons(map);
+      if (cancelled) return;
+      // A concurrent run may have created the source while icons decoded.
+      const raced = map.getSource(PLACES_SOURCE) as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (raced) {
+        raced.setData(data);
+        return;
+      }
       map.addSource(PLACES_SOURCE, { type: "geojson", data });
+      const enabled = enabledCatsRef.current;
+      // Pool first (below), prominent second (above) — add order is the stack.
       map.addLayer({
-        id: PLACES_LAYER,
-        type: "circle",
+        id: PLACES_POOL_LAYER,
+        type: "symbol",
         source: PLACES_SOURCE,
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            6,
-            2.5,
-            13,
-            5,
-          ],
-          "circle-color": "#E8DEC9",
-          "circle-stroke-color": "#1A1A1A",
-          "circle-stroke-width": 1,
-          "circle-opacity": 0.9,
+        filter: placesFilter(false, enabled),
+        layout: {
+          "icon-image": [
+            "concat",
+            "place-",
+            ["get", "category"],
+            "-pool",
+          ] as unknown as mapboxgl.DataDrivenPropertyValueSpecification<string>,
+          "icon-size": 1,
+          "icon-allow-overlap": POOL_OVERLAP.allow,
+          "icon-ignore-placement": POOL_OVERLAP.ignorePlacement,
+        },
+      });
+      map.addLayer({
+        id: PLACES_PROMINENT_LAYER,
+        type: "symbol",
+        source: PLACES_SOURCE,
+        filter: placesFilter(true, enabled),
+        layout: {
+          "icon-image": [
+            "concat",
+            "place-",
+            ["get", "category"],
+            "-prom",
+          ] as unknown as mapboxgl.DataDrivenPropertyValueSpecification<string>,
+          "icon-size": 1,
+          "icon-anchor": "bottom",
+          "icon-allow-overlap": PROMINENT_OVERLAP.allow,
+          "icon-ignore-placement": PROMINENT_OVERLAP.ignorePlacement,
         },
       });
     };
 
     if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("load", apply);
+      void apply();
       return () => {
-        map.off("load", apply);
+        cancelled = true;
       };
     }
+    const onLoad = () => void apply();
+    map.once("load", onLoad);
+    return () => {
+      cancelled = true;
+      map.off("load", onLoad);
+    };
   }, [activeDay, days]);
 
-  // PR2 — marker → card. Clicking a place dot dispatches trip:placeFocus with the
-  // feature's id (carried in properties by placesToFeatureCollection); the day
-  // column scrolls that card into view + highlights it. Mirrors the find-nearby
-  // marker→card link, adapted to a GeoJSON layer: the id rides in feature
-  // properties and the click path is map.on("click", layerId) + e.features
-  // rather than a DOM dataset. No camera move (this is a navigation aid, not a
-  // second route to the slideup — the card's own Details button still opens it).
-  // Layer-scoped listeners are safe to register before the layer exists; they
-  // only fire once it does. Registered once (mapRef is set by the init effect).
+  // Category toggles → re-filter BOTH layers (prominence half stays fixed).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer(PLACES_POOL_LAYER)) return;
+    map.setFilter(PLACES_POOL_LAYER, placesFilter(false, enabledCats));
+    map.setFilter(PLACES_PROMINENT_LAYER, placesFilter(true, enabledCats));
+  }, [enabledCats]);
+
+  // marker → card (#189). Clicking a place icon dispatches trip:placeFocus with
+  // the feature's id (carried in properties by placesToFeatureCollection); the
+  // day column scrolls that card into view + highlights it. Reads
+  // e.features[0].properties.id, so it survives the circle→symbol swap unchanged
+  // — registered on BOTH layers (pool + prominent). No camera move (a navigation
+  // aid, not a second route to the slideup). Layer-scoped listeners are safe to
+  // register before the layers exist; they only fire once they do.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -1000,13 +1070,17 @@ export function MapColumn({
     const onLeave = () => {
       map.getCanvas().style.cursor = "";
     };
-    map.on("click", PLACES_LAYER, onClick);
-    map.on("mouseenter", PLACES_LAYER, onEnter);
-    map.on("mouseleave", PLACES_LAYER, onLeave);
+    for (const layer of PLACES_LAYERS) {
+      map.on("click", layer, onClick);
+      map.on("mouseenter", layer, onEnter);
+      map.on("mouseleave", layer, onLeave);
+    }
     return () => {
-      map.off("click", PLACES_LAYER, onClick);
-      map.off("mouseenter", PLACES_LAYER, onEnter);
-      map.off("mouseleave", PLACES_LAYER, onLeave);
+      for (const layer of PLACES_LAYERS) {
+        map.off("click", layer, onClick);
+        map.off("mouseenter", layer, onEnter);
+        map.off("mouseleave", layer, onLeave);
+      }
     };
   }, []);
 
@@ -1257,6 +1331,12 @@ export function MapColumn({
   return (
     <div className="relative w-full h-full bg-bg-map">
       <div ref={containerRef} className="w-full h-full" />
+
+      {/* TEMPORARY TEST HARNESS — exercises the two-layer map's category
+          filters. Not a proposed UI; remove with the real filter surface. */}
+      {activeDay && (
+        <PlaceCategoryToggles enabled={enabledCats} onToggle={toggleCat} />
+      )}
 
       {mapInstance && (
         <UserLocationLayer

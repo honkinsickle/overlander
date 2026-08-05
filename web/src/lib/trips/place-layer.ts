@@ -1,4 +1,18 @@
 import type { CorridorPlace } from "@/components/trip/day-detail-corridor";
+import {
+  BROWSE_CARD_CATEGORIES,
+  type BrowseCardCategory,
+} from "@/lib/trip-browse/palette";
+
+const KNOWN_CATEGORIES = new Set<string>(BROWSE_CARD_CATEGORIES);
+
+/** Clamp a tile category to the canonical 9 so the map's `icon-image`
+ *  expression always resolves to a registered image. placePool already maps
+ *  `overnight → camping` and defaults missing to `interest`; this is the
+ *  belt-and-braces for any out-of-vocabulary value a stored payload might carry. */
+function normalizeCategory(c: string): BrowseCardCategory {
+  return (KNOWN_CATEGORIES.has(c) ? c : "interest") as BrowseCardCategory;
+}
 
 /**
  * Build the GeoJSON FeatureCollection for the active day's place pool, plotted
@@ -20,6 +34,13 @@ export type PlaceFeatureProps = {
   id: string;
   title: string;
   category: string;
+  /** curated key stop OR user/authored waypoint → the PROMINENT layer (above);
+   *  everything else → the POOL layer (below). Computed here, not stored — see
+   *  the two-layer map design. `curated` is a segmentSuggestions-only flag set
+   *  by the generation bake; `removable` is placePool's marker for the waypoints
+   *  source. The two layers filter on `prominent == true` / `!= true`, a
+   *  complementary partition so no feature renders twice. */
+  prominent: boolean;
 };
 
 export function placesToFeatureCollection(
@@ -41,7 +62,12 @@ export function placesToFeatureCollection(
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [c[0], c[1]] },
-      properties: { id: p.id, title: p.title, category: p.category },
+      properties: {
+        id: p.id,
+        title: p.title,
+        category: normalizeCategory(p.category),
+        prominent: Boolean(p.curated) || Boolean(p.removable),
+      },
     });
   }
   return { type: "FeatureCollection", features };

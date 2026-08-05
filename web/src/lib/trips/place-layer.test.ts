@@ -62,3 +62,54 @@ test("malformed coords (NaN, wrong length) are skipped", () => {
     ["ok"],
   );
 });
+
+// ── prominent discriminator ─────────────────────────────────────────────────
+// prominent = curated OR fromWaypoints, computed at render. curated is set only
+// by the generation bake on segmentSuggestions; a waypoint tile is flagged
+// `removable: true` in placePool (its only marker of the waypoints source).
+
+test("prominent: a curated tile is prominent", () => {
+  const fc = placesToFeatureCollection([
+    { ...tile("c", [-122, 45]), curated: true },
+  ]);
+  assert.equal(fc.features[0].properties.prominent, true);
+});
+
+test("prominent: a waypoint tile (removable) is prominent", () => {
+  const fc = placesToFeatureCollection([
+    { ...tile("w", [-122, 45]), removable: true },
+  ]);
+  assert.equal(fc.features[0].properties.prominent, true);
+});
+
+test("prominent: a plain pool tile (neither curated nor removable) is not prominent", () => {
+  const fc = placesToFeatureCollection([tile("p", [-122, 45])]);
+  assert.equal(fc.features[0].properties.prominent, false);
+});
+
+test("prominent: every feature carries a boolean prominent (complementary partition)", () => {
+  const fc = placesToFeatureCollection([
+    { ...tile("a", [-122, 45]), curated: true },
+    { ...tile("b", [-121, 45]), removable: true },
+    tile("c", [-120, 45]),
+  ]);
+  assert.deepEqual(
+    fc.features.map((f) => f.properties.prominent),
+    [true, true, false],
+  );
+});
+
+// ── category normalization (icon-image must always resolve) ──────────────────
+test("category: a known category passes through", () => {
+  const fc = placesToFeatureCollection([
+    { ...tile("s", [-122, 45]), category: "camping" },
+  ]);
+  assert.equal(fc.features[0].properties.category, "camping");
+});
+
+test("category: an unknown category clamps to interest so icon-image resolves", () => {
+  const fc = placesToFeatureCollection([
+    { ...tile("x", [-122, 45]), category: "gas" as CorridorPlace["category"] },
+  ]);
+  assert.equal(fc.features[0].properties.category, "interest");
+});
