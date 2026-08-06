@@ -50,10 +50,23 @@ function desiredPhoto(row: Row): ReturnType<typeof npsPhotoFromImages> {
   return npsPhotoFromImages(images as Parameters<typeof npsPhotoFromImages>[0]);
 }
 
-/** True when the stored normalized_payload.photo already matches `want`. */
-function alreadyMatches(row: Row, want: unknown): boolean {
-  const cur = (row.normalized_payload ?? {}).photo ?? null;
-  return JSON.stringify(cur) === JSON.stringify(want);
+/** True when the stored normalized_payload.photo already matches `want`. Field-
+ *  wise, NOT JSON.stringify — postgres jsonb does not preserve key order, so a
+ *  stringify compare re-writes every row on every run (not idempotent). */
+function alreadyMatches(
+  row: Row,
+  want: ReturnType<typeof npsPhotoFromImages>,
+): boolean {
+  const cur = ((row.normalized_payload ?? {}).photo ?? null) as
+    | { url?: unknown; altText?: unknown; credit?: unknown }
+    | null;
+  if (want === null) return cur === null;
+  if (cur === null) return false;
+  return (
+    cur.url === want.url &&
+    (cur.altText ?? null) === want.altText &&
+    (cur.credit ?? null) === want.credit
+  );
 }
 
 async function scan(
