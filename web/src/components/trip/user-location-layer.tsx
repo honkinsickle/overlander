@@ -5,6 +5,17 @@ import mapboxgl from "mapbox-gl";
 import { useUserLocation } from "@/lib/location/use-user-location";
 import { snapToRoute } from "@/lib/location/snap-to-route";
 
+// ───────────────────────────────────────────────────────────────────────────
+// TEMP FOLLOW INSTRUMENTATION — strip by deleting this block + every flog(...)
+// call. Grep tag: [FOLLOW-DBG]. Flip FOLLOW_DEBUG to silence without removing.
+const FOLLOW_DEBUG = true;
+function flog(event: string, data?: Record<string, unknown>) {
+  if (!FOLLOW_DEBUG) return;
+  // eslint-disable-next-line no-console
+  console.log("[FOLLOW-DBG]", event, data ?? {});
+}
+// ───────────────────────────────────────────────────────────────────────────
+
 /** Distance from the planned route (mi) within which the user-location
  *  marker is snapped onto the polyline. Beyond this, raw GPS is shown.
  *  Chosen empirically: typical highway GPS noise is <0.1mi, so 0.25mi
@@ -47,6 +58,7 @@ function panelAwareFly(
       essential: true,
       padding: { top: 0, right: 0, bottom: bottomPad, left: 0 },
     };
+    flog("camera:apply", { mode, coord, zoom, bottomPad }); // [FOLLOW-DBG]
     if (mode === "ease") map.easeTo(opts);
     else map.flyTo(opts);
   }, 0);
@@ -125,6 +137,12 @@ export function UserLocationLayer({
   // grant. Cleared after that first zoom; later follow updates keep the zoom.
   const pendingCenterZoomRef = useRef(false);
 
+  // [FOLLOW-DBG] log every true<->false transition of follow so the log shows
+  // exactly when (and, paired with map:gesture above, why) it flips.
+  useEffect(() => {
+    flog("following:changed", { following });
+  }, [following]);
+
   // Single effect handles mount, position updates, heading updates, and
   // follow-mode camera pan. Marker is created the first time we have a
   // position (mapbox `addTo` reads the marker's internal lngLat, so we
@@ -159,6 +177,18 @@ export function UserLocationLayer({
       .getElement()
       .style.setProperty("pointer-events", "none", "important");
     markerRef.current.setHeading(heading);
+    // [FOLLOW-DBG] every position update: is follow on, will the camera move,
+    // what coord/snap-state feeds it.
+    flog("position:update", {
+      following,
+      cameraWillMove: following,
+      coord: snap.coord,
+      snapped: snap.snapped,
+      offRouteMi: Number.isFinite(snap.offRouteMi)
+        ? Number(snap.offRouteMi.toFixed(3))
+        : snap.offRouteMi,
+      pendingZoom: pendingCenterZoomRef.current,
+    });
     if (following) {
       if (pendingCenterZoomRef.current) {
         // First fix after a locate tap: zoom straight to the location level
@@ -199,7 +229,15 @@ export function UserLocationLayer({
     const onUserMove = (e: unknown) => {
       // `zoomstart`/`dragstart` carry an `originalEvent` only when the
       // user kicked them off; programmatic flyTo/easeTo omits it.
-      if ((e as { originalEvent?: Event }).originalEvent) {
+      const hasOriginal = !!(e as { originalEvent?: Event }).originalEvent;
+      // [FOLLOW-DBG] THE key line for step 2: does a programmatic follow move
+      // arrive here carrying an originalEvent (iOS) and self-cancel follow?
+      flog("map:gesture", {
+        type: (e as { type?: string }).type,
+        hasOriginalEvent: hasOriginal,
+        willCancelFollow: hasOriginal,
+      });
+      if (hasOriginal) {
         setFollowing(false);
       }
     };
@@ -219,6 +257,7 @@ export function UserLocationLayer({
     const onSetFollow = (e: Event) => {
       const detail = (e as CustomEvent<{ follow: boolean }>).detail;
       if (!detail) return;
+      flog("trip:setFollow", { follow: detail.follow }); // [FOLLOW-DBG]
       if (detail.follow) {
         // Always call request(): idempotent on watching/unsupported, retries
         // watchPosition on denied so a user who clears the URL-bar denial
