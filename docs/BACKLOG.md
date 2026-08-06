@@ -5,6 +5,33 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## NPS photo backfill — `scan()` pagination-while-mutate defect (found 2026-08-06)
+
+`data/scripts/backfill-nps-photo.ts` `scan()` paginates `.range(from, from+999)`
+(filtered `source_id='nps'`) with **no `.order()`**, and issues row UPDATEs inside
+the same loop it pages over. Each UPDATE rewrites a heap tuple, shifting the
+physical order of the unordered scan, so later OFFSET windows **silently skip (or
+double-count) rows** — a single apply under-writes.
+
+Measured on the PROD run (2026-08-06): one `--confirm` left **738** of 4451 photo
+rows unwritten, the next left **47**; convergence to `changed: 0` needed **three
+apply→dry-run passes**. Mid-apply counts are also unreliable — `withPhoto` read
+**4507** during a write pass vs a stable **4451** in every read-only dry-run
+(double-counted rows). The final state is correct and idempotent; only *reaching*
+it took a loop.
+
+**Fix:** either (a) collect all ids in one read-only pass, then update by id; or
+(b) keyset-paginate (`.order("id")` + `WHERE id > lastId` + `LIMIT`), which is
+immune to mid-scan tuple movement. **The same footgun will bite any future corpus
+backfill that paginates-while-writing** — worth a shared helper, not a per-script
+fix.
+
+**Operator workaround until fixed:** loop `--confirm` → `--dry-run` until the
+dry-run reports `changed: 0`; never trust a single pass. And prefer the
+no-`.env`-swap prod-run method: `npx tsx --env-file=$HOME/.config/overlander/env-backups/.env.production-backup scripts/backfill-nps-photo.ts …`
+from `data/`, which points only that process at prod (`data/.env` stays TEST) while
+the `--confirm` guard still fires.
+
 ## Plot day-detail places on the map — SHIPPED; follow-ups (2026-08-05)
 
 The feature shipped in #187 (scoping + harnesses), #188 (tile layer + runbook
