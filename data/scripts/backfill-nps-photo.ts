@@ -69,18 +69,28 @@ function alreadyMatches(
   );
 }
 
-async function scan(
+export async function scan(
   db: SupabaseClient,
   apply: boolean,
+  pageSize: number = PAGE_SIZE,
 ): Promise<{ scanned: number; withPhoto: number; changed: number; skipped: number }> {
   const stats = { scanned: 0, withPhoto: 0, changed: 0, skipped: 0 };
+
+  // Phase 1 — READ ONLY. Enumerate every nps row in a stable id order and decide
+  // what each needs. No writes happen here, so pagination cannot be perturbed
+  // mid-scan. (The prior code paginated `.range()` with no `.order()` while
+  // UPDATE-ing rows in the same loop; each write relocated a heap tuple, so the
+  // offset windows skipped rows and a single pass under-wrote.) `.order("id")`
+  // pins the read order; deferring the write to Phase 2 removes the perturbation.
+  const pending: { id: string; normalized: Record<string, unknown> }[] = [];
   let from = 0;
   for (;;) {
     const { data, error } = await db
       .from("source_record")
       .select("id, raw_payload, normalized_payload")
       .eq("source_id", "nps")
-      .range(from, from + PAGE_SIZE - 1);
+      .order("id")
+      .range(from, from + pageSize - 1);
     if (error) throw new Error(`fetch nps source_records: ${error.message}`);
     const rows = (data ?? []) as Row[];
     if (rows.length === 0) break;
@@ -94,18 +104,27 @@ async function scan(
         continue;
       }
       stats.changed += 1;
-      if (apply) {
-        const merged = { ...(row.normalized_payload ?? {}), photo };
-        const { error: upErr } = await db
-          .from("source_record")
-          .update({ normalized_payload: merged })
-          .eq("id", row.id);
-        if (upErr) throw new Error(`update ${row.id}: ${upErr.message}`);
-      }
+      pending.push({
+        id: row.id,
+        normalized: { ...(row.normalized_payload ?? {}), photo },
+      });
     }
-    if (rows.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
+    if (rows.length < pageSize) break;
+    from += pageSize;
   }
+
+  // Phase 2 — WRITE by id. Phase 1's enumeration is already complete, so these
+  // updates cannot skip a row: a single pass writes every changed row.
+  if (apply) {
+    for (const { id, normalized } of pending) {
+      const { error: upErr } = await db
+        .from("source_record")
+        .update({ normalized_payload: normalized })
+        .eq("id", id);
+      if (upErr) throw new Error(`update ${id}: ${upErr.message}`);
+    }
+  }
+
   return stats;
 }
 
@@ -140,7 +159,9 @@ async function main(): Promise<void> {
   console.log(JSON.stringify({ target: ref, apply, ...stats }, null, 2));
 }
 
-main().catch((err) => {
-  logger.error({ err }, "backfill-nps-photo: fatal");
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    logger.error({ err }, "backfill-nps-photo: fatal");
+    process.exit(1);
+  });
+}
