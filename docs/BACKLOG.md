@@ -5,9 +5,17 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
-## NPS photo backfill — `scan()` pagination-while-mutate defect (found 2026-08-06)
+## NPS photo backfill — `scan()` pagination-while-mutate defect — RESOLVED (fix in #196, 2026-08-06)
 
-`data/scripts/backfill-nps-photo.ts` `scan()` paginates `.range(from, from+999)`
+**Fixed** in `feat/nps-corpus-imagery` (`a670dfe`): `scan()` is now two-phase —
+Phase 1 reads every nps row in a stable `.order("id")` pass and collects the
+writes; Phase 2 updates by id. The write phase can no longer perturb the
+enumeration, so one apply reaches `changed: 0`. A vitest fake that relocates a
+row on UPDATE proves it: at `pageSize=2` the old code scanned 4 of 6 rows, the
+fix scans all 6 (RED→GREEN, ms, no volume). Original defect kept below for the
+record.
+
+`data/scripts/backfill-nps-photo.ts` `scan()` paginated `.range(from, from+999)`
 (filtered `source_id='nps'`) with **no `.order()`**, and issues row UPDATEs inside
 the same loop it pages over. Each UPDATE rewrites a heap tuple, shifting the
 physical order of the unordered scan, so later OFFSET windows **silently skip (or
