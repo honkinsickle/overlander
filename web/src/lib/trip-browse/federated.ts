@@ -125,6 +125,11 @@ export type MasterPlaceRow = {
    *  Optional: the corridor RPC surfaces it (via a join); the by-id search
    *  hydrate path (hydrate.ts) doesn't, and doesn't need it. */
   google_place_id?: string | null;
+  /** Linked nps source_record normalized_payload.photo.url (Route A corpus
+   *  imagery), or null when no nps source carries a photo. Lets NPS-only tiles
+   *  — which have no placeId and never hydrate a Google photo — still show a
+   *  real image. Same optionality as google_place_id: the corridor RPC joins it. */
+  nps_photo_url?: string | null;
 };
 
 function prettyCategory(c: string): string {
@@ -201,6 +206,10 @@ export function mapMasterPlaceRow(
     overlanderTags: row.overlander_tags,
     // Hydrate key: present only when a google source backs this place.
     ...(row.google_place_id ? { placeId: row.google_place_id } : {}),
+    // Corpus-native photo (NPS Route A): present only when an nps source carries
+    // one AND the tile has no Google photo path. The card renders any photoUrl
+    // identically, so a corpus photo needs no render change.
+    ...(row.nps_photo_url ? { photoUrl: row.nps_photo_url } : {}),
   };
 }
 

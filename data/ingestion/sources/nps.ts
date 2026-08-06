@@ -55,6 +55,22 @@ const PlaceSchema = z
     longDescription: z.string().nullable().optional(),
     bodyText: z.string().nullable().optional(),
     tags: z.array(z.string()).optional(),
+    // The API returns an images array (cropped_image URLs + altText + credit).
+    // .passthrough() already kept it in raw_payload; parse it so normalizePlace
+    // can promote a photo. altText/credit ride along for a later render choice —
+    // licensing is deferred, not ignored (NPS credits vary: NPS public domain
+    // vs third-party CC BY-SA). See the NPS-photo backlog item.
+    images: z
+      .array(
+        z
+          .object({
+            url: z.string().nullable().optional(),
+            altText: z.string().nullable().optional(),
+            credit: z.string().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
     relatedParks: z
       .array(
         z
@@ -198,7 +214,25 @@ function parseLatLng(latStr: unknown, lngStr: unknown): [number, number] | null 
   return [lng, lat];
 }
 
-function normalizePlace(p: Place): Record<string, unknown> {
+/** The photo shape stored on `source_record.normalized_payload.photo` (Route A —
+ *  no master_place column). Carries `altText` + `credit` now so displaying them
+ *  later is a render choice, not another backfill. `null` when the place has no
+ *  usable image url. Pure; the backfill script reuses it off raw_payload. */
+export type NpsPhoto = { url: string; altText: string | null; credit: string | null };
+
+export function npsPhotoFromImages(
+  images: Place["images"] | undefined,
+): NpsPhoto | null {
+  const first = images?.find((im) => typeof im.url === "string" && im.url.length > 0);
+  if (!first || typeof first.url !== "string") return null;
+  return {
+    url: first.url,
+    altText: first.altText ?? null,
+    credit: first.credit ?? null,
+  };
+}
+
+export function normalizePlace(p: Place): Record<string, unknown> {
   return {
     // canonical_name from NPS's title field. NPS is the authority for federal
     // place names (priority 1 in field_precedence) — without this, master_place
@@ -210,6 +244,10 @@ function normalizePlace(p: Place): Record<string, unknown> {
     access: null,
     amenities: null,
     hours: null,
+    // Route A: photo lives here (not on master_place). pois_along_corridor reads
+    // `normalized_payload->'photo'->>'url'` via a LEFT JOIN LATERAL; the card
+    // renders whatever photoUrl arrives, so no render change is needed.
+    photo: npsPhotoFromImages(p.images),
   };
 }
 
