@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-05
+# STATE — `main` · 2026-08-06
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,39 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-06 — NPS corpus imagery LIVE end-to-end on PROD (#196 + migration + backfill)
+
+#196 merged **and** the migration is applied to **both TEST and PROD** and the
+backfill run on **PROD** — a materially different state from "merged." The Route A
+chain is live end to end `[queried PROD 2026-08-06]`:
+
+- the nps ingester promotes `source_record.normalized_payload.photo` (`url`,
+  `altText`, `credit`) — Route A, no `master_place` column;
+- backfill applied to PROD: **4,451 of 4,837** nps rows carry `photo.url`, converged
+  and idempotent;
+- `pois_along_corridor` returns `nps_photo_url` (migration on TEST **and** PROD,
+  verified by query on both);
+- `mapMasterPlaceRow` maps it → `photoUrl`; the card renders any `photoUrl`
+  regardless of source — **no render change**;
+- verified on PROD: the Portland corridor query returns the "Voices" and "Honoring
+  our Salmon" artworks with `nps.gov` URLs (**9 of 10** tiles; River Guardian on the
+  Willamette has no NPS image — correct, not a failure).
+
+Architecture: `docs/architecture/place-render-model.md` §4a (Route A — corpus-native
+photo, and why `normalized_payload` not a `master_place` column).
+
+**THE GAP — existing trips do NOT benefit.** A rest day's `segmentSuggestions` are
+BAKED at insert by `insertRestDay` and stored in the payload; the scroll renders them
+from storage with **no live re-query** `[read: repository.ts insertRestDay →
+fetchCorpusForSegment → mapMasterPlaceRow]`. So PROD `b97d06bf` day 4 (created
+2026-08-03) has 10 tiles with **NO `photoUrl` key at all**, though **9 of the 10** are
+nps master_places whose corpus photo is populated on PROD today `[queried PROD]`. A
+fresh rest-day insert would carry them; the stored tiles need regeneration — not a code
+fix (the mapping is correct and live). **This is the SECOND instance of the
+`milesFromStart` pattern** — data baked into payloads, correct going forward, stale in
+what already exists (see §`milesFromStart` below; `BACKLOG.md` §Refreshing stored
+suggestions).
 
 ## 2026-08-05 — day-bounds camera fit SHIPPED (#194, on `main`)
 

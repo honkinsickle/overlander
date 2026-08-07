@@ -572,6 +572,50 @@ not an artifact of a local key.
 not raised. See the banner at §4.4. Reasoning and the new unbounded-request-size
 defect: `docs/BACKLOG.md`.
 
+### 4.5 Route A — a corpus-native `photoUrl` (NPS imagery, no hydration) — #196
+
+The whole of §4 is the **Google** photo path: a tile earns a photo only if it has a
+`placeId` and survives hydration. NPS-only tiles have no google source → no `placeId`
+→ never hydrate → placeholder block. **Route A gives them a `photoUrl` from the corpus
+itself, bypassing hydration entirely.** `[read source: #196; queried PROD 2026-08-06]`
+
+The path, source → tile:
+
+1. **Ingest** — the NPS API already returns an `images[]` array; `PlaceSchema` now
+   parses it and `normalizePlace` promotes a **photo object** onto
+   `source_record.normalized_payload.photo` = `{ url, altText, credit }`
+   (`data/ingestion/sources/nps.ts`). A backfill populated existing rows from their own
+   `raw_payload` (**4,451 / 4,837** nps rows on PROD).
+2. **RPC** — `pois_along_corridor` gains a second `LEFT JOIN LATERAL` on the nps
+   `source_record`, returning `nps_photo_url = normalized_payload->'photo'->>'url'`
+   (NULL when no nps source carries one) — mirroring the existing `google_place_id`
+   lateral.
+3. **Projector** — `mapMasterPlaceRow` maps `nps_photo_url → BrowsePlace.photoUrl`
+   (`web/src/lib/trip-browse/federated.ts`). This one projector feeds **both** the live
+   browse panel and the generation/rest-day bake (`bake-corridors.ts`), so both paths
+   gain the photo.
+4. **Render** — **no change.** The card already draws any `photoUrl` as the hero
+   (§3.2), photoless-or-not; a corpus photo renders identically to a hydrated one.
+
+**Why `source_record.normalized_payload`, NOT a `master_place` column (Route A vs B).**
+`master_place` has no image column; adding one (Route B) would be a migration whose
+value must be promoted by `recompute_master_place()` through a **new `field_precedence`
+row** — and PROD is missing the `google_resolved` field_precedence migration already
+(`BACKLOG.md`), so a column route drags in that ledger gap. Route A stores the photo on
+the source record and has the RPC read it directly via the lateral: **no `master_place`
+schema change, no `recompute_master_place`, no `field_precedence`, no PROD-ledger
+entanglement.** The cost is that the join lives in the RPC rather than a promoted
+column — deliberate, and cheap.
+
+**The catch it does NOT fix — baked payloads.** A rest day's tiles are baked at insert
+and rendered from storage (§2 / `insertRestDay`), so trips created before the migration
+keep photoless tiles even though the corpus photo now exists. Corpus-native `photoUrl`
+reaches **new** inserts and the **live** browse path, not stored suggestions. Second
+instance of the `milesFromStart` baked-stale pattern — `BACKLOG.md` §Refreshing stored
+suggestions. Licensing (per-image credits vary — NPS public domain vs third-party CC
+BY-SA) is measured-and-deferred: `credit`/`altText` ride on `photo` for a later render
+choice. `BACKLOG.md` §NPS corpus imagery.
+
 ---
 
 ## 5. "yoTrippin Verified" — the gate never closes

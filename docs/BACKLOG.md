@@ -40,6 +40,42 @@ no-`.env`-swap prod-run method: `npx tsx --env-file=$HOME/.config/overlander/env
 from `data/`, which points only that process at prod (`data/.env` stays TEST) while
 the `--confirm` guard still fires.
 
+## NPS corpus imagery (Route A) — SHIPPED + live on PROD; follow-ups (2026-08-06)
+
+Route A is live end to end (`STATE.md` §2026-08-06; architecture
+`place-render-model.md` §4a). Parked follow-ups:
+
+- **REFRESHING STORED SUGGESTIONS — the question, not the answer.** A rest day's
+  `segmentSuggestions` are baked at insert and stored; **no backfill path exists for
+  baked payload tiles**, so only newly-inserted days benefit from corpus improvements
+  (a new photo, a corrected mile, a better name). `b97d06bf` day 4 is the live example
+  — 9 of 10 tiles now have a corpus photo that the stored payload can't reach `[queried
+  PROD 2026-08-06]`. **Should stored suggestions ever be re-queried, and on what
+  trigger** (day open? trip open? an explicit "refresh"? a migration-triggered sweep)?
+  Re-querying live loses the insert-time snapshot semantics; a sweep is a payload
+  rewrite across every trip. Open — the same shape as the `milesFromStart` baked-stale
+  debt (§below), now the second instance of the pattern.
+
+- **NPS image licensing — measured, deferred.** NPS `images` carry per-image credits
+  that DIFFER: one Portland record was **CC BY-SA 2.0 from a third-party photographer**
+  (`"River Spirits" by brx0`), another (Joshua Tree) was **NPS public domain**
+  (`NPS/Hannah Schwalbe`) `[queried NPS API + PROD, 2026-08-05/06]`. `credit` and
+  `altText` are carried through the ingest onto `normalized_payload.photo` so
+  *displaying* them later is a render change, not another backfill. **Not a blocker
+  today — Adam is the only user; richness over licensing** was the deliberate call.
+  Revisit before any public launch that surfaces NPS imagery.
+
+- **NPS-specific — does NOT generalize.** ridb `raw_payload` has a `MEDIA` field that
+  `.passthrough()` preserved, but **0 of 3,961** carry a URL; `parks_canada` and `osm`
+  have no image field at all `[queried PROD, 2026-08-05]`. So Route A helps nps only;
+  a "corpus imagery" generalization would need per-source work, and the other sources
+  have nothing to promote.
+
+- **River Guardian on the Willamette stays a placeholder — correct, not a failure.**
+  One of the six Lillian Pitt records has **no NPS image**, so its tile keeps the
+  category block. Expected: Route A surfaces imagery that exists, it does not invent
+  it (grounding rule holds).
+
 ## Plot day-detail places on the map — SHIPPED; follow-ups (2026-08-05)
 
 The feature shipped in #187 (scoping + harnesses), #188 (tile layer + runbook
