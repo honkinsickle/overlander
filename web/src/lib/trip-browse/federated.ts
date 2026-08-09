@@ -125,10 +125,12 @@ export type MasterPlaceRow = {
    *  hydrate key. Optional: the corridor RPC surfaces it (via a join); the
    *  by-id search hydrate path (hydrate.ts) doesn't, and doesn't need it. */
   google_place_id?: string | null;
-  /** Linked nps source_record normalized_payload.photo.url (Route A corpus
-   *  imagery), or null when no nps source carries a photo. Lets NPS-only tiles
-   *  — which have no placeId and never hydrate a Google photo — still show a
-   *  real image. Same optionality as google_place_id: the corridor RPC joins it. */
+  /** Corpus-native photo url (Route A), sourced from an nps or ridb
+   *  source_record normalized_payload.photo.url. NPS is preferred when both
+   *  are present. Column alias retained for compat with baked corridor
+   *  payloads. Null when no image-family source carries a photo for this
+   *  master_place. Same optionality as google_place_id: the corridor RPC
+   *  joins it. */
   nps_photo_url?: string | null;
 };
 
