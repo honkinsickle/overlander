@@ -89,6 +89,38 @@ const RecAreaSchema = z
   })
   .passthrough();
 
+// RIDBv1EntityMedia — one entry from /facilities/{id}/media or /recareas/{id}/media.
+// The RIDB docs list URL / MediaType / Title / Credits / IsPrimary. MediaType is
+// documented as one of Image / Map / Video / PDF but real responses have
+// occasionally shown mixed casing, so match case-insensitively downstream.
+// .passthrough() keeps any additional fields (EntityMediaID / Description / …)
+// available in raw_payload for later use.
+const MediaSchema = z
+  .object({
+    URL: z.string().nullable().optional(),
+    MediaType: z.string().nullable().optional(),
+    Title: z.string().nullable().optional(),
+    Credits: z.string().nullable().optional(),
+    IsPrimary: z.union([z.boolean(), z.string()]).nullable().optional(),
+  })
+  .passthrough();
+
+type MediaEntry = z.infer<typeof MediaSchema>;
+
+const MediaResponseSchema = z.object({
+  RECDATA: z.array(MediaSchema),
+  METADATA: z
+    .object({
+      RESULTS: z
+        .object({
+          CURRENT_COUNT: z.number().optional(),
+          TOTAL_COUNT: z.number().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
 const ResponseSchema = z.object({
   RECDATA: z.array(z.unknown()),
   METADATA: z
@@ -167,6 +199,83 @@ async function fetchPaginated(
   return out;
 }
 
+// ───── Entity media (Route A for RIDB) ────────────────────────────────
+
+/** The photo shape stored on `source_record.normalized_payload.photo`. Mirrors
+ *  NpsPhoto so pois_along_corridor's photo lateral can source either source
+ *  interchangeably. `null` when the entity has no usable image. Pure — the
+ *  backfill script reuses ridbPhotoFromMedia off raw_payload.media. */
+export type RidbPhoto = { url: string; altText: string | null; credit: string | null };
+
+/**
+ * Select a photo from a MEDIA response's RECDATA. Preference:
+ *   1. IsPrimary === true (or "true") with MediaType === "image" and a URL
+ *   2. First MediaType === "image" with a URL
+ *   3. null
+ * Case-insensitive on MediaType.
+ */
+export function ridbPhotoFromMedia(
+  media: readonly unknown[] | undefined | null,
+): RidbPhoto | null {
+  if (!media || media.length === 0) return null;
+  const parsed: MediaEntry[] = [];
+  for (const raw of media) {
+    const p = MediaSchema.safeParse(raw);
+    if (p.success) parsed.push(p.data);
+  }
+  const isImage = (m: MediaEntry): boolean =>
+    typeof m.MediaType === "string" && m.MediaType.toLowerCase() === "image";
+  const hasUrl = (m: MediaEntry): boolean =>
+    typeof m.URL === "string" && (m.URL as string).length > 0;
+  const isPrimary = (m: MediaEntry): boolean =>
+    m.IsPrimary === true || m.IsPrimary === "true";
+
+  const primary = parsed.find((m) => isImage(m) && hasUrl(m) && isPrimary(m));
+  const first = primary ?? parsed.find((m) => isImage(m) && hasUrl(m));
+  if (!first || typeof first.URL !== "string") return null;
+  return {
+    url: first.URL,
+    altText: first.Title ?? null,
+    credit: first.Credits ?? null,
+  };
+}
+
+/**
+ * Fetch the raw MEDIA RECDATA for one facility or recarea. Returns [] when the
+ * endpoint 404s or returns no records (entities without media are common —
+ * RIDB reports 0 media for most rows). Non-2xx responses OTHER than 404 throw
+ * through defaultRetry so transient upstream failures are retried.
+ */
+export async function fetchEntityMedia(
+  entity: "facilities" | "recareas",
+  id: string,
+): Promise<unknown[]> {
+  const apiKey = requireApiKey();
+  return await defaultRetry(async () => {
+    const url = `${RIDB_BASE}/${entity}/${encodeURIComponent(id)}/media`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: apiKey,
+        Accept: "application/json",
+        "User-Agent": USER_AGENT,
+      },
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`RIDB ${entity}/${id}/media ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const json = await res.json().catch(() => null);
+    if (!json) return [];
+    const parsed = MediaResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      logger.warn({ id, entity, err: parsed.error.flatten() }, "ridb: media response failed validation");
+      return [];
+    }
+    return parsed.data.RECDATA;
+  }, `ridb.${entity}.${id}.media`);
+}
+
 // ───── Normalization ───────────────────────────────────────────────────
 
 function buildOverlanderTags(parentOrgIdRaw: number | string | null | undefined): string[] {
@@ -191,7 +300,11 @@ function snakeCase(s: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function normalizeFacility(f: Facility, cleanName: string): Record<string, unknown> {
+export function normalizeFacility(
+  f: Facility,
+  cleanName: string,
+  photo: RidbPhoto | null = null,
+): Record<string, unknown> {
   const contact = compact({
     phone: f.FacilityPhone,
     email: f.FacilityEmail,
@@ -209,10 +322,18 @@ function normalizeFacility(f: Facility, cleanName: string): Record<string, unkno
     access: Object.keys(access).length ? access : null,
     amenities: null,
     hours: null,
+    // Route A photo, mirroring nps.ts: photo lives on normalized_payload,
+    // not on master_place. pois_along_corridor reads normalized_payload
+    // ->'photo'->>'url' via LEFT JOIN LATERAL (widened to include 'ridb').
+    photo,
   };
 }
 
-function normalizeRecArea(r: RecArea, cleanName: string): Record<string, unknown> {
+export function normalizeRecArea(
+  r: RecArea,
+  cleanName: string,
+  photo: RidbPhoto | null = null,
+): Record<string, unknown> {
   const contact = compact({
     phone: r.RecAreaPhone,
     email: r.RecAreaEmail,
@@ -226,6 +347,7 @@ function normalizeRecArea(r: RecArea, cleanName: string): Record<string, unknown
     access: null,
     amenities: null,
     hours: null,
+    photo,
   };
 }
 
@@ -252,12 +374,26 @@ async function persistFacility(
   const externalId = `ridb:facility:${f.FacilityID}`;
   const inferredCategory = f.FacilityTypeDescription ? snakeCase(f.FacilityTypeDescription) : null;
   const cleanName = titleCase(f.FacilityName);
-  const normalized = normalizeFacility(f, cleanName);
 
   if (dryRun) {
+    const normalized = normalizeFacility(f, cleanName);
     logger.debug({ externalId, name: cleanName, category: inferredCategory }, "ridb: dry-run");
+    void normalized;
     return "inserted";
   }
+
+  // Fetch media (Route A). Non-fatal: an image failure or missing media falls
+  // back to photo=null and the row still upserts. RIDB reports 0 media for the
+  // majority of rows, so a null photo is the common case, not a defect.
+  let media: unknown[] = [];
+  try {
+    media = await fetchEntityMedia("facilities", String(f.FacilityID));
+  } catch (err) {
+    logger.warn({ err, externalId }, "ridb: facility media fetch failed — persisting without photo");
+  }
+  const photo = ridbPhotoFromMedia(media);
+  const normalized = normalizeFacility(f, cleanName, photo);
+
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
@@ -265,7 +401,7 @@ async function persistFacility(
       name: cleanName,
       inferredCategory,
       point: [f.FacilityLongitude, f.FacilityLatitude],
-      rawPayload: { facility: f, fetched_at: new Date().toISOString() },
+      rawPayload: { facility: f, media, fetched_at: new Date().toISOString() },
       normalizedPayload: normalized,
       sourceQualityScore: SOURCE_QUALITY_SCORE,
     });
@@ -292,12 +428,23 @@ async function persistRecArea(
 
   const externalId = `ridb:recarea:${r.RecAreaID}`;
   const cleanName = titleCase(r.RecAreaName);
-  const normalized = normalizeRecArea(r, cleanName);
 
   if (dryRun) {
+    const normalized = normalizeRecArea(r, cleanName);
     logger.debug({ externalId, name: cleanName }, "ridb: dry-run");
+    void normalized;
     return "inserted";
   }
+
+  let media: unknown[] = [];
+  try {
+    media = await fetchEntityMedia("recareas", String(r.RecAreaID));
+  } catch (err) {
+    logger.warn({ err, externalId }, "ridb: recarea media fetch failed — persisting without photo");
+  }
+  const photo = ridbPhotoFromMedia(media);
+  const normalized = normalizeRecArea(r, cleanName, photo);
+
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
@@ -305,7 +452,7 @@ async function persistRecArea(
       name: cleanName,
       inferredCategory: "recreation_area",
       point: [r.RecAreaLongitude, r.RecAreaLatitude],
-      rawPayload: { recarea: r, fetched_at: new Date().toISOString() },
+      rawPayload: { recarea: r, media, fetched_at: new Date().toISOString() },
       normalizedPayload: normalized,
       sourceQualityScore: SOURCE_QUALITY_SCORE,
     });
