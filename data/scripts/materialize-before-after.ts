@@ -22,7 +22,9 @@ const CACHE = join(HERE, "..", ".cache", "mat-baseline.json");
 async function snapshot() {
   const db = getDb();
   const ref = (process.env.SUPABASE_URL ?? "").match(/\/\/([^.]+)\./)?.[1];
-  if (ref !== "znldzjdatkogdktymtvi") throw new Error(`Refusing: not TEST (got ${ref})`);
+  if (ref !== "znldzjdatkogdktymtvi" && !process.argv.includes("--allow-prod")) {
+    throw new Error(`Refusing: not TEST (got ${ref}). Pass --allow-prod to explicitly authorize.`);
+  }
 
   const total = await db.from("master_place").select("id", { count: "exact", head: true });
   const searchable = await db

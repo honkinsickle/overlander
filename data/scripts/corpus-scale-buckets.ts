@@ -28,8 +28,11 @@ async function main() {
     auth: { persistSession: false },
   });
   const ref = (process.env.SUPABASE_URL ?? "").match(/\/\/([^.]+)\./)?.[1] ?? "unknown";
-  if (ref !== "znldzjdatkogdktymtvi") throw new Error(`Refusing: not TEST (got ${ref})`);
-  console.log(`[env] TEST ${ref}`);
+  const allowProd = process.argv.includes("--allow-prod");
+  if (ref !== "znldzjdatkogdktymtvi" && !allowProd) {
+    throw new Error(`Refusing: not TEST (got ${ref}). Pass --allow-prod to explicitly authorize a PROD read.`);
+  }
+  console.log(`[env] ${ref === "nqzeywzcowujzyegxbsr" ? "PROD" : "TEST"} ${ref}`);
 
   // 1. Enumerate every searchable non-land_status master_place id
   const searchableRows = await pageAll<{ id: string }>(async (from, to) => {
