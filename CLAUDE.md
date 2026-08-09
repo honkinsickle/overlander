@@ -271,6 +271,11 @@ actually touched what they describe. The `/wrap` command runs this pass.
       vacuous — a check that cannot fail is not evidence. Pair it with a
       deliberate negative: break the subject on purpose and confirm the
       instrument goes red.
+  - Name the scope of every negative claim and every count. "X does not exist" means "no hit
+    under the paths I searched" — list them, and prefer repo-root grep for absence proofs.
+    A count from a paginated / capped / prominence-ordered source is a SAMPLE — say so and
+    give the frame. When a report resembles population-level truth, it must be measured
+    population-level. Sampled numbers are fine; sampled numbers dressed as totals are not.
   - **A DOM-driven interaction test verifies WIRING, not REACHABILITY**
     `[measured 2026-08-05]`. Firing a control's handler — `querySelector(sel).click()`
     or dispatching its event — passes even when the control renders **behind another
