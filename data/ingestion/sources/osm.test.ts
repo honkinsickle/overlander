@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { _internals, ALL_FAMILIES, parseFamilies, type TagFamily } from "./osm.ts";
+import { _internals, ALL_FAMILIES, DEFAULT_FAMILIES, parseFamilies, type TagFamily } from "./osm.ts";
 
 const { inferCategory, normalizeOsm, buildOverpassQuery, bboxScope, areaScope } = _internals;
 
@@ -72,11 +72,13 @@ describe("buildOverpassQuery — tag-family flag", () => {
     leisure: '"leisure"~"^(park|nature_reserve)$"',
   };
 
-  it("default (no opts) emits every family's predicates — behaviour preserved", () => {
+  it("default (no opts) emits every DEFAULT family's predicates and OMITS shops", () => {
     const q = buildOverpassQuery(bbox);
-    for (const family of ALL_FAMILIES) {
+    for (const family of DEFAULT_FAMILIES) {
       expect(q, `family ${family} must be present in default query`).toContain(SIGIL[family]);
     }
+    // shops is defined but OFF by default (retail-quality rationale in osm.ts).
+    expect(q, "shops must NOT appear in default").not.toContain(SIGIL.shops);
     // Camping's variant clauses always ship with the camping family.
     expect(q).toContain('"backcountry"="yes"');
     expect(q).toContain('"informal"="yes"');
@@ -84,6 +86,25 @@ describe("buildOverpassQuery — tag-family flag", () => {
     expect(q).not.toContain("waste_disposal");
     // dump_station is present as sanitary_dump_station.
     expect(q).toContain("sanitary_dump_station");
+  });
+
+  it("shops is still available via explicit --families (opt-in), and only shops appears", () => {
+    const q = buildOverpassQuery(bbox, { families: ["shops"] });
+    expect(q).toContain(SIGIL.shops);
+    for (const other of ALL_FAMILIES) {
+      if (other === "shops") continue;
+      expect(q, `family ${other} must NOT appear when only shops is selected`).not.toContain(SIGIL[other]);
+    }
+  });
+
+  it("DEFAULT_FAMILIES excludes shops but ALL_FAMILIES includes it", () => {
+    expect(DEFAULT_FAMILIES).not.toContain("shops");
+    expect(ALL_FAMILIES).toContain("shops");
+    // Every other family should be in the default.
+    for (const f of ALL_FAMILIES) {
+      if (f === "shops") continue;
+      expect(DEFAULT_FAMILIES).toContain(f);
+    }
   });
 
   it("families: ['camping'] emits camping predicates and OMITS every other family", () => {

@@ -133,6 +133,9 @@ export type TagFamily =
   | "natural"
   | "leisure";
 
+/** Every family the adapter knows about. Used by parseFamilies to validate a
+ *  CLI --families argument. `shops` is defined here but excluded from
+ *  DEFAULT_FAMILIES — see the comment below. */
 export const ALL_FAMILIES: readonly TagFamily[] = [
   "camping",
   "tourism_misc",
@@ -143,6 +146,24 @@ export const ALL_FAMILIES: readonly TagFamily[] = [
   "natural",
   "leisure",
 ] as const;
+
+/** The families that run when --families is not passed. Excludes `shops`.
+ *
+ *  Retail rationale (measured 2026-08-10, UT + NV, `shop~^(supermarket|
+ *  convenience|outdoor|hardware)$` under ISO3166-2 area scope):
+ *  - 33.7% (UT) / 45.5% (NV) of retail nodes carry brand OR operator
+ *  - 31.6% / 26.7% carry opening_hours
+ *  - 35.9% / 30.9% carry ≥3 of (name, hours, phone, website, addr:street)
+ *  - 29.5% / 16.8% are name-only pins with no contact/hours/branding
+ *  The community's `shop=` completeness bottom-rung is a stub. Google Places
+ *  is the correct source for retail — its data model requires hours, phone,
+ *  and categories by design. OSM retail can still be fetched explicitly via
+ *  `--families shops` (kept for opt-in ingest); it is off by default so a
+ *  bare `--source osm` run doesn't spend materialize/ER cycles on sparse pins.
+ */
+export const DEFAULT_FAMILIES: readonly TagFamily[] = ALL_FAMILIES.filter(
+  (f): f is TagFamily => f !== "shops",
+);
 
 /** Predicates per family. `%SCOPE%` is substituted with the bbox or area filter
  *  at build time. Semantics preserve the original single-block builder — the
@@ -217,7 +238,7 @@ interface BuildOverpassQueryOpts {
 // output statement to `out body geom;` so each way carries its centerpoint.
 // Then teach elementCoords() to read `center` for non-node elements.
 function buildOverpassQuery(scope: QueryScope, opts: BuildOverpassQueryOpts = {}): string {
-  const families = opts.families ?? ALL_FAMILIES;
+  const families = opts.families ?? DEFAULT_FAMILIES;
   const predicates = families.flatMap((f) => FAMILY_PREDICATES[f]);
   const body = predicates.map((p) => `  ${p.replace("%SCOPE%", scope.predicate)};`).join("\n");
   const areaBinding =
