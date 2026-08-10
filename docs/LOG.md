@@ -12,6 +12,75 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-09
+
+- **STOP #1 delivered on the six-state PROD trim.** Three branches created off
+  `main`, all clean, none pushed: `fix/osm-tag-corrections` (waste_disposal →
+  sanitary_dump_station + backcountry/informal predicates, 11/11 osm tests
+  green), `chore/prod-scope-diagnostics` (five read-only phase3 scripts),
+  `feat/reference-trips-is-active` (migration + user-facing filter). TEST
+  reference_trips flipped: 8 of 9 rows `is_active=false`, only
+  `la-to-portland` remains active; every hidden row's payload is byte-intact
+  under an unfiltered read. Waiting on Adam's "go" for the PROD apply.
+- **PROD six-state classification MEASURED, not extrapolated.** 20,384 active
+  source_records → **12,320 in-scope, 8,064 out-of-scope**; **0 master_place
+  rows co-linked across the footprint boundary**, so the cut is clean and a
+  bulk `is_active=false` UPDATE plus a view predicate suffices — no MP splits
+  or re-materializations required.
+- **BC-edge bug caught before shipping the view migration.** The initial WA
+  bbox `[-124.85, 45.55, -116.90, 49.00]` includes **Vancouver Island**; 26 PROD
+  rows around the Cowichan Valley classified as in-scope under that box. Fix
+  is to use the US–Canada border as the northern bound (real state polygons if
+  in-repo, or a tighter bbox). Recorded in `STATE.md` before touching PROD.
+- **CORRECTION — the earlier "curated_fuel doesn't exist" claim was wrong.**
+  Made against `data/ingestion/sources/` alone; the actual PROD `source_record`
+  table carries **3 `curated_fuel` rows plus 4 other Canadian sources** the
+  workspace grep missed (`bc_rec_sites_poly`, `bc_rec_sites_points_highvalue`,
+  `bc_rest_areas`, `yk_parks_campgrounds`). "Grep the adapter dir" ≠ "measure
+  the corpus."
+- **CORRECTION — the earlier "50–200k OSM ingest projection" was wrong.**
+  Extrapolated from a single dense southwest-Arizona bbox scaled by area to
+  the whole 1,700 sq° corridor rectangle (including Pacific Ocean). Measure
+  don't extrapolate: OSM ingest uses the corridor bbox rectangle via
+  `getActiveCorridorBbox()`, and each state has its own tag density.
+- **CORRECTION — the "3-batch MAX_IDS" and "curatedMode = false" instruments
+  were reported as gone, but the underlying UUID trips still exist and are
+  reachable directly.** They are de-linked from the app surfaces, not deleted;
+  a direct URL still resolves.
+
+## 2026-08-08
+
+- **RIDB Route A shipped to PROD from an unmerged branch under explicit
+  authorization.** Migrations `59330a3` (widen `pois_along_corridor` to accept
+  `google + google_resolved`) and `d962055` (widen the photo lateral to accept
+  `nps + ridb`) applied to PROD; the RIDB backfill wrote 1,519 photo rows;
+  emitting-tile count rose **3,737 → 5,256** `[queried PROD]`. **Materialize
+  was additive** (no `--rematerialize`); a `max(updated_at)` boundary snapshot
+  confirmed zero pre-existing MPs touched.
+- **DRIFT recorded, unresolved.** The RPC on PROD emits RIDB photos today, but
+  the migration files that produced it live on `feat/ridb-imagery-route-a`,
+  not `main`. `main` still carries only the NPS-only lateral from #196.
+  Reconciliation task: open the branch as a PR. Documented in STATE.md §DRIFT
+  so the next cold-start doesn't try to reapply the migrations from `main`
+  and revert the widening.
+- **APPARATUS LESSON — misread a running ingest as "0 successful fetches."**
+  A killed retry pass against `overpass.private.coffee` had actually inserted
+  ~8,918 rows before I stopped it; the log filter I was reading showed only
+  retries, not writes. Retracted the "0 fetches" claim once the DB count
+  disproved it. The rule the CLAUDE.md already carries: instrument writes and
+  reads separately.
+
+## 2026-08-06
+
+- **RIDB adapter research done under a read-only investigation.** Measured the
+  actual PROD RIDB row count (**3,797**, not the 2,874 echoed from the prompt).
+  Recorded as a corpus-scale measurement gotcha: **do not restate a corpus
+  count without measuring it against the environment the claim will apply to.**
+- **Verified H6 by reading source, not by inference.** The RPC-widen migration
+  in `59330a3` assumed the google source writes `external_id` as
+  `google:<place_id>` — confirmed at `data/ingestion/sources/google-places.ts:342`.
+  Recorded because the earlier migration was drafted without this check.
+
 ## 2026-08-05
 
 - **Plot-day-detail places SHIPPED across four PRs.** #187 (scoping doc +

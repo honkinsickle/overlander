@@ -33,6 +33,17 @@ Post-flip order `[read source: the flip edit this session]`:
 - **`getPersistedReferenceTrip(id)`** — plain `reference_trips` read; **`null` on
   miss**, **no snapshot fallback, no memo**.
 
+**Serve filter (2026-08-09, on `feat/reference-trips-is-active`, TEST only).**
+Both public entrypoints filter `is_active=true` at the DB read, so a hidden row
+returns `null` even though the payload is intact. `getReferenceTrip`'s
+signature widened from `Promise<Trip>` to `Promise<Trip | null>` and its
+committed-snapshot fallback was removed from the user-facing path — the internal
+`getAlaskaTrip` retains the unfiltered read + snapshot fallback for the four
+waypoint-helper callers in `repository.ts`. The fork route
+(`api/trips/fork/route.ts`) applies the same `is_active=true` filter, so
+forking a hidden id 404s rather than spawning a copy. Rationale + PROD apply
+plan: [`docs/decisions/2026-08-09-reference-trips-is-active.md`](../decisions/2026-08-09-reference-trips-is-active.md).
+
 **Why the split (not collapsed into the plain reader):** `la-to-deadhorse` is the
 live PROD reference trip. Routing it through `getPersistedReferenceTrip` would
 drop the snapshot fallback (404 on any DB blip) and the memo (a fresh DB read +

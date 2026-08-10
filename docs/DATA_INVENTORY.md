@@ -5,6 +5,11 @@ relying on them** (`data/search/sync-typesense.ts` and the ad-hoc scripts in
 this session read a project via `--env-file`). `data/.env` points at ONE project
 (TEST) — it is not the whole picture. The corpus lives on **PROD**.
 
+**Partial re-measurement 2026-08-09** for the source_record table and
+reference_trips only — see the dated deltas inline below. **`master_place`
+totals were NOT re-measured this session**; a fresh count is due before the
+six-state view trim runs.
+
 Three Supabase projects have existed; two remain (`supabase projects list`):
 `nqzeywzcowujzyegxbsr` (PROD) and `znldzjdatkogdktymtvi` (TEST). Staging is
 deleted.
@@ -37,6 +42,28 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
   US (osm/nps/ridb/usfs/google) **and** Canada (Parks Canada, BC Parks, DataBC
   rec-sites/rest-areas, GeoYukon campgrounds) — a federated corridor.
+- **Six-state footprint (2026-08-09).** Of those 20,384 active source_records,
+  **12,320 fall inside CA/NV/UT/AZ/WA/OR** and **8,064 are out of scope**
+  `[queried PROD, 2026-08-09]`. **0 master_place rows are co-linked across the
+  footprint boundary**, so the pending trim is a clean cut — a bulk
+  `is_active=false` UPDATE plus a `master_place_search_export` view predicate.
+  A previous "curated_fuel doesn't exist" claim was wrong; **`curated_fuel = 3`
+  above is authoritative**, plus four Canadian sources (`bc_rec_sites_poly`,
+  `bc_rec_sites_points_highvalue`, `bc_rest_areas`, `yk_parks_campgrounds`)
+  that a workspace-only grep missed. Rule: measure the corpus, don't grep the
+  adapter dir.
+- **RIDB imagery landed 2026-08-08.** Emitting-tile count via
+  `pois_along_corridor` rose **3,737 → 5,256** (+1,519) after the RIDB Route A
+  backfill and RPC widening `[queried PROD, 2026-08-08]`. RPC lateral now
+  accepts `source_id IN ('nps','ridb')` with NPS winning `ORDER BY` on
+  co-links. Migrations were applied from the unmerged
+  `feat/ridb-imagery-route-a` branch under explicit authorization — see
+  `STATE.md` §DRIFT.
+- **OSM tag audit — 1,723 mis-mapped rows (2026-08-09).** `dump_station`
+  currently includes municipal trash bins from the old `amenity=waste_disposal`
+  mapping. `fix/osm-tag-corrections` corrects future ingests
+  (`amenity=sanitary_dump_station`); the 1,723 existing rows need a separate
+  reclassify pass. See `BACKLOG.md` §OSM tag corrections.
 - **Active corridor:** `la_to_deadhorse_full` (active, status `complete`, buffer
   80 km), envelope **`[-156.5, 33.5] → [-110.8, 70.4]`**. (`segment_a_la_pnw`
   also present, inactive/complete — the old bootstrap.)
@@ -88,6 +115,22 @@ projects `[queried catalog, TEST + PROD, 2026-07-27]`.
 - **PROD — 3 rows:** `dawson-vancouver-cassiar`, `la-to-deadhorse`,
   `la-to-portland`. **Zero `expedition-*` rows** — generation cannot write to PROD.
   `[queried catalog; hash-reference-trips.ts before/after for the 2026-07-25 add]`
+
+**Schema addition 2026-08-09 — `is_active boolean default true` (on branch,
+applied to TEST only).** Migration `20260810120000_reference_trips_is_active.sql`
+on `feat/reference-trips-is-active`. **PROD apply is pending Adam's go.**
+User-facing readers (`getReferenceTrip`, `getPersistedReferenceTrip`, the
+fork route) filter `is_active=true`; the internal snapshot-backed fallback in
+`getAlaskaTrip` does NOT. Rationale + apply plan:
+[`docs/decisions/2026-08-09-reference-trips-is-active.md`](decisions/2026-08-09-reference-trips-is-active.md).
+
+**TEST `is_active` state (2026-08-09):** 8 of 9 rows flipped `false`, only
+`la-to-portland` remains `is_active=true` (the sole in-scope canonical trip
+on TEST). Hidden rows retain their full payload — verified byte-intact under
+an unfiltered read. The dev-era rows are kept as data because internal
+machinery still references them (four waypoint-helper callers in
+`repository.ts`), and `getAlaskaTrip`'s unfiltered fallback keeps them
+reachable service-side.
 
 How `getTrip` serves these rows (reader split, derivation, caching):
 [`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).

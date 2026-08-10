@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-05
+# STATE — `main` · 2026-08-09
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -65,8 +65,103 @@ later entry corrects an earlier one and the earlier one stays.
   `places_prod`. Restored 2026-07-23 after a rotated prod service key Vercel never
   received had silently broken hydrate. Counts and the full picture live in
   `docs/DATA_INVENTORY.md`.
+- **NPS **and** RIDB imagery surface on corpus tiles.** NPS shipped in #196
+  (`67afe8e`); RIDB extended the same lateral to accept both sources
+  (`feat/ridb-imagery-route-a`, migrations applied to PROD, code not yet merged —
+  see §DRIFT below). Emitting tiles rose 3,737 → 5,256 on PROD after RIDB backfill.
 - **Curated-POI kebab (Move to day / Delete)** — live on user-owned UUID trips
   (#131). See the caveat under RESIDUALS.
+
+## 2026-08-09 — six-state PROD trim IN FLIGHT (STOP #1 delivered)
+
+Scope narrowed to the six-state planning region (CA, NV, UT, AZ, WA, OR) at the
+CORPUS level too, not just at trip creation. Three branches created and clean;
+TEST reference_trips flipped; **awaiting explicit "go" for the PROD apply.**
+
+- **Branches (all ahead of `origin/main`, unpushed):**
+  - `fix/osm-tag-corrections` — waste_disposal → sanitary_dump_station mapping,
+    plus new backcountry/informal fetch predicates. 11/11 osm tests pass,
+    `data typecheck` clean. The tag fix touches only future ingests — no PROD
+    write yet. PROD carries **1,723 mis-mapped municipal trash bins as
+    `dump_station`** `[queried PROD, 2026-08-09]`; the corrected mapping is
+    load-bearing before any six-state OSM re-ingest.
+  - `chore/prod-scope-diagnostics` — 5 read-only scope-narrowing scripts under
+    `data/scripts/phase3-*`. Data typecheck clean.
+  - `feat/reference-trips-is-active` — `is_active boolean default true`
+    migration + user-facing filter in `lib/trips/reference.ts` and the fork
+    route. Rationale + apply plan:
+    `docs/decisions/2026-08-09-reference-trips-is-active.md`. TEST verified:
+    8 of 9 rows flipped, only `la-to-portland` remains active; every row's
+    payload is byte-intact.
+- **PROD scope classification (measured, not extrapolated):** of 20,384 active
+  `source_record` rows, **12,320 fall inside the six-state footprint and 8,064
+  are out of scope** `[queried PROD, 2026-08-09]`. **0 master_place rows are
+  co-linked across the footprint boundary** (a co-link would have required
+  merging in-scope and out-of-scope rows into one MP; none exist), so a bulk
+  `is_active=false` UPDATE plus a view predicate is a clean cut.
+- **STOPPED at PROD apply.** The three PROD steps queued behind Adam's "go":
+  (1) apply the reference_trips migration to PROD, (2) flip
+  `la-to-deadhorse` + `dawson-vancouver-cassiar` inactive, (3) UPDATE the 8,064
+  out-of-scope source_records, refresh `master_place_search_export`, run
+  `search:sync`. Full apply plan in the decision doc above.
+- **BC-edge caveat (measured):** the initial WA bbox `[-124.85, 45.55, -116.90,
+  49.00]` includes **Vancouver Island** (Canada). 26 PROD rows on Vancouver
+  Island around the Cowichan Valley classified as in-scope under that box. The
+  view migration must use the US–Canada border as the northern bound, not a
+  rounded 49.00 — or fall back to real state polygons.
+
+### DRIFT — two schema divergences, both intentional, both closable
+
+**Two directions, name each one:**
+
+1. **PROD is AHEAD of `main` on the RIDB widening.** The RIDB Route A
+   migrations (`59330a3` widening `pois_along_corridor` to accept
+   `google + google_resolved`, and `d962055` widening the photo lateral to
+   accept `nps + ridb`) were **applied directly to PROD from
+   `feat/ridb-imagery-route-a` under explicit authorization**, ahead of the
+   PR merge. The RPC on PROD therefore emits RIDB photos today, but the
+   migration files that produced it live on an unmerged branch. `main` still
+   carries only the NPS-only lateral shipped in #196. **The branch must be
+   opened as a PR and merged** before `main` reflects the deployed schema; a
+   fresh env-restore from `main`'s migration set would revert the widening.
+
+2. **TEST is AHEAD of PROD on `reference_trips.is_active`.** Migration
+   `20260810120000_reference_trips_is_active.sql` (on
+   `feat/reference-trips-is-active`) has been applied to TEST — the column
+   exists there, 8 of 9 rows are flipped `false`, only `la-to-portland`
+   remains active. **PROD does NOT have the column** `[queried PROD,
+   2026-08-09]`; PROD's `reference_trips` schema is still 5-column (`id`,
+   `title`, `payload`, `source_version`, `updated_at`). **Part 1 step 7 of
+   the six-state PROD trim plan closes this drift** by running
+   `db:push-verify` PROD-linked with `.env` swapped from
+   `~/.config/overlander/env-backups/.env.production-backup`. Until Part 1
+   runs, any code on this branch that filters `is_active=true` in a PROD read
+   path would return zero rows for every id — deploy of the branch is gated
+   on the PROD apply, in that order.
+
+## 2026-08-06 → 08-08 — RIDB Route A imagery SHIPPED (branch, not merged)
+
+Mirror of the NPS Route A pattern (#196) extended to RIDB. On PROD the emitting-
+tile count rose **3,737 → 5,256** after backfill `[queried PROD, 2026-08-08]`.
+
+- **Adapter (`data/ingestion/sources/ridb.ts`):** `MediaSchema` +
+  `fetchEntityMedia` per facility/recarea; normalized into the same photo shape
+  NPS emits. Tests cover the empty-media / no-preferred-photo / large-payload
+  paths.
+- **RPC (`pois_along_corridor`):** photo lateral widened from `source_id = 'nps'`
+  to `source_id IN ('nps','ridb')`, with an `ORDER BY case when 'nps' then 0
+  else 1 end` so NPS wins where both sources co-link. Verified on 6 TEST co-link
+  rows.
+- **TEST first, then PROD.** TEST ingest hit 388 RIDB rows and the corpus-scale
+  photo lateral emitted correctly across all three buckets (photo-only / photo-
+  and-nps / neither). Applied to PROD only after that. **Materialize was
+  additive** (no `--rematerialize`); zero pre-existing MPs touched, verified by
+  a `max(updated_at)` boundary snapshot.
+- **Number lesson recorded (in-session):** an earlier "2,874 RIDB rows on PROD"
+  figure was **echoed from a prompt rather than measured** — actual count
+  measured 3,797. Recorded as a corpus-scale measurement gotcha, not carried
+  forward as authoritative. Rule: never restate a corpus count without
+  measuring it against the environment the claim will apply to.
 
 ## DEV GATES
 - `main` is protected — direct pushes rejected (deletion, non_fast_forward,
@@ -686,7 +781,16 @@ marker. That marker is now discharged — the entries below are reconciled from
   `test:er` run is the true gate.
 
 ## NEXT (ordered)
-1. **The wizard swap is DONE through 4c.** 4a–4c merged or in review; the legacy
+1. **Resume the six-state PROD trim** on Adam's "go" — three PROD steps in the
+   order listed under §2026-08-09 above (reference_trips migration; flag flip
+   for the two out-of-scope canonical trips; source_record trim + view
+   migration + `search:sync`). Then propose per-state Overpass counts for
+   WA/OR/NV/UT (STOP #2 before ingesting).
+2. **Open PRs for the three staged branches** — `fix/osm-tag-corrections`,
+   `chore/prod-scope-diagnostics`, `feat/reference-trips-is-active`. And
+   **open a PR for `feat/ridb-imagery-route-a`** to reconcile `main` with the
+   PROD-applied RIDB widening (§DRIFT above).
+3. **The wizard swap is DONE through 4c.** 4a–4c merged or in review; the legacy
    wizard's routes, modules, and trips-domain residue are gone. What remains of
    the teardown is deliberately parked, not forgotten:
    - The **anon `TRIPS` store** — still out of scope, entangled with the
@@ -696,15 +800,15 @@ marker. That marker is now discharged — the entries below are reconciled from
    - The **dateless-draft header** (`NaN/NaN-NaN/NaN • 0 Days • 0 mi`) on PROD's
      7 draft rows. Still undecided, and drafts are still creatable via
      duplicate-trip, so this is not self-limiting.
-2. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
+4. **`dayAssignment` — decide the day-key, then build.** Mint a per-day uuid vs
    accept regen orphan-drop. Then apply at pool-assembly, extend `rescopeOverlays`,
    carry through regen, and re-wire the kebab's move-to-day to write it.
-3. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
+5. **DATA_INVENTORY maintenance** — keep `docs/DATA_INVENTORY.md` re-measured. It
    is the source of truth for what data lives where.
-4. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
+6. **Search architecture (reframed)** — the corridor corpus already EXISTS on PROD
    and works. The open question narrows to Google-primary vs corpus-first
    ranking/precedence, and whether audit-resolved Google records write back.
-5. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
+7. **Dwell-day reorder** — Day 6 POIs live in the drive:droppable. Scope decision.
 
 ## INVARIANTS (do not violate)
 - A rank is meaningful only within a cluster. Key it to the node.

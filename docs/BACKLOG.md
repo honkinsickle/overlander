@@ -5,6 +5,63 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Six-state corpus trim — PROD apply pending (2026-08-09)
+
+STOP #1 delivered; PROD apply queued behind Adam's "go". Full plan and
+rationale: `STATE.md` §2026-08-09 and
+`docs/decisions/2026-08-09-reference-trips-is-active.md`. Three ordered PROD
+operations, then a WA/OR/NV/UT count proposal (STOP #2 before ingesting).
+
+- **Op 1** — apply `20260810120000_reference_trips_is_active.sql` to PROD via
+  `db:push-verify` (PROD-linked, `.env` swapped from the env-backups dir).
+- **Op 2** — flip `la-to-deadhorse` and `dawson-vancouver-cassiar` inactive.
+  Cassiar's freeze rule is preserved (a boolean flip is not a touch of the
+  payload column).
+- **Op 3** — batch `UPDATE source_record SET is_active=false` for **8,064**
+  out-of-scope ids (batches of 500 to fit PostgREST payload limits); confirm
+  active count is **12,320**; apply the combined view migration on
+  `master_place_search_export` (`source_count > 0` + six-state footprint
+  filter using the **US–Canada border**, not a rounded 49.00 that would
+  re-admit Vancouver Island); confirm view row count delta ~13,629 → ~9,300;
+  `max(updated_at)` proves no pre-existing MP recomputed; then `search:sync`.
+  Restore `data/.env` and CLI link to TEST from the env-backups dir at the end.
+
+**STOP #2 before any six-state OSM re-ingest.** The corrected osm mapping
+(`fix/osm-tag-corrections`) is a prerequisite — see next item.
+
+## OSM tag corrections + WA/OR/NV/UT re-ingest — scoped, not started (2026-08-09)
+
+Branch: `fix/osm-tag-corrections`. Not yet a PR; the tag fix must land before
+any six-state re-ingest, or we replicate the mis-mapping.
+
+- **The fix.** `data/ingestion/sources/osm.ts` now maps
+  `amenity=sanitary_dump_station` (not `amenity=waste_disposal`) to
+  `dump_station`, and adds two Overpass fetch predicates for backcountry sites
+  (`tourism=camp_site` with `backcountry=yes` or `informal=yes`). 11/11 osm
+  tests pass; `data typecheck` clean.
+- **Blast radius on PROD.** 1,723 rows are currently mis-mapped as
+  `dump_station` when they are actually municipal trash bins
+  `[queried PROD, 2026-08-09]`. Re-ingest under the corrected mapping will
+  correct future rows; a separate cleanup pass will need to reclassify the
+  1,723 existing rows (small, mechanical UPDATE).
+- **STOP #2 gate.** Before running any WA/OR/NV/UT ingest against PROD:
+  propose per-state bboxes with expected Overpass `out count;` yields under
+  the corrected tag set, then wait for Adam's go. Do not ingest without the
+  count proposal — the "50–200k projection" retracted 2026-08-09 was the
+  cautionary tale.
+
+## `feat/ridb-imagery-route-a` — open the PR to reconcile with `main` (2026-08-09)
+
+The RIDB migrations were applied to PROD from this branch under authorization,
+but the branch is unmerged. `main` still carries only the NPS-only lateral
+from #196. See `STATE.md` §DRIFT.
+
+- Open the branch as a PR. Migrations are additive; the widening on PROD is
+  already correct; the merge simply brings `main`'s files into agreement with
+  the deployed schema.
+- Do NOT reapply the migrations from `main` before the merge — a fresh
+  `db:push` from `main` would revert the RIDB widening.
+
 ## NPS photo backfill — `scan()` pagination-while-mutate defect — RESOLVED (fix in #196, 2026-08-06)
 
 **Fixed** in `feat/nps-corpus-imagery` (`a670dfe`): `scan()` is now two-phase —
