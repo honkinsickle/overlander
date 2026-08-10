@@ -50,17 +50,24 @@ any six-state re-ingest, or we replicate the mis-mapping.
   count proposal — the "50–200k projection" retracted 2026-08-09 was the
   cautionary tale.
 
-## `feat/ridb-imagery-route-a` — open the PR to reconcile with `main` (2026-08-09)
+## RIDB backfill — 28 `/media` errors unretried, error shape UNVERIFIED (2026-08-10)
 
-The RIDB migrations were applied to PROD from this branch under authorization,
-but the branch is unmerged. `main` still carries only the NPS-only lateral
-from #196. See `STATE.md` §DRIFT.
+The PROD RIDB backfill run (2026-08-09, in #198) wrote 1,622 of 3,961 rows
+scanned and left **28 `/media` fetch errors unretried**. The prior wrap
+(`docs/state-ridb-route-a`, now folded into `STATE.md` §PREFLIGHT) asserted
+these are **not** the `web/.env.local` 401 (that key is unused; every RIDB
+consumer runs off `data/.env`'s working key). **The actual error shape is
+still UNVERIFIED** — the run's stderr wasn't captured, no log file exists
+`[searched repo-root, 2026-08-09]`.
 
-- Open the branch as a PR. Migrations are additive; the widening on PROD is
-  already correct; the merge simply brings `main`'s files into agreement with
-  the deployed schema.
-- Do NOT reapply the migrations from `main` before the merge — a fresh
-  `db:push` from `main` would revert the RIDB widening.
+- **Recovery is idempotent:** `backfill:ridb-photo` is a re-runnable script;
+  a fresh run recovers any that were transient.
+- **A `--dry-run` backfill would surface their shape** without writing
+  anything, and confirm or refute the "not-auth" assertion. Small, cheap,
+  read-only.
+- Not urgent — 28 rows out of 3,961 is 0.7%. But leaving the assertion
+  unverified is exactly the class of thing this repo has burned time on
+  before (inference from retry semantics is not evidence).
 
 ## NPS photo backfill — `scan()` pagination-while-mutate defect — RESOLVED (fix in #196, 2026-08-06)
 

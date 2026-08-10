@@ -48,6 +48,26 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   reachable directly.** They are de-linked from the app surfaces, not deleted;
   a direct URL still resolves.
 
+## 2026-08-10 — correction of 08-08's DRIFT claim
+
+- **RETRACTION.** The 2026-08-08 entry below wrote a §DRIFT into STATE.md
+  saying "PROD ahead of `main` on the RIDB widening — code on unmerged
+  branch." **That was true on 2026-08-08; it is false as of 2026-08-09
+  22:11 UTC** — #198 merged and landed the two RIDB migrations + adapter
+  on `main`. The DRIFT section in my in-flight PR #199 was based on a
+  stale local `main` (2 commits behind origin). Amended: DRIFT #1 dropped,
+  DRIFT #2 (`reference_trips.is_active` TEST-ahead-of-PROD) retained. Rule
+  once more: **fetch before making a "behind main" claim**; even better,
+  before publishing docs mentioning a merge state, run `gh pr view <N>` or
+  `git log origin/main` first.
+- **Folded `docs/state-ridb-route-a` into PR #199.** A prior session had
+  opened that branch with the accurate #198 wrap + PREFLIGHT diagnosis; my
+  #199 duplicated the ground and got it partly wrong. Folded uniques into
+  STATE (the migrations table, the −1 NPS artifact, the backfill numbers,
+  Known gaps, PREFLIGHT); closed the sibling branch. Reported here so the
+  fork of truth doesn't happen again — check `docs/state-*` branches
+  before writing a new refresh.
+
 ## 2026-08-08
 
 - **RIDB Route A shipped to PROD from an unmerged branch under explicit
@@ -56,13 +76,12 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   `nps + ridb`) applied to PROD; the RIDB backfill wrote 1,519 photo rows;
   emitting-tile count rose **3,737 → 5,256** `[queried PROD]`. **Materialize
   was additive** (no `--rematerialize`); a `max(updated_at)` boundary snapshot
-  confirmed zero pre-existing MPs touched.
-- **DRIFT recorded, unresolved.** The RPC on PROD emits RIDB photos today, but
-  the migration files that produced it live on `feat/ridb-imagery-route-a`,
-  not `main`. `main` still carries only the NPS-only lateral from #196.
-  Reconciliation task: open the branch as a PR. Documented in STATE.md §DRIFT
-  so the next cold-start doesn't try to reapply the migrations from `main`
-  and revert the widening.
+  confirmed zero pre-existing MPs touched. **[SUPERSEDED by 2026-08-10 entry
+  above: the branch was merged as #198 on 2026-08-09; `1,519` was the
+  emitting-tile delta, not the write-count; the write-count was 1,622 rows
+  written of 3,961 scanned.]**
+- **~~DRIFT recorded, unresolved.~~ RETRACTED — see 2026-08-10 above.** The
+  branch merged as #198.
 - **APPARATUS LESSON — misread a running ingest as "0 successful fetches."**
   A killed retry pass against `overpass.private.coffee` had actually inserted
   ~8,918 rows before I stopped it; the log filter I was reading showed only

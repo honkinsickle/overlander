@@ -65,10 +65,11 @@ later entry corrects an earlier one and the earlier one stays.
   `places_prod`. Restored 2026-07-23 after a rotated prod service key Vercel never
   received had silently broken hydrate. Counts and the full picture live in
   `docs/DATA_INVENTORY.md`.
-- **NPS **and** RIDB imagery surface on corpus tiles.** NPS shipped in #196
-  (`67afe8e`); RIDB extended the same lateral to accept both sources
-  (`feat/ridb-imagery-route-a`, migrations applied to PROD, code not yet merged —
-  see §DRIFT below). Emitting tiles rose 3,737 → 5,256 on PROD after RIDB backfill.
+- **Corpus-native photos on corridor tiles — nps + ridb** (#196, #198). **5,256**
+  photo-emitting tiles on PROD `[queried PROD, 2026-08-09]`. Reaches the card
+  **only through the `pois_along_corridor` RPC** — hydrate and Typesense search
+  still return imageless tiles, and tiles baked into existing trip payloads stay
+  imageless until regenerated. Details: §2026-08-09 RIDB Route A below.
 - **Curated-POI kebab (Move to day / Delete)** — live on user-owned UUID trips
   (#131). See the caveat under RESIDUALS.
 
@@ -110,58 +111,149 @@ TEST reference_trips flipped; **awaiting explicit "go" for the PROD apply.**
   view migration must use the US–Canada border as the northern bound, not a
   rounded 49.00 — or fall back to real state polygons.
 
-### DRIFT — two schema divergences, both intentional, both closable
+### DRIFT — one schema divergence, intentional, closable this session
 
-**Two directions, name each one:**
+**TEST is AHEAD of PROD on `reference_trips.is_active`.** Migration
+`20260810120000_reference_trips_is_active.sql` (on
+`feat/reference-trips-is-active`) has been applied to TEST — the column
+exists there, 8 of 9 rows are flipped `false`, only `la-to-portland` remains
+active. **PROD does NOT have the column** `[queried PROD, 2026-08-09]`;
+PROD's `reference_trips` schema is still 5-column (`id`, `title`, `payload`,
+`source_version`, `updated_at`). **Part 1 step 6 of the six-state PROD trim
+plan closes this drift** by running `db:push-verify` PROD-linked with `.env`
+swapped from `~/.config/overlander/env-backups/.env.production-backup`. Until
+that apply runs, any code on this branch that filters `is_active=true` in a
+PROD read path would return zero rows for every id — deploy of the branch is
+gated on the PROD apply, in that order.
 
-1. **PROD is AHEAD of `main` on the RIDB widening.** The RIDB Route A
-   migrations (`59330a3` widening `pois_along_corridor` to accept
-   `google + google_resolved`, and `d962055` widening the photo lateral to
-   accept `nps + ridb`) were **applied directly to PROD from
-   `feat/ridb-imagery-route-a` under explicit authorization**, ahead of the
-   PR merge. The RPC on PROD therefore emits RIDB photos today, but the
-   migration files that produced it live on an unmerged branch. `main` still
-   carries only the NPS-only lateral shipped in #196. **The branch must be
-   opened as a PR and merged** before `main` reflects the deployed schema; a
-   fresh env-restore from `main`'s migration set would revert the widening.
+**Previously recorded here — the RIDB widening drift — is CLOSED.** #198
+merged 2026-08-09T22:11:16Z, landing the two RIDB migrations
+(`20260809120000_widen_google_resolved.sql`,
+`20260809130000_ridb_photo.sql`), the adapter, the backfill script, and the
+verification tooling on `main`. `main` and PROD now agree on the RPC. The
+`feat/ridb-imagery-route-a` local branch (in `~/Code/overlander` only) is
+superseded by the squash-merge and is safe to delete once you say so; leaving
+it in place is harmless.
 
-2. **TEST is AHEAD of PROD on `reference_trips.is_active`.** Migration
-   `20260810120000_reference_trips_is_active.sql` (on
-   `feat/reference-trips-is-active`) has been applied to TEST — the column
-   exists there, 8 of 9 rows are flipped `false`, only `la-to-portland`
-   remains active. **PROD does NOT have the column** `[queried PROD,
-   2026-08-09]`; PROD's `reference_trips` schema is still 5-column (`id`,
-   `title`, `payload`, `source_version`, `updated_at`). **Part 1 step 7 of
-   the six-state PROD trim plan closes this drift** by running
-   `db:push-verify` PROD-linked with `.env` swapped from
-   `~/.config/overlander/env-backups/.env.production-backup`. Until Part 1
-   runs, any code on this branch that filters `is_active=true` in a PROD read
-   path would return zero rows for every id — deploy of the branch is gated
-   on the PROD apply, in that order.
+## 2026-08-09 — RIDB Route A imagery LIVE on PROD; photo lateral covers nps + ridb (#198)
 
-## 2026-08-06 → 08-08 — RIDB Route A imagery SHIPPED (branch, not merged)
+**#198 merged AND all four migrations applied to PROD AND the RIDB backfill
+run on PROD** — materially different from "merged." Widens the 2026-08-06
+NPS ship from nps-only to nps + ridb.
 
-Mirror of the NPS Route A pattern (#196) extended to RIDB. On PROD the emitting-
-tile count rose **3,737 → 5,256** after backfill `[queried PROD, 2026-08-08]`.
+### The four migrations, all applied to `nqzeywzcowujzyegxbsr`
+Applied in the order `db push --include-all` ran them. **Three of the four
+were already committed and had never been deployed** — see the gap note.
 
-- **Adapter (`data/ingestion/sources/ridb.ts`):** `MediaSchema` +
-  `fetchEntityMedia` per facility/recarea; normalized into the same photo shape
-  NPS emits. Tests cover the empty-media / no-preferred-photo / large-payload
-  paths.
-- **RPC (`pois_along_corridor`):** photo lateral widened from `source_id = 'nps'`
-  to `source_id IN ('nps','ridb')`, with an `ORDER BY case when 'nps' then 0
-  else 1 end` so NPS wins where both sources co-link. Verified on 6 TEST co-link
-  rows.
-- **TEST first, then PROD.** TEST ingest hit 388 RIDB rows and the corpus-scale
-  photo lateral emitted correctly across all three buckets (photo-only / photo-
-  and-nps / neither). Applied to PROD only after that. **Materialize was
-  additive** (no `--rematerialize`); zero pre-existing MPs touched, verified by
-  a `max(updated_at)` boundary snapshot.
-- **Number lesson recorded (in-session):** an earlier "2,874 RIDB rows on PROD"
-  figure was **echoed from a prompt rather than measured** — actual count
-  measured 3,797. Recorded as a corpus-scale measurement gotcha, not carried
-  forward as authoritative. Rule: never restate a corpus count without
-  measuring it against the environment the claim will apply to.
+| Migration | What it does |
+|---|---|
+| `20260723120000_google_resolved_field_precedence` | 3 rows into `field_precedence`; verifier confirmed present |
+| `20260805120000_pois_along_corridor_nps_photo_url` | the `nps_photo_url` lateral — **first deploy to PROD**, though authored 08-05 |
+| `20260809120000_pois_along_corridor_widen_google_resolved` | `google_place_id` lateral accepts `source_id IN ('google','google_resolved')` |
+| `20260809130000_pois_along_corridor_ridb_photo` | photo lateral accepts `source_id IN ('nps','ridb')`, `ORDER BY` nps first so NPS wins a co-link |
+
+The column alias stays `nps_photo_url` even though it now also carries RIDB
+— kept for backward compatibility with baked corridor payloads and card
+consumers. **The name is now a misnomer; do not read it as "this photo came
+from NPS."**
+
+### The ship
+- `data/ingestion/sources/ridb.ts` gains `fetchEntityMedia(entity, id)`
+  (rate-limited, **404-tolerant — a 404 returns `[]` and is not an error**,
+  `defaultRetry` on other non-2xx) and `ridbPhotoFromMedia` (prefers
+  `IsPrimary`, case-insensitive `MediaType`). 13 pure-normalization tests, no
+  DB, no network.
+- `data/scripts/backfill-ridb-photo.ts` — mirrors the NPS backfill but
+  fetches `/media` per row, because RIDB's ingested history predates the
+  adapter change.
+- **PROD backfill run:** scanned 3,961 · fetched 3,933 · **1,622 rows
+  written** with `normalized_payload.photo` · 2,311 skipped (no upstream
+  media, null → null idempotent) · **28 `/media` fetch errors, left
+  unretried** (see BACKLOG — asserted-not-auth but unverified as of
+  2026-08-10).
+
+### PROD photo-emitting tiles: 3,737 → 5,256 (+1,519)
+Measured by **direct `source_record` queries over the whole 13,629-row
+corpus**, not from the RPC's 1,000-row response `[queried PROD 2026-08-09]`:
+
+| bucket | before | after | Δ |
+|---|--:|--:|--:|
+| nps_only with emit-photo | 3,698 | 3,697 | −1 (artifact) |
+| ridb_only with emit-photo | 0 | **1,435** | **+1,435** |
+| both-linked with emit-photo | 39 | **124** | **+85** (RIDB filled where NPS was null) |
+| **TOTAL** | **3,737** | **5,256** | **+1,519** |
+
+- **The −1 on NPS is a measurement artifact, not a regression.**
+  `corpus-scale-buckets.ts` pages `source_record` **without a stable
+  `order()` clause**, and PROD had normal concurrent activity across the
+  ~15-minute window. Fix that script before relying on it again.
+- **Zero pre-existing `master_place` rows modified**, verified by the
+  DB-side `max(updated_at)` boundary method (baseline
+  `2026-07-12T19:57:09Z`; rows with `created_at ≤ boundary AND updated_at >
+  boundary` returned **0**).
+- **Re-verified live 2026-08-09** `[prod-rpc-smoke.ts --allow-prod]`: PROD
+  RPC returns `nps_photo_url` populated on **755 of the 1,000 rows it
+  returned** — PostgREST caps at 1,000, so **755/1000 is a SAMPLE of the
+  corridor, not a corpus ratio**. Top hits are `cdn.recreation.gov` URLs
+  (Ryan / Sheep Pass / Belle Campground) — the RIDB half is demonstrably
+  live.
+
+### The gap this surfaced — 3,698 NPS photos were dark on PROD for days
+They were sitting in `source_record.normalized_payload` and were
+**unreachable from every consumer** because `20260805120000` had never been
+deployed. The earlier claim that it had shipped was **inference from a
+commit message, not verification**. **Deploy state comes from
+`supabase_migrations.schema_migrations` (or the CLI's pending list), never
+from `git log`.**
+
+### Known gaps NOT closed by #198
+- **Hydrate and Typesense still carry no photos.** `hydratePlacesByIds`
+  reads `master_place` (bare) and `master_place_search_export` (a view with
+  no photo column), so `/api/places/hydrate` and `/api/search-area` still
+  render imageless tiles. Photos exist on the **corridor RPC path only**.
+  The fix is Artboard C — put the same lateral in
+  `master_place_search_export`. Designed in Paper, **not implemented**.
+- **Typesense has no `photo` field** — `PlaceDocument` doesn't declare one
+  and `transformRow` doesn't populate one, so a search sync is a no-op for
+  photos even now. Bundled with Artboard C.
+- **The 28 `/media` errors are still unretried.** `backfill:ridb-photo` is
+  idempotent, so a re-run recovers any that were transient. Diagnosis
+  status: NOT a `web/.env.local` 401 (that key is stale and no consumer
+  reads it); actual error shape is UNVERIFIED — the run's stderr wasn't
+  captured. A `--dry-run` backfill would surface the shape.
+
+## PREFLIGHT — two of the three red sources are false alarms `[measured 2026-08-09]`
+
+`bin/preflight` reported `✗ OVERPASS (000)`, `✗ MAPILLARY (500)`, `✗ RIDB (401)`.
+Two of those are artifacts of the checker, not of the source.
+
+- **RIDB 401 is a stale key in `web/.env.local` ONLY, and nothing reads it.**
+  `bin/preflight` sources `web/.env.local`; every actual RIDB consumer
+  (`data/ingestion/sources/ridb.ts`, `backfill:ridb-photo`,
+  `ridb-photo-diagnostic.ts`) runs out of `data/` under `--env-file=.env`.
+  The two files hold DIFFERENT keys (both well-formed 36-char UUIDs).
+  `data/.env`'s key returns **HTTP 200** on `/facilities` and on `/media`;
+  `web/.env.local`'s returns **401 `{"error":"Unauthorized Access"}` —
+  byte-identical to the no-key and garbage-key controls**, so it is revoked
+  or superseded, not malformed and not rate-limited. **Zero code consumers
+  of `RIDB_API_KEY` exist under `web/`** `[repo-root grep]` — the 401 is
+  cosmetic. Independently re-verified 2026-08-10.
+- **OVERPASS is REACHABLE; `000` is preflight's own 10s timeout under rate
+  limiting.** `overpass-api.de` returned **HTTP 200** on 4 of 5 sequential
+  probes at `--max-time 25`, and **429** on the 5th. `/api/status` reports
+  **`Rate limit: 2`** slots for this IP with slots queued 15–21s out —
+  longer than preflight's `--max-time 10`, which is exactly the `curl (28)`
+  timeout it prints as `000`. **Mirrors tested (2026-08-09):**
+  `overpass-api.de` **200**; `overpass.private.coffee` **200**;
+  `maps.mail.ru/osm/tools/overpass` **200**; `overpass.kumi.systems`
+  timeout; `overpass.osm.jp` **expired TLS certificate**. Independently
+  re-verified 2026-08-10: `overpass-api.de` 200 (1.2s), `overpass.kumi.systems`
+  200 (0.9s) but **serving a 2026-05-31 snapshot (~10 weeks stale)**,
+  `overpass.private.coffee` 000 (timeout). **`OVERPASS_URL` must pin to
+  `overpass-api.de` for any count that will be quoted** — kumi's staleness
+  would silently miss recent OSM data. Any Overpass work must serialize to
+  **≤2 concurrent queries** and allow >10s per call.
+- **MAPILLARY 500 not investigated** this session.
 
 ## DEV GATES
 - `main` is protected — direct pushes rejected (deletion, non_fast_forward,
@@ -787,9 +879,9 @@ marker. That marker is now discharged — the entries below are reconciled from
    migration + `search:sync`). Then propose per-state Overpass counts for
    WA/OR/NV/UT (STOP #2 before ingesting).
 2. **Open PRs for the three staged branches** — `fix/osm-tag-corrections`,
-   `chore/prod-scope-diagnostics`, `feat/reference-trips-is-active`. And
-   **open a PR for `feat/ridb-imagery-route-a`** to reconcile `main` with the
-   PROD-applied RIDB widening (§DRIFT above).
+   `chore/prod-scope-diagnostics`, `feat/reference-trips-is-active`. The
+   RIDB widening is on `main` via #198; `feat/ridb-imagery-route-a` is
+   superseded and does not need a PR.
 3. **The wizard swap is DONE through 4c.** 4a–4c merged or in review; the legacy
    wizard's routes, modules, and trips-domain residue are gone. What remains of
    the teardown is deliberately parked, not forgotten:
