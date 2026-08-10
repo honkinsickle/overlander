@@ -30,6 +30,32 @@ describe("inferCategory — dispersed-camping split (PR-B)", () => {
   });
 });
 
+describe("inferCategory — dump_station tag correction", () => {
+  it("amenity=sanitary_dump_station → dump_station (RV sanitary dumps, the intended target)", () => {
+    expect(inferCategory({ amenity: "sanitary_dump_station" })).toBe("dump_station");
+  });
+  it("amenity=waste_disposal → NOT categorized as dump_station (municipal trash bin, not RV)", () => {
+    // waste_disposal was previously mis-mapped to dump_station and produced
+    // 1,723 false-positive rows on PROD. It's no longer in the mapping.
+    expect(inferCategory({ amenity: "waste_disposal" })).toBeNull();
+  });
+});
+
+describe("normalizeOsm — dump_station amenity boolean tracks sanitary_dump_station only", () => {
+  it("sanitary_dump_station node lights the dump_station amenity flag", () => {
+    const n = normalizeOsm({ amenity: "sanitary_dump_station" }, "Unnamed dump station", "dump_station");
+    expect((n.amenities as Record<string, unknown> | null)?.dump_station).toBe(true);
+  });
+  it("waste_disposal node does NOT light the dump_station amenity flag", () => {
+    const n = normalizeOsm({ amenity: "waste_disposal" }, "Unnamed waste_disposal", null);
+    // With waste_disposal removed from the mapping, its category is null and
+    // the amenity flag is not set either — the row wouldn't even ingest via
+    // persistElement's category-null guard, but the pure normalizer should
+    // still refuse to falsely flag it as a dump_station.
+    expect(n.amenities).toBeNull();
+  });
+});
+
 describe("normalizeOsm — dispersed advisory payload", () => {
   it("sets likely_allowed + verify_locally + mvum stub for dispersed_camping", () => {
     const n = normalizeOsm(

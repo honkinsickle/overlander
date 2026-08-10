@@ -75,7 +75,7 @@ const TAG_TO_CATEGORY: Array<[tagKey: string, tagValue: RegExp, category: string
   ["amenity", /^drinking_water$/, "water"],
   ["amenity", /^shower$/, "shower"],
   ["amenity", /^toilets$/, "toilet"],
-  ["amenity", /^waste_disposal$/, "dump_station"],
+  ["amenity", /^sanitary_dump_station$/, "dump_station"],
   ["amenity", /^(bbq|fire_pit)$/, "fire_pit"],
   ["highway", /^(services|rest_area)$/, "rest_area"],
   ["highway", /^trailhead$/, "trailhead"],
@@ -136,7 +136,9 @@ function buildOverpassQuery(bbox: BoundingBox): string {
   return `[out:json][timeout:${OVERPASS_TIMEOUT_S}];
 (
   node["tourism"~"^(camp_site|caravan_site|picnic_site|viewpoint|alpine_hut|wilderness_hut)$"](${bboxStr});
-  node["amenity"~"^(fuel|drinking_water|shower|toilets|waste_disposal|charging_station|bbq|fire_pit)$"](${bboxStr});
+  node["tourism"="camp_site"]["backcountry"="yes"](${bboxStr});
+  node["tourism"="camp_site"]["informal"="yes"](${bboxStr});
+  node["amenity"~"^(fuel|drinking_water|shower|toilets|sanitary_dump_station|charging_station|bbq|fire_pit)$"](${bboxStr});
   node["highway"~"^(services|rest_area|trailhead)$"](${bboxStr});
   node["shop"~"^(supermarket|convenience|outdoor|hardware)$"](${bboxStr});
   node["natural"~"^(spring|peak|beach)$"](${bboxStr});
@@ -200,7 +202,7 @@ function normalizeOsm(
     water: t.drinking_water === "yes" || t.amenity === "drinking_water" ? true : undefined,
     toilet: t.toilets === "yes" || t.amenity === "toilets" ? true : undefined,
     shower: t.shower === "yes" || t.amenity === "shower" ? true : undefined,
-    dump_station: t.amenity === "waste_disposal" ? true : undefined,
+    dump_station: t.amenity === "sanitary_dump_station" ? true : undefined,
     fire_ring: t.amenity === "fire_pit" || t.amenity === "bbq" ? true : undefined,
     picnic: t.tourism === "picnic_site" ? true : undefined,
   });
