@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-06
+# STATE — `main` · 2026-08-09
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -67,12 +67,128 @@ later entry corrects an earlier one and the earlier one stays.
   `docs/DATA_INVENTORY.md`.
 - **Curated-POI kebab (Move to day / Delete)** — live on user-owned UUID trips
   (#131). See the caveat under RESIDUALS.
+- **Corpus-native photos on corridor tiles — nps + ridb** (#196, #198). **5,256**
+  photo-emitting tiles on PROD. Reaches the card **only through the
+  `pois_along_corridor` RPC** — hydrate and Typesense search still return imageless
+  tiles, and tiles baked into existing trip payloads stay imageless until regenerated.
 
 ## DEV GATES
 - `main` is protected — direct pushes rejected (deletion, non_fast_forward,
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-09 — RIDB Route A imagery LIVE on PROD; the photo lateral now covers nps + ridb (#198)
+
+**#198 merged AND all four migrations applied to PROD AND the RIDB backfill run on
+PROD** — again a materially different state from "merged." This supersedes nothing in
+the 2026-08-06 section below; it widens it from nps-only to nps + ridb.
+
+### The four migrations, all applied to `nqzeywzcowujzyegxbsr`
+Listed in the order `db push --include-all` applied them, not the order they were
+authored. **Three of the four were already committed and had never been deployed** —
+see the gap note.
+
+| Migration | What it does |
+|---|---|
+| `20260723120000_google_resolved_field_precedence` | 3 rows into `field_precedence`; verifier confirmed present |
+| `20260805120000_pois_along_corridor_nps_photo_url` | the `nps_photo_url` lateral — **first deploy to PROD**, though authored 08-05 |
+| `20260809120000_pois_along_corridor_widen_google_resolved` | `google_place_id` lateral accepts `source_id IN ('google','google_resolved')` |
+| `20260809130000_pois_along_corridor_ridb_photo` | photo lateral accepts `source_id IN ('nps','ridb')`, `ORDER BY` nps first so NPS wins a co-link |
+
+The column alias stays `nps_photo_url` even though it now also carries RIDB — kept for
+backward compatibility with baked corridor payloads and card consumers. **The name is
+now a misnomer; do not read it as "this photo came from NPS."**
+
+### The ship
+- `data/ingestion/sources/ridb.ts` gains `fetchEntityMedia(entity, id)` (rate-limited,
+  **404-tolerant — a 404 returns `[]` and is not an error**, `defaultRetry` on other
+  non-2xx) and `ridbPhotoFromMedia` (prefers `IsPrimary`, case-insensitive `MediaType`).
+  13 pure-normalization tests, no DB, no network.
+- `data/scripts/backfill-ridb-photo.ts` — mirrors the NPS backfill but fetches `/media`
+  per row, because RIDB's ingested history predates the adapter change.
+- **PROD backfill run:** scanned 3,961 · fetched 3,933 · **1,622 rows written** with
+  `normalized_payload.photo` · 2,311 skipped (no upstream media, null → null idempotent)
+  · **28 `/media` fetch errors, left unretried**.
+
+### PROD photo-emitting tiles: 3,737 → 5,256 (+1,519)
+Measured by **direct `source_record` queries over the whole 13,629-row corpus**, not
+from the RPC's 1,000-row response `[queried PROD 2026-08-09]`:
+
+| bucket | before | after | Δ |
+|---|--:|--:|--:|
+| nps_only with emit-photo | 3,698 | 3,697 | −1 (artifact, below) |
+| ridb_only with emit-photo | 0 | **1,435** | **+1,435** |
+| both-linked with emit-photo | 39 | **124** | **+85** (RIDB filled where NPS was null) |
+| **TOTAL** | **3,737** | **5,256** | **+1,519** |
+
+- **The −1 on NPS is a measurement artifact, not a regression.**
+  `corpus-scale-buckets.ts` pages `source_record` **without a stable `order()` clause**,
+  and PROD had normal concurrent activity across the ~15-minute window. Fix that script
+  before relying on it again.
+- **Zero pre-existing `master_place` rows modified**, verified by the DB-side
+  `max(updated_at)` boundary method (baseline `2026-07-12T19:57:09Z`; rows with
+  `created_at ≤ boundary AND updated_at > boundary` returned **0**).
+- **Re-verified live 2026-08-09 in this session** `[prod-rpc-smoke.ts --allow-prod]`:
+  the PROD RPC returns `nps_photo_url` populated on **755 of the 1,000 rows it
+  returned** — and PostgREST caps that response at 1,000, so **755/1000 is a SAMPLE of
+  the corridor, not a corpus ratio**. Top hits are `cdn.recreation.gov` URLs (Ryan /
+  Sheep Pass / Belle Campground) — i.e. the RIDB half is demonstrably live.
+
+### The gap this surfaced — 3,698 NPS photos were dark on PROD for days
+They were sitting in `source_record.normalized_payload` and were **unreachable from
+every consumer**, because `20260805120000` had never been deployed. The earlier claim
+that it had shipped was **inference from a commit message, not verification**.
+**Deploy state comes from `supabase_migrations.schema_migrations` (or the CLI's pending
+list), never from `git log`.**
+
+### Known gaps NOT closed by #198
+- **Hydrate and Typesense still carry no photos.** `hydratePlacesByIds` reads
+  `master_place` (bare) and `master_place_search_export` (a view with no photo column),
+  so `/api/places/hydrate` and `/api/search-area` still render imageless tiles. Photos
+  exist on the **corridor RPC path only**. The fix is Artboard C — put the same lateral
+  in `master_place_search_export`. Designed in Paper, **not implemented**.
+- **Typesense has no `photo` field** — `PlaceDocument` doesn't declare one and
+  `transformRow` doesn't populate one, so a search sync is a no-op for photos even now.
+  Bundled with Artboard C.
+- **The 28 `/media` errors are still unretried.** `backfill:ridb-photo` is idempotent,
+  so a re-run recovers any that were transient. **Diagnosed 2026-08-09: they are NOT
+  auth failures** — see §PREFLIGHT below.
+
+## PREFLIGHT — two of the three red sources are false alarms `[measured 2026-08-09]`
+
+`bin/preflight` reported `✗ OVERPASS (000)`, `✗ MAPILLARY (500)`, `✗ RIDB (401)`.
+Two of those are artifacts of the checker, not of the source.
+
+- **RIDB 401 is a stale key in `web/.env.local` ONLY, and nothing reads it.**
+  `bin/preflight` sources `web/.env.local`; every actual RIDB consumer
+  (`data/ingestion/sources/ridb.ts`, `backfill:ridb-photo`, `ridb-photo-diagnostic.ts`)
+  runs out of `data/` under `--env-file=.env`. **The two files hold DIFFERENT keys**
+  (both well-formed 36-char UUIDs; compared by hash, never printed). `data/.env`'s key
+  returns **HTTP 200** on `/facilities` and on `/media`; `web/.env.local`'s returns
+  **401 `{"error":"Unauthorized Access"}` — byte-identical to the no-key and
+  garbage-key controls**, so it is revoked or superseded, not malformed and not
+  rate-limited. **Zero code consumers of `RIDB_API_KEY` exist under `web/`**
+  `[repo-root grep]` — the 401 is cosmetic.
+- **The 28 `/media` errors are NOT this 401.** The backfill ran under `data/.env`'s
+  working key; a 401 is permanent, so `defaultRetry` would have exhausted on every row
+  and the run could not have written 1,622 successes. A probe of **60** PROD ridb rows
+  that carry no photo returned **60/60 HTTP 200 with `RECDATA: []`** — i.e. the
+  no-photo population is dominated by *upstream has no media*, not by failures. The
+  original error strings are **not recoverable** — no log file, no docs entry
+  `[searched repo-root for *.log, backfill artifacts, and docs/*.md]` — so "transient
+  upstream 5xx / network" is **inference from the retry semantics, not a reading of the
+  errors themselves**.
+- **OVERPASS is REACHABLE; `000` is preflight's own 10s timeout under rate limiting.**
+  `overpass-api.de` returned **HTTP 200** on 4 of 5 sequential probes at
+  `--max-time 25`, and **429** on the 5th. `/api/status` reports **`Rate limit: 2`**
+  slots for this IP with slots queued 15–21s out — longer than preflight's
+  `--max-time 10`, which is exactly the `curl (28)` timeout it prints as `000`.
+  **Mirrors tested:** `overpass-api.de` **200**; `overpass.private.coffee` **200**;
+  `maps.mail.ru/osm/tools/overpass` **200**; `overpass.kumi.systems` timeout;
+  `overpass.osm.jp` **expired TLS certificate**. Any Overpass work must serialize to
+  **≤2 concurrent queries** and allow >10s per call.
+- **MAPILLARY 500 not investigated** this session.
 
 ## 2026-08-06 — NPS corpus imagery LIVE end-to-end on PROD (#196 + migration + backfill)
 
