@@ -217,6 +217,77 @@ const NAME_SUFFIXES_TO_STRIP = [
   "picnic area",
 ];
 
+/**
+ * Placeholder-name detector.
+ *
+ * Some adapters fabricate a name when the upstream row has none. OSM's
+ * `inferName` (`data/ingestion/sources/osm.ts:112-118`) falls back to
+ * `"Unnamed <category>"` when tags carry no `name`/`name:en`/`brand`/
+ * `operator`. Two fabricated strings collide at Jaro-Winkler = 1.0,
+ * which lifts the blended confidence formula into manual_review even
+ * when the two rows are 200-400m apart and clearly distinct pins
+ * (measured 2026-08-10: 27 of 30 sampled manual_reviews had identical
+ * "Unnamed dispersed camping" / "Designated Campsite" placeholder
+ * strings, pinning conf at exactly 0.600). The name channel becomes
+ * misleading — a signal of "no name recorded", not "same place".
+ *
+ * We treat any name matching a known placeholder shape as *no name*:
+ * when EITHER side of a scoreMatch is a placeholder, `name_similarity`
+ * is forced to 0 rather than computed by Jaro-Winkler. Two consequences:
+ *   1. Placeholder ↔ placeholder pairs stop clearing the 0.6 floor at
+ *      distances > 20-40m — they become new_master_place instead of
+ *      queueing (the correct call for distinct pins at a BLM camping
+ *      area, per §err-toward-separate for dispersed camping).
+ *   2. Placeholder ↔ real-name pairs stop being falsely deflated by
+ *      Jaro-Winkler comparing a real name to a fabricated string. A
+ *      fabricated name IS NOT evidence — it's the absence of one.
+ *
+ * `close_nameless` (Step 4) already captures the "close pin, no
+ * meaningful name" case (dist ≤ 100m + name_sim < 0.85 + cat_compat ≥
+ * 0.8). Zeroing placeholder pairs' name_similarity lets that guard fire
+ * for them too, routing cross-source close-pin placeholder collisions
+ * into review with a distinct method label. Note this only fires when
+ * the candidate MP does NOT already carry a row from the source (per
+ * the existing `masterPlaceHasSource` guard in the close_nameless
+ * block), so same-source placeholder pairs bypass Step 4 and land in
+ * Step 5's new_master_place tail — again correct.
+ *
+ * Extending the allowlist:
+ *   - New OSM `inferName` fallback strings → automatically caught by
+ *     the leading "Unnamed " check as long as the pattern stays.
+ *   - New generic BLM/USFS designations that show up in OSM's `name`
+ *     tag (community mappers writing "Designated Campsite" instead of
+ *     "Campsite 4") → add to PLACEHOLDER_NAME_ALLOWLIST, all-lowercase,
+ *     verified by grepping source_record.name for high-frequency
+ *     duplicates before adding. Do NOT add specific place names — a
+ *     name that appears at exactly one master_place is not a
+ *     placeholder, it's a name that happens to be short.
+ *   - New adapters with fabrication paths → prefer to have them emit
+ *     `"Unnamed <category>"` too so the prefix check catches them; if
+ *     they emit a different sentinel, add to PLACEHOLDER_NAME_ALLOWLIST.
+ */
+const PLACEHOLDER_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
+  "campsite",
+  "designated campsite",
+  "designated walk-in campsite",
+]);
+
+/**
+ * True if `name` is a fabricated placeholder rather than a real name.
+ * Case-insensitive; trims whitespace. Empty / whitespace-only names
+ * are treated as placeholders too — no signal.
+ */
+export function isPlaceholderName(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const n = name.trim().toLowerCase();
+  if (n.length === 0) return true;
+  // OSM's inferName fabricates "Unnamed <category>" — matches both
+  // "Unnamed dispersed camping" and "Unnamed OSM feature".
+  if (n.startsWith("unnamed ")) return true;
+  if (PLACEHOLDER_NAME_ALLOWLIST.has(n)) return true;
+  return false;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────
 
 export interface SourceRecordRow {
@@ -821,10 +892,18 @@ export function scoreMatch(
 ): MatchScore {
   const distance_meters = candidate.distance_m;
 
-  const name_similarity = jaroWinkler(
-    normalizeName(source.name),
-    normalizeName(candidate.canonical_name),
-  );
+  // Placeholder-name detection: if EITHER side is a fabricated name,
+  // force name_similarity to 0 rather than compare two placeholder
+  // strings (or a real name to a fabricated one) with Jaro-Winkler.
+  // See isPlaceholderName above for rationale + extension policy.
+  const eitherIsPlaceholder =
+    isPlaceholderName(source.name) || isPlaceholderName(candidate.canonical_name);
+  const name_similarity = eitherIsPlaceholder
+    ? 0
+    : jaroWinkler(
+        normalizeName(source.name),
+        normalizeName(candidate.canonical_name),
+      );
 
   const category_compatibility = lookupCompatibility(
     source.inferred_category,

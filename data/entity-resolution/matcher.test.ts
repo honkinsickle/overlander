@@ -23,6 +23,7 @@ import {
   fetchUnresolvedByIds,
   findCandidates,
   ID_FETCH_CHUNK,
+  isPlaceholderName,
   lookupCompatibility,
   MatchAllCircuitBreakerError,
   paginateLinkedSourceRecords,
@@ -96,6 +97,126 @@ describe("scoreMatch — blend math + Step-5 fallback bands", () => {
     );
     expect(s.combined_confidence).toBeCloseTo(0.5316, 3);
     expect(s.combined_confidence).toBeLessThan(0.6);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Placeholder-name detection — scoreMatch forces name_similarity to 0 when
+// either side is a fabricated placeholder. Rationale + allowlist policy live
+// on isPlaceholderName in matcher.ts.
+// ───────────────────────────────────────────────────────────────────────────
+describe("isPlaceholderName", () => {
+  it("recognizes OSM's 'Unnamed <category>' fabrications (any case)", () => {
+    expect(isPlaceholderName("Unnamed dispersed camping")).toBe(true);
+    expect(isPlaceholderName("unnamed OSM feature")).toBe(true);
+    expect(isPlaceholderName("UNNAMED spring")).toBe(true);
+  });
+  it("recognizes the generic BLM designations in the allowlist", () => {
+    expect(isPlaceholderName("Designated Campsite")).toBe(true);
+    expect(isPlaceholderName("designated walk-in campsite")).toBe(true);
+    expect(isPlaceholderName("Campsite")).toBe(true);
+  });
+  it("treats null/empty/whitespace-only as placeholders (no signal)", () => {
+    expect(isPlaceholderName(null)).toBe(true);
+    expect(isPlaceholderName(undefined)).toBe(true);
+    expect(isPlaceholderName("")).toBe(true);
+    expect(isPlaceholderName("   ")).toBe(true);
+  });
+  it("does NOT match real names", () => {
+    expect(isPlaceholderName("Sheep Pass")).toBe(false);
+    expect(isPlaceholderName("Coon Creek")).toBe(false);
+    expect(isPlaceholderName("Willow Flat")).toBe(false);
+    // Names containing "unnamed" mid-string are not fabrications.
+    expect(isPlaceholderName("The Unnamed Hero Trail")).toBe(false);
+  });
+});
+
+describe("scoreMatch — placeholder-name channel (2026-08-10 fix)", () => {
+  it("placeholder ↔ placeholder → name_similarity = 0 (no false match)", () => {
+    const s = scoreMatch(
+      { name: "Unnamed dispersed camping", inferred_category: "dispersed_camping" },
+      {
+        id: "x",
+        canonical_name: "Unnamed dispersed camping",
+        primary_category: "dispersed_camping",
+        distance_m: 250,
+      },
+    );
+    expect(s.name_similarity).toBe(0);
+    // conf = 0.4·0 + 0.4·0 + 0.2·1.0 = 0.2 — below the 0.6 floor, so this
+    // pair becomes new_master_place (was 0.60 → manual_review pre-fix).
+    expect(s.combined_confidence).toBeCloseTo(0.2, 6);
+    expect(s.combined_confidence).toBeLessThan(0.6);
+  });
+
+  it("real ↔ real → unchanged from prior behaviour (regression guard)", () => {
+    // Same as the Willow Flat blended_residual case above: identical real
+    // names, recreation_area↔campground (0.7), 60m → conf = 0.70.
+    const s = scoreMatch(
+      { name: "Willow Flat", inferred_category: "recreation_area" },
+      { id: "x", canonical_name: "Willow Flat", primary_category: "campground", distance_m: 60 },
+    );
+    expect(s.name_similarity).toBe(1.0);
+    expect(s.combined_confidence).toBeCloseTo(0.7, 6);
+  });
+
+  it("real (source) ↔ placeholder (candidate) → name_similarity = 0", () => {
+    // A real-named row landing near a placeholder-seeded MP (e.g. MP was
+    // created earlier from an OSM 'Unnamed dispersed camping'). Pre-fix
+    // this would have compared "Coon Creek" to "unnamed dispersed camping"
+    // and scored ~0.4 name_sim; the fix zeroes it — a fabricated name is
+    // not evidence.
+    const s = scoreMatch(
+      { name: "Coon Creek", inferred_category: "dispersed_camping" },
+      {
+        id: "x",
+        canonical_name: "Unnamed dispersed camping",
+        primary_category: "dispersed_camping",
+        distance_m: 40,
+      },
+    );
+    expect(s.name_similarity).toBe(0);
+    // conf = 0.4·0.6 + 0.4·0 + 0.2·1.0 = 0.44 → new_master_place.
+    expect(s.combined_confidence).toBeCloseTo(0.44, 6);
+  });
+
+  it("placeholder (source) ↔ real (candidate) → name_similarity = 0 (symmetric)", () => {
+    const s = scoreMatch(
+      { name: "Unnamed dispersed camping", inferred_category: "dispersed_camping" },
+      {
+        id: "x",
+        canonical_name: "Coon Creek",
+        primary_category: "dispersed_camping",
+        distance_m: 40,
+      },
+    );
+    expect(s.name_similarity).toBe(0);
+    expect(s.combined_confidence).toBeCloseTo(0.44, 6);
+  });
+
+  it("close_nameless conditions now satisfied by placeholder pairs (dist ≤ 100m, cat ≥ 0.8, name < 0.85)", () => {
+    // The Step-4 close_nameless guard (matcher.ts:1038-1042) needs:
+    //   distance ≤ 100m, name_similarity < 0.85, category_compatibility ≥ 0.8.
+    // Pre-fix, placeholder pairs had name_sim = 1.0 and skipped this guard,
+    // falling through to Step 5 blended_residual. Post-fix, name_sim = 0
+    // satisfies the guard so matchOne routes cross-source placeholder pairs
+    // to close_nameless review. Verified here at the score-component level
+    // (the routing itself is exercised by phase3a.test.ts against fixtures).
+    const s = scoreMatch(
+      { name: "Designated Campsite", inferred_category: "dispersed_camping" },
+      {
+        id: "x",
+        canonical_name: "Designated Campsite",
+        primary_category: "dispersed_camping",
+        distance_m: 60,
+      },
+    );
+    expect(s.distance_meters).toBeLessThanOrEqual(100);
+    expect(s.name_similarity).toBeLessThan(0.85);
+    expect(s.category_compatibility).toBeGreaterThanOrEqual(0.8);
+    // Confidence itself is below auto-link but the close_nameless step
+    // handles routing before Step 5 fires.
+    expect(s.combined_confidence).toBeLessThan(0.85);
   });
 });
 
