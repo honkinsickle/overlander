@@ -74,4 +74,29 @@ check BLM       "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
 check MAPBOX    "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
   "https://api.mapbox.com/styles/v1/honkingsickle/cmolte3b7003e01so7msf20d3?access_token=${NEXT_PUBLIC_MAPBOX_TOKEN-}")"
 
+# Ledger drift (read-only): flag any migration recorded on PROD's
+# supabase_migrations.schema_migrations that has NO file in supabase/migrations/
+# — i.e. schema pushed outside `db push`. Direct psql DDL against PROD bypasses
+# the ledger (happened 2026-08-10 via a parallel Conductor worktree). Catches a
+# missing FILE; will NOT catch an object created with no ledger row at all.
+# Credential: an operator-managed read-only PROD conn string at
+# ~/.config/overlander/prod-db-url (same pattern as staging-db-url) — never in
+# the repo or shell env, and the CLI is not linked. Inert until that file exists.
+prod_db_url_file="$HOME/.config/overlander/prod-db-url"
+if [[ -f "$prod_db_url_file" ]] && command -v psql >/dev/null 2>&1; then
+  drift=""
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    ls supabase/migrations/"${v}"_*.sql >/dev/null 2>&1 || drift="${drift} ${v}"
+  done < <(psql "$(cat "$prod_db_url_file")" -Atc \
+    "select version from supabase_migrations.schema_migrations order by version" 2>/dev/null)
+  if [[ -n "$drift" ]]; then
+    printf "  ✗ LEDGER (PROD versions with no local file:%s )\n" "$drift"
+  else
+    printf "  ✓ LEDGER (every PROD migration has a repo file)\n"
+  fi
+else
+  printf "  ◦ LEDGER (skipped — no ~/.config/overlander/prod-db-url)\n"
+fi
+
 exit 0
