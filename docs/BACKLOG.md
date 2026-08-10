@@ -56,6 +56,8 @@ the export view so the search index and any card fed from it can show imagery. (
 a **"5,256 photo-emitting tiles"** figure was asserted for RIDB Route A but matches
 none of the measured counts — reconcile or discard it when this is picked up.)
 
+**Follow-up (post-#211):** `photo_url` is **stored and retrievable** on both `places_test` and `places_prod` (returned in search hits + via hydrate) but is **not a declared Typesense schema field** — the sync only sets the schema on collection *creation* — so `filter_by`/`facet_by` on it will **400**. Rendering is unaffected. Declaring it later is an in-place `collections.update` to add the field (background-indexes the already-stored values — no reindex/recreate).
+
 ## CA OSM camping — 8.33% `manual_review` rate unexplained (2026-08-10)
 
 CA's materialize produced **206 / 2,474 = 8.33% `manual_review`**, against AZ 4.4%
