@@ -121,6 +121,7 @@ export async function applyMatches(outcomes: MatchOutcome[]): Promise<ApplyResul
     errors: [],
   };
 
+  const rpcTimings: { batch: number; size: number; ms: number }[] = [];
   for (let offset = 0; offset < outcomes.length; offset += batchSize) {
     const batch = outcomes.slice(offset, offset + batchSize);
     const batchIdx = Math.floor(offset / batchSize) + 1;
@@ -129,12 +130,19 @@ export async function applyMatches(outcomes: MatchOutcome[]): Promise<ApplyResul
       "promote: applying batch",
     );
 
+    const t0 = performance.now();
     const { data, error } = await db.rpc("apply_match_outcomes", {
       p_outcomes: batch,
     });
+    const rpcMs = Math.round(performance.now() - t0);
+    rpcTimings.push({ batch: batchIdx, size: batch.length, ms: rpcMs });
+    logger.info(
+      { batch: batchIdx, size: batch.length, rpc_ms: rpcMs },
+      "promote: apply_match_outcomes RPC returned",
+    );
     if (error) {
       logger.error(
-        { err: error, batchIndex: batchIdx, batchSize: batch.length, completedOutcomes: offset },
+        { err: error, batchIndex: batchIdx, batchSize: batch.length, completedOutcomes: offset, rpc_ms: rpcMs },
         "promote: apply_match_outcomes RPC failed (partial progress retained)",
       );
       throw error;
@@ -148,6 +156,15 @@ export async function applyMatches(outcomes: MatchOutcome[]): Promise<ApplyResul
       totals.errors.push(...result.errors);
     }
   }
+  const rpcMsList = rpcTimings.map((r) => r.ms);
+  const rpcSum = rpcMsList.reduce((a, b) => a + b, 0);
+  const rpcMin = rpcMsList.length > 0 ? Math.min(...rpcMsList) : 0;
+  const rpcMax = rpcMsList.length > 0 ? Math.max(...rpcMsList) : 0;
+  const rpcAvg = rpcMsList.length > 0 ? Math.round(rpcSum / rpcMsList.length) : 0;
+  logger.info(
+    { total_rpc_ms: rpcSum, per_call_min_ms: rpcMin, per_call_max_ms: rpcMax, per_call_avg_ms: rpcAvg, calls: rpcMsList.length, batch_size: batchSize },
+    "promote: apply_match_outcomes RPC timing summary",
+  );
 
   logger.info(
     {
