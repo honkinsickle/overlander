@@ -111,29 +111,38 @@ TEST reference_trips flipped; **awaiting explicit "go" for the PROD apply.**
   view migration must use the US–Canada border as the northern bound, not a
   rounded 49.00 — or fall back to real state polygons.
 
-### DRIFT — one schema divergence, intentional, closable this session
+### DRIFT — both prior divergences are CLOSED as of 2026-08-10
 
-**TEST is AHEAD of PROD on `reference_trips.is_active`.** Migration
-`20260810120000_reference_trips_is_active.sql` (on
-`feat/reference-trips-is-active`) has been applied to TEST — the column
-exists there, 8 of 9 rows are flipped `false`, only `la-to-portland` remains
-active. **PROD does NOT have the column** `[queried PROD, 2026-08-09]`;
-PROD's `reference_trips` schema is still 5-column (`id`, `title`, `payload`,
-`source_version`, `updated_at`). **Part 1 step 6 of the six-state PROD trim
-plan closes this drift** by running `db:push-verify` PROD-linked with `.env`
-swapped from `~/.config/overlander/env-backups/.env.production-backup`. Until
-that apply runs, any code on this branch that filters `is_active=true` in a
-PROD read path would return zero rows for every id — deploy of the branch is
-gated on the PROD apply, in that order.
+**No open schema drift between TEST, PROD, and any staged branch as of this
+write.** Recorded here (not deleted) because a cold-start reader needs to
+know *why* the section is empty — the two drifts this refresh originally
+flagged both closed within a 24-hour window.
 
-**Previously recorded here — the RIDB widening drift — is CLOSED.** #198
-merged 2026-08-09T22:11:16Z, landing the two RIDB migrations
-(`20260809120000_widen_google_resolved.sql`,
-`20260809130000_ridb_photo.sql`), the adapter, the backfill script, and the
-verification tooling on `main`. `main` and PROD now agree on the RPC. The
-`feat/ridb-imagery-route-a` local branch (in `~/Code/overlander` only) is
-superseded by the squash-merge and is safe to delete once you say so; leaving
-it in place is harmless.
+- **~~RIDB widening (PROD ahead of `main`).~~ CLOSED — #198 merged
+  2026-08-09T22:11:16Z**, landing the two RIDB migrations
+  (`20260809120000_widen_google_resolved.sql`,
+  `20260809130000_ridb_photo.sql`), the adapter, the backfill script, and
+  the verification tooling on `main`. `main` and PROD now agree on the RPC.
+  The `feat/ridb-imagery-route-a` local branch (in `~/Code/overlander` only)
+  is superseded by the squash-merge and is safe to delete once you say so;
+  leaving it in place is harmless.
+- **~~`reference_trips.is_active` (TEST ahead of PROD).~~ CLOSED — the
+  migration was applied to PROD between STOP #1 and 2026-08-10 03:00 UTC**
+  by an interactive/ad-hoc write (not from a committed script on any branch
+  I can see; `work/six-state-trim` in the `havana` worktree carries only
+  the same is_active work as `feat/reference-trips-is-active`, no
+  additional commits). PROD now has the column, and both target rows
+  (`la-to-deadhorse`, `dawson-vancouver-cassiar`) are already
+  `is_active=false` with matching `updated_at=2026-08-10T01:52:40.76769Z`
+  (single-statement UPDATE). Payload byte-integrity verified — Cassiar SHA
+  matches the frozen `46a17cbb421208f7…`. **Part 1 step 6 of the six-state
+  trim plan is therefore DONE**, though not by this session; whoever
+  executed it is asked to record the apply in `LOG.md`.
+- **Part 2 (source_record trim, view migration, search:sync) has NOT
+  happened yet on PROD.** `source_record.is_active=true` still returns
+  20,384 (all rows), and `master_place.max(updated_at)` is still
+  `2026-07-12T19:57:09Z`. If a parallel session is mid-Part-2, its work is
+  uncommitted in the `havana` worktree.
 
 ## 2026-08-09 — RIDB Route A imagery LIVE on PROD; photo lateral covers nps + ridb (#198)
 

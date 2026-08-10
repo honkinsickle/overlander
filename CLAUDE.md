@@ -332,6 +332,20 @@ actually touched what they describe. The `/wrap` command runs this pass.
     `.next/types`, which only `next build` regenerates. Conversely, a STALE
     `.next` reports phantom `Cannot find module '../../src/app/…/page.js'` for
     routes you just deleted. Both are artifacts, not source errors. Run the build.
+  - **A supabase-js query with a bad column returns `null` count and often no
+    visible `error.message` — never conclude "zero rows" from a null count
+    without logging the full response** `[measured 2026-08-10]`. Two typos
+    this session (`name` vs `title` on `reference_trips`; `searchable` vs
+    `is_searchable` on `master_place`) returned `count: null` while
+    `error?.message ?? ""` printed empty, so the null read as "0 rows" for
+    hours before a follow-up caught it. PostgREST does surface the 400
+    (`{code: '42703', ...}`), but a `??`-guarded `error?.message` print is
+    vacuous when the error object shape or presence differs. **A null count
+    is a failure signal, not a data value.** Rule at every corpus-scale
+    read: `if (r.error || r.count == null) console.log('QUERY FAILED:', r)`
+    — log the whole response, not just `error?.message`. Same shape as the
+    scoping/apparatus lessons above: a check that cannot fail is not
+    evidence.
 
 ---
 
