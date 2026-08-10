@@ -25,15 +25,18 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — `is_active = true` | (all) | 20,750 |
 > | — `is_active = false` (six-state trim) | 0 | **8,067** |
 > | `master_place` total | 13,629 | **20,904** |
-> | `master_place_search_export` (view-visible) | — | **16,661** |
-> | Typesense `places_prod` | 13,629 | **16,661** |
+> | `master_place_search_export` (view-visible) | — | **16,654** (post-#209 footprint repoint) |
+> | Typesense `places_prod` | 13,629 | **16,654** |
 >
 > **`source_record` by `source_id` (all / active):** osm 13,804 / 13,804 ·
 > nps 4,837 / 3,466 · ridb 3,961 / 2,519 · parks_canada 3,078 / **0** ·
 > google 1,863 / 948 · bc_parks 8 / **0**. The six-state trim deactivated
 > the Canada sources entirely and the out-of-region US tail; osm is 100%
 > active (all in-scope). `master_place_search_export == places_prod ==
-> 16,661` — search index mirrors the export view exactly.
+> 16,654` — search index mirrors the export view exactly. **The view filters on
+> `six_state_footprint()` (tight) as of #209** — not `six_state_scope()`; that
+> repoint was −9 Idaho +2 San Juan Islands (16,661 → 16,654), footprint not being
+> a strict subset of scope.
 >
 > **OSM dispersed camping per state (ISO-area Overpass, distinct; sums
 > exactly to the PROD `osm dispersed_camping` source_record total, 3,125):**
@@ -46,9 +49,12 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > WA 327 / OR 156 / NV 2 — those are radius undercounts, **not** state
 > totals; use the ISO-area figures above.
 >
-> **Photo coverage:** 1,622 `ridb` + 4,451 `nps` = 6,073 source_records
-> carry a promoted `normalized_payload.photo.url`. `master_place_search_export`
-> has **no photo column** — no photo reaches search yet.
+> **Photo coverage (Artboard C LIVE, #211):** `photo_url` is now on the view
+> (nps/ridb lateral, NPS preferred) + the Typesense sync + hydrate. **3,526 of
+> 16,654** view rows carry a non-null `photo_url` (~21%); `places_prod` docs
+> carry it (retrievable — *not* a declared schema field, see BACKLOG). Source
+> photos: 1,622 `ridb` + 4,451 `nps` = 6,073 source_records carry
+> `normalized_payload.photo.url`.
 
 - **master_place:** 13,629 total · 13,629 searchable · 0 non-searchable.
 - **Searchable latitude range:** −88.6 → 70.2 (13,629 rows). The corridor proper
@@ -77,6 +83,24 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
   also present, inactive/complete — the old bootstrap.)
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
+
+> **⚠️ Re-measured 2026-08-10 `[queried TEST, read-only]` — TEST has grown far past
+> the old reseed via the six-state camping validation ingests, and its export view
+> was brought to the PROD baseline this session (`180000–180400`).** Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `source_record` total (all active — no `is_active` trim on TEST) | **18,967** |
+> | `master_place` total | **16,521** |
+> | `master_place_search_export` (view, `six_state_footprint()`) | **14,911** |
+> | — carrying `photo_url` | **226** |
+> | Typesense `places_test` | **14,911** (= view) |
+>
+> **`source_record` by `source_id`:** osm **18,250** · ridb 388 · nps 83 ·
+> google_resolved 122 · google 5. TEST is **osm-heavy (96%)** and now larger than
+> PROD's osm — still **not representative of PROD** (no `is_active` trim, no Canada
+> sources, different source mix), just no longer tiny. The 2026-07-23 counts below
+> are SUPERSEDED.
 
 Small and **not representative of coverage.** It was **wiped 2026-06-03 by
 `reset_phase3a_test_state`** — that is why it is tiny, not because the corpus is

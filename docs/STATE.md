@@ -74,6 +74,60 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-10 (later) — export view on `six_state_footprint()` + Artboard C photo LIVE on PROD
+
+Newest truth; supersedes the view figures in the section below (which predate the
+#209 footprint repoint). Every number **re-measured against PROD and TEST read-only,
+2026-08-10** `[queried]`.
+
+**Artboard C — corpus photo now flows into search (#211, live on PROD).** `photo_url`
+was lateraled into `master_place_search_export` (the same nps/ridb lateral
+`pois_along_corridor` uses, NPS preferred), then plumbed through the Typesense sync
+(`PlaceDocument`) and `hydratePlacesByIds` (via the existing `nps_photo_url → photoUrl`
+map — **no UI change**). So the same place now shows its image in search as it does in
+corridor browse. On PROD:
+
+| metric | value |
+|---|--:|
+| `master_place_search_export` (view) | **16,654** (unchanged — additive LEFT JOIN) |
+| view rows carrying a non-null `photo_url` | **3,526** (~21%) |
+| Typesense `places_prod` | **16,654** (= view exactly) |
+
+A `places_prod` doc carries `photo_url` (retrievable) and hydrate returns `photoUrl`
+against PROD — both verified. **Caveat (BACKLOG):** `photo_url` is stored/retrievable
+but **not a declared Typesense schema field** on the existing collections, so
+`filter_by`/`facet_by` on it 400s; rendering is unaffected.
+
+**The export view now filters on `six_state_footprint()`, not `six_state_scope()`
+(#209).** `six_state_scope()` (coarse) leaked **9 Idaho panhandle rows** into search;
+the tighter footprint removed them. **Net was −9 +2, not −9:** footprint is **not a
+strict subset** of scope — its accurate WA-northwest edge (Haro Strait) correctly
+re-includes **2 San Juan Islands WA** campgrounds that scope's flat 48.40 step
+dropped. View **16,661 → 16,654**. `six_state_scope()` is retained (marked superseded)
+because the source_record trim's helpers still reference it.
+
+**TEST was brought to the PROD view baseline.** TEST lacked the four six-state view
+migrations (`180000–180300`); applied via `db:push-verify --test`, TEST view
+**16,410 → 14,911**, dropping **exactly** the 1,499 out-of-footprint rows: Idaho
+1,141, MT/WY 124, CO/NM 40, Baja 10, other 184 (osm 1,460 / google_resolved 40). TEST
+view + `places_test` = **14,911**, matching PROD's predicate structure (counts differ
+by data). **Correction:** the objects-without-ledger drift was PROD-only — `120000`
+/`130000` were already properly in TEST's ledger, so TEST had nothing to repair.
+
+**Also #210:** `promote.ts` `DEFAULT_BATCH_SIZE` **500 → 25** (the stale "~10 s"
+calibration replaced with the measured 60 s PROD ceiling; 500/100 fail `57014`).
+
+### DRIFT — what remains open
+
+- **No schema drift** between TEST, PROD, and `main` on the export view — all three
+  now carry `180000–180400` (TEST via this session, PROD via #204/#209/#211, `main`
+  via merge). PROD's ledger was reconciled (#204 + `migration repair`); TEST's needed
+  no repair.
+- **`photo_url` undeclared on existing Typesense collections** — retrievable, not
+  filterable/facetable. In-place `collections.update` when wanted. `BACKLOG.md`.
+- **`waste_disposal` reclassify unrun on PROD** (1,723 rows); **CA 8.33% manual_review
+  unexplained**; **28 RIDB `/media` backfill errors** unverified. All in `BACKLOG.md`.
+
 ## 2026-08-10 (late) — six-state OSM camping corpus COMPLETE on PROD + live in search
 
 This is the current corpus truth. Every number below was **re-measured against
