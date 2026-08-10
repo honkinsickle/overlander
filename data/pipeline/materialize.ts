@@ -42,7 +42,9 @@ import type { BoundingBox } from "../ingestion/lib/geometry.ts";
 import { matchAll, type MatchOutcome } from "../entity-resolution/matcher.ts";
 import {
   loadFreshOutcomeCache,
+  loadIncrementalOutcomeCache,
   loadOutcomeCacheBypassingFingerprint,
+  saveIncrementalOutcomeCache,
   saveOutcomeCache,
 } from "../entity-resolution/outcome-cache.ts";
 import { applyMatches, type ApplyResult } from "../entity-resolution/promote.ts";
@@ -88,6 +90,18 @@ export interface MaterializeOptions {
    * state; the loader emits a warn log at every invocation.
    */
   skipFingerprintCheck: boolean;
+  /**
+   * Incremental-mode only. When set, skip findTrulyUnresolvedIds AND
+   * matchAll; load outcomes from `.cache/matchall-incremental-outcomes.json`
+   * (the file the incremental path now writes automatically after matchAll)
+   * and apply directly. Filters idempotently: any outcome whose
+   * source_record.master_place_id is already populated is skipped (that
+   * outcome landed on the prior partial apply). Use when applyMatches died
+   * mid-run and re-running would re-pay ~250s of matchAll for a ~2,000-row
+   * unresolved set. Fingerprint-free by design — see outcome-cache.ts
+   * §Incremental cache. Incompatible with --rematerialize.
+   */
+  applyFromCache: boolean;
   /**
    * Incremental-mode only. Fail-closed allowlist: when non-empty, ONLY
    * source_records whose `inferred_category` is in this list reach matchAll
@@ -249,10 +263,55 @@ async function findTrulyUnresolvedIds(
   return computeTrulyUnresolvedIds(srRows, pmRows, onlyCategories);
 }
 
+/** Filter outcomes that already landed on the DB. Stronger than "SR is
+ *  linked" alone: checks whether the specific (source_record_id, target)
+ *  place_match row exists. That covers all four outcome kinds without
+ *  tripping the place_match unique-constraint:
+ *
+ *   - new_master_place / auto_link / amenity_rollup — insert `confirmed`
+ *     place_match at (SR, target). Skip if the pair exists.
+ *   - manual_review — insert `pending` place_match at (SR, target) with
+ *     SR.master_place_id NULL (SR is never linked for this kind). A
+ *     naive "SR is linked" check would NOT skip these; the pair check
+ *     does. Re-applying would violate unique(source_record_id,
+ *     master_place_id).
+ *
+ *  Live-DB check, not fingerprint; see outcome-cache.ts §Incremental
+ *  cache for the rationale.
+ */
+async function filterAlreadyAppliedOutcomes(
+  outcomes: MatchOutcome[],
+): Promise<MatchOutcome[]> {
+  if (outcomes.length === 0) return outcomes;
+  const db = getDb();
+  const srIds = [...new Set(outcomes.map((o) => o.source_record_id))];
+  const existingPairs = new Set<string>();
+  const CHUNK = 100; // PostgREST URL cap
+  for (let i = 0; i < srIds.length; i += CHUNK) {
+    const chunk = srIds.slice(i, i + CHUNK);
+    const { data, error } = await db
+      .from("place_match")
+      .select("source_record_id, master_place_id")
+      .in("source_record_id", chunk);
+    if (error) throw error;
+    for (const row of (data ?? []) as { source_record_id: string; master_place_id: string }[]) {
+      existingPairs.add(`${row.source_record_id}|${row.master_place_id}`);
+    }
+  }
+  return outcomes.filter((o) => {
+    // Only outcomes with a `target` MP are filterable; every current
+    // MatchOutcome kind carries `target`.
+    const target = (o as { target?: string }).target;
+    if (!target) return true;
+    return !existingPairs.has(`${o.source_record_id}|${target}`);
+  });
+}
+
 async function runResolution(
   rematerializeJustRan: boolean,
   dryRun: boolean,
   skipFingerprintCheck: boolean,
+  applyFromCache: boolean,
   onlyCategories: readonly string[],
 ): Promise<ApplyResult> {
   // After --rematerialize, every source_record is unresolved by
@@ -291,8 +350,52 @@ async function runResolution(
       outcomes = cached;
     } else {
       logger.info("materialize: ER over full corpus (rematerialize)");
+      const t0 = performance.now();
       outcomes = await matchAll();
+      logger.info({ matchall_ms: Math.round(performance.now() - t0), outcomes: outcomes.length }, "materialize: matchAll (full corpus) complete");
       if (!dryRun) await saveOutcomeCache(outcomes);
+    }
+  } else if (applyFromCache) {
+    // Resume flow: skip findTrulyUnresolvedIds AND skip matchAll.
+    // Load previously-saved outcomes and filter out anything a prior
+    // partial apply already landed. See outcome-cache.ts §Incremental.
+    const cached = await loadIncrementalOutcomeCache();
+    if (!cached) {
+      throw new Error(
+        "materialize: --apply-from-cache but no incremental cache file found. " +
+          "Run an incremental materialize first (matchAll will save the cache on completion).",
+      );
+    }
+    const original = cached.outcomes;
+    if (dryRun) {
+      logger.info(
+        { cached: original.length, saved_at: cached.saved_at },
+        "materialize: --dry-run --apply-from-cache → would load + filter but not apply",
+      );
+      return {
+        new_master_places: original.filter((o) => o.kind === "new_master_place").length,
+        auto_linked: original.filter((o) => o.kind === "auto_link").length,
+        amenity_rolled_up: original.filter((o) => o.kind === "amenity_rollup").length,
+        manual_review_queued: original.filter((o) => o.kind === "manual_review").length,
+        errors: [],
+      };
+    }
+    const t0 = performance.now();
+    outcomes = await filterAlreadyAppliedOutcomes(original);
+    const skipped = original.length - outcomes.length;
+    logger.info(
+      {
+        cache_saved_at: cached.saved_at,
+        cache_outcomes: original.length,
+        already_applied: skipped,
+        remaining: outcomes.length,
+        filter_ms: Math.round(performance.now() - t0),
+      },
+      "materialize: --apply-from-cache filtered idempotently",
+    );
+    if (outcomes.length === 0) {
+      logger.info("materialize: --apply-from-cache — every cached outcome already applied, nothing to do");
+      return { new_master_places: 0, auto_linked: 0, amenity_rolled_up: 0, manual_review_queued: 0, errors: [] };
     }
   } else {
     const trulyUnresolvedIds = await findTrulyUnresolvedIds(onlyCategories);
@@ -307,7 +410,13 @@ async function runResolution(
       { unresolved: trulyUnresolvedIds.length, onlyCategories },
       "materialize: ER over truly-new source_records (incremental)",
     );
+    const t0 = performance.now();
     outcomes = await matchAll(trulyUnresolvedIds);
+    logger.info({ matchall_ms: Math.round(performance.now() - t0), input_ids: trulyUnresolvedIds.length, outcomes: outcomes.length }, "materialize: matchAll (incremental) complete");
+    // Persist BEFORE applyMatches so a killed apply is resumable via
+    // --apply-from-cache. Skipped under --dry-run since there's no
+    // apply to resume from.
+    if (!dryRun) await saveIncrementalOutcomeCache(trulyUnresolvedIds, outcomes);
   }
 
   if (dryRun) {
@@ -375,6 +484,12 @@ export async function materialize(opts: MaterializeOptions): Promise<Materialize
         "(rematerialize reprocesses the whole corpus). Refusing to run to avoid a silent no-op scope.",
     );
   }
+  if (opts.applyFromCache && opts.rematerialize) {
+    throw new Error(
+      "materialize: --apply-from-cache is an incremental-path recovery flag; " +
+        "it cannot be combined with --rematerialize.",
+    );
+  }
 
   const stagesRun: string[] = [];
 
@@ -402,6 +517,7 @@ export async function materialize(opts: MaterializeOptions): Promise<Materialize
       opts.rematerialize,
       opts.dryRun,
       opts.skipFingerprintCheck,
+      opts.applyFromCache,
       opts.onlyCategories,
     );
     logger.info(erResult, "materialize: ER complete");
@@ -471,6 +587,7 @@ interface CliOpts {
   dryRun?: boolean;
   rematerialize?: boolean;
   skipFingerprintCheck?: boolean;
+  applyFromCache?: boolean;
   onlyCategories?: readonly string[];
 }
 
@@ -493,6 +610,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       "RECOVERY ONLY (with --rematerialize): load matchall-outcomes.json without verifying corpus fingerprint. Use when resuming from a partial-apply failure via clear + re-apply.",
     )
     .option(
+      "--apply-from-cache",
+      "RECOVERY (incremental path): skip matchAll; load outcomes from .cache/matchall-incremental-outcomes.json and apply, filtering out any already-linked source_records. Use when an incremental apply died mid-run and re-matching would re-pay minutes of matchAll cost.",
+    )
+    .option(
       "--only-categories <list>",
       "Fail-closed allowlist: comma-separated inferred_category values; ONLY these reach the incremental ER delta, everything else (incl. unmapped) is held back. Incompatible with --rematerialize.",
       parseOnlyCategories,
@@ -509,6 +630,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         dryRun: cli.dryRun ?? false,
         rematerialize: cli.rematerialize ?? false,
         skipFingerprintCheck: cli.skipFingerprintCheck ?? false,
+        applyFromCache: cli.applyFromCache ?? false,
         onlyCategories: cli.onlyCategories ?? [],
       };
       try {

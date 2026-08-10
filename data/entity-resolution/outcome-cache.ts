@@ -37,6 +37,7 @@ import { logger } from "../ingestion/lib/logger.ts";
 import type { MatchOutcome } from "./matcher.ts";
 
 const DEFAULT_REL_PATH = ".cache/matchall-outcomes.json";
+const INCREMENTAL_REL_PATH = ".cache/matchall-incremental-outcomes.json";
 const EPOCH_ZERO = "0000-01-01T00:00:00Z";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -69,6 +70,13 @@ function cachePath(): string {
   if (env && isAbsolute(env)) return env;
   if (env) return resolveDataRel(env);
   return resolveDataRel(DEFAULT_REL_PATH);
+}
+
+function incrementalCachePath(): string {
+  const env = process.env.MATCHALL_INCREMENTAL_CACHE_PATH;
+  if (env && isAbsolute(env)) return env;
+  if (env) return resolveDataRel(env);
+  return resolveDataRel(INCREMENTAL_REL_PATH);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -200,4 +208,88 @@ export async function saveOutcomeCache(outcomes: MatchOutcome[]): Promise<void> 
     { path, outcomeCount: outcomes.length, fingerprint },
     "outcome-cache: saved",
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Incremental cache — for the incremental (non-rematerialize) path.
+//
+// Rematerialize's cache above is fingerprint-guarded: any source_record
+// mutation (including the master_place_id UPDATE from a successful apply)
+// bumps max(updated_at) and invalidates the cache. That is CORRECT for
+// rematerialize (whose intent is "reprocess everything from a known
+// baseline") but WRONG for the incremental-resume flow this file
+// supports below.
+//
+// The incremental cache stores the matchAll output for an operator-driven
+// subset (the trulyUnresolvedIds passed to matchAll). It is used for the
+// specific flow where apply_match_outcomes hits a timeout mid-batch and
+// the operator wants to resume the apply WITHOUT re-running matchAll.
+// Between the failed apply and the resume, some source_records got their
+// master_place_id set (the partial apply's successes), which bumps
+// source_record.max(updated_at) and would invalidate a fingerprinted
+// cache. The incremental cache is therefore fingerprint-FREE by design.
+//
+// Idempotency lives at the CALLER, not this module: the resume path
+// filters outcomes whose source_record.master_place_id is already
+// populated (the outcome was applied on the prior attempt), then re-
+// applies only the remainder. That's a much stronger correctness
+// guarantee than a fingerprint would give — checking actual DB state
+// beats trusting a stored counter.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Persisted shape for the incremental cache. Deliberately excludes any
+ *  corpus fingerprint — see the section header above. */
+export interface IncrementalCacheEntry {
+  saved_at: string;
+  /** The SR IDs matchAll was called with. Logged for provenance; the
+   *  resume path uses outcome.source_record_id (which the RPC needs
+   *  anyway), not this field, so a subset re-apply is fine. */
+  input_ids: string[];
+  outcomes: MatchOutcome[];
+}
+
+/** Persist the incremental matchAll output. Callers should invoke this
+ *  IMMEDIATELY after matchAll returns and BEFORE applyMatches, so a
+ *  killed apply can be resumed from the cache. */
+export async function saveIncrementalOutcomeCache(
+  inputIds: readonly string[],
+  outcomes: MatchOutcome[],
+): Promise<void> {
+  const path = incrementalCachePath();
+  const entry: IncrementalCacheEntry = {
+    saved_at: new Date().toISOString(),
+    input_ids: [...inputIds],
+    outcomes,
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(entry));
+  logger.info(
+    { path, input_ids: inputIds.length, outcomes: outcomes.length },
+    "outcome-cache: incremental saved",
+  );
+}
+
+/** Load a cached incremental matchAll output. Returns null when no cache
+ *  exists or the file is unreadable. NO fingerprint check — the resume
+ *  path handles idempotency by inspecting live source_record state. */
+export async function loadIncrementalOutcomeCache(): Promise<IncrementalCacheEntry | null> {
+  const path = incrementalCachePath();
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, "utf8");
+    const entry = JSON.parse(raw) as IncrementalCacheEntry;
+    logger.info(
+      {
+        path,
+        saved_at: entry.saved_at,
+        input_ids: entry.input_ids.length,
+        outcomes: entry.outcomes.length,
+      },
+      "outcome-cache: incremental loaded",
+    );
+    return entry;
+  } catch (err) {
+    logger.warn({ err, path }, "outcome-cache: incremental unreadable");
+    return null;
+  }
 }
