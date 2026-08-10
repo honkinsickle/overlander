@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { _internals } from "./osm.ts";
+import { _internals, ALL_FAMILIES, parseFamilies, type TagFamily } from "./osm.ts";
 
-const { inferCategory, normalizeOsm } = _internals;
+const { inferCategory, normalizeOsm, buildOverpassQuery, bboxScope, areaScope } = _internals;
 
 describe("inferCategory — dispersed-camping split (PR-B)", () => {
   it("camp_site + backcountry=yes → dispersed_camping", () => {
@@ -53,6 +53,105 @@ describe("normalizeOsm — dump_station amenity boolean tracks sanitary_dump_sta
     // persistElement's category-null guard, but the pure normalizer should
     // still refuse to falsely flag it as a dump_station.
     expect(n.amenities).toBeNull();
+  });
+});
+
+describe("buildOverpassQuery — tag-family flag", () => {
+  const bbox = bboxScope([-114.05, 37.00, -109.04, 42.00]); // UT
+
+  // Sentinels — one distinctive predicate substring per family, chosen so a
+  // match unambiguously identifies its family in the emitted query text.
+  const SIGIL: Record<TagFamily, string> = {
+    camping: '"tourism"~"^(camp_site|caravan_site)$"',
+    tourism_misc: '"tourism"~"^(picnic_site|viewpoint',
+    fuel: '"amenity"~"^(fuel|charging_station',
+    water_san: '"man_made"~"^(water_well|water_tap)$"',
+    trailheads: '"highway"~"^(services|rest_area|trailhead)$"',
+    shops: '"shop"~"^(supermarket|convenience|outdoor|hardware)$"',
+    natural: '"natural"~"^(spring|peak|beach)$"',
+    leisure: '"leisure"~"^(park|nature_reserve)$"',
+  };
+
+  it("default (no opts) emits every family's predicates — behaviour preserved", () => {
+    const q = buildOverpassQuery(bbox);
+    for (const family of ALL_FAMILIES) {
+      expect(q, `family ${family} must be present in default query`).toContain(SIGIL[family]);
+    }
+    // Camping's variant clauses always ship with the camping family.
+    expect(q).toContain('"backcountry"="yes"');
+    expect(q).toContain('"informal"="yes"');
+    // waste_disposal must NOT appear (removed in tag correction).
+    expect(q).not.toContain("waste_disposal");
+    // dump_station is present as sanitary_dump_station.
+    expect(q).toContain("sanitary_dump_station");
+  });
+
+  it("families: ['camping'] emits camping predicates and OMITS every other family", () => {
+    const q = buildOverpassQuery(bbox, { families: ["camping"] });
+    expect(q).toContain(SIGIL.camping);
+    expect(q).toContain('"backcountry"="yes"');
+    expect(q).toContain('"informal"="yes"');
+    for (const other of ALL_FAMILIES) {
+      if (other === "camping") continue;
+      expect(q, `family ${other} must NOT appear when only camping is selected`).not.toContain(SIGIL[other]);
+    }
+  });
+
+  it("families: ['water_san'] emits both water predicates and OMITS other families", () => {
+    const q = buildOverpassQuery(bbox, { families: ["water_san"] });
+    // water_san has two predicates — amenity subset AND man_made subset
+    expect(q).toContain('"amenity"~"^(drinking_water|toilets|shower|sanitary_dump_station)$"');
+    expect(q).toContain(SIGIL.water_san);
+    for (const other of ALL_FAMILIES) {
+      if (other === "water_san") continue;
+      expect(q, `family ${other} must NOT appear`).not.toContain(SIGIL[other]);
+    }
+    // The camping variant clauses (backcountry/informal) belong to camping,
+    // not water_san — must not leak in.
+    expect(q).not.toContain('"backcountry"="yes"');
+    expect(q).not.toContain('"informal"="yes"');
+  });
+
+  it("bbox scope emits the (s,w,n,e) predicate and no area binding", () => {
+    const q = buildOverpassQuery(bbox);
+    // Overpass bbox order is (south,west,north,east).
+    expect(q).toContain("(37,-114.05,42,-109.04)");
+    expect(q).not.toContain('area["ISO3166-2"');
+    expect(q).not.toContain("area.sa");
+  });
+
+  it("--iso (area scope) emits area binding + (area.sa) predicates, no bbox coordinates", () => {
+    const q = buildOverpassQuery(areaScope("US-UT"));
+    expect(q).toContain('area["ISO3166-2"="US-UT"]->.sa;');
+    expect(q).toContain("(area.sa)");
+    // The bbox coordinate tuple should not appear in area mode.
+    expect(q).not.toContain("(37,-114.05,42,-109.04)");
+    // Area timeout should be substantially longer than the bbox default (60s).
+    expect(q).toMatch(/\[timeout:900\]/);
+  });
+
+  it("area + families composes cleanly — only camping predicates, all scoped to (area.sa)", () => {
+    const q = buildOverpassQuery(areaScope("US-UT"), { families: ["camping"] });
+    expect(q).toContain('area["ISO3166-2"="US-UT"]->.sa;');
+    expect(q.match(/\(area\.sa\)/g)?.length).toBe(3); // 3 camping predicates
+    for (const other of ALL_FAMILIES) {
+      if (other === "camping") continue;
+      expect(q).not.toContain(SIGIL[other]);
+    }
+  });
+});
+
+describe("parseFamilies", () => {
+  it("accepts a single known family", () => {
+    expect(parseFamilies("camping")).toEqual(["camping"]);
+  });
+  it("accepts multiple families, trims whitespace, drops empties", () => {
+    expect(parseFamilies("camping, water_san , fuel")).toEqual(["camping", "water_san", "fuel"]);
+    expect(parseFamilies("camping,,fuel,")).toEqual(["camping", "fuel"]);
+  });
+  it("throws on unknown family (fails loudly, not silently)", () => {
+    expect(() => parseFamilies("camping,typo")).toThrow(/Unknown tag families: typo/);
+    expect(() => parseFamilies("bogus")).toThrow(/Unknown tag families: bogus/);
   });
 });
 
