@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-06
+# STATE — `main` · 2026-08-10
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,199 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-10 — three PRs merged; TEST fully validated for the four-state pattern
+
+Four merges today, one long TEST validation, one PROD write by a parallel
+session. **No PROD data written by this session** — everything on PROD is
+either from earlier (#196/#197/#198) or from the parallel havana session
+that executed Part 1 of the six-state trim.
+
+### The three PRs that landed on `main`
+
+- **#200 — matcher placeholder-name fix.** `isPlaceholderName()` in
+  `data/entity-resolution/matcher.ts` forces `name_similarity = 0` when
+  EITHER side of `scoreMatch` is a fabricated placeholder (`"Unnamed <cat>"`
+  from OSM's `inferName` fallback, plus a small allowlist for BLM
+  designations `"Designated Campsite"`, `"Designated Walk-In Campsite"`,
+  `"Campsite"`). Zero for both sides prevents the pathological
+  `jaroWinkler("Unnamed dispersed camping","Unnamed dispersed camping") =
+  1.0` from lifting the blended-confidence formula into `manual_review`
+  at 200-400m separation. Regression guard on real-name pairs is
+  identical to prior behaviour (measured — `Willow Flat ↔ Willow Flat` at
+  60m still scores 0.70 exactly). 9 new tests; full data suite 275/3.
+
+- **#201 — six-state trim + placeholder-fix TEST diagnostics.** Nine
+  read-only TEST-guarded scripts + a paired apply/undo for the placeholder
+  rewrite. Every script fails-closed on wrong project ref; every write is
+  paired with an undo. Groups: Phase 3 PROD scope-narrowing (5 scripts),
+  six-state trim baselines (4 scripts), TEST-side placeholder rewrite
+  (7 scripts including `apply-placeholder-rewrite.ts` +
+  `undo-placeholder-rewrite.ts` + `verify-rewrite-postconditions.ts`).
+
+- **#202 — OSM tag corrections + `--iso` / `--families` flags.** Three
+  commits: (a) `amenity=sanitary_dump_station → dump_station` correction
+  (the actual RV-oriented tag), removing the previous `waste_disposal →
+  dump_station` mis-mapping, plus two new fetch predicates
+  (`tourism=camp_site + backcountry=yes` and `+ informal=yes`); (b)
+  `--iso US-<state>` and `--families camping,water_san,...` CLI flags,
+  wired through `manual.ts` into `osm.ts`, mutually exclusive with
+  `--bbox`; (c) `DEFAULT_FAMILIES` drops `shops` (retail measured
+  30-45% brand/hours completeness on UT+NV — sparse enough that Google
+  Places is the correct source for retail; `shops` stays opt-in via
+  `--families shops`). 22 osm tests + 9 new builder tests.
+
+### PROD Part 1 (reference_trips.is_active): DONE by the parallel havana session
+
+**Not by this session.** Between STOP #1 (2026-08-09 evening) and 2026-08-10
+02:00 UTC, the `work/six-state-trim` branch in the `havana` worktree (a
+parallel Claude session) executed Part 1 step 6 of the six-state trim on
+PROD:
+
+- Applied migration `20260810120000_reference_trips_is_active.sql` to
+  `nqzeywzcowujzyegxbsr` — the `is_active boolean default true` column
+  now exists on PROD.
+- `UPDATE public.reference_trips SET is_active = false WHERE id IN
+  ('la-to-deadhorse','dawson-vancouver-cassiar')` — both rows now
+  `is_active=false`, both updated at the same microsecond timestamp
+  `2026-08-10T01:52:40.76769+00:00` (single-statement UPDATE signature).
+  `la-to-portland` untouched (`updated_at=2026-07-25`).
+- **Payload byte-integrity preserved.** Cassiar's payload SHA
+  `46a17cbb421208f7fceb3c49f2023492f0d54f54a6e95c5d9231c61bc8162b82` —
+  matches the frozen-Cassiar SHA recorded in
+  `docs/decisions/2026-07-25-reference-trips-db-first.md`. Freeze rule
+  respected (the boolean flip is not a touch of the payload column).
+
+**Part 2 (source_record trim + view migration + `search:sync`) has NOT
+been executed on PROD.** `source_record.is_active = true` still returns
+20,384 on PROD (all rows active), and `master_place.max(updated_at)` is
+still `2026-07-12T19:57:09Z` — nothing recomputed since #196. See
+BACKLOG.
+
+### The OSM tag defect the correction addresses
+
+Discovered 2026-08-09 during a read-only PROD audit; fixed on `main` via
+#202. **The corrected mapping is on `main` but PROD's existing data
+predates it — no cleanup was run today.** Details:
+
+- `amenity=waste_disposal` was mapped to `dump_station` in
+  `data/ingestion/sources/osm.ts` (pre-#202). In OSM's tag semantics,
+  `waste_disposal` is a **municipal trash bin**, not an RV sanitary
+  station. **1,723 PROD rows** were misclassified as `dump_station`
+  under this mapping `[queried PROD 2026-08-09]`.
+- Sample of 20 of those 1,723 rows: **0 were real dump stations.** Every
+  sampled row was a trash bin at a park entrance, gas station, or urban
+  street corner.
+- The actual RV-dump-station tag `amenity=sanitary_dump_station` was
+  **never requested by any Overpass query** in the adapter's history
+  before #202 — the mapping table pointed at the wrong tag and the fetch
+  predicate table left the right one out. Both fixed in a single
+  commit (`b8dcabd`).
+- `tourism=camp_site + backcountry=yes` (and `+ informal=yes`) were
+  **never fetch predicates**; the adapter fetched only bare
+  `tourism=camp_site` and lost the backcountry/informal split. #202 adds
+  both as explicit fetch clauses so dispersed sites land on ingest
+  without depending on the category-mapping refinement path
+  (`inferCategory`'s existing `backcountry=yes` check now has predicates
+  that actually cause those rows to be fetched).
+
+### The placeholder-name matcher defect the fix addresses
+
+Discovered 2026-08-10 during ER outcome analysis on the UT camping
+ingest; fixed via #200. Root cause + measured impact:
+
+- OSM's `inferName` at `data/ingestion/sources/osm.ts:112-118` fabricates
+  `"Unnamed <category>"` when a source_record has no name tag. Two such
+  fabricated strings collide at `jaroWinkler = 1.0`. Combined with same
+  category (`dispersed_camping ↔ dispersed_camping = 1.0`), the blended
+  formula `0.4·distance + 0.4·name + 0.2·cat` **clamps at exactly 0.600**
+  for any pair >100m apart (distance_score = 0). That's the
+  `manual_review` floor, so every placeholder-collision pair queued for
+  human review even though the pins were 200-400m apart and clearly
+  distinct BLM sites.
+- **Measured 2026-08-10** on the UT camping ingest (2,176 fresh rows):
+  945 queued for `manual_review` (**43%**). 22 of 30 sampled rows were
+  pinned at conf = 0.600. 27 of 30 had identical
+  `"Unnamed dispersed camping"` or `"Designated Campsite"` placeholder
+  names on both sides.
+- The fix (#200) forces `name_similarity = 0` when either side is a
+  placeholder — same-source pairs fall below 0.6 → `new_master_place`
+  (correct for distinct pins in a BLM loop); cross-source pairs with
+  dist ≤ 100m + cat ≥ 0.8 now satisfy the pre-existing `close_nameless`
+  guard.
+
+### The 521-row placeholder rewrite applied to TEST
+
+Applied via `data/scripts/apply-placeholder-rewrite.ts` (in #201). Consumes
+`/tmp/dryrun-classification.json` (also durable-backed at
+`~/.config/overlander/backups/dryrun-classification-20260810-052514.json`).
+Idempotency guard: proceeds only when SR is unlinked AND matching pending
+`place_match` still exists.
+
+- Planned 521 / skipped 0 / master_places created **521** / errors 0.
+- Delegates to the standard `apply_match_outcomes` RPC → the RPC creates
+  each MP, updates each SR's `master_place_id`, inserts a confirmed
+  `place_match` at 0/1.0/1.0/1.0, and calls `recompute_master_place`. No
+  bespoke insert logic.
+- **The 424 legitimate reviews were preserved BYTE-IDENTICAL.**
+  Verified: all 8 fields (`source_record_id`, `master_place_id`,
+  `distance_meters`, `name_similarity`, `category_compatibility`,
+  `combined_confidence`, `match_method`, `status`) match a pre-flight
+  snapshot on every one of the 424 rows. Zero field mismatches, zero
+  missing.
+- **Reversible.** `undo-placeholder-rewrite.ts` reads the rewrite mapping
+  and reverses: unlink SR → delete new MP (cascades confirmed PM) →
+  restore pending PM with recorded score components. Mapping durable at
+  `~/.config/overlander/backups/rewrite-mapping-20260810-052514.json`.
+
+### The 4-state TEST OSM camping ingest — pattern proven
+
+Under both fixes (#200 matcher + #202 flags), a serial WA→OR→NV ingest
+run + a UT ingest earlier the same day landed all four states:
+
+| state | predicted | fetched | inserted | wall-clock |
+|---|--:|--:|--:|--:|
+| UT | 2,176 | **2,176** | 2,176 | 132s |
+| WA | 1,224 | **1,224** | 1,224 | 101s |
+| OR | 1,504 | **1,504** | 1,504 | 171s |
+| NV | 168 | **168** | 168 | 14s |
+| **Total** | **5,072** | **5,072** | **5,072** | ~7 min + gaps |
+
+Predicted-to-actual match is **exact on every state**, zero errors, zero
+spillover into non-camping categories (all 5,072 landed as `campground`
+or `dispersed_camping`). Wall-clock is dominated by the Overpass area
+query, not the Supabase upserts.
+
+**Post-materialize ER outcomes on the 2,896 WA/OR/NV rows** (UT
+materialized earlier under a rewrite, not directly comparable):
+- new_master_place: 2,774 (**95.8%**)
+- manual_review: 105 (**3.6%**) ← was 43% pre-fix on UT
+- auto_link: 17 (0.6%)
+- amenity_rollup: 0
+- errors: 0
+
+**Manual_review rate dropped 43% → 3.6% — 12× reduction.** The remaining
+3.6% is real-named ambiguity that a human should look at, not
+placeholder-collision noise.
+
+### DRIFT — what remains open
+
+**No open schema drift between TEST, PROD, and any staged branch as of
+this writing.** Both prior drifts closed today:
+
+- **~~RIDB widening (PROD ahead of `main`).~~** CLOSED — #198 merged
+  2026-08-09; `main` and PROD RPC agree.
+- **~~`reference_trips.is_active` (TEST ahead of PROD).~~** CLOSED — the
+  parallel havana session applied the migration to PROD and flipped the
+  two out-of-scope rows between STOP #1 and 2026-08-10 02:00 UTC.
+
+**Two categories of open work, tracked in `BACKLOG.md`:**
+1. **Six-state trim Part 2 unrun on PROD** — 8,064 out-of-scope
+   source_records + view migration + `search:sync`. Independent of every
+   code branch; can run when authorized.
+2. **1,723 PROD `waste_disposal` rows still miscategorized** — the fix
+   is on `main` (#202), but PROD data predates it. Needs a reclassify
+   pass (small, mechanical UPDATE).
 
 ## 2026-08-06 — NPS corpus imagery LIVE end-to-end on PROD (#196 + migration + backfill)
 

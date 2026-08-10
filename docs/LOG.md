@@ -12,6 +12,92 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-10
+
+- **Three PRs merged: #200 matcher placeholder-name fix; #201 diagnostics
+  + apply/undo scripts; #202 OSM tag correction + `--iso`/`--families`
+  flags.** Each squash-merged, remote branch deleted. Full description of
+  what each shipped: `STATE.md` §2026-08-10. All landed within ~10
+  minutes end-to-end (04:49–04:56 UTC).
+- **OSM tag defect quantified before the fix landed.** `waste_disposal`
+  had been mapped to `dump_station` — but `waste_disposal` is
+  OSM-semantics for a municipal trash bin. **1,723 PROD rows
+  misclassified as `dump_station`** `[queried PROD 2026-08-09]`; sample
+  of 20 returned **0 real dump stations** (every one a trash bin at a
+  park entrance / gas station / urban corner). The actual RV tag
+  `amenity=sanitary_dump_station` was **never requested** by any
+  Overpass query in the adapter's history. Similarly
+  `tourism=camp_site + backcountry=yes` was **never a fetch predicate**;
+  the adapter fetched bare camp_site and depended on category-mapping
+  refinement to split dispersed. Both fixed in #202.
+- **Placeholder-name matcher defect quantified: 43% → 3.6%.** Fabricated
+  `"Unnamed <category>"` strings from OSM's `inferName` fallback collide
+  at `jaroWinkler = 1.0`, and combined with same-category = 1.0 the
+  blended formula **clamps at exactly 0.600** — the `manual_review`
+  floor — for any pair >100m apart. Measured on UT camping ingest
+  (2,176 rows): 945 queued for review = **43%**; 22 of 30 samples pinned
+  at conf 0.600; 27 of 30 identical placeholder names. Fix (#200): force
+  `name_similarity = 0` when either side is a placeholder. Re-measured
+  after fix on WA/OR/NV ingest: **3.6%** review rate — a 12× reduction.
+- **PROD Part 1 of the six-state trim: done by the parallel havana
+  session, NOT this one.** Between STOP #1 and 02:00 UTC 2026-08-10, the
+  `work/six-state-trim` branch in the `havana` worktree applied
+  `20260810120000_reference_trips_is_active.sql` to PROD and flipped
+  `la-to-deadhorse` + `dawson-vancouver-cassiar` inactive. Both target
+  rows updated at the same microsecond timestamp
+  `2026-08-10T01:52:40.76769+00:00` (single-statement UPDATE signature).
+  Cassiar payload byte-integrity verified via SHA
+  (`46a17cbb421208f7…` matches the frozen-Cassiar SHA in
+  `docs/decisions/2026-07-25-reference-trips-db-first.md`). Discovered
+  by this session in a read-only preflight query and reported at STOP;
+  attribution recorded to prevent future sessions attributing the write
+  to this session.
+- **521-row placeholder rewrite applied to TEST; 424 legitimate reviews
+  preserved BYTE-IDENTICAL.** Targeted script
+  (`apply-placeholder-rewrite.ts` in #201) consumed
+  `/tmp/dryrun-classification.json`, applied 521 `new_master_place`
+  outcomes via the standard `apply_match_outcomes` RPC (0 skipped by the
+  idempotency guard, 0 errors). Post-condition verifier proved all 424
+  keeps identical across all 8 place_match fields vs a pre-flight
+  snapshot. Reversal instrument
+  (`undo-placeholder-rewrite.ts`) preserved; mapping durable at
+  `~/.config/overlander/backups/rewrite-mapping-20260810-052514.json`.
+- **4-state TEST OSM camping pattern proven.** WA/OR/NV serial ingest
+  after UT under `--iso $ISO --families camping`: predicted 1,224 /
+  1,504 / 168 · fetched **exactly the same on every state** · zero
+  errors · zero non-camping spillover. UT (2,176) rounded the set out to
+  **5,072 total across 4 states, 0 rows lost or gained** vs the
+  area-scoped Overpass predictions. `materialize --skip-sync` produced
+  95.8% new_master_place + 3.6% review + 0.6% auto_link with the
+  matcher fix active. Full breakdown: `STATE.md` §2026-08-10.
+- **Cross-category `amenity_rollup` defect surfaced but NOT fixed by the
+  placeholder work** (recorded in BACKLOG). 5-8 collapsed MPs on TEST
+  hold different amenity types under one placeholder name (e.g.
+  `"Unnamed water"` MP holding 3 water_taps + 1 toilet, another holding
+  4 water_taps + 2 dump_stations). Placeholder fix stops NEW such
+  collisions from auto-linking; already-confirmed merges remain.
+  Orthogonal to the placeholder fix — a real-named `"Belle Toilets"`
+  auto-linked to `"Belle Water"` at 20m has the same shape.
+- **~28 RIDB `/media` errors from the 2026-08-09 backfill are asserted
+  not-auth but the error shape remains UNVERIFIED** (BACKLOG). Prior
+  session's `docs/state-ridb-route-a` wrap asserted they're not
+  `web/.env.local` 401 (that key is unused; every RIDB consumer runs off
+  `data/.env`'s working key), but the run's stderr wasn't captured and
+  no log file exists. A `--dry-run` backfill would surface the shape.
+- **LESSON — `docs/state-ridb-route-a` sibling branch existed
+  independently.** A prior session had opened it with the accurate #198
+  wrap + PREFLIGHT diagnosis; my STOP #1 branch (#199, closed today)
+  duplicated the ground and got DRIFT #1 partly wrong. Rule: check for
+  `docs/state-*` branches before writing a new refresh.
+- **CI shape correction.** `#201`'s first CI failed on typecheck —
+  `scripts/test-manual-review-dryrun.ts` imported `isPlaceholderName`
+  which only existed on #200's branch. Merging #200 first + rebasing
+  #201 resolved the import; a second bug (arithmetic on a non-numeric
+  compound in `verify-rewrite-postconditions.ts`) was fixed inline. Rule
+  worth naming for later: **when two PRs are dependent, merge the
+  dependency FIRST, then rebase the dependent to pick up the exported
+  symbols — CI failure is the natural gate**.
+
 ## 2026-08-06
 
 - **NPS corpus imagery (#196) went live end-to-end on PROD.** Migration applied to
