@@ -5,6 +5,135 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
+## Six-state trim Part 2 — unrun on PROD (2026-08-10)
+
+Part 1 (reference_trips.is_active migration + flip of `la-to-deadhorse`
+and `dawson-vancouver-cassiar`) was executed on PROD by the parallel
+`havana` session between STOP #1 and 2026-08-10 02:00 UTC. Part 2 has NOT
+been executed. Current PROD state:
+`source_record.is_active = true` returns **20,384** (all rows),
+`master_place.max(updated_at) = 2026-07-12T19:57:09Z` (nothing recomputed
+since #196).
+
+Remaining steps, in order:
+1. Pre-flight baseline snapshot on PROD (master_place total,
+   searchable, max(updated_at), active source_record count) with UTC
+   timestamp.
+2. Re-derive the 8,064 out-of-scope source_record IDs against live
+   corpus (prior measurement 2026-08-09; verify before acting).
+3. `UPDATE source_record SET is_active = false` for that set, batched
+   at 500 to fit PostgREST URL limits.
+4. Confirm `is_active = true` count is 12,320.
+5. Combined view migration on `master_place_search_export`: add
+   `source_count > 0` filter + a six-state footprint filter using
+   **the US–Canada border as the northern bound, NOT a rounded 49.00**
+   (the earlier bbox admits Vancouver Island around the Cowichan
+   Valley; ~26 PROD rows measured in that leak).
+6. Verify view row delta 13,629 → ~9,300.
+7. Verify via `max(updated_at)` boundary which pre-existing MPs
+   changed and why.
+8. `search:sync` to prune stale Typesense docs and reindex the trimmed
+   set.
+
+Runbook independent of every current code branch (nothing to merge
+first). Reversible via `UPDATE is_active = true` for the affected set
++ dropping the view predicate; the 8,064-row UPDATE is idempotent by
+design.
+
+## PROD OSM `waste_disposal` reclassify — 1,723 rows miscategorized (2026-08-10)
+
+The fix is on `main` via #202 (`b8dcabd`) — the adapter now maps
+`amenity=sanitary_dump_station → dump_station` (the actual RV tag) and
+the old `amenity=waste_disposal` mapping is gone. **But PROD data
+predates the fix.** 1,723 PROD rows are still stored with
+`inferred_category='dump_station'` under the old mis-mapping
+`[queried PROD 2026-08-09]`.
+
+Sample of 20 of those 1,723 rows: **0 were real dump stations.** Every
+one is a municipal trash bin at a park entrance, gas station, or urban
+street corner. Under the corrected mapping in `inferCategory` they
+would return `null` (unmapped) and not ingest — so a mechanical fix is
+either:
+
+- **Delete** the 1,723 rows outright (DELETE FROM source_record WHERE
+  source_id='osm' AND inferred_category='dump_station' AND
+  raw_payload->'element'->'tags'->>'amenity' = 'waste_disposal'). Also
+  removes their master_place links (ON DELETE CASCADE from the
+  place_match table takes care of that side). Recompute affected MPs.
+- OR **reclassify** by setting `inferred_category = NULL` and letting
+  the next materialize decide. But since the row shouldn't have been
+  ingested at all under the new mapping, delete is cleaner.
+
+A small script mirroring the `apply-placeholder-rewrite.ts` pattern
+(idempotent, paired undo, verify post-conditions) is the shape. Not
+run today.
+
+**Small blast radius.** No user-facing surface shows `dump_station`
+prominently; the mis-classification is data-quality debt, not a
+render defect. Can wait behind the six-state trim.
+
+## Cross-category `amenity_rollup` collapse — separate from placeholder fix (2026-08-10)
+
+Surfaced by the placeholder-name matcher fix audit
+(`audit-placeholder-collapses.ts`, in #201). While counting confirmed
+place_match rows where both sides are placeholders, 5-8 of TEST's 48
+collapsed MPs turned out to be **cross-category merges** the placeholder
+fix does NOT address:
+
+- `"Unnamed water"` MP holding 3 water_taps + 1 toilet
+- `"Unnamed water"` MP holding 4 water_taps + 2 dump_stations
+  (`amenity=waste_disposal`)
+- `"Unnamed water"` MP holding 3 camp_sites + 1 water + 1 toilet
+- `"Unnamed picnic area"` MP holding 3 picnic_sites + 1 water
+- etc.
+
+These are `amenity_rollup` outcomes (Step 2 in `matcher.ts`) or
+`auto_link` blended-scoring outcomes where the placeholder-name
+inflation combined with a permissive amenity → parent category
+compatibility let DIFFERENT amenity types collapse under one "parent"
+MP. The placeholder fix (#200, 2026-08-10) zeros name_similarity when
+either side is a placeholder, which stops future collisions of this
+shape from being auto-linked — but the ALREADY-CONFIRMED merges on
+TEST + PROD are not touched by that fix.
+
+**PROD footprint measured (partial):** the audit-placeholder-autolinks
+script counted **9 collapsed MPs / 10 non-seed auto-links** on PROD
+OSM-only 2026-08-10. The collapse-detail script hasn't been run on
+PROD yet; small population, easy to eyeball once run.
+
+**Likely fix (not yet scoped):** in `matcher.matchOne` Step 2 amenity
+rollup and Step 5 blended, block auto-merge when the source's
+`inferred_category` and the candidate's `primary_category` are
+DIFFERENT AMENITY types (e.g. `toilet` + `water`, `dump_station` +
+`water`), even if names match. This is orthogonal to the placeholder
+fix — a real-named `"Belle Toilets"` auto-linked to a real-named
+`"Belle Water"` at 20m has the same defect shape today.
+
+**Remediation for the ~10-15 existing wrong MPs:** hand-audit
+sufficient at this scale; a targeted split script mirroring
+`apply-placeholder-rewrite.ts` if needed.
+
+**Not addressed by the placeholder fix.** Recording as its own item so
+the next session doesn't mistake the placeholder fix's completion for
+end-to-end amenity-rollup cleanliness.
+
+## RIDB backfill — 28 `/media` errors unretried, error shape UNVERIFIED (2026-08-10)
+
+The PROD RIDB backfill run (2026-08-09, in #198) wrote 1,622 of 3,961
+rows scanned and left **28 `/media` fetch errors unretried**. Prior
+session's `docs/state-ridb-route-a` wrap (never merged) asserted these
+are **not** the `web/.env.local` 401 (that key is unused; every RIDB
+consumer runs off `data/.env`'s working key). **The actual error shape
+is still UNVERIFIED** — the run's stderr wasn't captured, no log file
+exists `[searched repo-root, 2026-08-09]`.
+
+- **Recovery is idempotent:** `backfill:ridb-photo` is re-runnable; a
+  fresh run recovers any that were transient.
+- **A `--dry-run` backfill would surface their shape** without writing
+  anything, and confirm or refute the "not-auth" assertion. Small,
+  cheap, read-only.
+- Not urgent — 28 rows out of 3,961 is 0.7%.
+
 ## NPS photo backfill — `scan()` pagination-while-mutate defect — RESOLVED (fix in #196, 2026-08-06)
 
 **Fixed** in `feat/nps-corpus-imagery` (`a670dfe`): `scan()` is now two-phase —
