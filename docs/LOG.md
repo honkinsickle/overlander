@@ -97,6 +97,67 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   worth naming for later: **when two PRs are dependent, merge the
   dependency FIRST, then rebase the dependent to pick up the exported
   symbols — CI failure is the natural gate**.
+- **Two more PRs merged: #203 (end-of-day doc snapshot) and #206
+  (`materialize`: split `matchAll` from `apply` for the incremental
+  path).** #206 is what made the batch-25 recovery run below possible —
+  `--apply-from-cache` re-applies saved outcomes without re-paying matchAll.
+- **PROD's `statement_timeout` is 60 s — discovered the hard way.** The
+  first PROD `apply_match_outcomes` runs failed with SQLSTATE **`57014`
+  "canceling statement due to statement timeout"** at **batch 500 (60,107
+  ms)** and **batch 100 (60,129 ms)** — the RPC is one statement, so the
+  whole batch is bounded by the role `statement_timeout`. **Batch 25 runs
+  ~33 s** and clears it. The error is emitted by Postgres, relayed through
+  PostgREST/supabase-js unchanged — NOT a client `AbortError`, PostgREST
+  504, or pooler cut. `promote.ts`'s in-code calibration comment still
+  cites a "~10 s" ceiling from a different project — stale, now backlogged.
+  `data/.env` has **no client-side timeout** (`db.ts` `createClient` sets
+  none), so this is purely server-side and adjustable via
+  `ALTER ROLE service_role SET statement_timeout` (not changed).
+- **Six-state OSM camping ingest COMPLETE on PROD, per-state, predicted =
+  actual on every state.** `--source osm --iso US-<st> --families camping`,
+  each pinned to `overpass-api.de` with a `timestamp_osm_base` ≤7-day
+  freshness assert first (a bare/unpinned run earlier had silently drawn a
+  **70-day-stale** snapshot from `kumi.systems` — always pin + assert):
+
+  | state | predicted | fetched | inserted | updated | recats | manual_review |
+  |---|--:|--:|--:|--:|--:|--:|
+  | AZ | 893 | 893 | 887 | 6 | 0 | 4.40% |
+  | CA | 2,721 | 2,721 | 2,474 | 247 | **23** (= predicted) | 8.33% |
+
+  (WA/OR/NV/UT landed earlier in the day per the 4-state block above.)
+  Every ingest matched its area-scoped Overpass prediction exactly. The
+  adapter reports `updated: 0` always — a counting artifact
+  (`persistElement` returns `"inserted"` for every upsert); the real
+  insert/update split is measured from the DB via `created_at`. **CA's 23
+  campground→dispersed recats matched the prediction exactly** (23
+  pre-existing camp_site rows carrying `backcountry`/`informal` re-scored
+  by `inferCategory`; the upsert overwrites `inferred_category` but never
+  touches `master_place_id` — all 247 CA updates kept their link).
+- **manual_review rate climbs with camping density: TEST 3.6% → AZ 4.4% →
+  CA 8.33%.** All post-#200 (placeholder noise gone); the residual is
+  genuine named-site ambiguity, and CA's 8.33% is unexplained — backlogged.
+- **`search:sync` → `places_prod` on the shared Typesense cluster.** The
+  PROD env backup carries only Supabase URL+key, so the collection had to
+  be resolved by hand: `TYPESENSE_COLLECTION=places_prod` (what Vercel's
+  `NEXT_PUBLIC_TYPESENSE_COLLECTION` reads), same host+admin key as
+  `places_test`. Indexed **16,661**, pruned 0, failed 0 — exactly the
+  `master_place_search_export` row count, dispersed 2,855 and campground
+  5,369 matching the corpus per category. `places_prod` 13,708 → 16,661.
+- **CORRECTION — per-state dispersed camping is 3,125, not the ~1,885 a
+  radius spot-check suggested.** A `location:(lat,lng,150 km)` interior
+  sample undercounts large states badly. ISO-area Overpass counts
+  (`camp_site` + `backcountry`|`informal`, distinct) **sum to exactly the
+  PROD `osm dispersed_camping` source_record total of 3,125**: CA 757, UT
+  893, WA 682, AZ 270, OR 508, NV 15. The radius sample had read UT 373 /
+  WA 327 / OR 156 / NV 2. **Lesson: a radius sample is not a state total —
+  scope the query to the subject (ISO area), and cross-check the sum
+  against the DB.**
+- **RIDB Route A photo count could not be reconciled to a stated 5,256.**
+  Measured on PROD: **1,622** `ridb` source_records carry a promoted
+  `normalized_payload.photo.url` (nps 4,451; all sources 6,073). None of
+  these is 5,256 — flagged UNVERIFIED rather than asserted. Separately,
+  `master_place_search_export` has **no photo column** at all, so no photo
+  reaches search yet (the "Artboard C" lateral is still open).
 
 ## 2026-08-06
 

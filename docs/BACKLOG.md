@@ -5,40 +5,82 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
-## Six-state trim Part 2 — unrun on PROD (2026-08-10)
+> **Six-state trim Part 2 (the `is_active` UPDATE), `reference_trips.is_active`,
+> and `search:sync` all executed on PROD 2026-08-10 — removed from this list.**
+> Verified `[queried PROD]`: 8,067 `source_record` rows `is_active = false`
+> (the estimate was 8,064); `la-to-deadhorse` + `dawson-vancouver-cassiar`
+> retired; `places_prod` reindexed to 16,661. **The ONE step that did NOT run is
+> the view migration (step 5) — carried below as its own item.**
 
-Part 1 (reference_trips.is_active migration + flip of `la-to-deadhorse`
-and `dawson-vancouver-cassiar`) was executed on PROD by the parallel
-`havana` session between STOP #1 and 2026-08-10 02:00 UTC. Part 2 has NOT
-been executed. Current PROD state:
-`source_record.is_active = true` returns **20,384** (all rows),
-`master_place.max(updated_at) = 2026-07-12T19:57:09Z` (nothing recomputed
-since #196).
+## `master_place_search_export` footprint filter — UNRUN; two overlapping footprint functions (2026-08-10)
 
-Remaining steps, in order:
-1. Pre-flight baseline snapshot on PROD (master_place total,
-   searchable, max(updated_at), active source_record count) with UTC
-   timestamp.
-2. Re-derive the 8,064 out-of-scope source_record IDs against live
-   corpus (prior measurement 2026-08-09; verify before acting).
-3. `UPDATE source_record SET is_active = false` for that set, batched
-   at 500 to fit PostgREST URL limits.
-4. Confirm `is_active = true` count is 12,320.
-5. Combined view migration on `master_place_search_export`: add
-   `source_count > 0` filter + a six-state footprint filter using
-   **the US–Canada border as the northern bound, NOT a rounded 49.00**
-   (the earlier bbox admits Vancouver Island around the Cowichan
-   Valley; ~26 PROD rows measured in that leak).
-6. Verify view row delta 13,629 → ~9,300.
-7. Verify via `max(updated_at)` boundary which pre-existing MPs
-   changed and why.
-8. `search:sync` to prune stale Typesense docs and reindex the trimmed
-   set.
+The view is **not** footprint-filtered. `master_place_search_export` returns
+**16,661 rows** `[queried PROD 2026-08-10]` — it grew with the six-state camping
+ingest rather than shrinking to the ~9,300 a footprint-trimmed view was projected
+to hold. So although the `source_record.is_active` trim ran, the search export
+still surfaces out-of-region and `source_count = 0` master_places.
 
-Runbook independent of every current code branch (nothing to merge
-first). Reversible via `UPDATE is_active = true` for the affected set
-+ dropping the view predicate; the 8,064-row UPDATE is idempotent by
-design.
+The intended migration adds, to the view: a `source_count > 0` filter **and** a
+six-state footprint filter using **the US–Canada border as the northern bound, NOT
+a rounded 49.00** (the coarse bbox admits Vancouver Island around the Cowichan
+Valley — ~26 PROD rows measured in that leak). Per the handoff there are **two
+overlapping footprint functions** and the view currently references the **coarser
+`six_state_scope()`**; consolidate to one precise footprint before wiring it into
+the view. **UNVERIFIED from the repo:** `six_state_scope` does not appear anywhere
+in `main` `[grep]`, so whichever footprint machinery exists is either a PROD-only
+object or not yet committed — confirm which before editing.
+
+After the view predicate lands: verify the row delta (→ ~9,300), the
+`max(updated_at)` boundary of which pre-existing MPs changed, then `search:sync` to
+prune the now-stale `places_prod` docs and reindex the trimmed set. Reversible by
+dropping the view predicate.
+
+## `promote.ts` — stale ~10 s calibration; `DEFAULT_BATCH_SIZE = 500` unsafe at PROD's 60 s ceiling (2026-08-10)
+
+`data/entity-resolution/promote.ts` sets `DEFAULT_BATCH_SIZE = 500` with a comment
+calibrating it against a **"~10 s"** `statement_timeout` "from a different project."
+**PROD's real ceiling is 60 s**, and both **batch 500 (60,107 ms)** and **batch 100
+(60,129 ms)** fail there with SQLSTATE **`57014`** `[measured PROD 2026-08-10]`;
+only **batch 25 (~33 s)** clears it. Every PROD materialize this session had to
+pass `ER_APPLY_BATCH_SIZE=25` by hand. Fix: correct the comment to the measured
+60 s PROD ceiling + ~1.3 s/outcome, and lower `DEFAULT_BATCH_SIZE` to something that
+survives 60 s (25–40). Note the timeout is server-side (`ALTER ROLE service_role SET
+statement_timeout`), not client-side — `db.ts` sets no fetch timeout.
+
+## Artboard C — photo lateral into `master_place_search_export` (2026-08-10)
+
+`master_place_search_export` has **no photo column** `[queried PROD 2026-08-10]`, so
+no imagery reaches Typesense/search even though 6,073 source_records carry a promoted
+`normalized_payload.photo.url` (nps 4,451 + ridb 1,622). Lateral a photo field through
+the export view so the search index and any card fed from it can show imagery. (Also:
+a **"5,256 photo-emitting tiles"** figure was asserted for RIDB Route A but matches
+none of the measured counts — reconcile or discard it when this is picked up.)
+
+## CA OSM camping — 8.33% `manual_review` rate unexplained (2026-08-10)
+
+CA's materialize produced **206 / 2,474 = 8.33% `manual_review`**, against AZ 4.4%
+and TEST/WA-OR-NV 3.6% `[measured PROD 2026-08-10]`. All are **post-#200**, so this
+is not placeholder-collision noise — it is genuine named-site ambiguity, but why CA
+runs ~2× the others is not established. Candidate: denser real-named camping with
+more sub-threshold near-duplicate pairs. Worth a sampling pass before assuming it is
+benign.
+
+## TEST corpus is not representative of PROD (standing caveat, re-flagged 2026-08-10)
+
+TEST (`znldzjdatkogdktymtvi`) holds ~1,749 searchable master_places over a LA/Joshua-Tree
+reseed; PROD holds **20,904 master_places / 16,661 view-visible** over the full
+six-state-plus corridor. A conclusion measured on TEST — coverage, ER outcome rates,
+density, enrichment behaviour — **does not transfer to PROD**. Several past
+"corpus is SoCal-only" errors trace to treating TEST as the corpus. Every corpus-scale
+claim must name which project it was measured on. (See also the disjoint-instruments
+caveat in `CLAUDE.md` §RUNBOOK.)
+
+## Open PRs — #204, #205 (as of 2026-08-10)
+
+Two PRs are open and unmerged. **Contents UNVERIFIED here** — not inspected this
+session; confirm scope, CI status, and whether either conflicts with the docs on this
+branch before merging. (The only other historically-open PR tracked in this doc is
+#24, May, live-weather salvage.)
 
 ## PROD OSM `waste_disposal` reclassify — 1,723 rows miscategorized (2026-08-10)
 

@@ -74,6 +74,68 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-10 (late) — six-state OSM camping corpus COMPLETE on PROD + live in search
+
+This is the current corpus truth. Every number below was **re-measured against
+PROD read-only, 2026-08-10** `[queried PROD]`; the per-state dispersed figures are
+ISO-area Overpass counts that sum exactly to the DB total.
+
+**PROD corpus, now:**
+
+| metric | value |
+|---|--:|
+| `source_record` total | **28,817** |
+| — `is_active = true` | 20,750 |
+| — `is_active = false` (six-state trim) | **8,067** |
+| `master_place` total | **20,904** |
+| `master_place_search_export` (view-visible) | **16,661** |
+| Typesense `places_prod` docs | **16,661** |
+
+`source_record` by source (all / active): osm 13,804 / 13,804 · nps 4,837 / 3,466 ·
+ridb 3,961 / 2,519 · parks_canada 3,078 / **0** · google 1,863 / 948 · bc_parks 8 / **0**.
+The six-state trim deactivated the two Canada sources entirely and the out-of-scope
+tail of the US sources. `master_place_search_export == places_prod == 16,661` end to
+end — the search index exactly mirrors the export view (dispersed 2,855, campground
+5,369 match per category).
+
+**Six-state OSM camping ingest COMPLETE (CA · UT · WA · AZ · OR · NV).** Every state
+ingested via `--source osm --iso US-<st> --families camping`, `overpass-api.de`
+pinned with a ≤7-day `timestamp_osm_base` assert, predicted = actual on every state,
+materialized at `ER_APPLY_BATCH_SIZE=25` (PROD's 60 s `statement_timeout` kills 100
+and 500), search-synced to `places_prod`. **Dispersed camping per state
+(ISO-area, distinct) — these sum to the PROD `osm dispersed_camping` total of 3,125:**
+
+| CA | UT | WA | AZ | OR | NV | **total** |
+|--:|--:|--:|--:|--:|--:|--:|
+| 757 | 893 | 682 | 270 | 508 | 15 | **3,125** |
+
+> **A radius spot-check is NOT a state total.** An earlier `location:(lat,lng,150 km)`
+> interior sample read UT 373 / WA 327 / OR 156 / NV 2 — large undercounts. The
+> ISO-area counts above are authoritative (they close exactly on the DB total).
+
+**Six-state trim applied on PROD** — 8,067 `source_record` rows `is_active = false`
+(the item predicted 8,064). **`reference_trips.is_active` applied** — `la-to-deadhorse`
+and `dawson-vancouver-cassiar` are `is_active = false` (retired from listings; both
+still URL-reachable, Cassiar still FROZEN); `la-to-portland` stays active.
+
+**RIDB Route A imagery — live, count UNVERIFIED.** 1,622 `ridb` source_records carry a
+promoted `normalized_payload.photo.url` (nps 4,451; all sources 6,073) `[queried PROD]`.
+A **"5,256 photo-emitting tiles"** figure was asserted but matches none of these — flagged,
+not adopted. Note `master_place_search_export` has **no photo column**, so no photo
+reaches search yet (the lateral is backlogged).
+
+### DRIFT — what remains open (as of this writing)
+
+- **No open schema drift** between TEST, PROD, and `main` from this session's work.
+- **`waste_disposal` reclassify unrun on PROD** — the #202 code fix is on `main`, but
+  the 1,723 pre-existing mis-mapped `dump_station` rows still carry the wrong category
+  (data cleanup, not code). `BACKLOG.md`.
+- **`promote.ts` calibration stale** — its comment cites a "~10 s" ceiling and
+  `DEFAULT_BATCH_SIZE = 500`; PROD's real ceiling is 60 s and 500 fails there. Backlogged.
+- **CA 8.33% manual_review rate unexplained** — higher than AZ (4.4%) / TEST (3.6%);
+  post-placeholder-fix, so it is genuine ambiguity, cause not established. Backlogged.
+- **28 RIDB `/media` backfill errors** still unretried, shape UNVERIFIED. Backlogged.
+
 ## 2026-08-10 — three PRs merged; TEST fully validated for the four-state pattern
 
 Four merges today, one long TEST validation, one PROD write by a parallel
