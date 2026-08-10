@@ -50,6 +50,52 @@ any six-state re-ingest, or we replicate the mis-mapping.
   count proposal — the "50–200k projection" retracted 2026-08-09 was the
   cautionary tale.
 
+## Cross-category `amenity_rollup` collapse — separate from placeholder fix (2026-08-10)
+
+Surfaced by the placeholder-name matcher fix audit (`audit-placeholder-
+collapses.ts`, chore/prod-scope-diagnostics). While counting confirmed
+place_match rows where both sides are placeholders, 5-8 of TEST's 48
+collapsed MPs turned out to be **cross-category merges** the placeholder
+fix does NOT address:
+
+- `"Unnamed water"` MP holding 3 water_taps + 1 toilet
+- `"Unnamed water"` MP holding 4 water_taps + 2 dump_stations
+  (`amenity=waste_disposal`)
+- `"Unnamed water"` MP holding 3 camp_sites + 1 water + 1 toilet
+- `"Unnamed picnic area"` MP holding 3 picnic_sites + 1 water
+- etc.
+
+These are `amenity_rollup` outcomes (Step 2 in `matcher.ts`) or
+`auto_link` blended-scoring outcomes where the placeholder-name inflation
+combined with a permissive amenity → parent category compatibility let
+DIFFERENT amenity types collapse under one "parent" MP. The placeholder
+fix (2026-08-10) zeros name_similarity when either side is a placeholder,
+which stops future collisions of this shape from being auto-linked —
+but the ALREADY-CONFIRMED merges on TEST + PROD are not touched by that
+fix.
+
+**PROD footprint UNMEASURED** — the audit script has `--osm-only`
+support and ran a total count (2,660 placeholder-both / 9 collapsed MPs /
+10 non-seed auto-links), but the collapse detail (`audit-placeholder-
+collapses.ts`) has only been run on TEST so far. Small population makes
+it easy to eyeball; do this before deciding remediation.
+
+**Likely fix (not yet scoped):** in `matcher.matchOne` Step 2 amenity
+rollup and Step 5 blended, block auto-merge when the source's
+`inferred_category` and the candidate's `primary_category` are DIFFERENT
+AMENITY types (e.g. `toilet` + `water`, `dump_station` + `water`), even
+if names match. This is orthogonal to the placeholder fix — a
+real-named "Belle Toilets" auto-linked to a real-named "Belle Water" at
+20m has the same defect shape today.
+
+**Remediation for the ~10-15 existing wrong MPs:** hand-audit sufficient;
+they can be split manually via a targeted script mirroring
+`apply-placeholder-rewrite.ts` if needed.
+
+**Not addressed by the placeholder fix.** Recording as its own item so
+next-session doesn't mistake the placeholder fix's completion for
+end-to-end amenity-rollup cleanliness.
+
 ## RIDB backfill — 28 `/media` errors unretried, error shape UNVERIFIED (2026-08-10)
 
 The PROD RIDB backfill run (2026-08-09, in #198) wrote 1,622 of 3,961 rows
