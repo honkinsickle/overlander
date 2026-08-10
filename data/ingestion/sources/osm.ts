@@ -75,7 +75,7 @@ const TAG_TO_CATEGORY: Array<[tagKey: string, tagValue: RegExp, category: string
   ["amenity", /^drinking_water$/, "water"],
   ["amenity", /^shower$/, "shower"],
   ["amenity", /^toilets$/, "toilet"],
-  ["amenity", /^waste_disposal$/, "dump_station"],
+  ["amenity", /^sanitary_dump_station$/, "dump_station"],
   ["amenity", /^(bbq|fire_pit)$/, "fire_pit"],
   ["highway", /^(services|rest_area)$/, "rest_area"],
   ["highway", /^trailhead$/, "trailhead"],
@@ -118,36 +118,151 @@ function inferName(tags: Record<string, string> | undefined, category: string | 
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Overpass query
+// Overpass query — tag families + scope shape
 // ──────────────────────────────────────────────────────────────────────
 
-function buildOverpassQuery(bbox: BoundingBox): string {
-  // Overpass bbox format: south,west,north,east
-  const [w, s, e, n] = bbox;
-  const bboxStr = `${s},${w},${n},${e}`;
+/** Named tag families the ingest can restrict to. Each maps to one or more
+ *  Overpass predicates; the union across selected families is what gets fetched. */
+export type TagFamily =
+  | "camping"
+  | "tourism_misc"
+  | "fuel"
+  | "water_san"
+  | "trailheads"
+  | "shops"
+  | "natural"
+  | "leisure";
 
-  // TODO(week-2): nodes-only. Campgrounds, parks, and rest areas are frequently
-  // tagged on ways (polygons) or relations (multipolygons) rather than nodes.
-  // Expect ~10–20% miss on federal campgrounds and parks at this stage.
-  // Upgrade plan: union in `way[...]` + `rel[...]` clauses for the polygon-prone
-  // tags (tourism=camp_site, leisure=park, highway=services), and switch the
-  // output statement to `out body geom;` so each way carries its centerpoint.
-  // Then teach elementCoords() to read `center` for non-node elements.
-  return `[out:json][timeout:${OVERPASS_TIMEOUT_S}];
-(
-  node["tourism"~"^(camp_site|caravan_site|picnic_site|viewpoint|alpine_hut|wilderness_hut)$"](${bboxStr});
-  node["amenity"~"^(fuel|drinking_water|shower|toilets|waste_disposal|charging_station|bbq|fire_pit)$"](${bboxStr});
-  node["highway"~"^(services|rest_area|trailhead)$"](${bboxStr});
-  node["shop"~"^(supermarket|convenience|outdoor|hardware)$"](${bboxStr});
-  node["natural"~"^(spring|peak|beach)$"](${bboxStr});
-  node["man_made"~"^(water_well|water_tap)$"](${bboxStr});
-  node["leisure"~"^(park|nature_reserve)$"](${bboxStr});
+/** Every family the adapter knows about. Used by parseFamilies to validate a
+ *  CLI --families argument. `shops` is defined here but excluded from
+ *  DEFAULT_FAMILIES — see the comment below. */
+export const ALL_FAMILIES: readonly TagFamily[] = [
+  "camping",
+  "tourism_misc",
+  "fuel",
+  "water_san",
+  "trailheads",
+  "shops",
+  "natural",
+  "leisure",
+] as const;
+
+/** The families that run when --families is not passed. Excludes `shops`.
+ *
+ *  Retail rationale (measured 2026-08-10, UT + NV, `shop~^(supermarket|
+ *  convenience|outdoor|hardware)$` under ISO3166-2 area scope):
+ *  - 33.7% (UT) / 45.5% (NV) of retail nodes carry brand OR operator
+ *  - 31.6% / 26.7% carry opening_hours
+ *  - 35.9% / 30.9% carry ≥3 of (name, hours, phone, website, addr:street)
+ *  - 29.5% / 16.8% are name-only pins with no contact/hours/branding
+ *  The community's `shop=` completeness bottom-rung is a stub. Google Places
+ *  is the correct source for retail — its data model requires hours, phone,
+ *  and categories by design. OSM retail can still be fetched explicitly via
+ *  `--families shops` (kept for opt-in ingest); it is off by default so a
+ *  bare `--source osm` run doesn't spend materialize/ER cycles on sparse pins.
+ */
+export const DEFAULT_FAMILIES: readonly TagFamily[] = ALL_FAMILIES.filter(
+  (f): f is TagFamily => f !== "shops",
 );
-out body;`;
+
+/** Predicates per family. `%SCOPE%` is substituted with the bbox or area filter
+ *  at build time. Semantics preserve the original single-block builder — the
+ *  set of nodes returned by all-families is identical (Overpass dedups the
+ *  outer union), the text is different because the amenity regex is split into
+ *  fuel-side and water-side. */
+const FAMILY_PREDICATES: Record<TagFamily, readonly string[]> = {
+  camping: [
+    'node["tourism"~"^(camp_site|caravan_site)$"](%SCOPE%)',
+    'node["tourism"="camp_site"]["backcountry"="yes"](%SCOPE%)',
+    'node["tourism"="camp_site"]["informal"="yes"](%SCOPE%)',
+  ],
+  tourism_misc: [
+    'node["tourism"~"^(picnic_site|viewpoint|alpine_hut|wilderness_hut)$"](%SCOPE%)',
+  ],
+  fuel: [
+    'node["amenity"~"^(fuel|charging_station|bbq|fire_pit)$"](%SCOPE%)',
+  ],
+  water_san: [
+    'node["amenity"~"^(drinking_water|toilets|shower|sanitary_dump_station)$"](%SCOPE%)',
+    'node["man_made"~"^(water_well|water_tap)$"](%SCOPE%)',
+  ],
+  trailheads: [
+    'node["highway"~"^(services|rest_area|trailhead)$"](%SCOPE%)',
+  ],
+  shops: [
+    'node["shop"~"^(supermarket|convenience|outdoor|hardware)$"](%SCOPE%)',
+  ],
+  natural: [
+    'node["natural"~"^(spring|peak|beach)$"](%SCOPE%)',
+  ],
+  leisure: [
+    'node["leisure"~"^(park|nature_reserve)$"](%SCOPE%)',
+  ],
+};
+
+/** Overpass query timeout in seconds. Bbox queries fetch a ~50km tile;
+ *  area queries scope the whole state and need substantially longer
+ *  (600s+ measured, 900s used here for headroom). */
+const OVERPASS_TIMEOUT_AREA_S = 900;
+
+interface QueryScope {
+  /** `bbox` or `area`. Exactly one shape per query. */
+  kind: "bbox" | "area";
+  /** Overpass predicate scope: "s,w,n,e" for bbox, "area.sa" for area. */
+  predicate: string;
+  /** Only for area: the ISO 3166-2 code to bind to `.sa`. */
+  isoCode?: string;
+  /** Per-query Overpass internal timeout override. */
+  timeoutS: number;
 }
 
-async function fetchTile(bbox: BoundingBox): Promise<OverpassElement[]> {
-  const query = buildOverpassQuery(bbox);
+function bboxScope(bbox: BoundingBox): QueryScope {
+  const [w, s, e, n] = bbox;
+  return { kind: "bbox", predicate: `${s},${w},${n},${e}`, timeoutS: OVERPASS_TIMEOUT_S };
+}
+
+function areaScope(isoCode: string): QueryScope {
+  return { kind: "area", predicate: "area.sa", isoCode, timeoutS: OVERPASS_TIMEOUT_AREA_S };
+}
+
+interface BuildOverpassQueryOpts {
+  /** Which families to include. Default: ALL_FAMILIES. */
+  families?: readonly TagFamily[];
+}
+
+// TODO(week-2): nodes-only. Campgrounds, parks, and rest areas are frequently
+// tagged on ways (polygons) or relations (multipolygons) rather than nodes.
+// Expect ~10–20% miss on federal campgrounds and parks at this stage.
+// Upgrade plan: union in `way[...]` + `rel[...]` clauses for the polygon-prone
+// tags (tourism=camp_site, leisure=park, highway=services), and switch the
+// output statement to `out body geom;` so each way carries its centerpoint.
+// Then teach elementCoords() to read `center` for non-node elements.
+function buildOverpassQuery(scope: QueryScope, opts: BuildOverpassQueryOpts = {}): string {
+  const families = opts.families ?? DEFAULT_FAMILIES;
+  const predicates = families.flatMap((f) => FAMILY_PREDICATES[f]);
+  const body = predicates.map((p) => `  ${p.replace("%SCOPE%", scope.predicate)};`).join("\n");
+  const areaBinding =
+    scope.kind === "area" ? `area["ISO3166-2"="${scope.isoCode}"]->.sa;\n` : "";
+  return `[out:json][timeout:${scope.timeoutS}];\n${areaBinding}(\n${body}\n);\nout body;`;
+}
+
+/** Parse + validate a comma-separated family list from the CLI. Throws on
+ *  unknown names so a typo fails loudly at boot rather than silently
+ *  producing an empty query. */
+export function parseFamilies(csv: string): TagFamily[] {
+  const parts = csv.split(",").map((s) => s.trim()).filter(Boolean);
+  const known = new Set<string>(ALL_FAMILIES);
+  const bad = parts.filter((p) => !known.has(p));
+  if (bad.length > 0) {
+    throw new Error(
+      `Unknown tag families: ${bad.join(", ")}. Available: ${ALL_FAMILIES.join(", ")}`,
+    );
+  }
+  return parts as TagFamily[];
+}
+
+async function fetchTile(scope: QueryScope, families?: readonly TagFamily[]): Promise<OverpassElement[]> {
+  const query = buildOverpassQuery(scope, { families });
   return defaultRetry(async () => {
     const res = await fetch(OVERPASS_URL, {
       method: "POST",
@@ -200,7 +315,7 @@ function normalizeOsm(
     water: t.drinking_water === "yes" || t.amenity === "drinking_water" ? true : undefined,
     toilet: t.toilets === "yes" || t.amenity === "toilets" ? true : undefined,
     shower: t.shower === "yes" || t.amenity === "shower" ? true : undefined,
-    dump_station: t.amenity === "waste_disposal" ? true : undefined,
+    dump_station: t.amenity === "sanitary_dump_station" ? true : undefined,
     fire_ring: t.amenity === "fire_pit" || t.amenity === "bbq" ? true : undefined,
     picnic: t.tourism === "picnic_site" ? true : undefined,
   });
@@ -304,35 +419,56 @@ async function persistElement(el: OverpassElement, dryRun: boolean): Promise<"in
 
 export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResult> => {
   const startedAt = Date.now();
-  let bbox: BoundingBox;
 
-  if (opts.bbox) {
-    bbox = opts.bbox;
-    logger.info({ bbox }, "osm: using manual bbox override");
-  } else {
-    const corridor = await getActiveCorridorBbox();
-    if (!corridor) {
-      throw new Error(
-        "No active corridor found. Either pass --bbox or run deploy-corridor first.",
-      );
-    }
-    bbox = corridor.bbox;
-    logger.info({ corridor: corridor.name, bbox }, "osm: using corridor bbox");
+  if (opts.iso && opts.bbox) {
+    throw new Error("osm: --iso and --bbox are mutually exclusive");
   }
 
-  const tiles = tileBbox(bbox, TILE_SIZE_KM);
-  logger.info({ tileCount: tiles.length, tileSizeKm: TILE_SIZE_KM }, "osm: tiling complete");
+  const families =
+    opts.families && opts.families.length > 0
+      ? parseFamilies(opts.families.join(","))
+      : undefined;
+  if (families) logger.info({ families }, "osm: restricted tag families");
+
+  // Build the query scope(s). Area mode issues ONE untiled query per state —
+  // Overpass area filters cannot be sub-tiled the way bboxes can (an area
+  // filter binds a named polygon set; tiling it would require intersecting
+  // the polygon with each sub-bbox, which the Overpass DSL does not directly
+  // support). Bbox mode preserves the existing 50km tile-fanout.
+  let scopes: QueryScope[];
+  if (opts.iso) {
+    scopes = [areaScope(opts.iso)];
+    logger.info({ iso: opts.iso, timeoutS: OVERPASS_TIMEOUT_AREA_S }, "osm: using area filter (untiled)");
+  } else {
+    let bbox: BoundingBox;
+    if (opts.bbox) {
+      bbox = opts.bbox;
+      logger.info({ bbox }, "osm: using manual bbox override");
+    } else {
+      const corridor = await getActiveCorridorBbox();
+      if (!corridor) {
+        throw new Error(
+          "No active corridor found. Either pass --bbox, --iso, or run deploy-corridor first.",
+        );
+      }
+      bbox = corridor.bbox;
+      logger.info({ corridor: corridor.name, bbox }, "osm: using corridor bbox");
+    }
+    const tiles = tileBbox(bbox, TILE_SIZE_KM);
+    logger.info({ tileCount: tiles.length, tileSizeKm: TILE_SIZE_KM }, "osm: tiling complete");
+    scopes = tiles.map(bboxScope);
+  }
 
   const stats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
   const limit = limits.osm;
 
   await Promise.all(
-    tiles.map((tile, idx) =>
+    scopes.map((scope, idx) =>
       limit(async () => {
         try {
-          const elements = await fetchTile(tile);
+          const elements = await fetchTile(scope, families);
           stats.fetched += elements.length;
-          logger.debug({ tile: idx + 1, of: tiles.length, fetched: elements.length }, "osm: tile fetched");
+          logger.debug({ tile: idx + 1, of: scopes.length, fetched: elements.length }, "osm: scope fetched");
 
           for (const el of elements) {
             const outcome = await persistElement(el, opts.dryRun ?? false);
@@ -341,7 +477,7 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
             else if (outcome === "error") stats.errors += 1;
           }
         } catch (err) {
-          logger.error({ err, tile }, "osm: tile failed");
+          logger.error({ err, scope }, "osm: scope failed");
           stats.errors += 1;
         }
       }),
@@ -357,7 +493,14 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
 export default ingest;
 
 // Test seam: pure helpers exercised without network or DB.
-export const _internals = { inferCategory, normalizeOsm };
+export const _internals = {
+  inferCategory,
+  normalizeOsm,
+  buildOverpassQuery,
+  bboxScope,
+  areaScope,
+  FAMILY_PREDICATES,
+};
 
 // Allow direct execution: `tsx ingestion/sources/osm.ts`
 if (import.meta.url === `file://${process.argv[1]}`) {

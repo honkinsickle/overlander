@@ -18,6 +18,12 @@ export interface IngestOptions {
   dryRun?: boolean;
   /** NPS-specific: which park codes to query (e.g. ["jotr"]). NPS API is parkCode-driven. */
   parkCodes?: string[];
+  /** OSM-specific: ISO 3166-2 code for area-scoped fetch (e.g. "US-UT"). Mutually
+   *  exclusive with `bbox`. Falls back to corridor lookup only if neither is set. */
+  iso?: string;
+  /** OSM-specific: restrict Overpass query to named tag families. Undefined =
+   *  all families (current behaviour). Unknown names throw at parse time. */
+  families?: string[];
 }
 
 export interface IngestResult {

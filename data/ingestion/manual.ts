@@ -27,6 +27,11 @@ program
   .description("Run one ingestion source ad-hoc")
   .requiredOption("--source <name>", "source to run: osm | ridb | nps")
   .option("--bbox <w,s,e,n>", "manual bbox override")
+  .option("--iso <code>", "ISO 3166-2 area filter (OSM only, e.g. US-UT). Mutually exclusive with --bbox")
+  .option(
+    "--families <list>",
+    "OSM only: restrict to comma-separated tag families (camping|tourism_misc|fuel|water_san|trailheads|shops|natural|leisure). Default omits 'shops' — pass --families with shops to opt in.",
+  )
   .option("--park-codes <codes>", "comma-separated NPS park codes (NPS source only)")
   .option("--dry-run", "validate + log without writing", false)
   .parse(process.argv);
@@ -34,9 +39,16 @@ program
 const opts = program.opts<{
   source: string;
   bbox?: string;
+  iso?: string;
+  families?: string;
   parkCodes?: string;
   dryRun?: boolean;
 }>();
+
+if (opts.bbox && opts.iso) {
+  console.error("Error: --bbox and --iso are mutually exclusive");
+  process.exit(2);
+}
 
 async function loadSource(name: string): Promise<IngestFn> {
   switch (name) {
@@ -86,6 +98,10 @@ async function loadSource(name: string): Promise<IngestFn> {
 const ingestOpts: IngestOptions = {
   dryRun: opts.dryRun ?? false,
   ...(opts.bbox ? { bbox: parseBboxString(opts.bbox) } : {}),
+  ...(opts.iso ? { iso: opts.iso } : {}),
+  ...(opts.families
+    ? { families: opts.families.split(",").map((s) => s.trim()).filter(Boolean) }
+    : {}),
   ...(opts.parkCodes
     ? { parkCodes: opts.parkCodes.split(",").map((s) => s.trim()).filter(Boolean) }
     : {}),
