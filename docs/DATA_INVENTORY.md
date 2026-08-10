@@ -15,6 +15,41 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Re-measured 2026-08-10 `[queried PROD, read-only]` — the counts below
+> this box (from 2026-07-23) are SUPERSEDED for totals; the corpus roughly
+> doubled with the six-state OSM camping ingest.** Current PROD:
+>
+> | metric | 2026-07-23 | **2026-08-10** |
+> |---|--:|--:|
+> | `source_record` total | 20,384 | **28,817** |
+> | — `is_active = true` | (all) | 20,750 |
+> | — `is_active = false` (six-state trim) | 0 | **8,067** |
+> | `master_place` total | 13,629 | **20,904** |
+> | `master_place_search_export` (view-visible) | — | **16,661** |
+> | Typesense `places_prod` | 13,629 | **16,661** |
+>
+> **`source_record` by `source_id` (all / active):** osm 13,804 / 13,804 ·
+> nps 4,837 / 3,466 · ridb 3,961 / 2,519 · parks_canada 3,078 / **0** ·
+> google 1,863 / 948 · bc_parks 8 / **0**. The six-state trim deactivated
+> the Canada sources entirely and the out-of-region US tail; osm is 100%
+> active (all in-scope). `master_place_search_export == places_prod ==
+> 16,661` — search index mirrors the export view exactly.
+>
+> **OSM dispersed camping per state (ISO-area Overpass, distinct; sums
+> exactly to the PROD `osm dispersed_camping` source_record total, 3,125):**
+>
+> | CA | UT | WA | AZ | OR | NV | **total** |
+> |--:|--:|--:|--:|--:|--:|--:|
+> | 757 | 893 | 682 | 270 | 508 | 15 | **3,125** |
+>
+> An earlier `location:(lat,lng,150 km)` interior spot-check read UT 373 /
+> WA 327 / OR 156 / NV 2 — those are radius undercounts, **not** state
+> totals; use the ISO-area figures above.
+>
+> **Photo coverage:** 1,622 `ridb` + 4,451 `nps` = 6,073 source_records
+> carry a promoted `normalized_payload.photo.url`. `master_place_search_export`
+> has **no photo column** — no photo reaches search yet.
+
 - **master_place:** 13,629 total · 13,629 searchable · 0 non-searchable.
 - **Searchable latitude range:** −88.6 → 70.2 (13,629 rows). The corridor proper
   spans ~**30N → 70.2N** (LA → Deadhorse / Prudhoe Bay); the two rows below ~30N
@@ -406,7 +441,7 @@ tier = 1 cluster).
 
 | collection | docs | used by |
 |---|---:|---|
-| `places_prod` | 13,629 | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
+| `places_prod` | ~~13,629~~ **16,661** (2026-08-10) | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
 | `places_test` | 1,749 | dev (`web/.env.local`) + `data/.env` |
 
 (The old shared `places` collection — 1,749 docs — was **deleted 2026-07-23**
