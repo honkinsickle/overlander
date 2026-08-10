@@ -5,40 +5,95 @@ queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-fligh
 and is authoritative for the current branch. When an item here becomes the next
 thing worked, it moves into STATE.md §Queued.
 
-## Six-state trim Part 2 — unrun on PROD (2026-08-10)
+## Migrations recovered from Conductor checkpoints — standing check (2026-08-10)
 
-Part 1 (reference_trips.is_active migration + flip of `la-to-deadhorse`
-and `dawson-vancouver-cassiar`) was executed on PROD by the parallel
-`havana` session between STOP #1 and 2026-08-10 02:00 UTC. Part 2 has NOT
-been executed. Current PROD state:
-`source_record.is_active = true` returns **20,384** (all rows),
-`master_place.max(updated_at) = 2026-07-12T19:57:09Z` (nothing recomputed
-since #196).
+**Two Aug-10 migrations existed only in Conductor session checkpoint refs
+until recovered for PR #204:**
 
-Remaining steps, in order:
-1. Pre-flight baseline snapshot on PROD (master_place total,
-   searchable, max(updated_at), active source_record count) with UTC
-   timestamp.
-2. Re-derive the 8,064 out-of-scope source_record IDs against live
-   corpus (prior measurement 2026-08-09; verify before acting).
-3. `UPDATE source_record SET is_active = false` for that set, batched
-   at 500 to fit PostgREST URL limits.
-4. Confirm `is_active = true` count is 12,320.
-5. Combined view migration on `master_place_search_export`: add
-   `source_count > 0` filter + a six-state footprint filter using
-   **the US–Canada border as the northern bound, NOT a rounded 49.00**
-   (the earlier bbox admits Vancouver Island around the Cowichan
-   Valley; ~26 PROD rows measured in that leak).
-6. Verify view row delta 13,629 → ~9,300.
-7. Verify via `max(updated_at)` boundary which pre-existing MPs
-   changed and why.
-8. `search:sync` to prune stale Typesense docs and reindex the trimmed
-   set.
+- `20260810120000_reference_trips_is_active.sql` (Part 1 of the six-state
+  trim — is_active column on reference_trips + partial index)
+- `20260810130000_six_state_footprint.sql` (footprint function +
+  source_record_scope view)
 
-Runbook independent of every current code branch (nothing to merge
-first). Reversible via `UPDATE is_active = true` for the affected set
-+ dropping the view predicate; the 8,064-row UPDATE is idempotent by
-design.
+Both were applied to PROD by the parallel `havana` session between
+STOP #1 (2026-08-09 evening) and 02:00 UTC 2026-08-10. Neither existed
+in any real branch — `git branch -a --contains <sha>` returned empty for
+each; only Conductor's `checkpoint:...` synthetic refs held the blobs.
+
+**This is the third instance in this project of PROD state without a
+reachable source-controlled file.** The prior two:
+- **`feat/ridb-imagery-route-a`'s widen_google_resolved.sql +
+  ridb_photo.sql migrations** applied to PROD 2026-08-09 from an
+  unmerged, unpushed branch — resolved when #198 landed the same content
+  via squash-merge.
+- **The first Conductor-only migration** (whichever of 120000/130000 was
+  first to reach PROD) — same pattern.
+
+**Standing check to add to `bin/preflight` or session-start ritual:**
+```
+supabase migration list | grep -E "^\s+\|"  # rows with local blank
+```
+Rows where the local timestamp column is blank = migration applied to
+PROD without a file in `supabase/migrations/`. Any non-zero output should
+block a fresh clone from being considered "reproducible" until the
+missing files are recovered from checkpoints and committed. The recovery
+path is documented in PR #204 (`git log --all --diff-filter=A --pretty=format:'%H' -- <path>`
+against Conductor checkpoint refs).
+
+## Two overlapping footprint functions on PROD — resolution pending (2026-08-10)
+
+Part 2 of the six-state trim landed two functions on PROD:
+
+- **`public.six_state_scope()`** (from `20260810180000`, mine) — coarser
+  WA polygon with a single 48.40°N step west of −123°W. Used by the
+  current `master_place_search_export` view predicate.
+- **`public.six_state_footprint()`** (from `20260810130000`, havana's)
+  — MORE accurate: WA follows the actual Haro Strait border descent
+  through 5 vertices; CA southern edge follows the 1848 treaty diagonal;
+  AZ southern edge follows the Gadsden Purchase line.
+
+**Measured 2026-08-10 across all 20,384 PROD source_records:**
+
+| classification | count |
+|---|---:|
+| in both scope AND footprint | 12,308 |
+| in scope, NOT in footprint (scope over-includes) | **9** |
+| in footprint, NOT in scope (footprint over-includes) | 0 |
+| in neither (both agree out-of-scope) | 8,067 |
+| null geometry | 0 |
+| **total** | **20,384** |
+
+**`six_state_footprint()` is strictly tighter than `six_state_scope()`
+on measured data.** The 9-row over-include population is Mexican-border
+wedges (CA between 32.53°N and the 1848 diagonal; AZ between 31.33°N
+and the Gadsden line) plus possibly Idaho-panhandle strip and Vancouver
+Island near-edge slivers.
+
+**Recommended follow-up (scoped, not applied):**
+- New migration `20260810180300_master_place_search_export_use_footprint.sql`:
+  `CREATE OR REPLACE VIEW master_place_search_export ... where
+  mp.is_searchable and mp.source_count > 0 and
+  st_intersects(mp.geometry, public.six_state_footprint())`.
+- Estimated view row impact: **up to 9 rows removed** from the current
+  9,393, likely fewer since multiple source_records collapse to one MP.
+  Would need to be re-measured post-swap.
+- Also `DROP FUNCTION public.six_state_scope()` and its dependent RPCs
+  (`count_source_records_out_of_scope`,
+  `count_cross_boundary_master_places`,
+  `list_out_of_scope_source_record_ids`) — one-shot helpers, only needed
+  during the trim. Or keep them for future re-runs. Operator call.
+
+Do NOT run without a fresh `search:sync` afterward — the removed MPs
+would be stale in Typesense otherwise.
+
+## ~~Six-state trim Part 2 — unrun on PROD (2026-08-10)~~ DONE 2026-08-10T06:19Z
+
+Executed end-to-end after authorization. 8,067 source_records deactivated
+(prior prediction 8,064; +3 delta from WA polygon correction) · 12,317
+active · 9,393 view-visible MPs · 4,236 Typesense docs pruned.
+`master_place.max(updated_at)` unchanged. Full result table +
+implementation notes: `STATE.md` §2026-08-10. Migrations + operator
+scripts committed on PR #204.
 
 ## PROD OSM `waste_disposal` reclassify — 1,723 rows miscategorized (2026-08-10)
 

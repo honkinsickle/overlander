@@ -259,13 +259,45 @@ this writing.** Both prior drifts closed today:
   parallel havana session applied the migration to PROD and flipped the
   two out-of-scope rows between STOP #1 and 2026-08-10 02:00 UTC.
 
-**Two categories of open work, tracked in `BACKLOG.md`:**
-1. **Six-state trim Part 2 unrun on PROD** — 8,064 out-of-scope
-   source_records + view migration + `search:sync`. Independent of every
-   code branch; can run when authorized.
-2. **1,723 PROD `waste_disposal` rows still miscategorized** — the fix
+**One category of open work, tracked in `BACKLOG.md`:**
+1. **1,723 PROD `waste_disposal` rows still miscategorized** — the fix
    is on `main` (#202), but PROD data predates it. Needs a reclassify
    pass (small, mechanical UPDATE).
+
+### Six-state trim Part 2 — DONE on PROD 2026-08-10T06:19Z
+
+Ran end-to-end after authorization. Migrations + operator scripts
+committed on `chore/prod-part2-six-state-trim-migrations` (PR #204).
+
+| step | result |
+|---|---|
+| baseline | 20,384 active source_records, 13,629 master_places, `max(updated_at) = 2026-07-12T19:57:09Z` |
+| re-derive out-of-scope | **8,067** rows (prior prediction 8,064; +3 delta from WA polygon correction — Vancouver Island exclusion) |
+| cross-boundary MPs | **0** (predicted 0) — trim will not orphan any in-scope MP |
+| batched UPDATE (500/chunk × 17) | **8,067 rows deactivated** |
+| post-UPDATE active count | **12,317** (predicted 12,320; delta −3 consistent with the +3 out-of-scope) |
+| view migration (source_count > 0 + `st_intersects(geom, six_state_scope())`) | applied via `20260810180200` |
+| view row delta | **13,629 → 9,393** (4,236 removed; predicted ~9,300; +93 within 1% tolerance) |
+| `master_place.max(updated_at)` post-trim | UNCHANGED at `2026-07-12T19:57:09Z` — no MP recomputed (correct: trim only flipped `source_record.is_active` + view predicates) |
+| `search:sync` | **4,236 Typesense docs pruned**, 9,393 final in `places_prod`, 0 errors |
+| restore | `data/.env` and CLI link back to TEST, verified |
+
+Two implementation notes worth carrying forward:
+
+- **Two overlapping footprint functions on PROD.** `six_state_scope()`
+  (mine, coarser WA polygon, used by the view) and
+  `six_state_footprint()` (havana's, more accurate — 5-vertex Haro Strait
+  descent + CA 1848 treaty diagonal + AZ Gadsden line). Measured 2026-08-10:
+  `six_state_scope()` over-includes **9 source_records** vs footprint;
+  footprint over-includes 0. Follow-up: repoint view at `six_state_footprint()`
+  (BACKLOG).
+- **Two migrations applied to PROD (`20260810120000` reference_trips
+  is_active, `20260810130000` six_state_footprint) existed ONLY in
+  Conductor checkpoint refs** until recovered for PR #204. This is the
+  third instance in the project of PROD state without a reachable
+  source-controlled file. BACKLOG carries the standing check (before
+  a fresh clone can reproduce PROD, every applied migration needs a
+  file on a branch).
 
 ## 2026-08-06 — NPS corpus imagery LIVE end-to-end on PROD (#196 + migration + backfill)
 
