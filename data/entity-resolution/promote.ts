@@ -56,19 +56,18 @@ export interface ApplyResult {
 }
 
 /**
- * Default outcome-batch size for the apply_match_outcomes RPC. Each
- * batch is its own transaction; bounding it bounds the per-RPC work
- * (especially the recompute_master_place cascade, which is the
- * dominant cost).
+ * Default outcome-batch size for the apply_match_outcomes RPC. Each batch is one
+ * transaction, and the whole RPC is a single statement — so it is bounded by
+ * PROD's 60 s statement_timeout and an over-large batch fails outright (SQLSTATE
+ * 57014), not partially.
  *
- * Calibration: at corridor scale, an 8,428-outcome single call hit
- * Postgres statement_timeout (~10 s). 500/batch keeps each call's
- * recompute cascade comfortably under that ceiling. Drop via
- * ER_APPLY_BATCH_SIZE if a particular corpus shape (e.g. all
- * new_master_place outcomes with heavy amenity rollups) still
- * stresses the timeout.
+ * Measured on PROD 2026-08-10 (CA camping materialize): batch 500 and batch 100
+ * both hit 57014; batch 25 ran min 66 ms / max 34.5 s / avg 8.0 s over 99 batches.
+ * Cost is dominated by the recompute_master_place cascade, which grows with the
+ * master_place count — so this ceiling TIGHTENS as the corpus grows. Only raise
+ * via ER_APPLY_BATCH_SIZE after re-measuring; lower it if batches approach 60 s.
  */
-const DEFAULT_BATCH_SIZE = 500;
+const DEFAULT_BATCH_SIZE = 25;
 
 function parseBatchSize(): number {
   const env = process.env.ER_APPLY_BATCH_SIZE;
