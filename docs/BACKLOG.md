@@ -26,6 +26,30 @@ measured count.) Only the schema-field note below remains open.
 
 **Follow-up (post-#211):** `photo_url` is **stored and retrievable** on both `places_test` and `places_prod` (returned in search hits + via hydrate) but is **not a declared Typesense schema field** — the sync only sets the schema on collection *creation* — so `filter_by`/`facet_by` on it will **400**. Rendering is unaffected. Declaring it later is an in-place `collections.update` to add the field (background-indexes the already-stored values — no reindex/recreate).
 
+## OSM fuel family retired (#214) — gas/ev rows still on PROD (2026-08-11)
+
+#214 dropped the whole `fuel` family from the OSM adapter (`fuel` /
+`charging_station` / `bbq` / `fire_pit` removed from `FAMILY_PREDICATES` and
+`TAG_TO_CATEGORY`). The `bbq`/`fire_pit` rows were deactivated on PROD 2026-08-11
+(view 16,654 → 16,516 — see `STATE.md` + `LOG.md`). Two things remain open:
+
+- **261 `gas_station` + 184 `ev_charging` osm source_records remain active in the
+  corpus** even though their mappings were dropped in #214 (code-only; existing
+  rows keep their persisted `inferred_category`). Deliberately kept:
+  - **gas_station** is covered **live** by Google Places (`gas_station` in the
+    `/api/search-area` fanout), so the OSM copy is redundant — a candidate for a
+    later deactivation pass, low urgency.
+  - **ev_charging** is the **only corpus EV source** until Google's
+    `electric_vehicle_charging_station` type (added to the live fanout in #214)
+    **proves itself in production**. Do NOT deactivate it before that is verified —
+    revisit both after the Google EV type has real prod coverage confirmed.
+- **`evChargeOptions` was declined (#214).** Requesting connector type / max kW
+  from Google would add `places.evChargeOptions` to the Nearby Search field mask,
+  which moves **every** search-area call into the Places API **Enterprise** tier
+  (a per-call SKU bump, same class as the existing rating/price Pro-tier fields).
+  Not worth it for a chip label; revisit only if EV connector detail becomes a
+  product requirement.
+
 ## CA OSM camping — 8.33% `manual_review` rate unexplained (2026-08-10)
 
 CA's materialize produced **206 / 2,474 = 8.33% `manual_review`**, against AZ 4.4%

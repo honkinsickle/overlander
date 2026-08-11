@@ -12,6 +12,36 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-11
+
+- **bbq/fire_pit deactivated on PROD.** 223 osm `inferred_category = fire_pit`
+  source_records set `is_active = false` (one batch of ≤500, fire_pit-only
+  compound filter); their **138** solo master_places recomputed to
+  `source_count = 0`; the **85** dangling pending `place_match` rows on the
+  unlinked source_records cleared; `search:sync` pruned **138** stale docs from
+  `places_prod`. View **16,654 → 16,516**; `places_prod` = view exactly;
+  active source_record 20,750 → 20,527. All re-verified `[queried PROD]`.
+- **Why they were noise.** `amenity=fire_pit` has **zero** nodes across all six
+  states (CA/NV/UT/AZ/WA/OR, ISO-area Overpass) — every "fire_pit"-category row
+  was actually `amenity=bbq`. And bbq is picnic-area grills: **83%** (184/223)
+  sit within 100m of another bbq node, all nameless, no `operator`. Ingested,
+  they rendered as standalone "Unnamed fire pit" pins. `amenity_rollup` could
+  **not** absorb them because `AMENITY_PARENT_CATEGORIES`
+  (campground/recreation_area/facility/lodging) excludes `picnic_area` and
+  `park` — measured **0/223** within 100m of a rollup parent.
+- **The 138 were recomputed, not deleted.** They stay in `master_place` at
+  `source_count = 0` (still `is_searchable`); the view's `source_count > 0`
+  filter is what drops them. `master_place source_count = 0` went 0 → exactly
+  138, boundary-checked against `updated_at` (zero unexpected rows touched).
+- **gas_station (261) + ev_charging (184) deliberately left active** — their
+  mappings were dropped in #214, but the rows remain (gas covered live by
+  Google; ev_charging is the only corpus EV source until Google's
+  `electric_vehicle_charging_station` type is verified in prod). See BACKLOG.
+- **Operation hygiene.** `data/.env` swapped to PROD for the op (fail-closed
+  PROD assertion + fire_pit-only filter on every write), then restored to TEST
+  byte-identical; CLI link never touched (unlinked, not PROD). No schema change,
+  no migration — pure data.
+
 ## 2026-08-10
 
 - **Three PRs merged: #200 matcher placeholder-name fix; #201 diagnostics

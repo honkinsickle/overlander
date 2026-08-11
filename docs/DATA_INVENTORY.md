@@ -15,25 +15,28 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
-> **⚠️ Re-measured 2026-08-10 `[queried PROD, read-only]` — the counts below
+> **⚠️ Re-verified 2026-08-11 `[queried PROD, read-only]` — the counts below
 > this box (from 2026-07-23) are SUPERSEDED for totals; the corpus roughly
-> doubled with the six-state OSM camping ingest.** Current PROD:
+> doubled with the six-state OSM camping ingest, then the bbq/fire_pit
+> deactivation (2026-08-11) took the view to 16,516.** Current PROD:
 >
-> | metric | 2026-07-23 | **2026-08-10** |
+> | metric | 2026-07-23 | **2026-08-11** |
 > |---|--:|--:|
 > | `source_record` total | 20,384 | **28,817** |
-> | — `is_active = true` | (all) | 20,750 |
-> | — `is_active = false` (six-state trim) | 0 | **8,067** |
+> | — `is_active = true` | (all) | **20,527** |
+> | — `is_active = false` (six-state trim + fire_pit) | 0 | **8,290** |
 > | `master_place` total | 13,629 | **20,904** |
-> | `master_place_search_export` (view-visible) | — | **16,654** (post-#209 footprint repoint) |
-> | Typesense `places_prod` | 13,629 | **16,654** |
+> | — of which `source_count = 0` (fire_pit, view-excluded) | 0 | **138** |
+> | `master_place_search_export` (view-visible) | — | **16,516** (footprint #209, −138 fire_pit 2026-08-11) |
+> | Typesense `places_prod` | 13,629 | **16,516** |
 >
-> **`source_record` by `source_id` (all / active):** osm 13,804 / 13,804 ·
+> **`source_record` by `source_id` (all / active):** osm 13,804 / **13,581** ·
 > nps 4,837 / 3,466 · ridb 3,961 / 2,519 · parks_canada 3,078 / **0** ·
 > google 1,863 / 948 · bc_parks 8 / **0**. The six-state trim deactivated
-> the Canada sources entirely and the out-of-region US tail; osm is 100%
-> active (all in-scope). `master_place_search_export == places_prod ==
-> 16,654` — search index mirrors the export view exactly. **The view filters on
+> the Canada sources entirely and the out-of-region US tail; the 2026-08-11
+> pass deactivated the 223 osm `fire_pit` (all `amenity=bbq`) rows.
+> `master_place_search_export == places_prod ==
+> 16,516` — search index mirrors the export view exactly. **The view filters on
 > `six_state_footprint()` (tight) as of #209** — not `six_state_scope()`; that
 > repoint was −9 Idaho +2 San Juan Islands (16,661 → 16,654), footprint not being
 > a strict subset of scope.
@@ -51,7 +54,8 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 >
 > **Photo coverage (Artboard C LIVE, #211):** `photo_url` is now on the view
 > (nps/ridb lateral, NPS preferred) + the Typesense sync + hydrate. **3,526 of
-> 16,654** view rows carry a non-null `photo_url` (~21%); `places_prod` docs
+> 16,516** view rows carry a non-null `photo_url` (~21%; unchanged by the
+> fire_pit deactivation — osm bbq nodes carry no photo); `places_prod` docs
 > carry it (retrievable — *not* a declared schema field, see BACKLOG). Source
 > photos: 1,622 `ridb` + 4,451 `nps` = 6,073 source_records carry
 > `normalized_payload.photo.url`.
@@ -465,8 +469,8 @@ tier = 1 cluster).
 
 | collection | docs | used by |
 |---|---:|---|
-| `places_prod` | ~~13,629~~ **16,661** (2026-08-10) | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
-| `places_test` | 1,749 | dev (`web/.env.local`) + `data/.env` |
+| `places_prod` | ~~13,629~~ ~~16,661~~ **16,516** (2026-08-11) | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
+| `places_test` | ~~1,749~~ **14,911** (2026-08-11) | dev (`web/.env.local`) + `data/.env` |
 
 (The old shared `places` collection — 1,749 docs — was **deleted 2026-07-23**
 once both environments were confirmed on their own collections. Nothing read it:
