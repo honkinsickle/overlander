@@ -70,13 +70,10 @@ const TAG_TO_CATEGORY: Array<[tagKey: string, tagValue: RegExp, category: string
   ["tourism", /^picnic_site$/, "picnic_area"],
   ["tourism", /^viewpoint$/, "viewpoint"],
   ["tourism", /^(alpine_hut|wilderness_hut)$/, "hut"],
-  ["amenity", /^fuel$/, "gas_station"],
-  ["amenity", /^charging_station$/, "ev_charging"],
   ["amenity", /^drinking_water$/, "water"],
   ["amenity", /^shower$/, "shower"],
   ["amenity", /^toilets$/, "toilet"],
   ["amenity", /^sanitary_dump_station$/, "dump_station"],
-  ["amenity", /^(bbq|fire_pit)$/, "fire_pit"],
   ["highway", /^(services|rest_area)$/, "rest_area"],
   ["highway", /^trailhead$/, "trailhead"],
   ["shop", /^(supermarket|convenience)$/, "grocery"],
@@ -126,11 +123,12 @@ function inferName(tags: Record<string, string> | undefined, category: string | 
 export type TagFamily =
   | "camping"
   | "tourism_misc"
-  | "fuel"
   | "water_san"
   | "trailheads"
   | "shops"
-  | "natural"
+  | "spring"
+  | "peak"
+  | "beach"
   | "leisure";
 
 /** Every family the adapter knows about. Used by parseFamilies to validate a
@@ -139,11 +137,12 @@ export type TagFamily =
 export const ALL_FAMILIES: readonly TagFamily[] = [
   "camping",
   "tourism_misc",
-  "fuel",
   "water_san",
   "trailheads",
   "shops",
-  "natural",
+  "spring",
+  "peak",
+  "beach",
   "leisure",
 ] as const;
 
@@ -166,10 +165,13 @@ export const DEFAULT_FAMILIES: readonly TagFamily[] = ALL_FAMILIES.filter(
 );
 
 /** Predicates per family. `%SCOPE%` is substituted with the bbox or area filter
- *  at build time. Semantics preserve the original single-block builder — the
- *  set of nodes returned by all-families is identical (Overpass dedups the
- *  outer union), the text is different because the amenity regex is split into
- *  fuel-side and water-side. */
+ *  at build time. Each family maps to one or more Overpass predicates; the union
+ *  across selected families is fetched (Overpass dedups the outer union). The
+ *  `natural` bundle was split into single-value `spring`/`peak`/`beach` families
+ *  so each can be requested independently, and the `fuel` bundle
+ *  (fuel/charging_station/bbq/fire_pit) was retired entirely — Google Places
+ *  covers gas and EV charging live, fire_pit has zero six-state nodes, and bbq
+ *  is amenity noise (see the natural/fuel audit, 2026-08-11). */
 const FAMILY_PREDICATES: Record<TagFamily, readonly string[]> = {
   camping: [
     'node["tourism"~"^(camp_site|caravan_site)$"](%SCOPE%)',
@@ -178,9 +180,6 @@ const FAMILY_PREDICATES: Record<TagFamily, readonly string[]> = {
   ],
   tourism_misc: [
     'node["tourism"~"^(picnic_site|viewpoint|alpine_hut|wilderness_hut)$"](%SCOPE%)',
-  ],
-  fuel: [
-    'node["amenity"~"^(fuel|charging_station|bbq|fire_pit)$"](%SCOPE%)',
   ],
   water_san: [
     'node["amenity"~"^(drinking_water|toilets|shower|sanitary_dump_station)$"](%SCOPE%)',
@@ -192,8 +191,14 @@ const FAMILY_PREDICATES: Record<TagFamily, readonly string[]> = {
   shops: [
     'node["shop"~"^(supermarket|convenience|outdoor|hardware)$"](%SCOPE%)',
   ],
-  natural: [
-    'node["natural"~"^(spring|peak|beach)$"](%SCOPE%)',
+  spring: [
+    'node["natural"="spring"](%SCOPE%)',
+  ],
+  peak: [
+    'node["natural"="peak"](%SCOPE%)',
+  ],
+  beach: [
+    'node["natural"="beach"](%SCOPE%)',
   ],
   leisure: [
     'node["leisure"~"^(park|nature_reserve)$"](%SCOPE%)',

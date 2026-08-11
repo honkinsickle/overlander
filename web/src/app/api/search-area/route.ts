@@ -35,9 +35,10 @@ import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 /** Corpus `primary_category` → live slide bucket, for the categories that
  *  Google actually covers via TYPES_BY_CATEGORY. Primaries omitted here are
  *  overland-specific (dispersed_camping, trailhead, water, shower,
- *  dump_station, ev_charging, grocery, car_repair, …) — Google has no honest
- *  type for them, so they run federated-only rather than borrowing an
- *  unrelated live result. */
+ *  dump_station, grocery, car_repair, …) — Google has no honest type for them,
+ *  so they run federated-only rather than borrowing an unrelated live result.
+ *  ev_charging now maps live via Google's electric_vehicle_charging_station
+ *  type (see TYPES_BY_CATEGORY.fuel). */
 const LIVE_SLIDE_FOR_PRIMARY: Record<string, SlideCategoryKey> = {
   // FOOD — Google food types: restaurant / cafe / bar / bakery
   cafe: "food",
@@ -63,9 +64,10 @@ const LIVE_SLIDE_FOR_PRIMARY: Record<string, SlideCategoryKey> = {
   bar_and_grill: "food",
   gastropub: "food",
   brewpub: "food",
-  // FUEL — Google: gas_station
+  // FUEL — Google: gas_station + electric_vehicle_charging_station
   gas_station: "fuel",
   truck_stop: "fuel",
+  ev_charging: "fuel",
   // CAMPING — Google: campground / rv_park
   campground: "camping",
   rv_park: "camping",
