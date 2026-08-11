@@ -32,6 +32,12 @@ test("venues still map as before", () => {
   assert.equal(cat(["tourist_attraction", "park"]), "scenic");
 });
 
+test("EV charging → fuel — Google's electric_vehicle_charging_station now covered live", () => {
+  assert.equal(cat(["electric_vehicle_charging_station"]), "fuel");
+  // Mixed EV + gas result still buckets to fuel.
+  assert.equal(cat(["electric_vehicle_charging_station", "gas_station"]), "fuel");
+});
+
 test("urban only fires when 'urban' is in the wanted set (the gate that broke it)", () => {
   const withoutUrban = new Set<SlideCategoryKey>(["food", "scenic", "fuel"]);
   // Mirrors the original placeDetails bug: wanted omits urban → towns → null.

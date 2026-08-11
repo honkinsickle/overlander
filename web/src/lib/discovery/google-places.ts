@@ -50,7 +50,7 @@ const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   oddity: [],
   camping: ["campground", "rv_park"],
   overnight: ["lodging", "hotel"],
-  fuel: ["gas_station"],
+  fuel: ["gas_station", "electric_vehicle_charging_station"],
   // Corpus-backed (federated) buckets — no live Google Places fanout.
   interest: [],
   urban: [],
@@ -407,7 +407,12 @@ export function categoryForGoogleTypes(
   if (wanted.has("overnight") && (t.has("lodging") || t.has("hotel"))) {
     return "overnight";
   }
-  if (wanted.has("fuel") && t.has("gas_station")) return "fuel";
+  if (
+    wanted.has("fuel") &&
+    (t.has("gas_station") || t.has("electric_vehicle_charging_station"))
+  ) {
+    return "fuel";
+  }
   if (
     wanted.has("food") &&
     ["restaurant", "cafe", "bar", "bakery"].some((x) => t.has(x))

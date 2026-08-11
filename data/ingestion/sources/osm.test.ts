@@ -26,7 +26,23 @@ describe("inferCategory — dispersed-camping split (PR-B)", () => {
   it("non-camping tags are unaffected by the split", () => {
     expect(inferCategory({ tourism: "viewpoint" })).toBe("viewpoint");
     expect(inferCategory({ natural: "peak", backcountry: "yes" })).toBe("peak");
-    expect(inferCategory({ amenity: "fuel" })).toBe("gas_station");
+    expect(inferCategory({ natural: "spring" })).toBe("spring");
+  });
+});
+
+describe("inferCategory — retired fuel family (fuel/charging_station/bbq/fire_pit)", () => {
+  // Google Places covers gas + EV charging live; fire_pit has zero six-state
+  // nodes; bbq is amenity noise. These tags were dropped from TAG_TO_CATEGORY
+  // (natural/fuel audit, 2026-08-11), so they no longer categorize.
+  it("amenity=fuel is no longer mapped", () => {
+    expect(inferCategory({ amenity: "fuel" })).toBeNull();
+  });
+  it("amenity=charging_station is no longer mapped", () => {
+    expect(inferCategory({ amenity: "charging_station" })).toBeNull();
+  });
+  it("amenity=bbq / amenity=fire_pit are no longer mapped", () => {
+    expect(inferCategory({ amenity: "bbq" })).toBeNull();
+    expect(inferCategory({ amenity: "fire_pit" })).toBeNull();
   });
 });
 
@@ -64,11 +80,12 @@ describe("buildOverpassQuery — tag-family flag", () => {
   const SIGIL: Record<TagFamily, string> = {
     camping: '"tourism"~"^(camp_site|caravan_site)$"',
     tourism_misc: '"tourism"~"^(picnic_site|viewpoint',
-    fuel: '"amenity"~"^(fuel|charging_station',
     water_san: '"man_made"~"^(water_well|water_tap)$"',
     trailheads: '"highway"~"^(services|rest_area|trailhead)$"',
     shops: '"shop"~"^(supermarket|convenience|outdoor|hardware)$"',
-    natural: '"natural"~"^(spring|peak|beach)$"',
+    spring: '"natural"="spring"',
+    peak: '"natural"="peak"',
+    beach: '"natural"="beach"',
     leisure: '"leisure"~"^(park|nature_reserve)$"',
   };
 
@@ -133,6 +150,38 @@ describe("buildOverpassQuery — tag-family flag", () => {
     expect(q).not.toContain('"informal"="yes"');
   });
 
+  for (const fam of ["spring", "peak", "beach"] as const) {
+    it(`families: ['${fam}'] emits ONLY its own natural=${fam} predicate`, () => {
+      const q = buildOverpassQuery(bbox, { families: [fam] });
+      expect(q).toContain(`node["natural"="${fam}"]`);
+      // The other two natural families must not leak in — the bundle is split.
+      for (const other of ["spring", "peak", "beach"] as const) {
+        if (other === fam) continue;
+        expect(q, `natural=${other} must not appear`).not.toContain(`"natural"="${other}"`);
+      }
+      for (const other of ALL_FAMILIES) {
+        if (other === fam) continue;
+        expect(q, `family ${other} must NOT appear`).not.toContain(SIGIL[other]);
+      }
+    });
+  }
+
+  it("the retired fuel bundle emits nothing — no fuel/charging_station/bbq/fire_pit tags in any query", () => {
+    // Full default query and the all-families query must both be clean.
+    for (const q of [buildOverpassQuery(bbox), buildOverpassQuery(bbox, { families: [...ALL_FAMILIES] })]) {
+      expect(q).not.toContain('"amenity"="fuel"');
+      expect(q).not.toContain('"amenity"~"^(fuel');
+      expect(q).not.toContain("charging_station");
+      expect(q).not.toContain("bbq");
+      expect(q).not.toContain("fire_pit");
+    }
+  });
+
+  it("the coarse 'natural' and 'fuel' family names are retired (parseFamilies rejects them)", () => {
+    expect(() => parseFamilies("natural")).toThrow(/Unknown tag families: natural/);
+    expect(() => parseFamilies("fuel")).toThrow(/Unknown tag families: fuel/);
+  });
+
   it("bbox scope emits the (s,w,n,e) predicate and no area binding", () => {
     const q = buildOverpassQuery(bbox);
     // Overpass bbox order is (south,west,north,east).
@@ -167,8 +216,8 @@ describe("parseFamilies", () => {
     expect(parseFamilies("camping")).toEqual(["camping"]);
   });
   it("accepts multiple families, trims whitespace, drops empties", () => {
-    expect(parseFamilies("camping, water_san , fuel")).toEqual(["camping", "water_san", "fuel"]);
-    expect(parseFamilies("camping,,fuel,")).toEqual(["camping", "fuel"]);
+    expect(parseFamilies("camping, water_san , spring")).toEqual(["camping", "water_san", "spring"]);
+    expect(parseFamilies("camping,,spring,")).toEqual(["camping", "spring"]);
   });
   it("throws on unknown family (fails loudly, not silently)", () => {
     expect(() => parseFamilies("camping,typo")).toThrow(/Unknown tag families: typo/);

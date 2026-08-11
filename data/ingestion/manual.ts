@@ -30,7 +30,7 @@ program
   .option("--iso <code>", "ISO 3166-2 area filter (OSM only, e.g. US-UT). Mutually exclusive with --bbox")
   .option(
     "--families <list>",
-    "OSM only: restrict to comma-separated tag families (camping|tourism_misc|fuel|water_san|trailheads|shops|natural|leisure). Default omits 'shops' — pass --families with shops to opt in.",
+    "OSM only: restrict to comma-separated tag families (camping|tourism_misc|water_san|trailheads|shops|spring|peak|beach|leisure). Default omits 'shops' — pass --families with shops to opt in.",
   )
   .option("--park-codes <codes>", "comma-separated NPS park codes (NPS source only)")
   .option("--dry-run", "validate + log without writing", false)
