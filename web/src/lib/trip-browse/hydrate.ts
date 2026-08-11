@@ -76,7 +76,7 @@ export async function hydratePlacesByIds(
   // View: geometry split into lng/lat doubles.
   const geoQuery = supabase
     .from("master_place_search_export")
-    .select("id,lng,lat")
+    .select("id,lng,lat,photo_url")
     .in("id", ids);
 
   const [baseRes, geoRes] = await Promise.all([baseQuery, geoQuery]);
@@ -91,10 +91,10 @@ export async function hydratePlacesByIds(
   const baseById = new Map<string, HydrateRow>(
     (baseRes.data as HydrateRow[]).map((r) => [r.id, r]),
   );
-  const geoById = new Map<string, { lng: number; lat: number }>(
-    (geoRes.data as { id: string; lng: number; lat: number }[]).map((r) => [
+  const geoById = new Map<string, { lng: number; lat: number; photo_url: string | null }>(
+    (geoRes.data as { id: string; lng: number; lat: number; photo_url: string | null }[]).map((r) => [
       r.id,
-      { lng: r.lng, lat: r.lat },
+      { lng: r.lng, lat: r.lat, photo_url: r.photo_url },
     ]),
   );
 
@@ -115,6 +115,10 @@ export async function hydratePlacesByIds(
       primary_category: base.primary_category,
       lng: geo.lng,
       lat: geo.lat,
+      // Corpus photo from the export view's nps/ridb lateral. mapMasterPlaceRow
+      // maps nps_photo_url -> photoUrl, so search hydrate now shows the same
+      // image as corridor browse (Artboard C). No UI change.
+      nps_photo_url: geo.photo_url,
       prominence_score: base.prominence_score,
       mvum_corridor: base.mvum_corridor,
       overlander_tags: base.overlander_tags,

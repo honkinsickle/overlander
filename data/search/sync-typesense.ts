@@ -80,6 +80,7 @@ const SCHEMA: CollectionCreateSchema = {
     { name: "has_water", type: "bool", facet: true, optional: true },
     { name: "has_dump_station", type: "bool", facet: true, optional: true },
     { name: "is_federal", type: "bool", facet: true, optional: true },
+    { name: "photo_url", type: "string", optional: true },
   ] satisfies CollectionFieldSchema[],
   default_sorting_field: "prominence_score",
 };
@@ -101,6 +102,7 @@ interface MasterPlaceExportRow {
   prominence_score: number;
   source_count: number;
   amenities: Record<string, unknown> | null;
+  photo_url: string | null;
 }
 
 interface PlaceDocument {
@@ -118,6 +120,7 @@ interface PlaceDocument {
   has_water?: boolean;
   has_dump_station?: boolean;
   is_federal?: boolean;
+  photo_url?: string;
 }
 
 export interface SyncResult {
@@ -174,6 +177,7 @@ function transformRow(row: MasterPlaceExportRow): PlaceDocument {
   if (hasDump !== undefined) doc.has_dump_station = hasDump;
   const isFederal = deriveIsFederal(row.overlander_tags);
   if (isFederal !== undefined) doc.is_federal = isFederal;
+  if (row.photo_url) doc.photo_url = row.photo_url;
 
   return doc;
 }
