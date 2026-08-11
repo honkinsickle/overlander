@@ -74,6 +74,38 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-11 — bbq/fire_pit deactivated on PROD (view 16,654 → 16,516)
+
+Newest truth; **supersedes the view / places_prod / active-source_record figures in
+every section below.** Every number **re-verified against PROD read-only, 2026-08-11**
+`[queried PROD]` (not taken from the operation report).
+
+The 223 osm `inferred_category = fire_pit` source_records (all `amenity=bbq` — see
+`docs/LOG.md` 2026-08-11 for why) were deactivated (`is_active = false`); their 138
+solo master_places were recomputed to `source_count = 0`; the 85 dangling pending
+`place_match` rows on the unlinked ones were cleared; `search:sync` pruned 138 stale
+docs from `places_prod`.
+
+| metric | before | **now** |
+|---|--:|--:|
+| `master_place_search_export` (view) | 16,654 | **16,516** |
+| Typesense `places_prod` | 16,654 | **16,516** (= view exactly) |
+| `source_record` `is_active = true` | 20,750 | **20,527** (−223) |
+| `source_record` `is_active = false` | 8,067 | **8,290** (+223) |
+| `master_place` total | 20,904 | **20,904** (unchanged) |
+
+**The 138 fire_pit master_places were NOT deleted.** They persist at
+`source_count = 0` and `is_searchable = true`, but the view's `source_count > 0`
+filter now excludes them — so they drop from search without leaving the corpus.
+`master_place source_count = 0` went from 0 → **exactly 138**, all
+`primary_category = fire_pit` (recompute kept the category, only zeroed the count).
+Boundary-checked: exactly the 138 expected MPs had `updated_at` bump, zero others.
+
+**gas_station (261) and ev_charging (184) osm rows were deliberately left active** —
+their category mappings were dropped in #214, but the rows stay (gas is covered live
+by Google; ev_charging is the only corpus EV source until Google's EV type proves out).
+See `docs/BACKLOG.md`. `data/.env` + CLI link left on TEST after the op.
+
 ## 2026-08-10 (later) — export view on `six_state_footprint()` + Artboard C photo LIVE on PROD
 
 Newest truth; supersedes the view figures in the section below (which predate the
