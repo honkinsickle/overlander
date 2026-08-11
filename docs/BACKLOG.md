@@ -12,49 +12,17 @@ thing worked, it moves into STATE.md §Queued.
 > retired; `places_prod` reindexed to 16,661. **The ONE step that did NOT run is
 > the view migration (step 5) — carried below as its own item.**
 
-## `master_place_search_export` footprint filter — UNRUN; two overlapping footprint functions (2026-08-10)
+> **SHIPPED, removed from this list:** the footprint-filter repoint (view now on
+> `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
+> the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
-The view is **not** footprint-filtered. `master_place_search_export` returns
-**16,661 rows** `[queried PROD 2026-08-10]` — it grew with the six-state camping
-ingest rather than shrinking to the ~9,300 a footprint-trimmed view was projected
-to hold. So although the `source_record.is_active` trim ran, the search export
-still surfaces out-of-region and `source_count = 0` master_places.
+## Artboard C — photo in search + hydrate — SHIPPED (#211, live on PROD 2026-08-10)
 
-The intended migration adds, to the view: a `source_count > 0` filter **and** a
-six-state footprint filter using **the US–Canada border as the northern bound, NOT
-a rounded 49.00** (the coarse bbox admits Vancouver Island around the Cowichan
-Valley — ~26 PROD rows measured in that leak). Per the handoff there are **two
-overlapping footprint functions** and the view currently references the **coarser
-`six_state_scope()`**; consolidate to one precise footprint before wiring it into
-the view. **UNVERIFIED from the repo:** `six_state_scope` does not appear anywhere
-in `main` `[grep]`, so whichever footprint machinery exists is either a PROD-only
-object or not yet committed — confirm which before editing.
-
-After the view predicate lands: verify the row delta (→ ~9,300), the
-`max(updated_at)` boundary of which pre-existing MPs changed, then `search:sync` to
-prune the now-stale `places_prod` docs and reindex the trimmed set. Reversible by
-dropping the view predicate.
-
-## `promote.ts` — stale ~10 s calibration; `DEFAULT_BATCH_SIZE = 500` unsafe at PROD's 60 s ceiling (2026-08-10)
-
-`data/entity-resolution/promote.ts` sets `DEFAULT_BATCH_SIZE = 500` with a comment
-calibrating it against a **"~10 s"** `statement_timeout` "from a different project."
-**PROD's real ceiling is 60 s**, and both **batch 500 (60,107 ms)** and **batch 100
-(60,129 ms)** fail there with SQLSTATE **`57014`** `[measured PROD 2026-08-10]`;
-only **batch 25 (~33 s)** clears it. Every PROD materialize this session had to
-pass `ER_APPLY_BATCH_SIZE=25` by hand. Fix: correct the comment to the measured
-60 s PROD ceiling + ~1.3 s/outcome, and lower `DEFAULT_BATCH_SIZE` to something that
-survives 60 s (25–40). Note the timeout is server-side (`ALTER ROLE service_role SET
-statement_timeout`), not client-side — `db.ts` sets no fetch timeout.
-
-## Artboard C — photo lateral into `master_place_search_export` (2026-08-10)
-
-`master_place_search_export` has **no photo column** `[queried PROD 2026-08-10]`, so
-no imagery reaches Typesense/search even though 6,073 source_records carry a promoted
-`normalized_payload.photo.url` (nps 4,451 + ridb 1,622). Lateral a photo field through
-the export view so the search index and any card fed from it can show imagery. (Also:
-a **"5,256 photo-emitting tiles"** figure was asserted for RIDB Route A but matches
-none of the measured counts — reconcile or discard it when this is picked up.)
+The photo lateral landed: `photo_url` on `master_place_search_export` (nps/ridb, NPS
+preferred) + the Typesense sync (`PlaceDocument`) + `hydratePlacesByIds`. PROD view
+**16,654 unchanged**, **3,526** rows carry a photo (~21%), `places_prod` = view.
+(The asserted "5,256 photo-emitting tiles" RIDB figure was discarded — matched no
+measured count.) Only the schema-field note below remains open.
 
 **Follow-up (post-#211):** `photo_url` is **stored and retrievable** on both `places_test` and `places_prod` (returned in search hits + via hydrate) but is **not a declared Typesense schema field** — the sync only sets the schema on collection *creation* — so `filter_by`/`facet_by` on it will **400**. Rendering is unaffected. Declaring it later is an in-place `collections.update` to add the field (background-indexes the already-stored values — no reindex/recreate).
 
@@ -70,19 +38,30 @@ benign.
 ## TEST corpus is not representative of PROD (standing caveat, re-flagged 2026-08-10)
 
 TEST (`znldzjdatkogdktymtvi`) holds ~1,749 searchable master_places over a LA/Joshua-Tree
-reseed; PROD holds **20,904 master_places / 16,661 view-visible** over the full
+reseed; PROD holds **20,904 master_places / 16,654 view-visible** over the full
 six-state-plus corridor. A conclusion measured on TEST — coverage, ER outcome rates,
 density, enrichment behaviour — **does not transfer to PROD**. Several past
 "corpus is SoCal-only" errors trace to treating TEST as the corpus. Every corpus-scale
 claim must name which project it was measured on. (See also the disjoint-instruments
 caveat in `CLAUDE.md` §RUNBOOK.)
 
-## Open PRs — #204, #205 (as of 2026-08-10)
+## TEST fixture composition — Path B, non-destructive, targeted (decided 2026-08-10)
 
-Two PRs are open and unmerged. **Contents UNVERIFIED here** — not inspected this
-session; confirm scope, CI status, and whether either conflicts with the docs on this
-branch before merging. (The only other historically-open PR tracked in this doc is
-#24, May, live-weather salvage.)
+**Decision.** Improve TEST as an ER/enrichment instrument by adding **non-OSM density
+co-located with the existing OSM camping in CA and AZ** — realistic cross-source
+overlap where matches actually fire. The target is **that co-location, NOT a
+corpus-wide source ratio**. **Path B: non-destructive — do NOT clear TEST** (its
+18,967 source_records / 16,521 master_places / 14,911-row view baseline stay).
+**Blocked on Overpass and RIDB availability** — both were intermittently down this
+session (RIDB 401, Overpass 504/429), and the targeted fetch depends on them.
+
+## Open PRs — resolved (updated 2026-08-10)
+
+~~#204, #205 open~~ — **#204 merged** (committed the 5 six-state migrations to `main`;
+PROD ledger reconciled via `migration repair`). **#205 closed as superseded** by #207
+(its STATE numbers were the stale post-trim snapshot; its checkpoint-migration
+standing-check idea was salvaged into `bin/preflight`). The one long-standing open PR
+remains **#24** (May, live-weather salvage).
 
 ## PROD OSM `waste_disposal` reclassify — 1,723 rows miscategorized (2026-08-10)
 

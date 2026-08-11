@@ -158,6 +158,43 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   these is 5,256 — flagged UNVERIFIED rather than asserted. Separately,
   `master_place_search_export` has **no photo column** at all, so no photo
   reaches search yet (the "Artboard C" lateral is still open).
+- **#209 — export view repointed from `six_state_scope()` to
+  `six_state_footprint()`.** Analysis found the coarse scope's WA-east edge
+  (−116.90) leaked **9 Idaho panhandle rows** (Priest Lake, Moscow/Lewiston,
+  all ridb/nps) into search. Repointed to the tighter footprint. **Net was
+  −9 +2, not −9**: footprint is NOT a strict subset of scope — its accurate
+  WA-northwest edge (Haro Strait) correctly re-includes **2 San Juan Islands
+  WA** campgrounds (Jones Island S/N) that scope's flat 48.40 step wrongly
+  dropped. View **16,661 → 16,654**; `search:sync` pruned exactly the 9,
+  `places_prod` = 16,654 `[measured PROD 2026-08-10]`.
+- **#210 — `promote.ts` `DEFAULT_BATCH_SIZE` 500 → 25.** Replaced the stale
+  "~10 s from a different project" calibration comment with the measured
+  reality: PROD `statement_timeout` is **60 s**, `apply_match_outcomes` is a
+  single statement, batch 500/100 fail `57014`, batch 25 ran min 66 ms /
+  max 34.5 s / avg 8.0 s over 99 batches. No other code assumed 500; no test
+  asserted it (the `500` in `phase3a.test.ts` is the 500 m candidate radius).
+- **#211 — Artboard C: corpus photo in search + hydrate.** Added the same
+  nps/ridb photo lateral `20260809130000` uses to `master_place_search_export`
+  (`photo_url`, NPS preferred), plumbed through `sync-typesense.ts`
+  (`PlaceDocument`) and `hydratePlacesByIds` (via the existing
+  `nps_photo_url → photoUrl` map — no UI change). **TEST then PROD:** PROD
+  view 16,654 unchanged, **3,526 rows carry a photo (~21%)**, `places_prod`
+  16,654 = view; a `places_prod` doc carries `photo_url` and hydrate returns
+  `photoUrl` against PROD `[measured 2026-08-10]`.
+- **TEST brought to the PROD view baseline.** TEST was missing the four
+  six-state view migrations (`180000–180300`); applied via
+  `db:push-verify --test`, view **16,410 → 14,911** (dropped **exactly** the
+  1,499 out-of-footprint rows: Idaho 1,141, MT/WY 124, CO/NM 40, Baja 10,
+  other 184; osm 1,460 / google_resolved 40). TEST view now matches PROD's
+  predicate structure.
+- **CORRECTION — the objects-without-ledger drift was PROD-only, not TEST.**
+  An earlier report this session claimed `six_state_footprint()` /
+  `source_record_scope` existed on TEST as objects without a ledger row (the
+  #204 pattern). The full TEST `migration list` disproved it: `20260810120000`
+  and `130000` were **already in TEST's ledger** (applied via a normal
+  `db push`). The direct-SQL-no-ledger drift happened only on PROD; TEST had
+  **nothing to repair** — the 4 missing migrations had neither ledger rows nor
+  objects and were genuinely pending.
 
 ## 2026-08-06
 
