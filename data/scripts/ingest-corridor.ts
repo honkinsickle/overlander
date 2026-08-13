@@ -345,6 +345,7 @@ interface EnrichmentAggregate {
 
 async function runEnrichment(
   candidates: EnrichmentCandidate[],
+  opts: { skipPersist?: boolean } = {},
 ): Promise<EnrichmentAggregate> {
   const startedAt = Date.now();
   const agg: Omit<EnrichmentAggregate, "duration_ms"> = {
@@ -360,11 +361,14 @@ async function runEnrichment(
   for (let i = 0; i < candidates.length; i += 1) {
     const c = candidates[i]!;
     try {
-      const result: EnrichResult = await enrichSourceRecord({
-        name: c.name,
-        lng: c.lng,
-        lat: c.lat,
-      });
+      const result: EnrichResult = await enrichSourceRecord(
+        {
+          name: c.name,
+          lng: c.lng,
+          lat: c.lat,
+        },
+        { skipPersist: opts.skipPersist ?? false },
+      );
       switch (result.status) {
         case "cached_hit":
           agg.cached_hit += 1;
@@ -465,6 +469,10 @@ async function main(): Promise<void> {
       "--skip-enrichment",
       "Skip Google enrichment (stage 4a) but still run discovery (stage 4b). Discovery-only: avoids the whole-envelope enrichment candidate scan consuming the budget before the anchors run.",
     )
+    .option(
+      "--skip-enrichment-persist",
+      "Run stage 4a for real (candidate selection, textSearch, Place Details — real Google calls, real budget spend) but skip the final source_record write. Dry-run for enrichment specifically: everything up to persistence happens as normal, only the write is skipped.",
+    )
     .parse(process.argv);
 
   const opts = program.opts<{
@@ -474,6 +482,7 @@ async function main(): Promise<void> {
     skipNps?: boolean;
     skipGoogle?: boolean;
     skipEnrichment?: boolean;
+    skipEnrichmentPersist?: boolean;
   }>();
   const startedAt = Date.now();
 
@@ -593,7 +602,9 @@ async function main(): Promise<void> {
       } else {
         logger.info("ingest-corridor: stage 4a — Google enrichment");
         const candidates = await fetchEnrichmentCandidates(corridor.bbox, ENRICH_CATEGORIES);
-        enrichment = await runEnrichment(candidates);
+        enrichment = await runEnrichment(candidates, {
+          skipPersist: opts.skipEnrichmentPersist ?? false,
+        });
       }
 
       logger.info("ingest-corridor: stage 4b — Google discovery");
