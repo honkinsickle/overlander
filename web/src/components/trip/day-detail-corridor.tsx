@@ -602,6 +602,7 @@ export function DayDetailCorridor({
               <PlaceSlot key={p.id} placeId={p.id}>
                 <CategoryListCard
                   place={p}
+                  verified={!!p.placeId}
                   category={p.category}
                   status={p.keyStopNote}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
@@ -755,6 +756,7 @@ function RestDayNearby({
             <PlaceSlot key={p.id} placeId={p.id}>
               <CategoryListCard
                 place={p}
+                verified={!!p.placeId}
                 category={p.category}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                 curatedMenu={buildCuratedMenu?.(p)}
@@ -871,6 +873,7 @@ function CityNode({
               <PlaceSlot key={p.id} placeId={p.id}>
                 <CategoryListCard
                   place={p}
+                  verified={!!p.placeId}
                   category={p.category}
                   status={p.keyStopNote}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
@@ -893,6 +896,7 @@ function CityNode({
               <PlaceSlot key={p.id} placeId={p.id}>
                 <CategoryListCard
                   place={p}
+                  verified={!!p.placeId}
                   category={p.category}
                   status={p.keyStopNote}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
@@ -982,6 +986,7 @@ function KeyStopNode({
         <PlaceSlot placeId={place.id}>
           <CategoryListCard
             place={place}
+            verified={!!place.placeId}
             category={place.category}
             status={place.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
@@ -1043,6 +1048,7 @@ function MileTick({
           <PlaceSlot key={p.id} placeId={p.id}>
             <CategoryListCard
               place={p}
+              verified={!!p.placeId}
               category={p.category}
               status={p.keyStopNote}
               onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}

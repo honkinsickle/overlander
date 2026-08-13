@@ -38,13 +38,12 @@ export type OverviewGuide = {
 
 export type OverviewPlace = Pick<
   BrowsePlace,
-  "id" | "title" | "photoUrl" | "photoAlt" | "description" | "rating" | "reviewCount"
+  "id" | "title" | "photoUrl" | "photoAlt" | "description" | "rating" | "reviewCount" | "placeId"
 > & {
   category: BrowseCardCategory;
   /** Leg-relative detour. Optional — omitted for the trip-level Overview
    *  (no defined leg); the card hides the off-route meta line when absent. */
   detour?: { miles: number; minutes?: number };
-  verified?: boolean;
 };
 
 type Props = {
@@ -424,7 +423,7 @@ function PlaceCard({
           border: "1px solid var(--border-strong)",
         }}
       >
-        {/* Badge + title + verified. */}
+        {/* Badge + title. */}
         <div className="flex items-start" style={{ gap: 8 }}>
           <span
             className="flex items-center justify-center shrink-0"
@@ -455,7 +454,7 @@ function PlaceCard({
               {place.title}
             </span>
             <div className="flex items-center" style={{ gap: 4, height: 20, marginTop: -2 }}>
-              {(place.verified ?? true) && (
+              {!!place.placeId && (
                 <span style={metaMono}>yoTrippin Verified</span>
               )}
               {meta !== undefined && (

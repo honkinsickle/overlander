@@ -35,7 +35,8 @@ type Props = {
   category: BrowseCardCategory;
   /** Status line, e.g. "Open · 6a–10p". Omit to hide the row. */
   status?: string;
-  /** "yoTrippin Verified" provenance line. Default true (per the board). */
+  /** "yoTrippin Verified" provenance line. Default false — callers opt in only
+   *  for tiles carrying a real placeId (the badge's grounding). */
   verified?: boolean;
   onOpen?: (e?: React.MouseEvent) => void;
   /** When present, renders a small remove (✕) control top-right. Corridor
@@ -65,7 +66,7 @@ export function CategoryListCard({
   place,
   category,
   status,
-  verified = true,
+  verified = false,
   onOpen,
   onRemove,
   curatedMenu,
