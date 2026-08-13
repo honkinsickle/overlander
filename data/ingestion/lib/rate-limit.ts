@@ -8,7 +8,12 @@ import pLimit, { type LimitFunction } from "p-limit";
 export const limits: Record<string, LimitFunction> = {
   osm: pLimit(2),         // Overpass is community-run; keep low.
   google: pLimit(10),     // Plenty of headroom in Places quota.
-  ridb: pLimit(4),
+  // pLimit(1) — RIDB rate-limits concurrent requests, not overall rate.
+  // pLimit(4) throttled after ~3-4 minutes of sustained traffic (measured
+  // on UT twice); pLimit(1) ran OR through cleanly at ~4x wall time with
+  // zero 429s. If RIDB documents a higher tier or the throttle behavior
+  // changes, this can be raised.
+  ridb: pLimit(1),
   nps: pLimit(4),
   parks_canada: pLimit(4), // ESRI REST endpoints; no documented rate limit, be polite.
   bc_parks: pLimit(5), // DataBC WFS + BC Parks REST API; ~5 req/sec courtesy limit.
