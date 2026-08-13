@@ -40,6 +40,7 @@ import { getCostLedger, BudgetExceededError } from "../ingestion/lib/cost-ledger
 import { tileCorridorEnvelope } from "../ingestion/lib/corridor-tiles.ts";
 import { getDb } from "../ingestion/lib/db.ts";
 import { logger } from "../ingestion/lib/logger.ts";
+import { isPlaceholderName } from "../entity-resolution/matcher.ts";
 
 import osmIngest from "../ingestion/sources/osm.ts";
 import ridbIngest from "../ingestion/sources/ridb.ts";
@@ -283,13 +284,16 @@ async function fetchEnrichmentCandidates(
     offset += PAGE;
   }
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    inferredCategory: row.inferred_category,
-    lng: row.lng,
-    lat: row.lat,
-  }));
+  // gate: skip candidates whose name is a synthesized placeholder — resolving these produces false positives (the resolver has no name-quality check of its own)
+  return rows
+    .filter((row) => !isPlaceholderName(row.name))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      inferredCategory: row.inferred_category,
+      lng: row.lng,
+      lat: row.lat,
+    }));
 }
 
 // ──────────────────────────────────────────────────────────────────────
