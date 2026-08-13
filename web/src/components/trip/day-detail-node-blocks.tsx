@@ -414,6 +414,7 @@ export function DayDetailNodeBlocks({
           {draggedPlace ? (
             <CategoryListCard
               place={draggedPlace}
+              verified={!!draggedPlace.placeId}
               category={draggedPlace.category}
               status={draggedPlace.keyStopNote}
               editMode
@@ -718,6 +719,7 @@ function PoiRow({
         <div style={pending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}>
           <CategoryListCard
             place={place}
+            verified={!!place.placeId}
             category={place.category}
             status={place.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
@@ -864,6 +866,7 @@ function AlongTheWay({
           <CategoryListCard
             key={p.id}
             place={p}
+            verified={!!p.placeId}
             category={p.category}
             status={p.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
