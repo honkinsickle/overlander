@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 import { getCostLedger, type CostLedger } from "../lib/cost-ledger.ts";
-import { upsertSourceRecord } from "../lib/db.ts";
+import { getDb, upsertSourceRecord } from "../lib/db.ts";
 import { logger } from "../lib/logger.ts";
 import { AbortError, defaultRetry } from "../lib/retry.ts";
 import { getActiveCorridorBbox } from "../lib/corridor.ts";
@@ -328,7 +328,7 @@ async function persistPlace(
   raw: unknown,
   filter: (lng: number, lat: number) => boolean,
   dryRun: boolean,
-): Promise<"inserted" | "skipped" | "error"> {
+): Promise<"inserted" | "existing" | "unknown" | "skipped" | "error"> {
   const parsed = PlaceSchema.safeParse(raw);
   if (!parsed.success) {
     logger.warn({ err: parsed.error.flatten() }, "google: place schema mismatch — skipped");
@@ -344,7 +344,26 @@ async function persistPlace(
 
   if (dryRun) {
     logger.debug({ externalId, name, category: inferredCategory }, "google: dry-run");
-    return "inserted";
+    // Behavior fix: distinguish "would be a genuinely new row" from "already
+    // exists" instead of unconditionally claiming "inserted". Same client the
+    // real write path uses (getDb(), shared with upsertSourceRecord) — no
+    // second Supabase client. Never throws: the batch must keep running even
+    // if this one existence check fails.
+    const db = getDb();
+    const { data: existing, error: selectErr } = await db
+      .from("source_record")
+      .select("id")
+      .eq("source_id", SOURCE_ID)
+      .eq("external_id", externalId)
+      .maybeSingle();
+    if (selectErr) {
+      logger.warn(
+        { err: selectErr, externalId },
+        "google: dry-run existence check failed — inserted status unknown",
+      );
+      return "unknown";
+    }
+    return existing ? "existing" : "inserted";
   }
   try {
     await upsertSourceRecord({
@@ -458,12 +477,24 @@ export interface EnrichSeed {
 export interface EnrichOptions {
   ledger?: CostLedger;
   dryRun?: boolean;
+  /** Distinct from dryRun, which skips textSearch/placeDetails entirely (no
+   *  Google call, no signal). skipPersist still calls Google for real —
+   *  only the final source_record write is skipped, so accept/reject
+   *  signal is real. */
+  skipPersist?: boolean;
 }
 
 export type EnrichResult =
   | { status: "cached_hit"; placeId: string }
   | { status: "cached_miss" }
-  | { status: "enriched"; placeId: string; inserted: boolean }
+  | {
+      status: "enriched";
+      placeId: string;
+      /** true = genuinely new, false = a matching (source_id, external_id)
+       *  row already exists, null = the skipPersist existence check errored
+       *  (unknown, not a claim either way). */
+      inserted: boolean | null;
+    }
   | { status: "miss" }
   | { status: "dry_run" };
 
@@ -547,13 +578,14 @@ export async function enrichSourceRecord(
   const outcome = await persistPlace(
     details,
     () => true, // bbox filter is satisfied by construction — the seed is in-corridor.
-    false,
+    opts.skipPersist ?? false,
   );
 
   return {
     status: "enriched",
     placeId,
-    inserted: outcome === "inserted",
+    inserted:
+      outcome === "inserted" ? true : outcome === "existing" ? false : outcome === "unknown" ? null : false,
   };
 }
 
