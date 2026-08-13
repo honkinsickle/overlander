@@ -338,6 +338,10 @@ interface EnrichmentAggregate {
   cached_hit: number;
   cached_miss: number;
   enriched: number;
+  /** enriched_new + enriched_existing + enriched_unknown === enriched. */
+  enriched_new: number;
+  enriched_existing: number;
+  enriched_unknown: number;
   miss: number;
   errors: number;
   duration_ms: number;
@@ -353,6 +357,9 @@ async function runEnrichment(
     cached_hit: 0,
     cached_miss: 0,
     enriched: 0,
+    enriched_new: 0,
+    enriched_existing: 0,
+    enriched_unknown: 0,
     miss: 0,
     errors: 0,
   };
@@ -378,6 +385,9 @@ async function runEnrichment(
           break;
         case "enriched":
           agg.enriched += 1;
+          if (result.inserted === true) agg.enriched_new += 1;
+          else if (result.inserted === false) agg.enriched_existing += 1;
+          else agg.enriched_unknown += 1;
           break;
         case "miss":
           agg.miss += 1;
@@ -567,6 +577,9 @@ async function main(): Promise<void> {
           cached_hit: 0,
           cached_miss: 0,
           enriched: 0,
+          enriched_new: 0,
+          enriched_existing: 0,
+          enriched_unknown: 0,
           miss: 0,
           errors: 0,
           duration_ms: 0,
@@ -591,6 +604,9 @@ async function main(): Promise<void> {
         cached_hit: 0,
         cached_miss: 0,
         enriched: 0,
+        enriched_new: 0,
+        enriched_existing: 0,
+        enriched_unknown: 0,
         miss: 0,
         errors: 0,
         duration_ms: 0,
@@ -631,6 +647,9 @@ async function main(): Promise<void> {
           cached_hit: 0,
           cached_miss: 0,
           enriched: 0,
+          enriched_new: 0,
+          enriched_existing: 0,
+          enriched_unknown: 0,
           miss: 0,
           errors: 0,
           duration_ms: 0,
