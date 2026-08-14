@@ -88,6 +88,49 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Re-measured 2026-08-14 `[queried TEST, read-only]` — SUPERSEDES the
+> 2026-08-10 box below for totals.** The RIDB and OSM six-state (WA, UT, OR,
+> AZ, NV, CA) campaigns both completed this session — live-write TEST ingest,
+> no PROD touched. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `source_record` total | **115,957** |
+> | `master_place` total | **110,246** |
+> | — solo (`source_count=1`) | 109,053 |
+> | — multi (`source_count>1`) | 1,193 |
+> | `place_match` pending (manual_review), corpus-wide | **4,230** |
+>
+> **`source_record` by `source_id`:** osm **109,615** · ridb **6,013** ·
+> google_resolved 122 · padus 113 · nps 83 · google 5 · usfs 6 ·
+> parks_canada/bc_parks/alberta_parks **0**. RIDB grew from a 355-row
+> SoCal-only smoke-test footprint to full six-state coverage
+> (`pLimit(1)`, six ingest+reconcile passes — see `STATE.md`). OSM grew
+> by ingesting six tag families (`camping, trailheads, natural, leisure,
+> fuel, tourism_misc`) per state via `--iso US-<XX>` on top of the prior
+> six-state `camping`-only baseline.
+>
+> **`manual_review` (pending) by source:** osm **3,848** · ridb **362** ·
+> other **20**. No review process exists for this queue yet — see
+> `docs/BACKLOG.md`.
+>
+> **State-level breakdown, osm and ridb** (six-state bboxes from this
+> session's scoping work; bboxes deliberately overlap at shared borders,
+> so state totals sum to MORE than the corpus total — do not add these
+> columns to get a corpus figure):
+>
+> | | WA | UT | OR | AZ | NV | CA |
+> |---|--:|--:|--:|--:|--:|--:|
+> | osm | 13,492 | 12,733 | 12,502 | 20,902 | 25,502 | 52,175 |
+> | ridb | 615 | 1,311 | 1,186 | 784 | 807 | 2,360 |
+>
+> osm's per-state figures grew past each state's own post-ingest count
+> where a *later*-ingested neighboring state's fetch also produced nodes
+> falling inside an *earlier* state's bbox rectangle near a shared border
+> (e.g. WA's OSM count includes some OR-ingest nodes near the WA/OR
+> line) — expected given the deliberately loose interior bbox edges, not
+> a data error.
+
 > **⚠️ Re-measured 2026-08-10 `[queried TEST, read-only]` — TEST has grown far past
 > the old reseed via the six-state camping validation ingests, and its export view
 > was brought to the PROD baseline this session (`180000–180400`).** Current TEST:

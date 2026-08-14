@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-10
+# STATE — `main` · 2026-08-13
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,118 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-13 — RIDB + OSM six-state campaigns COMPLETE on TEST; six PRs landed on `main`
+
+Newest truth for TEST. Every number **re-verified against TEST read-only,
+2026-08-14** `[queried TEST]`. **No PROD writes this session** — everything
+below is TEST-only, live-write ingest work.
+
+**RIDB six-state campaign (WA, UT, OR, AZ, NV, CA) — COMPLETE:**
+`source_record` (ridb) **355 → 6,013**; **5,493** distinct `master_place`
+carry a ridb source_record; **362** ridb rows sit in `manual_review`
+(`place_match.status='pending'`). Ran at `pLimit(1)` after `pLimit(4)`
+sustained-429'd twice on UT (see below). Two real incidents along the way,
+both recovered: a UT run hit sustained rate-limiting mid-run (retried clean at
+`pLimit(1)`); an NV run hit a ~14s local DNS blip that dropped 52 upserts
+(46 distinct ids) — verified afterward that tile-overlap self-recovered 30 of
+those within the same run and the remaining 16 landed on a clean backfill re-run,
+**0 permanently lost**.
+
+**OSM six-state campaign (same six states) — COMPLETE**, families `camping,
+trailheads, natural, leisure, fuel, tourism_misc` (deliberately excludes
+`water_san` — every category it produces is suppressed from browse per
+`SLIDE_TO_PRIMARY_CATEGORY` — and `shops`, already off by `DEFAULT_FAMILIES`):
+**+105,392** new `source_record` (osm), **+88,883** new `master_place`,
+**+1,745** new `manual_review` rows. Zero ingest errors, zero reconciliation
+errors, zero Overpass timeouts across all six states — every state ran clean
+end to end (`--iso US-<XX>`, untiled area query, 900s Overpass internal
+timeout, never hit).
+
+**Corpus totals now (TEST, all sources):**
+
+| metric | value |
+|---|--:|
+| `source_record` total | **115,957** |
+| — osm | 109,615 |
+| — ridb | 6,013 |
+| `master_place` total | **110,246** |
+| — solo (`source_count=1`) | 109,053 |
+| — multi (`source_count>1`) | 1,193 |
+| distinct `master_place` with any osm source_record | **105,121** |
+| `place_match` pending (manual_review), corpus-wide | **4,230** (osm 3,848 · ridb 362 · other 20) |
+
+**A real measurement-tooling bug was caught and fixed mid-campaign.** CA's
+post-reconciliation analysis (the largest single ingest, ~110K osm rows)
+initially showed an impossible result — the same `external_id` appearing
+twice under one `master_place` — traced to client-side pagination
+(`.range()`) with no `.order()` clause, letting the same row land in two
+overlapping page windows at CA's table size. **This was the measurement
+script, not the data** — confirmed via a direct single-row query. Fixed
+(`.order("id")` + defensive dedup) and re-verified against materialize's own
+server-side outcome counts, which matched exactly after the fix. The other
+five states' numbers were cross-checked against their own outcome-count sums
+at the time and all matched within the known small rectangle-vs-true-state-
+polygon boundary margin (1–11 rows) — evidence, not proof, they weren't
+affected by the same latent bug.
+
+**pLimit(1) committed as the RIDB default** (`data/ingestion/lib/rate-limit.ts`,
+was `pLimit(4)`) — measured: `pLimit(4)` reliably triggered sustained 429s
+after ~3–4 minutes of concurrent RIDB traffic (twice, both on UT);
+`pLimit(1)` ran every subsequent state through cleanly, ~4x slower per
+fetched item but zero 429s. Comment on the line names the measurement and the
+revisit condition (a documented higher RIDB tier, or a change in observed
+throttle behavior).
+
+**Six PRs landed on `main` `[gh pr list, 2026-08-14]`** — **#221
+`fix/ridb-plimit-serialize`** is this session's own commit (the pLimit(1)
+change above), pushed and merged independently. **#216–#220** (`badge-gate`,
+`fold-union`, `enrichment-name-gate`, `enrichment-dry-run`,
+`enrichment-aggregate-split`) landed via a **stacked PR chain** built in a
+parallel workspace (`djibouti`, a sibling git worktree sharing this repo's
+object database) from six already-implemented local commits that had never
+been pushed — a "get existing work onto GitHub correctly" task, not new
+development. All six merged 2026-08-13T23:43. Stack order mattered
+(`#217→#216`, `#218→#217`, `#219→#218`, `#220→#219`) since the commits build
+on each other; #221 was independent.
+
+- **#216 — badge gate on `placeId` presence, shipped.** Closes the
+  "DECIDED and SCOPED, unbuilt" `docs/BACKLOG.md` item from 2026-07-31 — see
+  that file for the shipped annotation.
+- **#217 — fold union: chord + polyline supply in corpus fold.**
+- **#218 — enrichment name gate:** `fetchEnrichmentCandidates` now filters
+  `isPlaceholderName` before feeding the Google resolver.
+- **#219 — enrichment dry-run:** `--skip-enrichment-persist`, preview without
+  write.
+- **#220 — enrichment aggregate split:** `EnrichmentAggregate` now reports
+  `enriched_new` / `enriched_existing` / `enriched_unknown` separately so a
+  dry-run report is decision-quality, not just a single opaque count.
+- **#218–#220 together are the grounding dry-run infrastructure** — built,
+  merged, **not yet run against the six-state corpus**. See
+  `docs/BACKLOG.md` and the new ADR
+  `docs/decisions/2026-08-13-google-places-strategy-open-question.md` — the
+  strategic question of whether/how to spend against Google Places is
+  **OPEN**, and the dry-run should not proceed until it's answered.
+
+**Matcher bugs found this session, unfixed — see `docs/BACKLOG.md`** for the
+full writeup: coordinate-dominant merges at 0m distance (Castle Rock Trail +
+Badger Trail; now also confirmed source-agnostic via OSM's Liberty Glen
+#72/#73/#74), and the `name_dominant` waterfall step bypassing
+`combined_confidence` entirely (Buckhorn Draw Campsite 10 + Buckhorn Dino
+Track, confidence 0.544 — below even the `manual_review` floor — still
+auto-linked).
+
+**Gotcha worth carrying forward — stacked branches across worktrees.** This
+repo uses git worktrees sharing one object database; a branch checked out in
+a *different* worktree is still visible and pushable from any other one — a
+"wrong workspace" mismatch doesn't block git operations, only affects working-
+tree file state. `git push origin <sha>:refs/heads/<name>` creates a remote
+branch with **no corresponding local branch ref** — a later plain
+`git push origin <name>` or `git branch --contains` won't find it locally
+even though it's live on origin. And stacked commits need stacked PR
+**bases** (each PR's base = the previous PR's branch, not all four vs.
+`main`) — otherwise a later PR in the chain shows the full cumulative diff of
+everything beneath it, not just its own change.
 
 ## 2026-08-11 — bbq/fire_pit deactivated on PROD (view 16,654 → 16,516)
 

@@ -16,6 +16,113 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Pending ingest — USFS, PAD-US, BLM (2026-08-13)
+
+Scoped read-only this session (`data/ingestion/sources/usfs.ts`,
+`padus.ts`; no BLM ingester exists). Not run — RIDB + OSM six-state
+campaigns took priority. None have an `--iso` flag; six-state coverage
+means six `--bbox` runs (or a corridor polygon) for either.
+
+- **USFS six-state ingest — small, cheap.** Deliberately scoped to
+  `markeractivity='Dispersed Camping'` only (developed campgrounds
+  excluded by design, per the ingester's own docstring — they overlap RIDB
+  and are deferred). National ceiling for that one activity type is
+  **367** (`recareaid == recid`, verified 367/367 in the PR-A read pass —
+  see `data/ingestion/sources/usfs.ts`). Current TEST corpus: 6 rows.
+  Single non-tiled ESRI query per state; no rate-limit or key friction
+  (public ArcGIS REST, no auth).
+- **PAD-US six-state ingest — massive, product decision pending.**
+  `docs/decisions/2026-06-02-land-status-and-dispersed-camping-sources.md`
+  estimates **PAD-US lower-48 ~400k–480k polygons** (dominated by
+  Fee-class ownership parcels, not federal units) and **BLM SMA national
+  ~100k–300k** — both national/lower-48 estimates, not six-state-scoped.
+  Current TEST corpus: 113 rows. Whether land-status is a target feature
+  at all is an open product question, not just a sizing one — do not run
+  this ingest as a default "why not" without that decision first.
+- **BLM investigation — deferred.** No standalone BLM ingester exists.
+  `padus.ts`'s own header states PAD-US + BLM SMA are **one combined
+  source** (PAD-US primary, SMA a later tie-breaker) — so BLM land-status
+  data is already partially represented through PAD-US, which changes the
+  shape of "should we build a BLM ingester" from "greenfield" to "is the
+  PAD-US path sufficient." Scoped in a prior handoff; needs a fresh
+  session to actually decide.
+
+## Matcher bugs — coord-dominant merges and the `name_dominant` confidence bypass (2026-08-13)
+
+Found during a read-only merge-quality audit of the (then) 623 corpus-wide
+`master_place` rows with `source_count > 1`. Both confirmed via direct
+`place_match` score reads, not inferred. **Neither is fixed.**
+
+- **Bug 1 — coordinate-dominant merges at 0m.** `scoreMatch`'s blended
+  formula (`0.4·distance_score + 0.4·name_similarity + 0.2·category_compat`)
+  lets `distance_score = 1.0` (two source_records sharing an exact
+  coordinate) alone contribute enough that even mediocre name similarity
+  crosses the 0.85 auto-link threshold. Seed example: **Castle Rock Trail +
+  Badger Trail** (AZ, RIDB) — two genuinely distinct, adjoining BLM trails
+  sharing one trailhead coordinate; the BLM description text itself says
+  Castle Rock Trail "connects the Badger Trail" — `distance_meters=0,
+  name_similarity=0.630, combined_confidence=0.852`, crossing 0.85 by
+  0.002. **6 confirmed instances in the RIDB corpus** (of ~16 total
+  "visibly unrelated names" merges found; the rest were borderline/
+  plausible parent-child, not confirmed bugs). **Also confirmed
+  source-agnostic** — the same shape appeared in OSM data after the
+  six-state OSM ingest: **Liberty Glen #72/#73/#74**, three distinctly-
+  numbered dispersed camping sites collapsed into one `master_place`.
+  Prevalence scales with corpus size, not with source. Fix requires
+  threshold/formula work — not scoped.
+- **Bug 2 — `name_dominant` bypasses `combined_confidence` entirely.**
+  Waterfall Step 3 in `matcher.ts` (`matchOne`) auto-links whenever
+  `distance ≤ 500m AND name_similarity ≥ 0.85 AND category_compat ≥ 0.8` —
+  it never checks the resulting `combined_confidence` at all. Example:
+  **Buckhorn Draw Campsite 10 + Buckhorn Dino Track** (UT, osm+ridb
+  cross-source) — a campsite merged with an unrelated dinosaur-track
+  attraction 229m away, `combined_confidence=0.544` (below even the 0.6
+  `manual_review` floor), `match_method=name_dominant`. Root cause is
+  Jaro-Winkler's prefix-weighting: "Buckhorn " as a shared 9-character
+  prefix alone pushed name_similarity to 0.859 regardless of what
+  followed. **One-line fix** (add a confidence floor check to the
+  `name_dominant` branch) — not yet applied.
+
+## Corpus quality — open questions from the merge-quality audit (2026-08-13)
+
+- **`amenity_rollup` individual correctness never audited.** Distinct from
+  the "Cross-category `amenity_rollup` collapse" item above (which is
+  about DIFFERENT amenity types colliding under one parent) — this is
+  about whether each rollup picked the *geometrically/logically correct*
+  parent at all, e.g. a dump station 95m from Campground A when
+  Campground B is actually closer. ~100 `amenity_rollup` pairs exist in
+  the (pre-OSM-campaign) corpus; none individually verified. Not audited
+  at corpus scale.
+- **`canonical_name` resolution bug — rolled-up amenity names beating
+  real site names.** `recompute_master_place`'s field_precedence
+  sometimes picks a rolled-up amenity's fabricated name over the parent
+  site's real name. Confirmed twice: two "Unnamed toilet"
+  `master_place.canonical_name` values in the Santa Rosa Yellow Post
+  cluster (CA, osm), each really a numbered yellow-post campsite with a
+  toilet amenity rolled up into it. The mechanism (field_precedence
+  ordering, not a one-off) suggests more exist; not audited at corpus
+  scale.
+- **Manual review queue has no process.** **4,230 rows** corpus-wide
+  sitting in `place_match.status='pending'` (osm 3,848 · ridb 362 ·
+  other 20, `[queried TEST, 2026-08-14]`) — no review UI, script, or
+  workflow exists to work through this queue. Grows with every ingest.
+
+## Grounding infrastructure — complete, not yet run (2026-08-13)
+
+Three PRs (#218, #219, #220 — see `STATE.md`) shipped the machinery for a
+Google Places grounding dry-run against the six-state corpus:
+`--skip-enrichment-persist` (preview without write), the `isPlaceholderName`
+gate on `fetchEnrichmentCandidates` (placeholder-named source_records never
+reach the resolver), and the `EnrichmentAggregate` three-way split
+(`enriched_new` / `enriched_existing` / `enriched_unknown`) so a dry-run
+report is decision-quality. **Next step: run the dry-run against the
+six-state corpus, review output, decide whether to spend for real.**
+**Blocked on the Google Places strategy decision** — see the new ADR
+`docs/decisions/2026-08-13-google-places-strategy-open-question.md`. Do not
+run the dry-run as a "why not, it's free" step; the ADR exists specifically
+because the follow-on hydration cost is not free and the strategic direction
+isn't chosen yet.
+
 ## Artboard C — photo in search + hydrate — SHIPPED (#211, live on PROD 2026-08-10)
 
 The photo lateral landed: `photo_url` on `master_place_search_export` (nps/ridb, NPS
@@ -1635,7 +1742,14 @@ conclusion.
 
 ## Surfaced 2026-07-31 (the planning-region / chunking session)
 
-- **Badge gate on `placeId` — DECIDED and SCOPED, unbuilt.** Gate the "yoTrippin
+- **Badge gate on `placeId` — SHIPPED as #216 (2026-08-13, merged to `main`).**
+  Gates the "yoTrippin Verified" badge on whether the tile carries a
+  `placeId` at all. This was the *mechanical* half only; it does **not**
+  answer what the label means — that question is still open. Kept below
+  struck-in-spirit (not deleted) since the reasoning that motivated the
+  narrower gate over the fuller enrichment-gated version still documents a
+  real decision, not just a shipped fact.
+- ~~Badge gate on `placeId` — DECIDED and SCOPED, unbuilt.~~ Gate the "yoTrippin
   Verified" badge on whether the tile carries a `placeId` at all. This is the
   *mechanical* half only; it does **not** answer what the label means.
   - **Tension to resolve first, deliberately flagged rather than buried:** the
