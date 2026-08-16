@@ -26,6 +26,8 @@ import {
   isPlaceholderName,
   lookupCompatibility,
   MatchAllCircuitBreakerError,
+  matchOne,
+  NAME_DOMINANT_CONFIDENCE_FLOOR,
   paginateLinkedSourceRecords,
   scoreMatch,
 } from "./matcher.ts";
@@ -97,6 +99,50 @@ describe("scoreMatch — blend math + Step-5 fallback bands", () => {
     );
     expect(s.combined_confidence).toBeCloseTo(0.5316, 3);
     expect(s.combined_confidence).toBeLessThan(0.6);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// name_dominant confidence floor (Step 3). The name_dominant path gates on the
+// raw components (name ≥ 0.85, category ≥ 0.8, distance ≤ 500m) but now also
+// respects combined_confidence: a candidate that clears those gates auto_links
+// only when combined_confidence ≥ NAME_DOMINANT_CONFIDENCE_FLOOR; below it, the
+// pair routes to manual_review (method name_dominant_low_conf) instead of
+// auto-linking silently. scoreMatch is unchanged — these lock the distance the
+// floor corresponds to for the identical-name/identical-category population, so
+// the routing branch in matchOne keys on a value we've pinned here.
+// ───────────────────────────────────────────────────────────────────────────
+describe("name_dominant confidence floor", () => {
+  const identical = (distance_m: number) =>
+    scoreMatch(
+      { name: "Willow Flat", inferred_category: "campground" },
+      { id: "x", canonical_name: "Willow Flat", primary_category: "campground", distance_m },
+    );
+
+  it("floor is 0.70", () => {
+    expect(NAME_DOMINANT_CONFIDENCE_FLOOR).toBe(0.7);
+  });
+
+  it("identical name+category lands exactly at the floor at 75m → auto_link band", () => {
+    // distance_score = 1 − 75/100 = 0.25 → 0.4·0.25 + 0.4·1 + 0.2·1 = 0.70.
+    const s = identical(75);
+    expect(s.combined_confidence).toBeCloseTo(0.7, 6);
+    expect(s.combined_confidence).toBeGreaterThanOrEqual(NAME_DOMINANT_CONFIDENCE_FLOOR);
+  });
+
+  it("identical name+category at 90m falls below the floor → manual_review band", () => {
+    // distance_score = 0.10 → 0.04 + 0.4 + 0.2 = 0.64 < 0.70. Passes the
+    // name_dominant name/category gates but routes to name_dominant_low_conf.
+    const s = identical(90);
+    expect(s.combined_confidence).toBeCloseTo(0.64, 6);
+    expect(s.combined_confidence).toBeLessThan(NAME_DOMINANT_CONFIDENCE_FLOOR);
+  });
+
+  it("identical name+category beyond the clip (≥100m) caps at 0.60 → below floor", () => {
+    // The whole >100m identical-name population the clip pins to 0.60 — the
+    // 'same complex vs adjacent feature' ambiguity that must go to a human.
+    expect(identical(150).combined_confidence).toBeCloseTo(0.6, 6);
+    expect(identical(150).combined_confidence).toBeLessThan(NAME_DOMINANT_CONFIDENCE_FLOOR);
   });
 });
 
@@ -308,6 +354,82 @@ describe("findCandidates — skipRpcs=false path (populated master_place)", () =
     await expect(findCandidates("sr-test-3")).rejects.toMatchObject({
       message: "boom",
     });
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// matchOne — the name_dominant floor ROUTING (the fix's actual behavior), with
+// the DB fully mocked. The integration flavor lives in phase3a.test.ts, which
+// is excluded from the default suite (its reset_phase3a_test_state() would wipe
+// the shared working corpus). This mocked unit test is the only guard that runs
+// in CI. It drives matchOne directly: fetchSourceRecord's
+// .from().select().eq().single() and findCandidates' .rpc().abortSignal() are
+// mocked, findFederalAnchor short-circuits for a non-federal source (no DB),
+// the amenity branch is skipped for `campground`, and masterPlaceHasSource is
+// false against the empty module caches.
+//
+// NOTE (coupling): these mocks mirror the exact query shapes of
+// fetchSourceRecord + findCandidates and will break if those refactor. See
+// docs/BACKLOG.md — extracting the post-gate decision to a pure function would
+// remove the coupling. resetPlanning() is not exported, so each test uses a
+// DISTINCT source/target id to avoid cross-test state (sourceRecordCache is
+// keyed by id; an auto_link populates plannedLinks under its own target).
+// ───────────────────────────────────────────────────────────────────────────
+describe("matchOne — name_dominant floor routing (mocked DB)", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+  });
+
+  // fetchSourceRecord: db.from("source_record").select(...).eq("id",id).single()
+  const sourceResolves = (row: unknown) =>
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: row, error: null }),
+        }),
+      }),
+    });
+
+  const runMatch = (opts: { srId: string; name: string; distance_m: number }) => {
+    sourceResolves({
+      id: opts.srId,
+      source_id: "usfs", // non-federal → findFederalAnchor returns null before any DB
+      external_id: `usfs:site:${opts.srId}`,
+      name: opts.name,
+      inferred_category: "campground", // not an AMENITY_TYPE → amenity branch skipped
+      master_place_id: null,
+      geometry: { type: "Point", coordinates: [-111.0, 34.0] },
+    });
+    rpcResolves({
+      data: [
+        {
+          id: `mp-${opts.srId}`,
+          canonical_name: opts.name, // identical name → name_similarity = 1.0
+          primary_category: "campground", // campground↔campground = 1.0
+          distance_m: opts.distance_m,
+        },
+      ],
+      error: null,
+    });
+    return matchOne(opts.srId);
+  };
+
+  it("identical name+category at 50m (conf 0.80) → auto_link / name_dominant", async () => {
+    // distance_score = 0.5 → 0.4·0.5 + 0.4·1 + 0.2·1 = 0.80 ≥ 0.70 floor.
+    const outcome = await runMatch({ srId: "ndlc-50", name: "Test Ridge Campground", distance_m: 50 });
+    expect(outcome.kind).toBe("auto_link");
+    expect(outcome).toMatchObject({ method: "name_dominant", target: "mp-ndlc-50" });
+    if (outcome.kind === "auto_link") expect(outcome.confidence).toBeCloseTo(0.8, 6);
+  });
+
+  it("identical name+category at 90m (conf 0.64) → manual_review / name_dominant_low_conf", async () => {
+    // distance_score = 0.1 → 0.04 + 0.4 + 0.2 = 0.64 < 0.70 floor. Passes the
+    // name/category gates but routes to review instead of auto-linking silently.
+    const outcome = await runMatch({ srId: "ndlc-90", name: "Test Ridge Campground", distance_m: 90 });
+    expect(outcome.kind).toBe("manual_review");
+    expect(outcome).toMatchObject({ method: "name_dominant_low_conf", target: "mp-ndlc-90" });
+    if (outcome.kind === "manual_review") expect(outcome.confidence).toBeCloseTo(0.64, 6);
   });
 });
 
