@@ -24,7 +24,6 @@ const MODEL = "claude-sonnet-4-5";  // as requested; fallback to claude-sonnet-5
 const FALLBACK_MODEL = "claude-sonnet-5";
 const OUTPUT_PATH = resolve(process.cwd(), "..", ".context/measurements/place_description_samples.jsonl");
 const CONCURRENCY = 3;  // gentle on Anthropic rate limits
-const SAMPLE_TARGET = 50;  // 25 minimal + 25 rich
 
 // State classifier (same logic as measure-grounding-eligibility.ts after fix)
 type State = "WA" | "OR" | "CA" | "NV" | "UT" | "AZ" | "outside";
@@ -134,7 +133,6 @@ async function fetchAllMPsWithFacets(db: SupabaseClient): Promise<MP[]> {
       if (!row.master_place_id) continue;
       const np = (row.normalized_payload ?? {}) as any;
       const contact = np.contact ?? {};
-      const photo = np.photo;
       const hours = np.hours ?? np.opening_hours;
       let agg = bySR.get(row.master_place_id);
       if (!agg) {
@@ -184,9 +182,6 @@ async function fetchAllMPsWithFacets(db: SupabaseClient): Promise<MP[]> {
 }
 
 // ─── Diverse sampling ─────────────────────────────────────────────────────
-
-const TARGET_CATEGORIES = ["campground", "gas_station", "peak", "spring", "trailhead", "park", "viewpoint", "beach", "picnic_area"];
-const TARGET_STATES: State[] = ["WA", "OR", "CA", "NV", "UT", "AZ"];
 
 /** Deterministic PRNG so runs are repeatable. */
 function mulberry32(seed: number) {

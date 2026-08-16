@@ -33,6 +33,10 @@ program
     "OSM only: restrict to comma-separated tag families (camping|tourism_misc|fuel|water_san|trailheads|shops|natural|leisure). Default omits 'shops' — pass --families with shops to opt in.",
   )
   .option("--park-codes <codes>", "comma-separated NPS park codes (NPS source only)")
+  .option(
+    "--site-types <list>",
+    "USFS only: restrict INFRA layer to comma-separated site-type tokens (trailhead|campground|group_campground|camping_area|picnic_site|group_picnic_site). Default = all six.",
+  )
   .option("--dry-run", "validate + log without writing", false)
   .parse(process.argv);
 
@@ -42,6 +46,7 @@ const opts = program.opts<{
   iso?: string;
   families?: string;
   parkCodes?: string;
+  siteTypes?: string;
   dryRun?: boolean;
 }>();
 
@@ -104,6 +109,9 @@ const ingestOpts: IngestOptions = {
     : {}),
   ...(opts.parkCodes
     ? { parkCodes: opts.parkCodes.split(",").map((s) => s.trim()).filter(Boolean) }
+    : {}),
+  ...(opts.siteTypes
+    ? { siteTypes: opts.siteTypes.split(",").map((s) => s.trim()).filter(Boolean) }
     : {}),
 };
 
