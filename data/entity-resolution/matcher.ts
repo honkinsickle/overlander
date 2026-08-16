@@ -340,12 +340,18 @@ export type MatchOutcome =
       score: MatchScore;
       /**
        * Which rule routed this to manual review:
-       *   close_nameless    — Mode C (high-cat + low-name + close distance)
-       *   blended_residual  — fallback (0.6 ≤ blended conf < 0.85)
+       *   close_nameless        — Mode C (high-cat + low-name + close distance)
+       *   blended_residual      — fallback (0.6 ≤ blended conf < 0.85)
+       *   name_dominant_low_conf — passed the name_dominant name/category/
+       *                            distance gates but combined_confidence fell
+       *                            below NAME_DOMINANT_CONFIDENCE_FLOOR (the
+       *                            distance clip makes >~75m identical-name
+       *                            pairs undecidable from coordinates — defer
+       *                            to a human rather than auto-link)
        * Stored as place_match.match_method so the 3b audit CLI can group
        * pending rows by why-they're-pending without re-running the matcher.
        */
-      method: "close_nameless" | "blended_residual";
+      method: "close_nameless" | "blended_residual" | "name_dominant_low_conf";
     }
   | {
       kind: "new_master_place";
@@ -864,6 +870,28 @@ export async function findCandidates(
 }
 
 /**
+ * Confidence floor on the name_dominant auto_link path (Step 3).
+ *
+ * name_dominant gates on the raw components (name_similarity ≥ 0.85,
+ * category_compatibility ≥ 0.8, distance ≤ 500m) but historically did NOT
+ * check combined_confidence. Because distance_score clips at 100m, an
+ * identical-name/identical-category pair scores exactly 0.60 beyond 100m
+ * and 0.70 at ~75m — so at range the name+category signal cannot
+ * distinguish "same complex named differently by two agencies" from
+ * "adjacent-but-distinct feature." Both look identical to the matcher.
+ *
+ * 0.70 ≈ a 75m ceiling for the identical-name population: within it,
+ * auto_link (the near band Step 5's blended thresholds can't reach —
+ * this is why name_dominant exists); below it, route to manual_review
+ * (method name_dominant_low_conf) so a human decides rather than the
+ * matcher guessing silently. This is exactly the report's existing
+ * low_confidence_auto_link cutoff (dryrun-report.ts). The distance clip
+ * itself is left untouched — it correctly caps distant pairs at the
+ * manual_review floor for the whole corpus via Step 5.
+ */
+export const NAME_DOMINANT_CONFIDENCE_FLOOR = 0.7;
+
+/**
  * Pure scoring function (no I/O). The weighted blend per spec §9.1:
  *
  *   combined_confidence = 0.4 × distance_score
@@ -1078,6 +1106,42 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
     if (score.name_similarity < 0.85) continue;
     if (score.category_compatibility < 0.8) continue;
     if (masterPlaceHasSource(c.id, source.source_id)) continue;
+
+    // Candidate selection is unchanged: the first (nearest) candidate that
+    // clears the name/category/distance/same-source gates is the match.
+    // What differs is the outcome. combined_confidence below the floor
+    // means the distance clip has zeroed out the distance signal (the pair
+    // is >~75m apart), so name+category alone can't tell "same place" from
+    // "adjacent distinct feature" — route to manual_review rather than
+    // auto-link silently. Return here (no fall-through): a strong-name pair
+    // is a human-decision case, not a new_master_place, and Step 4/5 below
+    // would not catch it (close_nameless requires name_sim < 0.85, and a
+    // sub-0.60 blend would become a silent separate place).
+    if (score.combined_confidence < NAME_DOMINANT_CONFIDENCE_FLOOR) {
+      logger.debug(
+        {
+          source_record_id: source.id,
+          target: c.id,
+          distance_m: score.distance_meters,
+          name_sim: score.name_similarity,
+          cat_compat: score.category_compatibility,
+          confidence: score.combined_confidence,
+        },
+        "matcher: name_dominant_low_conf manual_review",
+      );
+      const outcome: MatchOutcome = {
+        kind: "manual_review",
+        source_record_id: source.id,
+        target: c.id,
+        confidence: score.combined_confidence,
+        score,
+        method: "name_dominant_low_conf",
+      };
+      recordScoring(performance.now() - scoringStart);
+      trackOutcomeLink(source.source_id, outcome);
+      return outcome;
+    }
+
     logger.debug(
       {
         source_record_id: source.id,
