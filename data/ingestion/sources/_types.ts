@@ -24,6 +24,12 @@ export interface IngestOptions {
   /** OSM-specific: restrict Overpass query to named tag families. Undefined =
    *  all families (current behaviour). Unknown names throw at parse time. */
   families?: string[];
+  /** USFS-specific: restrict INFRA layer query to named site-type tokens.
+   *  Tokens are the lower-snake_case CLI form (e.g. "trailhead",
+   *  "group_campground") — the ingester maps them to the INFRA `site_type`
+   *  vocabulary. Undefined = all six mapped types (v1 default). Unknown
+   *  tokens throw at parse time. */
+  siteTypes?: string[];
 }
 
 export interface IngestResult {
