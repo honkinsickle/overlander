@@ -26,6 +26,7 @@ import {
   isPlaceholderName,
   lookupCompatibility,
   MatchAllCircuitBreakerError,
+  NAME_DOMINANT_CONFIDENCE_FLOOR,
   paginateLinkedSourceRecords,
   scoreMatch,
 } from "./matcher.ts";
@@ -97,6 +98,50 @@ describe("scoreMatch — blend math + Step-5 fallback bands", () => {
     );
     expect(s.combined_confidence).toBeCloseTo(0.5316, 3);
     expect(s.combined_confidence).toBeLessThan(0.6);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// name_dominant confidence floor (Step 3). The name_dominant path gates on the
+// raw components (name ≥ 0.85, category ≥ 0.8, distance ≤ 500m) but now also
+// respects combined_confidence: a candidate that clears those gates auto_links
+// only when combined_confidence ≥ NAME_DOMINANT_CONFIDENCE_FLOOR; below it, the
+// pair routes to manual_review (method name_dominant_low_conf) instead of
+// auto-linking silently. scoreMatch is unchanged — these lock the distance the
+// floor corresponds to for the identical-name/identical-category population, so
+// the routing branch in matchOne keys on a value we've pinned here.
+// ───────────────────────────────────────────────────────────────────────────
+describe("name_dominant confidence floor", () => {
+  const identical = (distance_m: number) =>
+    scoreMatch(
+      { name: "Willow Flat", inferred_category: "campground" },
+      { id: "x", canonical_name: "Willow Flat", primary_category: "campground", distance_m },
+    );
+
+  it("floor is 0.70", () => {
+    expect(NAME_DOMINANT_CONFIDENCE_FLOOR).toBe(0.7);
+  });
+
+  it("identical name+category lands exactly at the floor at 75m → auto_link band", () => {
+    // distance_score = 1 − 75/100 = 0.25 → 0.4·0.25 + 0.4·1 + 0.2·1 = 0.70.
+    const s = identical(75);
+    expect(s.combined_confidence).toBeCloseTo(0.7, 6);
+    expect(s.combined_confidence).toBeGreaterThanOrEqual(NAME_DOMINANT_CONFIDENCE_FLOOR);
+  });
+
+  it("identical name+category at 90m falls below the floor → manual_review band", () => {
+    // distance_score = 0.10 → 0.04 + 0.4 + 0.2 = 0.64 < 0.70. Passes the
+    // name_dominant name/category gates but routes to name_dominant_low_conf.
+    const s = identical(90);
+    expect(s.combined_confidence).toBeCloseTo(0.64, 6);
+    expect(s.combined_confidence).toBeLessThan(NAME_DOMINANT_CONFIDENCE_FLOOR);
+  });
+
+  it("identical name+category beyond the clip (≥100m) caps at 0.60 → below floor", () => {
+    // The whole >100m identical-name population the clip pins to 0.60 — the
+    // 'same complex vs adjacent feature' ambiguity that must go to a human.
+    expect(identical(150).combined_confidence).toBeCloseTo(0.6, 6);
+    expect(identical(150).combined_confidence).toBeLessThan(NAME_DOMINANT_CONFIDENCE_FLOOR);
   });
 });
 
