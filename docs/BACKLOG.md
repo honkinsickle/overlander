@@ -82,6 +82,41 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   prefix alone pushed name_similarity to 0.859 regardless of what
   followed. **One-line fix** (add a confidence floor check to the
   `name_dominant` branch) — not yet applied.
+- **Testing follow-up (Bug 2 fix, PR #227) — extract the post-gate
+  `name_dominant` decision to a pure function.** The fix routes weak
+  `name_dominant` matches to `manual_review` (method
+  `name_dominant_low_conf`); its ONLY guard in the default/CI suite is a
+  mocked-DB unit test in `matcher.test.ts`
+  (`matchOne — name_dominant floor routing`). The `phase3a` integration
+  path can't guard it — that suite is excluded from the default run
+  because `reset_phase3a_test_state()` would wipe the shared working
+  corpus (`SUPABASE_TEST_URL` == the working ref in local
+  `data/.env.test`). The mock mirrors the exact query shapes of
+  `fetchSourceRecord` (`.from().select().eq().single()`) and
+  `findCandidates` (`.rpc().abortSignal()`) and **will break on a refactor
+  of either** — a false failure unrelated to the routing. Next time
+  someone is in `matcher.ts`: extract the post-gate decision (a scored
+  candidate + the floor → `{kind, method}`) into a pure function and test
+  that directly — zero mock coupling, non-brittle. Deferred deliberately
+  to avoid restructuring `matcher.ts` while the fix sits in an unmerged PR.
+
+## Doc hygiene — check CLAUDE.md's CI description against `.github/workflows/ci.yml` (2026-08-16)
+
+CLAUDE.md describes the CI gates in prose ("CI runs `typecheck`, `test`,
+and `build` as three separate jobs"). A full session worked from that
+prose without ever reading `ci.yml`; it happened to be accurate. As of
+2026-08-16 `ci.yml` is exactly: **`typecheck`** (`npm run -w web
+typecheck` + `npm run -w data typecheck`), **`test`** (`npm run -w data
+test` — pointed at `secrets.SUPABASE_TEST_URL`, which `ci.yml`'s own
+comment calls an "isolated test project"; the secret's value isn't
+readable from here, so that it is genuinely distinct from the working
+corpus is the workflow's stated intent, not something confirmed — and it
+EXCLUDES the `phase3a`/`phase3b` destructive suites per
+`vitest.config.ts`), and **`build`** (`cd web && npx next build`, web
+only). Worth a periodic re-check that the prose still matches the
+workflow: a drift (CI stops running the data suite, or adds a gate)
+silently invalidates the "run the same gates locally as CI" assumption
+the STANDING RULES lean on. Cheap to confirm; expensive to assume.
 
 ## Corpus quality — open questions from the merge-quality audit (2026-08-13)
 
