@@ -12,6 +12,57 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-16
+
+- **PAD-US six-state campaign COMPLETE on TEST.** Fee_Managers endpoint, all six
+  states; padus active `source_record` → **37,701**. Corpus **149,385 master_place**
+  `[queried TEST]`. Polygon centroids are structurally disjoint from the point corpus
+  under the current matcher (0 auto_link, 0 amenity_rollup across all six
+  `[per #225, not re-measured this turn]`) — the carried-forward "over-merge"
+  fear did **not** reproduce. **~96% of the land-status
+  family is `land_status`** (35,966 vs 1,314 `public_land`), all search-excluded; the
+  corpus-weight question is open (`BACKLOG.md`).
+- **USFS ingester rewritten** `EDW_RecreationOpportunities_01` → `EDW_RecInfraRecreationSites_02`
+  (PR #226 → OPEN #223). **6,324 active SRs** (trailhead 3,041 · campground 2,312 ·
+  picnic 570 · dispersed 401) `[queried TEST]`; 6 legacy `usfs:recarea:*`
+  deactivated. **Trailhead materialized live** — 2,601 linked `[queried TEST]`
+  (the 630 auto_link / 1,971 new_MP split is `[handoff, unverified]`); 440 manual_review.
+  Campground PARKED, picnic + dispersed dry-ran clean, not run.
+- **Matcher Bug 2 fixed** — `name_dominant` now gates on `combined_confidence ≥ 0.70`,
+  below-floor → `manual_review` (`name_dominant_low_conf`), no fall-through (PR #227 →
+  OPEN #224; ADR `2026-08-16-name-dominant-confidence-floor.md`). Campground preview
+  1,427 auto → 657, `low_confidence` flags 771 → 0; picnic byte-identical (382/0/138/50).
+  **0.70 vs 0.65:** the choice moved only 59 campground rows; 0.70 kept because it zeroes
+  the report's own low-conf flag and keeps the 40–75 m band `name_dominant` exists for.
+  Distance clip deliberately left alone (it's the Step-5 gate corpus-wide; wrong blast
+  radius + wrong sign to touch it). Guarded by a mocked-DB routing test (the only CI
+  guard — `phase3a` is excluded); apply path exercised end-to-end + cleaned up. Also
+  shipped: `materialize --dry-run-report` (per-match JSONL; matcher untouched, counts
+  byte-identical) in OPEN #224.
+- **Manual-review queue measured 5,089** (95% osm `blended_residual`). No processing
+  framework; the floor adds ~803 more from campground. **Triage framework scoped, not
+  built** (`BACKLOG.md`) — it is now the blocker on a live campground materialize, not
+  the matcher.
+- **Incident `[handoff, unverified — not observed by this agent]`:** TEST (Micro
+  `t4g.micro`) went Unhealthy ~2h during a WA PAD-US materialize — `materialize`
+  has no `pLimit`, back-to-back runs exhausted the tier.
+  Recovered; runs since chunked with health checks. **No PROD writes all session.**
+- **Claims that did NOT survive measurement earlier this session** — all from the
+  handoff / prior turns and **not re-verified by this agent** (`[handoff, unverified]`
+  throughout; recorded so the next agent doesn't re-inherit them as open): MVUM encodes
+  **no** dispersed-camping corridor data (vehicle
+  class + seasonal only; corridor rules live in per-forest PDFs); `EDW_RecreationAreaActivities_01`
+  **is** the real multi-value activity roster (52,482 rows, ~3× RecOpp's dispersed
+  coverage) — not the dead end it was twice dismissed as; `EDW_InfraRecreationSites_01`
+  has more fields (137 vs 70) than `_02` but they're ~90% empty, so `_02` was still the
+  right layer; `EDW_Wilderness_02` (629 subparcels, 253 six-state) is the source to wire
+  for the still-unbuilt PAD-US Designation gap; and an earlier "6–10% of campground merges
+  are wrong" figure was fabricated from an 8-row eyeball — wrongness is unknown and
+  unknowable from corpus data (USFS↔RIDB share no identifier).
+- **Merge/docs note:** docs-only #225 (padus) + #228 (matcher/CI notes) merged to `main`;
+  the *code* PRs #223 (usfs + scripts) and #224 (matcher floor + dry-run tooling) are still
+  OPEN — the matcher floor and USFS ingester are **not on `main`** yet.
+
 ## 2026-08-11
 
 - **bbq/fire_pit deactivated on PROD.** 223 osm `inferred_category = fire_pit`
