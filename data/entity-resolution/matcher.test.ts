@@ -26,6 +26,7 @@ import {
   isPlaceholderName,
   lookupCompatibility,
   MatchAllCircuitBreakerError,
+  matchOne,
   NAME_DOMINANT_CONFIDENCE_FLOOR,
   paginateLinkedSourceRecords,
   scoreMatch,
@@ -353,6 +354,82 @@ describe("findCandidates — skipRpcs=false path (populated master_place)", () =
     await expect(findCandidates("sr-test-3")).rejects.toMatchObject({
       message: "boom",
     });
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// matchOne — the name_dominant floor ROUTING (the fix's actual behavior), with
+// the DB fully mocked. The integration flavor lives in phase3a.test.ts, which
+// is excluded from the default suite (its reset_phase3a_test_state() would wipe
+// the shared working corpus). This mocked unit test is the only guard that runs
+// in CI. It drives matchOne directly: fetchSourceRecord's
+// .from().select().eq().single() and findCandidates' .rpc().abortSignal() are
+// mocked, findFederalAnchor short-circuits for a non-federal source (no DB),
+// the amenity branch is skipped for `campground`, and masterPlaceHasSource is
+// false against the empty module caches.
+//
+// NOTE (coupling): these mocks mirror the exact query shapes of
+// fetchSourceRecord + findCandidates and will break if those refactor. See
+// docs/BACKLOG.md — extracting the post-gate decision to a pure function would
+// remove the coupling. resetPlanning() is not exported, so each test uses a
+// DISTINCT source/target id to avoid cross-test state (sourceRecordCache is
+// keyed by id; an auto_link populates plannedLinks under its own target).
+// ───────────────────────────────────────────────────────────────────────────
+describe("matchOne — name_dominant floor routing (mocked DB)", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+  });
+
+  // fetchSourceRecord: db.from("source_record").select(...).eq("id",id).single()
+  const sourceResolves = (row: unknown) =>
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: row, error: null }),
+        }),
+      }),
+    });
+
+  const runMatch = (opts: { srId: string; name: string; distance_m: number }) => {
+    sourceResolves({
+      id: opts.srId,
+      source_id: "usfs", // non-federal → findFederalAnchor returns null before any DB
+      external_id: `usfs:site:${opts.srId}`,
+      name: opts.name,
+      inferred_category: "campground", // not an AMENITY_TYPE → amenity branch skipped
+      master_place_id: null,
+      geometry: { type: "Point", coordinates: [-111.0, 34.0] },
+    });
+    rpcResolves({
+      data: [
+        {
+          id: `mp-${opts.srId}`,
+          canonical_name: opts.name, // identical name → name_similarity = 1.0
+          primary_category: "campground", // campground↔campground = 1.0
+          distance_m: opts.distance_m,
+        },
+      ],
+      error: null,
+    });
+    return matchOne(opts.srId);
+  };
+
+  it("identical name+category at 50m (conf 0.80) → auto_link / name_dominant", async () => {
+    // distance_score = 0.5 → 0.4·0.5 + 0.4·1 + 0.2·1 = 0.80 ≥ 0.70 floor.
+    const outcome = await runMatch({ srId: "ndlc-50", name: "Test Ridge Campground", distance_m: 50 });
+    expect(outcome.kind).toBe("auto_link");
+    expect(outcome).toMatchObject({ method: "name_dominant", target: "mp-ndlc-50" });
+    if (outcome.kind === "auto_link") expect(outcome.confidence).toBeCloseTo(0.8, 6);
+  });
+
+  it("identical name+category at 90m (conf 0.64) → manual_review / name_dominant_low_conf", async () => {
+    // distance_score = 0.1 → 0.04 + 0.4 + 0.2 = 0.64 < 0.70 floor. Passes the
+    // name/category gates but routes to review instead of auto-linking silently.
+    const outcome = await runMatch({ srId: "ndlc-90", name: "Test Ridge Campground", distance_m: 90 });
+    expect(outcome.kind).toBe("manual_review");
+    expect(outcome).toMatchObject({ method: "name_dominant_low_conf", target: "mp-ndlc-90" });
+    if (outcome.kind === "manual_review") expect(outcome.confidence).toBeCloseTo(0.64, 6);
   });
 });
 
