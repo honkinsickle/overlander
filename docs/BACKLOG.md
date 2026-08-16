@@ -31,14 +31,22 @@ means six `--bbox` runs (or a corridor polygon) for either.
   see `data/ingestion/sources/usfs.ts`). Current TEST corpus: 6 rows.
   Single non-tiled ESRI query per state; no rate-limit or key friction
   (public ArcGIS REST, no auth).
-- **PAD-US six-state ingest — massive, product decision pending.**
-  `docs/decisions/2026-06-02-land-status-and-dispersed-camping-sources.md`
-  estimates **PAD-US lower-48 ~400k–480k polygons** (dominated by
-  Fee-class ownership parcels, not federal units) and **BLM SMA national
-  ~100k–300k** — both national/lower-48 estimates, not six-state-scoped.
-  Current TEST corpus: 113 rows. Whether land-status is a target feature
-  at all is an open product question, not just a sizing one — do not run
-  this ingest as a default "why not" without that decision first.
+- **~~PAD-US six-state ingest — massive, product decision pending.~~**
+  **DONE 2026-08-14 (TEST)** — Fee_Managers endpoint, all six states
+  ingested + materialized on TEST. **35,859 padus source_records** written
+  across WA/OR/AZ/NV/CA (UT ran a day earlier). Reconciliation produced
+  **30,152 new master_places** on top of UT's 7,016. Corpus grew
+  117,262 → 147,414 MPs; padus active SRs 7,162 → 37,701. The
+  ~400k–480k lower-48 estimate proved right in shape: ~42k written
+  for the six-state Fee-only slice. Zero auto_link, zero amenity_rollup,
+  zero errors across all six states. Cumulative wall time ~4h 10m
+  (matchAll ~3h 48m). Follow-ups filed as separate items below
+  (`land_status` corpus weight, materialize serialization, Wilderness
+  Designation endpoint, residual unlinked). See `LOG.md` /
+  `STATE.md` for the run details. The product-decision framing above
+  is superseded by the completed characterization run — outstanding
+  land-status product question now lives in the "PAD-US `land_status`
+  corpus weight" entry below.
 - **BLM investigation — deferred.** No standalone BLM ingester exists.
   `padus.ts`'s own header states PAD-US + BLM SMA are **one combined
   source** (PAD-US primary, SMA a later tie-breaker) — so BLM land-status
@@ -46,6 +54,139 @@ means six `--bbox` runs (or a corridor polygon) for either.
   shape of "should we build a BLM ingester" from "greenfield" to "is the
   PAD-US path sufficient." Scoped in a prior handoff; needs a fresh
   session to actually decide.
+
+## PAD-US polygon-source ER — investigated across all six states, no over-merge (2026-08-14, resolved history)
+
+Kept for the record so a future session does not re-litigate this from an
+older handoff. **A prior handoff had documented a PAD-US "polygon
+over-merging" concern citing a UT `master_place` with `source_count=134`
+and a WA `master_place` with `source_count=8,410` from an earlier
+failed/partial batch attempt. Investigated across all six states
+(UT/WA/OR/AZ/NV/CA) after a clean full ingest + materialize sequence,
+2026-08-14. Does not reproduce.**
+
+**Measured on the clean run, per state:**
+
+| state | padus SRs | MPs referenced | source_count histogram | max source_count | auto_link | amenity_rollup |
+|---|--:|--:|---|--:|--:|--:|
+| UT | 7,015 | 7,128 | {"1":7128} | **1** (Rothschild House, coincidentally same-name) | 0 | 0 |
+| WA | 6,742 | 6,716 | {"1":6716} | **1** | 0 | 0 |
+| OR | 6,026 | 5,943 | {"1":5943} | **1** | 0 | 0 |
+| AZ | 2,242 | 2,227 | {"1":2227} | **1** | 0 | 0 |
+| NV | 2,575 | 2,523 | {"1":2523} | **1** | 0 | 0 |
+| CA | 18,038 | 17,764 | {"1":17764} | **1** | 0 | 0 |
+| **six-state total** | **42,638** | **~37,168 distinct new** | all solo | **1 everywhere** | **0** | **0** |
+
+**37,168 padus SRs (99.4% of the fresh writes) landed as their own new
+`master_place`.** Zero auto-links into existing point-based
+(OSM/RIDB/NPS) MPs. Zero amenity-rollups. The polygon-source and
+point-source corpora are **structurally disjoint under the current
+matcher** — polygon centroids don't align to point coords, and the
+category-compatibility function returns 0 for `land_status`/`public_land`
+vs any point category (peak, park, trailhead, etc.), preventing spurious
+merges in either direction. This is behaving as documented in the
+land-status ADR, not as a matcher defect. **Resolved. Do not re-open
+without a fresh reproducing case.**
+
+## PAD-US `land_status` corpus weight — product decision open (2026-08-14)
+
+Of the ~37,168 new padus master_places, **47,633 padus-linked MPs
+(~97% of the aggregate padus-sourced footprint) are
+`primary_category = 'land_status'`** — jurisdiction parcels
+(SITLA/SLB blocks, city/county parks, LP/LREC/SCA units) that are
+`is_searchable = false` and excluded from browse/search. Only **1,586
+(~3%) are `public_land`** — named federal/state units that appear
+in search.
+
+Open question: **do the 47k land_status rows earn their place as
+first-class `master_place` rows** (serving attribution and enrichment
+paths that already know how to read a `master_place`), or should
+land-status live in a separate table per the three-tier geospatial
+model? Two shapes worth considering:
+
+- **Keep as-is:** every polygon is a `master_place`, `is_searchable=false`
+  hides them from search, geometry-lookup queries (`is this point on
+  BLM land?`) work through existing `geometry_polygon` joins.
+- **Split out:** promote `land_status` rows into their own table
+  (`land_status_polygon` or similar), simplifying `master_place` to
+  the ~1.5k named-unit set + the point-based POIs it already carries.
+  Cost: every consumer of `master_place` that expects `land_status`
+  to be reachable there has to be rewritten.
+
+**No decision made — flagging for evaluation** before any further
+land-status-family ingest (BLM SMA, Wilderness Designation, USFS
+Special Interest Areas). The choice affects table shape, RLS, and
+whether the point-lookup queries are joins across two tables or one.
+
+## `materialize` lacks request serialization — TEST hit an Unhealthy state after back-to-back matchAll runs (2026-08-14)
+
+`data/ingestion/lib/rate-limit.ts` sets per-source `pLimit` values —
+RIDB was pinned to `pLimit(1)` in commit `9a06f39` after `pLimit(4)`
+sustained-429'd twice on UT. **`materialize` has no equivalent
+throttle.** Its matchAll issues per-record RPC calls sequentially but
+without an explicit rate limit; on a big-corpus run it can generate
+sustained load the target project cannot absorb.
+
+**Concrete failure, 2026-08-14 TEST:** back-to-back UT + WA materialize
+runs (~13,000 RPC calls total, spanning ~55 min) knocked TEST
+(`znldzjdatkogdktymtvi`, Micro tier / `t4g.micro`) into an Unhealthy
+state. Cloudflare returned **522 (origin timeout)** on all
+origin-touching requests for ~2 hours; the gateway itself stayed
+healthy (unauthenticated `/rest/v1/` continued returning `HTTP 401` in
+~200 ms with valid `sb-project-ref` headers, while any query that
+needed PostgREST → Postgres 522'd for 20 s). WA matchAll's circuit
+breaker tripped after 15 consecutive `AbortError`s (568/6,692
+processed), no writes landed, materialize was rerun cleanly after the
+project recovered. Sequence completed after recovery.
+
+**Two follow-ups worth considering:**
+- **Serialize matchAll RPCs** — a `pLimit(1)` (or a small pool with
+  backoff) around the per-record candidate lookup would smooth the
+  burst that pushed TEST into the failure state. Mirrors the fix
+  applied to RIDB.
+- **Raise TEST off Micro compute before the next large campaign.**
+  The current tier can handle bursts up to a few thousand RPCs, but a
+  50k+ MP corpus scan pattern (as would happen if BLM/Wilderness gets
+  wired) is likely to hit the same wall regardless of serialization.
+  Small dashboard change; no code change.
+
+## PAD-US Wilderness (Designation endpoint) not ingested (2026-08-14)
+
+**No `des_tp='WA'` rows landed in any of the six states** — the
+Fee_Managers endpoint the ingester currently uses **deliberately
+excludes Wilderness**, per the pre-prod gate documented at the top of
+`data/ingestion/sources/padus.ts` (`§ HARD PRE-PROD GATE: Wilderness
+(Designation class)`). Wilderness lives on PAD-US's separate
+Designation feature class, which is **unwired** — the ingester's
+`ENDPOINTS.fee` constant has no `ENDPOINTS.designation` sibling.
+
+Consequence today: a point inside a Wilderness inherits the enclosing
+forest's `dispersed_camping = 'likely_allowed'` — a wrong "camp here"
+signal. `deriveDispersedCamping` already returns `'likely_restricted'`
+for `des_tp='WA'`, but no `WA` records ever reach it under Fee-only.
+
+**Needs a decision:**
+- **Wire it** — implement the Designation endpoint fetch + the
+  multi-parent resolution rule (`restricted-beats-allowed` when a
+  Wilderness overlaps a Forest). This is the documented pre-prod gate
+  before any prod ship of the dispersed-camping signal.
+- **Formally drop it** — accept the signal is TEST-only and never
+  surfaces to users, and rip the pre-prod-gate machinery. Only
+  reasonable if the dispersed-camping feature itself is deprioritized.
+
+Not merely a config toggle — the endpoint is unwritten and the
+multi-parent resolution has no code path.
+
+## PAD-US 421 residual unlinked source_records after six-state run (2026-08-14)
+
+The six-state materialize sequence left **421 padus source_records
+still `master_place_id = null`** after all runs completed. Per-state
+matchAll slippage (unresolved-count query vs matchAll's own fetch
+race): UT ~34 · WA ~60 · OR ~137 · AZ ~152 · NV ~152 · CA ~202 sums to
+~585; the applyMatches phase closed ~160 of these gaps, leaving ~421.
+Not investigated — most likely just needs one more `materialize
+--skip-sync` pass. Small enough to file as-is. If it survives a rerun
+untouched, the matchAll → applyMatches boundary needs a closer read.
 
 ## Matcher bugs — coord-dominant merges and the `name_dominant` confidence bypass (2026-08-13)
 
@@ -102,10 +243,13 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   toilet amenity rolled up into it. The mechanism (field_precedence
   ordering, not a one-off) suggests more exist; not audited at corpus
   scale.
-- **Manual review queue has no process.** **4,230 rows** corpus-wide
-  sitting in `place_match.status='pending'` (osm 3,848 · ridb 362 ·
-  other 20, `[queried TEST, 2026-08-14]`) — no review UI, script, or
-  workflow exists to work through this queue. Grows with every ingest.
+- **Manual review queue has no process.** **4,649 rows** corpus-wide
+  sitting in `place_match.status='pending'` `[queried TEST, 2026-08-15]` —
+  no review UI, script, or workflow exists to work through this queue.
+  **Grew by 386 during the PAD-US six-state campaign** (UT 33 · WA 26 ·
+  OR 77 · AZ 15 · NV 49 · CA 219 · plus small cross-border residual);
+  the rest is the standing pre-PAD-US backlog (osm 3,848 · ridb 362 ·
+  other 20 from earlier). Grows with every ingest.
 
 ## Grounding infrastructure — complete, not yet run (2026-08-13)
 
