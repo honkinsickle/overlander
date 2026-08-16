@@ -114,6 +114,16 @@ export interface MaterializeOptions {
    * orchestrator refuses that combo.
    */
   onlyCategories: readonly string[];
+  /**
+   * Dry-run only. Path to write a per-match JSONL report to. Each line
+   * is one MatchOutcome enriched with SR context, target MP context,
+   * projected source_count deltas, and bug-shape flags. Followed by a
+   * `# ─── SUMMARY ───` block. When null, --dry-run behaviour is unchanged
+   * (aggregate log only, no per-row output). Ignored when dryRun is false.
+   * Read the module docstring in pipeline/dryrun-report.ts for the field
+   * contract.
+   */
+  dryRunReportPath: string | null;
 }
 
 export interface RematerializeReport {
@@ -313,6 +323,7 @@ async function runResolution(
   skipFingerprintCheck: boolean,
   applyFromCache: boolean,
   onlyCategories: readonly string[],
+  dryRunReportPath: string | null,
 ): Promise<ApplyResult> {
   // After --rematerialize, every source_record is unresolved by
   // construction; call matchAll() with no IDs so it runs its own
@@ -421,6 +432,14 @@ async function runResolution(
 
   if (dryRun) {
     logger.info("materialize: --dry-run → matching but not applying");
+    // Per-match observability. Aggregate counts (returned below) are
+    // computed identically whether or not the report ran — matcher
+    // behaviour is unchanged, this only reads the outcomes it already
+    // produced. See pipeline/dryrun-report.ts §MATCHER BEHAVIOUR.
+    if (dryRunReportPath) {
+      const { writeDryRunReport } = await import("./dryrun-report.ts");
+      await writeDryRunReport({ outcomes, outputPath: dryRunReportPath });
+    }
     return {
       new_master_places: outcomes.filter((o) => o.kind === "new_master_place").length,
       auto_linked: outcomes.filter((o) => o.kind === "auto_link").length,
@@ -519,6 +538,7 @@ export async function materialize(opts: MaterializeOptions): Promise<Materialize
       opts.skipFingerprintCheck,
       opts.applyFromCache,
       opts.onlyCategories,
+      opts.dryRunReportPath,
     );
     logger.info(erResult, "materialize: ER complete");
   }
@@ -589,6 +609,7 @@ interface CliOpts {
   skipFingerprintCheck?: boolean;
   applyFromCache?: boolean;
   onlyCategories?: readonly string[];
+  dryRunReport?: string;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -618,6 +639,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       "Fail-closed allowlist: comma-separated inferred_category values; ONLY these reach the incremental ER delta, everything else (incl. unmapped) is held back. Incompatible with --rematerialize.",
       parseOnlyCategories,
     )
+    .option(
+      "--dry-run-report <path>",
+      "Requires --dry-run. Write a per-match JSONL diagnostic report to <path> (SR + target-MP context, projected source_count deltas, bug-shape flags). No effect without --dry-run.",
+    )
     .action(async (cli: CliOpts) => {
       const opts: MaterializeOptions = {
         ingest: cli.ingest ?? false,
@@ -632,7 +657,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         skipFingerprintCheck: cli.skipFingerprintCheck ?? false,
         applyFromCache: cli.applyFromCache ?? false,
         onlyCategories: cli.onlyCategories ?? [],
+        dryRunReportPath: cli.dryRunReport ?? null,
       };
+      if (opts.dryRunReportPath && !opts.dryRun) {
+        throw new Error(
+          "materialize: --dry-run-report requires --dry-run. Refusing to write a per-match report on a live run (the report reads outcomes from the dry-run branch of runResolution only).",
+        );
+      }
       try {
         const report = await materialize(opts);
         logger.info(report, "materialize: complete");
