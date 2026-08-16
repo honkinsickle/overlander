@@ -88,6 +88,29 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Re-measured 2026-08-16 `[queried TEST, read-only]` — SUPERSEDES the
+> 2026-08-14 box below for totals.** The PAD-US six-state (Fee_Managers) and
+> USFS `EDW_RecInfraRecreationSites_02` campaigns completed this session —
+> live-write TEST ingest, no PROD touched. USFS trailhead materialized;
+> campground/picnic/dispersed not. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `master_place` total | **149,385** |
+> | — `primary_category='land_status'` (search-excluded) | 35,966 |
+> | — `primary_category='public_land'` (searchable) | 1,314 |
+> | `source_record` total (all / active) | **159,869 / 159,863** |
+> | `place_match` pending (manual_review), corpus-wide | **5,089** (blended_residual 4,856 · close_nameless 233) |
+>
+> **`source_record` by `source_id` (active):** osm **109,615** · padus
+> **37,701** · usfs **6,324** · ridb **6,013** · google_resolved 122 · nps 83 ·
+> google 5 · parks_canada/bc_parks/alberta_parks **0**. **usfs 6,324** =
+> trailhead 3,041 · campground 2,312 · picnic_area 570 · dispersed_camping 401
+> (2,601 linked / 3,723 unlinked; +6 legacy `is_active=false`). padus grew via
+> the Fee_Managers six-state campaign. **Note:** the USFS ingester, matcher
+> `name_dominant` floor, and `--dry-run-report` are in OPEN PRs #223/#224 — the
+> TEST *data* is live, the *code* is not yet on `main`.
+
 > **⚠️ Re-measured 2026-08-14 `[queried TEST, read-only]` — SUPERSEDES the
 > 2026-08-10 box below for totals.** The RIDB and OSM six-state (WA, UT, OR,
 > AZ, NV, CA) campaigns both completed this session — live-write TEST ingest,

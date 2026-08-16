@@ -23,14 +23,25 @@ Scoped read-only this session (`data/ingestion/sources/usfs.ts`,
 campaigns took priority. None have an `--iso` flag; six-state coverage
 means six `--bbox` runs (or a corridor polygon) for either.
 
-- **USFS six-state ingest — small, cheap.** Deliberately scoped to
-  `markeractivity='Dispersed Camping'` only (developed campgrounds
-  excluded by design, per the ingester's own docstring — they overlap RIDB
-  and are deferred). National ceiling for that one activity type is
-  **367** (`recareaid == recid`, verified 367/367 in the PR-A read pass —
-  see `data/ingestion/sources/usfs.ts`). Current TEST corpus: 6 rows.
-  Single non-tiled ESRI query per state; no rate-limit or key friction
-  (public ArcGIS REST, no auth).
+- **~~USFS six-state ingest — small, cheap. Scoped to
+  `markeractivity='Dispersed Camping'` only … national ceiling 367 …
+  Current TEST corpus: 6 rows.~~** **SUPERSEDED / DONE 2026-08-16 (TEST) —
+  ingester rewritten to `EDW_RecInfraRecreationSites_02`.** The
+  dispersed-only / 367-ceiling scoping above is obsolete: the source moved
+  from `EDW_RecreationOpportunities_01` (367 dispersed-only national rows)
+  to `EDW_RecInfraRecreationSites_02` layer 0 (~31k developed sites
+  `[handoff, unverified]`), with RecOpp kept as a light enrichment join.
+  Six-state ingest DONE on TEST: **6,324 active `source_record`**
+  `[queried TEST 2026-08-16]` — trailhead 3,041 · campground 2,312 ·
+  picnic_area 570 · dispersed_camping 401; 6 legacy `usfs:recarea:*`
+  deactivated (`is_active=false`; **5 need `recompute_master_place`** on a
+  future run `[handoff, unverified]`). **Trailhead materialized live** —
+  2,601 linked `[queried TEST]` (the 630 auto_link / 1,971 new_master_place
+  split is `[handoff, unverified]`); 440 manual_review. **Campground
+  PARKED** behind the matcher `name_dominant` floor + review-queue
+  capacity; **picnic (570) + dispersed (401) dry-ran clean, not yet
+  materialized.** Code in OPEN PR #223 (via #226). BLM still has no
+  ingester.
 - **~~PAD-US six-state ingest — massive, product decision pending.~~**
   **DONE 2026-08-14 (TEST)** — Fee_Managers endpoint, all six states
   ingested + materialized on TEST. **35,859 padus source_records** written
@@ -210,7 +221,12 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   six-state OSM ingest: **Liberty Glen #72/#73/#74**, three distinctly-
   numbered dispersed camping sites collapsed into one `master_place`.
   Prevalence scales with corpus size, not with source. Fix requires
-  threshold/formula work — not scoped.
+  threshold/formula work — not scoped. **Still OPEN as of 2026-08-16** — the
+  campground dry-run reported **0 coord-dominant flags** `[measured 2026-08-16]`;
+  the trailhead pass was **already materialized**, so its outcomes were read from
+  persisted `place_match` rows (not dry-run this session), where the handoff
+  reports it also did not clearly fire `[handoff, unverified]`. Lower-priority
+  than it looked, but unaddressed.
 - **Bug 2 — `name_dominant` bypasses `combined_confidence` entirely.**
   Waterfall Step 3 in `matcher.ts` (`matchOne`) auto-links whenever
   `distance ≤ 500m AND name_similarity ≥ 0.85 AND category_compat ≥ 0.8` —
@@ -221,8 +237,15 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   `manual_review` floor), `match_method=name_dominant`. Root cause is
   Jaro-Winkler's prefix-weighting: "Buckhorn " as a shared 9-character
   prefix alone pushed name_similarity to 0.859 regardless of what
-  followed. **One-line fix** (add a confidence floor check to the
-  `name_dominant` branch) — not yet applied.
+  followed. ~~**One-line fix** (add a confidence floor check to the
+  `name_dominant` branch) — not yet applied.~~ **FIXED 2026-08-16 via
+  [#227](https://github.com/honkinsickle/overlander/pull/227)** (merged into
+  the stacked, still-OPEN #224 — not yet on `main`). `name_dominant` now
+  gates on `combined_confidence ≥ NAME_DOMINANT_CONFIDENCE_FLOOR (0.70)`;
+  below-floor matches route to `manual_review` with
+  `match_method='name_dominant_low_conf'` (no fall-through). Buckhorn Draw at
+  0.544 would now queue for review. Reasoning (0.70 vs 0.65; leave the 100 m
+  clip) in `docs/decisions/2026-08-16-name-dominant-confidence-floor.md`.
 - **Testing follow-up (Bug 2 fix, PR #227) — extract the post-gate
   `name_dominant` decision to a pure function.** The fix routes weak
   `name_dominant` matches to `manual_review` (method
@@ -258,6 +281,39 @@ only). Worth a periodic re-check that the prose still matches the
 workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
+
+## Manual-review queue — no processing framework; triage scoped, not built (2026-08-16)
+
+**5,089 pending `place_match` rows** `[queried TEST 2026-08-16]` — by method
+`blended_residual` 4,856 (95%) + `close_nameless` 233; by source osm 3,848 (76%),
+usfs 441, padus 420, ridb 362, nps 17. **There is no tool to work this queue**,
+and the `name_dominant` floor (above) converts silent merges into review rows —
+the campground chunk alone would add ~803 (`name_dominant_low_conf`), taking it to
+~6,034. **This is now the blocker on a live campground materialize, not the matcher.**
+
+A triage framework was **scoped this session, not built.** Key findings from the
+scoping:
+
+- **Partition by `match_method` first** — method ≈ decision-shape. The osm
+  `blended_residual` mass (placeholder/dispersed collisions) and the incoming
+  federal `name_dominant_low_conf` cluster (identical names at distance) need
+  different playbooks, not one universal approver.
+- **The `name_dominant_low_conf` cluster is largely bulk-decidable**, not
+  row-by-row: on the campground preview, 66% carried an identical normalized name
+  (name adds no discriminating signal → decision collapses to distance × category ×
+  target-multiplicity), 52% sat at conf exactly 0.60 (≥100 m clip), 7% were
+  cross-category collisions (campground→facility). ~65–75% clearable by a few
+  filtered bulk actions; ~25–35% need per-row judgment.
+- **Per-row, a reviewer needs the pair + scores + a map** (both pins + the MP's
+  other-source pins) — distance alone can't resolve "same complex vs adjacent
+  feature," and USFS↔RIDB share no identifier, so external lookup (fs.usda.gov ↔
+  recreation.gov) is the only ground truth. The framework links out; it doesn't
+  resolve.
+- **Write-back already exists** — `apply_match_outcomes` handles confirm→auto_link
+  and reject→new_master_place. The framework is a read/filter/decide layer over it.
+
+Not a one-row approver — a filter-and-bulk-act queue. Sizing to "the campground
+803" undersizes the real queue 6×.
 
 ## Corpus quality — open questions from the merge-quality audit (2026-08-13)
 

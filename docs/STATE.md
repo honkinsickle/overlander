@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-13
+# STATE — `main` · 2026-08-16 (⚠ newest section is TEST-corpus + open-PR work; the matcher floor and USFS ingester are NOT on `main` yet — PRs #223/#224 open)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,67 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-16 — PAD-US + USFS six-state on TEST; `name_dominant` 0.70 floor (code in OPEN PRs)
+
+Newest truth. **All counts re-measured against TEST read-only, 2026-08-16**
+`[queried TEST]`. **No PROD writes this session.** Two things to hold separately:
+the **TEST corpus operations** (PAD-US + USFS ingest, trailhead materialize) are
+**live on TEST**; the **code** (matcher floor, USFS ingester, dry-run tooling) is
+**NOT on `main` yet** — it merged into the stacked PRs #223/#224, which are still
+**OPEN** against `main`. Docs-only #225 (padus follow-ups) and #228 (matcher/CI
+notes) *did* merge to `main`.
+
+**TEST corpus position `[queried TEST 2026-08-16]`:**
+
+| metric | value |
+|---|--:|
+| `master_place` | **149,385** |
+| — `primary_category='land_status'` (search-excluded) | 35,966 |
+| — `primary_category='public_land'` (searchable) | 1,314 |
+| `source_record` (active) | **159,863** |
+| — osm / padus / usfs / ridb / nps / google_resolved / google | 109,615 / 37,701 / 6,324 / 6,013 / 83 / 122 / 5 |
+| `place_match` pending (`manual_review` queue) | **5,089** (blended_residual 4,856 · close_nameless 233 · name_dominant_low_conf 0) |
+
+**PAD-US six-state COMPLETE on TEST.** Fee_Managers endpoint, all six states;
+padus active `source_record` **37,701** `[queried TEST 2026-08-16]`. (The
+handoff's "42,638 padus SRs" was a cumulative-written figure; the measured
+**active** total is 37,701 — used here, same as 149,385 is used over the
+handoff's 147,414.) Polygon centroids are structurally disjoint from the point
+corpus under the current matcher — 0 auto_link, 0 amenity_rollup `[per #225,
+not re-measured this session]` — so the earlier "over-merge" fear did not
+reproduce. **~96% of the
+land-status family is `land_status`** (35,966 vs 1,314 `public_land`), all
+search-excluded — the corpus-weight product question is OPEN in `BACKLOG.md`.
+
+**USFS ingester rewritten** `EDW_RecreationOpportunities_01` → `EDW_RecInfraRecreationSites_02`
+(in OPEN PR #223, via #226). **6,324 active `source_record`** on TEST — trailhead
+3,041 · campground 2,312 · picnic_area 570 · dispersed_camping 401; 6 legacy
+`usfs:recarea:*` deactivated. **Trailhead MATERIALIZED live** — 2,601 linked
+`[queried TEST 2026-08-16]` (the 630 auto_link / 1,971 new_master_place split is
+`[handoff, unverified]` — only the 2,601 total and the 3,723/3,283 unlinked
+figures were re-measured); the residual 440 = 3,723 unlinked − 3,283
+unmaterialized. **Campground PARKED**
+(behind the matcher floor + queue capacity); **picnic (570) + dispersed (401)
+dry-ran clean, not materialized.** usfs unlinked = 3,723 (440 trailhead reviews +
+3,283 unmaterialized).
+
+**Matcher `name_dominant` now gated on `combined_confidence` at 0.70** (PR #227 →
+stacked into OPEN #224; `a17bce8` + routing test `208bbae`). Below-floor →
+`manual_review` (`name_dominant_low_conf`), no fall-through. Campground preview
+went 1,427 auto → 657 (771 below-0.70 flags → 0); picnic byte-identical. Distance
+clip deliberately untouched. ADR: `docs/decisions/2026-08-16-name-dominant-confidence-floor.md`.
+Also in OPEN #224: `materialize --dry-run-report` (per-match JSONL; matcher
+untouched, byte-identical counts). Measurement scripts in OPEN #223.
+
+**Manual-review queue = 5,089, 95% osm `blended_residual`.** A triage framework was
+**scoped, not built** (`BACKLOG.md`) — it is now the blocker on a live campground
+materialize, not the matcher.
+
+**One incident `[handoff, unverified — not observed by this agent]`:** TEST
+(Micro `t4g.micro`) went Unhealthy for ~2h during a WA PAD-US materialize —
+`materialize` has no `pLimit` serialization and back-to-back runs exhausted the
+tier. Recovered; subsequent runs chunked with health checks. Backlogged.
 
 ## 2026-08-13 — RIDB + OSM six-state campaigns COMPLETE on TEST; six PRs landed on `main`
 

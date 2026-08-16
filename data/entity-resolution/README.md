@@ -297,8 +297,21 @@ The `find_master_place_candidates` RPC default is bumped; matcher.ts
 
 Fires when a candidate within 500m has `name_sim ≥ 0.85` AND
 `cat_compat ≥ 0.8` AND the candidate's master_place does NOT already
-have a source_record from the incoming source. Auto-links with
-`method='name_dominant'` and `confidence` = the blended score.
+have a source_record from the incoming source. **Since 2026-08-16
+([PR #227](https://github.com/honkinsickle/overlander/pull/227)) it then
+gates on the blended `combined_confidence`:** at
+`≥ NAME_DOMINANT_CONFIDENCE_FLOOR` (0.70) it auto-links
+(`method='name_dominant'`, `confidence` = the blended score); **below 0.70
+it routes to `manual_review` with `method='name_dominant_low_conf'`, returned
+directly (no fall-through).** The floor exists because the 100m distance clip
+pins an identical-name / identical-category pair to exactly 0.60 beyond 100m —
+so at range, name + category alone cannot distinguish "same complex named
+differently" from "adjacent-but-distinct feature," and those defer to a human
+rather than auto-linking silently. The distance clip itself is intentionally
+unchanged (it is the Step-5 gate corpus-wide). See
+`docs/decisions/2026-08-16-name-dominant-confidence-floor.md`. ~~Auto-links
+with `method='name_dominant'` and `confidence` = the blended score.~~ (the
+pre-2026-08-16 unconditional behavior).
 
 Resolves Mode A entirely. Also covers the Mode B pairs that re-enter
 scoring under the widened radius.
