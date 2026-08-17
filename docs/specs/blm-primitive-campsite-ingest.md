@@ -117,8 +117,36 @@ rest ignored — same discipline as `InfraPropsSchema` in `usfs.ts`.
 Run:
 
 ```
-npm run -w data ingest:manual -- --source blm --bbox <six-state> --dry-run
+npm run -w data ingest:manual -- --source blm --bbox -124.9,31.3,-109.0,49.1 --dry-run
 ```
+
+---
+
+## 1a. Live-ingest bbox — the 876-row physical-six-state scope
+
+**Use exactly this `--bbox` for the live ingest (west,south,east,north):**
+
+```
+-124.9,31.3,-109.0,49.1
+```
+
+This is the value verified in the dry-run: WHERE + this envelope returns **876
+rows** (0 skipped, 0 errors), vs **877** for the ADMIN_ST-driven scope with no
+bbox.
+
+Why 876, not 877: `ADMIN_ST` is the *administering office*, not physical
+location, so a wider or purely ADMIN_ST-driven scope pulls in at least one
+out-of-region point — `Cunningham Gulch Dispersed Campsite 14`, which is
+`ADMIN_ST='CA'` but physically in Colorado near Silverton (lon −107.58, lat
+37.79); this bbox's east edge (−109.0) excludes it (confirmed: 0 of that row
+inside the envelope). The remaining 876 are the primitive-campsite points
+physically inside the six planning states.
+
+**Any future ingest run against this source must reuse this bbox** unless there
+is a deliberate reason to widen it. Nothing in `blm-rec.ts` or `manual.ts`
+hardcodes or enforces the 876-row scope — the bbox is a runtime `--bbox` flag
+(`resolveCorridorFilter(opts.bbox)`), so the scope decision lives with the
+operator's command, and this section is the only record of the intended value.
 
 ---
 
