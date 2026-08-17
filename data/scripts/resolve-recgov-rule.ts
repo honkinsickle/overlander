@@ -1,8 +1,12 @@
 /**
- * Deterministic recreation.gov-ID queue resolver (usfs-campground specific).
+ * Deterministic recreation.gov-ID queue resolver.
+ *
+ * Sources: defaults to usfs; widen with --sources <a,b,...> (e.g. usfs,nps).
+ * The recgov-id extraction and match logic are source-agnostic — only the
+ * pending-queue filter is parametrized.
  *
  * THE RULE — auto-confirm a pending place_match when:
- *   1. the usfs source_record payload references recreation.gov/camping/campgrounds/<id>
+ *   1. the source_record payload references recreation.gov/camping/campgrounds/<id>
  *   2. <id> resolves to a ridb source_record with external_id ridb:facility:<id>
  *   3. that ridb source_record is attached to the SAME master_place the pending row proposes
  * Surfaced but NEVER acted on:
@@ -10,7 +14,8 @@
  *   - not-in-corpus: <id> names a facility we haven't ingested
  *
  * MODES:
- *   (default) --dry-run   read-only. Classifies the full pending-usfs queue,
+ *   (default) --dry-run   read-only. Classifies the full pending queue (per
+ *                         --sources),
  *                         reports match counts, 20 samples, the per-MP
  *                         canonical_name/primary_category precedence simulation
  *                         (what recompute_master_place would rename), projected
@@ -43,7 +48,8 @@ interface Row {
   pm_id: string;
   sr_id: string;
   mp_id: string;            // master_place the pending row proposes
-  usfs_name: string;
+  source_id: string;        // the SR's source (usfs, nps, …)
+  usfs_name: string;        // SR name (field name kept for stability)
   category: string;
   recgov_ids: string[];
   resolved_mp: string | null; // MP the recgov id actually resolves to (via ridb)
@@ -66,7 +72,16 @@ function argVal(flag: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-function recgovIds(sr: { raw_payload?: unknown; normalized_payload?: unknown }): string[] {
+// --sources usfs,nps → ["usfs","nps"]. Defaults to ["usfs"] so existing
+// invocations (no flag) behave exactly as before.
+function argSources(): string[] {
+  const raw = argVal("--sources");
+  if (!raw) return ["usfs"];
+  const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return list.length ? list : ["usfs"];
+}
+
+export function recgovIds(sr: { raw_payload?: unknown; normalized_payload?: unknown }): string[] {
   const flat = JSON.stringify(sr.raw_payload ?? {}) + JSON.stringify(sr.normalized_payload ?? {});
   const ids = new Set<string>();
   for (const m of flat.matchAll(/recreation\.gov\\?\/camping\\?\/campgrounds\\?\/(\d{4,})/gi)) ids.add(m[1]);
@@ -109,7 +124,7 @@ function precedenceWinner(
   return { source_id: w.source_id, value: w.value! };
 }
 
-async function classifyQueue(db: ReturnType<typeof getDb>): Promise<Row[]> {
+async function classifyQueue(db: ReturnType<typeof getDb>, sources: string[]): Promise<Row[]> {
   // Global RIDB facility -> master_place maps.
   const byFac = new Map<string, string>();
   const ridbRows = await pageAll<{ external_id: string; master_place_id: string | null }>((f) =>
@@ -121,7 +136,7 @@ async function classifyQueue(db: ReturnType<typeof getDb>): Promise<Row[]> {
 
   const sel = "id,master_place_id,source_record!inner(id,source_id,inferred_category,name,raw_payload,normalized_payload)";
   const pm = await pageAll<Record<string, unknown>>((f) =>
-    db.from("place_match").select(sel).eq("status", "pending").eq("source_record.source_id", "usfs").order("id").range(f, f + 999));
+    db.from("place_match").select(sel).eq("status", "pending").in("source_record.source_id", sources).order("id").range(f, f + 999));
 
   const rows: Row[] = [];
   for (const r of pm) {
@@ -137,6 +152,7 @@ async function classifyQueue(db: ReturnType<typeof getDb>): Promise<Row[]> {
       pm_id: r.id as string,
       sr_id: sr.id as string,
       mp_id: mpId,
+      source_id: sr.source_id as string,
       usfs_name: sr.name as string,
       category: sr.inferred_category as string,
       recgov_ids: ids,
@@ -147,17 +163,34 @@ async function classifyQueue(db: ReturnType<typeof getDb>): Promise<Row[]> {
   return rows;
 }
 
-async function dryRun(db: ReturnType<typeof getDb>): Promise<void> {
-  const rows = await classifyQueue(db);
+async function dryRun(db: ReturnType<typeof getDb>, sources: string[]): Promise<void> {
+  const rows = await classifyQueue(db, sources);
   const matched = rows.filter((r) => r.outcome === "matched");
   const differentMp = rows.filter((r) => r.outcome === "different-mp");
   const notInCorpus = rows.filter((r) => r.outcome === "not-in-corpus");
 
-  console.log(`\n═══ RULE MATCH COUNTS (full pending-usfs queue: ${rows.length}) ═══`);
+  console.log(`\n═══ RULE MATCH COUNTS (full pending queue [${sources.join(",")}]: ${rows.length}) ═══`);
   console.log(`  matched          : ${matched.length}   (auto-confirm candidates)`);
   console.log(`  different-mp      : ${differentMp.length}   (surface only — likely mis-pairing)`);
   console.log(`  not-in-corpus     : ${notInCorpus.length}   (surface only — facility not ingested)`);
   console.log(`  no-recgov-id      : ${rows.filter((r) => r.outcome === "no-recgov-id").length}`);
+
+  // Per-source breakdown — printed only when the queue spans >1 source, so a
+  // default usfs-only run's output is byte-for-byte what it was before.
+  if (sources.length > 1) {
+    const order: Outcome[] = ["matched", "different-mp", "not-in-corpus", "no-recgov-id"];
+    const bySource = new Map<string, Record<Outcome, number>>();
+    for (const r of rows) {
+      const b = bySource.get(r.source_id) ?? { matched: 0, "different-mp": 0, "not-in-corpus": 0, "no-recgov-id": 0 };
+      b[r.outcome] += 1;
+      bySource.set(r.source_id, b);
+    }
+    console.log(`\n  ── by source ──`);
+    for (const src of [...bySource.keys()].sort()) {
+      const b = bySource.get(src)!;
+      console.log(`    ${src.padEnd(6)} ${order.map((o) => `${o} ${b[o]}`).join("  ")}`);
+    }
+  }
 
   // ── RIDB facility names + affected MP state + linked SRs, batched. ──
   const facIds = [...new Set(matched.flatMap((r) => r.recgov_ids))];
@@ -186,13 +219,13 @@ async function dryRun(db: ReturnType<typeof getDb>): Promise<void> {
     }
   }
   // The usfs SRs being added (name/payload) — batch by sr_id.
-  const srAdd = new Map<string, { cname: string | null; pcat: string | null; is_active: boolean }>();
+  const srAdd = new Map<string, { source_id: string; quality: number; cname: string | null; pcat: string | null; is_active: boolean }>();
   const srIds = matched.map((r) => r.sr_id);
   for (let i = 0; i < srIds.length; i += 100) {
-    const r = await db.from("source_record").select("id,is_active,normalized_payload").in("id", srIds.slice(i, i + 100));
-    for (const x of (r.data ?? []) as { id: string; is_active: boolean; normalized_payload: Record<string, unknown> | null }[]) {
+    const r = await db.from("source_record").select("id,source_id,source_quality_score,is_active,normalized_payload").in("id", srIds.slice(i, i + 100));
+    for (const x of (r.data ?? []) as { id: string; source_id: string; source_quality_score: number; is_active: boolean; normalized_payload: Record<string, unknown> | null }[]) {
       const np = x.normalized_payload ?? {};
-      srAdd.set(x.id, { cname: (np.canonical_name as string) ?? null, pcat: (np.primary_category as string) ?? null, is_active: x.is_active });
+      srAdd.set(x.id, { source_id: x.source_id, quality: x.source_quality_score, cname: (np.canonical_name as string) ?? null, pcat: (np.primary_category as string) ?? null, is_active: x.is_active });
     }
   }
 
@@ -220,7 +253,7 @@ async function dryRun(db: ReturnType<typeof getDb>): Promise<void> {
     const added = addedSrIds.map((id) => srAdd.get(id)).filter((x): x is NonNullable<typeof x> => !!x);
     const all = [
       ...cur.map((s) => ({ source_id: s.source_id, quality: s.quality, cname: s.cname, pcat: s.pcat })),
-      ...added.map((s) => ({ source_id: "usfs", quality: 0.9, cname: s.cname, pcat: s.pcat })),
+      ...added.map((s) => ({ source_id: s.source_id, quality: s.quality, cname: s.cname, pcat: s.pcat })),
     ];
     const cWin = precedenceWinner(all.map((s) => ({ source_id: s.source_id, quality: s.quality, value: s.cname })), precCname);
     const pWin = precedenceWinner(all.map((s) => ({ source_id: s.source_id, quality: s.quality, value: s.pcat })), precPcat);
@@ -234,7 +267,10 @@ async function dryRun(db: ReturnType<typeof getDb>): Promise<void> {
   console.log(`\n═══ PRECEDENCE IMPACT (recompute_master_place under field_precedence) ═══`);
   console.log(`  canonical_name / primary_category CHANGES: ${renames.length}`);
   for (const c of renames) console.log(`    MP ${c.mp}  ${c.field}:  "${c.before}"  →  "${c.after}"`);
-  if (renames.length === 0) console.log(`    (none — usfs ties ridb on canonical_name@pri3 and loses on source_id ASC; usfs has no primary_category precedence row)`);
+  if (renames.length === 0) console.log(
+    sources.length === 1 && sources[0] === "usfs"
+      ? `    (none — usfs ties ridb on canonical_name@pri3 and loses on source_id ASC; usfs has no primary_category precedence row)`
+      : `    (none — no added SR outranks the current field winner under field_precedence)`);
 
   console.log(`\n═══ PROJECTED source_count on affected MPs (${counts.length} distinct MPs) ═══`);
   counts.sort((a, b) => b.projected - a.projected);
@@ -261,8 +297,8 @@ async function dryRun(db: ReturnType<typeof getDb>): Promise<void> {
   console.log(`\n(DRY RUN — no writes. Migration 20260817120000 is NOT applied yet.)`);
 }
 
-async function apply(db: ReturnType<typeof getDb>, tag: string, limit: number | undefined, chunk: number): Promise<void> {
-  const rows = (await classifyQueue(db)).filter((r) => r.outcome === "matched");
+async function apply(db: ReturnType<typeof getDb>, tag: string, limit: number | undefined, chunk: number, sources: string[]): Promise<void> {
+  const rows = (await classifyQueue(db, sources)).filter((r) => r.outcome === "matched");
   const target = limit ? rows.slice(0, limit) : rows;
   console.log(`[apply] tag=${tag}  matched=${rows.length}  applying=${target.length}  chunk=${chunk}`);
 
@@ -379,6 +415,7 @@ async function main(): Promise<void> {
   if (ref !== TEST_REF) throw new Error(`Refusing: not TEST (${ref})`);
   const chunk = Number(argVal("--chunk") ?? 25);
   const limit = argVal("--limit") ? Number(argVal("--limit")) : undefined;
+  const sources = argSources();
 
   if (process.argv.includes("--undo")) {
     const tag = argVal("--undo");
@@ -387,10 +424,14 @@ async function main(): Promise<void> {
   } else if (process.argv.includes("--apply")) {
     const tag = argVal("--tag");
     if (!tag) throw new Error("--apply requires --tag <tag>");
-    await apply(db, tag, limit, chunk);
+    await apply(db, tag, limit, chunk, sources);
   } else {
-    console.log(`[env] TEST ${ref}  (DRY RUN)  ${new Date().toISOString()}`);
-    await dryRun(db);
+    console.log(`[env] TEST ${ref}  (DRY RUN)  sources=[${sources.join(",")}]  ${new Date().toISOString()}`);
+    await dryRun(db, sources);
   }
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+// CLI entry only — guard so the module can be imported (e.g. by tests) without
+// executing main(). Mirrors the ingester pattern in ingestion/sources/nps.ts.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}
