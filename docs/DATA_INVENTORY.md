@@ -88,6 +88,32 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Re-measured 2026-08-17 `[queried TEST, read-only]` — SUPERSEDES the
+> 2026-08-16 box below for totals.** All four USFS categories materialized live
+> this session; the recreation.gov-id queue rule confirmed 370 pending campground
+> rows via the new `resolve_place_match` RPC (migration `20260817120000`, **TEST
+> only**). No PROD touched. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `master_place` total | **150,844** (149,385 → +1,459 from the three materializes) |
+> | `source_record` total (all / active) | **159,869 / 159,863** |
+> | `place_match` pending (manual_review), corpus-wide | **5,745** (blended_residual 4,979 · close_nameless 325 · name_dominant_low_conf 441) |
+>
+> **`source_record` by `source_id` (active):** osm **109,615** · padus **37,701** ·
+> usfs **6,324** · ridb **6,013** · google_resolved 122 · nps 83 · google 5.
+> **usfs 6,324** = trailhead 3,041 · campground 2,312 · picnic_area 570 ·
+> dispersed_camping 401, now **5,228 linked / 1,096 unlinked** (+6 legacy
+> `is_active=false`). Pending usfs by category: campground 572 · trailhead 440 ·
+> picnic 50 · dispersed 35.
+>
+> **Queue write provenance:** 370 rows carry `resolved_by='rule:recgov-id:full0817'`
+> (confirmed by the recgov-id rule). Reversal snapshot on record outside the repo:
+> `~/.config/overlander/queue-snapshots/recgov-full0817.jsonl`. The 2026-08-16 code
+> (USFS ingester, matcher floor, dry-run tooling) has since **merged to `main`**
+> (#223/#224); the recgov rule + RPC are in **OPEN PR #230**, TEST data live, code
+> not yet on `main`.
+
 > **⚠️ Re-measured 2026-08-16 `[queried TEST, read-only]` — SUPERSEDES the
 > 2026-08-14 box below for totals.** The PAD-US six-state (Fee_Managers) and
 > USFS `EDW_RecInfraRecreationSites_02` campaigns completed this session —
