@@ -12,6 +12,63 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-17
+
+- **All four USFS categories materialized live on TEST.** Picnic (570 SR) +
+  dispersed (401 SR) ran, then campground (2,312 SR): **715 new_master_place +
+  655 auto_link + 942 manual_review** `[handoff, unverified — split not isolated
+  this session; the three sum to the measured 2,312]`. Corpus **150,844
+  master_place** (+1,459), queue **5,745** (blended_residual 4,979 · close_nameless
+  325 · **name_dominant_low_conf 0 → 441**) `[queried TEST 2026-08-17]`. The floor's
+  low-conf cluster is now visible in the queue for the first time.
+- **LLM place-pair adjudication calibration — not usable unsupervised** `[handoff,
+  unverified — measured this session, not re-run]`. 60 pairs, 3 groups. **No-web run
+  ($0.26):** the model abstained just **1 of 60** and treated copied federal
+  descriptions (USFS text mirrored into a ridb record) as **identity evidence** —
+  a same-text ≠ same-place failure. **Web-enabled re-run** confirmed the
+  FS↔recreation.gov link is real but cost **$0.40/pair** and **exhausted API
+  credits after 17 pairs** — infeasible at queue scale.
+- **The deterministic finding that replaced the LLM: the recreation.gov facility
+  id is already embedded in the USFS INFRA payload text.** No fetch, no model —
+  a regex over stored data. **$0, ~40s for the full queue.** The fetch path the
+  earlier design assumed is a dead end (below).
+- **`resolve_place_match` / `unresolve_place_match` RPCs** (migration
+  `20260817120000`, **TEST only**). The confirm path **did not exist**:
+  `apply_match_outcomes` is INSERT-only and its `manual_review` branch leaves the
+  source_record unlinked, so confirming an existing pending row had no path
+  (re-insert collides with `unique(source_record_id, master_place_id)`).
+  `resolve_place_match` links the SR + flips to `confirmed` + tags `resolved_by` +
+  recomputes; `unresolve_place_match` is the exact inverse for snapshot-based undo.
+  Neither deletes. ADR `2026-08-17-resolve-place-match-and-recgov-id-rule.md`.
+- **Recgov-id rule applied as tag `full0817`: 370 campground rows confirmed on
+  exact facility-id match. 0 failures, 0 renames, 0 recategorizations, max
+  source_count 6** `[queried TEST 2026-08-17]`. **The 0 renames was PROVABLE from
+  `field_precedence` before it was measured** — usfs ties ridb at `canonical_name`
+  priority 3 / quality 0.9 and loses the tie on `source_id ASC`; usfs has no
+  `primary_category` precedence row at all. Undo verified **exact** on a 2-row round
+  trip before the full run. Chunked 25 with health checks (73–181 ms, flat).
+- **Surfaced and untouched:** **58** rows where the payload id resolves to a
+  *different* master_place (mis-pairings); **28** naming recreation.gov facilities
+  not in the corpus. PR **#230** open, commit `45e6ede`, not merged.
+- **Findings worth keeping (not just events):** (1) **The recgov bridge is a
+  developed-campground feature.** Payload-embedded ids: campground **921/2,312
+  (40%)**, but trailhead 5/3,041 · picnic 21/570 · dispersed **0/407** — only **26
+  of 4,018** non-campground SRs carry any id `[queried TEST 2026-08-17]`. Those rows
+  have no identity evidence at any price. (2) **The stored `usda_portal_url` is a
+  dead legacy link** — 301s to a generic forest index and drops the recid; any
+  future design assuming it resolves is wrong `[measured this session]`. (3)
+  **`fs.usda.gov` 403-blocks non-browser user agents** `[measured this session]`.
+  (4) **Duplicate master_places exist that the matcher never proposed as pairs** —
+  the recgov-id rule is a *high-precision* duplicate detector (same facility id →
+  two MPs = one place split in two); confirmed cases Smiling River Campground,
+  Allingham, South Shore, East Kachess Group Site `[queried TEST 2026-08-17]`. A
+  corpus-wide count is **not** cleanly obtainable by name (brands + geographically
+  distinct same-named campgrounds confound it); a real count later would come from
+  the recgov-id path itself. Distinct from the queue — a corpus problem.
+- **Merge note:** the 2026-08-16 code PRs #223 (usfs + scripts) and #224 (matcher
+  floor + dry-run tooling) **merged to `main`** since that entry was written (the
+  entry's "still OPEN" line is historical, not edited).
+
 ## 2026-08-16
 
 - **PAD-US six-state campaign COMPLETE on TEST.** Fee_Managers endpoint, all six

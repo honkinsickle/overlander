@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-16 (⚠ newest section is TEST-corpus + open-PR work; the matcher floor and USFS ingester are NOT on `main` yet — PRs #223/#224 open)
+# STATE — `main` · 2026-08-17 (⚠ newest section is TEST-corpus + open-PR work; the recgov queue rule is in OPEN PR #230. The 2026-08-16 matcher floor + USFS ingester HAVE since merged — PRs #223/#224 are on `main`.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -74,7 +74,60 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-16 — PAD-US + USFS six-state on TEST; `name_dominant` 0.70 floor (code in OPEN PRs)
+## 2026-08-17 — all four USFS categories materialized on TEST; `resolve_place_match` RPC + recreation.gov-id queue rule (OPEN PR #230)
+
+Newest truth. **All counts re-measured against TEST read-only, 2026-08-17**
+`[queried TEST]`, apples-to-apples on `is_active = true`. **No PROD writes this
+session.** The migration `20260817120000` is applied to **TEST only** — PROD is a
+separate authorized step. Code is in **OPEN** PR #230 (`45e6ede`), not merged.
+
+**TEST corpus position `[queried TEST 2026-08-17]`:**
+
+| metric | value |
+|---|--:|
+| `master_place` | **150,844** (149,385 → +1,459 from the three materializes) |
+| `source_record` (active) | **159,863** |
+| — osm / padus / usfs / ridb / google_resolved / nps / google | 109,615 / 37,701 / 6,324 / 6,013 / 122 / 83 / 5 |
+| — usfs active by category | campground 2,312 · trailhead 3,041 · picnic 570 · dispersed 401 |
+| — usfs SR linked / unlinked | **5,228 / 1,096** |
+| `place_match` pending (`manual_review` queue) | **5,745** (blended_residual 4,979 · close_nameless 325 · name_dominant_low_conf 441) |
+| — pending usfs by category | campground 572 · trailhead 440 · picnic 50 · dispersed 35 |
+
+**All four USFS categories now materialized live on TEST.** Since 2026-08-16:
+picnic (570 SR) + dispersed (401 SR) materialized, then **campground (2,312 SR):
+715 new_master_place + 655 auto_link + 942 manual_review** `[handoff, unverified
+— split not isolated this session; the three sum to the measured 2,312]`. The
+floor's `name_dominant_low_conf` cluster went **0 → 441** as a result (the visible
+half of what the floor converts from silent merges to review rows). The
+"95% osm" queue framing is now stale: `blended_residual` is **87%** of the 5,745,
+osm-specifically **67%**.
+
+**`resolve_place_match` / `unresolve_place_match` RPCs (migration
+`20260817120000`, TEST only).** `apply_match_outcomes` is INSERT-only and its
+`manual_review` branch leaves the source_record unlinked, so **no path to CONFIRM
+an existing pending row existed** (re-inserting collides with
+`unique(source_record_id, master_place_id)`). `resolve_place_match` links the SR,
+flips status to `confirmed`, tags `resolved_by`, recomputes the MP;
+`unresolve_place_match` is the exact inverse for snapshot-based undo. Neither
+deletes rows. ADR: `docs/decisions/2026-08-17-resolve-place-match-and-recgov-id-rule.md`.
+
+**Deterministic recreation.gov-id queue rule — applied as tag `full0817`.** The
+USFS INFRA payload text already embeds the `recreation.gov/camping/campgrounds/<id>`
+facility id for developed campgrounds (no fetch needed). The rule auto-confirms a
+pending usfs campground row when that id resolves to a `ridb` record
+(`external_id ridb:facility:<id>`) on the **same** master_place the pending row
+proposes. **370 confirmed, 0 failures, 0 renames, 0 recategorizations, max
+source_count 6** `[queried TEST 2026-08-17]`. Undo verified **exact** on a 2-row
+round trip (canonical_name, primary_category, source_count, pending status all
+restored) before the full run. Snapshot on record:
+`~/.config/overlander/queue-snapshots/recgov-full0817.jsonl`.
+
+**Surfaced but NOT touched (in the queue, pending):** **58** rows where the
+payload id resolves to a *different* master_place (mis-pairings — several are
+duplicate master_places sharing a name); **28** rows naming recreation.gov
+facilities not in the corpus. Handling design is in `BACKLOG.md`.
+
+## 2026-08-16 — PAD-US + USFS six-state on TEST; `name_dominant` 0.70 floor (~~code in OPEN PRs~~ **PRs #223/#224 MERGED to `main` since this section was written — 2026-08-17**)
 
 Newest truth. **All counts re-measured against TEST read-only, 2026-08-16**
 `[queried TEST]`. **No PROD writes this session.** Two things to hold separately:
@@ -113,10 +166,11 @@ search-excluded — the corpus-weight product question is OPEN in `BACKLOG.md`.
 `[queried TEST 2026-08-16]` (the 630 auto_link / 1,971 new_master_place split is
 `[handoff, unverified]` — only the 2,601 total and the 3,723/3,283 unlinked
 figures were re-measured); the residual 440 = 3,723 unlinked − 3,283
-unmaterialized. **Campground PARKED**
+unmaterialized. ~~**Campground PARKED**
 (behind the matcher floor + queue capacity); **picnic (570) + dispersed (401)
 dry-ran clean, not materialized.** usfs unlinked = 3,723 (440 trailhead reviews +
-3,283 unmaterialized).
+3,283 unmaterialized).~~ **SUPERSEDED 2026-08-17 — all four categories now
+materialized; usfs unlinked = 1,096. See the 2026-08-17 section.**
 
 **Matcher `name_dominant` now gated on `combined_confidence` at 0.70** (PR #227 →
 stacked into OPEN #224; `a17bce8` + routing test `208bbae`). Below-floor →
@@ -127,8 +181,10 @@ Also in OPEN #224: `materialize --dry-run-report` (per-match JSONL; matcher
 untouched, byte-identical counts). Measurement scripts in OPEN #223.
 
 **Manual-review queue = 5,089, 95% osm `blended_residual`.** A triage framework was
-**scoped, not built** (`BACKLOG.md`) — it is now the blocker on a live campground
-materialize, not the matcher.
+**scoped, not built** (`BACKLOG.md`) — ~~it is now the blocker on a live campground
+materialize, not the matcher.~~ **SUPERSEDED 2026-08-17 — campground materialized
+anyway; queue now 5,745. The first deterministic bulk-clearing mechanism (the
+recgov-id rule) shipped and cleared 370. See the 2026-08-17 section.**
 
 **One incident `[handoff, unverified — not observed by this agent]`:** TEST
 (Micro `t4g.micro`) went Unhealthy for ~2h during a WA PAD-US materialize —

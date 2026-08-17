@@ -37,11 +37,15 @@ means six `--bbox` runs (or a corridor polygon) for either.
   deactivated (`is_active=false`; **5 need `recompute_master_place`** on a
   future run `[handoff, unverified]`). **Trailhead materialized live** —
   2,601 linked `[queried TEST]` (the 630 auto_link / 1,971 new_master_place
-  split is `[handoff, unverified]`); 440 manual_review. **Campground
+  split is `[handoff, unverified]`); 440 manual_review. ~~**Campground
   PARKED** behind the matcher `name_dominant` floor + review-queue
   capacity; **picnic (570) + dispersed (401) dry-ran clean, not yet
-  materialized.** Code in OPEN PR #223 (via #226). BLM still has no
-  ingester.
+  materialized.**~~ **SUPERSEDED / DONE 2026-08-17 — all four categories
+  materialized live on TEST.** picnic + dispersed ran, then campground
+  (2,312 SR: **715 new_master_place + 655 auto_link + 942 manual_review**
+  `[handoff, unverified — the three sum to the measured 2,312]`). usfs
+  linked/unlinked now **5,228 / 1,096** `[queried TEST 2026-08-17]`. Code
+  in PR #223 (via #226) **merged to `main`**. BLM still has no ingester.
 - **~~PAD-US six-state ingest — massive, product decision pending.~~**
   **DONE 2026-08-14 (TEST)** — Fee_Managers endpoint, all six states
   ingested + materialized on TEST. **35,859 padus source_records** written
@@ -282,38 +286,86 @@ workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
 
-## Manual-review queue — no processing framework; triage scoped, not built (2026-08-16)
+## Manual-review queue — first bulk-clearing mechanism shipped; framework still not built (updated 2026-08-17)
 
-**5,089 pending `place_match` rows** `[queried TEST 2026-08-16]` — by method
-`blended_residual` 4,856 (95%) + `close_nameless` 233; by source osm 3,848 (76%),
-usfs 441, padus 420, ridb 362, nps 17. **There is no tool to work this queue**,
-and the `name_dominant` floor (above) converts silent merges into review rows —
-the campground chunk alone would add ~803 (`name_dominant_low_conf`), taking it to
-~6,034. **This is now the blocker on a live campground materialize, not the matcher.**
+**5,745 pending `place_match` rows** `[queried TEST 2026-08-17]` — by method
+`blended_residual` 4,979 (87%) · `close_nameless` 325 · `name_dominant_low_conf`
+441 (the floor's cluster, 0 → 441 after the three USFS materializes); osm is
+~67% of the pending mass. ~~It is now the blocker on a live campground
+materialize~~ **SUPERSEDED 2026-08-17 — campground materialized anyway, and the
+first deterministic bulk-clearing mechanism shipped: the recreation.gov-id rule
+(below) confirmed 370 campground rows.** A general filter-and-bulk-act framework
+is **still not built.**
 
-A triage framework was **scoped this session, not built.** Key findings from the
-scoping:
+**Two claims from the 2026-08-16 scoping are now CORRECTED (both measured false
+this session):**
 
-- **Partition by `match_method` first** — method ≈ decision-shape. The osm
-  `blended_residual` mass (placeholder/dispersed collisions) and the incoming
-  federal `name_dominant_low_conf` cluster (identical names at distance) need
-  different playbooks, not one universal approver.
-- **The `name_dominant_low_conf` cluster is largely bulk-decidable**, not
-  row-by-row: on the campground preview, 66% carried an identical normalized name
-  (name adds no discriminating signal → decision collapses to distance × category ×
-  target-multiplicity), 52% sat at conf exactly 0.60 (≥100 m clip), 7% were
-  cross-category collisions (campground→facility). ~65–75% clearable by a few
-  filtered bulk actions; ~25–35% need per-row judgment.
+- ~~**Write-back already exists** — `apply_match_outcomes` handles
+  confirm→auto_link.~~ **WRONG.** `apply_match_outcomes` is **INSERT-only**; its
+  `manual_review` branch leaves the source_record unlinked, so **confirming an
+  existing pending row had no path at all** (re-insert collides with
+  `unique(source_record_id, master_place_id)`). This session **built** that path —
+  `resolve_place_match` / `unresolve_place_match` (migration `20260817120000`, TEST
+  only; ADR `2026-08-17-…`). Any framework builds on those, not on
+  `apply_match_outcomes`.
+- ~~**USFS↔RIDB share no identifier, so external lookup is the only ground
+  truth.**~~ **PARTIALLY REFUTED for developed campgrounds.** The USFS INFRA
+  payload text embeds the `recreation.gov/camping/campgrounds/<id>` facility id for
+  **921 / 2,312 campground SRs (40%)** `[queried TEST 2026-08-17]` — a deterministic
+  identifier bridge, no external fetch. It does **not** generalize: trailhead
+  5/3,041 · picnic 21/570 · dispersed 0/407 (only **26 / 4,018** non-campground SRs
+  carry any id), so those rows still have no evidence at any price.
+
+**Shipped — the recreation.gov-id rule (`data/scripts/resolve-recgov-rule.ts`,
+PR #230).** Auto-confirms a pending usfs campground row when the payload's
+recreation.gov id resolves to a `ridb` record (`external_id ridb:facility:<id>`)
+on the **same** master_place the pending row proposes. Applied as tag `full0817`:
+**370 confirmed, 0 failures, 0 renames, 0 recategorizations, max source_count 6.**
+Snapshot-based undo verified exact. This is the model for the queue: not a one-row
+approver — a deterministic rule that bulk-clears an evidence-backed slice.
+
+**Surfaced by the same rule, NOT acted on — needs handling design:**
+- **58 different-mp rows** — the payload id resolves to a *different* master_place
+  than the matcher proposed. These are likely mis-pairings or duplicate MPs (see
+  the duplicate-master_place item below); a rule to *re-point* the SR (or merge the
+  two MPs) is a separate design from confirm-in-place.
+- **28 not-in-corpus rows** — the id names a recreation.gov facility we have not
+  ingested. A RIDB-coverage gap, not a match decision.
+
+**Still-valid framework findings from the 2026-08-16 scoping** (carried forward):
+- **Partition by `match_method` first** — method ≈ decision-shape; the osm
+  `blended_residual` mass and the federal `name_dominant_low_conf` cluster need
+  different playbooks.
+- **The `name_dominant_low_conf` cluster is largely bulk-decidable** — on the
+  campground preview, 66% identical normalized name, 52% at conf exactly 0.60
+  (≥100 m clip), 7% cross-category. ~65–75% clearable by filtered bulk actions.
 - **Per-row, a reviewer needs the pair + scores + a map** (both pins + the MP's
-  other-source pins) — distance alone can't resolve "same complex vs adjacent
-  feature," and USFS↔RIDB share no identifier, so external lookup (fs.usda.gov ↔
-  recreation.gov) is the only ground truth. The framework links out; it doesn't
-  resolve.
-- **Write-back already exists** — `apply_match_outcomes` handles confirm→auto_link
-  and reject→new_master_place. The framework is a read/filter/decide layer over it.
+  other-source pins). The framework links out; it doesn't resolve.
 
-Not a one-row approver — a filter-and-bulk-act queue. Sizing to "the campground
-803" undersizes the real queue 6×.
+## Duplicate master_places the matcher never paired (2026-08-17)
+
+Distinct from the review queue — a **corpus** problem. The recreation.gov-id rule
+surfaced master_places that are the **same physical place split into two MPs**,
+which the matcher never proposed as a candidate pair (so they never entered the
+queue). Confirmed cases `[queried TEST 2026-08-17]`: **Smiling River Campground,
+Allingham Campground, South Shore Campground, East Kachess Group Site** — each a
+pending usfs row proposing one MP while the payload's recreation.gov id resolves to
+a *different* MP carrying the exact same canonical_name.
+
+**How widespread is unmeasured, and cannot be cleanly counted by name.** A
+name-collision count is badly confounded: it is dominated by legitimate
+multi-location brands (Chevron, Tesla Supercharger, Shell) and by geographically
+**distinct** same-named campgrounds across different forests (e.g. several real
+"Riverside Campground"s). Same-name ≠ same-place. **No number is recorded here on
+purpose** — a name-based figure would misrepresent the problem.
+
+**The one path to a real count later:** the recgov-id mechanism is itself a
+*high-precision* duplicate detector — a shared external facility id resolving to
+two MPs is strong evidence they are one place, independent of name. A future pass
+could enumerate true duplicates by walking shared external identifiers (recreation.gov
+facility id; and, where they exist, other cross-source ids), optionally confirmed by
+co-location. That is the honest way to size and then resolve this — not a
+`GROUP BY canonical_name`.
 
 ## Corpus quality — open questions from the merge-quality audit (2026-08-13)
 

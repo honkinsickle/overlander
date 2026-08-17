@@ -5,12 +5,29 @@ Week 3 work. Stubbed for now.
 Will contain:
 - `matcher.ts` — deterministic candidate scoring (Jaro-Winkler name + distance + category compat)
 - `promote.ts` — `place_match` → `master_place` linkage
-- `audit-cli.ts` — manual review CLI (`pending`, `show`, `confirm`, `reject`, `merge`, `coverage`)
+- ~~`audit-cli.ts` — manual review CLI (`pending`, `show`, `confirm`, `reject`, `merge`, `coverage`)~~ **STALE REFERENCE (verified 2026-08-17): `audit-cli.ts` does NOT exist in the repo or in git history — it was planned here and never built. This is a pre-existing aspirational line in the original "Will contain" list, not something that broke now. There is no manual-review CLI; the only queue-resolution tooling that exists is the deterministic `resolve-recgov-rule.ts` (see the apply-layer note below).**
 - `tests/fixtures/` — known good/bad match pairs
 
 See `phase-1-build-spec.md` section 9.
 
 ---
+
+## Apply layer — how a match decision becomes a write (updated 2026-08-17)
+
+- **`apply_match_outcomes(jsonb)`** — the batch apply RPC `promote.ts` calls. It is
+  **INSERT-only**: it handles `new_master_place`, `auto_link`, `amenity_rollup`, and
+  `manual_review` (which INSERTs a *pending* row and leaves the source_record
+  **unlinked**). It has **no branch that confirms an already-pending row**.
+- **`resolve_place_match(pm_id, resolved_by)` / `unresolve_place_match(pm_id,
+  prior_sr_master_place_id)`** (migration `20260817120000`, on TEST) — the missing
+  **confirm** path and its exact inverse. `resolve` links the source_record, flips
+  `status` to `confirmed`, tags `resolved_by`, and calls `recompute_master_place`;
+  `unresolve` restores the SR link to its snapshotted prior value, flips back to
+  `pending`, nulls the resolver fields, recomputes. Neither deletes rows (audit
+  trail survives confirm/undo). Confirming a pending row via `apply_match_outcomes`
+  is impossible — re-inserting collides with `unique(source_record_id,
+  master_place_id)`. First user: `data/scripts/resolve-recgov-rule.ts` (the
+  recreation.gov-id rule). ADR `docs/decisions/2026-08-17-resolve-place-match-and-recgov-id-rule.md`.
 
 ## Spec corrections (canonical from week-1 smoke tests)
 
