@@ -93,9 +93,13 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/usfs.ts");
       return mod.default;
     }
+    case "blm": {
+      const mod = await import("./sources/blm-rec.ts");
+      return mod.default;
+    }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm`,
       );
   }
 }
