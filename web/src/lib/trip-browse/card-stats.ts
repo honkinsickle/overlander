@@ -166,22 +166,39 @@ const AMENITY_LABELS: Record<string, string> = {
   picnic: "Picnic Area",
 };
 
-/** Corpus amenities (a boolean-keyed presence map) → display label chips.
- *  Included only when the value is exactly `true` — never renders "No X"
- *  for a false or absent key. Keys outside AMENITY_LABELS are ignored: the
- *  merged `amenities` field can currently also carry NPS's raw pass-through
- *  shape (arbitrary keys, "Yes"/"No - seasonal" string values — see
- *  coerceCampgroundAmenities in data/ingestion/sources/nps.ts) or bc_parks'
- *  {camping_types, facilities} array shape, both of which resolve ABOVE osm
- *  in field_precedence today. Neither is recognized here; this only
- *  translates the known 6-key boolean shape. */
+/** Optional per-category caveat suffix. Written only by
+ *  coerceCampgroundAmenities (data/ingestion/sources/nps.ts) via a sibling
+ *  `${key}_qualifier` key — OSM's amenities never carry one. REVISES the
+ *  "NPS shape is unrecognized, only produces empty output" note this
+ *  function's docstring used to carry: NPS now normalizes to this same
+ *  canonical shape upstream, so its qualified values reach here too.
+ *  "year round" is the unmarked/default case and writes no qualifier key at
+ *  all (see coerceCampgroundAmenities) — only these two values currently
+ *  exist. Copy choice, not an engineering one. */
+const QUALIFIER_SUFFIXES: Record<string, string> = {
+  seasonal: " (seasonal)",
+  non_potable: " (non-potable)",
+};
+
+/** Corpus amenities (a boolean-keyed presence map, optionally with a sibling
+ *  `${key}_qualifier` string) → display label chips. A category is included
+ *  only when its value is exactly `true` — never renders "No X" for a false
+ *  or absent key. Keys outside AMENITY_LABELS are ignored: bc_parks'
+ *  {camping_types, facilities} array shape (out of scope, inert on TEST
+ *  today) resolves above osm in field_precedence and isn't recognized here
+ *  — this only translates the canonical shape normalizeOsm() and
+ *  coerceCampgroundAmenities both produce. */
 function amenitiesToLabels(
   amenities: Record<string, unknown> | null | undefined,
 ): string[] {
   if (!amenities) return [];
   return Object.entries(AMENITY_LABELS)
     .filter(([key]) => amenities[key] === true)
-    .map(([, label]) => label);
+    .map(([key, label]) => {
+      const qualifier = amenities[`${key}_qualifier`];
+      const suffix = typeof qualifier === "string" ? QUALIFIER_SUFFIXES[qualifier] : undefined;
+      return suffix ? `${label}${suffix}` : label;
+    });
 }
 
 /** Display labels for known provenance source identifiers. Keyed by the

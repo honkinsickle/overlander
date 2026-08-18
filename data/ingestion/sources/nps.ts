@@ -330,18 +330,123 @@ function normalizeCampground(c: Campground): Record<string, unknown> {
     overlander_tags: ["federal_land", "nps"],
     contact: Object.keys(contact).length ? contact : null,
     // The NPS API returns extremely rich amenity/accessibility/fees data —
-    // for Phase 1 we keep just the raw shape inside raw_payload and surface
-    // a flat boolean amenities map. A second-pass normalizer can refine.
+    // the full raw shape stays in raw_payload; coerceCampgroundAmenities is
+    // the second-pass normalizer down to the canonical shape (see its own
+    // docstring for the key mapping + what's deliberately dropped).
     amenities: c.amenities ? coerceCampgroundAmenities(c.amenities) : null,
     access: c.accessibility ? compact({ raw: c.accessibility }) : null,
     hours: c.operatingHours ? { raw: c.operatingHours } : null,
   };
 }
 
-function coerceCampgroundAmenities(raw: Record<string, unknown>): Record<string, unknown> {
-  // NPS amenity values are strings like "Yes", "No - seasonal", "Yes - seasonal", "None".
-  // Keep the raw mapping; downstream can interpret.
-  return raw;
+// ───── Amenities normalization: NPS's 14-key raw shape → canonical shape ──
+//
+// Canonical shape mirrors normalizeOsm()'s boolean presence map (osm.ts): a
+// category key is written only when present (`true`; `false` is never
+// written, absent means "no signal"). Extended here with an OPTIONAL sibling
+// `${category}_qualifier` key rather than widening the value type to a union
+// — every existing boolean-only consumer (osm.ts's own output,
+// amenitiesToLabels's original `=== true` check) keeps working unchanged for
+// non-qualified values.
+//
+// Of NPS's 14 raw keys, only 4 correspond to an existing canonical category:
+// dumpStation, showers, toilets, potableWater → dump_station, shower,
+// toilet, water. The other 10 (campStore, laundry, cellPhoneReception,
+// internetConnectivity, iceAvailableForSale, staffOrVolunteerHostOnsite,
+// amphitheater, foodStorageLockers, firewoodForSale, trashRecyclingCollection)
+// have no OSM-derived equivalent and are dropped here — a scope decision,
+// not silent: neither firewoodForSale (selling firewood, a retail amenity)
+// nor trashRecyclingCollection (a pickup service) is the same concept as
+// OSM's fire_ring (a physical fire-pit fixture), so fire_ring stays
+// OSM-only rather than being force-mapped. Reversible later by extending
+// this map + card-stats.ts's AMENITY_LABELS together.
+
+/** The single-element negative marker each array-valued NPS key packs
+ *  instead of an empty array — array non-emptiness is NOT a presence
+ *  signal by itself; these three strings must be filtered out first. */
+const NEGATIVE_MARKERS: Record<string, string> = {
+  showers: "None",
+  toilets: "No Toilets",
+  potableWater: "No water",
+};
+
+type ParsedAmenity = { present: boolean; qualifier?: "seasonal" | "non_potable" };
+
+/** The 11 scalar NPS keys take exactly one of 4 values (verified against all
+ *  221 real records on TEST): "No", "" (blank — NPS gave no answer),
+ *  "Yes - seasonal", "Yes - year round". Only "seasonal" gets a qualifier —
+ *  year-round is the unmarked/default case, same as a plain presence chip. */
+function parseScalarAmenity(value: unknown): ParsedAmenity {
+  if (value === "Yes - seasonal") return { present: true, qualifier: "seasonal" };
+  if (value === "Yes - year round") return { present: true };
+  return { present: false }; // "No", "" (blank), or any unrecognized value
+}
+
+/** The 3 array-valued NPS keys (showers, toilets, potableWater) describe
+ *  qualified facility types (e.g. "Flush Toilets - seasonal"), or pack an
+ *  explicit negative into the array's sole entry. `npsKey` selects which
+ *  negative marker to filter out. */
+function parseArrayAmenity(
+  value: unknown,
+  npsKey: keyof typeof NEGATIVE_MARKERS,
+): ParsedAmenity {
+  if (!Array.isArray(value) || value.length === 0) return { present: false };
+  const entries = value.filter((v): v is string => typeof v === "string");
+
+  // potableWater-specific: NPS's own API splits the single sentence "Water,
+  // but not potable" into two array elements on 5 records — an upstream
+  // artifact, not ours to reproduce. Water IS physically present, just
+  // unsafe to drink, so this is present=true with a distinct qualifier, not
+  // dropped — a judgment call (flagged in the report) since it doesn't fit
+  // the seasonal-qualifier pattern.
+  if (npsKey === "potableWater" && entries.some((v) => v.toLowerCase().includes("not potable"))) {
+    return { present: true, qualifier: "non_potable" };
+  }
+
+  // A real facility-type string wins over a co-occurring negative marker —
+  // guards the one observed contradictory record: toilets: ["Vault Toilets
+  // - year round", "No Toilets"]. Filtering the marker out (rather than
+  // bailing whenever it appears at all) is what resolves that record to
+  // present=true.
+  const negativeMarker = NEGATIVE_MARKERS[npsKey];
+  const real = entries.filter((v) => v !== negativeMarker);
+  if (real.length === 0) return { present: false };
+
+  // Mixed qualifiers across entries do occur (e.g. toilets:
+  // ["Flush Toilets - seasonal", "Vault Toilets - year round"], 14 of 221
+  // records) — year-round wins the tie: the amenity IS available
+  // year-round via at least one facility, so no seasonal caveat applies.
+  //
+  // Case-INSENSITIVE match: `toilets`/`potableWater` use lowercase
+  // (" - seasonal", " - year round") but `showers` uses Title Case
+  // (" - Seasonal", " - Year Round") for the identical qualifier concept —
+  // a real inconsistency in NPS's own data across these three keys, not a
+  // typo to "fix" upstream. Matching case-insensitively is the correct
+  // handling, not a workaround.
+  const lower = real.map((v) => v.toLowerCase());
+  if (lower.some((v) => v.includes(" - year round"))) return { present: true };
+  if (lower.some((v) => v.includes(" - seasonal"))) return { present: true, qualifier: "seasonal" };
+  return { present: true };
+}
+
+/** Maps NPS's 14-key raw campground amenities shape (verbatim from the NPS
+ *  API — see persistCampground's raw_payload) to the canonical shape
+ *  normalizeOsm() produces. Absent/negative/blank keys are omitted
+ *  entirely — the 19-of-221 records where NPS answered nothing for any key
+ *  ("" / []) correctly produce an empty result here, same as `false` would
+ *  have. `null` mirrors normalizeOsm()'s own empty-result convention. */
+export function coerceCampgroundAmenities(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  const set = (category: string, parsed: ParsedAmenity) => {
+    if (!parsed.present) return;
+    out[category] = true;
+    if (parsed.qualifier) out[`${category}_qualifier`] = parsed.qualifier;
+  };
+  set("dump_station", parseScalarAmenity(raw.dumpStation));
+  set("shower", parseArrayAmenity(raw.showers, "showers"));
+  set("toilet", parseArrayAmenity(raw.toilets, "toilets"));
+  set("water", parseArrayAmenity(raw.potableWater, "potableWater"));
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 // ───── Persistence ─────────────────────────────────────────────────────
