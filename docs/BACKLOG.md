@@ -2207,5 +2207,35 @@ conclusion.
     the 15-minute negative cache in `CLAUDE.md` before drawing conclusions from
     it.
 
+- **`recompute_master_place` never clears a field back to null — only
+  overwrites when a new value exists. LOW-TO-MEDIUM PRIORITY, currently
+  render-harmless but real.** Found during NPS amenities normalization
+  (commit `b03450d`): the function's `IF v_value IS NOT NULL` guard skips
+  the UPDATE entirely when `resolve_field()` finds no winning source for a
+  field — so if a place's field previously had a real value and every
+  source's value for it changes/disappears (e.g. a source gets
+  renormalized and no longer maps to any recognized category), the OLD
+  value stays stranded in `master_place` instead of being cleared.
+  - **Confirmed harmless today, not confirmed harmless generally.** 14
+    `master_place` rows hit this exact case for `amenities`
+    post-NPS-renormalization — `attribution.amenities` correctly cleared to
+    reflect "no source resolves this anymore," but `master_place.amenities`
+    itself still holds the old raw blob. Verified render-harmless
+    specifically because the stale blob's keys have zero overlap with the
+    current `AMENITY_LABELS` set, so the render translator produces `[]`
+    regardless — but this was a coincidence of the specific data involved,
+    not a property of the fix.
+  - **Deliberately not patched as part of the NPS work** — fixing
+    `recompute_master_place` itself is higher blast radius than a
+    normalizer change (it's shared across every field/source, per the
+    master_place invariant restricting writes to that column to only go
+    through this function). Needs its own scoped pass: likely an explicit
+    clear (`SET field = NULL`) branch when `resolve_field()` returns no
+    candidate, not just skipping the UPDATE.
+  - Any future work that touches this function, or any field whose sources
+    might stop resolving (a source renormalization, a source deactivation,
+    precedence changes), should check for the same class of stale-data risk
+    this pass happened to catch by coincidence.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
