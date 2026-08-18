@@ -433,6 +433,104 @@ describe("matchOne — name_dominant floor routing (mocked DB)", () => {
   });
 });
 
+// matchOne — the LINKING_BARRED guard (nps:park_feature). Federal anchors are
+// seeded into plannedMasterPlaces by running matchOne on a ridb record first
+// (no candidates → new_master_place → recordPlanned), then the nps record at
+// the same coordinate. Each test uses spatially-disjoint coords + distinct ids,
+// so module state (plannedMasterPlaces / sourceRecordCache) can't cross-match.
+describe("matchOne — LINKING_BARRED guard (nps:park_feature)", () => {
+  const rowsById: Record<string, unknown> = {};
+  const register = (r: {
+    id: string;
+    source_id: string;
+    inferred_category: string;
+    name: string;
+    coords: [number, number];
+  }) => {
+    rowsById[r.id] = {
+      id: r.id,
+      source_id: r.source_id,
+      external_id: `${r.source_id}:x:${r.id}`,
+      name: r.name,
+      inferred_category: r.inferred_category,
+      master_place_id: null,
+      geometry: { type: "Point", coordinates: r.coords },
+    };
+  };
+
+  beforeEach(() => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+    for (const k of Object.keys(rowsById)) delete rowsById[k];
+    // fetchSourceRecord dispatches on the id passed to .eq("id", id).
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: (_col: string, id: string) => ({
+          single: () => Promise.resolve({ data: rowsById[id], error: null }),
+        }),
+      }),
+    });
+    // Default: no DB candidates (findCandidates → empty).
+    rpcResolves({ data: [], error: null });
+  });
+
+  // Seed a ridb-seeded master_place at `coords` via the real machinery: a ridb
+  // record with no candidates becomes new_master_place, and recordPlanned pushes
+  // it into plannedMasterPlaces so findFederalAnchor can later fed_exact to it.
+  const seedRidbAnchor = async (id: string, coords: [number, number]): Promise<string> => {
+    register({ id, source_id: "ridb", inferred_category: "campground", name: `Anchor ${id}`, coords });
+    const o = await matchOne(id);
+    expect(o.kind).toBe("new_master_place");
+    return o.target;
+  };
+
+  it("nps:park_feature with a federal (ridb) candidate within 10m → new_master_place, NOT fed_exact auto_link", async () => {
+    const coords: [number, number] = [-111.0, 34.0];
+    await seedRidbAnchor("bar-ridb-1", coords);
+    register({ id: "bar-nps-pf-1", source_id: "nps", inferred_category: "park_feature", name: "Camptosaurus aphanoecetes", coords });
+    const outcome = await matchOne("bar-nps-pf-1");
+    expect(outcome.kind).toBe("new_master_place"); // guard fired before Step 1 fed_exact
+  });
+
+  it("nps:campground with a federal (ridb) candidate within 10m → still fed_exact auto_link (guard must not over-reach)", async () => {
+    const coords: [number, number] = [-112.0, 35.0];
+    const anchorMp = await seedRidbAnchor("bar-ridb-2", coords);
+    register({ id: "bar-nps-cg-2", source_id: "nps", inferred_category: "campground", name: "Some Campground", coords });
+    const outcome = await matchOne("bar-nps-cg-2");
+    expect(outcome.kind).toBe("auto_link");
+    expect(outcome).toMatchObject({ method: "fed_exact", target: anchorMp });
+  });
+
+  it("nps:park_feature with a close-but-not-federal candidate → new_master_place, not manual_review", async () => {
+    const coords: [number, number] = [-113.0, 36.0];
+    // A close non-federal candidate that (unguarded) would blend to
+    // manual_review: identical name + recreation_area (park_feature↔
+    // recreation_area = 0.5) at 50m → conf 0.70, blended_residual. With the
+    // guard the record short-circuits to new_master_place before scoring.
+    rpcResolves({
+      data: [{ id: "bar-osm-mp-3", canonical_name: "Panorama Point", primary_category: "recreation_area", distance_m: 50 }],
+      error: null,
+    });
+    register({ id: "bar-nps-pf-3", source_id: "nps", inferred_category: "park_feature", name: "Panorama Point", coords });
+    const outcome = await matchOne("bar-nps-pf-3");
+    expect(outcome.kind).toBe("new_master_place");
+  });
+
+  it("ridb:park_feature (non-nps) with a federal candidate within 10m → still fed_exact auto_link (other sources unaffected)", async () => {
+    // The guard keys on the EXACT pair "nps:park_feature". A different source
+    // with the same category must NOT be barred. ridb is federal, so it takes
+    // the same fed_exact path as nps — seed an nps anchor as its partner.
+    const coords: [number, number] = [-114.0, 37.0];
+    register({ id: "neg-nps-anchor", source_id: "nps", inferred_category: "campground", name: "Anchor Campground", coords });
+    const anchor = await matchOne("neg-nps-anchor");
+    expect(anchor.kind).toBe("new_master_place");
+    register({ id: "neg-ridb-pf", source_id: "ridb", inferred_category: "park_feature", name: "Some Ridb Feature", coords });
+    const outcome = await matchOne("neg-ridb-pf");
+    expect(outcome.kind).toBe("auto_link");
+    expect(outcome).toMatchObject({ method: "fed_exact", target: anchor.target });
+  });
+});
+
 describe("paginateLinkedSourceRecords", () => {
   it("paginates beyond a single 1000-row page", async () => {
     // 2,500 rows × 3 distinct mp_ids × 4 distinct source_ids cycling
