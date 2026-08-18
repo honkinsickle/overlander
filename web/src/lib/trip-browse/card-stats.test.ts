@@ -114,6 +114,52 @@ test("all 6 known amenity keys true → all 6 labels, in the translator's declar
   ]);
 });
 
+test("all 15 known amenity keys true → all 15 labels, in the translator's declared order", () => {
+  // The 6 OSM-shared categories plus the 9 NPS-introduced categories added
+  // for the remaining-10-keys pass (cellPhoneReception is the 10th NPS key
+  // and deliberately has no category — see coerceCampgroundAmenities).
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        water: true,
+        toilet: true,
+        shower: true,
+        dump_station: true,
+        fire_ring: true,
+        picnic: true,
+        camp_store: true,
+        laundry: true,
+        internet: true,
+        ice_for_sale: true,
+        host_onsite: true,
+        amphitheater: true,
+        food_storage: true,
+        firewood_for_sale: true,
+        trash_recycling: true,
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, [
+    "Water",
+    "Toilet",
+    "Shower",
+    "Dump Station",
+    "Fire Ring",
+    "Picnic Area",
+    "Camp Store",
+    "Laundry",
+    "Internet",
+    "Ice for Sale",
+    "Camp Host",
+    "Amphitheater",
+    "Food Storage Lockers",
+    "Firewood",
+    "Trash",
+  ]);
+});
+
 test("a single true key → only that label", () => {
   const wp = browsePlaceToWaypoint(
     place({ amenities: { shower: true } }),
@@ -147,6 +193,15 @@ test("a seasonal qualifier appends '(seasonal)' to the label", () => {
     stats,
   );
   assert.deepEqual(wp.amenities, ["Water (seasonal)"]);
+});
+
+test("the qualifier suffix mechanism applies equally to a NPS-introduced category, not just the original 4", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { firewood_for_sale: true, firewood_for_sale_qualifier: "seasonal" } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Firewood (seasonal)"]);
 });
 
 test("a non_potable qualifier appends '(non-potable)' to the label", () => {

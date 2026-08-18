@@ -153,10 +153,20 @@ function priceTierToEntry(tier?: 1 | 2 | 3 | 4): string | undefined {
   return tier ? "$".repeat(tier) : undefined;
 }
 
-/** Display labels for the known BrowsePlace.amenities keys (the boolean
- *  presence map normalizeOsm() produces — see data/ingestion/sources/osm.ts).
- *  Copy choice, not locked to any existing in-product convention (none
- *  found for amenity-facility labels specifically). */
+/** Display labels for the known BrowsePlace.amenities keys — the 6 OSM-
+ *  shared categories (normalizeOsm(), data/ingestion/sources/osm.ts) plus 9
+ *  NPS-introduced categories with no OSM equivalent
+ *  (coerceCampgroundAmenities, data/ingestion/sources/nps.ts). Copy choice,
+ *  not an engineering one. "Trash" and "Firewood" match the existing
+ *  design-reference labels in
+ *  web/src/components/demo/category-planning-slide.tsx (CampingFeatures,
+ *  mirrors Paper artboards WBU-1/UTE-1/W0C-1/WFW-1/WJL-1) — that source
+ *  covers trash pickup only, not recycling, so "Trash" alone slightly
+ *  under-describes trash_recycling's broader NPS meaning; flagged as a
+ *  copy call, not resolved silently. The other 8 have no existing
+ *  precedent found anywhere in the codebase. cellPhoneReception is
+ *  deliberately NOT here — see coerceCampgroundAmenities's docstring for
+ *  why (master_place.cell_signal is its dedicated home instead). */
 const AMENITY_LABELS: Record<string, string> = {
   water: "Water",
   toilet: "Toilet",
@@ -164,6 +174,15 @@ const AMENITY_LABELS: Record<string, string> = {
   dump_station: "Dump Station",
   fire_ring: "Fire Ring",
   picnic: "Picnic Area",
+  camp_store: "Camp Store",
+  laundry: "Laundry",
+  internet: "Internet",
+  ice_for_sale: "Ice for Sale",
+  host_onsite: "Camp Host",
+  amphitheater: "Amphitheater",
+  food_storage: "Food Storage Lockers",
+  firewood_for_sale: "Firewood",
+  trash_recycling: "Trash",
 };
 
 /** Optional per-category caveat suffix. Written only by

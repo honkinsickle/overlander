@@ -349,17 +349,23 @@ function normalizeCampground(c: Campground): Record<string, unknown> {
 // amenitiesToLabels's original `=== true` check) keeps working unchanged for
 // non-qualified values.
 //
-// Of NPS's 14 raw keys, only 4 correspond to an existing canonical category:
-// dumpStation, showers, toilets, potableWater → dump_station, shower,
-// toilet, water. The other 10 (campStore, laundry, cellPhoneReception,
+// Of NPS's 14 raw keys, 4 correspond to an existing OSM-shared canonical
+// category (dumpStation, showers, toilets, potableWater → dump_station,
+// shower, toilet, water) and 9 more are promoted here to NEW,
+// NPS-introduced categories with no OSM equivalent (campStore, laundry,
 // internetConnectivity, iceAvailableForSale, staffOrVolunteerHostOnsite,
-// amphitheater, foodStorageLockers, firewoodForSale, trashRecyclingCollection)
-// have no OSM-derived equivalent and are dropped here — a scope decision,
-// not silent: neither firewoodForSale (selling firewood, a retail amenity)
-// nor trashRecyclingCollection (a pickup service) is the same concept as
-// OSM's fire_ring (a physical fire-pit fixture), so fire_ring stays
-// OSM-only rather than being force-mapped. Reversible later by extending
-// this map + card-stats.ts's AMENITY_LABELS together.
+// amphitheater, foodStorageLockers, firewoodForSale,
+// trashRecyclingCollection) — neither firewoodForSale (selling firewood,
+// a retail amenity) nor trashRecyclingCollection (a pickup service) is the
+// same concept as OSM's fire_ring (a physical fire-pit fixture), so
+// fire_ring stays OSM-only rather than being force-mapped onto either.
+//
+// The 14th key, cellPhoneReception, is deliberately NOT promoted to an
+// amenities category at all: master_place already has its own dedicated
+// `cell_signal` jsonb column (20260527120100_phase1_master_place.sql) for
+// this exact concept, currently unpopulated by any source. Folding it into
+// `amenities` instead would build a second, competing home for the same
+// signal — wiring it into `cell_signal` is a separate, out-of-scope pass.
 
 /** The single-element negative marker each array-valued NPS key packs
  *  instead of an empty array — array non-emptiness is NOT a presence
@@ -446,6 +452,17 @@ export function coerceCampgroundAmenities(raw: Record<string, unknown>): Record<
   set("shower", parseArrayAmenity(raw.showers, "showers"));
   set("toilet", parseArrayAmenity(raw.toilets, "toilets"));
   set("water", parseArrayAmenity(raw.potableWater, "potableWater"));
+  // NPS-introduced categories (no OSM equivalent) — same scalar 4-value
+  // vocabulary as dumpStation, reusing parseScalarAmenity as-is.
+  set("camp_store", parseScalarAmenity(raw.campStore));
+  set("laundry", parseScalarAmenity(raw.laundry));
+  set("internet", parseScalarAmenity(raw.internetConnectivity));
+  set("ice_for_sale", parseScalarAmenity(raw.iceAvailableForSale));
+  set("host_onsite", parseScalarAmenity(raw.staffOrVolunteerHostOnsite));
+  set("amphitheater", parseScalarAmenity(raw.amphitheater));
+  set("food_storage", parseScalarAmenity(raw.foodStorageLockers));
+  set("firewood_for_sale", parseScalarAmenity(raw.firewoodForSale));
+  set("trash_recycling", parseScalarAmenity(raw.trashRecyclingCollection));
   return Object.keys(out).length > 0 ? out : null;
 }
 

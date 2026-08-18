@@ -106,6 +106,48 @@ describe("coerceCampgroundAmenities", () => {
     });
   });
 
+  // The 9 NPS-introduced categories (no OSM equivalent) reuse
+  // parseScalarAmenity exactly as dumpStation does — same 4-value
+  // vocabulary, same qualifier rule. Table-driven so each of the 9 gets its
+  // own direct coverage without 9x the boilerplate of the dumpStation block
+  // above. cellPhoneReception is intentionally absent from this table — see
+  // coerceCampgroundAmenities's docstring for why it's not a category at all.
+  describe.each([
+    ["campStore", "camp_store"],
+    ["laundry", "laundry"],
+    ["internetConnectivity", "internet"],
+    ["iceAvailableForSale", "ice_for_sale"],
+    ["staffOrVolunteerHostOnsite", "host_onsite"],
+    ["amphitheater", "amphitheater"],
+    ["foodStorageLockers", "food_storage"],
+    ["firewoodForSale", "firewood_for_sale"],
+    ["trashRecyclingCollection", "trash_recycling"],
+  ])("NPS-introduced scalar key %s → category %s", (npsKey, category) => {
+    it('"No" → absent', () => {
+      expect(coerceCampgroundAmenities({ ...BLANK_AMENITIES, [npsKey]: "No" })).toBeNull();
+    });
+    it('"" (blank) → absent', () => {
+      expect(coerceCampgroundAmenities({ ...BLANK_AMENITIES, [npsKey]: "" })).toBeNull();
+    });
+    it('"Yes - seasonal" → present, seasonal qualifier', () => {
+      expect(coerceCampgroundAmenities({ ...BLANK_AMENITIES, [npsKey]: "Yes - seasonal" })).toEqual({
+        [category]: true,
+        [`${category}_qualifier`]: "seasonal",
+      });
+    });
+    it('"Yes - year round" → present, no qualifier', () => {
+      expect(coerceCampgroundAmenities({ ...BLANK_AMENITIES, [npsKey]: "Yes - year round" })).toEqual({
+        [category]: true,
+      });
+    });
+  });
+
+  it("cellPhoneReception never produces an amenities category, regardless of value", () => {
+    expect(
+      coerceCampgroundAmenities({ ...BLANK_AMENITIES, cellPhoneReception: "Yes - year round" }),
+    ).toBeNull();
+  });
+
   describe("array-key negative packaging — non-emptiness is NOT a presence signal", () => {
     it('showers: ["None"] → absent, not a false-positive "present"', () => {
       expect(coerceCampgroundAmenities({ ...BLANK_AMENITIES, showers: ["None"] })).toBeNull();
@@ -163,12 +205,12 @@ describe("coerceCampgroundAmenities", () => {
     ).toEqual({ water: true, water_qualifier: "non_potable" });
   });
 
-  it("keys with no OSM-derived equivalent are dropped, not fabricated into categories", () => {
+  it("only cellPhoneReception is dropped now — the other 9 previously-dropped keys produce real categories", () => {
     const out = coerceCampgroundAmenities({
       ...BLANK_AMENITIES,
       campStore: "Yes - year round",
       laundry: "Yes - seasonal",
-      cellPhoneReception: "Yes - year round",
+      cellPhoneReception: "Yes - year round", // the one still dropped
       internetConnectivity: "Yes - year round",
       iceAvailableForSale: "Yes - year round",
       staffOrVolunteerHostOnsite: "Yes - seasonal",
@@ -177,10 +219,24 @@ describe("coerceCampgroundAmenities", () => {
       firewoodForSale: "Yes - seasonal",
       trashRecyclingCollection: "Yes - year round",
     });
-    expect(out).toBeNull();
+    expect(out).toEqual({
+      camp_store: true,
+      laundry: true,
+      laundry_qualifier: "seasonal",
+      internet: true,
+      ice_for_sale: true,
+      host_onsite: true,
+      host_onsite_qualifier: "seasonal",
+      amphitheater: true,
+      food_storage: true,
+      firewood_for_sale: true,
+      firewood_for_sale_qualifier: "seasonal",
+      trash_recycling: true,
+      // no cell_reception / cellPhoneReception-derived key anywhere.
+    });
   });
 
-  it("a real full record (verbatim shape from a TEST sample) produces all 4 mapped categories", () => {
+  it("a real full record (verbatim shape from a TEST sample) produces all mapped categories, cellPhoneReception excluded", () => {
     const out = coerceCampgroundAmenities({
       laundry: "No",
       showers: ["None"],
@@ -204,6 +260,15 @@ describe("coerceCampgroundAmenities", () => {
       toilet: true, // mixed seasonal+year-round → year-round wins, no qualifier
       water: true,
       water_qualifier: "seasonal",
+      amphitheater: true,
+      firewood_for_sale: true,
+      firewood_for_sale_qualifier: "seasonal",
+      trash_recycling: true,
+      host_onsite: true,
+      host_onsite_qualifier: "seasonal",
+      // laundry: "No", campStore: "No", foodStorageLockers: "No",
+      // internetConnectivity: "No", iceAvailableForSale: "No" → all absent.
+      // cellPhoneReception: "Yes - year round" → still excluded entirely.
     });
   });
 });
