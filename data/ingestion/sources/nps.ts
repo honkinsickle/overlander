@@ -123,8 +123,36 @@ const ParkBoundarySchema = z.union([
   }),
 ]);
 
+// /parks?parkCode=<code> — the park unit record. We consume fullName (the real
+// canonical name), description, url + phone (contact), and operatingHours (hours).
+// designation, entranceFees, addresses, etc. are kept in raw_payload only (via
+// .passthrough() + stashing the whole object) — no normalized fields invented.
+const ParkSchema = z
+  .object({
+    id: z.string().optional(),
+    parkCode: z.string().optional(),
+    fullName: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    designation: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
+    contacts: z
+      .object({
+        phoneNumbers: z
+          .array(z.object({ phoneNumber: z.string().nullable().optional() }).passthrough())
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    operatingHours: z.array(z.unknown()).optional(),
+    entranceFees: z.array(z.unknown()).optional(),
+    addresses: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
+
 type Place = z.infer<typeof PlaceSchema>;
 type Campground = z.infer<typeof CampgroundSchema>;
+type Park = z.infer<typeof ParkSchema>;
 
 // ───── Pagination ──────────────────────────────────────────────────────
 
@@ -200,6 +228,44 @@ async function fetchParkBoundary(parkCode: string): Promise<unknown | null> {
     }, "nps.parkboundary.fetch");
   } catch (err) {
     logger.warn({ err, parkCode }, "nps: park boundary fetch failed — continuing without polygon");
+    return null;
+  }
+}
+
+/** Fetch the park unit record (/parks?parkCode). Returns null on any failure —
+ *  persistParkBoundary then falls back to the synthetic name, so a missing
+ *  /parks response never blocks writing the boundary polygon. */
+async function fetchPark(parkCode: string): Promise<Park | null> {
+  const apiKey = requireApiKey();
+  const url = new URL(`${NPS_BASE}/parks`);
+  url.searchParams.set("parkCode", parkCode);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("api_key", apiKey);
+
+  try {
+    return await defaultRetry(async () => {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`NPS parks ${res.status}: ${body.slice(0, 200)}`);
+      }
+      const json = await res.json();
+      const list = ListResponseSchema.safeParse(json);
+      if (!list.success || list.data.data.length === 0) {
+        logger.warn({ parkCode }, "nps: /parks returned no data — synthetic name will be used");
+        return null;
+      }
+      const parsed = ParkSchema.safeParse(list.data.data[0]);
+      if (!parsed.success) {
+        logger.warn({ parkCode, err: parsed.error.flatten() }, "nps: /parks response failed validation");
+        return null;
+      }
+      return parsed.data;
+    }, "nps.parks.fetch");
+  } catch (err) {
+    logger.warn({ err, parkCode }, "nps: /parks fetch failed — falling back to synthetic name");
     return null;
   }
 }
@@ -385,6 +451,7 @@ async function persistCampground(
 async function persistParkBoundary(
   parkCode: string,
   boundary: unknown,
+  park: Park | null,
   dryRun: boolean,
 ): Promise<"inserted" | "skipped" | "error"> {
   // Extract a primary polygon geometry + a representative point for the
@@ -401,11 +468,20 @@ async function persistParkBoundary(
   }
 
   const externalId = `nps:park:${parkCode}`;
-  const name = `NPS park boundary: ${parkCode}`;
+  // Real park name from /parks (fullName), e.g. "Joshua Tree National Park".
+  // Falls back to the synthetic string only when /parks is unavailable so the
+  // boundary polygon still lands. This name is NPS's authoritative canonical_name
+  // (field_precedence priority 1) — the whole point of wiring /parks.
+  const fullName = park?.fullName?.trim();
+  const name = fullName && fullName.length > 0 ? fullName : `NPS park boundary: ${parkCode}`;
   if (dryRun) {
-    logger.debug({ externalId, parkCode }, "nps: dry-run");
+    logger.debug({ externalId, parkCode, name }, "nps: dry-run");
     return "inserted";
   }
+  const phone = park?.contacts?.phoneNumbers?.find(
+    (p): p is { phoneNumber: string } => typeof p.phoneNumber === "string" && p.phoneNumber.length > 0,
+  )?.phoneNumber;
+  const contact = compact({ website: park?.url ?? undefined, phone });
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
@@ -413,19 +489,17 @@ async function persistParkBoundary(
       name,
       inferredCategory: "park",
       point: centroid,
-      rawPayload: { boundary, fetched_at: new Date().toISOString() },
+      // Full /parks object stashed here — designation, entranceFees, addresses,
+      // etc. live in raw_payload, not in invented normalized fields.
+      rawPayload: { boundary, park: park ?? null, fetched_at: new Date().toISOString() },
       normalizedPayload: {
-        // Use the same synthetic name as source_record.name. The /parks
-        // endpoint isn't fetched in this path, so we don't have the
-        // park's full title yet. A follow-up could resolve "jotr" →
-        // "Joshua Tree National Park" via a single /parks?parkCode call.
         canonical_name: name,
-        description: null,
+        description: park?.description ?? null,
         overlander_tags: ["federal_land", "nps"],
-        contact: null,
+        contact: Object.keys(contact).length ? contact : null,
         access: null,
         amenities: null,
-        hours: null,
+        hours: park?.operatingHours && park.operatingHours.length ? { raw: park.operatingHours } : null,
         // The key Phase-1 deliverable for parks: GeoJSON polygon for
         // recompute_master_place() to promote later.
         geometry_polygon: geometry,
@@ -540,10 +614,13 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
         }
       }),
       limit(async () => {
-        const boundary = await fetchParkBoundary(parkCode);
+        const [boundary, park] = await Promise.all([
+          fetchParkBoundary(parkCode),
+          fetchPark(parkCode),
+        ]);
         if (!boundary) return;
         stats.fetched += 1;
-        const outcome = await persistParkBoundary(parkCode, boundary, opts.dryRun ?? false);
+        const outcome = await persistParkBoundary(parkCode, boundary, park, opts.dryRun ?? false);
         if (outcome === "inserted") stats.inserted += 1;
         else if (outcome === "skipped") stats.skipped += 1;
         else stats.errors += 1;
