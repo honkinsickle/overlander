@@ -153,6 +153,37 @@ function priceTierToEntry(tier?: 1 | 2 | 3 | 4): string | undefined {
   return tier ? "$".repeat(tier) : undefined;
 }
 
+/** Display labels for the known BrowsePlace.amenities keys (the boolean
+ *  presence map normalizeOsm() produces — see data/ingestion/sources/osm.ts).
+ *  Copy choice, not locked to any existing in-product convention (none
+ *  found for amenity-facility labels specifically). */
+const AMENITY_LABELS: Record<string, string> = {
+  water: "Water",
+  toilet: "Toilet",
+  shower: "Shower",
+  dump_station: "Dump Station",
+  fire_ring: "Fire Ring",
+  picnic: "Picnic Area",
+};
+
+/** Corpus amenities (a boolean-keyed presence map) → display label chips.
+ *  Included only when the value is exactly `true` — never renders "No X"
+ *  for a false or absent key. Keys outside AMENITY_LABELS are ignored: the
+ *  merged `amenities` field can currently also carry NPS's raw pass-through
+ *  shape (arbitrary keys, "Yes"/"No - seasonal" string values — see
+ *  coerceCampgroundAmenities in data/ingestion/sources/nps.ts) or bc_parks'
+ *  {camping_types, facilities} array shape, both of which resolve ABOVE osm
+ *  in field_precedence today. Neither is recognized here; this only
+ *  translates the known 6-key boolean shape. */
+function amenitiesToLabels(
+  amenities: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!amenities) return [];
+  return Object.entries(AMENITY_LABELS)
+    .filter(([key]) => amenities[key] === true)
+    .map(([, label]) => label);
+}
+
 /** Display labels for known provenance source identifiers. Keyed by the
  *  lowercased token so it normalizes BOTH the federated path's raw pipeline
  *  ids (attribution values: "ridb", "osm", "nps", …) AND the live discovery
@@ -217,13 +248,17 @@ export function browsePlaceToWaypoint(
   // Federated rows carry real overland tags (land status / managing agency /
   // camping policy — e.g. "federal_land", "dispersed_camping_likely"); live
   // Google/OSM results have none. These read as descriptors, so they home in
-  // the Tags pills only. There is no real amenities (facilities) signal, so
-  // the Amenities section is left unset and simply does not render.
+  // the Tags pills only.
   const realTags =
     place.overlanderTags && place.overlanderTags.length > 0
       ? place.overlanderTags
       : undefined;
   const dataSources = realDataSources(place);
+  // Amenities section: real facility presence (water/toilet/shower/dump
+  // station/fire ring/picnic) from the corpus's merged amenities field,
+  // translated to display labels. Absent/false keys are omitted, never
+  // shown as "No X" — see amenitiesToLabels for the shape this recognizes.
+  const amenityLabels = amenitiesToLabels(place.amenities);
 
   return {
     id: place.id,
@@ -269,5 +304,6 @@ export function browsePlaceToWaypoint(
         }
       : {}),
     ...(dataSources.length > 0 ? { dataSources } : {}),
+    ...(amenityLabels.length > 0 ? { amenities: amenityLabels } : {}),
   };
 }

@@ -77,3 +77,103 @@ test("no priceTier → no entry line (never a fabricated price)", () => {
   assert.equal(wp.logistics?.entry, undefined);
   assert.equal(wp.simulator?.entryCost, undefined);
 });
+
+// Amenities shape translation — this is the last gap in the amenities chain
+// per docs/architecture/place-pipeline-trace-amenities-addendum.md: the
+// corpus's merged amenities field is a boolean-keyed presence map (per
+// normalizeOsm() in data/ingestion/sources/osm.ts), but the slideup reads
+// Waypoint.amenities: string[] (display labels). amenitiesToLabels (private
+// to card-stats.ts, exercised here through browsePlaceToWaypoint per this
+// file's existing convention — priceTierToEntry above is tested the same
+// indirect way) is the translator. Each test below isolates one aspect of
+// the translator itself; the "real corpus tile" test at the end is the
+// integration-level check that the whole path wires end to end.
+
+test("all 6 known amenity keys true → all 6 labels, in the translator's declared order", () => {
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        water: true,
+        toilet: true,
+        shower: true,
+        dump_station: true,
+        fire_ring: true,
+        picnic: true,
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, [
+    "Water",
+    "Toilet",
+    "Shower",
+    "Dump Station",
+    "Fire Ring",
+    "Picnic Area",
+  ]);
+});
+
+test("a single true key → only that label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { shower: true } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Shower"]);
+});
+
+test("false and absent keys are both omitted — never a 'No X' label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { water: true, toilet: false } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Water"]);
+});
+
+test("amenities: null → amenities undefined (section hidden, not an empty array)", () => {
+  const wp = browsePlaceToWaypoint(place({ amenities: null }), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("amenities: {} (all keys absent) → amenities undefined", () => {
+  const wp = browsePlaceToWaypoint(place({ amenities: {} }), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("no amenities field at all → amenities undefined (no fabrication)", () => {
+  const wp = browsePlaceToWaypoint(place(), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("unrecognized keys (e.g. NPS's raw pass-through shape) are ignored, not fabricated into labels", () => {
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        // NPS's coerceCampgroundAmenities shape: arbitrary keys, string
+        // values, not the 6-key boolean shape this translator recognizes.
+        campstore: "Yes",
+        showers: "No - seasonal",
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.equal(wp.amenities, undefined);
+});
+
+test("end to end: a real corpus tile's amenities reach Waypoint.amenities as display labels", () => {
+  // Shape a federated/corpus BrowsePlace would actually carry post-merge —
+  // mapMasterPlaceRow passes master_place.amenities through unchanged
+  // (federated.ts), so this is resolve_field()'s output shape, not a
+  // synthetic one.
+  const corpusPlace = place({
+    id: "mp:22222222-2222-2222-2222-222222222222",
+    title: "Kingman Field Office Dispersed Site",
+    overlanderTags: ["blm_land", "dispersed_camping_likely"],
+    amenities: { water: true, fire_ring: true, toilet: false },
+  });
+  const wp = browsePlaceToWaypoint(corpusPlace, ctx, stats);
+  assert.deepEqual(wp.amenities, ["Water", "Fire Ring"]);
+});
