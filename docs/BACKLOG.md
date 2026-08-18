@@ -16,6 +16,77 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## `fed_exact` is category-blind AND name-blind within 10m (2026-08-17)
+
+`matchOne` Step 1 (`findFederalAnchor`, `data/entity-resolution/matcher.ts`)
+auto-links an NPS or RIDB record to any federal-partner master_place within 10m
+**by coordinate alone** — it never checks the name or the category. Usually
+correct (it is the NPS↔RIDB campground bridge). But it is the mechanism behind a
+whole class of corruption: **all 103 bad `nps:park_feature` auto-links this
+session came through `fed_exact`** `[measured 2026-08-17]` — editorial content
+cards collapsing onto real federal places by proximity, then NPS priority-1
+precedence renaming them (11 fossil labels → Quarry Exhibit Hall). #234 scoped
+the fix to **one source+category pair** (`nps:park_feature`, forced to
+`new_master_place`) rather than touching `fed_exact`, because `fed_exact` is
+correct for campgrounds and a global change has the wrong blast radius. **Open:**
+whether `fed_exact` should ever consider category compatibility (e.g., refuse to
+link across incompatible categories even within 10m), or whether the
+source+category allowlist is the durable shape. See ADR
+`docs/decisions/2026-08-17-bar-nps-park-feature-linking.md`.
+
+## The dry-run report's `primary_category` column is a proxy artifact (2026-08-17)
+
+`materialize --dry-run-report` computes a "category change" whenever an NPS SR's
+`inferred_category` differs from the target MP's `primary_category` — it predicted
+**56** for the NPS materialize. **Zero landed, correctly:** `recompute_master_place`
+resolves `primary_category` from `normalized_payload.primary_category` via
+`field_precedence`, but the **NPS ingester never populates that field**, so NPS
+cannot recategorize an existing MP (confirmed: **0** master_places carry
+`attribution.primary_category == 'nps'` `[queried TEST 2026-08-17]`). The report's
+column measures a *possible* precedence winner, not an *actual* one. **This will
+mislead again** — any source whose `normalized_payload` omits `primary_category`
+(NPS, and check others) shows phantom category changes in the report that never
+materialize. Fix options: have the report resolve against `normalized_payload`
+like recompute does, or label the column "inferred_category mismatch (not a
+recompute prediction)."
+
+## NPS `park_feature` — editorial CMS content, no clean physical/interpretive filter (2026-08-17)
+
+The 4,235 `nps:park_feature` rows are now standalone master_places (guard #234).
+But NPS `/places` is an **editorial content system**: every record is a card with
+`bodyText` + `images`, and a picnic area and a fossil label share one schema. A
+50-row read showed **roughly half are real destinations**; the other half are
+interpretive stops, wayside signs, audio-tour panels, fossil labels, and webpage-
+like content ("Current Conditions at…"). **No field cleanly separates them** —
+`isMapPinHidden` and title patterns (the two best signals) disagree on ~250 of 900
+sampled rows `[queried TEST 2026-08-17]`; `isOpenToPublic` is 96% true,
+`associatedIcon` 97% empty. **Open:** whether to keep all 4,235 in the searchable
+corpus, exclude `park_feature` from search, or build a downstream classifier. No
+field filter is trustworthy; a curated allowlist or a classifier is the only
+clean path, and neither is obviously worth it for ~2,500 marginal POIs.
+
+## 10 jotr `park_feature` rows pending from May, predating the guard (2026-08-17)
+
+10 `nps:park_feature` rows sit in `manual_review` (all `blended_residual`) from the
+original May jotr materialize — each queued against a *nearby* jotr feature MP
+(e.g. "Cholla Cactus (Cholla Cactus Garden)" → "Cholla Cactus Garden") `[queried
+TEST 2026-08-17]`. **Under the guard (#234) each would be a `new_master_place`**,
+not a queued review; they predate it, and an incremental materialize skips them
+(they already carry a `place_match`). Harmless (pending, not confirmed). To
+regularize: clear their pending `place_match` and re-materialize the 10, or leave
+them until a queue-processing pass.
+
+## Typesense TEST index was stale by ~102k — caught up, keep it synced (2026-08-17)
+
+`places_test` was **14,911** (the 2026-08-10 state) while the export view held
+**117,261**; the OSM / PAD-US / BLM six-state campaigns had **not been synced to
+TEST Typesense since 2026-08-10**. Caught up this session (`materialize --skip-er`
+→ 117,261, 0 failed) `[queried TEST 2026-08-17]`. **Standing reminder:** a TEST
+`materialize` chunked with `--skip-sync` (as the NPS run was, to isolate ER)
+leaves the search index stale — a `--skip-er` sync (or an unskipped materialize)
+has to follow, or TEST search silently drifts from the corpus. PROD `places_prod`
+is unaffected by this (separate collection, separate cadence).
+
 ## Pending ingest — USFS, PAD-US, BLM (2026-08-13)
 
 Scoped read-only this session (`data/ingestion/sources/usfs.ts`,

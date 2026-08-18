@@ -69,6 +69,60 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   floor + dry-run tooling) **merged to `main`** since that entry was written (the
   entry's "still OPEN" line is historical, not edited).
 
+### — later session (NPS six-state) —
+
+- **NPS was a stale demo: 83 rows, all Joshua Tree, one 13-second run in May** —
+  against 91 units + ~223 campgrounds in the six states (~1% coverage). The
+  ingester is parkCode-driven and won't enumerate; codes come from
+  `/parks?stateCode=` as a manual pre-step. Ingested all 91 → **5,283
+  `source_record`** `[queried TEST 2026-08-17]`.
+- **Two matcher/ingester fixes merged.** #234 bars `nps:park_feature` from
+  linking: **all 103 bad auto_links came through `fed_exact`** — the within-10m
+  federal coordinate shortcut, which is category-blind AND name-blind, so 11
+  fossil labels collapsed onto Quarry Exhibit Hall and NPS priority-1 precedence
+  renamed it. The guard forces `new_master_place` (also bars `amenity_rollup` +
+  `manual_review`). #235 wired `/parks`: park rows were getting a synthetic
+  `"NPS park boundary: <code>"` name that would have renamed Alcatraz Island + 8
+  others on materialize. ADR: `docs/decisions/2026-08-17-bar-nps-park-feature-linking.md`.
+- **Also merged earlier this session: #233** parametrized the recgov rule's
+  sources (usfs → +nps) and fixed a latent hardcode that modeled every added SR
+  as `usfs`/0.9 — that would have under-reported NPS rename risk as zero.
+- **Live materialize — 7 category chunks, 5,200 rows, 0 errors, 0 5xx, no halt.**
+  4,651 `new_master_place` · 262 `auto_link` · 279 `manual_review` · 8
+  `amenity_rollup`. **Zero `park_feature` linked to anything** (measured: max
+  `source_count` 1, 0 with `source_count>1`, max 1 SR/MP) `[queried TEST
+  2026-08-17]`.
+- **Renames: 103 canonical, 0 category.** Re-measured against the actual 272
+  shared target MPs, not the dry run's predicted 261 — the count held. **Category
+  = 0 is a real finding about the dry-run report:** it predicted 56, but it
+  compares NPS `inferred_category` to `primary_category`, while `recompute`
+  resolves from `normalized_payload.primary_category`, which the NPS ingester
+  never populates (0 MPs carry `attribution.primary_category=='nps'`). That 56 is
+  a report artifact and will mislead again.
+- **The 121→103 canonical gap, worth writing down because the shape recurs:** the
+  dry run predicts renames **per prediction row** (SR→MP); the corpus renames
+  **per master_place**. The 18 not-landed = 9 `park` (synthetic in the dry run,
+  now real `/parks` names → no-op) + 9 non-park (~5 *sibling* renames where a
+  different NPS SR on the same MP won, so the row "didn't land" but the MP did
+  rename — counted once under the winner; ~4 genuine no-ops). **Not order effects.**
+- **NPS `/places` is an editorial CMS, not a POI catalog.** Every record is a
+  content card with `bodyText` + `images`; a picnic area and a fossil label share
+  one schema. No field cleanly separates physical sites from interpretive content
+  — the two best signals disagree on ~250 of 900 sampled rows; a 50-row read
+  showed roughly half are real destinations.
+- **Typesense was stale by ~102k, not the 4,651 NPS delta.** `places_test`
+  **14,911 → 117,261** — the 14,911 was the 2026-08-10 state; the index was **not
+  synced since 2026-08-10**, so OSM/PAD-US/BLM never reached search. One
+  `materialize --skip-er` (collection `places_test`, 0 failed) caught it up.
+- **Cleanup:** the last synthetic-named MP (jotr, already-resolved from May) →
+  targeted `recompute_master_place` → `"Joshua Tree National Park"`, one call. 0
+  synthetic names remain. 10 jotr `park_feature` rows still pending from May (the
+  guard would have made them new MPs; they predate it) — reported, not touched.
+- **Process:** two self-audits this session caught the sampled-as-total habit
+  again ("renames mostly casing" → 21/216 cosmetic; "category changes all
+  facility→campground" → 28/159) and one over-clean "order effects" gloss on the
+  121→103 gap — corrected before drafting by re-measuring against actual targets.
+
 ## 2026-08-16
 
 - **PAD-US six-state campaign COMPLETE on TEST.** Fee_Managers endpoint, all six
