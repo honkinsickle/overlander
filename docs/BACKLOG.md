@@ -2207,5 +2207,29 @@ conclusion.
     the 15-minute negative cache in `CLAUDE.md` before drawing conclusions from
     it.
 
+- **land_manager / manager_type / designation / gap_status — SCOPED, NOT
+  BUILT. LOW PRIORITY.** PAD-US's normalizer (`data/ingestion/sources/padus.ts`)
+  already extracts these four fields into `source_record.normalized_payload`,
+  but neither a `master_place` column nor a `field_precedence` row exists for
+  any of them — confirmed directly against the migrations, not inherited from
+  an earlier report. Full proposal from a 2026-08-18 investigation pass (not
+  written to a `docs/` file — this entry is the durable record):
+  - Four new TEXT columns on `master_place`. `field_precedence` at **priority 1
+    (PAD-US authoritative)**, deliberately NOT the amenities-style
+    lowest-priority gap-fill pattern — PAD-US has no competing validated source
+    for land ownership (RIDB's agency signal only covers 5 federal agencies and
+    is already consumed elsewhere as an `overlander_tags` tag), and PAD-US is
+    already the documented primary source for this data per the 2026-06-02
+    land-status/dispersed-camping ADR. If anyone considers changing this to a
+    low-priority gap-fill row later, re-read that reasoning first — it's not an
+    oversight.
+  - Touches `recompute_master_place`, the `pois_along_corridor` RPC (new
+    migration), and both `federated.ts`/`mapMasterPlaceRow` and `hydrate.ts` —
+    no existing UI slot, this is new render work, not a reconnect like
+    `capacity`/`amenities` were.
+  - Open, unresolved: `gap_status` (GAP 1-4 protection-tier codes) needs
+    plain-language display copy before it can be shown to a user (e.g.
+    "Permanently protected" vs. raw code) — a product decision, not yet made.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
