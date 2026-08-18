@@ -50,6 +50,8 @@ type HydrateRow = {
   description: string | null;
   attribution: Record<string, string> | null;
   hours: Record<string, unknown> | null;
+  capacity: Record<string, unknown> | null;
+  amenities: Record<string, unknown> | null;
 };
 
 export async function hydratePlacesByIds(
@@ -67,7 +69,7 @@ export async function hydratePlacesByIds(
   const baseQuery = supabase
     .from("master_place")
     .select(
-      "id,canonical_name,primary_category,prominence_score,mvum_corridor,overlander_tags,contact,description,attribution,hours",
+      "id,canonical_name,primary_category,prominence_score,mvum_corridor,overlander_tags,contact,description,attribution,hours,capacity,amenities",
     )
     .in("id", ids)
     .eq("is_searchable", true)
@@ -126,10 +128,15 @@ export async function hydratePlacesByIds(
       description: base.description,
       attribution: base.attribution,
       hours: base.hours,
-      amenities: null,
+      // Previously hardcoded null — this SELECT never fetched either column,
+      // an earlier drop point than mapMasterPlaceRow's own (which the
+      // corridor RPC path — fetchFederatedPois — already had fixed for it).
+      // See docs/architecture/place-pipeline-trace.md §2 and
+      // place-pipeline-trace-amenities-addendum.md §4.
+      amenities: base.amenities,
       access: null,
       services: null,
-      capacity: null,
+      capacity: base.capacity,
       seasonality: null,
       cell_signal: null,
       geometry_polygon: null,
