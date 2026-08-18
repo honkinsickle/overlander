@@ -88,8 +88,36 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
-> **⚠️ Re-measured 2026-08-17 `[queried TEST, read-only]` — SUPERSEDES the
-> 2026-08-16 box below for totals.** All four USFS categories materialized live
+> **⚠️ Re-measured 2026-08-17 (later) `[queried TEST, read-only]` — SUPERSEDES
+> every box below for totals.** Six-state NPS ingest (all 91 park codes) +
+> live materialize of the seven NPS categories; park_feature-linking guard (#234)
+> + `/parks` wiring (#235) merged. No PROD touched. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `master_place` total | **155,495** (150,844 → +4,651 from the NPS materialize) |
+> | `source_record` total (all / active) | **165,945 / 165,939** |
+> | `place_match` total / confirmed / pending | 165,292 / 159,188 / **6,102** |
+> | `master_place_search_export` (view) | **117,261** |
+> | Typesense `places_test` | **117,261** (was 14,911 — the 2026-08-10 state; **not synced since 2026-08-10**, so OSM/PAD-US/BLM never reached search until this run) |
+> | synthetic `"NPS park boundary:"` master_places | **0** |
+>
+> **`source_record` by `source_id` (active / all):** osm **109,615** · padus
+> **37,701** · usfs **6,324 / 6,330** (6 legacy `usfs:recarea` inactive) · ridb
+> **6,013** · **nps 5,283** (was 83) · **blm 876** (new to this inventory) ·
+> google_resolved 122 · google 5 · parks_canada 0 · bc_parks 0. Active +6,076
+> over the 2026-08-16 box's 159,863 = NPS +5,200 + BLM +876, exactly.
+>
+> **NPS 5,283** by `inferred_category`: park 91 · picnic_area 56 · visitor_center
+> 169 · viewpoint 231 · trailhead 243 · campground 258 · **park_feature 4,235**.
+> Resolved **4,987** (own-MP/`new_master_place` 4,705 · shared-MP/`auto_link`+
+> `amenity` 282); pending **296** (blended_residual 122 · close_nameless 78 ·
+> name_dominant_low_conf 96), of which **10** are `park_feature` predating the
+> guard. Migration `20260817120000` (`resolve_place_match`) remains **TEST-only**.
+
+> **⚠️ Re-measured 2026-08-17 `[queried TEST, read-only]` — ~~SUPERSEDES the
+> 2026-08-16 box below for totals~~ SUPERSEDED by the 2026-08-17 (later) box
+> above.** All four USFS categories materialized live
 > this session; the recreation.gov-id queue rule confirmed 370 pending campground
 > rows via the new `resolve_place_match` RPC (migration `20260817120000`, **TEST
 > only**). No PROD touched. Current TEST:

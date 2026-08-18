@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-17 (⚠ newest section is TEST-corpus + open-PR work; the recgov queue rule is in OPEN PR #230. The 2026-08-16 matcher floor + USFS ingester HAVE since merged — PRs #223/#224 are on `main`.)
+# STATE — `main` · 2026-08-17 (⚠ newest section is the **six-state NPS materialize** — 5,283 NPS SRs ingested, materialized live on TEST, park_feature-linking guard + `/parks` wiring merged. PRs #233 (recgov widen), #234 (park_feature guard), #235 (`/parks`) are on `main`. Everything below is TEST-only; no PROD writes this session.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -74,7 +74,98 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-17 — all four USFS categories materialized on TEST; `resolve_place_match` RPC + recreation.gov-id queue rule (OPEN PR #230)
+## 2026-08-17 (later) — six-state NPS materialized live on TEST; park_feature-linking guard + `/parks` wiring merged; Typesense caught up
+
+Newest truth. **All corpus counts re-measured against TEST read-only,
+2026-08-17** `[queried TEST 2026-08-17]`. **No PROD writes this session.** Three
+PRs merged to `main` this session — #233 (recgov rule widened to NPS), #234
+(park_feature-linking guard), #235 (`/parks` wiring).
+
+**NPS was a stale demo.** Before this session the corpus held **83** NPS rows —
+all Joshua Tree, from a single 13-second run in May — against **91 units and
+~223 campgrounds** in the six states (~1% coverage). The ingester is
+**parkCode-driven and will not enumerate**; the 91 codes come from
+`/parks?stateCode=WA,OR,CA,AZ,NV,UT` as a manual pre-step. Ingested all 91:
+**5,283 `source_record`** `[queried TEST 2026-08-17]`.
+
+**TEST corpus position `[queried TEST 2026-08-17]`:**
+
+| metric | value |
+|---|--:|
+| `master_place` | **155,495** (150,844 → +4,651 from the NPS materialize) |
+| `source_record` all / active | 165,945 / **165,939** |
+| `place_match` total / confirmed / pending | 165,292 / 159,188 / **6,102** |
+| `master_place_search_export` (view) | **117,261** |
+| Typesense `places_test` | **117,261** (was 14,911) |
+| synthetic `"NPS park boundary:"` master_places | **0** |
+
+**`source_record` by source (active / all):** osm 109,615 · padus 37,701 ·
+**usfs 6,324 / 6,330** (6 legacy `usfs:recarea` inactive) · ridb 6,013 · **nps
+5,283** (was 83) · **blm 876** · google_resolved 122 · google 5. Active +6,076
+over the prior 159,863 = NPS +5,200 + BLM +876, exactly.
+
+**NPS `[queried TEST 2026-08-17]`:** 5,283 SRs — park 91 · picnic_area 56 ·
+visitor_center 169 · viewpoint 231 · trailhead 243 · campground 258 ·
+**park_feature 4,235**. **Resolved 4,987** = own-MP/`new_master_place` **4,705**
++ shared-MP/`auto_link`+`amenity` **282**; **unresolved/pending 296**
+(blended_residual 122 · close_nameless 78 · name_dominant_low_conf 96).
+
+**Live materialize — 7 category chunks, 5,200 rows, zero errors, zero 5xx, no
+halt** `[measured during run 2026-08-17; each split re-derived from current
+linkage]`. Order: park (90) → picnic_area → visitor_center → viewpoint →
+trailhead → campground → **park_feature (4,182) last, alone**. Outcomes: **4,651
+`new_master_place` · 262 `auto_link` · 8 `amenity_rollup` · 279 `manual_review`**.
+Reconciles exactly against the 66-resolved/17-pending May-jotr baseline (own 4,705
+= 4,651 + 54; shared 282 = 270 + 12; pending 296 = 279 + 17).
+
+**Zero `park_feature` linked to anything — measured, not asserted `[queried TEST
+2026-08-17]`:** among master_places holding an `nps:park_feature` source, **max
+`source_count` = 1**, **0** have `source_count > 1`, **max 1 park_feature SR per
+MP**, 4,225 distinct MPs == 4,225 rows. The guard (#234) forced every one to its
+own place. ADR: `docs/decisions/2026-08-17-bar-nps-park-feature-linking.md`.
+
+**Renames landed = 103 canonical, 0 category `[queried TEST 2026-08-17, measured
+against the actual 272 shared target MPs]`.** Category = 0 is
+attribution-confirmed — **0** MPs carry `attribution.primary_category == 'nps'`
+(NPS never populates `normalized_payload.primary_category`, so it cannot win that
+field; the dry run's predicted "56" is a report proxy artifact — `BACKLOG.md`).
+The **121 → 103 canonical gap is worth writing down, because the shape recurs:**
+the dry run predicts renames **per prediction row** (one SR → one MP); the corpus
+renames **per master_place** (one winning name). The 18 predicted-but-not-landed
+= **9 `park`** (synthetic in the dry run, now real names via `/parks` → no-op) +
+**9 non-park**, and those 9 split into **~5 sibling renames** (multiple NPS SRs hit
+one MP; a *different* SR's name won, so that prediction row "didn't land" but the
+MP still renamed — counted once, under the winner, in the 103) and **~4 genuine
+no-ops** (the predicted auto_link produced no name change). Not order effects.
+
+**`/parks` wiring (#235) fixed the 9 `park`-category synthetic renames at the
+data layer, not the matcher.** Park rows previously got `"NPS park boundary:
+<code>"` because the ingester skipped `/parks`; on materialize NPS's priority-1
+`canonical_name` would have overwritten `"Alcatraz Island"` and 8 others. #235
+maps `fullName → canonical_name` (+ `description`, `contact`, `hours`;
+`designation`/`entranceFees`/`addresses` stay in `raw_payload`), keeping the
+polygon centroid as the point to avoid changing `fed_exact`. Re-ran all 91 codes
+idempotently; **0 synthetic names remain**. The last one — jotr's already-resolved
+MP from May — was fixed by a **targeted `recompute_master_place`** →
+`"Joshua Tree National Park"` (single call; description/contact/hours populated;
+`primary_category` unchanged).
+
+**Typesense caught up — the finding, not a footnote.** The search index was stale
+by **~102k**, not the 4,651 NPS delta. `places_test` went **14,911 → 117,261**
+`[queried TEST 2026-08-17]`. The 14,911 is the **2026-08-10** state
+(`DATA_INVENTORY.md`); the index **was not synced since 2026-08-10**, so the
+OSM / PAD-US / BLM six-state searchable rows added since never reached
+`places_test` until this `materialize --skip-er` run (fetched/indexed 117,261,
+0 failed, 0 pruned, collection `places_test` — never `places_prod`).
+
+**Still open (`BACKLOG.md`):** 10 jotr `park_feature` rows pending from May (the
+guard would have made them `new_master_place`, but they predate it); the
+`fed_exact` category-blind / name-blind class; the dry-run report's
+`primary_category` proxy artifact; the NPS-park_feature physical-vs-interpretive
+CMS question. Migration `20260817120000` (`resolve_place_match`) remains
+**TEST-only**.
+
+## 2026-08-17 — all four USFS categories materialized on TEST; `resolve_place_match` RPC + recreation.gov-id queue rule (~~OPEN PR #230~~ **MERGED to `main` since — 2026-08-17 (later)**)
 
 Newest truth. **All counts re-measured against TEST read-only, 2026-08-17**
 `[queried TEST]`, apples-to-apples on `is_active = true`. **No PROD writes this
@@ -90,7 +181,7 @@ separate authorized step. Code is in **OPEN** PR #230 (`45e6ede`), not merged.
 | — osm / padus / usfs / ridb / google_resolved / nps / google | 109,615 / 37,701 / 6,324 / 6,013 / 122 / 83 / 5 |
 | — usfs active by category | campground 2,312 · trailhead 3,041 · picnic 570 · dispersed 401 |
 | — usfs SR linked / unlinked | **5,228 / 1,096** |
-| `place_match` pending (`manual_review` queue) | **5,745** (blended_residual 4,979 · close_nameless 325 · name_dominant_low_conf 441) |
+| `place_match` pending (`manual_review` queue) | ~~**5,745**~~ (blended_residual 4,979 · close_nameless 325 · name_dominant_low_conf 441) **— SUPERSEDED: was already 5,823 at NPS-run time (+78 blm-triage), now 6,102 (see the 2026-08-17 (later) section). The stated 5,745 baseline was wrong by 78 rows.** |
 | — pending usfs by category | campground 572 · trailhead 440 · picnic 50 · dispersed 35 |
 
 **All four USFS categories now materialized live on TEST.** Since 2026-08-16:
