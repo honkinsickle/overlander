@@ -77,3 +77,249 @@ test("no priceTier → no entry line (never a fabricated price)", () => {
   assert.equal(wp.logistics?.entry, undefined);
   assert.equal(wp.simulator?.entryCost, undefined);
 });
+
+// Amenities shape translation — this is the last gap in the amenities chain
+// per docs/architecture/place-pipeline-trace-amenities-addendum.md: the
+// corpus's merged amenities field is a boolean-keyed presence map (per
+// normalizeOsm() in data/ingestion/sources/osm.ts), but the slideup reads
+// Waypoint.amenities: string[] (display labels). amenitiesToLabels (private
+// to card-stats.ts, exercised here through browsePlaceToWaypoint per this
+// file's existing convention — priceTierToEntry above is tested the same
+// indirect way) is the translator. Each test below isolates one aspect of
+// the translator itself; the "real corpus tile" test at the end is the
+// integration-level check that the whole path wires end to end.
+
+test("all 6 known amenity keys true → all 6 labels, in the translator's declared order", () => {
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        water: true,
+        toilet: true,
+        shower: true,
+        dump_station: true,
+        fire_ring: true,
+        picnic: true,
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, [
+    "Water",
+    "Toilet",
+    "Shower",
+    "Dump Station",
+    "Fire Ring",
+    "Picnic Area",
+  ]);
+});
+
+test("all 15 known amenity keys true → all 15 labels, in the translator's declared order", () => {
+  // The 6 OSM-shared categories plus the 9 NPS-introduced categories added
+  // for the remaining-10-keys pass (cellPhoneReception is the 10th NPS key
+  // and deliberately has no category — see coerceCampgroundAmenities).
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        water: true,
+        toilet: true,
+        shower: true,
+        dump_station: true,
+        fire_ring: true,
+        picnic: true,
+        camp_store: true,
+        laundry: true,
+        internet: true,
+        ice_for_sale: true,
+        host_onsite: true,
+        amphitheater: true,
+        food_storage: true,
+        firewood_for_sale: true,
+        trash_recycling: true,
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, [
+    "Water",
+    "Toilet",
+    "Shower",
+    "Dump Station",
+    "Fire Ring",
+    "Picnic Area",
+    "Camp Store",
+    "Laundry",
+    "Internet",
+    "Ice for Sale",
+    "Camp Host",
+    "Amphitheater",
+    "Food Storage Lockers",
+    "Firewood",
+    "Trash",
+  ]);
+});
+
+test("a single true key → only that label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { shower: true } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Shower"]);
+});
+
+test("false and absent keys are both omitted — never a 'No X' label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { water: true, toilet: false } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Water"]);
+});
+
+// Qualifier suffixes — written only by coerceCampgroundAmenities
+// (data/ingestion/sources/nps.ts) via a sibling `${key}_qualifier` key.
+// This is new behavior added after the original amenities-render-shape fix
+// (f85bbcb) — the "NPS amenities gap" scoping report predicted
+// amenitiesToLabels would need NO changes to close the NPS gap; adding
+// qualifier support (per Adam's decision to keep, not collapse, the
+// seasonal distinction) revises that prediction.
+
+test("a seasonal qualifier appends '(seasonal)' to the label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { water: true, water_qualifier: "seasonal" } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Water (seasonal)"]);
+});
+
+test("the qualifier suffix mechanism applies equally to a NPS-introduced category, not just the original 4", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { firewood_for_sale: true, firewood_for_sale_qualifier: "seasonal" } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Firewood (seasonal)"]);
+});
+
+test("a non_potable qualifier appends '(non-potable)' to the label", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { water: true, water_qualifier: "non_potable" } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Water (non-potable)"]);
+});
+
+test("no qualifier key (the year-round/default case) → bare label, no suffix", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { toilet: true } }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Toilet"]);
+});
+
+test("a qualifier on a key that isn't itself true is ignored (no dangling '(seasonal)' with no base label)", () => {
+  const wp = browsePlaceToWaypoint(
+    place({ amenities: { water: false, water_qualifier: "seasonal" } }),
+    ctx,
+    stats,
+  );
+  assert.equal(wp.amenities, undefined);
+});
+
+test("mixed qualified and unqualified keys in the same object", () => {
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        dump_station: true,
+        dump_station_qualifier: "seasonal",
+        toilet: true,
+        water: true,
+        water_qualifier: "non_potable",
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, [
+    "Water (non-potable)",
+    "Toilet",
+    "Dump Station (seasonal)",
+  ]);
+});
+
+test("end to end: a real backfilled NPS campground's amenities produce correct qualifier labels", () => {
+  // The exact output of coerceCampgroundAmenities (data/ingestion/sources/
+  // nps.ts) for the real TEST record fixture in nps.test.ts's "a real full
+  // record" case — hardcoded here rather than imported (web/ doesn't import
+  // from data/ at runtime, and this keeps the test self-contained), but
+  // traceable back to that exact record's raw amenities.
+  const wp = browsePlaceToWaypoint(
+    place({
+      title: "A real NPS campground (post-normalization)",
+      amenities: {
+        dump_station: true,
+        dump_station_qualifier: "seasonal",
+        toilet: true, // mixed seasonal+year-round entries → year-round wins, no qualifier
+        water: true,
+        water_qualifier: "seasonal",
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.deepEqual(wp.amenities, ["Water (seasonal)", "Toilet", "Dump Station (seasonal)"]);
+});
+
+test("amenities: null → amenities undefined (section hidden, not an empty array)", () => {
+  const wp = browsePlaceToWaypoint(place({ amenities: null }), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("amenities: {} (all keys absent) → amenities undefined", () => {
+  const wp = browsePlaceToWaypoint(place({ amenities: {} }), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("no amenities field at all → amenities undefined (no fabrication)", () => {
+  const wp = browsePlaceToWaypoint(place(), ctx, stats);
+  assert.equal(wp.amenities, undefined);
+});
+
+test("unrecognized keys (e.g. bc_parks' array shape, out of scope/inert today) are ignored, not fabricated into labels", () => {
+  // NPS's amenities now normalize to this same canonical shape upstream
+  // (coerceCampgroundAmenities, data/ingestion/sources/nps.ts) — this case
+  // now stands in for any OTHER out-of-scope raw shape reaching this
+  // function unexpectedly, not NPS specifically. Revises this test's
+  // original framing from the "amenities gap" scoping report.
+  const wp = browsePlaceToWaypoint(
+    place({
+      amenities: {
+        camping_types: ["RV", "Tent"],
+        facilities: ["Toilet"],
+      },
+    }),
+    ctx,
+    stats,
+  );
+  assert.equal(wp.amenities, undefined);
+});
+
+test("end to end: a real corpus tile's amenities reach Waypoint.amenities as display labels", () => {
+  // Shape a federated/corpus BrowsePlace would actually carry post-merge —
+  // mapMasterPlaceRow passes master_place.amenities through unchanged
+  // (federated.ts), so this is resolve_field()'s output shape, not a
+  // synthetic one.
+  const corpusPlace = place({
+    id: "mp:22222222-2222-2222-2222-222222222222",
+    title: "Kingman Field Office Dispersed Site",
+    overlanderTags: ["blm_land", "dispersed_camping_likely"],
+    amenities: { water: true, fire_ring: true, toilet: false },
+  });
+  const wp = browsePlaceToWaypoint(corpusPlace, ctx, stats);
+  assert.deepEqual(wp.amenities, ["Water", "Fire Ring"]);
+});

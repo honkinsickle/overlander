@@ -2,6 +2,14 @@
  * Read-only: characterize the rich-facets distribution across master_place
  * to define an LLM-enrichment eligibility criterion. NOT modifying anything.
  *
+ * Bucketing logic lives in lib/eligibility.ts, shared with
+ * measure-eligibility-full-corpus.ts — fixed once, not twice. See that
+ * module for the has_real_description signal and the DESCRIPTION_MIN_LENGTH
+ * threshold it's based on (real RIDB/USFS/NPS samples, not a guessed
+ * number) — added after the full-corpus pass found facility/visitor_center
+ * wrongly bucketed NONE despite RIDB/NPS populating a real description on
+ * 99-100% of their rows.
+ *
  * Terminology note: the codebase has no `facets` column. source_record has
  * `normalized_payload` (jsonb; per-source cleaned shape) and `raw_payload`
  * (jsonb; verbatim source). The OSM ingester's normalizeOsm() at
@@ -12,6 +20,15 @@
  * This script probes BOTH.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  computeSignals,
+  emptyAggregatedSignals,
+  foldSignalsInto,
+  isStrong as isStrongSignals,
+  isWeak as isWeakSignals,
+  type SRSignals,
+  type AggregatedSignals,
+} from "./lib/eligibility.ts";
 
 const PAGE = 1000;
 
@@ -26,32 +43,9 @@ function classifyState(lng: number, lat: number): State {
   return "outside";
 }
 
-// Strict per the ask's exemplars: keys that carry LLM-usable descriptive
-// content, not category markers. Excludes tourism/natural/amenity/leisure
-// (already captured by inferred_category), ele (bare number), and access
-// tags like surface/wheelchair (useful but not the "descriptive text" the
-// ask calls out). The 5+-raw-tags fallback catches rich OSM rows that lack
-// any of these keys.
-const MEANINGFUL_OSM_KEYS = new Set([
-  "description", "note",
-  "historic_name", "historic:name", "heritage",
-  "operator",
-  "cuisine",
-  "name:en", "alt_name",
-  "wikipedia", "wikidata",
-]);
-
-type SR = {
+type SR = SRSignals & {
   master_place_id: string | null;
   source_id: string;
-  // signals
-  has_website: boolean;
-  has_phone: boolean;
-  has_hours: boolean;
-  has_wikipedia: boolean;
-  has_wikidata: boolean;
-  meaningful_tag_count: number;
-  raw_tag_count: number;
 };
 
 async function fetchSRSignals(db: SupabaseClient): Promise<SR[]> {
@@ -76,42 +70,8 @@ async function fetchSRSignals(db: SupabaseClient): Promise<SR[]> {
       normalized_payload: any;
       raw_payload: any;
     }>) {
-      const np = raw.normalized_payload ?? {};
-      const rp = raw.raw_payload ?? {};
-      const contact = np.contact ?? {};
-      const npHours = np.hours ?? np.opening_hours;
-      // Raw tag dict lives at different paths per source:
-      //   OSM: raw_payload.element.tags (key-value dict from Overpass)
-      //   NPS: raw_payload.place.tags (array of theme labels — not a dict)
-      //   RIDB / USFS / PAD-US / google_resolved: no key-value tag dict
-      // Only OSM's shape supports the "5+ keys" or "high-signal key" test.
-      const rawTags: Record<string, unknown> =
-        (rp.element?.tags && typeof rp.element.tags === "object" && !Array.isArray(rp.element.tags))
-          ? rp.element.tags
-          : (rp.tags && typeof rp.tags === "object" && !Array.isArray(rp.tags)) ? rp.tags : {};
-      const rawTagKeys = Object.keys(rawTags);
-      let meaningful = 0;
-      for (const k of rawTagKeys) if (MEANINGFUL_OSM_KEYS.has(k)) meaningful++;
-
-      rows.push({
-        master_place_id: raw.master_place_id,
-        source_id: raw.source_id,
-        // Existing pipeline-visible signals (normalized_payload):
-        has_website: !!(contact.website ?? np.website ?? rawTags.website ?? rawTags.url),
-        has_phone: !!(contact.phone ?? np.phone ?? rawTags.phone),
-        has_hours: !!(
-          (typeof npHours === "string" && npHours.length > 0) ||
-          (npHours && typeof npHours === "object" && Object.keys(npHours).length > 0) ||
-          rawTags.opening_hours
-        ),
-        // Wiki refs (from raw only — normalized_payload never carries them):
-        has_wikipedia: !!(np.wikipedia ?? rawTags.wikipedia),
-        has_wikidata: !!(np.wikidata ?? rawTags.wikidata),
-        // Meaningful tags: presence of high-signal keys OR 5+ total tags
-        // (the "more than name+category" phrasing in the ask)
-        meaningful_tag_count: meaningful,
-        raw_tag_count: rawTagKeys.length,
-      });
+      const s = computeSignals(raw.normalized_payload, raw.raw_payload);
+      rows.push({ master_place_id: raw.master_place_id, source_id: raw.source_id, ...s });
     }
     if (r.data.length < PAGE) break;
     from += PAGE;
@@ -187,29 +147,17 @@ async function main() {
   console.log(`  source_records probed: ${fmt(srs.length)}`);
 
   // Aggregate signals per MP: any linked SR contributes
-  type MPSig = {
-    has_wikipedia: boolean;
-    has_website: boolean;
-    has_opening_hours: boolean;
-    has_phone: boolean;
-    has_meaningful_tags: boolean;  // ≥1 meaningful key OR ≥5 raw tags
-    source_ids: Set<string>;
-  };
+  type MPSig = AggregatedSignals & { source_ids: Set<string> };
   const sigs = new Map<string, MPSig>();
   for (const sr of srs) {
     if (!sr.master_place_id) continue;
     let s = sigs.get(sr.master_place_id);
     if (!s) {
-      s = { has_wikipedia: false, has_website: false, has_opening_hours: false,
-            has_phone: false, has_meaningful_tags: false, source_ids: new Set() };
+      s = { ...emptyAggregatedSignals(), source_ids: new Set() };
       sigs.set(sr.master_place_id, s);
     }
     s.source_ids.add(sr.source_id);
-    s.has_wikipedia ||= sr.has_wikipedia || sr.has_wikidata;
-    s.has_website ||= sr.has_website;
-    s.has_opening_hours ||= sr.has_hours;
-    s.has_phone ||= sr.has_phone;
-    s.has_meaningful_tags ||= (sr.meaningful_tag_count >= 1) || (sr.raw_tag_count >= 5);
+    foldSignalsInto(s, sr);
   }
 
   const mpsWithSR = mps.filter(m => sigs.has(m.id));
@@ -217,14 +165,15 @@ async function main() {
   console.log(`  MPs with at least one active SR: ${fmt(N)}`);
 
   // ── Individual signal counts
-  const c = { wiki: 0, web: 0, hours: 0, phone: 0, meaningful: 0 };
+  const c = { wiki: 0, web: 0, hours: 0, phone: 0, meaningful: 0, realDescription: 0 };
   for (const m of mpsWithSR) {
     const s = sigs.get(m.id)!;
     if (s.has_wikipedia) c.wiki++;
     if (s.has_website) c.web++;
-    if (s.has_opening_hours) c.hours++;
+    if (s.has_hours) c.hours++;
     if (s.has_phone) c.phone++;
-    if (s.has_meaningful_tags) c.meaningful++;
+    if (s.has_meaningful) c.meaningful++;
+    if (s.has_real_description) c.realDescription++;
   }
   console.log("\n── INDIVIDUAL SIGNALS (each independent) ──");
   console.log(`  has_wikipedia (any source, incl raw_payload.tags):    ${fmt(c.wiki).padStart(8)}  ${pct(c.wiki, N)}`);
@@ -232,19 +181,18 @@ async function main() {
   console.log(`  has_opening_hours:                                    ${fmt(c.hours).padStart(8)}  ${pct(c.hours, N)}`);
   console.log(`  has_phone:                                            ${fmt(c.phone).padStart(8)}  ${pct(c.phone, N)}`);
   console.log(`  has_meaningful_tags (≥1 high-signal key OR ≥5 raw):   ${fmt(c.meaningful).padStart(8)}  ${pct(c.meaningful, N)}`);
+  console.log(`  has_real_description (>=40 trimmed chars):            ${fmt(c.realDescription).padStart(8)}  ${pct(c.realDescription, N)}`);
 
   // ── Buckets
   let strong = 0, weakOnly = 0, none = 0;
   for (const m of mpsWithSR) {
     const s = sigs.get(m.id)!;
-    const isStrong = s.has_wikipedia || s.has_website || s.has_meaningful_tags;
-    const isWeak = !isStrong && (s.has_phone || s.has_opening_hours);
-    if (isStrong) strong++;
-    else if (isWeak) weakOnly++;
+    if (isStrongSignals(s)) strong++;
+    else if (isWeakSignals(s)) weakOnly++;
     else none++;
   }
   console.log("\n── BUCKETS ──");
-  console.log(`  STRONG   (wiki OR website OR meaningful_tags):        ${fmt(strong).padStart(8)}  ${pct(strong, N)}`);
+  console.log(`  STRONG   (wiki OR website OR meaningful_tags OR real description): ${fmt(strong).padStart(8)}  ${pct(strong, N)}`);
   console.log(`  WEAK-only (phone/hours only, no strong):              ${fmt(weakOnly).padStart(8)}  ${pct(weakOnly, N)}`);
   console.log(`  NONE     (no rich signals — minimal-bucket):          ${fmt(none).padStart(8)}  ${pct(none, N)}`);
 
@@ -254,12 +202,12 @@ async function main() {
   const byCat = new Map<string, { n: number; strong: number; weak: number; none: number }>();
   for (const m of mpsWithSR) {
     const s = sigs.get(m.id)!;
-    const isStrong = s.has_wikipedia || s.has_website || s.has_meaningful_tags;
-    const isWeak = !isStrong && (s.has_phone || s.has_opening_hours);
+    const strongHere = isStrongSignals(s);
+    const weakHere = isWeakSignals(s);
     let row = byCat.get(m.primary_category);
     if (!row) { row = { n: 0, strong: 0, weak: 0, none: 0 }; byCat.set(m.primary_category, row); }
     row.n++;
-    if (isStrong) row.strong++; else if (isWeak) row.weak++; else row.none++;
+    if (strongHere) row.strong++; else if (weakHere) row.weak++; else row.none++;
   }
   const catRows = [...byCat.entries()]
     .filter(([_, r]) => r.n >= 100)
@@ -276,12 +224,12 @@ async function main() {
   const byState = new Map<State, { n: number; strong: number; weak: number; none: number }>();
   for (const m of mpsWithSR) {
     const s = sigs.get(m.id)!;
-    const isStrong = s.has_wikipedia || s.has_website || s.has_meaningful_tags;
-    const isWeak = !isStrong && (s.has_phone || s.has_opening_hours);
+    const strongHere = isStrongSignals(s);
+    const weakHere = isWeakSignals(s);
     let row = byState.get(m.state);
     if (!row) { row = { n: 0, strong: 0, weak: 0, none: 0 }; byState.set(m.state, row); }
     row.n++;
-    if (isStrong) row.strong++; else if (isWeak) row.weak++; else row.none++;
+    if (strongHere) row.strong++; else if (weakHere) row.weak++; else row.none++;
   }
   for (const st of ["WA", "OR", "CA", "NV", "UT", "AZ", "outside"] as State[]) {
     const r = byState.get(st) ?? { n: 0, strong: 0, weak: 0, none: 0 };
