@@ -90,6 +90,18 @@ export type BrowsePlace = {
   mvumCorridor?: boolean | null;
   attribution?: Record<string, string> | null;
   overlanderTags?: string[] | null;
+  /** Corpus capacity data (sites_total, sites_reservable, max_rig_length —
+   *  card data matrix), resolved via field_precedence (ridb > nps > osm).
+   *  Same "carried through, no render consumer yet" status as mvumCorridor
+   *  above. NULL for non-applicable rows; absent on live results. */
+  capacity?: Record<string, unknown> | null;
+  /** Corpus amenities (water, toilet, shower, dump_station, fire_ring,
+   *  picnic), resolved via field_precedence for ioverlander/ridb/nps/google
+   *  ONLY — OSM is deliberately excluded, a separate design decision (see
+   *  docs/architecture/place-pipeline-trace-amenities-addendum.md). Same
+   *  "carried through, no render consumer yet" status as mvumCorridor above.
+   *  NULL for non-applicable rows; absent on live results. */
+  amenities?: Record<string, unknown> | null;
 };
 
 const BASE_PILLS = {

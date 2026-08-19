@@ -577,12 +577,169 @@ either:
   ingested at all under the new mapping, delete is cleaner.
 
 A small script mirroring the `apply-placeholder-rewrite.ts` pattern
-(idempotent, paired undo, verify post-conditions) is the shape. Not
-run today.
+(idempotent, paired undo, verify post-conditions) is the shape. ~~Not
+run today.~~ **DONE ON TEST 2026-08-18 — see below. PROD still open.**
 
 **Small blast radius.** No user-facing surface shows `dump_station`
 prominently; the mis-classification is data-quality debt, not a
 render defect. Can wait behind the six-state trim.
+
+### RESOLVED ON TEST 2026-08-18 by DELETION — `data/scripts/delete-osm-waste-disposal.ts`
+
+**Final state. Supersedes the reclassify-to-NULL step recorded below.** Adam's
+decision reversed that intermediate approach in favour of the **delete this
+entry preferred from the start** ("since the row shouldn't have been ingested at
+all, delete is cleaner"). The 123 stale rows are **hard-deleted from TEST**.
+**PROD's 1,723 rows are UNTOUCHED and still need Adam's explicit go-ahead as a
+separate operation.**
+
+**TEST before → after `[queried TEST 2026-08-18]`:**
+
+| metric | before | after | Δ |
+|---|--:|--:|--:|
+| `source_record` total | 165,945 | **165,822** | −123 |
+| — `is_active=false` | 84,911 | 84,788 | −123 |
+| — `is_active=true` | 81,034 | 81,034 | **0** |
+| osm `source_record` | 109,615 | **109,492** | −123 |
+| `place_match` total | 163,248 | **163,151** | −97 (cascade) |
+| `master_place` total | 155,495 | 155,495 | **0** |
+
+Zero `amenity=waste_disposal` rows remain on TEST; the **26** genuine
+`sanitary_dump_station` rows are untouched and still deactivated. The
+corpus-wide diff was exactly the five lines above — no other category or source
+moved. `place_match` cascades via `on delete cascade` on
+`place_match.source_record_id` (the only FK referencing `source_record`).
+
+**The set was NOT taken from the prior snapshot — that snapshot had been
+destroyed.** `reclassify-osm-waste-disposal.ts` wrote its snapshot on every run
+including dry runs, so a post-apply dry run found 0 rows and overwrote it with
+an empty file. Defect fixed in that script (timestamped snapshots, never write
+an empty one). The set was instead re-derived and proven identical: **zero** osm
+rows had a NULL `inferred_category` before the reclassify step, and it set
+exactly 123 to NULL, so `source_id='osm' AND inferred_category IS NULL` selects
+precisely those rows. Four independent guards enforced it at delete time (NULL
+category + raw tag + expected count 123 + all-inactive). A full-row backup
+(every column + the 97 cascading `place_match` rows) is at
+`~/.config/overlander/deletion-backups/`; `raw_payload` carries the original OSM
+element with coordinates, so rows are reconstructible via
+`upsert_source_record`.
+
+**Post-hoc content verification — the premise HOLDS `[read backup 2026-08-18]`.**
+The "these are municipal trash bins, not RV dump stations" judgement was
+originally **inherited** from tag semantics plus the 20-row **PROD** sample
+above, and was never checked against these specific TEST rows before they were
+deleted. It has now been verified read-only against the backup, across **all
+123 rows — a full scan, not a sample** (a sample cannot answer "are there
+exceptions?"):
+
+- **100%** carry `amenity=waste_disposal`; no other amenity value appears.
+- **112 of 123 (91.1%)** carry the bare category tag and nothing else. Only six
+  distinct tag-set shapes exist across the whole population.
+- **Zero** rows carry `description`, `operator`, `website`, `brand`, `phone`,
+  `opening_hours`, `capacity`, `fee`, `charge`, or any `addr:*` tag.
+- **Only 2 rows carry an OSM `name` tag at all — and both are literally named
+  `"Dumpster"`**, with `waste=trash`. They are the strongest confirmation of the
+  characterization, not counter-examples.
+- **6 more** carry `waste=trash`; **3** carry an access restriction
+  (`access=private` ×2, `access=customers` ×1) — all consistent with bins.
+  Remaining keys (`source`, `source_ref`, `source_date`) are provenance noise.
+- `normalized_payload` held **0** non-empty descriptions. All 123 carried
+  `amenities: {"dump_station": true}` — a false amenity flag derived from the
+  bad category, so the deletion also removed 123 bogus `dump_station` amenity
+  assertions from the corpus.
+
+**Verdict: no row in the deleted set resembles an RV sanitary dump station.
+Nothing is flagged for restoration and the deletion stands as correct.** The
+backup remains on disk regardless.
+
+**Deletion did NOT fix the `recompute_master_place` clear-bug `[queried TEST
+2026-08-18]`.** The recompute demonstrably **ran and wrote**: all 89 affected
+master_places carry `updated_at` in the **03:16:22–03:16:33 UTC** window, which
+matches the delete operation exactly (its backup file is stamped 03:16:22) and
+matches no other operation this session. Yet **78 of them still read
+`primary_category='dump_station'`** and `canonical_name='Unnamed dump station'`.
+A recompute that provably wrote still left those columns stale — which is the
+clear-bug demonstrated directly, on the `IF v_value IS NOT NULL` guard: with no
+*active* source_record left, `resolve_field()` returns no candidate, the UPDATE
+is skipped, and the old value stays stranded. Deleting the source_record is
+therefore **not** a workaround for the clear-bug; it needs its own scoped pass.
+
+**Observed inconsistency, mechanism NOT established.** Post-delete, the 78 rows
+carry `attribution = {}` and `secondary_categories = []` while
+`primary_category`/`canonical_name` still hold values with no backing source.
+These aggregate columns were **not measured pre-delete**, so it is not known
+whether the delete changed them or they were already empty — and no causal link
+between them and the `updated_at` bump has been established. Recorded as an
+observation, not a mechanism.
+
+> **CORRECTION 2026-08-18 (same day, before push).** ~~An earlier revision of
+> this entry and of this deletion commit's message claimed `updated_at` bumped
+> "89 of 89, vs 0 of 89 for the NULL case," and that the recompute "genuinely
+> wrote this time" while the NULL-case recompute was a verified no-op.~~ **That
+> contrast was never established and has been struck.** The "0 of 89" came from a
+> **vacuous check**: the filter tested `updated_at` for the prefix
+> `2026-08-18` while the machine runs PDT and the operation executed at
+> **03:02 UTC on 2026-08-19**, so it was guaranteed to return 0 whether or not
+> the recompute wrote. The NULL-case write behaviour was therefore **never
+> measured**, and the evidence is now **unrecoverable** — the 03:16 delete
+> recompute overwrote those `updated_at` values. Only the delete-case
+> measurement above stands. Same failure class as the apparatus lessons in
+> `CLAUDE.md`: a check that cannot fail is not evidence.
+
+**NEW residual introduced by the deletion: 78 completely sourceless
+`master_place` rows** (zero `source_record` rows now reference them; before,
+they at least had an inactive one). Still **render-harmless** — all 94
+corpus-wide `dump_station` master_places sit at `source_count = 0` and
+`master_place_search_export` returns **0** of them `[queried TEST 2026-08-18]`.
+Cleaning them up is a separate authorized decision (deleting `master_place` rows
+was not in scope here) and is the natural companion to the clear-bug pass.
+
+### Intermediate step, 2026-08-18 — reclassify to NULL (`reclassify-osm-waste-disposal.ts`)
+
+~~Final.~~ **Superseded by the deletion above; kept for the record.**
+
+Surfaced by this session's tag-richness investigation, which first reported
+dump_station at 93.3% tag-rich — an **apparatus artifact**: the richness
+probe's defining-tag predicate was `amenity=sanitary_dump_station`, so on a
+mis-mapped row the `amenity` key itself counted as an "extra" tag. Re-measured
+split by the tag that actually produced the category.
+
+**TEST before → after `[queried TEST 2026-08-18]`:** osm
+`inferred_category='dump_station'` **149 → 26**; the **123**
+`amenity=waste_disposal` rows re-derived to `inferred_category = NULL`. All 149
+were already `is_active=false` (deactivated in `47e00e4`); the 26 genuine rows
+stay deactivated — the parent decision stands, templates are a separate stage.
+
+**Chose reclassify-to-NULL over the delete this entry prefers**, on explicit
+instruction. NULL is what the current normalizer actually derives
+(`osm.test.ts` asserts `inferCategory({amenity:'waste_disposal'})` is `null`),
+`inferred_category` is nullable, and `recompute_aggregated_fields` already skips
+nulls — so it is a state the schema and recompute path both expect, and it is
+reversible. Delete remains the cleaner end state if the rows are ever confirmed
+worthless; nothing here forecloses it.
+
+Corpus-wide before/after diff was **exactly two lines** (osm `(null)` +123,
+`dump_station` 149→26) — no other category, source, or master_place count moved.
+Reversibility proven by a full undo → re-apply round trip (149 → 123 restored →
+26). Snapshot:
+`~/.config/overlander/reclassify-snapshots/osm-waste-disposal-dump-station.json`.
+
+**RESIDUAL — a second confirmed instance of the `recompute_master_place`
+clear-bug** (its own entry above predicted exactly this: "any field whose
+sources might stop resolving … should check for the same class of stale-data
+risk"). The 89 affected master_places were recomputed with zero errors, and
+**78 still read `primary_category='dump_station'`** `[queried TEST 2026-08-18]`.
+~~`updated_at` bumped on 0 of 89.~~ **STRUCK — that check was vacuous** (a
+`2026-08-18` prefix filter against a run that executed at 03:02 UTC on
+**2026-08-19** on a PDT machine; it returned 0 regardless of outcome). Whether
+this NULL-case recompute wrote was **never measured** and can no longer be
+recovered — see the CORRECTION note in the deletion section above. Cause: with no
+*active* source_record left, `resolve_field()` returns no candidate, so the
+`IF v_value IS NOT NULL` guard skips the UPDATE and the old value stays
+stranded. **Render-harmless here** — all 94 corpus-wide `dump_station`
+master_places sit at `source_count = 0`, which the export view's
+`source_count > 0` filter excludes, so none reach search. Fixing it belongs to
+the clear-bug's own scoped pass, not here.
 
 ## Cross-category `amenity_rollup` collapse — separate from placeholder fix (2026-08-10)
 
@@ -2230,6 +2387,179 @@ conclusion.
   - Open, unresolved: `gap_status` (GAP 1-4 protection-tier codes) needs
     plain-language display copy before it can be shown to a user (e.g.
     "Permanently protected" vs. raw code) — a product decision, not yet made.
+
+- **`recompute_master_place` never clears a field back to null — only
+  overwrites when a new value exists. LOW-TO-MEDIUM PRIORITY, currently
+  render-harmless but real.** Found during NPS amenities normalization
+  (commit `b03450d`): the function's `IF v_value IS NOT NULL` guard skips
+  the UPDATE entirely when `resolve_field()` finds no winning source for a
+  field — so if a place's field previously had a real value and every
+  source's value for it changes/disappears (e.g. a source gets
+  renormalized and no longer maps to any recognized category), the OLD
+  value stays stranded in `master_place` instead of being cleared.
+  - **Confirmed harmless today, not confirmed harmless generally.** 14
+    `master_place` rows hit this exact case for `amenities`
+    post-NPS-renormalization — `attribution.amenities` correctly cleared to
+    reflect "no source resolves this anymore," but `master_place.amenities`
+    itself still holds the old raw blob. Verified render-harmless
+    specifically because the stale blob's keys have zero overlap with the
+    current `AMENITY_LABELS` set, so the render translator produces `[]`
+    regardless — but this was a coincidence of the specific data involved,
+    not a property of the fix.
+  - **Deliberately not patched as part of the NPS work** — fixing
+    `recompute_master_place` itself is higher blast radius than a
+    normalizer change (it's shared across every field/source, per the
+    master_place invariant restricting writes to that column to only go
+    through this function). Needs its own scoped pass: likely an explicit
+    clear (`SET field = NULL`) branch when `resolve_field()` returns no
+    candidate, not just skipping the UPDATE.
+  - Any future work that touches this function, or any field whose sources
+    might stop resolving (a source renormalization, a source deactivation,
+    precedence changes), should check for the same class of stale-data risk
+    this pass happened to catch by coincidence.
+  - **THIRD OBSERVATION, 2026-08-18 — reinforcing evidence, and the clearest
+    demonstration yet.** The dump_station cleanup hit it twice more. After the
+    123 stale rows were reclassified to `inferred_category = null`, and again
+    after they were hard-deleted, **78 `master_place` rows still read
+    `primary_category='dump_station'` and `canonical_name='Unnamed dump
+    station'`** `[queried TEST 2026-08-18]`. The delete case is the sharpest
+    evidence available: the recompute **provably ran and wrote** — all 89
+    affected master_places carry `updated_at` inside the delete operation's own
+    03:16:22–03:16:33 UTC window — and the guarded columns *still* went
+    unchanged. So this is not "recompute didn't run"; it is the `IF v_value IS
+    NOT NULL` guard skipping the UPDATE exactly as described above.
+    - Note the split: the **unconditionally-written** aggregates did clear
+      (`attribution` → `{}`, `secondary_categories` → `[]`), while the
+      **precedence-resolved** columns stranded — leaving rows that are
+      internally inconsistent, asserting a category and name with no backing
+      source. Those aggregates were not measured pre-delete, so whether the
+      delete changed them is unknown; recorded as an observation, not a
+      mechanism.
+    - **Render-harmless again, for the same accidental reason:** all 94
+      corpus-wide `dump_station` master_places sit at `source_count = 0` except
+      the 16 live ones, and the export view's `source_count > 0` filter excludes
+      the rest. Harmless by filter, not by design.
+    - **New companion residual:** those 78 rows are now **completely sourceless**
+      — zero `source_record` rows reference them at all, where before they at
+      least had an inactive one. Deleting them is a separate authorized decision
+      and the natural companion to this fix's own scoped pass.
+
+- **Amenity chip density — no cap or overflow handling. UNBUILT, flagged
+  2026-08-18.** The slideup renders one chip per truthy amenity key via
+  `amenitiesToLabels` (`web/src/lib/trip-browse/card-stats.ts`), and
+  `AMENITY_LABELS` currently defines **15** keys — 6 shared with `normalizeOsm`
+  plus 9 NPS-introduced ones `[read source 2026-08-18]`. A fully-populated NPS
+  campground can therefore emit up to 15 chips onto a single card with **no cap,
+  no "+N more", and no overflow treatment** anywhere in the render path. Not
+  observed breaking a real card yet — flagged when the NPS normalization landed
+  (`95fdeb7`) because it materially raised the achievable chip count, and this
+  entry exists because a prior session flagged it mid-work and it was never
+  written down. Needs a product/design call on cap and overflow affordance
+  before it is an engineering task.
+
+- ~~**`land_manager` / `designation` / `gap_status` proposal is STRANDED ON AN
+  UNMERGED BRANCH — 2026-08-18.**~~ **RESOLVED 2026-08-19 — the branch was
+  merged and the proposal now lives in this file.** It had existed only in
+  `land-manager-precedence-design` (`30c231a`), unreachable from `main`, which is
+  what this entry recorded. The full scoped proposal is above; this pointer is
+  kept because it is still the stated blocker for `public_land` (1,343 padus
+  rows, deactivated).
+
+- **Two approved commit-message corrections — APPLIED 2026-08-18, then pushed.**
+  Both were applied at end of session. Neither commit was the branch tip, so this
+  was a history rewrite (cherry-pick reword), not a plain `--amend`: `159ac2b` →
+  **`0e8906f`** and `db6e64b` → **`b794a23`**, with their descendants renumbered.
+  Content verified byte-identical to the pre-rewrite tree — messages only. Every
+  hash reference in STATE.md / LOG.md / BACKLOG.md / the Diary was repointed to
+  the new SHAs in the same pass.
+  - `0e8906f` — its message says "4 new tests (29 → 33 in this file)". The real
+    figure is **2 new tests, 29 → 31** `[measured 2026-08-18: vitest reports 31,
+    and the file contains 31 `it(` blocks]`. The suite moved 482 → 484, which is
+    +2 and contradicts the claim in the same sentence.
+  - `b794a23` — its message says "The OOM that failed three times earlier in the
+    session did NOT recur." Wrong twice: the 3 failures were **never observed in
+    this session** (one sync run, which succeeded) and they **predate this
+    session**, coming from the handoff document. Correct framing: the handoff
+    reports 3 consecutive OOM failures; this run succeeded.
+
+- ~~**Description-less remainder in the reactivated categories — OPEN DECISION,
+  NOT RESOLVED, 2026-08-18.**~~ **RESOLVED 2026-08-19 — decided and implemented.**
+  Adam's call: within toilet / water / dump_station, only rows that actually carry
+  a description stay live. "Has a description" counts a real original OSM
+  `description`/`note` tag and a generated template sentence equally.
+  Implemented in commit **`478e8d0`**.
+  **1,008 description-less rows deactivated** — 362 toilet, 635 water, 11
+  dump_station. Live now: **toilet 308 / 670, water 370 / 1,005, dump_station
+  15 / 26**, and every active row in all three carries a description
+  `[queried TEST 2026-08-19]`.
+  - Targeted partial deactivation, not a category toggle — no described row was
+    touched, and all **519** master_places holding a described active row remain
+    in the export view.
+  - `source_record` active 82,735 → **81,727** (−1,008 exactly); view 36,175 →
+    **35,398** (−777). The view falls by less than 1,008 because a master_place
+    holding both a described and an undescribed row keeps its described source
+    and stays live.
+  - Verified on BOTH surfaces in BOTH directions, 18/18: deactivated places absent
+    from `master_place_search_export` **and** from a live `pois_along_corridor`
+    call; described controls present on both.
+  - ⚠ **Typesense is stale as a result** — the follow-up sync failed on cluster
+    OOM, so search still returns the 777 removed places. See `STATE.md`. The
+    database-backed surfaces are correct.
+
+- ~~**NPS-sourced viewpoint reactivation — SCOPED, NEVER RAN, 2026-08-18.**~~
+  **RESOLVED 2026-08-19 — both viewpoint slices reactivated.** See `STATE.md`
+  §"Viewpoint — both slices reactivated".
+  - **NPS (`16738b6`)**: all **231** source_records active, 148 linked → **146
+    distinct master_places**, **120 in the export view**. The 26 absent are
+    outside `six_state_footprint()` (Los Alamos NM / Oak Ridge TN Manhattan
+    Project NHP sites), correctly excluded on geography, not a defect.
+  - **OSM (`6a03720`)**: **175** active under filter C → **170 master_places, all
+    170 in the view**. Junk **27** and undescribed **6,268** stay off; the
+    partition closes on 6,470. Filter C keeps `note`-tag content deliberately —
+    the presumed mapper-junk did not materialise (**0** rows with mapper
+    vocabulary), and the note rows carry trail directions and safety warnings.
+  - Classifier is a checked-in pure function
+    (`data/ingestion/lib/osm-viewpoint-content-filter.ts`) with 9 tests, so the
+    reactivation and its verification cannot drift apart. **Known limitation
+    recorded there:** filter C is structural, not a truth check — a 48-char
+    dispute entry passes every structural test and was admitted.
+  - **City Hall Observation Deck is NOT in either slice** — OSM-sourced,
+    description null. Used as a negative control; correctly absent from both
+    surfaces.
+
+- **Never-processed ER backlog — BLM slice CLEARED 2026-08-19, remainder OPEN.**
+  Corpus-wide, source_records existed that were active and unlinked with **no
+  `place_match` row at all** — never seen by entity resolution, distinct from the
+  `manual_review` queue. Cause established by exclusion (timing, data shape,
+  category allowlist, run truncation all refuted): they were never in any
+  materialize invocation's id set.
+  - **Done:** the 652 blm `dispersed_camping` rows materialized — **507
+    new_master_place · 44 auto_link · 101 manual_review**; 551 linked, 101 still
+    in review; 529 distinct master_places (507 new + 22 pre-existing). Scoping
+    verified clean beforehand (0 inactive rows swept in). Cost, measured: **471 s
+    wall clock**, `matchall_ms` **381,093**, apply **59,594 ms** / 27 calls.
+  - **Remaining:** never-processed **2,671 → 2,019**, and never-processed *and
+    active* **912 → 260** `[queried TEST 2026-08-19]`.
+  - **Viewpoint deliberately excluded** — its dry run put 82 of 88 active rows
+    (93%) into `manual_review`, which leaves them unlinked and still invisible,
+    so materializing would not achieve the goal. Needs its own decision on why
+    NPS viewpoint scores so poorly (96% review) vs BLM (15%).
+  - **The durable gap:** nothing reconciles "did every source_record receive an
+    outcome?" A post-materialize completeness assertion — unresolved-with-no-
+    place_match must be 0, or explain the remainder — would have caught all
+    2,671 at the time.
+
+- **88 active-but-unreachable viewpoint source_records — OPEN, 2026-08-19.**
+  Rows with no `master_place_id` were reactivated with their slice but reach
+  **neither** the export view nor `pois_along_corridor`; they need
+  materialization. **83 nps + 5 osm = 88** `[queried TEST 2026-08-19]`. The five
+  OSM ones are among the better content in the set:
+  `osm:node:358804431` (Zabriskie Point, 254 chars) · `osm:node:11370405017`
+  (Badwater Basin hiking warning) · `osm:node:9287425516` and
+  `osm:node:9287425501` (note-tag trail/gate directions) ·
+  `osm:node:9401761579` (Roosevelt Dam view). Same issue class in both slices,
+  unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
+  and 231 NPS rows to 146.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

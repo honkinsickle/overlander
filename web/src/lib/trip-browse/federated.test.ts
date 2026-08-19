@@ -49,3 +49,41 @@ test("google_place_id still → placeId (the two join columns don't collide)", (
   assert.equal(tile.placeId, "ChIJabc");
   assert.equal(tile.photoUrl, "https://x/y.jpg");
 });
+
+// capacity/amenities: typed on the RPC row, previously never read in this
+// function's body — the value crossed the wire and was silently discarded.
+// docs/architecture/place-pipeline-trace.md §2 (capacity) and
+// place-pipeline-trace-amenities-addendum.md §4 (amenities).
+
+test("capacity survives row → tile (was silently dropped)", () => {
+  const capacity = { sites_total: 42, sites_reservable: 30 };
+  const tile = mapMasterPlaceRow(row({ capacity }), "camping");
+  assert.deepEqual(tile.capacity, capacity);
+});
+
+test("no capacity on the row → no capacity on the tile (null, not dropped-and-undefined)", () => {
+  const tile = mapMasterPlaceRow(row({ capacity: null }), "camping");
+  assert.equal(tile.capacity, null);
+});
+
+test("amenities survives row → tile for a source field_precedence resolves (ridb/nps/google) (was silently dropped)", () => {
+  const amenities = { water: true, toilet: true, dump_station: false };
+  const tile = mapMasterPlaceRow(row({ amenities }), "camping");
+  assert.deepEqual(tile.amenities, amenities);
+});
+
+test("no amenities on the row → no amenities on the tile", () => {
+  const tile = mapMasterPlaceRow(row({ amenities: null }), "camping");
+  assert.equal(tile.amenities, null);
+});
+
+// NOTE on OSM + amenities: this function does not, and should not, know
+// which source_id resolved `row.amenities` — that decision is made entirely
+// upstream, in SQL, by field_precedence (ioverlander/ridb/nps/google only;
+// OSM has no field_precedence row for `amenities` and is therefore
+// structurally excluded before this function ever runs — confirmed by
+// reading supabase/migrations/20260527121000_phase1_seed_field_precedence.sql
+// directly, not inferred). mapMasterPlaceRow is a pure, source-blind
+// passthrough of whatever the DB already resolved onto `row`, so there is
+// nothing for a test at this layer to gate — an OSM-exclusion test belongs
+// against `resolve_field()`/field_precedence (DB layer), not this mapper.

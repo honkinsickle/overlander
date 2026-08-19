@@ -12,6 +12,75 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-18
+
+- **Amenities reconnected end to end, then a session of category curation.**
+  Source-layer normalization (OSM + NPS, NPS extended to 9 further categories),
+  the boolean-map → display-label translator for the slideup, the
+  capacity/amenities/priceTier merge-layer reconnect, OSM added to `amenities`
+  `field_precedence` as gap-fill only, and the OSM/parks_canada priority
+  collision resolved 5 → 8. All on `fix/amenities-render-shape`, **pushed to origin
+  at end of session; no PR opened**.
+- **Two categories deactivated as product scope, not as a data bug.** peak +
+  spring, **65,389 rows measured 2026-08-18** (earlier notes said ~64,300 — the
+  measured figure supersedes). Confirmed real via a live Overpass cross-check
+  before flipping anything: these exist and are correctly tagged, they are simply
+  not POIs this product curates.
+- **A measurement bug was fixed BEFORE trusting the sparseness verdict it fed.**
+  The STRONG/WEAK/NONE eligibility bucketing never read
+  `normalized_payload.description` directly, which wrongly scored RIDB/USFS-heavy
+  categories (facility, visitor_center, recreation_area) as sparse. After the fix
+  those categories moved and the seven genuinely-sparse ones did **not** — that
+  non-movement is what justified the sparse-batch deactivation. Worth keeping:
+  the deactivation decision was re-derived after the instrument was repaired,
+  rather than inherited from the broken run.
+- **`pois_along_corridor` never checked `source_count` in any of its 6
+  revisions.** A place deactivated via the established pattern
+  (`is_active=false` → recompute → `source_count = 0`) was correctly hidden from
+  browse/search by the export view's filter, but the generation RPC reads
+  `master_place.geometry` directly, bypassing the view — so a deactivated place
+  was still offered as a trip stop. Fixed (migration `20260818160000`, TEST-only).
+  **This is why the reactivation was later verified on both surfaces and not
+  just one.**
+- **dump_station was 83% mislabeled.** 123 of 149 rows carried pre-#202
+  `amenity=waste_disposal` — municipal trash bins. Reclassified to null first,
+  then hard-deleted on Adam's call (matching BACKLOG's original preference).
+  **The premise was verified only AFTER the deletion, and it held**: a full scan
+  of all 123 backed-up rows found 100% `waste_disposal`, zero content-bearing
+  tags, and the only 2 named rows literally named `"Dumpster"`. Real population
+  is **26**. Recorded as a sequencing lesson — the check should have preceded the
+  destructive step, and the conclusion was inherited from a 20-row PROD sample
+  taken on a different date until then.
+- **Templated descriptions built for toilet / water / dump_station**, then those
+  three **reactivated** (`b794a23`). Gap-fill only — a real OSM
+  `description`/`note` always wins, and all 29 pre-existing real descriptions
+  survived verbatim. Bare rows get no description rather than a fabricated one.
+  Safety rule: explicit `drinking_water=no` outranks a generic "drinking water"
+  lead, because 38 water rows are explicitly non-potable and that is the one
+  error here with real-world consequences.
+- **Typesense synced clean** — 36,175 indexed, 0 failed, 81,086 stale pruned;
+  `places_test` now equals the export view exactly. **The 3 OOM failures the
+  handoff reported did not recur — but were also never observed in this
+  session**, so they remain a reported constraint, not a reproduced one.
+- **Seven self-audits, and the pattern they exposed is the durable finding.**
+  In order: a vacuous timezone-based date filter that manufactured a false
+  before/after contrast; an unpaginated query that was right by luck; two
+  invented numbers (a false "byte-identical" claim and a wrong distance) that
+  were chat-only and never committed; one correctly-measured number misapplied
+  to an inflated claim (173 where the real figure was 59); one arithmetic error
+  in a commit message (4 new tests vs 2); and an inherited claim about a prior
+  session's OOM failures presented as this session's own observation.
+  **Every single failure was in summarizing prose — a commit message or a chat
+  report. Not one was in the underlying measurement.** The data work held up
+  under every audit. The rule this produced: a number that appears only in a
+  summary and not in a tool output is unverified by construction, and must be
+  recomputed before it is written. Now a standing instruction in Adam's memory
+  system.
+- **Docs gap closed.** This branch had made multiple corpus mutations without a
+  single `STATE.md` or `LOG.md` entry; this pass is the first. Every figure was
+  re-queried against TEST in one pass rather than transcribed, because counts
+  drifted between reports during the session.
+
 ## 2026-08-17
 
 - **All four USFS categories materialized live on TEST.** Picnic (570 SR) +

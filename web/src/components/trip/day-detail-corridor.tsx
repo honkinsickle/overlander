@@ -80,6 +80,14 @@ export type CorridorPlace = {
   /** Inline context for a curated key stop ("fuel + lunch, hot tub") — rendered
    *  as the tile's status line. Absent on pool tiles. */
   keyStopNote?: string;
+  /** Real price tier ($–$$$$) from a Google-backed source. Fetched by the
+   *  hydrate endpoint and now grafted at both merge sites (day-detail-
+   *  corridor-column.tsx's hydratePlaces() and synth()), same "carried
+   *  through, no render consumer yet on THIS surface" status as the other
+   *  passthrough fields above — the slideup already renders it via
+   *  logistics.entry (browsePlaceToWaypoint → priceTierToEntry). See
+   *  docs/architecture/place-pipeline-trace.md §3. */
+  priceTier?: 1 | 2 | 3 | 4;
 };
 
 type Props = {
