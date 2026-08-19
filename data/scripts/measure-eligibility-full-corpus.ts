@@ -1,11 +1,12 @@
 /**
  * Read-only, TEST-only: full corpus-wide STRONG/WEAK/NONE eligibility
  * bucketing, EVERY category (not the top-N/n>=100 subset the original
- * measure-llm-eligibility.ts reported). Same bucketing logic, reused
- * verbatim (isStrong = has_wikipedia || has_website || has_meaningful_tags;
- * isWeak = !isStrong && (has_phone || has_hours); else NONE) — already
- * verified to hold up in the peak/spring/viewpoint/fire_pit/dump_station
- * pilot work.
+ * measure-llm-eligibility.ts reported).
+ *
+ * Bucketing logic lives in lib/eligibility.ts, shared with
+ * measure-llm-eligibility.ts — fixed once, not twice. See that module for
+ * the has_real_description signal and the DESCRIPTION_MIN_LENGTH threshold
+ * it's based on (real RIDB/USFS/NPS samples, not a guessed number).
  *
  * Adds, beyond the original script:
  *   - every category, not just n>=100
@@ -23,75 +24,23 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { writeFileSync } from "node:fs";
+import {
+  computeSignals,
+  emptyAggregatedSignals,
+  foldSignalsInto,
+  bucketOf,
+  type SRSignals,
+  type AggregatedSignals,
+} from "./lib/eligibility.ts";
 
 const PAGE = 1000; // PostgREST caps responses at 1000 regardless of requested range — a
                     // larger PAGE here silently clamps, and a naive `data.length < PAGE`
                     // exit check then mistakes the clamped page for the last one.
 
-const MEANINGFUL_OSM_KEYS = new Set([
-  "description", "note",
-  "historic_name", "historic:name", "heritage",
-  "operator",
-  "cuisine",
-  "name:en", "alt_name",
-  "wikipedia", "wikidata",
-]);
-
-type SR = {
+type SR = SRSignals & {
   master_place_id: string | null;
   source_id: string;
-  has_website: boolean;
-  has_phone: boolean;
-  has_hours: boolean;
-  has_wikipedia: boolean;
-  has_wikidata: boolean;
-  meaningful_tag_count: number;
-  raw_tag_count: number;
-  // Separate from the bucketing signals above (which is deliberately
-  // reused verbatim from measure-llm-eligibility.ts / the prior pilot).
-  // IMPORTANT: has_meaningful_tags checks for a literal "description" TAG
-  // KEY inside OSM's raw tags dict — it does NOT check whether
-  // normalized_payload.description itself is populated. For non-OSM
-  // sources (USFS, NPS, RIDB) that write real prose into
-  // normalized_payload.description but have none of the other signals,
-  // this makes the STRONG/WEAK/NONE bucket answer a DIFFERENT question
-  // ("is there rich raw material to generate a description from") than
-  // "does this place already have a description" — tracked here
-  // separately so the two don't get silently conflated.
-  has_real_description: boolean;
 };
-
-function computeSignals(np: any, rp: any) {
-  np = np ?? {};
-  rp = rp ?? {};
-  const contact = np.contact ?? {};
-  const npHours = np.hours ?? np.opening_hours;
-  const rawTags: Record<string, unknown> =
-    (rp.element?.tags && typeof rp.element.tags === "object" && !Array.isArray(rp.element.tags))
-      ? rp.element.tags
-      : (rp.tags && typeof rp.tags === "object" && !Array.isArray(rp.tags)) ? rp.tags : {};
-  const rawTagKeys = Object.keys(rawTags);
-  let meaningful = 0;
-  for (const k of rawTagKeys) if (MEANINGFUL_OSM_KEYS.has(k)) meaningful++;
-  return {
-    has_website: !!(contact.website ?? np.website ?? (rawTags as any).website ?? (rawTags as any).url),
-    has_phone: !!(contact.phone ?? np.phone ?? (rawTags as any).phone),
-    has_hours: !!(
-      (typeof npHours === "string" && npHours.length > 0) ||
-      (npHours && typeof npHours === "object" && Object.keys(npHours).length > 0) ||
-      (rawTags as any).opening_hours
-    ),
-    has_wikipedia: !!(np.wikipedia ?? (rawTags as any).wikipedia),
-    has_wikidata: !!(np.wikidata ?? (rawTags as any).wikidata),
-    meaningful_tag_count: meaningful,
-    raw_tag_count: rawTagKeys.length,
-    // Literal presence check — does NOT distinguish real prose from a
-    // templated placeholder (e.g. USFS's "NAME (Trailhead)" pattern,
-    // observed directly in the spot-check, is non-null but not
-    // informative). Presence only; quality is a separate, unmeasured axis.
-    has_real_description: typeof np.description === "string" && np.description.trim().length > 0,
-  };
-}
 
 async function fetchSRSignals(db: SupabaseClient): Promise<SR[]> {
   const rows: SR[] = [];
@@ -162,32 +111,20 @@ async function main() {
 
   // Aggregate per-MP (across ALL its sources) for the bucket decision, AND
   // keep per-(MP, source_id) so we can compute a per-source NONE rate too.
-  type MPSig = { has_wikipedia: boolean; has_website: boolean; has_hours: boolean; has_phone: boolean; has_meaningful: boolean; has_real_description: boolean; sourceIds: Set<string> };
+  type MPSig = AggregatedSignals & { sourceIds: Set<string> };
   const sigs = new Map<string, MPSig>();
-  const bySourceForMp = new Map<string, Map<string, ReturnType<typeof computeSignals>>>(); // mp -> source_id -> that source's own signals
+  const bySourceForMp = new Map<string, Map<string, SRSignals>>(); // mp -> source_id -> that source's own signals
 
   for (const sr of srs) {
     if (!sr.master_place_id) continue;
     let s = sigs.get(sr.master_place_id);
-    if (!s) { s = { has_wikipedia: false, has_website: false, has_hours: false, has_phone: false, has_meaningful: false, has_real_description: false, sourceIds: new Set() }; sigs.set(sr.master_place_id, s); }
+    if (!s) { s = { ...emptyAggregatedSignals(), sourceIds: new Set() }; sigs.set(sr.master_place_id, s); }
     s.sourceIds.add(sr.source_id);
-    s.has_wikipedia ||= sr.has_wikipedia || sr.has_wikidata;
-    s.has_website ||= sr.has_website;
-    s.has_hours ||= sr.has_hours;
-    s.has_phone ||= sr.has_phone;
-    s.has_meaningful ||= (sr.meaningful_tag_count >= 1) || (sr.raw_tag_count >= 5);
-    s.has_real_description ||= sr.has_real_description;
+    foldSignalsInto(s, sr);
 
     let bySource = bySourceForMp.get(sr.master_place_id);
     if (!bySource) { bySource = new Map(); bySourceForMp.set(sr.master_place_id, bySource); }
     bySource.set(sr.source_id, sr); // if a MP has 2 SRs from the same source (shouldn't happen), last wins — fine for this diagnostic
-  }
-
-  function bucketOf(s: MPSig): "STRONG" | "WEAK" | "NONE" {
-    const isStrong = s.has_wikipedia || s.has_website || s.has_meaningful;
-    if (isStrong) return "STRONG";
-    const isWeak = s.has_phone || s.has_hours;
-    return isWeak ? "WEAK" : "NONE";
   }
 
   // ── Per-category rollup ──
