@@ -577,12 +577,53 @@ either:
   ingested at all under the new mapping, delete is cleaner.
 
 A small script mirroring the `apply-placeholder-rewrite.ts` pattern
-(idempotent, paired undo, verify post-conditions) is the shape. Not
-run today.
+(idempotent, paired undo, verify post-conditions) is the shape. ~~Not
+run today.~~ **DONE ON TEST 2026-08-18 — see below. PROD still open.**
 
 **Small blast radius.** No user-facing surface shows `dump_station`
 prominently; the mis-classification is data-quality debt, not a
 render defect. Can wait behind the six-state trim.
+
+### TEST side APPLIED 2026-08-18 — `data/scripts/reclassify-osm-waste-disposal.ts`
+
+Surfaced by this session's tag-richness investigation, which first reported
+dump_station at 93.3% tag-rich — an **apparatus artifact**: the richness
+probe's defining-tag predicate was `amenity=sanitary_dump_station`, so on a
+mis-mapped row the `amenity` key itself counted as an "extra" tag. Re-measured
+split by the tag that actually produced the category.
+
+**TEST before → after `[queried TEST 2026-08-18]`:** osm
+`inferred_category='dump_station'` **149 → 26**; the **123**
+`amenity=waste_disposal` rows re-derived to `inferred_category = NULL`. All 149
+were already `is_active=false` (deactivated in `47e00e4`); the 26 genuine rows
+stay deactivated — the parent decision stands, templates are a separate stage.
+
+**Chose reclassify-to-NULL over the delete this entry prefers**, on explicit
+instruction. NULL is what the current normalizer actually derives
+(`osm.test.ts` asserts `inferCategory({amenity:'waste_disposal'})` is `null`),
+`inferred_category` is nullable, and `recompute_aggregated_fields` already skips
+nulls — so it is a state the schema and recompute path both expect, and it is
+reversible. Delete remains the cleaner end state if the rows are ever confirmed
+worthless; nothing here forecloses it.
+
+Corpus-wide before/after diff was **exactly two lines** (osm `(null)` +123,
+`dump_station` 149→26) — no other category, source, or master_place count moved.
+Reversibility proven by a full undo → re-apply round trip (149 → 123 restored →
+26). Snapshot:
+`~/.config/overlander/reclassify-snapshots/osm-waste-disposal-dump-station.json`.
+
+**RESIDUAL — a second confirmed instance of the `recompute_master_place`
+clear-bug** (its own entry above predicted exactly this: "any field whose
+sources might stop resolving … should check for the same class of stale-data
+risk"). The 89 affected master_places were recomputed with zero errors, but
+**`updated_at` bumped on 0 of 89** and **78 still read
+`primary_category='dump_station'`** `[queried TEST 2026-08-18]`. Cause: with no
+*active* source_record left, `resolve_field()` returns no candidate, so the
+`IF v_value IS NOT NULL` guard skips the UPDATE and the old value stays
+stranded. **Render-harmless here** — all 94 corpus-wide `dump_station`
+master_places sit at `source_count = 0`, which the export view's
+`source_count > 0` filter excludes, so none reach search. Fixing it belongs to
+the clear-bug's own scoped pass, not here.
 
 ## Cross-category `amenity_rollup` collapse — separate from placeholder fix (2026-08-10)
 
