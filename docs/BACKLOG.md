@@ -2483,16 +2483,38 @@ conclusion.
     OOM, so search still returns the 777 removed places. See `STATE.md`. The
     database-backed surfaces are correct.
 
-- **NPS-sourced viewpoint reactivation — SCOPED, NEVER RAN, 2026-08-18.**
-  Confirmed by query, not inferred: **231 nps viewpoint `source_record` rows, 0
-  active**; 148 are linked, resolving to **146 distinct master_places**, of which
-  only **2** appear in `master_place_search_export` today (they carry another
-  active source) `[queried TEST 2026-08-18]`. The case for reactivating is that
-  **all 231 carry a real description**, against **202 of 6,470** for osm-sourced
-  viewpoint — so the NPS slice is not sparse and was swept up by a
-  category-level decision that fit only the osm half. One known casualty is a
-  real place embedded in an active reference trip. Decide the NPS slice on its
-  own evidence; osm viewpoint stays off.
+- ~~**NPS-sourced viewpoint reactivation — SCOPED, NEVER RAN, 2026-08-18.**~~
+  **RESOLVED 2026-08-19 — both viewpoint slices reactivated.** See `STATE.md`
+  §"Viewpoint — both slices reactivated".
+  - **NPS (`16738b6`)**: all **231** source_records active, 148 linked → **146
+    distinct master_places**, **120 in the export view**. The 26 absent are
+    outside `six_state_footprint()` (Los Alamos NM / Oak Ridge TN Manhattan
+    Project NHP sites), correctly excluded on geography, not a defect.
+  - **OSM (`6a03720`)**: **175** active under filter C → **170 master_places, all
+    170 in the view**. Junk **27** and undescribed **6,268** stay off; the
+    partition closes on 6,470. Filter C keeps `note`-tag content deliberately —
+    the presumed mapper-junk did not materialise (**0** rows with mapper
+    vocabulary), and the note rows carry trail directions and safety warnings.
+  - Classifier is a checked-in pure function
+    (`data/ingestion/lib/osm-viewpoint-content-filter.ts`) with 9 tests, so the
+    reactivation and its verification cannot drift apart. **Known limitation
+    recorded there:** filter C is structural, not a truth check — a 48-char
+    dispute entry passes every structural test and was admitted.
+  - **City Hall Observation Deck is NOT in either slice** — OSM-sourced,
+    description null. Used as a negative control; correctly absent from both
+    surfaces.
+
+- **88 active-but-unreachable viewpoint source_records — OPEN, 2026-08-19.**
+  Rows with no `master_place_id` were reactivated with their slice but reach
+  **neither** the export view nor `pois_along_corridor`; they need
+  materialization. **83 nps + 5 osm = 88** `[queried TEST 2026-08-19]`. The five
+  OSM ones are among the better content in the set:
+  `osm:node:358804431` (Zabriskie Point, 254 chars) · `osm:node:11370405017`
+  (Badwater Basin hiking warning) · `osm:node:9287425516` and
+  `osm:node:9287425501` (note-tag trail/gate directions) ·
+  `osm:node:9401761579` (Roosevelt Dam view). Same issue class in both slices,
+  unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
+  and 231 NPS rows to 146.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_

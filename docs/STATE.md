@@ -1,4 +1,4 @@
-# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station reactivated on TEST with templated descriptions, then **narrowed so only described rows stay live** (1,008 description-less rows pulled back out). 23 commits, **pushed to origin, no PR opened**. One item remains OPEN — NPS viewpoint reactivation, confirmed NOT done. ⚠ Typesense is **stale** against the DB: sync blocked by cluster OOM. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
+# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station reactivated on TEST with templated descriptions, then **narrowed so only described rows stay live** (1,008 description-less rows pulled back out). 25 commits, **2 unpushed at time of writing**, no PR opened. **Both viewpoint reactivations have since RUN** — the NPS slice and the OSM described/filter-C subset. Open now: **88 unlinked viewpoint source_records** (83 nps + 5 osm) that are active but reach no surface without materialization. ⚠ Typesense is **stale** against the DB: sync still blocked by cluster OOM. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -101,10 +101,10 @@ is unreachable from here (verified by `git show` on all three refs).
 | metric | value |
 |---|--:|
 | `master_place` | **155,495** |
-| `source_record` all / active / inactive | 165,822 / **81,727** / 84,095 |
+| `source_record` all / active / inactive | 165,822 / **82,133** / 83,689 |
 | `place_match` total / pending | 163,151 / **4,058** |
-| `master_place_search_export` (view) | **35,398** |
-| Typesense `places_test` | **36,175** — ⚠ **NOT equal to the view; sync failing, see below** |
+| `master_place_search_export` (view) | **35,685** |
+| Typesense `places_test` | **36,175** — ⚠ **NOT equal to the view; sync failing, drift 490, see below** |
 | `master_place` with `source_count = 0` | **81,189** |
 
 **`source_record` by source (active / all):** osm 27,985 / 109,492 · padus
@@ -121,7 +121,8 @@ not attrition — see the table below.
 | toilet | 670 | **308** | 308 (100% of active) | **REACTIVATED, then narrowed** — 362 description-less rows deactivated |
 | water | 1,005 | **370** | 370 (100% of active) | **REACTIVATED, then narrowed** — 635 description-less rows deactivated |
 | dump_station | 26 | **15** | 15 (100% of active) | **REACTIVATED, then narrowed** — 11 description-less rows deactivated |
-| viewpoint | 6,701 | 0 | — | deactivated (osm 6,470 + **nps 231**) |
+| viewpoint (nps) | 231 | **231** | 231 (100%) | **REACTIVATED** — 146 master_places, 120 in the view |
+| viewpoint (osm) | 6,470 | **175** | 175 (100% of active) | **REACTIVATED, filter C only** — 170 master_places, all 170 in the view; 27 junk + 6,268 undescribed stay off |
 | fire_pit | 3,521 | 0 | — | deactivated — decided, not worth templating |
 | gas_station | 6,127 | 0 | — | deactivated — **deliberate**, Google covers gas live |
 | public_land | 1,343 | 0 | — | deactivated — blocked on parked land_manager work |
@@ -218,14 +219,73 @@ the whole session's deactivations. **`places_test` now equals the view exactly.*
 > retried.
 >
 > **Consequence — a real split between surfaces.** `places_test` still holds
-> **36,175** docs against a **35,398**-row view, so the 777 places that left the
-> view are **still returned by Typesense-backed search**. Confirmed by direct
+> **36,175** docs against a **35,685**-row view — **drift 490, re-verified
+> 2026-08-19** after both viewpoint reactivations, and it reconciles exactly:
+> 777 narrowed-out rows still indexed, minus 118 NPS and 169 OSM viewpoint places
+> added since, = 490. So search is stale in BOTH directions now: it still returns
+> the 777 removed places AND does not yet carry the 287 restored ones. Confirmed by direct
 > document lookup, not inferred from the count gap: sampled deactivated places
 > return HTTP 200 from `places_test` while being absent from the view
 > `[measured 2026-08-19]`. **The database-backed surfaces are correct** — the
 > export view and `pois_along_corridor` (trip generation) both reflect the
 > narrowing. **Search-backed surfaces are stale until the cluster can accept a
 > sync.**
+
+### Viewpoint — both slices reactivated 2026-08-19 `[queried TEST 2026-08-19]`
+
+`47e00e4` deactivated viewpoint wholesale on a sparseness verdict that fits only
+its OSM half. Re-measured: **nps viewpoint is 231/231 described (100%)** against
+**osm viewpoint at 202/6,470 (3.1%)**. The category was reopened in two steps.
+
+**NPS slice (`16738b6`) — all 231 reactivated.** 148 linked → **146 distinct
+master_places**, of which **120 are in the export view**. The 26 absent are not a
+defect: they pass `source_count` and `is_searchable` and are excluded by the
+view's geographic filter, being outside `six_state_footprint()` — Los Alamos NM
+and Oak Ridge TN Manhattan Project NHP sites.
+
+**OSM slice (`6a03720`) — 175 reactivated under "filter C".** The described subset
+was investigated before any reactivation rather than presumed good. Filter C keeps
+real content and drops only structurally contentless rows; it deliberately keeps
+BOTH `description`-tag and `note`-tag material, because the expected
+mapper-to-mapper junk did not materialise — **0 rows** contained mapper vocabulary
+and the note rows carry some of the best content (trail directions, snake
+warnings, private-property access limits). Current OSM viewpoint state:
+
+| slice | rows | status |
+|---|--:|---|
+| passes filter C | **175** | **ACTIVE** — 170 distinct master_places, **all 170 in the view** |
+| junk, excluded | **27** | stays off — under-min-chars 16, single-word 8, name-restatement 2, url-only 1 |
+| no description at all | **6,268** | stays off, untouched |
+| **total** | **6,470** | partition closes exactly |
+
+The view grew by **169**, not 170, because one place — *Father Crowley Vista
+Point- Rainbow Canyon* — already carried an active NPS viewpoint source from
+`16738b6` and was in the view already. Both slices together put **287** rows of
+`primary_category='viewpoint'` in the view.
+
+**City Hall Observation Deck is NOT part of either reactivation.** A prior brief
+expected it in the NPS slice; it is **OSM-sourced** (`osm:node:5745696621`, its
+only source_record) with a **null description**, so it qualifies under neither
+slice and remains deactivated. The `la-to-portland` payload itself labels it
+`"secondary":"osm"`. It was used as a negative control in both verifications and
+correctly stayed absent from both surfaces.
+
+**KNOWN LIMITATION — 88 active-but-unreachable rows, unresolved.** Rows with no
+`master_place_id` were reactivated along with their slice but reach **neither**
+surface; they need materialization. **83 nps + 5 osm = 88.** The five OSM ones are
+listed because they are among the better content in the set:
+
+- `osm:node:358804431` — Zabriskie Point, 254 chars of real prose
+- `osm:node:11370405017` — "Lowest point in North America. HIKING NOT ADVISED AFTER 10AM IN THE SUMMER !!!" (Badwater Basin)
+- `osm:node:9287425516` — note-tag: "Follow the dirt path up the hill … watch out for snakes"
+- `osm:node:9287425501` — note-tag: "Follow the pathway behind the locked gate…"
+- `osm:node:9401761579` — "View of the Roosevelt Dam"
+
+Same issue class in both slices, unresolved in both. This is why 175 OSM rows
+resolve to 170 master_places and 231 NPS rows to 146.
+
+Propagation was verified on BOTH surfaces for each slice — 5/5 for NPS, 7/7 for
+OSM including two note-tag positives and three negative controls.
 
 ### OPEN — not decided, do not treat as settled
 
@@ -240,12 +300,9 @@ the whole session's deactivations. **`places_test` now equals the view exactly.*
    present on both. All 519 master_places holding a described active row remain
    in the view.
 
-2. **NPS viewpoint reactivation — still NOT done** `[queried TEST 2026-08-18]`.
-   **231 nps viewpoint source_records, 0 active.** 148 are linked, resolving to
-   **146 distinct master_places**, of which only **2** appear in the view today
-   (those carry another active source). **All 231 carry a real description** —
-   unlike osm viewpoint, where only 202 of 6,470 do. This was scoped but never
-   ran; it is genuinely pending, now confirmed by query rather than inference.
+2. ~~**NPS viewpoint reactivation — still NOT done.**~~ **RESOLVED 2026-08-19 —
+   both viewpoint reactivations have run.** See the dedicated section below.
+
 3. **Two approved-but-unapplied one-line commit-message corrections** — see
    BACKLOG. Deliberately NOT applied in this docs pass.
 
