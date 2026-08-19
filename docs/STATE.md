@@ -1,4 +1,4 @@
-# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station REACTIVATED on TEST with templated descriptions, 22 commits **PUSHED to origin, no PR opened**. Two items are OPEN and undecided — the description-less remainder, and NPS viewpoint reactivation which is confirmed NOT done. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
+# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station reactivated on TEST with templated descriptions, then **narrowed so only described rows stay live** (1,008 description-less rows pulled back out). 23 commits, **pushed to origin, no PR opened**. One item remains OPEN — NPS viewpoint reactivation, confirmed NOT done. ⚠ Typesense is **stale** against the DB: sync blocked by cluster OOM. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -74,7 +74,7 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station REACTIVATED with templated descriptions (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
+## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station reactivated with templated descriptions, then narrowed to the described subset (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
 
 Newest truth. **Every figure below was measured against TEST read-only on
 2026-08-18 in a single pass** (`data/scripts/measure-session-closeout.ts`) —
@@ -101,10 +101,10 @@ is unreachable from here (verified by `git show` on all three refs).
 | metric | value |
 |---|--:|
 | `master_place` | **155,495** |
-| `source_record` all / active / inactive | 165,822 / **82,735** / 83,087 |
+| `source_record` all / active / inactive | 165,822 / **81,727** / 84,095 |
 | `place_match` total / pending | 163,151 / **4,058** |
-| `master_place_search_export` (view) | **36,175** |
-| Typesense `places_test` | **36,175** (= view exactly) |
+| `master_place_search_export` (view) | **35,398** |
+| Typesense `places_test` | **36,175** — ⚠ **NOT equal to the view; sync failing, see below** |
 | `master_place` with `source_count = 0` | **81,189** |
 
 **`source_record` by source (active / all):** osm 27,985 / 109,492 · padus
@@ -118,9 +118,9 @@ not attrition — see the table below.
 
 | category | rows | active | with description | status |
 |---|--:|--:|--:|---|
-| toilet | 670 | **670** | 308 (46.0%) | **REACTIVATED** |
-| water | 1,005 | **1,005** | 370 (36.8%) | **REACTIVATED** |
-| dump_station | 26 | **26** | 15 (57.7%) | **REACTIVATED** |
+| toilet | 670 | **308** | 308 (100% of active) | **REACTIVATED, then narrowed** — 362 description-less rows deactivated |
+| water | 1,005 | **370** | 370 (100% of active) | **REACTIVATED, then narrowed** — 635 description-less rows deactivated |
+| dump_station | 26 | **15** | 15 (100% of active) | **REACTIVATED, then narrowed** — 11 description-less rows deactivated |
 | viewpoint | 6,701 | 0 | — | deactivated (osm 6,470 + **nps 231**) |
 | fire_pit | 3,521 | 0 | — | deactivated — decided, not worth templating |
 | gas_station | 6,127 | 0 | — | deactivated — **deliberate**, Google covers gas live |
@@ -139,10 +139,12 @@ category, 9/9 present in `master_place_search_export` AND returned by a live
 `pois_along_corridor` call with a real GeoJSON LineString through each place's
 own coordinates. The RPC reads `master_place.geometry` directly and bypasses the
 view, so a place can be in one and absent from the other; checking one surface
-would not have been evidence. View rows in the three categories: toilet 503 +
-water 768 + dump_station 16 = **1,287**, which equals the view's growth exactly
-(34,888 → 36,175) — and therefore also proves none of these categories had any
-row in the view beforehand.
+would not have been evidence. At full reactivation the view rows in the three
+categories were toilet 503 + water 768 + dump_station 16 = **1,287**, exactly the
+view's growth (34,888 → 36,175) — which also proved none of these categories had
+any row in the view beforehand. **Those figures describe the reactivation step
+only.** After the narrowing they are **toilet 215 + water 285 + dump_station 10 =
+510** `[queried TEST 2026-08-19]`.
 
 ### Shipped this session (all on the branch, none merged)
 
@@ -183,7 +185,9 @@ sample) and confirmed the premise: 100% `amenity=waste_disposal`, zero carrying
 `description`/`operator`/`website`/`brand`/`phone`/`opening_hours`/`fee`/`addr:*`,
 and the only 2 rows with a `name` tag are literally named `"Dumpster"` with
 `waste=trash`. Nothing was restored. **The real dump_station population is 26**,
-all `amenity=sanitary_dump_station`, all now active.
+all `amenity=sanitary_dump_station`. **15 of the 26 are active** — the 11
+carrying no description were deactivated in the narrowing step
+`[queried TEST 2026-08-19]`.
 
 **Residual:** 94 `master_place` rows still read `primary_category='dump_station'`;
 **78 sit at `source_count = 0`** and stay out of the view (only 16 are live). Those
@@ -192,7 +196,8 @@ see `BACKLOG.md`.
 
 ### Typesense
 
-`search:sync` against `places_test` **succeeded**: fetched 36,175, indexed 36,175,
+**SUPERSEDED 2026-08-19 — a later sync FAILED; see the note below this block.**
+The 2026-08-18 run against `places_test` **succeeded**: fetched 36,175, indexed 36,175,
 **0 failed**, pruned 81,086 stale docs, 0 prune errors. The prune implies a
 pre-sync index of 117,261, matching the figure recorded for `places_test` on
 2026-08-17 — i.e. the index had not been synced since then and this run absorbed
@@ -203,15 +208,38 @@ the whole session's deactivations. **`places_test` now equals the view exactly.*
 > **That was not observed in this session** — one run, and it succeeded. The OOM
 > remains a reported constraint, not a reproduced one, from this session's vantage.
 
+> **2026-08-19 — the OOM is now REPRODUCED, and the index is stale.** A sync run
+> after the narrowing **failed**. The cluster reports
+> `{"ok":true,"resource_error":"OUT_OF_MEMORY"}` with system memory at
+> **0.42 GB / 0.44 GB = 96.7%** `[queried 2026-08-19]`, and refuses writes with
+> **HTTP 422 `ObjectUnprocessable`** rather than a 500 — which is why it does not
+> look like OOM at first glance. Only 2 of the 100 docs in the rejected batch were
+> in the three categories, so this is a cluster constraint, not a data defect. Not
+> retried.
+>
+> **Consequence — a real split between surfaces.** `places_test` still holds
+> **36,175** docs against a **35,398**-row view, so the 777 places that left the
+> view are **still returned by Typesense-backed search**. Confirmed by direct
+> document lookup, not inferred from the count gap: sampled deactivated places
+> return HTTP 200 from `places_test` while being absent from the view
+> `[measured 2026-08-19]`. **The database-backed surfaces are correct** — the
+> export view and `pois_along_corridor` (trip generation) both reflect the
+> narrowing. **Search-backed surfaces are stale until the cluster can accept a
+> sync.**
+
 ### OPEN — not decided, do not treat as settled
 
-1. **The description-less remainder.** Reactivation covers *every* row in the
-   three categories, but only a subset carries a description: **toilet 308/670,
-   water 370/1005, dump_station 15/26** `[queried TEST 2026-08-18]`. The
-   remainder — **362 toilet, 635 water, 11 dump_station** — are back in browse
-   and generation with **no description**, which was the original deactivation
-   rationale. **Adam has not decided** whether to leave this or pull the
-   description-less remainder back out.
+1. ~~**The description-less remainder.**~~ **RESOLVED 2026-08-19 — Adam decided
+   to pull it back out, and it is implemented.** Within toilet / water /
+   dump_station only rows carrying a description (real OSM original or generated
+   template) stay live; **1,008 description-less rows were deactivated** — 362
+   toilet, 635 water, 11 dump_station. Live now: **toilet 308, water 370,
+   dump_station 15**, every one of them described `[queried TEST 2026-08-19]`.
+   Verified on both consumer surfaces in both directions (18/18): deactivated
+   places absent from the view AND from `pois_along_corridor`, described controls
+   present on both. All 519 master_places holding a described active row remain
+   in the view.
+
 2. **NPS viewpoint reactivation — still NOT done** `[queried TEST 2026-08-18]`.
    **231 nps viewpoint source_records, 0 active.** 148 are linked, resolving to
    **146 distinct master_places**, of which only **2** appear in the view today

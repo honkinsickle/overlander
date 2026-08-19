@@ -2459,15 +2459,29 @@ conclusion.
     session**, coming from the handoff document. Correct framing: the handoff
     reports 3 consecutive OOM failures; this run succeeded.
 
-- **Description-less remainder in the reactivated categories — OPEN DECISION,
-  NOT RESOLVED, 2026-08-18.** Reactivation (`b794a23`) brought back *every* row
-  in toilet / water / dump_station, but only a subset carries a description:
-  **toilet 308/670, water 370/1005, dump_station 15/26** `[queried TEST
-  2026-08-18]`. So **362 toilet + 635 water + 11 dump_station** rows are live in
-  browse and trip generation with **no description at all** — which was the
-  original rationale for deactivating them in `47e00e4`. Adam has **not**
-  decided between leaving it as-is and pulling the description-less remainder
-  back out. Flagged at implementation time, not discovered later.
+- ~~**Description-less remainder in the reactivated categories — OPEN DECISION,
+  NOT RESOLVED, 2026-08-18.**~~ **RESOLVED 2026-08-19 — decided and implemented.**
+  Adam's call: within toilet / water / dump_station, only rows that actually carry
+  a description stay live. "Has a description" counts a real original OSM
+  `description`/`note` tag and a generated template sentence equally.
+  Implemented in commit **`478e8d0`**.
+  **1,008 description-less rows deactivated** — 362 toilet, 635 water, 11
+  dump_station. Live now: **toilet 308 / 670, water 370 / 1,005, dump_station
+  15 / 26**, and every active row in all three carries a description
+  `[queried TEST 2026-08-19]`.
+  - Targeted partial deactivation, not a category toggle — no described row was
+    touched, and all **519** master_places holding a described active row remain
+    in the export view.
+  - `source_record` active 82,735 → **81,727** (−1,008 exactly); view 36,175 →
+    **35,398** (−777). The view falls by less than 1,008 because a master_place
+    holding both a described and an undescribed row keeps its described source
+    and stays live.
+  - Verified on BOTH surfaces in BOTH directions, 18/18: deactivated places absent
+    from `master_place_search_export` **and** from a live `pois_along_corridor`
+    call; described controls present on both.
+  - ⚠ **Typesense is stale as a result** — the follow-up sync failed on cluster
+    OOM, so search still returns the 777 removed places. See `STATE.md`. The
+    database-backed surfaces are correct.
 
 - **NPS-sourced viewpoint reactivation — SCOPED, NEVER RAN, 2026-08-18.**
   Confirmed by query, not inferred: **231 nps viewpoint `source_record` rows, 0
