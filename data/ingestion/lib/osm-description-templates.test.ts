@@ -163,6 +163,32 @@ describe("water templates", () => {
     ).toBe("Non-potable water.");
   });
 
+  it("a lone 'Drinking water' only restates the category -> null", () => {
+    // Regression guard. An earlier revision judged the lead by PROVENANCE
+    // (drinking_water=yes is an explicit tag, so "specialized") and stored the
+    // description "Drinking water." on 13 TEST rows — text indistinguishable
+    // from the category label. The rule is now on the rendered text.
+    expect(
+      buildTemplatedDescription("water", { amenity: "drinking_water", drinking_water: "yes" }),
+    ).toBeNull();
+    expect(
+      buildTemplatedDescription("water", { man_made: "water_tap", drinking_water: "yes" }),
+    ).toBeNull();
+    expect(
+      buildTemplatedDescription("water", {
+        man_made: "water_tap",
+        drinking_water: "yes",
+        "drinking_water:legal": "yes",
+      }),
+    ).toBeNull();
+  });
+
+  it("'Drinking water' still leads when a real second fact follows", () => {
+    expect(
+      buildTemplatedDescription("water", { amenity: "drinking_water", drinking_water: "yes", fee: "no" }),
+    ).toBe("Drinking water, free.");
+  });
+
   it("SAFETY: a well with drinking_water=no is never called potable", () => {
     // Real shape: {"man_made":"water_well","description":...,"drinking_water":"no"}
     const out = buildTemplatedDescription("water", {

@@ -51,9 +51,13 @@ const CONSUMABLE: Record<TemplatedCategory, readonly string[]> = {
     "toilets:handwashing", "portable", "drinking_water", "unisex", "male",
     "female", "operator", "opening_hours", "supervised",
   ],
+  // `man_made` (water_well / water_tap) and `amenity` (drinking_water) are the
+  // tags that CREATE a water row, so they are deliberately absent here: a
+  // category-defining tag carries nothing beyond the category itself and must
+  // not by itself trip the threshold. They are still read by the lead clause.
   water: [
     "drinking_water", "fee", "charge", "access", "bottle", "fountain", "pump",
-    "wheelchair", "operator", "indoor", "covered", "seasonal", "man_made",
+    "wheelchair", "operator", "indoor", "covered", "seasonal",
   ],
   dump_station: [
     "fee", "charge", "access", "water_point", "sanitary_dump_station:round_drain",
@@ -66,22 +70,32 @@ const CONSUMABLE: Record<TemplatedCategory, readonly string[]> = {
 export function hasConsumableTag(category: TemplatedCategory, tags: OsmTags): boolean {
   return CONSUMABLE[category].some((k) => {
     const v = tags[k];
-    if (v === undefined) return false;
-    // `man_made` only counts for water when it is the well/tap variant, since
-    // that is the only case the lead clause reads it for. It is otherwise the
-    // defining tag and carries nothing extra.
-    if (k === "man_made") return false;
-    return v.trim().length > 0;
+    return v !== undefined && v.trim().length > 0;
   });
 }
 
 /**
- * A built clause list plus whether its LEAD is generic. A generic lead merely
- * names the category ("Toilets", "Water", "RV dump station"); a specialized one
- * carries a fact of its own ("Flush toilets", "Non-potable water"). The
- * distinction decides whether a single-clause result is worth emitting.
+ * Lead phrases that only NAME the category. A description consisting solely of
+ * one of these tells the reader nothing the category label beside it doesn't
+ * already say, so it is suppressed — the rule stated at THRESHOLD above.
+ *
+ * The test is on the RENDERED TEXT, not on which tag produced it. An earlier
+ * revision tracked provenance instead ("`drinking_water=yes` is an explicit
+ * tag, so it counts as specialized"), which let 13 water rows store the
+ * description "Drinking water." — text a reader cannot tell apart from the
+ * category label. Provenance is invisible to the reader; the words are not.
+ *
+ * "Non-potable water", "Flush toilets", "Pit latrine" and "Portable toilet" are
+ * deliberately NOT here: each states a fact the category label omits.
  */
-type Built = { clauses: string[]; leadIsGeneric: boolean };
+const RESTATING_LEADS = new Set([
+  "Toilets",
+  "Water",
+  "Water well",
+  "Water tap",
+  "Drinking water",
+  "RV dump station",
+]);
 
 /** Render a `charge` value: "$20 fee" when purely numeric, else passthrough. */
 function chargeClause(charge: string): string {
@@ -130,20 +144,17 @@ function operatorClause(v: string | undefined): string | undefined {
 
 // ── toilet ────────────────────────────────────────────────────────────────
 
-function toiletClauses(tags: OsmTags): Built {
+function toiletClauses(tags: OsmTags): string[] {
   const out: string[] = [];
 
   // Lead: the disposal type is the single most decision-relevant fact
   // (flush vs pit latrine). Falls back to the plain noun when untagged.
-  let leadIsGeneric = false;
   switch (tags["toilets:disposal"]) {
     case "flush": out.push("Flush toilets"); break;
     case "pitlatrine": out.push("Pit latrine"); break;
     case "chemical": out.push("Chemical toilets"); break;
     case "bucket": out.push("Bucket toilet"); break;
-    default:
-      if (tags.portable === "yes") out.push("Portable toilet");
-      else { out.push("Toilets"); leadIsGeneric = true; }
+    default: out.push(tags.portable === "yes" ? "Portable toilet" : "Toilets");
   }
 
   if (tags.unisex === "yes") out.push("unisex");
@@ -167,32 +178,29 @@ function toiletClauses(tags: OsmTags): Built {
   if (op) out.push(op);
   if (tags.opening_hours?.trim()) out.push(`hours ${tags.opening_hours.trim()}`);
 
-  return { clauses: out, leadIsGeneric };
+  return out;
 }
 
 // ── water ─────────────────────────────────────────────────────────────────
 
-function waterClauses(tags: OsmTags): Built {
+function waterClauses(tags: OsmTags): string[] {
   const out: string[] = [];
 
   // Lead. `drinking_water=no` OUTRANKS `amenity=drinking_water` — see the
-  // SAFETY note at the top of this file. A lead is "specialized" only when an
-  // explicit `drinking_water` tag settled potability; the `amenity`/`man_made`
-  // forms merely restate the category tag that created the row.
-  let leadIsGeneric = false;
+  // SAFETY note at the top of this file. Only "Non-potable water" is a fact the
+  // category label omits; every other lead here just names the category and is
+  // suppressed when it stands alone (RESTATING_LEADS).
   if (tags.drinking_water === "no") {
     out.push("Non-potable water");
-  } else if (tags.drinking_water === "yes") {
+  } else if (tags.drinking_water === "yes" || tags.amenity === "drinking_water") {
     out.push("Drinking water");
-  } else if (tags.amenity === "drinking_water") {
-    out.push("Drinking water"); leadIsGeneric = true;
   } else if (tags.man_made === "water_well") {
     // A well with no potability tag: state what it is, claim nothing.
-    out.push("Water well"); leadIsGeneric = true;
+    out.push("Water well");
   } else if (tags.man_made === "water_tap") {
-    out.push("Water tap"); leadIsGeneric = true;
+    out.push("Water tap");
   } else {
-    out.push("Water"); leadIsGeneric = true;
+    out.push("Water");
   }
 
   switch (tags.fountain) {
@@ -220,12 +228,12 @@ function waterClauses(tags: OsmTags): Built {
   const op = operatorClause(tags.operator);
   if (op) out.push(op);
 
-  return { clauses: out, leadIsGeneric };
+  return out;
 }
 
 // ── dump_station ──────────────────────────────────────────────────────────
 
-function dumpStationClauses(tags: OsmTags): Built {
+function dumpStationClauses(tags: OsmTags): string[] {
   // The lead is always the category noun, so it is always generic: a bare dump
   // station must contribute at least one real fact to earn a description.
   const out: string[] = ["RV dump station"];
@@ -250,7 +258,7 @@ function dumpStationClauses(tags: OsmTags): Built {
   const op = operatorClause(tags.operator);
   if (op) out.push(op);
 
-  return { clauses: out, leadIsGeneric: true };
+  return out;
 }
 
 /**
@@ -271,16 +279,15 @@ export function buildTemplatedDescription(
   const t = tags ?? {};
   if (!hasConsumableTag(category, t)) return null;
 
-  const { clauses, leadIsGeneric } =
+  const clauses =
     category === "toilet" ? toiletClauses(t)
     : category === "water" ? waterClauses(t)
     : dumpStationClauses(t);
 
-  // A lone GENERIC lead ("Toilets", "Water", "RV dump station") only restates
-  // the category, so it is suppressed. A lone SPECIALIZED lead is real content
-  // in its own right — "Flush toilets." and "Non-potable water." each carry a
-  // fact the category label does not — so it stands alone.
-  if (clauses.length < 2 && leadIsGeneric) return null;
+  // A lone lead that only restates the category is suppressed; a lone lead that
+  // states a real fact ("Flush toilets.", "Non-potable water.") stands alone.
+  // Judged on the rendered TEXT — see RESTATING_LEADS.
+  if (clauses.length < 2 && RESTATING_LEADS.has(clauses[0])) return null;
 
   const [lead, ...rest] = clauses;
   return rest.length === 0 ? `${lead}.` : `${lead}, ${rest.join(", ")}.`;
