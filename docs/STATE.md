@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-17 (⚠ newest section is the **six-state NPS materialize** — 5,283 NPS SRs ingested, materialized live on TEST, park_feature-linking guard + `/parks` wiring merged. PRs #233 (recgov widen), #234 (park_feature guard), #235 (`/parks`) are on `main`. Everything below is TEST-only; no PROD writes this session.)
+# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station REACTIVATED on TEST with templated descriptions, 20 commits **UNPUSHED** with no PR. Two items are OPEN and undecided — the description-less remainder, and NPS viewpoint reactivation which is confirmed NOT done. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,149 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station REACTIVATED with templated descriptions (branch `fix/amenities-render-shape`, **UNPUSHED**)
+
+Newest truth. **Every figure below was measured against TEST read-only on
+2026-08-18 in a single pass** (`data/scripts/measure-session-closeout.ts`) —
+none transcribed from a prior report, because counts drifted between reports
+during this session (dump_station appeared as both 149 and 26, either side of a
+deletion). **No PROD writes this session. Nothing pushed.**
+
+### Where the work lives
+
+**Branch `fix/amenities-render-shape`, tip `db6e64b`, 20 commits ahead of
+`origin/main`, working tree clean, NO remote branch, NO PR** `[git, 2026-08-18]`.
+Everything in this section is TEST-only and lives on that branch. Two sibling
+branches from the same effort are also unpushed: `fix/phase0-corpus-field-reconnect`
+(`c68ab5a`, an ancestor of this branch) and **`land-manager-precedence-design`
+(`30c231a`), which is NOT merged into this branch or `main`** — its BACKLOG entry
+is unreachable from here (verified by `git show` on all three refs).
+
+### TEST corpus position `[queried TEST 2026-08-18]`
+
+| metric | value |
+|---|--:|
+| `master_place` | **155,495** |
+| `source_record` all / active / inactive | 165,822 / **82,735** / 83,087 |
+| `place_match` total / pending | 163,151 / **4,058** |
+| `master_place_search_export` (view) | **36,175** |
+| Typesense `places_test` | **36,175** (= view exactly) |
+| `master_place` with `source_count = 0` | **81,189** |
+
+**`source_record` by source (active / all):** osm 27,985 / 109,492 · padus
+36,358 / 37,701 · usfs 6,324 / 6,330 · ridb 6,013 / 6,013 · nps 5,052 / 5,283 ·
+blm 876 / 876 · google_resolved 122 / 122 · google 5 / 5.
+
+The large active/all gap on osm is this session's deliberate category curation,
+not attrition — see the table below.
+
+### Category curation — what is live and what is off `[queried TEST 2026-08-18]`
+
+| category | rows | active | with description | status |
+|---|--:|--:|--:|---|
+| toilet | 670 | **670** | 308 (46.0%) | **REACTIVATED** |
+| water | 1,005 | **1,005** | 370 (36.8%) | **REACTIVATED** |
+| dump_station | 26 | **26** | 15 (57.7%) | **REACTIVATED** |
+| viewpoint | 6,701 | 0 | — | deactivated (osm 6,470 + **nps 231**) |
+| fire_pit | 3,521 | 0 | — | deactivated — decided, not worth templating |
+| gas_station | 6,127 | 0 | — | deactivated — **deliberate**, Google covers gas live |
+| public_land | 1,343 | 0 | — | deactivated — blocked on parked land_manager work |
+| peak | 33,924 | 0 | — | deactivated — product scope decision |
+| spring | 31,465 | 0 | — | deactivated — product scope decision |
+
+peak + spring = **65,389** rows measured now (earlier notes said "~64,300" — use
+the measured figure). All three reactivated categories are **osm-only**; there is
+no non-osm row in any of them, so "all osm rows" and "exactly what `47e00e4`
+deactivated" are the same set here (measured, because `47e00e4` deactivated
+across *any* source_id and the two definitions do not coincide in general).
+
+**Reactivation verified on BOTH consumer surfaces** — 9 sampled places, 3 per
+category, 9/9 present in `master_place_search_export` AND returned by a live
+`pois_along_corridor` call with a real GeoJSON LineString through each place's
+own coordinates. The RPC reads `master_place.geometry` directly and bypasses the
+view, so a place can be in one and absent from the other; checking one surface
+would not have been evidence. View rows in the three categories: toilet 503 +
+water 768 + dump_station 16 = **1,287**, which equals the view's growth exactly
+(34,888 → 36,175) — and therefore also proves none of these categories had any
+row in the view beforehand.
+
+### Shipped this session (all on the branch, none merged)
+
+- **Amenities end-to-end.** OSM + NPS source-layer normalization (NPS extended to
+  9 further categories, `95fdeb7`/`b03450d`), the boolean-map → display-label
+  translator for the slideup (`f85bbcb`), the capacity/amenities/priceTier
+  merge-layer reconnect at the known drop points (`b64bb9e`), OSM added to
+  `amenities` `field_precedence` as gap-fill only (`0c046ef`, **TEST-only
+  migration**) and the OSM/parks_canada priority collision resolved 5 → 8
+  (`c68ab5a`).
+- **`pois_along_corridor` `source_count` filter** (`4c9d955`) — closes the gap
+  where a deactivated place stayed hidden from browse/search but was still
+  offered as a trip stop during generation. Migration `20260818160000`,
+  **TEST-only**.
+- **Eligibility-bucketing measurement fix** (`69fc612`) — the STRONG/WEAK/NONE
+  bucketing never read `normalized_payload.description` directly, so
+  RIDB/USFS-heavy categories (facility, visitor_center, recreation_area) were
+  wrongly scored sparse. After the fix none of the seven genuinely-sparse
+  categories moved, which is what justified deactivating them.
+- **Templated descriptions** for toilet / water / dump_station (`9743e6e`,
+  `159ac2b`) — built from real structured OSM tags, wired into `normalizeOsm` as
+  a **gap-fill fallback only** so a real `description`/`note` tag always wins.
+  Degrades gracefully: a bare row gets no description rather than a fabricated
+  one. Carries a safety rule — an explicit `drinking_water=no` always outranks a
+  generic "drinking water" lead. Suppresses any lead that merely restates the
+  category label.
+- **dump_station data-integrity fix** (`80bf0a1` → `e43de94`, verified `e1e7af4`).
+- **Reactivation** (`db6e64b`) + a clean Typesense sync.
+
+### dump_station — the full arc
+
+Of 149 rows, **123 were stale pre-#202 `amenity=waste_disposal`** — municipal
+trash bins, not RV sanitary stations. First reclassified to
+`inferred_category = null` (`80bf0a1`), then **hard-deleted** per Adam's decision
+matching BACKLOG's original stated preference (`e43de94`). A full-row backup was
+taken first; a later pass then read **all 123 backed-up rows** (a full scan, not a
+sample) and confirmed the premise: 100% `amenity=waste_disposal`, zero carrying
+`description`/`operator`/`website`/`brand`/`phone`/`opening_hours`/`fee`/`addr:*`,
+and the only 2 rows with a `name` tag are literally named `"Dumpster"` with
+`waste=trash`. Nothing was restored. **The real dump_station population is 26**,
+all `amenity=sanitary_dump_station`, all now active.
+
+**Residual:** 94 `master_place` rows still read `primary_category='dump_station'`;
+**78 sit at `source_count = 0`** and stay out of the view (only 16 are live). Those
+78 are a third observed instance of the `recompute_master_place` clear-bug —
+see `BACKLOG.md`.
+
+### Typesense
+
+`search:sync` against `places_test` **succeeded**: fetched 36,175, indexed 36,175,
+**0 failed**, pruned 81,086 stale docs, 0 prune errors. The prune implies a
+pre-sync index of 117,261, matching the figure recorded for `places_test` on
+2026-08-17 — i.e. the index had not been synced since then and this run absorbed
+the whole session's deactivations. **`places_test` now equals the view exactly.**
+`[measured 2026-08-18]`
+
+> The handoff reported 3 consecutive OOM failures on this shared TEST cluster.
+> **That was not observed in this session** — one run, and it succeeded. The OOM
+> remains a reported constraint, not a reproduced one, from this session's vantage.
+
+### OPEN — not decided, do not treat as settled
+
+1. **The description-less remainder.** Reactivation covers *every* row in the
+   three categories, but only a subset carries a description: **toilet 308/670,
+   water 370/1005, dump_station 15/26** `[queried TEST 2026-08-18]`. The
+   remainder — **362 toilet, 635 water, 11 dump_station** — are back in browse
+   and generation with **no description**, which was the original deactivation
+   rationale. **Adam has not decided** whether to leave this or pull the
+   description-less remainder back out.
+2. **NPS viewpoint reactivation — still NOT done** `[queried TEST 2026-08-18]`.
+   **231 nps viewpoint source_records, 0 active.** 148 are linked, resolving to
+   **146 distinct master_places**, of which only **2** appear in the view today
+   (those carry another active source). **All 231 carry a real description** —
+   unlike osm viewpoint, where only 202 of 6,470 do. This was scoped but never
+   ran; it is genuinely pending, now confirmed by query rather than inference.
+3. **Two approved-but-unapplied one-line commit-message corrections** — see
+   BACKLOG. Deliberately NOT applied in this docs pass.
 
 ## 2026-08-17 (later) — six-state NPS materialized live on TEST; park_feature-linking guard + `/parks` wiring merged; Typesense caught up
 

@@ -2393,6 +2393,88 @@ conclusion.
     might stop resolving (a source renormalization, a source deactivation,
     precedence changes), should check for the same class of stale-data risk
     this pass happened to catch by coincidence.
+  - **THIRD OBSERVATION, 2026-08-18 — reinforcing evidence, and the clearest
+    demonstration yet.** The dump_station cleanup hit it twice more. After the
+    123 stale rows were reclassified to `inferred_category = null`, and again
+    after they were hard-deleted, **78 `master_place` rows still read
+    `primary_category='dump_station'` and `canonical_name='Unnamed dump
+    station'`** `[queried TEST 2026-08-18]`. The delete case is the sharpest
+    evidence available: the recompute **provably ran and wrote** — all 89
+    affected master_places carry `updated_at` inside the delete operation's own
+    03:16:22–03:16:33 UTC window — and the guarded columns *still* went
+    unchanged. So this is not "recompute didn't run"; it is the `IF v_value IS
+    NOT NULL` guard skipping the UPDATE exactly as described above.
+    - Note the split: the **unconditionally-written** aggregates did clear
+      (`attribution` → `{}`, `secondary_categories` → `[]`), while the
+      **precedence-resolved** columns stranded — leaving rows that are
+      internally inconsistent, asserting a category and name with no backing
+      source. Those aggregates were not measured pre-delete, so whether the
+      delete changed them is unknown; recorded as an observation, not a
+      mechanism.
+    - **Render-harmless again, for the same accidental reason:** all 94
+      corpus-wide `dump_station` master_places sit at `source_count = 0` except
+      the 16 live ones, and the export view's `source_count > 0` filter excludes
+      the rest. Harmless by filter, not by design.
+    - **New companion residual:** those 78 rows are now **completely sourceless**
+      — zero `source_record` rows reference them at all, where before they at
+      least had an inactive one. Deleting them is a separate authorized decision
+      and the natural companion to this fix's own scoped pass.
+
+- **Amenity chip density — no cap or overflow handling. UNBUILT, flagged
+  2026-08-18.** The slideup renders one chip per truthy amenity key via
+  `amenitiesToLabels` (`web/src/lib/trip-browse/card-stats.ts`), and
+  `AMENITY_LABELS` currently defines **15** keys — 6 shared with `normalizeOsm`
+  plus 9 NPS-introduced ones `[read source 2026-08-18]`. A fully-populated NPS
+  campground can therefore emit up to 15 chips onto a single card with **no cap,
+  no "+N more", and no overflow treatment** anywhere in the render path. Not
+  observed breaking a real card yet — flagged when the NPS normalization landed
+  (`95fdeb7`) because it materially raised the achievable chip count, and this
+  entry exists because a prior session flagged it mid-work and it was never
+  written down. Needs a product/design call on cap and overflow affordance
+  before it is an engineering task.
+
+- **`land_manager` / `designation` / `gap_status` proposal is STRANDED ON AN
+  UNMERGED BRANCH — 2026-08-18.** The scoped proposal lives only in
+  `land-manager-precedence-design` (`30c231a`) and is **not reachable from
+  `fix/amenities-render-shape` or `origin/main`** — verified by `git show` on
+  all three refs, the entry greps to 0 hits on both. It is also the stated
+  blocker for `public_land` (1,343 padus rows, deactivated). Anyone looking for
+  it from `main` will not find it. Either merge that branch or re-land the
+  entry; do not re-scope the work from scratch, it is already written.
+
+- **Two approved, unapplied one-line commit-message corrections — OPEN,
+  2026-08-18.** Both commits are local and unpushed, so both are still safely
+  amendable; deliberately NOT applied during the docs pass.
+  - `159ac2b` — its message says "4 new tests (29 → 33 in this file)". The real
+    figure is **2 new tests, 29 → 31** `[measured 2026-08-18: vitest reports 31,
+    and the file contains 31 `it(` blocks]`. The suite moved 482 → 484, which is
+    +2 and contradicts the claim in the same sentence.
+  - `db6e64b` — its message says "The OOM that failed three times earlier in the
+    session did NOT recur." Wrong twice: the 3 failures were **never observed in
+    this session** (one sync run, which succeeded) and they **predate this
+    session**, coming from the handoff document. Correct framing: the handoff
+    reports 3 consecutive OOM failures; this run succeeded.
+
+- **Description-less remainder in the reactivated categories — OPEN DECISION,
+  NOT RESOLVED, 2026-08-18.** Reactivation (`db6e64b`) brought back *every* row
+  in toilet / water / dump_station, but only a subset carries a description:
+  **toilet 308/670, water 370/1005, dump_station 15/26** `[queried TEST
+  2026-08-18]`. So **362 toilet + 635 water + 11 dump_station** rows are live in
+  browse and trip generation with **no description at all** — which was the
+  original rationale for deactivating them in `47e00e4`. Adam has **not**
+  decided between leaving it as-is and pulling the description-less remainder
+  back out. Flagged at implementation time, not discovered later.
+
+- **NPS-sourced viewpoint reactivation — SCOPED, NEVER RAN, 2026-08-18.**
+  Confirmed by query, not inferred: **231 nps viewpoint `source_record` rows, 0
+  active**; 148 are linked, resolving to **146 distinct master_places**, of which
+  only **2** appear in `master_place_search_export` today (they carry another
+  active source) `[queried TEST 2026-08-18]`. The case for reactivating is that
+  **all 231 carry a real description**, against **202 of 6,470** for osm-sourced
+  viewpoint — so the NPS slice is not sparse and was swept up by a
+  category-level decision that fit only the osm half. One known casualty is a
+  real place embedded in an active reference trip. Decide the NPS slice on its
+  own evidence; osm viewpoint stays off.
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
