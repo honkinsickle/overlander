@@ -624,6 +624,34 @@ category + raw tag + expected count 123 + all-inactive). A full-row backup
 element with coordinates, so rows are reconstructible via
 `upsert_source_record`.
 
+**Post-hoc content verification — the premise HOLDS `[read backup 2026-08-18]`.**
+The "these are municipal trash bins, not RV dump stations" judgement was
+originally **inherited** from tag semantics plus the 20-row **PROD** sample
+above, and was never checked against these specific TEST rows before they were
+deleted. It has now been verified read-only against the backup, across **all
+123 rows — a full scan, not a sample** (a sample cannot answer "are there
+exceptions?"):
+
+- **100%** carry `amenity=waste_disposal`; no other amenity value appears.
+- **112 of 123 (91.1%)** carry the bare category tag and nothing else. Only six
+  distinct tag-set shapes exist across the whole population.
+- **Zero** rows carry `description`, `operator`, `website`, `brand`, `phone`,
+  `opening_hours`, `capacity`, `fee`, `charge`, or any `addr:*` tag.
+- **Only 2 rows carry an OSM `name` tag at all — and both are literally named
+  `"Dumpster"`**, with `waste=trash`. They are the strongest confirmation of the
+  characterization, not counter-examples.
+- **6 more** carry `waste=trash`; **3** carry an access restriction
+  (`access=private` ×2, `access=customers` ×1) — all consistent with bins.
+  Remaining keys (`source`, `source_ref`, `source_date`) are provenance noise.
+- `normalized_payload` held **0** non-empty descriptions. All 123 carried
+  `amenities: {"dump_station": true}` — a false amenity flag derived from the
+  bad category, so the deletion also removed 123 bogus `dump_station` amenity
+  assertions from the corpus.
+
+**Verdict: no row in the deleted set resembles an RV sanitary dump station.
+Nothing is flagged for restoration and the deletion stands as correct.** The
+backup remains on disk regardless.
+
 **Deletion did NOT fix the `recompute_master_place` clear-bug `[queried TEST
 2026-08-18]`.** The recompute demonstrably **ran and wrote**: all 89 affected
 master_places carry `updated_at` in the **03:16:22–03:16:33 UTC** window, which
