@@ -584,7 +584,91 @@ run today.~~ **DONE ON TEST 2026-08-18 — see below. PROD still open.**
 prominently; the mis-classification is data-quality debt, not a
 render defect. Can wait behind the six-state trim.
 
-### TEST side APPLIED 2026-08-18 — `data/scripts/reclassify-osm-waste-disposal.ts`
+### RESOLVED ON TEST 2026-08-18 by DELETION — `data/scripts/delete-osm-waste-disposal.ts`
+
+**Final state. Supersedes the reclassify-to-NULL step recorded below.** Adam's
+decision reversed that intermediate approach in favour of the **delete this
+entry preferred from the start** ("since the row shouldn't have been ingested at
+all, delete is cleaner"). The 123 stale rows are **hard-deleted from TEST**.
+**PROD's 1,723 rows are UNTOUCHED and still need Adam's explicit go-ahead as a
+separate operation.**
+
+**TEST before → after `[queried TEST 2026-08-18]`:**
+
+| metric | before | after | Δ |
+|---|--:|--:|--:|
+| `source_record` total | 165,945 | **165,822** | −123 |
+| — `is_active=false` | 84,911 | 84,788 | −123 |
+| — `is_active=true` | 81,034 | 81,034 | **0** |
+| osm `source_record` | 109,615 | **109,492** | −123 |
+| `place_match` total | 163,248 | **163,151** | −97 (cascade) |
+| `master_place` total | 155,495 | 155,495 | **0** |
+
+Zero `amenity=waste_disposal` rows remain on TEST; the **26** genuine
+`sanitary_dump_station` rows are untouched and still deactivated. The
+corpus-wide diff was exactly the five lines above — no other category or source
+moved. `place_match` cascades via `on delete cascade` on
+`place_match.source_record_id` (the only FK referencing `source_record`).
+
+**The set was NOT taken from the prior snapshot — that snapshot had been
+destroyed.** `reclassify-osm-waste-disposal.ts` wrote its snapshot on every run
+including dry runs, so a post-apply dry run found 0 rows and overwrote it with
+an empty file. Defect fixed in that script (timestamped snapshots, never write
+an empty one). The set was instead re-derived and proven identical: **zero** osm
+rows had a NULL `inferred_category` before the reclassify step, and it set
+exactly 123 to NULL, so `source_id='osm' AND inferred_category IS NULL` selects
+precisely those rows. Four independent guards enforced it at delete time (NULL
+category + raw tag + expected count 123 + all-inactive). A full-row backup
+(every column + the 97 cascading `place_match` rows) is at
+`~/.config/overlander/deletion-backups/`; `raw_payload` carries the original OSM
+element with coordinates, so rows are reconstructible via
+`upsert_source_record`.
+
+**Deletion did NOT fix the `recompute_master_place` clear-bug `[queried TEST
+2026-08-18]`.** The recompute demonstrably **ran and wrote**: all 89 affected
+master_places carry `updated_at` in the **03:16:22–03:16:33 UTC** window, which
+matches the delete operation exactly (its backup file is stamped 03:16:22) and
+matches no other operation this session. Yet **78 of them still read
+`primary_category='dump_station'`** and `canonical_name='Unnamed dump station'`.
+A recompute that provably wrote still left those columns stale — which is the
+clear-bug demonstrated directly, on the `IF v_value IS NOT NULL` guard: with no
+*active* source_record left, `resolve_field()` returns no candidate, the UPDATE
+is skipped, and the old value stays stranded. Deleting the source_record is
+therefore **not** a workaround for the clear-bug; it needs its own scoped pass.
+
+**Observed inconsistency, mechanism NOT established.** Post-delete, the 78 rows
+carry `attribution = {}` and `secondary_categories = []` while
+`primary_category`/`canonical_name` still hold values with no backing source.
+These aggregate columns were **not measured pre-delete**, so it is not known
+whether the delete changed them or they were already empty — and no causal link
+between them and the `updated_at` bump has been established. Recorded as an
+observation, not a mechanism.
+
+> **CORRECTION 2026-08-18 (same day, before push).** ~~An earlier revision of
+> this entry and of this deletion commit's message claimed `updated_at` bumped
+> "89 of 89, vs 0 of 89 for the NULL case," and that the recompute "genuinely
+> wrote this time" while the NULL-case recompute was a verified no-op.~~ **That
+> contrast was never established and has been struck.** The "0 of 89" came from a
+> **vacuous check**: the filter tested `updated_at` for the prefix
+> `2026-08-18` while the machine runs PDT and the operation executed at
+> **03:02 UTC on 2026-08-19**, so it was guaranteed to return 0 whether or not
+> the recompute wrote. The NULL-case write behaviour was therefore **never
+> measured**, and the evidence is now **unrecoverable** — the 03:16 delete
+> recompute overwrote those `updated_at` values. Only the delete-case
+> measurement above stands. Same failure class as the apparatus lessons in
+> `CLAUDE.md`: a check that cannot fail is not evidence.
+
+**NEW residual introduced by the deletion: 78 completely sourceless
+`master_place` rows** (zero `source_record` rows now reference them; before,
+they at least had an inactive one). Still **render-harmless** — all 94
+corpus-wide `dump_station` master_places sit at `source_count = 0` and
+`master_place_search_export` returns **0** of them `[queried TEST 2026-08-18]`.
+Cleaning them up is a separate authorized decision (deleting `master_place` rows
+was not in scope here) and is the natural companion to the clear-bug pass.
+
+### Intermediate step, 2026-08-18 — reclassify to NULL (`reclassify-osm-waste-disposal.ts`)
+
+~~Final.~~ **Superseded by the deletion above; kept for the record.**
 
 Surfaced by this session's tag-richness investigation, which first reported
 dump_station at 93.3% tag-rich — an **apparatus artifact**: the richness
@@ -615,9 +699,13 @@ Reversibility proven by a full undo → re-apply round trip (149 → 123 restore
 **RESIDUAL — a second confirmed instance of the `recompute_master_place`
 clear-bug** (its own entry above predicted exactly this: "any field whose
 sources might stop resolving … should check for the same class of stale-data
-risk"). The 89 affected master_places were recomputed with zero errors, but
-**`updated_at` bumped on 0 of 89** and **78 still read
-`primary_category='dump_station'`** `[queried TEST 2026-08-18]`. Cause: with no
+risk"). The 89 affected master_places were recomputed with zero errors, and
+**78 still read `primary_category='dump_station'`** `[queried TEST 2026-08-18]`.
+~~`updated_at` bumped on 0 of 89.~~ **STRUCK — that check was vacuous** (a
+`2026-08-18` prefix filter against a run that executed at 03:02 UTC on
+**2026-08-19** on a PDT machine; it returned 0 regardless of outcome). Whether
+this NULL-case recompute wrote was **never measured** and can no longer be
+recovered — see the CORRECTION note in the deletion section above. Cause: with no
 *active* source_record left, `resolve_field()` returns no candidate, so the
 `IF v_value IS NOT NULL` guard skips the UPDATE and the old value stays
 stranded. **Render-harmless here** — all 94 corpus-wide `dump_station`

@@ -1,4 +1,16 @@
 /**
+ * SUPERSEDED 2026-08-18 by `delete-osm-waste-disposal.ts` — Adam's decision was
+ * to hard-delete these rows rather than leave them at `inferred_category=null`,
+ * matching `docs/BACKLOG.md`'s original stated preference. This script is kept
+ * as the record of the intermediate step; its `--undo` can no longer restore
+ * anything, because the rows it targeted no longer exist.
+ *
+ * DEFECT FIXED HERE (it cost the original snapshot): the snapshot used to be
+ * written on EVERY run including a dry run, so re-running the dry run after a
+ * successful apply found 0 remaining rows and overwrote the good snapshot with
+ * an empty one. Snapshots are now TIMESTAMPED (never clobber) and an empty
+ * result set is never written at all.
+ *
  * Reclassify the stale `amenity=waste_disposal` rows out of `dump_station`.
  *
  * WHY. Pre-#202 the OSM adapter mapped `amenity=waste_disposal` (a municipal
@@ -32,13 +44,12 @@
  *   --undo     restore inferred_category from the snapshot file + recompute
  */
 import { createClient } from "@supabase/supabase-js";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const TEST_REF = "znldzjdatkogdktymtvi";
 const SNAPSHOT_DIR = join(homedir(), ".config", "overlander", "reclassify-snapshots");
-const SNAPSHOT_FILE = join(SNAPSHOT_DIR, "osm-waste-disposal-dump-station.json");
 
 type SrRow = {
   id: string;
@@ -89,8 +100,13 @@ async function main() {
 
   // ── UNDO ────────────────────────────────────────────────────────────────
   if (undo) {
-    if (!existsSync(SNAPSHOT_FILE)) throw new Error(`No snapshot at ${SNAPSHOT_FILE} — nothing to undo.`);
-    const snap = JSON.parse(readFileSync(SNAPSHOT_FILE, "utf8")) as Snapshot;
+    if (!existsSync(SNAPSHOT_DIR)) throw new Error(`No snapshot dir at ${SNAPSHOT_DIR} — nothing to undo.`);
+    const candidates = readdirSync(SNAPSHOT_DIR).filter((f) => f.startsWith("osm-waste-disposal-dump-station") && f.endsWith(".json")).sort();
+    const newest = candidates.at(-1);
+    if (!newest) throw new Error(`No snapshot file in ${SNAPSHOT_DIR} — nothing to undo.`);
+    const snapPath = join(SNAPSHOT_DIR, newest);
+    console.log(`using snapshot: ${snapPath}`);
+    const snap = JSON.parse(readFileSync(snapPath, "utf8")) as Snapshot;
     if (snap.project_ref !== TEST_REF) throw new Error(`Snapshot is for ${snap.project_ref}, not TEST.`);
     console.log(`restoring ${snap.rows.length} rows from snapshot taken ${snap.taken_at}`);
     let restored = 0;
@@ -137,16 +153,23 @@ async function main() {
   const mpIds = [...new Set(target.map((r) => r.master_place_id).filter((x): x is string => !!x))];
   console.log(`  → distinct master_places to recompute: ${mpIds.length}`);
 
-  // Snapshot BEFORE any write.
-  mkdirSync(SNAPSHOT_DIR, { recursive: true });
-  const snapshot: Snapshot = {
-    taken_at: new Date().toISOString(),
-    project_ref: TEST_REF,
-    rows: target.map((r) => ({ id: r.id, external_id: r.external_id, prior_inferred_category: r.inferred_category, master_place_id: r.master_place_id })),
-    affected_master_place_ids: mpIds,
-  };
-  writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2));
-  console.log(`\n  snapshot written: ${SNAPSHOT_FILE} (${snapshot.rows.length} rows)`);
+  // Snapshot BEFORE any write. Never clobber: timestamped filename, and an
+  // empty result set is never written (a post-apply dry run must not be able
+  // to overwrite the snapshot that makes the apply reversible).
+  if (target.length === 0) {
+    console.log(`\n  nothing to reclassify — snapshot NOT written (refusing to overwrite an existing one).`);
+  } else {
+    mkdirSync(SNAPSHOT_DIR, { recursive: true });
+    const snapshot: Snapshot = {
+      taken_at: new Date().toISOString(),
+      project_ref: TEST_REF,
+      rows: target.map((r) => ({ id: r.id, external_id: r.external_id, prior_inferred_category: r.inferred_category, master_place_id: r.master_place_id })),
+      affected_master_place_ids: mpIds,
+    };
+    const file = join(SNAPSHOT_DIR, `osm-waste-disposal-dump-station-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+    writeFileSync(file, JSON.stringify(snapshot, null, 2));
+    console.log(`\n  snapshot written: ${file} (${snapshot.rows.length} rows)`);
+  }
 
   if (!apply) {
     console.log("\nDRY RUN — no writes performed. Re-run with --apply.");
