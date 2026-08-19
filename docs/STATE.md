@@ -100,10 +100,10 @@ is unreachable from here (verified by `git show` on all three refs).
 
 | metric | value |
 |---|--:|
-| `master_place` | **155,495** |
+| `master_place` | **156,002** |
 | `source_record` all / active / inactive | 165,822 / **82,133** / 83,689 |
-| `place_match` total / pending | 163,151 / **4,058** |
-| `master_place_search_export` (view) | **35,685** |
+| `place_match` total / pending | 163,803 / **4,159** |
+| `master_place_search_export` (view) | **36,192** |
 | Typesense `places_test` | **36,175** — ⚠ **NOT equal to the view; sync failing, drift 490, see below** |
 | `master_place` with `source_count = 0` | **81,189** |
 
@@ -219,11 +219,12 @@ the whole session's deactivations. **`places_test` now equals the view exactly.*
 > retried.
 >
 > **Consequence — a real split between surfaces.** `places_test` still holds
-> **36,175** docs against a **35,685**-row view — **drift 490, re-verified
-> 2026-08-19** after both viewpoint reactivations, and it reconciles exactly:
-> 777 narrowed-out rows still indexed, minus 118 NPS and 169 OSM viewpoint places
-> added since, = 490. So search is stale in BOTH directions now: it still returns
-> the 777 removed places AND does not yet carry the 287 restored ones. Confirmed by direct
+> **36,175** docs against a **36,192**-row view `[queried TEST 2026-08-19]`. The
+> drift has since FLIPPED SIGN: it was +490 (index ahead) after the two viewpoint
+> reactivations, and the BLM materialization then added 507 places to the view,
+> leaving the index **17 BEHIND**. Search remains stale in both directions — it
+> still returns the 777 narrowed-out places AND lacks the 287 restored viewpoint
+> places plus the 507 new BLM ones. Confirmed by direct
 > document lookup, not inferred from the count gap: sampled deactivated places
 > return HTTP 200 from `places_test` while being absent from the view
 > `[measured 2026-08-19]`. **The database-backed surfaces are correct** — the
@@ -286,6 +287,52 @@ resolve to 170 master_places and 231 NPS rows to 146.
 
 Propagation was verified on BOTH surfaces for each slice — 5/5 for NPS, 7/7 for
 OSM including two note-tag positives and three negative controls.
+
+### BLM dispersed_camping ER backlog materialized 2026-08-19 `[queried TEST 2026-08-19]`
+
+A corpus-wide diagnosis found source_records that were **active and unlinked with
+no `place_match` row at all** — never processed by entity resolution, distinct
+from the `manual_review` queue. Root cause established by exclusion (timing,
+data-shape, category allowlist and run-truncation all refuted): the rows were
+simply never included in any materialize invocation's id set. The durable gap is
+that **nothing reconciles "did every source_record receive an outcome?"** — the
+fail-closed `--only-categories` allowlist plus per-chunk operator scoping makes
+silent omission structurally possible.
+
+The largest block, **652 blm `dispersed_camping` rows**, was materialized. Scoping
+was verified clean first: the delta was exactly 652, **0 inactive rows** would be
+swept in (unlike viewpoint, where 160 would).
+
+| outcome | count |
+|---|--:|
+| `new_master_place` | **507** |
+| `auto_link` | **44** |
+| `amenity_rollup` | 0 |
+| `manual_review` (still unlinked) | **101** |
+
+**Result:** 551 of the 652 are now linked, 101 remain in review. All 652 received
+a `place_match` row (551 confirmed, 101 pending). They resolve to **529 distinct
+master_places — 507 newly created plus 22 pre-existing** ones the auto_links
+attached to, confirmed by `created_at` rather than inferred.
+
+`recompute_master_place` runs **inside** `apply_match_outcomes` — no separate pass
+needed. Verified: of the 529, **0** sit at `source_count = 0` and all 529 are in
+the export view, which requires `source_count > 0`. Propagation confirmed on both
+surfaces, 4/4.
+
+**Measured cost, because it is the real constraint:** wall clock **471 s** —
+`matchall_ms` **381,093** for 652 input ids, plus `apply_match_outcomes`
+**59,594 ms** across 27 calls at batch_size 25. This is the load the 2026-08-16
+tier-exhaustion incident concerned; a per-category run of this size is ~8 minutes,
+not seconds.
+
+**Backlog remaining after this pass:** never-processed rows fell **2,671 → 2,019**,
+and never-processed *and active* **912 → 260** `[queried TEST 2026-08-19]`.
+
+**Viewpoint was deliberately NOT materialized.** Its dry run showed 82 of the 88
+active rows (93%) would land in `manual_review`, which leaves them unlinked and
+therefore still invisible — materialization would not achieve the goal. See
+`BACKLOG.md`.
 
 ### OPEN — not decided, do not treat as settled
 

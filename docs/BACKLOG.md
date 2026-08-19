@@ -2504,6 +2504,28 @@ conclusion.
     description null. Used as a negative control; correctly absent from both
     surfaces.
 
+- **Never-processed ER backlog — BLM slice CLEARED 2026-08-19, remainder OPEN.**
+  Corpus-wide, source_records existed that were active and unlinked with **no
+  `place_match` row at all** — never seen by entity resolution, distinct from the
+  `manual_review` queue. Cause established by exclusion (timing, data shape,
+  category allowlist, run truncation all refuted): they were never in any
+  materialize invocation's id set.
+  - **Done:** the 652 blm `dispersed_camping` rows materialized — **507
+    new_master_place · 44 auto_link · 101 manual_review**; 551 linked, 101 still
+    in review; 529 distinct master_places (507 new + 22 pre-existing). Scoping
+    verified clean beforehand (0 inactive rows swept in). Cost, measured: **471 s
+    wall clock**, `matchall_ms` **381,093**, apply **59,594 ms** / 27 calls.
+  - **Remaining:** never-processed **2,671 → 2,019**, and never-processed *and
+    active* **912 → 260** `[queried TEST 2026-08-19]`.
+  - **Viewpoint deliberately excluded** — its dry run put 82 of 88 active rows
+    (93%) into `manual_review`, which leaves them unlinked and still invisible,
+    so materializing would not achieve the goal. Needs its own decision on why
+    NPS viewpoint scores so poorly (96% review) vs BLM (15%).
+  - **The durable gap:** nothing reconciles "did every source_record receive an
+    outcome?" A post-materialize completeness assertion — unresolved-with-no-
+    place_match must be 0, or explain the remainder — would have caught all
+    2,671 at the time.
+
 - **88 active-but-unreachable viewpoint source_records — OPEN, 2026-08-19.**
   Rows with no `master_place_id` were reactivated with their slice but reach
   **neither** the export view nor `pois_along_corridor`; they need
