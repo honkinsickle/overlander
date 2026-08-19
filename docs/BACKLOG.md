@@ -2474,8 +2474,10 @@ conclusion.
       nullable and now get an explicit `set field = null` when no active
       source resolves them, each guarded on `where ... is not null` so an
       already-empty row costs no extra write. Plain SQL `NULL`, not `'{}'`/
-      `'[]'` — verified 0 of 156,002 rows store either in these columns today,
-      so NULL is the existing "no data" convention, not a new state.
+      `'[]'` — verified 0 of 156,002 rows store either in these columns today
+      across all 10 (only 6 checked at write-time; `contact`/`access`/
+      `seasonality`/`cell_signal` were closed in a follow-up pass), so NULL is
+      the existing "no data" convention, not a new state.
     - **Applied to TEST only**, via `db:push-verify -- --test`. Re-pulled
       `pg_get_functiondef` after apply and diffed byte-for-byte against the
       intended migration body — identical (only `pg_get_functiondef`'s own
@@ -2518,6 +2520,26 @@ conclusion.
       snapshot exactly — no inserts or deletes). 148,354 of 156,002 rows carry
       a `last_resolved_at` older than session start, confirming only the
       backfill + regression sample (~7,646 rows) were touched.
+    - **User-visible impact — not all 7,346 were render-harmless like the
+      original 3 instances.** Only 60 of the 7,346 backfilled rows have
+      `source_count > 0`; of those, **59 are currently live in
+      `master_place_search_export`** (the 60th fails on an unrelated,
+      pre-existing geographic exclusion — outside `six_state_footprint()`,
+      confirmed via the view's own `pg_get_functiondef`, which filters only on
+      `is_searchable`/`source_count`/geometry, none of the 10 cleared fields).
+      Category split: **44 campground, 14 facility, 1 recreation_area**. These
+      59 real, search-visible places had a field visibly change (most likely
+      emptied) as a direct, intended effect of this fix — this is the correct
+      behavior (removing unsupported stale data), but it is a real content
+      change on live cards, not a no-op, and Adam should know that before
+      approving.
+    - **View-count drift (36,192 → 36,188) during this session is confirmed
+      NOT caused by this fix**, not merely assumed: the view's WHERE clause
+      (`is_searchable`, `source_count > 0`, footprint intersection) never
+      references any of the 10 cleared fields, and a direct membership check
+      against all 7,346 backfilled ids found only the one pre-existing
+      geographic exclusion above — zero rows dropped from the view because of
+      this migration.
 
 - **Amenity chip density — no cap or overflow handling. UNBUILT, flagged
   2026-08-18.** The slideup renders one chip per truthy amenity key via
