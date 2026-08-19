@@ -2364,6 +2364,30 @@ conclusion.
     the 15-minute negative cache in `CLAUDE.md` before drawing conclusions from
     it.
 
+- **land_manager / manager_type / designation / gap_status — SCOPED, NOT
+  BUILT. LOW PRIORITY.** PAD-US's normalizer (`data/ingestion/sources/padus.ts`)
+  already extracts these four fields into `source_record.normalized_payload`,
+  but neither a `master_place` column nor a `field_precedence` row exists for
+  any of them — confirmed directly against the migrations, not inherited from
+  an earlier report. Full proposal from a 2026-08-18 investigation pass (not
+  written to a `docs/` file — this entry is the durable record):
+  - Four new TEXT columns on `master_place`. `field_precedence` at **priority 1
+    (PAD-US authoritative)**, deliberately NOT the amenities-style
+    lowest-priority gap-fill pattern — PAD-US has no competing validated source
+    for land ownership (RIDB's agency signal only covers 5 federal agencies and
+    is already consumed elsewhere as an `overlander_tags` tag), and PAD-US is
+    already the documented primary source for this data per the 2026-06-02
+    land-status/dispersed-camping ADR. If anyone considers changing this to a
+    low-priority gap-fill row later, re-read that reasoning first — it's not an
+    oversight.
+  - Touches `recompute_master_place`, the `pois_along_corridor` RPC (new
+    migration), and both `federated.ts`/`mapMasterPlaceRow` and `hydrate.ts` —
+    no existing UI slot, this is new render work, not a reconnect like
+    `capacity`/`amenities` were.
+  - Open, unresolved: `gap_status` (GAP 1-4 protection-tier codes) needs
+    plain-language display copy before it can be shown to a user (e.g.
+    "Permanently protected" vs. raw code) — a product decision, not yet made.
+
 - **`recompute_master_place` never clears a field back to null — only
   overwrites when a new value exists. LOW-TO-MEDIUM PRIORITY, currently
   render-harmless but real.** Found during NPS amenities normalization
@@ -2433,14 +2457,13 @@ conclusion.
   written down. Needs a product/design call on cap and overflow affordance
   before it is an engineering task.
 
-- **`land_manager` / `designation` / `gap_status` proposal is STRANDED ON AN
-  UNMERGED BRANCH — 2026-08-18.** The scoped proposal lives only in
-  `land-manager-precedence-design` (`30c231a`) and is **not reachable from
-  `fix/amenities-render-shape` or `origin/main`** — verified by `git show` on
-  all three refs, the entry greps to 0 hits on both. It is also the stated
-  blocker for `public_land` (1,343 padus rows, deactivated). Anyone looking for
-  it from `main` will not find it. Either merge that branch or re-land the
-  entry; do not re-scope the work from scratch, it is already written.
+- ~~**`land_manager` / `designation` / `gap_status` proposal is STRANDED ON AN
+  UNMERGED BRANCH — 2026-08-18.**~~ **RESOLVED 2026-08-19 — the branch was
+  merged and the proposal now lives in this file.** It had existed only in
+  `land-manager-precedence-design` (`30c231a`), unreachable from `main`, which is
+  what this entry recorded. The full scoped proposal is above; this pointer is
+  kept because it is still the stated blocker for `public_land` (1,343 padus
+  rows, deactivated).
 
 - **Two approved commit-message corrections — APPLIED 2026-08-18, then pushed.**
   Both were applied at end of session. Neither commit was the branch tip, so this
