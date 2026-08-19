@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-17 (⚠ newest section is the **six-state NPS materialize** — 5,283 NPS SRs ingested, materialized live on TEST, park_feature-linking guard + `/parks` wiring merged. PRs #233 (recgov widen), #234 (park_feature guard), #235 (`/parks`) are on `main`. Everything below is TEST-only; no PROD writes this session.)
+# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station reactivated on TEST with templated descriptions, then **narrowed so only described rows stay live** (1,008 description-less rows pulled back out). 25 commits, **2 unpushed at time of writing**, no PR opened. **Both viewpoint reactivations have since RUN** — the NPS slice and the OSM described/filter-C subset. Open now: **88 unlinked viewpoint source_records** (83 nps + 5 osm) that are active but reach no surface without materialization. ⚠ Typesense is **stale** against the DB: sync still blocked by cluster OOM. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,285 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station reactivated with templated descriptions, then narrowed to the described subset (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
+
+Newest truth. **Every figure below was measured against TEST read-only on
+2026-08-18 in a single pass** (`data/scripts/measure-session-closeout.ts`) —
+none transcribed from a prior report, because counts drifted between reports
+during this session (dump_station appeared as both 149 and 26, either side of a
+deletion). **No PROD writes this session. Nothing pushed.**
+
+### Where the work lives
+
+**Branch `fix/amenities-render-shape`, 22 commits ahead of `origin/main`, working
+tree clean — PUSHED to origin at end of session with upstream tracking set**
+`[git, 2026-08-18]`. The reactivation commit is `b794a23`; the docs close-out sits
+above it. Two commit messages were corrected before pushing (see BACKLOG), which
+rewrote those two commits and their descendants — content byte-identical, messages
+only.
+Everything in this section is TEST-only and lives on that branch. Two sibling
+branches from the same effort were pushed alongside it: `fix/phase0-corpus-field-reconnect`
+(`c68ab5a`, an ancestor of this branch) and **`land-manager-precedence-design`
+(`30c231a`), which is NOT merged into this branch or `main`** — its BACKLOG entry
+is unreachable from here (verified by `git show` on all three refs).
+
+### TEST corpus position `[queried TEST 2026-08-18]`
+
+| metric | value |
+|---|--:|
+| `master_place` | **156,002** |
+| `source_record` all / active / inactive | 165,822 / **82,133** / 83,689 |
+| `place_match` total / pending | 163,803 / **4,159** |
+| `master_place_search_export` (view) | **36,192** |
+| Typesense `places_test` | **36,175** — ⚠ **NOT equal to the view; sync failing, drift 490, see below** |
+| `master_place` with `source_count = 0` | **81,189** |
+
+**`source_record` by source (active / all):** osm 27,985 / 109,492 · padus
+36,358 / 37,701 · usfs 6,324 / 6,330 · ridb 6,013 / 6,013 · nps 5,052 / 5,283 ·
+blm 876 / 876 · google_resolved 122 / 122 · google 5 / 5.
+
+The large active/all gap on osm is this session's deliberate category curation,
+not attrition — see the table below.
+
+### Category curation — what is live and what is off `[queried TEST 2026-08-18]`
+
+| category | rows | active | with description | status |
+|---|--:|--:|--:|---|
+| toilet | 670 | **308** | 308 (100% of active) | **REACTIVATED, then narrowed** — 362 description-less rows deactivated |
+| water | 1,005 | **370** | 370 (100% of active) | **REACTIVATED, then narrowed** — 635 description-less rows deactivated |
+| dump_station | 26 | **15** | 15 (100% of active) | **REACTIVATED, then narrowed** — 11 description-less rows deactivated |
+| viewpoint (nps) | 231 | **231** | 231 (100%) | **REACTIVATED** — 146 master_places, 120 in the view |
+| viewpoint (osm) | 6,470 | **175** | 175 (100% of active) | **REACTIVATED, filter C only** — 170 master_places, all 170 in the view; 27 junk + 6,268 undescribed stay off |
+| fire_pit | 3,521 | 0 | — | deactivated — decided, not worth templating |
+| gas_station | 6,127 | 0 | — | deactivated — **deliberate**, Google covers gas live |
+| public_land | 1,343 | 0 | — | deactivated — blocked on parked land_manager work |
+| peak | 33,924 | 0 | — | deactivated — product scope decision |
+| spring | 31,465 | 0 | — | deactivated — product scope decision |
+
+peak + spring = **65,389** rows measured now (earlier notes said "~64,300" — use
+the measured figure). All three reactivated categories are **osm-only**; there is
+no non-osm row in any of them, so "all osm rows" and "exactly what `47e00e4`
+deactivated" are the same set here (measured, because `47e00e4` deactivated
+across *any* source_id and the two definitions do not coincide in general).
+
+**Reactivation verified on BOTH consumer surfaces** — 9 sampled places, 3 per
+category, 9/9 present in `master_place_search_export` AND returned by a live
+`pois_along_corridor` call with a real GeoJSON LineString through each place's
+own coordinates. The RPC reads `master_place.geometry` directly and bypasses the
+view, so a place can be in one and absent from the other; checking one surface
+would not have been evidence. At full reactivation the view rows in the three
+categories were toilet 503 + water 768 + dump_station 16 = **1,287**, exactly the
+view's growth (34,888 → 36,175) — which also proved none of these categories had
+any row in the view beforehand. **Those figures describe the reactivation step
+only.** After the narrowing they are **toilet 215 + water 285 + dump_station 10 =
+510** `[queried TEST 2026-08-19]`.
+
+### Shipped this session (all on the branch, none merged)
+
+- **Amenities end-to-end.** OSM + NPS source-layer normalization (NPS extended to
+  9 further categories, `95fdeb7`/`b03450d`), the boolean-map → display-label
+  translator for the slideup (`f85bbcb`), the capacity/amenities/priceTier
+  merge-layer reconnect at the known drop points (`b64bb9e`), OSM added to
+  `amenities` `field_precedence` as gap-fill only (`0c046ef`, **TEST-only
+  migration**) and the OSM/parks_canada priority collision resolved 5 → 8
+  (`c68ab5a`).
+- **`pois_along_corridor` `source_count` filter** (`4c9d955`) — closes the gap
+  where a deactivated place stayed hidden from browse/search but was still
+  offered as a trip stop during generation. Migration `20260818160000`,
+  **TEST-only**.
+- **Eligibility-bucketing measurement fix** (`69fc612`) — the STRONG/WEAK/NONE
+  bucketing never read `normalized_payload.description` directly, so
+  RIDB/USFS-heavy categories (facility, visitor_center, recreation_area) were
+  wrongly scored sparse. After the fix none of the seven genuinely-sparse
+  categories moved, which is what justified deactivating them.
+- **Templated descriptions** for toilet / water / dump_station (`9743e6e`,
+  `0e8906f`) — built from real structured OSM tags, wired into `normalizeOsm` as
+  a **gap-fill fallback only** so a real `description`/`note` tag always wins.
+  Degrades gracefully: a bare row gets no description rather than a fabricated
+  one. Carries a safety rule — an explicit `drinking_water=no` always outranks a
+  generic "drinking water" lead. Suppresses any lead that merely restates the
+  category label.
+- **dump_station data-integrity fix** (`80bf0a1` → `e43de94`, verified `e1e7af4`).
+- **Reactivation** (`b794a23`) + a clean Typesense sync.
+
+### dump_station — the full arc
+
+Of 149 rows, **123 were stale pre-#202 `amenity=waste_disposal`** — municipal
+trash bins, not RV sanitary stations. First reclassified to
+`inferred_category = null` (`80bf0a1`), then **hard-deleted** per Adam's decision
+matching BACKLOG's original stated preference (`e43de94`). A full-row backup was
+taken first; a later pass then read **all 123 backed-up rows** (a full scan, not a
+sample) and confirmed the premise: 100% `amenity=waste_disposal`, zero carrying
+`description`/`operator`/`website`/`brand`/`phone`/`opening_hours`/`fee`/`addr:*`,
+and the only 2 rows with a `name` tag are literally named `"Dumpster"` with
+`waste=trash`. Nothing was restored. **The real dump_station population is 26**,
+all `amenity=sanitary_dump_station`. **15 of the 26 are active** — the 11
+carrying no description were deactivated in the narrowing step
+`[queried TEST 2026-08-19]`.
+
+**Residual:** 94 `master_place` rows still read `primary_category='dump_station'`;
+**78 sit at `source_count = 0`** and stay out of the view (only 16 are live). Those
+78 are a third observed instance of the `recompute_master_place` clear-bug —
+see `BACKLOG.md`.
+
+### Typesense
+
+**SUPERSEDED 2026-08-19 — a later sync FAILED; see the note below this block.**
+The 2026-08-18 run against `places_test` **succeeded**: fetched 36,175, indexed 36,175,
+**0 failed**, pruned 81,086 stale docs, 0 prune errors. The prune implies a
+pre-sync index of 117,261, matching the figure recorded for `places_test` on
+2026-08-17 — i.e. the index had not been synced since then and this run absorbed
+the whole session's deactivations. **`places_test` now equals the view exactly.**
+`[measured 2026-08-18]`
+
+> The handoff reported 3 consecutive OOM failures on this shared TEST cluster.
+> **That was not observed in this session** — one run, and it succeeded. The OOM
+> remains a reported constraint, not a reproduced one, from this session's vantage.
+
+> **2026-08-19 — the OOM is now REPRODUCED, and the index is stale.** A sync run
+> after the narrowing **failed**. The cluster reports
+> `{"ok":true,"resource_error":"OUT_OF_MEMORY"}` with system memory at
+> **0.42 GB / 0.44 GB = 96.7%** `[queried 2026-08-19]`, and refuses writes with
+> **HTTP 422 `ObjectUnprocessable`** rather than a 500 — which is why it does not
+> look like OOM at first glance. Only 2 of the 100 docs in the rejected batch were
+> in the three categories, so this is a cluster constraint, not a data defect. Not
+> retried.
+>
+> **Consequence — a real split between surfaces.** `places_test` still holds
+> **36,175** docs against a **36,192**-row view `[queried TEST 2026-08-19]`. The
+> drift has since FLIPPED SIGN: it was +490 (index ahead) after the two viewpoint
+> reactivations, and the BLM materialization then added 507 places to the view,
+> leaving the index **17 BEHIND**. Search remains stale in both directions — it
+> still returns the 777 narrowed-out places AND lacks the 287 restored viewpoint
+> places plus the 507 new BLM ones. Confirmed by direct
+> document lookup, not inferred from the count gap: sampled deactivated places
+> return HTTP 200 from `places_test` while being absent from the view
+> `[measured 2026-08-19]`. **The database-backed surfaces are correct** — the
+> export view and `pois_along_corridor` (trip generation) both reflect the
+> narrowing. **Search-backed surfaces are stale until the cluster can accept a
+> sync.**
+
+### Viewpoint — both slices reactivated 2026-08-19 `[queried TEST 2026-08-19]`
+
+`47e00e4` deactivated viewpoint wholesale on a sparseness verdict that fits only
+its OSM half. Re-measured: **nps viewpoint is 231/231 described (100%)** against
+**osm viewpoint at 202/6,470 (3.1%)**. The category was reopened in two steps.
+
+**NPS slice (`16738b6`) — all 231 reactivated.** 148 linked → **146 distinct
+master_places**, of which **120 are in the export view**. The 26 absent are not a
+defect: they pass `source_count` and `is_searchable` and are excluded by the
+view's geographic filter, being outside `six_state_footprint()` — Los Alamos NM
+and Oak Ridge TN Manhattan Project NHP sites.
+
+**OSM slice (`6a03720`) — 175 reactivated under "filter C".** The described subset
+was investigated before any reactivation rather than presumed good. Filter C keeps
+real content and drops only structurally contentless rows; it deliberately keeps
+BOTH `description`-tag and `note`-tag material, because the expected
+mapper-to-mapper junk did not materialise — **0 rows** contained mapper vocabulary
+and the note rows carry some of the best content (trail directions, snake
+warnings, private-property access limits). Current OSM viewpoint state:
+
+| slice | rows | status |
+|---|--:|---|
+| passes filter C | **175** | **ACTIVE** — 170 distinct master_places, **all 170 in the view** |
+| junk, excluded | **27** | stays off — under-min-chars 16, single-word 8, name-restatement 2, url-only 1 |
+| no description at all | **6,268** | stays off, untouched |
+| **total** | **6,470** | partition closes exactly |
+
+The view grew by **169**, not 170, because one place — *Father Crowley Vista
+Point- Rainbow Canyon* — already carried an active NPS viewpoint source from
+`16738b6` and was in the view already. Both slices together put **287** rows of
+`primary_category='viewpoint'` in the view.
+
+**City Hall Observation Deck is NOT part of either reactivation.** A prior brief
+expected it in the NPS slice; it is **OSM-sourced** (`osm:node:5745696621`, its
+only source_record) with a **null description**, so it qualifies under neither
+slice and remains deactivated. The `la-to-portland` payload itself labels it
+`"secondary":"osm"`. It was used as a negative control in both verifications and
+correctly stayed absent from both surfaces.
+
+**KNOWN LIMITATION — 88 active-but-unreachable rows, unresolved.** Rows with no
+`master_place_id` were reactivated along with their slice but reach **neither**
+surface; they need materialization. **83 nps + 5 osm = 88.** The five OSM ones are
+listed because they are among the better content in the set:
+
+- `osm:node:358804431` — Zabriskie Point, 254 chars of real prose
+- `osm:node:11370405017` — "Lowest point in North America. HIKING NOT ADVISED AFTER 10AM IN THE SUMMER !!!" (Badwater Basin)
+- `osm:node:9287425516` — note-tag: "Follow the dirt path up the hill … watch out for snakes"
+- `osm:node:9287425501` — note-tag: "Follow the pathway behind the locked gate…"
+- `osm:node:9401761579` — "View of the Roosevelt Dam"
+
+Same issue class in both slices, unresolved in both. This is why 175 OSM rows
+resolve to 170 master_places and 231 NPS rows to 146.
+
+Propagation was verified on BOTH surfaces for each slice — 5/5 for NPS, 7/7 for
+OSM including two note-tag positives and three negative controls.
+
+### BLM dispersed_camping ER backlog materialized 2026-08-19 `[queried TEST 2026-08-19]`
+
+A corpus-wide diagnosis found source_records that were **active and unlinked with
+no `place_match` row at all** — never processed by entity resolution, distinct
+from the `manual_review` queue. Root cause established by exclusion (timing,
+data-shape, category allowlist and run-truncation all refuted): the rows were
+simply never included in any materialize invocation's id set. The durable gap is
+that **nothing reconciles "did every source_record receive an outcome?"** — the
+fail-closed `--only-categories` allowlist plus per-chunk operator scoping makes
+silent omission structurally possible.
+
+The largest block, **652 blm `dispersed_camping` rows**, was materialized. Scoping
+was verified clean first: the delta was exactly 652, **0 inactive rows** would be
+swept in (unlike viewpoint, where 160 would).
+
+| outcome | count |
+|---|--:|
+| `new_master_place` | **507** |
+| `auto_link` | **44** |
+| `amenity_rollup` | 0 |
+| `manual_review` (still unlinked) | **101** |
+
+**Result:** 551 of the 652 are now linked, 101 remain in review. All 652 received
+a `place_match` row (551 confirmed, 101 pending). They resolve to **529 distinct
+master_places — 507 newly created plus 22 pre-existing** ones the auto_links
+attached to, confirmed by `created_at` rather than inferred.
+
+`recompute_master_place` runs **inside** `apply_match_outcomes` — no separate pass
+needed. Verified: of the 529, **0** sit at `source_count = 0` and all 529 are in
+the export view, which requires `source_count > 0`. Propagation confirmed on both
+surfaces, 4/4.
+
+**Measured cost, because it is the real constraint:** wall clock **471 s** —
+`matchall_ms` **381,093** for 652 input ids, plus `apply_match_outcomes`
+**59,594 ms** across 27 calls at batch_size 25. This is the load the 2026-08-16
+tier-exhaustion incident concerned; a per-category run of this size is ~8 minutes,
+not seconds.
+
+**Backlog remaining after this pass:** never-processed rows fell **2,671 → 2,019**,
+and never-processed *and active* **912 → 260** `[queried TEST 2026-08-19]`.
+
+**Viewpoint was deliberately NOT materialized.** Its dry run showed 82 of the 88
+active rows (93%) would land in `manual_review`, which leaves them unlinked and
+therefore still invisible — materialization would not achieve the goal. See
+`BACKLOG.md`.
+
+### OPEN — not decided, do not treat as settled
+
+1. ~~**The description-less remainder.**~~ **RESOLVED 2026-08-19 — Adam decided
+   to pull it back out, and it is implemented.** Within toilet / water /
+   dump_station only rows carrying a description (real OSM original or generated
+   template) stay live; **1,008 description-less rows were deactivated** — 362
+   toilet, 635 water, 11 dump_station. Live now: **toilet 308, water 370,
+   dump_station 15**, every one of them described `[queried TEST 2026-08-19]`.
+   Verified on both consumer surfaces in both directions (18/18): deactivated
+   places absent from the view AND from `pois_along_corridor`, described controls
+   present on both. All 519 master_places holding a described active row remain
+   in the view.
+
+2. ~~**NPS viewpoint reactivation — still NOT done.**~~ **RESOLVED 2026-08-19 —
+   both viewpoint reactivations have run.** See the dedicated section below.
+
+3. **Two approved-but-unapplied one-line commit-message corrections** — see
+   BACKLOG. Deliberately NOT applied in this docs pass.
 
 ## 2026-08-17 (later) — six-state NPS materialized live on TEST; park_feature-linking guard + `/parks` wiring merged; Typesense caught up
 

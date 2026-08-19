@@ -20,6 +20,7 @@
     "backfill:polygon-containment": "tsx --env-file=.env scripts/backfill-polygon-containment.ts",
     "backfill:nps-photo": "tsx --env-file=.env scripts/backfill-nps-photo.ts",
     "backfill:ridb-photo": "tsx --env-file=.env scripts/backfill-ridb-photo.ts",
+    "backfill:nps-amenities": "tsx --env-file=.env scripts/backfill-nps-amenities.ts",
     "mvum:load": "tsx --env-file=.env scripts/load-mvum-roads.ts",
     "db:push-verify": "tsx --env-file=.env scripts/verify-migration.ts --push",
     "test:seed": "tsx --env-file=.env --env-file=.env.test scripts/seed-test-fixtures.ts",

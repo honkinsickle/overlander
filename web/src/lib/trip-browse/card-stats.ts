@@ -153,6 +153,73 @@ function priceTierToEntry(tier?: 1 | 2 | 3 | 4): string | undefined {
   return tier ? "$".repeat(tier) : undefined;
 }
 
+/** Display labels for the known BrowsePlace.amenities keys — the 6 OSM-
+ *  shared categories (normalizeOsm(), data/ingestion/sources/osm.ts) plus 9
+ *  NPS-introduced categories with no OSM equivalent
+ *  (coerceCampgroundAmenities, data/ingestion/sources/nps.ts). Copy choice,
+ *  not an engineering one. "Trash" and "Firewood" match the existing
+ *  design-reference labels in
+ *  web/src/components/demo/category-planning-slide.tsx (CampingFeatures,
+ *  mirrors Paper artboards WBU-1/UTE-1/W0C-1/WFW-1/WJL-1) — that source
+ *  covers trash pickup only, not recycling, so "Trash" alone slightly
+ *  under-describes trash_recycling's broader NPS meaning; flagged as a
+ *  copy call, not resolved silently. The other 8 have no existing
+ *  precedent found anywhere in the codebase. cellPhoneReception is
+ *  deliberately NOT here — see coerceCampgroundAmenities's docstring for
+ *  why (master_place.cell_signal is its dedicated home instead). */
+const AMENITY_LABELS: Record<string, string> = {
+  water: "Water",
+  toilet: "Toilet",
+  shower: "Shower",
+  dump_station: "Dump Station",
+  fire_ring: "Fire Ring",
+  picnic: "Picnic Area",
+  camp_store: "Camp Store",
+  laundry: "Laundry",
+  internet: "Internet",
+  ice_for_sale: "Ice for Sale",
+  host_onsite: "Camp Host",
+  amphitheater: "Amphitheater",
+  food_storage: "Food Storage Lockers",
+  firewood_for_sale: "Firewood",
+  trash_recycling: "Trash",
+};
+
+/** Optional per-category caveat suffix. Written only by
+ *  coerceCampgroundAmenities (data/ingestion/sources/nps.ts) via a sibling
+ *  `${key}_qualifier` key — OSM's amenities never carry one. REVISES the
+ *  "NPS shape is unrecognized, only produces empty output" note this
+ *  function's docstring used to carry: NPS now normalizes to this same
+ *  canonical shape upstream, so its qualified values reach here too.
+ *  "year round" is the unmarked/default case and writes no qualifier key at
+ *  all (see coerceCampgroundAmenities) — only these two values currently
+ *  exist. Copy choice, not an engineering one. */
+const QUALIFIER_SUFFIXES: Record<string, string> = {
+  seasonal: " (seasonal)",
+  non_potable: " (non-potable)",
+};
+
+/** Corpus amenities (a boolean-keyed presence map, optionally with a sibling
+ *  `${key}_qualifier` string) → display label chips. A category is included
+ *  only when its value is exactly `true` — never renders "No X" for a false
+ *  or absent key. Keys outside AMENITY_LABELS are ignored: bc_parks'
+ *  {camping_types, facilities} array shape (out of scope, inert on TEST
+ *  today) resolves above osm in field_precedence and isn't recognized here
+ *  — this only translates the canonical shape normalizeOsm() and
+ *  coerceCampgroundAmenities both produce. */
+function amenitiesToLabels(
+  amenities: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!amenities) return [];
+  return Object.entries(AMENITY_LABELS)
+    .filter(([key]) => amenities[key] === true)
+    .map(([key, label]) => {
+      const qualifier = amenities[`${key}_qualifier`];
+      const suffix = typeof qualifier === "string" ? QUALIFIER_SUFFIXES[qualifier] : undefined;
+      return suffix ? `${label}${suffix}` : label;
+    });
+}
+
 /** Display labels for known provenance source identifiers. Keyed by the
  *  lowercased token so it normalizes BOTH the federated path's raw pipeline
  *  ids (attribution values: "ridb", "osm", "nps", …) AND the live discovery
@@ -217,13 +284,17 @@ export function browsePlaceToWaypoint(
   // Federated rows carry real overland tags (land status / managing agency /
   // camping policy — e.g. "federal_land", "dispersed_camping_likely"); live
   // Google/OSM results have none. These read as descriptors, so they home in
-  // the Tags pills only. There is no real amenities (facilities) signal, so
-  // the Amenities section is left unset and simply does not render.
+  // the Tags pills only.
   const realTags =
     place.overlanderTags && place.overlanderTags.length > 0
       ? place.overlanderTags
       : undefined;
   const dataSources = realDataSources(place);
+  // Amenities section: real facility presence (water/toilet/shower/dump
+  // station/fire ring/picnic) from the corpus's merged amenities field,
+  // translated to display labels. Absent/false keys are omitted, never
+  // shown as "No X" — see amenitiesToLabels for the shape this recognizes.
+  const amenityLabels = amenitiesToLabels(place.amenities);
 
   return {
     id: place.id,
@@ -269,5 +340,6 @@ export function browsePlaceToWaypoint(
         }
       : {}),
     ...(dataSources.length > 0 ? { dataSources } : {}),
+    ...(amenityLabels.length > 0 ? { amenities: amenityLabels } : {}),
   };
 }

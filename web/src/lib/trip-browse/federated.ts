@@ -206,6 +206,15 @@ export function mapMasterPlaceRow(
     mvumCorridor: row.mvum_corridor,
     attribution: row.attribution,
     overlanderTags: row.overlander_tags,
+    // Typed on MasterPlaceRow (the RPC's own RETURNS TABLE carries both),
+    // but previously never read here — the value crossed the wire and was
+    // discarded at this exact mapping step. See docs/architecture/
+    // place-pipeline-trace.md §2 (capacity) and place-pipeline-trace-
+    // amenities-addendum.md §4 (amenities). amenities resolves via
+    // field_precedence for ioverlander/ridb/nps/google only — OSM is
+    // excluded upstream in SQL, not by anything in this function.
+    capacity: row.capacity,
+    amenities: row.amenities,
     // Hydrate key: present only when a google source backs this place.
     ...(row.google_place_id ? { placeId: row.google_place_id } : {}),
     // Corpus-native photo (NPS Route A): present only when an nps source carries

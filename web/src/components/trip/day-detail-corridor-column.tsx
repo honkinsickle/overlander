@@ -728,6 +728,12 @@ export function DayDetailCorridorColumn({
         rating: rich?.rating ?? sug.rating,
         reviewCount: rich?.reviewCount ?? sug.reviewCount,
         photoUrl: rich?.photoUrl ?? sug.photoUrl,
+        // Fetched by /api/places/details (PlaceRich.priceTier) but previously
+        // never grafted here — browsePlaceToWaypoint already reads
+        // place.priceTier (→ logistics.entry / simulator.entryCost via
+        // priceTierToEntry) and always has; this was the missing graft, not
+        // a missing consumer. docs/architecture/place-pipeline-trace.md §3.
+        priceTier: rich?.priceTier ?? sug.priceTier,
       };
       const wp = browsePlaceToWaypoint(
         enriched,
@@ -824,6 +830,12 @@ export function DayDetailCorridorColumn({
             category:
               (rich.category === "overnight" ? "hotel" : rich.category) ??
               t.category,
+            // Fetched, previously never grafted (docs/architecture/
+            // place-pipeline-trace.md §3). CategoryListCard doesn't render
+            // it today — carried through for parity with the slideup path
+            // and any future card-side consumer, same status as the other
+            // passthrough fields on CorridorPlace.
+            priceTier: rich.priceTier ?? t.priceTier,
           }
         : t;
     });
