@@ -2444,6 +2444,81 @@ conclusion.
       least had an inactive one. Deleting them is a separate authorized decision
       and the natural companion to this fix's own scoped pass.
 
+  - **RESOLVED 2026-08-19 — real fix applied and backfilled on TEST, commit
+    `bf73f97`'s scoped pass. NOT pushed to origin — local commit only, flagged
+    for Adam's review before it reaches shared infrastructure.** Migration
+    `20260819180000_recompute_master_place_clear_bug_fix.sql`.
+    - **Live function pulled via `pg_get_functiondef` from TEST
+      (`znldzjdatkogdktymtvi`), not from a migration file** `[queried TEST
+      2026-08-19]` — confirmed current before touching anything. One handoff
+      claim did NOT hold up: the function is described elsewhere as
+      "security-definer" — measured `pg_proc.prosecdef = false`. The migration
+      matches the measured live definition, not the claim; flagging the
+      discrepancy here rather than silently going either way.
+    - **Full scan, not just the 3 known instances.** 13 guarded write sites
+      total in `recompute_master_place`: the Step 3 11-field loop
+      (`canonical_name`, `primary_category`, `description`, `amenities`,
+      `hours`, `contact`, `access`, `services`, `capacity`, `seasonality`,
+      `cell_signal`), Step 4 (`geometry`), Step 5 (`geometry_polygon`).
+      `recompute_aggregated_fields` (Step 1) was checked too — already
+      unconditional (`coalesce(..., '{}'::text[])`), not part of the bug.
+    - **Fix scope is 10 of the 13 sites, not all 13 — a real constraint the
+      original bug writeup didn't anticipate.** `canonical_name`,
+      `primary_category`, and `geometry` are **NOT NULL** columns on
+      `master_place` `[queried TEST 2026-08-19, information_schema.columns]`
+      — there is no NULL to clear them to without relaxing the constraint,
+      which this migration deliberately does NOT do (higher blast radius,
+      Adam's call). Their guarded-skip behavior is **unchanged**. The other 10
+      (`description`, `amenities`, `hours`, `contact`, `access`, `services`,
+      `capacity`, `seasonality`, `cell_signal`, `geometry_polygon`) are
+      nullable and now get an explicit `set field = null` when no active
+      source resolves them, each guarded on `where ... is not null` so an
+      already-empty row costs no extra write. Plain SQL `NULL`, not `'{}'`/
+      `'[]'` — verified 0 of 156,002 rows store either in these columns today,
+      so NULL is the existing "no data" convention, not a new state.
+    - **Applied to TEST only**, via `db:push-verify -- --test`. Re-pulled
+      `pg_get_functiondef` after apply and diffed byte-for-byte against the
+      intended migration body — identical (only `pg_get_functiondef`'s own
+      case/whitespace normalization differed). `prosecdef` and all 5 grants
+      (`postgres`/`anon`/`authenticated`/`service_role`/`PUBLIC`) confirmed
+      unchanged.
+    - **Backfill: 7,346 distinct `master_place` rows**, identified by a
+      per-field SQL scan mirroring `resolve_field()`'s own WHERE clause (not
+      a guess) across the 6 non-empty clearable fields — `description` 336,
+      `amenities` 4,066, `hours` 492, `contact` 1,230, `access` 919,
+      `geometry_polygon` 1,314 (`capacity`/`seasonality`/`cell_signal`/
+      `services` were 0 — nothing has ever populated them corpus-wide yet).
+      Candidate ID list snapshotted to
+      `~/.config/overlander/clear-bug-backfill-snapshots/candidates-pre-fix-20260819.json`
+      before backfill. Re-ran `recompute_master_place` (new function) on all
+      7,346 in 8 batches of ~1,000; the same stale-scan re-run afterward
+      returned **0** remaining candidates.
+    - **Fourth confirmed instance, larger than the first three combined:**
+      1,314 `public_land` rows (100% of the category, all padus-sourced) held
+      a stale `geometry_polygon` after `public_land` was deactivated this
+      session. Timestamps prove this is the guard bug, not "recompute never
+      ran": `last_resolved_at` postdates the source's deactivation
+      `updated_at` for all 1,314 `[queried TEST 2026-08-19]` — recompute
+      genuinely ran and still left the polygon stranded, same shape as the
+      dump_station evidence above.
+    - **Regression check:** 300 rows sampled from `source_count > 0` places
+      (deterministic seed, real resolved values), full column snapshot
+      before/after re-running `recompute_master_place`. 296/300 byte-identical
+      across all 17 checked columns including `prominence_score`. The other
+      4 changed on `geometry_polygon` only, to a *different real polygon*, not
+      a clear — traced to a `padus` source whose stored payload had never been
+      re-resolved since that master_place's single confirmed `place_match`
+      (2026-08-15), unrelated to this fix: the "has a candidate" code branch
+      is byte-for-byte unchanged by this migration, so the old function would
+      have produced the identical correction. Not a regression; flagged as a
+      separate, pre-existing "some rows haven't seen a recompute since their
+      match changed" observation, out of scope here.
+    - **Guard check:** `master_place`/`source_record`/`place_match` row counts
+      unchanged (156,002 / 165,822 / 163,803, matching the session-start
+      snapshot exactly — no inserts or deletes). 148,354 of 156,002 rows carry
+      a `last_resolved_at` older than session start, confirming only the
+      backfill + regression sample (~7,646 rows) were touched.
+
 - **Amenity chip density — no cap or overflow handling. UNBUILT, flagged
   2026-08-18.** The slideup renders one chip per truthy amenity key via
   `amenitiesToLabels` (`web/src/lib/trip-browse/card-stats.ts`), and
