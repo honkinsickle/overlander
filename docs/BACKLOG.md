@@ -2442,21 +2442,25 @@ conclusion.
   it from `main` will not find it. Either merge that branch or re-land the
   entry; do not re-scope the work from scratch, it is already written.
 
-- **Two approved, unapplied one-line commit-message corrections — OPEN,
-  2026-08-18.** Both commits are local and unpushed, so both are still safely
-  amendable; deliberately NOT applied during the docs pass.
-  - `159ac2b` — its message says "4 new tests (29 → 33 in this file)". The real
+- **Two approved commit-message corrections — APPLIED 2026-08-18, then pushed.**
+  Both were applied at end of session. Neither commit was the branch tip, so this
+  was a history rewrite (cherry-pick reword), not a plain `--amend`: `159ac2b` →
+  **`0e8906f`** and `db6e64b` → **`b794a23`**, with their descendants renumbered.
+  Content verified byte-identical to the pre-rewrite tree — messages only. Every
+  hash reference in STATE.md / LOG.md / BACKLOG.md / the Diary was repointed to
+  the new SHAs in the same pass.
+  - `0e8906f` — its message says "4 new tests (29 → 33 in this file)". The real
     figure is **2 new tests, 29 → 31** `[measured 2026-08-18: vitest reports 31,
     and the file contains 31 `it(` blocks]`. The suite moved 482 → 484, which is
     +2 and contradicts the claim in the same sentence.
-  - `db6e64b` — its message says "The OOM that failed three times earlier in the
+  - `b794a23` — its message says "The OOM that failed three times earlier in the
     session did NOT recur." Wrong twice: the 3 failures were **never observed in
     this session** (one sync run, which succeeded) and they **predate this
     session**, coming from the handoff document. Correct framing: the handoff
     reports 3 consecutive OOM failures; this run succeeded.
 
 - **Description-less remainder in the reactivated categories — OPEN DECISION,
-  NOT RESOLVED, 2026-08-18.** Reactivation (`db6e64b`) brought back *every* row
+  NOT RESOLVED, 2026-08-18.** Reactivation (`b794a23`) brought back *every* row
   in toilet / water / dump_station, but only a subset carries a description:
   **toilet 308/670, water 370/1005, dump_station 15/26** `[queried TEST
   2026-08-18]`. So **362 toilet + 635 water + 11 dump_station** rows are live in

@@ -19,7 +19,8 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   the boolean-map → display-label translator for the slideup, the
   capacity/amenities/priceTier merge-layer reconnect, OSM added to `amenities`
   `field_precedence` as gap-fill only, and the OSM/parks_canada priority
-  collision resolved 5 → 8. All on `fix/amenities-render-shape`, **unpushed**.
+  collision resolved 5 → 8. All on `fix/amenities-render-shape`, **pushed to origin
+  at end of session; no PR opened**.
 - **Two categories deactivated as product scope, not as a data bug.** peak +
   spring, **65,389 rows measured 2026-08-18** (earlier notes said ~64,300 — the
   measured figure supersedes). Confirmed real via a live Overpass cross-check
@@ -51,7 +52,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   destructive step, and the conclusion was inherited from a 20-row PROD sample
   taken on a different date until then.
 - **Templated descriptions built for toilet / water / dump_station**, then those
-  three **reactivated** (`db6e64b`). Gap-fill only — a real OSM
+  three **reactivated** (`b794a23`). Gap-fill only — a real OSM
   `description`/`note` always wins, and all 29 pre-existing real descriptions
   survived verbatim. Bare rows get no description rather than a fabricated one.
   Safety rule: explicit `drinking_water=no` outranks a generic "drinking water"

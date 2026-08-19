@@ -1,4 +1,4 @@
-# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station REACTIVATED on TEST with templated descriptions, 20 commits **UNPUSHED** with no PR. Two items are OPEN and undecided — the description-less remainder, and NPS viewpoint reactivation which is confirmed NOT done. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
+# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station REACTIVATED on TEST with templated descriptions, 22 commits **PUSHED to origin, no PR opened**. Two items are OPEN and undecided — the description-less remainder, and NPS viewpoint reactivation which is confirmed NOT done. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -74,7 +74,7 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station REACTIVATED with templated descriptions (branch `fix/amenities-render-shape`, **UNPUSHED**)
+## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station REACTIVATED with templated descriptions (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
 
 Newest truth. **Every figure below was measured against TEST read-only on
 2026-08-18 in a single pass** (`data/scripts/measure-session-closeout.ts`) —
@@ -84,10 +84,14 @@ deletion). **No PROD writes this session. Nothing pushed.**
 
 ### Where the work lives
 
-**Branch `fix/amenities-render-shape`, tip `db6e64b`, 20 commits ahead of
-`origin/main`, working tree clean, NO remote branch, NO PR** `[git, 2026-08-18]`.
+**Branch `fix/amenities-render-shape`, 22 commits ahead of `origin/main`, working
+tree clean — PUSHED to origin at end of session with upstream tracking set**
+`[git, 2026-08-18]`. The reactivation commit is `b794a23`; the docs close-out sits
+above it. Two commit messages were corrected before pushing (see BACKLOG), which
+rewrote those two commits and their descendants — content byte-identical, messages
+only.
 Everything in this section is TEST-only and lives on that branch. Two sibling
-branches from the same effort are also unpushed: `fix/phase0-corpus-field-reconnect`
+branches from the same effort were pushed alongside it: `fix/phase0-corpus-field-reconnect`
 (`c68ab5a`, an ancestor of this branch) and **`land-manager-precedence-design`
 (`30c231a`), which is NOT merged into this branch or `main`** — its BACKLOG entry
 is unreachable from here (verified by `git show` on all three refs).
@@ -159,14 +163,14 @@ row in the view beforehand.
   wrongly scored sparse. After the fix none of the seven genuinely-sparse
   categories moved, which is what justified deactivating them.
 - **Templated descriptions** for toilet / water / dump_station (`9743e6e`,
-  `159ac2b`) — built from real structured OSM tags, wired into `normalizeOsm` as
+  `0e8906f`) — built from real structured OSM tags, wired into `normalizeOsm` as
   a **gap-fill fallback only** so a real `description`/`note` tag always wins.
   Degrades gracefully: a bare row gets no description rather than a fabricated
   one. Carries a safety rule — an explicit `drinking_water=no` always outranks a
   generic "drinking water" lead. Suppresses any lead that merely restates the
   category label.
 - **dump_station data-integrity fix** (`80bf0a1` → `e43de94`, verified `e1e7af4`).
-- **Reactivation** (`db6e64b`) + a clean Typesense sync.
+- **Reactivation** (`b794a23`) + a clean Typesense sync.
 
 ### dump_station — the full arc
 
