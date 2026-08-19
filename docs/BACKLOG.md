@@ -2541,6 +2541,34 @@ conclusion.
       geographic exclusion above — zero rows dropped from the view because of
       this migration.
 
+- **`canonical_name` / `primary_category` / `geometry` — same clear-bug shape
+  as bf73f97, NOT fixed. DECISION: leave as-is for now, documented rather than
+  resolved.** The `recompute_master_place` fix (`a41e0f8`/`14add86`) added an
+  explicit clear for 10 fields when `resolve_field()` finds no candidate
+  source. These 3 fields could NOT get the same fix — they're NOT NULL
+  columns in the schema, so there's no null to clear them to without relaxing
+  that constraint, which is a schema decision, not a code fix, and wasn't made
+  unilaterally.
+  - Three real options were considered: (1) relax the constraint, allow null,
+    same fix as the other 10 — simplest but has real downstream risk, since
+    `title`/`coords` (canonical_name and geometry are effectively these) were
+    identified elsewhere this session as the two truly hard-required fields
+    for a place card to render at all; a null name or null coordinates could
+    break rendering rather than just showing stale data. (2) keep NOT NULL,
+    fall back to some default value instead of clearing — untried, needs its
+    own design. (3) leave alone, accept the risk as lower-probability than the
+    other 10 fields (a place losing literally every source for its
+    name/category/geometry simultaneously is a bigger, rarer event than
+    losing e.g. its description).
+  - **Decision: option 3.** Not measured how often this could actually occur
+    in the real corpus — if picked up again, checking that first (has any
+    place ever actually lost every source for name/category/geometry) would
+    tell you whether this is a real, live risk or a hypothetical one worth
+    deprioritizing further.
+  - Same standing risk noted in bf73f97: any future work touching
+    `resolve_field()`/precedence for these 3 fields specifically should be
+    aware this gap exists.
+
 - **Amenity chip density — no cap or overflow handling. UNBUILT, flagged
   2026-08-18.** The slideup renders one chip per truthy amenity key via
   `amenitiesToLabels` (`web/src/lib/trip-browse/card-stats.ts`), and
