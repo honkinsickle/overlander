@@ -50,7 +50,9 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   urban: ["shopping_mall", "city_park"],
   // oddity: roadside / generic attractions. `tourist_attraction` (generic POI
   // attraction) lives here, NOT in the formal-cultural `attraction` bucket.
-  oddity: ["roadside_attraction", "tourist_attraction"],
+  // `oddity` itself is the Atlas Obscura primary_category — a curated
+  // cultural/roadside/oddity set that doesn't fit the camping/outdoor buckets.
+  oddity: ["roadside_attraction", "tourist_attraction", "oddity"],
   // interest: the residual — every primary_category not cleanly another bucket.
   interest: [
     "rest_area", "activity_pass", "unknown", "permit", "hardware",

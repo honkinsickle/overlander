@@ -97,9 +97,13 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/blm-rec.ts");
       return mod.default;
     }
+    case "atlas_oddities": {
+      const mod = await import("./sources/atlas-oddities.ts");
+      return mod.default;
+    }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, atlas_oddities`,
       );
   }
 }
