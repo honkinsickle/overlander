@@ -2686,5 +2686,40 @@ conclusion.
   unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
   and 231 NPS rows to 146.
 
+## Surfaced 2026-08-20 (Google Places compliance check)
+
+- **Live-fetch-at-render Google data (ratings/hours/testimonials) — PARKED,
+  sequenced after the LLM-enrichment-of-existing-corpus pass.** Investigated
+  in `docs/measurements/2026-08-20-google-places-details-compliance-check.md`.
+  Google's Places API (New) caching policy permits storing only two things:
+  `place_id` (indefinite) and coordinates (30 days). `editorialSummary`,
+  `websiteUri`, `internationalPhoneNumber`, `regularOpeningHours`, `rating`,
+  and `userRatingCount` all have no caching exception — confirmed this is a
+  **field-based restriction, not a display-based one**: it applies the same
+  whether the content is plotted on a map or rendered as our own UI text, and
+  Places UI Kit carries the same terms as the raw API. Closing this gap
+  needs a **live-fetch-at-render architecture instead** — call Place Details
+  at view time keyed on a stored `place_id`, never persist the result — which
+  is a different shape (cost-per-render instead of cost-per-place, plus
+  latency) than the storage-based design that was originally scoped.
+  Deliberately sequenced **after** the LLM-enrichment pass so the enrichment
+  ceiling on existing corpus data is established before Google integration
+  work starts.
+  - **Related, not part of this item:** the existing `google_resolved`/`google`
+    source_records (127 rows total) already store non-exempt fields
+    (`displayName`/`canonical_name`, `formattedAddress`) indefinitely with no
+    refresh policy — a live compliance gap in current data, surfaced in
+    passing during the same investigation, not yet triaged.
+
+- **New source ingestion: gas stations + medical/hospital/urgent-care POIs —
+  PARKED, sequenced after both threads above.** Not enrichment work — these
+  categories don't exist in the corpus as a source at all yet, so this needs
+  a source-selection decision before any ingestion design. Google Places is
+  likely reliable for gas stations, but Google's medical-facility data does
+  not reliably distinguish urgent care from a full ER from a general clinic —
+  a wrong ER location is a safety issue, not a UX gap, so this category may
+  need a dedicated source (e.g. state licensing databases, HealthCare.gov
+  provider data) rather than Google as primary.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
