@@ -32,7 +32,7 @@
  * order A → B → C → D → E. That order is deliberate: A/B are structural
  * (name-shape / distance), C/D are compositional.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 type Shape = "A_parent_facility" | "B_same_name_moderate_dist" | "C_shared_noun_diff_suffix" | "D_mismatch_shared_coord" | "E_residual";
 
@@ -189,6 +189,17 @@ function main() {
       console.log(`     why: ${r.why}`);
     }
   }
+
+  // Persist shape-labeled JSONL so executors can filter by (shape,
+  // place_match_id) — the Eagle Rock lesson: never key an action off a
+  // homonym-prone column like canonical_name.
+  const out: string[] = [];
+  for (const [shape, arr] of Object.entries(shapes)) {
+    for (const r of arr) out.push(JSON.stringify({ shape, ...r }));
+  }
+  const outPath = "/tmp/ao-classified-ambiguous.jsonl";
+  writeFileSync(outPath, out.join("\n") + "\n");
+  console.log(`\nWROTE ${out.length} shape-labeled rows → ${outPath}`);
 
   // For residual: show source-set concentration to see if there's a hidden pattern.
   const residualSrc: Record<string, number> = {};
