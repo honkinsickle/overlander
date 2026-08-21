@@ -12,7 +12,87 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-08-20
+## 2026-08-20 — state_parks LIVE ON PROD
+
+- **state_parks ingester built, TEST ingest + materialize complete.** 1,736
+  source_records across 6 states (CA 914, WA 280, OR 342, NV 105, AZ 48, UT 47).
+  881 new master_places, 58 auto_linked, 797 manual_review, 0 errors.
+- **Campsite aggregation implemented** — AZ's 1,346 individual sites → 14
+  park-level campground records (per `PARK_ABBR4`); WA's 6,124 sites → 73
+  park-level campground records (per `ParkName`, Filter=active only). Per-site
+  records are NOT emitted as individual source_records — they're aggregated to
+  avoid flooding corridor-ranking density scoring.
+- **Three defects caught by self-audit and fixed before TEST ingest:** (1) AZ
+  campground names were raw PARK_ABBR4 codes ("LDSP Campground") — no shared
+  join key between the AZ campsites and parks layers; resolved via nearest-point
+  matching against State_Park_Points, all 14 matches verified unambiguous with
+  ≥1.17km margin to second-nearest. (2) NV facility category mapping was broken
+  — all 362 records got `park_feature` because the code checked for a `Campground`
+  field that doesn't exist on TP_SCORP_Master; fixed to use the `type` coded-
+  domain field (31 Campground, 20 Trailhead, 311 park_feature). (3) AZ/WA
+  aggregated rows missing `park_id` in normalized_payload.
+- **Two polygon-geometry routing bugs caught during dry-run:** WA and NV parks
+  endpoints return polygon geometry but the code routed them through
+  `buildPointParkRow` (point-only), skipping all records. Fixed by adding
+  `groupBy` to route through the dissolve path.
+- **NV facilities data-quality finding:** `guid` is whitespace on ALL 362
+  state-park-filtered records — the earlier verification checked the unfiltered
+  7,412-record layer. `objectid` is the only populated unique field; accepted
+  as key with same risk class as NV parks name-key. Also, 284 of 362 NV
+  facilities have blank `poiname` (toilets, parking, kiosks) — correctly
+  skipped.
+- **Manual-review queue analysis:** 797 pending, 83% blended_residual. The
+  dominant pattern is state_parks park-boundary records matching PAD-US
+  land-status polygons (608/663 = 92% of blended_residual). Matches are
+  typically same name + ≤50m distance + name_sim ≥0.9, but cat_compat=0.0
+  (recreation_area vs land_status) blocks auto-confirm. These are real
+  same-place matches; the category mismatch is what holds them.
+- **Multi place_match check:** 0 state_parks SRs with >1 place_match row.
+  26 all-sources duplicates found — all `atlas_oddities`, pre-existing.
+- **Field precedence verified:** state_parks (priority 4) correctly wins over
+  OSM (priority 5) for canonical_name; RIDB (priority 3) correctly wins over
+  state_parks. Checked 4 specific multi-source master_places.
+
+## 2026-08-18 — State Parks Enumeration
+
+- **State parks source enumeration — six states, investigation-only, no code.**
+  Branch `state-park-systems-enumeration`. All six OSM target states (CA, AZ, NV,
+  UT, WA, OR) have public, unauthenticated ArcGIS endpoints for their state park
+  systems. Every endpoint URL verified live. Data depth splits three ways: AZ has
+  per-campsite amenity data (from 2016), WA/CA/NV have campground/facility-level
+  points, OR/UT are boundaries-only. No state publishes fees or seasonal closures
+  via GIS.
+- **Architecture spec written and reviewed through four verification rounds**
+  (`docs/specs/state-parks-source-architecture.md`, v4, READY FOR BUILD). Covers
+  source_id, external_id keys, dissolve logic, category mapping, quality scores,
+  field_precedence, per-state adapter config. All open questions resolved; only
+  the description placeholder is blocked on a separate visitor-website investigation.
+- **Key findings worth carrying forward:** (1) ArcGIS OBJECTID is NOT stable on
+  at least 4 of 10 endpoints — GlobalID or agency codes preferred wherever
+  available. (2) NV's `id` field is broken (753/759 records = 0); NV boundaries
+  have no GlobalID; `name` is the only viable key, risk accepted at 27-record
+  scope. (3) WA `ParkCode` has 3 collisions (different parks sharing a code:
+  Brooks Memorial ≠ Satus Pass, Conconully ≠ Conconully Lake, Deception Pass ≠
+  Hope Island); `ParkName` (207/207 distinct) used instead. (4) AZ `SITE_ID`
+  collides across parks (site 44 appears in 10 different parks); GlobalID used.
+  (5) CA has 461 boundary polygons → 394 UNITNBR groups → CSP official 280 "park
+  units" — the gap is non-classified holdings. (6) OR `NAME` has 2 edge cases
+  (false merge + false split); `FULL_NAME` (342 distinct, 0 nulls) resolves both.
+  (7) OSM operator-tag coverage is too sparse for primary use: 3 (UT) to 122 (WA)
+  features with correct state-parks operator tags.
+- **Self-audit methodology proved valuable.** Three rounds of "re-analyze for
+  hallucinations, scope creep, failures, and incorrect logic" caught: the NV id=0
+  problem, AZ SITE_ID collisions, WA ParkCode collisions, CA's unsourced "~280"
+  figure, the OR dissolve edge cases, the iOverlander rationale referencing a
+  banned source, and imprecise description-coverage counts. Each was then closed
+  with a targeted verification query against the live endpoint.
+- **Decisions made by Adam this session:** scope = six states; depth =
+  campground-level where available; fee/seasonal = omitted; NV key risk =
+  accepted; CA SUBTYPE = ingest all, filter downstream; description = from
+  visitor websites, not GIS (separate investigation underway); OSM = fallback
+  only.
+
+## 2026-08-20 — corpus quality: BLM/RIDB eligibility fixes, LLM description prompt, placeholder deactivations (PR #243)
 
 - **Google Places content warehousing ruled out on compliance grounds
   before any code was written.** Checked Google's Places API (New) caching
@@ -64,7 +144,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   (`znldzjdatkogdktymtvi`) only, each script asserting the project ref
   before writing.
 
-## 2026-08-18
+## 2026-08-18 — Amenities & Category Curation
 
 - **Amenities reconnected end to end, then a session of category curation.**
   Source-layer normalization (OSM + NPS, NPS extended to 9 further categories),
