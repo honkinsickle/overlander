@@ -1,4 +1,4 @@
-# STATE — branch `corpus` · 2026-08-20 (⚠ TWO newest-truth threads landed independently on the same day — read both `## 2026-08-20` sections below as SIBLINGS, neither supersedes the other. **state_parks LIVE ON PROD** (#242, merged to `main` — 1,736 SRs, 1,584 confirmed, 156 pending triage). **`corpus`'s own gap-scan / Google Places compliance / LLM description pilot / placeholder-name deactivation session** (PR #243, open against `main`, not yet merged — BLM/RIDB eligibility fixes, LLM prompt A/B, two TEST placeholder-name deactivations). This file lives on `corpus`, which has been merged with `main` in place to resolve this doc conflict ahead of #243 — see the merge commit for detail. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged branch. Typesense still stale.)
+# STATE — branch `main` · 2026-08-21 (⚠ **PR #243 is now MERGED** — squash-merged to `main` as `5a822ab` `[git log, 2026-08-21]`, corrected below; the "open, not yet merged" framing further down this file is now STALE. **Newest truth: a template-description / eligibility / provenance / review session, done directly on local `main`** — see `## 2026-08-21` right below. **This session's work (code + migrations + scripts) is UNCOMMITTED as of this docs pass, sitting directly on local `main`, not yet on a branch, not pushed.** Per CLAUDE.md's own standing rule (`main` is protected, every change goes branch → PR → Adam merges), that code needs to move to a branch before it can reach `origin`. This docs pass commits only `docs/` — see the section below for the exact uncommitted-file inventory. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged, unpushed-since branch, status unchanged from before. Older masthead text preserved below, now historical.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,202 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-21 — state-boundary rebuild (real TIGER/Line, all six states), NONE-bucket template pipeline, eligibility + provenance + review mechanism, Typesense sync fix
+
+Newest truth. Long investigation-and-build session, done directly on local
+`main` (see the masthead — not yet on a branch). **No PROD writes.** Every
+figure below was computed this session against TEST
+(`znldzjdatkogdktymtvi`) — see `docs/measurements/2026-08-21-*.md` for full
+methodology on each.
+
+### Branch / commit state — read this before touching anything here
+
+**Currently on local `main`, not a feature branch.** This session's code
+(`data/scripts/lib/eligibility.ts` + `.test.ts`, `data/search/sync-typesense.ts`)
+and every new migration/script are **uncommitted** as of this docs pass —
+this docs-only commit is deliberately separate from them, matching this
+session's own instruction. Before any of it can reach `origin/main` it
+needs to move to a branch per CLAUDE.md's standing rule. Nothing has been
+pushed. **`docs/BACKLOG.md` was already updated and committed earlier in
+this session** (`f3c4830`) — this pass added the remaining docs on top,
+not a duplicate BACKLOG pass.
+
+**Uncommitted, tracked-file changes:** `data/scripts/lib/eligibility.ts` +
+`.test.ts` (new `has_template_description` signal), `data/search/sync-typesense.ts`
+(`description_source` field + a schema-reconciliation fix, see below).
+
+**Uncommitted, untracked new files:** six new migrations
+(`20260821000000`–`20260821050000` — `master_place_generated_content` table,
+`state_boundaries` + `resolve_state()`, `backfill_state_for_ids()`, the
+`needs_review` columns, `description_source` on the export view, the
+`pois_along_corridor` exclusion filter), ~10 new `data/scripts/*.ts` (state
+boundary load/backfill, template generation/regeneration, placeholder
+deactivation, measurement scripts), and the `docs/measurements/2026-08-21-*.md`
+reports this section summarizes.
+
+### 1. State assignment rebuilt on real geometry, all six states
+
+A manual spot-check caught the Astoria Column (WA/OR border) labeled
+Oregon when it reads as Washington. The mechanism behind every state
+label in the corpus was a bbox classifier whose own source
+(`six_state_footprint()`) explicitly documents interior-border overlap as
+deliberately loose for scope membership, never designed to assert one
+specific state as fact. **Scope grew from a Nevada-only patch to a
+six-state rebuild once the corpus-wide numbers came in** — see
+`docs/decisions/2026-08-21-template-eligibility-provenance-review-decisions.md`
+§1 for why the narrower fix was abandoned mid-build.
+
+**New mechanism:** `state_boundaries` (PostGIS table, real US Census
+TIGER/Line 2023 geometry, public domain) + `resolve_state()` (real
+`ST_Contains` point-in-polygon) + a backfilled `master_place.state`
+column (snapshot, not live-recomputed — deliberately not wired into
+`recompute_master_place`, a separate open question).
+
+**Corpus-wide backfill: 2,964 of 32,734 in-scope rows corrected (9.05%)**
+— NV→CA alone was 73.96% of the changes (confirms the root-cause finding
+at full precision), plus two smaller patterns only visible at six-state
+scope: AZ mildly overreaching into NV/CA, and a near-even OR↔WA
+reclassification along the Columbia River border. **Fresh, corpus-wide
+`master_place.state` distribution `[queried TEST 2026-08-21]`:** null
+**128,210** (out-of-scope/land_status/unresolved rows) · CA **13,380** ·
+OR **5,317** · WA **4,828** · UT **3,953** · AZ **3,863** · NV **1,152**.
+Full report: `docs/measurements/2026-08-21-state-boundary-fix-all-six-states.md`.
+
+### 2. NONE-bucket template descriptions — generated, then corrected twice as the state fix landed underneath them
+
+**10,292** NONE-bucket rows got zero-fabrication template descriptions
+(`"{name} is a {category} in {parent}, {state}."`, built only from
+fields already in the corpus — `master_place_generated_content`, new
+table this session). Because the state-boundary fix (§1) landed in the
+same session, a slice of already-generated template text went stale or
+incomplete partway through and needed two follow-up regeneration passes,
+both UPDATE-in-place on the same rows (no duplicates):
+
+- **158 rows** whose stored text named the OLD, now-wrong state —
+  confirmed via literal text inspection, not assumed from the transition
+  matrix. `docs/measurements/2026-08-21-stale-template-regeneration-fix.md`.
+- **1,211 rows** that had never named any state (the old classifier called
+  them ambiguous/outside) and could now gain a correct one — an addition,
+  not a stale-fact correction, kept as a distinct pass.
+  `docs/measurements/2026-08-21-three-part-cleanup.md` Part 1.
+
+**Fresh count `[queried TEST 2026-08-21]`: 10,292 generated_content rows,
+all `generation_method='template'`, 0 `llm`.**
+
+### 3. Eligibility change — template descriptions count as STRONG
+
+Decision (see the decisions/ doc §2 for the full reasoning): a template
+description counts as "resolved" for eligibility purposes, same tier as
+a real description, but explicitly conditioned on staying
+distinguishable downstream (§4) and excluded from trip generation by
+default (§5) — counting toward eligibility is not the same claim as
+"good enough to hand a trip-planner."
+
+`has_template_description` added to `lib/eligibility.ts`'s
+`AggregatedSignals`, folded into `isStrong()`. **Fresh corpus-wide
+before/after, in-scope population `[queried TEST 2026-08-21]`:**
+
+| | STRONG | WEAK | NONE | total |
+|---|--:|--:|--:|--:|
+| Before (signal forced off) | 22,107 | 100 | 10,527 | 32,734 |
+| After (current) | **32,399** | **100** | **235** | 32,734 |
+
+WEAK is identical either way — confirms no WEAK-bucket row carried
+template content. 37 unit tests pass (34 existing + 3 new).
+
+### 4. Provenance — `description_source`, live in Postgres AND Typesense
+
+`description_source` (`'source'`/`'template'`/`'llm'`/`null`) added to
+`master_place_search_export` via a `LEFT JOIN LATERAL`, precedence
+matching `master_place_generated_content`'s own documented read path
+(real description wins even when an unused template also exists).
+**Fresh distribution on the view `[queried TEST 2026-08-21]`: source
+**15,582** · template **8,535** · null **8,617*** (sums exactly to
+32,734). Cross-check: `10,292 − 8,535 = 1,757` matches the independently
+measured "dual" row count (real description + unused template) exactly.
+
+**Investigated before wiring further, and the premise needed correcting:**
+`master_place_search_export` is not what the frontend queries live —
+it's the sync source for Typesense (`data/search/sync-typesense.ts` →
+`places_test`), which is what `web/src/lib/search.ts` actually queries.
+Added `description_source` to the Typesense schema + `transformRow`, ran
+`search:sync` — **32,734/32,734 indexed, 0 failed.**
+
+**A real gap found and fixed, not just noted:** the Typesense collection
+already existed, so the schema addition alone never reached the live
+index — the field was written onto every document but uninspectable via
+facet/filter (404). Fixed with a schema-reconciliation step
+(`reconcileSchemaFields`) that PATCHes missing fields into an existing
+collection before re-import. **This incidentally caught a second,
+independent, PRE-EXISTING instance of the exact same bug on `photo_url`**
+(added to the Typesense schema back in migration `20260810180400`,
+apparently never reconciled either — see `BACKLOG.md`'s old note on this,
+now closed) — fixed in the same pass. One self-caught bug along the way:
+the first reconciliation attempt tried to alter Typesense's implicit `id`
+field and was cleanly rejected (HTTP 400, no partial state) before being
+corrected. Live-verified: facet query on `description_source` now
+returns real counts instead of 404ing; a `description_source:=template`
+filter query works end-to-end. Full report:
+`docs/measurements/2026-08-21-typesense-description-source.md`.
+
+### 5. Review/re-queue mechanism — Astoria Column flagged as the first real case
+
+Four columns directly on `master_place_generated_content`
+(`needs_review`, `review_reason`, `flagged_at`, `flagged_by`) — a flat
+shape chosen over a companion table because the real requirement is one
+current flag per row, not a history log (decisions/ doc §4). **The
+Astoria Column's template row is flagged** (`needs_review=true`,
+`review_reason` describing the WA/OR border mislabel) as a real exercise
+of the mechanism, not a synthetic test — confirmed excluded from
+`pois_along_corridor` on that basis, confirmed still browsable via
+`master_place_search_export`. **Fresh count `[queried TEST 2026-08-21]`:
+1** row corpus-wide carries `needs_review=true` — exactly the one flagged
+this session, nothing else.
+
+### 6. Trip-generation exclusion
+
+`pois_along_corridor` now excludes (a) template-only rows — precisely
+where `mp.description IS NULL` and a template row exists, matching
+`description_source='template'` exactly, so a "dual" row with real
+content plus an unused template backup is NOT excluded — and (b) any
+row with `needs_review=true`, unconditionally. Verified: 8/8 sampled
+template-only rows excluded from the RPC but still in the export view;
+5/5 sampled dual rows correctly NOT excluded; the Astoria Column excluded
+specifically via the flag.
+
+### 7. Cleanup
+
+Corpus-wide placeholder-name deactivation across ALL categories (not
+just picnic_area/ev_charging from #243) — **3,516 rows**, same
+`is_active=false` → `recompute_master_place()` mechanism as every prior
+deactivation this repo has used. A 235-row junk-code-named slice was
+deliberately NOT auto-deactivated after confirmed false positives
+("7-Eleven", "Good2Go") — delivered as a manual review list instead
+(`docs/measurements/2026-08-21-junkcode-review-list.csv`). A leftover
+one-off script from an earlier ad-hoc pull was found and deleted.
+
+### OPEN — not decided, do not treat as settled
+
+1. **This session's code is uncommitted, on local `main`, not pushed** —
+   see the branch/commit state note above. Moving it to a branch and
+   opening a PR is a separate, future step.
+2. **`master_place.state` is a snapshot, not wired into
+   `recompute_master_place`** — an open architectural question, not
+   resolved this session.
+3. **STRONG-bucket description-quality audit** — the same boilerplate
+   pattern found in the "dual" rows (name-repeat, empty HTML) likely
+   exists among STRONG-bucket rows generally, not just the 1,757
+   investigated. Flagged in `BACKLOG.md`, not investigated at that
+   scope.
+4. **Map filter toggle UI + review worklist UI** — backend fully built
+   and verified (§4, §5); no frontend work has started.
+5. **state_parks `WEB_LINK` → `contact.website` mapping gap** — same
+   shape as the already-shipped BLM fix, found (177/1,448 rows, 71 would
+   flip NONE→STRONG) but not fixed this session.
+6. **`fix/amenities-render-shape`'s real status** — unchanged from the
+   2026-08-20 open item below; still needs a file-tree diff against
+   `main`.
 
 ## 2026-08-20 — state_parks LIVE ON PROD (1,736 SRs, 1,584 confirmed, 156 pending triage)
 
@@ -209,9 +405,18 @@ writes. Branch `state-park-systems-enumeration` carries one uncommitted file:
 
 **No database, corpus, or schema changes this session. No PROD/TEST writes.**
 
-## 2026-08-20 — corpus gap-scan, Google Places compliance check, LLM description pilot + A/B, NONE-bucket characterization, BLM/RIDB/OSM eligibility investigation, placeholder-name deactivations (branch `corpus`, PR #243, **open against `main`, not yet merged**)
+## 2026-08-20 — corpus gap-scan, Google Places compliance check, LLM description pilot + A/B, NONE-bucket characterization, BLM/RIDB/OSM eligibility investigation, placeholder-name deactivations (branch `corpus`, ~~PR #243, **open against `main`, not yet merged**~~)
 
-Newest truth. Investigation-and-fix session, largely read-only with two
+> **CORRECTED 2026-08-21 — PR #243 has since MERGED**, squash-merged to
+> `main` as `5a822ab` `[git log]`. The "open, not yet merged" framing
+> below (and the "code is uncommitted" claims throughout this section)
+> describe a state that no longer holds — see the masthead and the
+> `## 2026-08-21` section above for current position. Left in place,
+> per this file's own convention, rather than rewritten.
+
+Newest truth (as of 2026-08-20 — see the correction above and the
+`## 2026-08-21` section above for what supersedes it). Investigation-and-fix
+session, largely read-only with two
 authorized write passes (a small controlled LLM sample and two TEST
 deactivation passes). **No PROD writes or reads beyond what's noted below.**
 Every figure in this section was computed this session against TEST

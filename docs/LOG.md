@@ -12,6 +12,61 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-21 — state-boundary rebuild, NONE-bucket templates, eligibility + provenance + review
+
+- **A manual spot-check (Astoria Column, WA/OR border, labeled Oregon
+  when it reads as Washington) escalated from a Nevada-only bbox patch to
+  a full six-state rebuild on real geometry.** During the narrower fix's
+  own testing, Las Vegas and Reno — unambiguously Nevada — resolved to
+  "ambiguous" under a naive multi-box-vote design, because California's
+  existing box independently also overreaches into real Nevada. That
+  regression was the concrete signal to stop patching one box in
+  isolation. Rebuilt on US Census TIGER/Line 2023 point-in-polygon for
+  all six states in one pass; the Nevada-only module was deleted once
+  fully redundant. Corpus-wide backfill corrected 2,964 of 32,734
+  in-scope rows (9.05%) — NV→CA was the large majority, but two smaller
+  patterns (AZ overreach, a near-even OR↔WA Columbia River split) only
+  surfaced by doing all six states properly.
+- **10,292 zero-fabrication template descriptions generated for the
+  NONE bucket, then two follow-up passes corrected them as the state fix
+  landed underneath.** 158 rows had already-generated text naming the
+  now-wrong state (confirmed via literal text inspection, not the
+  transition matrix alone); 1,211 rows had never named any state at all
+  and gained a correct one once real geometry made it resolvable — kept
+  as a separate pass since it's an addition, not a stale-fact fix.
+- **Decided template descriptions count as STRONG for eligibility, but
+  conditioned that decision on building provenance and exclusion in the
+  same pass, not deferring them.** `has_template_description` folded into
+  `isStrong()`; NONE bucket 10,527 → 235 corpus-wide. In the same pass:
+  `description_source` ('source'/'template'/'llm'/null) added to the
+  export view and the Typesense index, and `pois_along_corridor` now
+  excludes template-only rows by default — verified a "dual" row (real
+  description plus an unused template backup) is NOT wrongly excluded.
+- **A review/re-queue mechanism was built and immediately exercised on a
+  real case, not just designed.** Four flat columns on
+  `master_place_generated_content` (chose against a companion table —
+  the real need is one current flag, not a history log). The Astoria
+  Column's template row is flagged for real, confirmed excluded from
+  trip generation via the flag, confirmed still browsable.
+- **Wiring `description_source` into Typesense surfaced a real,
+  independent gap: the collection already existed, so a schema addition
+  in code never reached the live index.** Fixed with a
+  schema-reconciliation step that PATCHes missing fields into an
+  existing collection before re-import — which incidentally caught a
+  SECOND, pre-existing instance of the same bug on `photo_url` (added to
+  the schema in an earlier migration, never reconciled either) and fixed
+  it in the same pass. One self-caught bug along the way: the first
+  reconciliation attempt tried to alter Typesense's implicit `id` field
+  and was cleanly rejected before being corrected.
+- **This entire session ran without a single write to PROD**, and — like
+  2026-08-20 — the code from this session is uncommitted as of this docs
+  pass, sitting directly on local `main`, not a branch, not pushed. This
+  docs pass is a separate commit from that code, on purpose.
+- **PR #243 (the 2026-08-20 session's own work) merged to `main` since
+  that session's doc pass** — `5a822ab`. The "open PR" framing throughout
+  the 2026-08-20 `STATE.md` section is now corrected in place, not
+  rewritten.
+
 ## 2026-08-20 — state_parks LIVE ON PROD
 
 - **state_parks ingester built, TEST ingest + materialize complete.** 1,736
