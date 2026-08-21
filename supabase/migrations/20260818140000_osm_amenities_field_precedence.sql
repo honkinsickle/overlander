@@ -1,0 +1,54 @@
+-- ============================================================================
+-- Phase 1 — OSM amenities field_precedence (gap-fill only)
+--
+-- TEST-ONLY migration. Apply via `npm run -w data db:push-verify -- --test`.
+-- Do NOT apply to PROD without a separate, deliberate authorization.
+--
+-- Adds OSM to the `amenities` field_precedence ladder at priority 5 — one
+-- rank below the current lowest (google, 4). Per resolve_field()
+-- (20260601010000_phase3a_resolve_field_determinism.sql): its WHERE clause
+-- only admits source_records that ALREADY have a non-null value for the
+-- field being resolved, then orders the survivors by `priority ASC`
+-- (ties broken by `source_quality_score DESC`, then `source_id ASC`) and
+-- takes the top row. It does not merge values, and a source that is unlinked
+-- or null for a given master_place simply never enters that WHERE clause —
+-- it can't "block" a lower-priority source from winning by its mere
+-- existence elsewhere in the precedence table.
+--
+-- Consequence: placing OSM at a priority number STRICTLY GREATER than every
+-- existing amenities source (ioverlander=1, ridb=2, nps=3, google=4)
+-- achieves "OSM only fills empty slots, never overrides a value another
+-- source already provided" using the existing mechanism completely
+-- unchanged — no new precedence semantic, no code change to resolve_field()
+-- or recompute_master_place(). This is the same pattern already used for
+-- `capacity` (osm seeded at priority 4, the lowest rank among its four
+-- sources, in 20260527121000_phase1_seed_field_precedence.sql).
+--
+-- Design history — why OSM was excluded until now. OSM was previously
+-- ABSENT from amenities field_precedence entirely, per a comment in
+-- 20260527121000 asserting amenity-rollup (entity resolution) covered OSM
+-- amenities a different way. Traced and found NOT to hold:
+-- docs/architecture/place-pipeline-trace-amenities-addendum.md §2 — amenity
+-- rollup (matcher.ts Step 2, applied in
+-- 20260527130300_phase3a_apply_match_outcomes.sql) only links the child
+-- source_record into place_match (`UPDATE source_record SET
+-- master_place_id = ...` + `INSERT INTO place_match`); it never touches
+-- resolve_field() or field_precedence. A rolled-up OSM amenity record's own
+-- normalized_payload.amenities was therefore structurally unreachable by
+-- recompute_master_place() regardless of how cleanly it linked. This
+-- migration is the fix for that gap: OSM amenities now participate in
+-- resolution, gap-fill-only per the priority placement above.
+--
+-- OSM's quality score (0.4, the lowest of any source in the pipeline —
+-- data/ingestion/sources/osm.ts:7, "OSM tags are inconsistent") is
+-- consistent with, but is NOT what enforces, the gap-fill-only behavior
+-- here: priority=5 is unique among amenities sources (not shared with any
+-- other source_id for this field_name), so the quality-score and source_id
+-- tie-breakers are never even consulted for this row — `priority ASC` alone
+-- decides it.
+-- ============================================================================
+
+set search_path = public;
+
+insert into field_precedence (field_name, source_id, priority) values
+  ('amenities', 'osm', 5);

@@ -28,6 +28,11 @@ See `phase-1-build-spec.md` section 9.
   is impossible — re-inserting collides with `unique(source_record_id,
   master_place_id)`. First user: `data/scripts/resolve-recgov-rule.ts` (the
   recreation.gov-id rule). ADR `docs/decisions/2026-08-17-resolve-place-match-and-recgov-id-rule.md`.
+  **Updated 2026-08-17 (later), #233:** that rule is now source-parametrized
+  (`--sources`, default `usfs`) and covers `nps` too — the recgov facility id in an
+  NPS campground's `reservationUrl` joins to `ridb:facility:<id>` the same way; a
+  latent hardcode that modeled every added SR as `usfs`/0.9 (which would have
+  under-reported NPS rename risk as zero) was fixed in the same PR.
 
 ## Spec corrections (canonical from week-1 smoke tests)
 
@@ -351,11 +356,48 @@ blended formula and typically become their own master_places.
 The new rules execute **after** `fed_exact` and `amenity_rollup`,
 **before** the blended fallback. Sequence (per matcher.ts matchOne):
 
+0. **`LINKING_BARRED` guard** (NEW 2026-08-17, #234) — if `${source_id}:${inferred_category}`
+   is barred (currently `nps:park_feature`), skip the whole waterfall and emit
+   `new_master_place` directly. Runs **before Step 1**, so a barred record never
+   `fed_exact`-links by coordinate. See "fed_exact is category-blind" below.
 1. fed_exact (NPS↔RIDB within 10m → auto_link conf 1.0)
 2. amenity_rollup (AMENITY_TYPES → nearest parent within 100m)
 3. **name_dominant** (NEW)
 4. **close_nameless** (NEW)
 5. blended scoring (existing fallback)
+
+### ER Finding: `fed_exact` is category-blind AND name-blind within 10m (2026-08-17, #234)
+
+`fed_exact` links an NPS/RIDB record to any federal-partner master_place within
+10m by **coordinate alone** — no name check, no category check. Correct for
+campgrounds (the NPS↔RIDB bookable-campground bridge), but catastrophic for
+editorial content: **all 103 bad `nps:park_feature` auto-links came through
+`fed_exact`** `[measured 2026-08-17]` — 11 fossil-specimen labels collapsed onto
+the one "Quarry Exhibit Hall" master_place because they sit within 10m of it, and
+NPS `field_precedence` priority-1 `canonical_name` then renamed the hall to a
+dinosaur. Fix (#234): the Step-0 `LINKING_BARRED` guard forces `nps:park_feature`
+to `new_master_place` (also bars `amenity_rollup` + `manual_review`, so it can
+never win precedence over an existing name). Scoped to the source+category pair,
+not `fed_exact` itself — a `fed_exact`-wide fix has the wrong blast radius (it is
+correct for campgrounds). The general "should `fed_exact` consider category?"
+question is open — `docs/BACKLOG.md`. ADR:
+`docs/decisions/2026-08-17-bar-nps-park-feature-linking.md`.
+
+### ER Finding: NPS `/places` is an editorial CMS, not a POI catalog (2026-08-17)
+
+Every NPS `/places` record is a content card (`bodyText` + `images`); a picnic
+area and a fossil label share one schema. No field cleanly separates physical
+sites from interpretive content (`isMapPinHidden` + title patterns disagree on
+~250 of 900 sampled rows). This is *why* `park_feature` (the default bucket, 80%
+of NPS places) is full of things that must not coordinate-match. See `BACKLOG.md`.
+
+### `recompute` resolves `primary_category` from `normalized_payload`, not `inferred_category` (2026-08-17)
+
+The NPS ingester never sets `normalized_payload.primary_category`, so an NPS
+auto_link cannot change a target MP's `primary_category` (measured: **0** MPs
+carry `attribution.primary_category == 'nps'`). The `--dry-run-report`'s "category
+change" column compares `inferred_category` to `primary_category` and so
+**over-predicts** — it flagged 56 NPS category changes; 0 landed. `BACKLOG.md`.
 
 ### Fixture expectation adjustment for Sheep Pass
 

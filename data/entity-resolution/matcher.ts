@@ -101,6 +101,33 @@ export const AMENITY_PARENT_CATEGORIES = [
 ] as const;
 
 /**
+ * Source+category pairs barred from ALL linking. A barred source_record
+ * skips the entire matchOne waterfall and becomes its own master_place —
+ * it can never fed_exact / name_dominant auto_link, amenity_rollup, or
+ * manual_review onto an EXISTING master_place, so it can never win
+ * field_precedence over an existing name.
+ *
+ * `nps:park_feature` — NPS "Places" park_features are an editorial content
+ * mix (real sites + interpretive stops / signs / fossil labels). fed_exact
+ * (coord ≤ 10m) links them to a nearby federal MP by coordinate, name
+ * ignored, and NPS's priority-1 canonical_name then overwrites the target
+ * (measured: "Quarry Exhibit Hall" → a fossil-specimen label). Barring
+ * linking keeps them in the corpus as their own places without corrupting
+ * existing MPs. Keyed as `${source_id}:${inferred_category}`.
+ */
+export const LINKING_BARRED: ReadonlySet<string> = new Set([
+  "nps:park_feature",
+]);
+
+/** True when the source_record's (source_id, inferred_category) is barred from linking. */
+export function isLinkingBarred(source: {
+  source_id: string;
+  inferred_category: string | null;
+}): boolean {
+  return LINKING_BARRED.has(`${source.source_id}:${source.inferred_category ?? ""}`);
+}
+
+/**
  * Category compatibility scores. Lookup is symmetric — A↔B has the
  * same score as B↔A; `lookupCompatibility` handles the symmetry.
  * Missing entries default to 0.
@@ -1021,6 +1048,27 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   const point = parsePoint(source.geometry);
   if (!point) {
     throw new Error(`matchOne: source_record ${sourceRecordId} has no parseable geometry`);
+  }
+
+  // Guard: source+category pairs barred from linking (LINKING_BARRED) skip the
+  // whole waterfall and become their own master_place. Must run BEFORE Step 1,
+  // or fed_exact would link them by coordinate first. This is what prevents
+  // nps:park_feature editorial content from renaming existing MPs. No auto_link,
+  // no amenity_rollup, no manual_review — always new_master_place.
+  if (isLinkingBarred(source)) {
+    const newId = randomUUID();
+    recordPlanned(source, newId, point);
+    const outcome: MatchOutcome = {
+      kind: "new_master_place",
+      source_record_id: source.id,
+      target: newId,
+      seed_category: source.inferred_category ?? "unknown",
+      seed_geometry: point,
+      seed_name: source.name,
+    };
+    trackOutcomeLink(source.source_id, outcome);
+    logger.debug({ source_record_id: source.id, target: newId }, "matcher: linking-barred → new_master_place");
+    return outcome;
   }
 
   // Step 1: federal exact-match shortcut.

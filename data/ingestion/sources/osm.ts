@@ -17,6 +17,7 @@ import { logger } from "../lib/logger.ts";
 import { defaultRetry } from "../lib/retry.ts";
 import { limits } from "../lib/rate-limit.ts";
 import { tileBbox, type BoundingBox } from "../lib/geometry.ts";
+import { buildTemplatedDescription } from "../lib/osm-description-templates.ts";
 import { getActiveCorridorBbox } from "../lib/corridor.ts";
 import { compact } from "../lib/normalize.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
@@ -337,7 +338,11 @@ function normalizeOsm(
   });
 
   const hours = t.opening_hours ? { raw: t.opening_hours } : null;
-  const description = t.description ?? t.note ?? null;
+  // GAP-FILL ONLY: a real OSM `description`/`note` always wins. The template is
+  // the last resort, and returns null for a bare row rather than restating the
+  // category — see data/ingestion/lib/osm-description-templates.ts.
+  const description =
+    t.description ?? t.note ?? buildTemplatedDescription(category, t);
 
   const result: NormalizedOsm = {
     // canonical_name lets field_precedence resolve master_place.canonical_name

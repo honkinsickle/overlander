@@ -123,8 +123,36 @@ const ParkBoundarySchema = z.union([
   }),
 ]);
 
+// /parks?parkCode=<code> — the park unit record. We consume fullName (the real
+// canonical name), description, url + phone (contact), and operatingHours (hours).
+// designation, entranceFees, addresses, etc. are kept in raw_payload only (via
+// .passthrough() + stashing the whole object) — no normalized fields invented.
+const ParkSchema = z
+  .object({
+    id: z.string().optional(),
+    parkCode: z.string().optional(),
+    fullName: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    designation: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
+    contacts: z
+      .object({
+        phoneNumbers: z
+          .array(z.object({ phoneNumber: z.string().nullable().optional() }).passthrough())
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    operatingHours: z.array(z.unknown()).optional(),
+    entranceFees: z.array(z.unknown()).optional(),
+    addresses: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
+
 type Place = z.infer<typeof PlaceSchema>;
 type Campground = z.infer<typeof CampgroundSchema>;
+type Park = z.infer<typeof ParkSchema>;
 
 // ───── Pagination ──────────────────────────────────────────────────────
 
@@ -204,6 +232,44 @@ async function fetchParkBoundary(parkCode: string): Promise<unknown | null> {
   }
 }
 
+/** Fetch the park unit record (/parks?parkCode). Returns null on any failure —
+ *  persistParkBoundary then falls back to the synthetic name, so a missing
+ *  /parks response never blocks writing the boundary polygon. */
+async function fetchPark(parkCode: string): Promise<Park | null> {
+  const apiKey = requireApiKey();
+  const url = new URL(`${NPS_BASE}/parks`);
+  url.searchParams.set("parkCode", parkCode);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("api_key", apiKey);
+
+  try {
+    return await defaultRetry(async () => {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`NPS parks ${res.status}: ${body.slice(0, 200)}`);
+      }
+      const json = await res.json();
+      const list = ListResponseSchema.safeParse(json);
+      if (!list.success || list.data.data.length === 0) {
+        logger.warn({ parkCode }, "nps: /parks returned no data — synthetic name will be used");
+        return null;
+      }
+      const parsed = ParkSchema.safeParse(list.data.data[0]);
+      if (!parsed.success) {
+        logger.warn({ parkCode, err: parsed.error.flatten() }, "nps: /parks response failed validation");
+        return null;
+      }
+      return parsed.data;
+    }, "nps.parks.fetch");
+  } catch (err) {
+    logger.warn({ err, parkCode }, "nps: /parks fetch failed — falling back to synthetic name");
+    return null;
+  }
+}
+
 // ───── Normalization ───────────────────────────────────────────────────
 
 function parseLatLng(latStr: unknown, lngStr: unknown): [number, number] | null {
@@ -264,18 +330,140 @@ function normalizeCampground(c: Campground): Record<string, unknown> {
     overlander_tags: ["federal_land", "nps"],
     contact: Object.keys(contact).length ? contact : null,
     // The NPS API returns extremely rich amenity/accessibility/fees data —
-    // for Phase 1 we keep just the raw shape inside raw_payload and surface
-    // a flat boolean amenities map. A second-pass normalizer can refine.
+    // the full raw shape stays in raw_payload; coerceCampgroundAmenities is
+    // the second-pass normalizer down to the canonical shape (see its own
+    // docstring for the key mapping + what's deliberately dropped).
     amenities: c.amenities ? coerceCampgroundAmenities(c.amenities) : null,
     access: c.accessibility ? compact({ raw: c.accessibility }) : null,
     hours: c.operatingHours ? { raw: c.operatingHours } : null,
   };
 }
 
-function coerceCampgroundAmenities(raw: Record<string, unknown>): Record<string, unknown> {
-  // NPS amenity values are strings like "Yes", "No - seasonal", "Yes - seasonal", "None".
-  // Keep the raw mapping; downstream can interpret.
-  return raw;
+// ───── Amenities normalization: NPS's 14-key raw shape → canonical shape ──
+//
+// Canonical shape mirrors normalizeOsm()'s boolean presence map (osm.ts): a
+// category key is written only when present (`true`; `false` is never
+// written, absent means "no signal"). Extended here with an OPTIONAL sibling
+// `${category}_qualifier` key rather than widening the value type to a union
+// — every existing boolean-only consumer (osm.ts's own output,
+// amenitiesToLabels's original `=== true` check) keeps working unchanged for
+// non-qualified values.
+//
+// Of NPS's 14 raw keys, 4 correspond to an existing OSM-shared canonical
+// category (dumpStation, showers, toilets, potableWater → dump_station,
+// shower, toilet, water) and 9 more are promoted here to NEW,
+// NPS-introduced categories with no OSM equivalent (campStore, laundry,
+// internetConnectivity, iceAvailableForSale, staffOrVolunteerHostOnsite,
+// amphitheater, foodStorageLockers, firewoodForSale,
+// trashRecyclingCollection) — neither firewoodForSale (selling firewood,
+// a retail amenity) nor trashRecyclingCollection (a pickup service) is the
+// same concept as OSM's fire_ring (a physical fire-pit fixture), so
+// fire_ring stays OSM-only rather than being force-mapped onto either.
+//
+// The 14th key, cellPhoneReception, is deliberately NOT promoted to an
+// amenities category at all: master_place already has its own dedicated
+// `cell_signal` jsonb column (20260527120100_phase1_master_place.sql) for
+// this exact concept, currently unpopulated by any source. Folding it into
+// `amenities` instead would build a second, competing home for the same
+// signal — wiring it into `cell_signal` is a separate, out-of-scope pass.
+
+/** The single-element negative marker each array-valued NPS key packs
+ *  instead of an empty array — array non-emptiness is NOT a presence
+ *  signal by itself; these three strings must be filtered out first. */
+const NEGATIVE_MARKERS: Record<string, string> = {
+  showers: "None",
+  toilets: "No Toilets",
+  potableWater: "No water",
+};
+
+type ParsedAmenity = { present: boolean; qualifier?: "seasonal" | "non_potable" };
+
+/** The 11 scalar NPS keys take exactly one of 4 values (verified against all
+ *  221 real records on TEST): "No", "" (blank — NPS gave no answer),
+ *  "Yes - seasonal", "Yes - year round". Only "seasonal" gets a qualifier —
+ *  year-round is the unmarked/default case, same as a plain presence chip. */
+function parseScalarAmenity(value: unknown): ParsedAmenity {
+  if (value === "Yes - seasonal") return { present: true, qualifier: "seasonal" };
+  if (value === "Yes - year round") return { present: true };
+  return { present: false }; // "No", "" (blank), or any unrecognized value
+}
+
+/** The 3 array-valued NPS keys (showers, toilets, potableWater) describe
+ *  qualified facility types (e.g. "Flush Toilets - seasonal"), or pack an
+ *  explicit negative into the array's sole entry. `npsKey` selects which
+ *  negative marker to filter out. */
+function parseArrayAmenity(
+  value: unknown,
+  npsKey: keyof typeof NEGATIVE_MARKERS,
+): ParsedAmenity {
+  if (!Array.isArray(value) || value.length === 0) return { present: false };
+  const entries = value.filter((v): v is string => typeof v === "string");
+
+  // potableWater-specific: NPS's own API splits the single sentence "Water,
+  // but not potable" into two array elements on 5 records — an upstream
+  // artifact, not ours to reproduce. Water IS physically present, just
+  // unsafe to drink, so this is present=true with a distinct qualifier, not
+  // dropped — a judgment call (flagged in the report) since it doesn't fit
+  // the seasonal-qualifier pattern.
+  if (npsKey === "potableWater" && entries.some((v) => v.toLowerCase().includes("not potable"))) {
+    return { present: true, qualifier: "non_potable" };
+  }
+
+  // A real facility-type string wins over a co-occurring negative marker —
+  // guards the one observed contradictory record: toilets: ["Vault Toilets
+  // - year round", "No Toilets"]. Filtering the marker out (rather than
+  // bailing whenever it appears at all) is what resolves that record to
+  // present=true.
+  const negativeMarker = NEGATIVE_MARKERS[npsKey];
+  const real = entries.filter((v) => v !== negativeMarker);
+  if (real.length === 0) return { present: false };
+
+  // Mixed qualifiers across entries do occur (e.g. toilets:
+  // ["Flush Toilets - seasonal", "Vault Toilets - year round"], 14 of 221
+  // records) — year-round wins the tie: the amenity IS available
+  // year-round via at least one facility, so no seasonal caveat applies.
+  //
+  // Case-INSENSITIVE match: `toilets`/`potableWater` use lowercase
+  // (" - seasonal", " - year round") but `showers` uses Title Case
+  // (" - Seasonal", " - Year Round") for the identical qualifier concept —
+  // a real inconsistency in NPS's own data across these three keys, not a
+  // typo to "fix" upstream. Matching case-insensitively is the correct
+  // handling, not a workaround.
+  const lower = real.map((v) => v.toLowerCase());
+  if (lower.some((v) => v.includes(" - year round"))) return { present: true };
+  if (lower.some((v) => v.includes(" - seasonal"))) return { present: true, qualifier: "seasonal" };
+  return { present: true };
+}
+
+/** Maps NPS's 14-key raw campground amenities shape (verbatim from the NPS
+ *  API — see persistCampground's raw_payload) to the canonical shape
+ *  normalizeOsm() produces. Absent/negative/blank keys are omitted
+ *  entirely — the 19-of-221 records where NPS answered nothing for any key
+ *  ("" / []) correctly produce an empty result here, same as `false` would
+ *  have. `null` mirrors normalizeOsm()'s own empty-result convention. */
+export function coerceCampgroundAmenities(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  const set = (category: string, parsed: ParsedAmenity) => {
+    if (!parsed.present) return;
+    out[category] = true;
+    if (parsed.qualifier) out[`${category}_qualifier`] = parsed.qualifier;
+  };
+  set("dump_station", parseScalarAmenity(raw.dumpStation));
+  set("shower", parseArrayAmenity(raw.showers, "showers"));
+  set("toilet", parseArrayAmenity(raw.toilets, "toilets"));
+  set("water", parseArrayAmenity(raw.potableWater, "potableWater"));
+  // NPS-introduced categories (no OSM equivalent) — same scalar 4-value
+  // vocabulary as dumpStation, reusing parseScalarAmenity as-is.
+  set("camp_store", parseScalarAmenity(raw.campStore));
+  set("laundry", parseScalarAmenity(raw.laundry));
+  set("internet", parseScalarAmenity(raw.internetConnectivity));
+  set("ice_for_sale", parseScalarAmenity(raw.iceAvailableForSale));
+  set("host_onsite", parseScalarAmenity(raw.staffOrVolunteerHostOnsite));
+  set("amphitheater", parseScalarAmenity(raw.amphitheater));
+  set("food_storage", parseScalarAmenity(raw.foodStorageLockers));
+  set("firewood_for_sale", parseScalarAmenity(raw.firewoodForSale));
+  set("trash_recycling", parseScalarAmenity(raw.trashRecyclingCollection));
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 // ───── Persistence ─────────────────────────────────────────────────────
@@ -385,6 +573,7 @@ async function persistCampground(
 async function persistParkBoundary(
   parkCode: string,
   boundary: unknown,
+  park: Park | null,
   dryRun: boolean,
 ): Promise<"inserted" | "skipped" | "error"> {
   // Extract a primary polygon geometry + a representative point for the
@@ -401,11 +590,20 @@ async function persistParkBoundary(
   }
 
   const externalId = `nps:park:${parkCode}`;
-  const name = `NPS park boundary: ${parkCode}`;
+  // Real park name from /parks (fullName), e.g. "Joshua Tree National Park".
+  // Falls back to the synthetic string only when /parks is unavailable so the
+  // boundary polygon still lands. This name is NPS's authoritative canonical_name
+  // (field_precedence priority 1) — the whole point of wiring /parks.
+  const fullName = park?.fullName?.trim();
+  const name = fullName && fullName.length > 0 ? fullName : `NPS park boundary: ${parkCode}`;
   if (dryRun) {
-    logger.debug({ externalId, parkCode }, "nps: dry-run");
+    logger.debug({ externalId, parkCode, name }, "nps: dry-run");
     return "inserted";
   }
+  const phone = park?.contacts?.phoneNumbers?.find(
+    (p): p is { phoneNumber: string } => typeof p.phoneNumber === "string" && p.phoneNumber.length > 0,
+  )?.phoneNumber;
+  const contact = compact({ website: park?.url ?? undefined, phone });
   try {
     await upsertSourceRecord({
       sourceId: SOURCE_ID,
@@ -413,19 +611,17 @@ async function persistParkBoundary(
       name,
       inferredCategory: "park",
       point: centroid,
-      rawPayload: { boundary, fetched_at: new Date().toISOString() },
+      // Full /parks object stashed here — designation, entranceFees, addresses,
+      // etc. live in raw_payload, not in invented normalized fields.
+      rawPayload: { boundary, park: park ?? null, fetched_at: new Date().toISOString() },
       normalizedPayload: {
-        // Use the same synthetic name as source_record.name. The /parks
-        // endpoint isn't fetched in this path, so we don't have the
-        // park's full title yet. A follow-up could resolve "jotr" →
-        // "Joshua Tree National Park" via a single /parks?parkCode call.
         canonical_name: name,
-        description: null,
+        description: park?.description ?? null,
         overlander_tags: ["federal_land", "nps"],
-        contact: null,
+        contact: Object.keys(contact).length ? contact : null,
         access: null,
         amenities: null,
-        hours: null,
+        hours: park?.operatingHours && park.operatingHours.length ? { raw: park.operatingHours } : null,
         // The key Phase-1 deliverable for parks: GeoJSON polygon for
         // recompute_master_place() to promote later.
         geometry_polygon: geometry,
@@ -540,10 +736,13 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
         }
       }),
       limit(async () => {
-        const boundary = await fetchParkBoundary(parkCode);
+        const [boundary, park] = await Promise.all([
+          fetchParkBoundary(parkCode),
+          fetchPark(parkCode),
+        ]);
         if (!boundary) return;
         stats.fetched += 1;
-        const outcome = await persistParkBoundary(parkCode, boundary, opts.dryRun ?? false);
+        const outcome = await persistParkBoundary(parkCode, boundary, park, opts.dryRun ?? false);
         if (outcome === "inserted") stats.inserted += 1;
         else if (outcome === "skipped") stats.skipped += 1;
         else stats.errors += 1;
