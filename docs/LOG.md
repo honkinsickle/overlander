@@ -59,13 +59,24 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   reconciliation attempt tried to alter Typesense's implicit `id` field
   and was cleanly rejected before being corrected.
 - **This entire session ran without a single write to PROD**, and — like
-  2026-08-20 — the code from this session is uncommitted as of this docs
-  pass, sitting directly on local `main`, not a branch, not pushed. This
-  docs pass is a separate commit from that code, on purpose.
+  2026-08-20 — ~~the code from this session is uncommitted as of this docs
+  pass, sitting directly on local `main`, not a branch, not pushed~~
+  **[CORRECTED below — since merged as #244]**. This docs pass is a separate
+  commit from that code, on purpose.
 - **PR #243 (the 2026-08-20 session's own work) merged to `main` since
   that session's doc pass** — `5a822ab`. The "open PR" framing throughout
   the 2026-08-20 `STATE.md` section is now corrected in place, not
   rewritten.
+- **PR #244 — THIS session's corpus-quality work — has since merged to
+  `main`** as `d6c55ac`. The state-boundary rebuild, NONE-bucket template
+  descriptions, eligibility/provenance/review mechanism, and placeholder
+  deactivations described above are on `main`; the "uncommitted / not pushed"
+  framing in the first bullet is corrected here in place, not rewritten.
+- **PR #245 — place-data resolver consolidation ADR** (a follow-up added
+  after this session's original work; decided in a design-review
+  conversation, implementation pending) merged to `main` as `4fbd051`, now
+  the `origin/main` tip. Doc:
+  `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
 
 ## 2026-08-20 — state_parks LIVE ON PROD
 

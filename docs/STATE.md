@@ -1,4 +1,4 @@
-# STATE — branch `main` · 2026-08-21 (⚠ **PR #243 is now MERGED** — squash-merged to `main` as `5a822ab` `[git log, 2026-08-21]`, corrected below; the "open, not yet merged" framing further down this file is now STALE. **Newest truth: a template-description / eligibility / provenance / review session, done directly on local `main`** — see `## 2026-08-21` right below. **This session's work (code + migrations + scripts) is UNCOMMITTED as of this docs pass, sitting directly on local `main`, not yet on a branch, not pushed.** Per CLAUDE.md's own standing rule (`main` is protected, every change goes branch → PR → Adam merges), that code needs to move to a branch before it can reach `origin`. This docs pass commits only `docs/` — see the section below for the exact uncommitted-file inventory. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged, unpushed-since branch, status unchanged from before. Older masthead text preserved below, now historical.)
+# STATE — branch `main` · 2026-08-21 (⚠ **PR #243 is now MERGED** — squash-merged to `main` as `5a822ab` `[git log, 2026-08-21]`, corrected below; the "open, not yet merged" framing further down this file is now STALE. **Newest truth: a template-description / eligibility / provenance / review session, done directly on local `main`** — see `## 2026-08-21` right below. ~~**This session's work (code + migrations + scripts) is UNCOMMITTED as of this docs pass, sitting directly on local `main`, not yet on a branch, not pushed.**~~ **CORRECTED 2026-08-21 — NOW MERGED:** the corpus-quality work squash-merged to `main` as **`d6c55ac` (#244)**, and the place-data resolver ADR added afterward squash-merged as **`4fbd051` (#245)**; current `origin/main` tip is **`4fbd051`**. The "uncommitted / not yet on a branch / not pushed" framing here and throughout §2026-08-21 is now STALE. ~~Per CLAUDE.md's own standing rule (`main` is protected, every change goes branch → PR → Adam merges), that code needs to move to a branch before it can reach `origin`.~~ This docs pass commits only `docs/` — see the section below for the exact uncommitted-file inventory. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged, unpushed-since branch, status unchanged from before. Older masthead text preserved below, now historical.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -84,13 +84,21 @@ methodology on each.
 
 ### Branch / commit state — read this before touching anything here
 
-**Currently on local `main`, not a feature branch.** This session's code
+> **⚠ CORRECTED 2026-08-21 — MERGED; do not act on the "uncommitted" framing
+> below.** Everything this subsection lists (the tracked-file code changes, the
+> six migrations, the scripts) squash-merged to `main` as **`d6c55ac` (#244)**.
+> The place-data resolver ADR that followed merged as **`4fbd051` (#245)**, now
+> the `origin/main` tip. The struck text below is preserved per this file's
+> convention; the "Uncommitted, tracked-file changes" and "Uncommitted,
+> untracked new files" inventories that follow it now describe MERGED content.
+
+~~**Currently on local `main`, not a feature branch.** This session's code
 (`data/scripts/lib/eligibility.ts` + `.test.ts`, `data/search/sync-typesense.ts`)
 and every new migration/script are **uncommitted** as of this docs pass —
 this docs-only commit is deliberately separate from them, matching this
 session's own instruction. Before any of it can reach `origin/main` it
 needs to move to a branch per CLAUDE.md's standing rule. Nothing has been
-pushed. **`docs/BACKLOG.md` was already updated and committed earlier in
+pushed.~~ **`docs/BACKLOG.md` was already updated and committed earlier in
 this session** (`f3c4830`) — this pass added the remaining docs on top,
 not a duplicate BACKLOG pass.
 
@@ -250,9 +258,12 @@ one-off script from an earlier ad-hoc pull was found and deleted.
 
 ### OPEN — not decided, do not treat as settled
 
-1. **This session's code is uncommitted, on local `main`, not pushed** —
+1. ~~**This session's code is uncommitted, on local `main`, not pushed** —
    see the branch/commit state note above. Moving it to a branch and
-   opening a PR is a separate, future step.
+   opening a PR is a separate, future step.~~ **RESOLVED 2026-08-21 — merged
+   as `d6c55ac` (#244).** The place-data resolver ADR (a follow-up, not part
+   of this session's original corpus work) merged separately as `4fbd051`
+   (#245); `origin/main` tip is `4fbd051`.
 2. **`master_place.state` is a snapshot, not wired into
    `recompute_master_place`** — an open architectural question, not
    resolved this session.
