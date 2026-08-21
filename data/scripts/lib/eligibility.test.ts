@@ -73,6 +73,54 @@ describe("computeSignals: has_real_description", () => {
   });
 });
 
+// ───── has_real_directions — added 2026-08-20 (RIDB FacilityDirections /
+// USFS directions gap found by the NONE-bucket characterization pass) ────
+
+describe("computeSignals: has_real_directions", () => {
+  it("real turn-by-turn directions (real RIDB FacilityDirections sample) qualifies", () => {
+    const np = {
+      directions:
+        "Riley Springs Trailhead is located approximately 15 miles northeast of Loa, Utah. Head north on N Main St toward W 100 N St 0.6 miles.",
+    };
+    expect(computeSignals(np, {}).has_real_directions).toBe(true);
+  });
+
+  it("directions: null does NOT qualify", () => {
+    expect(computeSignals({ directions: null }, {}).has_real_directions).toBe(false);
+  });
+
+  it("directions key absent entirely does NOT qualify", () => {
+    expect(computeSignals({}, {}).has_real_directions).toBe(false);
+  });
+
+  it("short directions text below DESCRIPTION_MIN_LENGTH does NOT qualify (same threshold as description)", () => {
+    expect(computeSignals({ directions: "Turn left." }, {}).has_real_directions).toBe(false);
+  });
+
+  it("exactly at the threshold qualifies; one character short does not (boundary check)", () => {
+    const atThreshold = "x".repeat(DESCRIPTION_MIN_LENGTH);
+    const belowThreshold = "x".repeat(DESCRIPTION_MIN_LENGTH - 1);
+    expect(computeSignals({ directions: atThreshold }, {}).has_real_directions).toBe(true);
+    expect(computeSignals({ directions: belowThreshold }, {}).has_real_directions).toBe(false);
+  });
+
+  it("has_real_directions and has_real_description are independent signals", () => {
+    const directionsOnly = computeSignals(
+      { description: "DAM POINT (Picnic Site)", directions: "y".repeat(50) },
+      {},
+    );
+    expect(directionsOnly.has_real_description).toBe(false);
+    expect(directionsOnly.has_real_directions).toBe(true);
+  });
+
+  it("a row with ONLY real directions (nothing else) is STRONG", () => {
+    const agg = emptyAggregatedSignals();
+    foldSignalsInto(agg, computeSignals({ directions: "z".repeat(60) }, {}));
+    expect(isStrong(agg)).toBe(true);
+    expect(bucketOf(agg)).toBe("STRONG");
+  });
+});
+
 // ───── Existing OSM-shape signals — confirm unchanged by the refactor ───
 
 describe("computeSignals: existing OSM-shape signals (unchanged)", () => {
@@ -127,6 +175,7 @@ describe("computeSignals: existing OSM-shape signals (unchanged)", () => {
     expect(s.has_wikidata).toBe(false);
     expect(s.meaningful_tag_count).toBe(0);
     expect(s.has_real_description).toBe(false);
+    expect(s.has_real_directions).toBe(false);
   });
 });
 

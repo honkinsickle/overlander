@@ -35,8 +35,10 @@
  * the OR/WA line is the meandering Columbia and a bbox lat-cut is a guess.
  *
  * Attributes are sparse: PHOTO fields ~100% null, DESCRIPTION mostly null,
- * WEB_LINK office-level not per-POI. amenities/hours/contact/access are emitted
- * null rather than fabricated.
+ * WEB_LINK office-level not per-POI (also mapped into `contact.website` as of
+ * 2026-08-20 for the has_website eligibility signal — see the flagged
+ * reasoning on `normalize()`'s `website` local). amenities/hours/access are
+ * emitted null rather than fabricated.
  *
  * Point geometry over ArcGIS REST rides the shared lib/esri.ts client
  * (OID-keyset pagination at pageSize 1000). pLimit(4) at the source layer.
@@ -134,6 +136,23 @@ function normalize(
   name: string,
   globalId: string,
 ): Record<string, unknown> {
+  // WEB_LINK is an office/region-level URL (e.g. "…/visit/lower-deschutes-
+  // wild-and-scenic-river" for an entire river corridor), not a URL specific
+  // to THIS individual campsite point — that's why it was originally kept
+  // separate under `web_link` rather than `contact.website` (see the prior
+  // comment on that field, preserved below). 2026-08-20 fix: mapped into
+  // `contact.website` anyway, on explicit instruction, because the
+  // has_website eligibility signal (data/scripts/lib/eligibility.ts) only
+  // reads `contact.website` — see docs/measurements/2026-08-20-none-bucket-
+  // characterization.md §5 and the accompanying fix report for the full
+  // reasoning. FLAG: this reverses that original, deliberate, commented
+  // decision, and it does make `has_website` true for a place based on a
+  // link that isn't really "this place's website" — it's a real URL, but
+  // for a river/region, not the campsite. Worth a product read before
+  // trusting `has_website=true` on BLM rows the way it's trusted for a
+  // source with genuinely per-POI URLs.
+  const website = trimOrNull(props.WEB_LINK);
+
   return {
     canonical_name: name,
     description: trimOrNull(props.DESCRIPTION),
@@ -144,14 +163,16 @@ function normalize(
     verify_locally: true,
     mvum_corridor: null,
 
-    // Office-level URL, not per-POI — stored, not promoted.
-    web_link: trimOrNull(props.WEB_LINK),
+    // Office-level URL, not per-POI — stored, not promoted. Kept for
+    // continuity/debugging even though `contact.website` below is now also
+    // populated from the same source value — see the fix note above.
+    web_link: website,
 
     // Attributes are sparse to absent on this layer; emit null rather than a
     // bag of nulls fabricated from empty fields.
     amenities: null,
     hours: null,
-    contact: null,
+    contact: website ? { website } : null,
     access: null,
 
     provenance: {

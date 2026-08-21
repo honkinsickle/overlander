@@ -136,4 +136,30 @@ describe("normalize", () => {
     expect(np.mvum_corridor).toBeNull();
     expect(np.verify_locally).toBe(true);
   });
+
+  it("maps WEB_LINK into contact.website (2026-08-20 fix, for the has_website eligibility signal) while keeping the legacy web_link field", () => {
+    const np = normalize(
+      {
+        FET_NAME: "D10.62L",
+        ADMIN_ST: "OR",
+        FET_SUBTYPE: PRIMITIVE_SUBTYPE,
+        WEB_LINK: "https://www.blm.gov/visit/lower-deschutes-wild-and-scenic-river",
+      },
+      "D10.62L",
+      "{GUID}",
+    );
+    expect(np.contact).toEqual({
+      website: "https://www.blm.gov/visit/lower-deschutes-wild-and-scenic-river",
+    });
+    expect(np.web_link).toBe("https://www.blm.gov/visit/lower-deschutes-wild-and-scenic-river");
+  });
+
+  it("contact stays null when WEB_LINK is absent", () => {
+    const np = normalize(
+      { FET_NAME: "No Link Site", ADMIN_ST: "CA", FET_SUBTYPE: PRIMITIVE_SUBTYPE },
+      "No Link Site",
+      "{GUID}",
+    );
+    expect(np.contact).toBeNull();
+  });
 });

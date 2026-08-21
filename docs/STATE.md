@@ -1,4 +1,4 @@
-# STATE — `main` · 2026-08-20 (⚠ state_parks LIVE ON PROD — 1,736 SRs, 1,584 confirmed, 156 pending. Amenities/curation session from 2026-08-18 also merged. Typesense still stale.)
+# STATE — branch `corpus` · 2026-08-20 (⚠ TWO newest-truth threads landed independently on the same day — read both `## 2026-08-20` sections below as SIBLINGS, neither supersedes the other. **state_parks LIVE ON PROD** (#242, merged to `main` — 1,736 SRs, 1,584 confirmed, 156 pending triage). **`corpus`'s own gap-scan / Google Places compliance / LLM description pilot / placeholder-name deactivation session** (PR #243, open against `main`, not yet merged — BLM/RIDB eligibility fixes, LLM prompt A/B, two TEST placeholder-name deactivations). This file lives on `corpus`, which has been merged with `main` in place to resolve this doc conflict ahead of #243 — see the merge commit for detail. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged branch. Typesense still stale.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -78,7 +78,9 @@ later entry corrects an earlier one and the earlier one stays.
 
 **BUILD + PROD session.** Ingester code, migration, tests, TEST ingest/triage,
 and PROD ingest/materialize all complete. Branch `state-park-systems-enumeration`
-carries code (not yet on `main`); migrations applied to both TEST and PROD.
+carries code (not yet on `main` at authoring time; merged to `main` via #242 —
+this section is preserved verbatim from that branch's own STATE.md, reconciled
+here during the `corpus`/`main` merge); migrations applied to both TEST and PROD.
 
 **What was built:**
 - `data/ingestion/sources/state-parks.ts` — six-state ingester with padus-style
@@ -206,6 +208,183 @@ writes. Branch `state-park-systems-enumeration` carries one uncommitted file:
    - OSM: fallback-only (3–122 operator-tagged features per state, sparse)
 
 **No database, corpus, or schema changes this session. No PROD/TEST writes.**
+
+## 2026-08-20 — corpus gap-scan, Google Places compliance check, LLM description pilot + A/B, NONE-bucket characterization, BLM/RIDB/OSM eligibility investigation, placeholder-name deactivations (branch `corpus`, PR #243, **open against `main`, not yet merged**)
+
+Newest truth. Investigation-and-fix session, largely read-only with two
+authorized write passes (a small controlled LLM sample and two TEST
+deactivation passes). **No PROD writes or reads beyond what's noted below.**
+Every figure in this section was computed this session against TEST
+(`znldzjdatkogdktymtvi`) — see `docs/measurements/2026-08-20-*.md` for full
+methodology on each. This session also ran the `sg` self-audit skill against
+its own earlier work; three findings from that pass are still open (see
+below) — **nothing has been changed as a result yet**, per the skill's own
+"change nothing before the user answers" rule.
+
+### Branch reconciliation — `corpus` vs `fix/amenities-render-shape` `[git, 2026-08-20]`
+
+`corpus` forks `origin/main` at `a501744` (BLM primitive campsite ingester,
+#232) and carries one commit ahead, `4297486` (BACKLOG doc entry) — **not
+pushed** (`origin/corpus` does not exist). It does **not** contain
+`fix/amenities-render-shape` as an ancestor — they are sibling branches.
+
+`fix/amenities-render-shape` itself: still exists, local SHA equals
+`origin/fix/amenities-render-shape` (`31ea0fa`) — **fully pushed, still no
+PR**, exactly as the superseded masthead above said. But its **code**
+substantially already reached `main` by a different path: `git log --follow
+origin/main -- data/ingestion/lib/osm-description-templates.ts` shows that
+file (and the merge-layer reconnect it shipped alongside) landed via
+`411bf9c` (#237) — a squash-merge under a different SHA than the branch's own
+29 unique commits, matching this repo's established "parallel worktree,
+squash into a fresh branch" pattern (see `CLAUDE.md` §RUNBOOK gotchas). What
+this session did **not** re-verify: whether `fix/amenities-render-shape`'s
+own TEST-database operations (toilet/water/dump_station reactivation,
+viewpoint reactivation, its dump_station cleanup) are now fully redundant
+with what shipped via #237–#241, or whether some data-level work from that
+branch's session is still uniquely live only on the state that branch left
+TEST in. **Flagged, not resolved** — a fresh session should diff
+`fix/amenities-render-shape`'s file tree against current `main` before
+deciding whether to open a PR, rebase, or abandon it.
+
+### TEST corpus position `[queried TEST 2026-08-20]`
+
+| metric | value |
+|---|--:|
+| `master_place` | **160,703** |
+| `source_record` all / active / inactive | 170,428 / **82,564** / 87,864 |
+| `place_match` total / pending | 170,454 / **5,065** |
+| `master_place_search_export` (view) | **36,250** |
+| `master_place` with `source_count = 0` | **86,299** |
+
+**`source_record` by source (active / all):** osm 22,977 / 109,492 · padus
+36,358 / 37,701 · usfs 6,324 / 6,330 · ridb 6,013 / 6,013 · nps 5,283 / 5,283 ·
+blm 876 / 876 · atlas_oddities 2,870 / 2,870 · google_resolved 122 / 122 ·
+google 5 / 5. osm's active/all gap widened further this session — today's two
+deactivation passes (below) plus prior sessions' category curation.
+
+### Committed vs uncommitted — what's actually on disk right now `[git status, 2026-08-20]`
+
+**Committed** (in `4297486`): two BACKLOG entries (Google Places compliance
+follow-ups).
+
+**Uncommitted, tracked-file changes:** `data/scripts/lib/eligibility.ts` +
+`.test.ts` (`has_real_directions` signal), `data/ingestion/sources/ridb.ts` +
+`.test.ts` (`FacilityDirections` parsing), `data/ingestion/sources/blm-rec.ts`
++ `.test.ts` (`WEB_LINK` → `contact.website`), `data/package.json` (two new
+backfill script entries).
+
+**Untracked, uncommitted new files:** the BLM/RIDB backfill scripts
+(`backfill-blm-website.ts`, `backfill-ridb-directions.ts`), the two
+placeholder-name deactivation scripts (`deactivate-unnamed-picnic-area.ts`,
+`deactivate-unnamed-ev-charging.ts`), and ~7 one-off measurement scripts
+(`measure-*-2026-08-20.ts`, `eval-llm-descriptions-sample-2026-08-20*.ts`).
+**This docs pass deliberately does NOT commit any of this** — the task was
+docs-only; the code changes remain exactly as a future commit will find them.
+`docs/measurements/` (new this session) is committed in this docs pass.
+
+### What happened, in order
+
+1. **Corpus gap-scan** (read-only) — refreshed STRONG/WEAK/NONE bucketing,
+   source/state/category breakdowns, Google-linkage measurement. Report:
+   `docs/measurements/2026-08-20-corpus-gap-scan.md`.
+2. **Google-resolved provenance investigation** (read-only) — traced the 127
+   `google_resolved`/`google` rows to the tier-2 live-resolve write-back
+   mechanism (`web/src/lib/itinerary/ingest.ts`/`resolve.ts`), not a
+   corpus-wide match attempt. Report:
+   `docs/measurements/2026-08-20-google-resolved-provenance.md`.
+3. **Google Places compliance check.** `editorialSummary` (and every Place
+   Details field except `place_id` and coordinates) carries a **30-day cache
+   limit** under Google's current ToS — storing it as a permanent
+   `master_place.description` value is **not compliant**. The only compliant
+   path for that content is live-fetch-at-render (fetch fresh each time,
+   never persist) — parked as a BACKLOG item, not built. Report + sources:
+   `docs/measurements/2026-08-20-google-places-details-compliance-check.md`.
+4. **LLM description-generation pilot** (small controlled sample, real API
+   spend, no bulk run). Target population defined precisely: STRONG/WEAK
+   bucket, no existing real description = **8,782** rows; `atlas_oddities`
+   recommended for exclusion (0 of 2,866 active rows have any description
+   text — their STRONG bucketing comes from tags/hours, not narrative
+   content) → corrected target **7,154**. 27-row stratified sample run
+   against the original prompt: **11/27 (41%) any-fabrication, 4/27 (15%)
+   severe.** Report: `docs/measurements/2026-08-20-llm-description-generation-pilot.md`.
+5. **Prompt A/B** — redesigned the system prompt (explicit anti-fabrication
+   grounding rules, hedging language, length matched to available fields),
+   re-ran on the **exact same 27 rows**: any-fabrication **41% → 4%** (11/27
+   → 1/27), severe **15% → 0%** (4/27 → 0/27). **One residual
+   fabrication remains, reported honestly, not papered over** — flagged as a
+   small-sample result (n=27), not certified at corpus scale. Report:
+   `docs/measurements/2026-08-20-llm-description-prompt-iteration.md`.
+6. **NONE-bucket deep characterization** (read-only + one 20-request live
+   Wikipedia calibration). Precise NONE-bucket count and category/source/state
+   breakdown; qualitative spot-checks; checked PAD-US/RIDB/NPS/BLM for a
+   USFS-directions-style missed field — **found two**: RIDB
+   `FacilityDirections` unparsed, BLM `WEB_LINK` mapped to `web_link` but not
+   `contact.website`. Report: `docs/measurements/2026-08-20-none-bucket-characterization.md`.
+7. **BLM/RIDB eligibility fixes** (TEST writes) — new `has_real_directions`
+   signal in `eligibility.ts` (source-agnostic, works for USFS + RIDB);
+   BLM's `WEB_LINK` now also populates `contact.website` (flagged: this
+   reverses a deliberate "office-level URL, not per-POI" design choice — see
+   the new decisions/ entry). Backfilled + verified on TEST: **273 rows
+   flipped out of NONE corpus-wide** (265 BLM + 8 RIDB). Report:
+   `docs/measurements/2026-08-20-blm-ridb-eligibility-fixes.md`. **Code is
+   uncommitted** — see above.
+8. **Self-audit (`sg` skill)** against this session's own work. Three
+   findings, **none yet acted on**:
+   - `RecAreaDirections` gap — the BLM/RIDB fix report's claim "RecAreaSchema
+     has no directions-equivalent field" is **false**;
+     `raw_payload.recarea.RecAreaDirections` exists, populated on 1,104/1,220
+     (90.5%) of RIDB recarea rows. Measured impact if fixed: **1** additional
+     recarea-linked MP would flip out of NONE (recareas are usually already
+     STRONG via other signals).
+   - `atlas_oddities`-in-NONE-bucket count mismatch: **1,157** in the gap-scan
+     doc vs **1,144** in the characterization doc — same conceptual
+     measurement, never cross-referenced or explained in either doc.
+   - The LLM pilot report's claim that severe fabrication "clusters on
+     WEAK-bucket rows" is contradicted by its own example list — the
+     Bainbridge Island memorial case is explicitly STRONG bucket in the same
+     document.
+9. **OSM NONE-bucket investigation** (read-only). Mirrored the USFS/RIDB/BLM
+   missed-field pattern, scoped to OSM. **Verdict: genuine sparsity, not a
+   cheap win** — every OSM row attached to a NONE-bucket MP structurally has
+   <5 raw tags and zero `MEANINGFUL_OSM_KEYS` hits (the pipeline's own
+   ceiling, verified with zero exceptions across 14,105 rows); no candidate
+   free-text field was found after checking all 195 distinct tag keys down to
+   frequency 1. `wikipedia`/`wikidata` as raw tags on NONE-bucket nodes: **0**
+   (confirms they're already caught upstream). Report:
+   `docs/measurements/2026-08-20-osm-none-bucket-tag-investigation.md`.
+10. **Two placeholder-name deactivation passes** (TEST writes, same mechanism
+    as Phase 0 peak/spring — `source_record.is_active = false` →
+    `recompute_master_place()` → dangling-`place_match` cleanup):
+    - **picnic_area**: `canonical_name` exactly `"Unnamed picnic area"` AND
+      NONE-bucket → **3,427 deactivated**, 0 recompute failures. 53 STRONG +
+      1 WEAK placeholder-named rows and 1,187 real-named rows left active.
+    - **ev_charging**: investigated fresh (not assumed to mirror picnic_area)
+      — found a single literal placeholder `"Unnamed ev charging"` covering
+      only 931/3,634 (25.6%) of the category (unlike picnic_area's ~75%); the
+      rest are real network/brand names. NONE-bucket placeholder →
+      **748 deactivated**, 0 failures. 177 STRONG + 6 WEAK placeholder rows
+      and 2,703 real-named rows left active.
+    - Both verified: 0 deactivated rows in `master_place_search_export`;
+      spot-checked against the live `pois_along_corridor` RPC — 0/5 surfaced
+      for each pass. Reports:
+      `docs/measurements/2026-08-20-unnamed-picnic-area-deactivation.md`,
+      `docs/measurements/2026-08-20-unnamed-ev-charging-deactivation.md`.
+
+### OPEN — not decided, do not treat as settled
+
+1. **The three self-audit findings above** — RecAreaDirections gap,
+   atlas_oddities count mismatch, WEAK-clustering claim correction. Presented
+   to the user; no response yet as of this doc pass.
+2. **`fix/amenities-render-shape`'s real status** — see the branch
+   reconciliation note above. Needs a file-tree diff against `main`, not
+   inherited from this session's git-log archaeology alone.
+3. **Google Places live-fetch-at-render** — parked in BACKLOG, not built.
+4. **LLM description generation at corpus scale** — the prompt fix is
+   promising (4% residual on n=27) but explicitly not certified beyond that
+   sample size; no bulk run has been authorized or run.
+5. **This session's code changes are uncommitted** — see above. Committing
+   them (and deciding whether to open a PR for `corpus`) is a separate,
+   future step.
 
 ## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station reactivated with templated descriptions, then narrowed to the described subset (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
 

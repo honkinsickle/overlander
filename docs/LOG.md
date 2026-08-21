@@ -12,7 +12,7 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-08-20
+## 2026-08-20 — state_parks LIVE ON PROD
 
 - **state_parks ingester built, TEST ingest + materialize complete.** 1,736
   source_records across 6 states (CA 914, WA 280, OR 342, NV 105, AZ 48, UT 47).
@@ -91,6 +91,59 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   accepted; CA SUBTYPE = ingest all, filter downstream; description = from
   visitor websites, not GIS (separate investigation underway); OSM = fallback
   only.
+
+## 2026-08-20 — corpus quality: BLM/RIDB eligibility fixes, LLM description prompt, placeholder deactivations (PR #243)
+
+- **Google Places content warehousing ruled out on compliance grounds
+  before any code was written.** Checked Google's Places API (New) caching
+  policy directly: only `place_id` and coordinates (30-day) are cacheable;
+  `editorialSummary` and every other Place Details field has no caching
+  exception, field-based not display-based. The only compliant path is
+  live-fetch-at-render, never persist — a different architecture than what
+  was scoped. Parked in `BACKLOG.md`, sequenced after the LLM-enrichment
+  pass below. ADR: `docs/decisions/2026-08-20-corpus-enrichment-and-cleanup-decisions.md` §1.
+- **LLM description generation: prompt redesign fixed real fabrication,
+  41% → 4% any-fabrication on the same 27 rows** (severe: 15% → 0%). Target
+  population scoped to STRONG/WEAK-bucket-no-description (8,782 rows),
+  `atlas_oddities` excluded (0 of 2,866 active rows have any description
+  text, despite many being STRONG via tags/hours). One residual fabrication
+  case remains, reported not papered over; the 4% figure is explicitly a
+  small-sample result, not certified at scale. ADR §3.
+- **Two real missed-field gaps found and fixed in `eligibility.ts`** — RIDB
+  `FacilityDirections` was never parsed into `normalized_payload`, and BLM's
+  `WEB_LINK` was mapped to `web_link` but never `contact.website` (a
+  deliberate original design choice, reversed here on explicit instruction
+  and flagged in the code). New source-agnostic `has_real_directions`
+  signal. Backfilled + verified on TEST: 273 rows flipped out of NONE
+  (265 BLM + 8 RIDB). **Code is uncommitted as of this doc pass.**
+- **OSM's NONE bucket investigated and found genuinely sparse, not a hidden
+  win like BLM/RIDB.** Every OSM row on a NONE-bucket place structurally has
+  <5 raw tags and zero of the 10 recognized meaningful keys — verified with
+  zero exceptions across 14,105 rows. Checked all 195 distinct tag keys down
+  to frequency 1; none carried prose. No fix applied — there's nothing to
+  fix.
+- **Self-audited the session's own work (`sg` skill) and found three real
+  errors, none yet corrected:** a false "RecAreaSchema has no directions
+  field" claim (it does, 90.5% populated), a 1,157-vs-1,144
+  atlas_oddities count mismatch between two same-session docs never
+  cross-checked, and a "severe cases cluster on WEAK bucket" claim
+  contradicted by the report's own cited example. Presented to the user;
+  changing nothing until there's a decision, per the skill's own rule.
+- **Deactivated two placeholder-name populations on TEST** — 3,427
+  picnic_area + 748 ev_charging rows, both NONE-bucket AND carrying the
+  exact literal placeholder name (`"Unnamed picnic area"` /
+  `"Unnamed ev charging"`), same mechanism as the 2026-08-11 peak/spring
+  deactivation. **ev_charging's placeholder pattern was investigated fresh
+  rather than assumed to mirror picnic_area's — it does share the
+  single-exact-string shape, but covers only 26% of the category (real
+  brand names dominate), not ~75% like picnic_area.** Verified both:
+  0 deactivated rows in the search-export view, 0/5 spot-checked still
+  surface via live `pois_along_corridor` generation calls.
+- **This entire session ran without a single write to PROD.** Every DB
+  write (LLM sample, BLM/RIDB backfill, both deactivations) targeted TEST
+  (`znldzjdatkogdktymtvi`) only, each script asserting the project ref
+  before writing.
+
 ## 2026-08-18 — Amenities & Category Curation
 
 - **Amenities reconnected end to end, then a session of category curation.**

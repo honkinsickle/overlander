@@ -2708,5 +2708,99 @@ conclusion.
   unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
   and 231 NPS rows to 146.
 
+## Surfaced 2026-08-20 (Google Places compliance check)
+
+- **Live-fetch-at-render Google data (ratings/hours/testimonials) — PARKED,
+  sequenced after the LLM-enrichment-of-existing-corpus pass.** Investigated
+  in `docs/measurements/2026-08-20-google-places-details-compliance-check.md`.
+  Google's Places API (New) caching policy permits storing only two things:
+  `place_id` (indefinite) and coordinates (30 days). `editorialSummary`,
+  `websiteUri`, `internationalPhoneNumber`, `regularOpeningHours`, `rating`,
+  and `userRatingCount` all have no caching exception — confirmed this is a
+  **field-based restriction, not a display-based one**: it applies the same
+  whether the content is plotted on a map or rendered as our own UI text, and
+  Places UI Kit carries the same terms as the raw API. Closing this gap
+  needs a **live-fetch-at-render architecture instead** — call Place Details
+  at view time keyed on a stored `place_id`, never persist the result — which
+  is a different shape (cost-per-render instead of cost-per-place, plus
+  latency) than the storage-based design that was originally scoped.
+  Deliberately sequenced **after** the LLM-enrichment pass so the enrichment
+  ceiling on existing corpus data is established before Google integration
+  work starts.
+  - **Related, not part of this item:** the existing `google_resolved`/`google`
+    source_records (127 rows total) already store non-exempt fields
+    (`displayName`/`canonical_name`, `formattedAddress`) indefinitely with no
+    refresh policy — a live compliance gap in current data, surfaced in
+    passing during the same investigation, not yet triaged.
+
+- **New source ingestion: gas stations + medical/hospital/urgent-care POIs —
+  PARKED, sequenced after both threads above.** Not enrichment work — these
+  categories don't exist in the corpus as a source at all yet, so this needs
+  a source-selection decision before any ingestion design. Google Places is
+  likely reliable for gas stations, but Google's medical-facility data does
+  not reliably distinguish urgent care from a full ER from a general clinic —
+  a wrong ER location is a safety issue, not a UX gap, so this category may
+  need a dedicated source (e.g. state licensing databases, HealthCare.gov
+  provider data) rather than Google as primary.
+
+## Surfaced 2026-08-20 (session self-audit — three unresolved corrections)
+
+Found by running the `sg` (second-guess) skill against this session's own
+earlier work. All three were presented to the user; **no response yet as of
+this docs pass — none applied.**
+
+- **RIDB `RecAreaSchema` DOES have a directions-equivalent field — the
+  BLM/RIDB eligibility fix report's claim that it doesn't is wrong.**
+  `docs/measurements/2026-08-20-blm-ridb-eligibility-fixes.md` states
+  `RecAreaSchema` has no directions-equivalent field, "matching what the
+  characterization pass actually found." Live-verified false:
+  `raw_payload.recarea.RecAreaDirections` exists and is populated on
+  1,104/1,220 (90.5%) of RIDB recarea rows `[queried TEST 2026-08-20]`.
+  Measured impact if the fix were extended to recarea rows: **1** additional
+  recarea-linked master_place would flip out of NONE (recareas are usually
+  already STRONG via other signals, so the practical impact is small even
+  though the claim itself is wrong). Fix: add `RecAreaDirections` to
+  `RecAreaSchema`/`normalizeRecArea` in `data/ingestion/sources/ridb.ts`,
+  same pattern as the existing `FacilityDirections` fix, and extend the
+  backfill script to cover recarea rows.
+- **atlas_oddities-in-NONE-bucket count disagrees between two docs from the
+  same session, never reconciled.** `docs/measurements/2026-08-20-corpus-gap-scan.md`
+  states **1,157**; `docs/measurements/2026-08-20-none-bucket-characterization.md`
+  states **1,144**. Same conceptual measurement (atlas_oddities rows landing
+  in the NONE bucket), taken at two different points in the same session, no
+  cross-reference or explanation in either doc for the 13-row gap. Needs a
+  fresh recount against current TEST state and a correction note in whichever
+  doc is stale (per the decisions/ append-only convention — flag, don't
+  silently edit).
+- **LLM pilot report's "clusters on WEAK-bucket rows" claim is contradicted
+  by its own cited example.** `docs/measurements/2026-08-20-llm-description-generation-pilot.md`
+  claims severe fabrication cases cluster on WEAK-bucket rows, but lists the
+  Bainbridge Island memorial example as explicitly STRONG bucket in the same
+  document. Needs a corrected characterization of what the severe cases
+  actually have in common (thin sourcing generally, not the WEAK bucket
+  specifically) — see the doc's §5 examples for the raw material.
+
+## Surfaced 2026-08-20 (deactivation pass follow-ups)
+
+- **picnic_area real-named remainder — not enrichment-eligible via the
+  placeholder mechanism, not otherwise investigated.** After deactivating the
+  3,427 NONE-bucket rows with the exact placeholder `canonical_name`
+  `"Unnamed picnic area"`, **1,187** picnic_area rows carry a real (non-
+  placeholder) name and remain untouched `[queried TEST 2026-08-20]` — this
+  corrects an earlier informal estimate of "~653" that was never actually
+  computed. Whether any of these 1,187 are themselves thin/low-value
+  (real-named but otherwise sparse) has not been characterized — a smaller,
+  separate question from the placeholder-name cleanup this session did.
+- **campground / dispersed_camping — a mixed-bucket naming pattern observed
+  but not investigated.** Surfaced in passing during this session's
+  placeholder-pattern work (the ev_charging investigation, and BLM's 22
+  `"Unnamed picnic area"`-named `campground` rows found during the
+  picnic_area scope check): these two categories appear to mix real
+  site-specific names, blank/placeholder stubs, and source-generated
+  junk-code-shaped names (e.g. numbered or ID-like strings) in a way that
+  hasn't been characterized the way picnic_area/ev_charging now have been.
+  No count taken — this is a flag for a future investigation pass to define
+  and measure the pattern properly, not a pre-judged finding.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
