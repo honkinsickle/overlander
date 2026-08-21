@@ -88,6 +88,56 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Re-measured 2026-08-20 `[queried TEST, read-only]` — SUPERSEDES every
+> box below for totals.** Investigation-and-fix session: BLM/RIDB eligibility
+> signal fixes + backfill, an OSM NONE-bucket investigation (no corpus
+> writes), and two placeholder-name deactivation passes (picnic_area,
+> ev_charging) using the same mechanism as Phase 0's peak/spring
+> deactivation. No PROD touched. Full session narrative:
+> `docs/STATE.md` §2026-08-20. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `master_place` | **160,703** |
+> | `source_record` total (all / active) | **170,428 / 82,564** |
+> | `place_match` total / pending | 170,454 / **5,065** |
+> | `master_place_search_export` (view) | **36,250** |
+> | `master_place` with `source_count = 0` | **86,299** |
+>
+> **`source_record` by `source_id` (active / all):** osm **22,977 / 109,492**
+> · padus **36,358 / 37,701** · usfs **6,324 / 6,330** · ridb **6,013 /
+> 6,013** · nps **5,283 / 5,283** · blm **876 / 876** · atlas_oddities
+> **2,870 / 2,870** · google_resolved 122 / 122 · google 5 / 5.
+>
+> **Two placeholder-name deactivation passes this session** (TEST only, same
+> mechanism as the 2026-08-18 peak/spring deactivation below —
+> `source_record.is_active = false` → `recompute_master_place()` → dangling
+> `place_match` cleanup, scoped to exact-literal `canonical_name` match AND
+> NONE-bucket only):
+>
+> | category | total rows | `source_count = 0` after | deactivated this session |
+> |---|--:|--:|--:|
+> | picnic_area | 4,668 | 3,427 | **3,427** |
+> | ev_charging | 3,634 | 748 | **748** |
+>
+> Full detail (placeholder-pattern investigation, before/after verification,
+> generation-exclusion spot-checks):
+> `docs/measurements/2026-08-20-unnamed-picnic-area-deactivation.md`,
+> `docs/measurements/2026-08-20-unnamed-ev-charging-deactivation.md`.
+>
+> **BLM/RIDB eligibility fixes** (code uncommitted as of this doc pass — see
+> `docs/STATE.md` §2026-08-20) flipped **273 rows out of the NONE bucket
+> corpus-wide** (265 BLM `contact.website` + 8 RIDB `has_real_directions`) —
+> this is a bucketing-signal change, not a row-count change, so it doesn't
+> move any of the totals above.
+>
+> osm's active/all gap (22,977 / 109,492) is wider than any prior box in this
+> doc — the cumulative effect of this session's two deactivation passes on
+> top of prior sessions' category curation (peak/spring, fire_pit,
+> toilet/water/dump_station narrowing, viewpoint filtering). Not a single
+> clean number to attribute to one operation; see `docs/STATE.md`'s dated
+> sections for the incremental history.
+
 > **⚠️ Re-measured 2026-08-17 (later) `[queried TEST, read-only]` — SUPERSEDES
 > every box below for totals.** Six-state NPS ingest (all 91 park codes) +
 > live materialize of the seven NPS categories; park_feature-linking guard (#234)

@@ -2721,5 +2721,64 @@ conclusion.
   need a dedicated source (e.g. state licensing databases, HealthCare.gov
   provider data) rather than Google as primary.
 
+## Surfaced 2026-08-20 (session self-audit — three unresolved corrections)
+
+Found by running the `sg` (second-guess) skill against this session's own
+earlier work. All three were presented to the user; **no response yet as of
+this docs pass — none applied.**
+
+- **RIDB `RecAreaSchema` DOES have a directions-equivalent field — the
+  BLM/RIDB eligibility fix report's claim that it doesn't is wrong.**
+  `docs/measurements/2026-08-20-blm-ridb-eligibility-fixes.md` states
+  `RecAreaSchema` has no directions-equivalent field, "matching what the
+  characterization pass actually found." Live-verified false:
+  `raw_payload.recarea.RecAreaDirections` exists and is populated on
+  1,104/1,220 (90.5%) of RIDB recarea rows `[queried TEST 2026-08-20]`.
+  Measured impact if the fix were extended to recarea rows: **1** additional
+  recarea-linked master_place would flip out of NONE (recareas are usually
+  already STRONG via other signals, so the practical impact is small even
+  though the claim itself is wrong). Fix: add `RecAreaDirections` to
+  `RecAreaSchema`/`normalizeRecArea` in `data/ingestion/sources/ridb.ts`,
+  same pattern as the existing `FacilityDirections` fix, and extend the
+  backfill script to cover recarea rows.
+- **atlas_oddities-in-NONE-bucket count disagrees between two docs from the
+  same session, never reconciled.** `docs/measurements/2026-08-20-corpus-gap-scan.md`
+  states **1,157**; `docs/measurements/2026-08-20-none-bucket-characterization.md`
+  states **1,144**. Same conceptual measurement (atlas_oddities rows landing
+  in the NONE bucket), taken at two different points in the same session, no
+  cross-reference or explanation in either doc for the 13-row gap. Needs a
+  fresh recount against current TEST state and a correction note in whichever
+  doc is stale (per the decisions/ append-only convention — flag, don't
+  silently edit).
+- **LLM pilot report's "clusters on WEAK-bucket rows" claim is contradicted
+  by its own cited example.** `docs/measurements/2026-08-20-llm-description-generation-pilot.md`
+  claims severe fabrication cases cluster on WEAK-bucket rows, but lists the
+  Bainbridge Island memorial example as explicitly STRONG bucket in the same
+  document. Needs a corrected characterization of what the severe cases
+  actually have in common (thin sourcing generally, not the WEAK bucket
+  specifically) — see the doc's §5 examples for the raw material.
+
+## Surfaced 2026-08-20 (deactivation pass follow-ups)
+
+- **picnic_area real-named remainder — not enrichment-eligible via the
+  placeholder mechanism, not otherwise investigated.** After deactivating the
+  3,427 NONE-bucket rows with the exact placeholder `canonical_name`
+  `"Unnamed picnic area"`, **1,187** picnic_area rows carry a real (non-
+  placeholder) name and remain untouched `[queried TEST 2026-08-20]` — this
+  corrects an earlier informal estimate of "~653" that was never actually
+  computed. Whether any of these 1,187 are themselves thin/low-value
+  (real-named but otherwise sparse) has not been characterized — a smaller,
+  separate question from the placeholder-name cleanup this session did.
+- **campground / dispersed_camping — a mixed-bucket naming pattern observed
+  but not investigated.** Surfaced in passing during this session's
+  placeholder-pattern work (the ev_charging investigation, and BLM's 22
+  `"Unnamed picnic area"`-named `campground` rows found during the
+  picnic_area scope check): these two categories appear to mix real
+  site-specific names, blank/placeholder stubs, and source-generated
+  junk-code-shaped names (e.g. numbered or ID-like strings) in a way that
+  hasn't been characterized the way picnic_area/ev_charging now have been.
+  No count taken — this is a flag for a future investigation pass to define
+  and measure the pattern properly, not a pre-judged finding.
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
