@@ -2802,5 +2802,51 @@ this docs pass — none applied.**
   No count taken — this is a flag for a future investigation pass to define
   and measure the pattern properly, not a pre-judged finding.
 
+## Surfaced 2026-08-21 (template descriptions / eligibility / provenance session)
+
+- **235-row junk-code manual review — list delivered, not yet actioned.**
+  The placeholder-deactivation pass deliberately did NOT auto-deactivate
+  junk-code-named rows (e.g. `"42"`, `"D10.62L"`) after confirming false
+  positives among real brand names (`"7-Eleven"`, `"Good2Go"` — genuinely
+  alphanumeric/short). Review list already delivered:
+  `docs/measurements/2026-08-21-junkcode-review-list.csv`. Needs Adam's
+  manual pass before any deactivation.
+- **Boilerplate/near-empty descriptions likely exist inside the STRONG
+  bucket too — not yet investigated at that scope.** The dual
+  description/template investigation found **1,757** rows where
+  `master_place.description` is technically non-null but substantively
+  empty — **1,404 of the 1,757** fall into two junk patterns
+  (`"NAME (Category)"` name-repeat boilerplate, or empty HTML like
+  `<p>.</p>`). These correctly did NOT block template generation
+  (eligibility logic already treats them as insufficient), but the same
+  low-quality pattern likely exists among STRONG-bucket rows where a
+  technically-real description masks near-zero actual content —
+  `has_real_description` only gates the NONE/WEAK/STRONG boundary, it
+  says nothing about quality once a row is already STRONG via some other
+  signal. Worth a dedicated audit of STRONG-bucket description quality,
+  distinct from NONE-bucket completeness. Not yet investigated at that
+  scope.
+- **Map filter toggle UI + review worklist UI — backend fully built and
+  verified, frontend not started.** `description_source`
+  (`'source'`/`'template'`/`'llm'`) is live and queryable in the
+  `places_test` Typesense index (confirmed via a live facet query and a
+  live filter query), and the `needs_review` flag + worklist query on
+  `master_place_generated_content` is confirmed working end to end (the
+  Astoria Column flag/exclude round-trip). Both are pure reads against
+  schema that already exists — no further backend work needed. What's
+  missing is the actual frontend: a map/browse filter toggle on
+  `description_source`, and a worklist screen for whoever handles
+  review-flagged rows (worklist query already given in
+  `docs/measurements/2026-08-21-eligibility-provenance-review.md` §6).
+- **state_parks `WEB_LINK` → `contact.website` mapping gap — same shape
+  as the already-shipped BLM fix, found but not fixed.**
+  `normalized_payload.web_link` carries a real URL on **177 of 1,448**
+  in-scope state_parks source_records, not mapped into `contact.website`,
+  so `has_website` never sees them. Measured impact: **71** rows would
+  flip NONE→STRONG if fixed. Small, cheap — same normalizer-mapping
+  mechanism as the BLM WEB_LINK fix (see
+  `docs/measurements/2026-08-20-blm-ridb-eligibility-fixes.md` for the
+  pattern this would mirror).
+
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
