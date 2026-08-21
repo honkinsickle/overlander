@@ -66,6 +66,7 @@ const FacilitySchema = z
     FacilityLatitude: z.number().nullable().optional(),
     FacilityLongitude: z.number().nullable().optional(),
     FacilityDescription: z.string().nullable().optional(),
+    FacilityDirections: z.string().nullable().optional(),
     FacilityPhone: z.string().nullable().optional(),
     FacilityEmail: z.string().nullable().optional(),
     FacilityReservationURL: z.string().nullable().optional(),
@@ -292,6 +293,26 @@ function buildOverlanderTags(parentOrgIdRaw: number | string | null | undefined)
   return tags;
 }
 
+/**
+ * Best-effort plain-text from RIDB's HTML-wrapped FacilityDirections
+ * (`<p>From Union Creek Resort, OR, travel north...</p>`). Mirrors the
+ * `cleanText` pattern in bc-parks.ts — strips tags + common entities,
+ * collapses whitespace. Returns null for empty/non-string input; the
+ * eligibility signal (has_real_directions, data/scripts/lib/eligibility.ts)
+ * applies its own length threshold, so no length filtering happens here.
+ */
+function cleanText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&[a-z0-9#]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 0 ? text : null;
+}
+
 function snakeCase(s: string): string {
   return s
     .trim()
@@ -317,6 +338,14 @@ export function normalizeFacility(
     // recompute_master_place() will pick this up via field_precedence in week 3.
     canonical_name: cleanName,
     description: f.FacilityDescription ?? null,
+    // Found by the 2026-08-20 NONE-bucket characterization pass (docs/
+    // measurements/2026-08-20-none-bucket-characterization.md §5): real
+    // driving directions, structurally identical to usfs.ts's `directions`
+    // field, sitting unread in raw_payload. HTML-wrapped in the API
+    // response, hence cleanText. Length/junk filtering is the eligibility
+    // layer's job (has_real_directions in lib/eligibility.ts), not ours —
+    // matches how `description` above is passed through unfiltered too.
+    directions: cleanText(f.FacilityDirections),
     overlander_tags: buildOverlanderTags(f.ParentOrgID),
     contact: Object.keys(contact).length ? contact : null,
     access: Object.keys(access).length ? access : null,

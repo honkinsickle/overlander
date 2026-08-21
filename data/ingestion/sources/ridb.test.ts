@@ -115,6 +115,28 @@ describe("normalizeFacility", () => {
     const out = normalizeFacility(facility, "Aspen Campground", null);
     expect(out.photo).toBeNull();
   });
+
+  it("directions is null when FacilityDirections absent", () => {
+    const out = normalizeFacility(facility, "Aspen Campground");
+    expect(out.directions).toBeNull();
+  });
+
+  it("directions strips HTML wrapping from FacilityDirections (real RIDB shape)", () => {
+    const withDirections = {
+      ...facility,
+      FacilityDirections:
+        "<p>Riley Springs Trailhead is located approximately 15 miles northeast of Loa, Utah.</p>",
+    } as Parameters<typeof normalizeFacility>[0];
+    const out = normalizeFacility(withDirections, "Aspen Campground");
+    expect(out.directions).toBe(
+      "Riley Springs Trailhead is located approximately 15 miles northeast of Loa, Utah.",
+    );
+  });
+
+  it("directions is null for an empty-string FacilityDirections", () => {
+    const withDirections = { ...facility, FacilityDirections: "" } as Parameters<typeof normalizeFacility>[0];
+    expect(normalizeFacility(withDirections, "Aspen Campground").directions).toBeNull();
+  });
 });
 
 describe("normalizeRecArea", () => {

@@ -75,6 +75,18 @@ export type SRSignals = {
    *  >= DESCRIPTION_MIN_LENGTH. See that constant's comment for the real
    *  samples this threshold was derived from. */
   has_real_description: boolean;
+  /** normalized_payload.directions is a non-null string, trimmed length
+   *  >= DESCRIPTION_MIN_LENGTH (same threshold, reused — real driving
+   *  directions and a real description are both "real prose", junk at the
+   *  same short lengths). Populated by usfs.ts (`directions`) and, as of
+   *  2026-08-20, ridb.ts's `normalizeFacility` (`facility.FacilityDirections`
+   *  → `directions`) — found via the 2026-08-20 NONE-bucket characterization
+   *  pass (docs/measurements/2026-08-20-none-bucket-characterization.md §5).
+   *  Deliberately a distinct signal from has_real_description, not folded
+   *  into it: a place can have real turn-by-turn directions with no prose
+   *  about what the place actually is, or vice versa — they're different
+   *  content, not different phrasings of the same fact. */
+  has_real_directions: boolean;
 };
 
 /** Per-source_record signal computation. Pure — no DB access. */
@@ -100,6 +112,10 @@ export function computeSignals(normalized_payload: unknown, raw_payload: unknown
   const hasRealDescription =
     typeof description === "string" && description.trim().length >= DESCRIPTION_MIN_LENGTH;
 
+  const directions = np.directions;
+  const hasRealDirections =
+    typeof directions === "string" && directions.trim().length >= DESCRIPTION_MIN_LENGTH;
+
   return {
     has_website: !!(contact.website ?? np.website ?? (rawTags as any).website ?? (rawTags as any).url),
     has_phone: !!(contact.phone ?? np.phone ?? (rawTags as any).phone),
@@ -113,6 +129,7 @@ export function computeSignals(normalized_payload: unknown, raw_payload: unknown
     meaningful_tag_count: meaningful,
     raw_tag_count: rawTagKeys.length,
     has_real_description: hasRealDescription,
+    has_real_directions: hasRealDirections,
   };
 }
 
@@ -125,6 +142,7 @@ export type AggregatedSignals = {
   has_phone: boolean;
   has_meaningful: boolean;
   has_real_description: boolean;
+  has_real_directions: boolean;
 };
 
 export function emptyAggregatedSignals(): AggregatedSignals {
@@ -135,6 +153,7 @@ export function emptyAggregatedSignals(): AggregatedSignals {
     has_phone: false,
     has_meaningful: false,
     has_real_description: false,
+    has_real_directions: false,
   };
 }
 
@@ -145,6 +164,7 @@ export function foldSignalsInto(agg: AggregatedSignals, sr: SRSignals): void {
   agg.has_phone ||= sr.has_phone;
   agg.has_meaningful ||= (sr.meaningful_tag_count >= 1) || (sr.raw_tag_count >= 5);
   agg.has_real_description ||= sr.has_real_description;
+  agg.has_real_directions ||= sr.has_real_directions;
 }
 
 /**
@@ -160,7 +180,7 @@ export function foldSignalsInto(agg: AggregatedSignals, sr: SRSignals): void {
  * new one above or below it.
  */
 export function isStrong(s: AggregatedSignals): boolean {
-  return s.has_wikipedia || s.has_website || s.has_meaningful || s.has_real_description;
+  return s.has_wikipedia || s.has_website || s.has_meaningful || s.has_real_description || s.has_real_directions;
 }
 
 export function isWeak(s: AggregatedSignals): boolean {
