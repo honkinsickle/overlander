@@ -143,6 +143,18 @@ export type AggregatedSignals = {
   has_meaningful: boolean;
   has_real_description: boolean;
   has_real_directions: boolean;
+  /** master_place has a master_place_generated_content row
+   *  (field_name='description', generation_method='template') — the
+   *  2026-08-21 zero-fabrication template pass. This is master_place-level
+   *  data, not per-source_record, so unlike every other field here it is
+   *  NOT set via foldSignalsInto/computeSignals (which are pure functions
+   *  of one source_record's payloads and have no DB access). Callers set
+   *  it directly after a separate query against
+   *  master_place_generated_content. Decision: 2026-08-21 combined pass —
+   *  a place with a generated template description counts as
+   *  eligible/resolved for description purposes, same tier as
+   *  has_real_description (see isStrong's comment). */
+  has_template_description: boolean;
 };
 
 export function emptyAggregatedSignals(): AggregatedSignals {
@@ -154,6 +166,7 @@ export function emptyAggregatedSignals(): AggregatedSignals {
     has_meaningful: false,
     has_real_description: false,
     has_real_directions: false,
+    has_template_description: false,
   };
 }
 
@@ -180,7 +193,7 @@ export function foldSignalsInto(agg: AggregatedSignals, sr: SRSignals): void {
  * new one above or below it.
  */
 export function isStrong(s: AggregatedSignals): boolean {
-  return s.has_wikipedia || s.has_website || s.has_meaningful || s.has_real_description || s.has_real_directions;
+  return s.has_wikipedia || s.has_website || s.has_meaningful || s.has_real_description || s.has_real_directions || s.has_template_description;
 }
 
 export function isWeak(s: AggregatedSignals): boolean {

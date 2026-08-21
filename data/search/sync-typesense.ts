@@ -81,6 +81,7 @@ const SCHEMA: CollectionCreateSchema = {
     { name: "has_dump_station", type: "bool", facet: true, optional: true },
     { name: "is_federal", type: "bool", facet: true, optional: true },
     { name: "photo_url", type: "string", optional: true },
+    { name: "description_source", type: "string", facet: true, optional: true },
   ] satisfies CollectionFieldSchema[],
   default_sorting_field: "prominence_score",
 };
@@ -103,6 +104,7 @@ interface MasterPlaceExportRow {
   source_count: number;
   amenities: Record<string, unknown> | null;
   photo_url: string | null;
+  description_source: "source" | "template" | "llm" | null;
 }
 
 interface PlaceDocument {
@@ -121,6 +123,7 @@ interface PlaceDocument {
   has_dump_station?: boolean;
   is_federal?: boolean;
   photo_url?: string;
+  description_source?: "source" | "template" | "llm";
 }
 
 export interface SyncResult {
@@ -178,6 +181,7 @@ function transformRow(row: MasterPlaceExportRow): PlaceDocument {
   const isFederal = deriveIsFederal(row.overlander_tags);
   if (isFederal !== undefined) doc.is_federal = isFederal;
   if (row.photo_url) doc.photo_url = row.photo_url;
+  if (row.description_source) doc.description_source = row.description_source;
 
   return doc;
 }
@@ -208,10 +212,47 @@ function getTypesenseClient(): Typesense.Client {
   });
 }
 
+/**
+ * Adds any SCHEMA field not yet present on the live collection, via
+ * Typesense's PATCH-collection "add field" operation
+ * (collections(name).update({ fields: [...] })). Needed because
+ * ensureCollection's create-if-missing path only runs once — a field
+ * added to SCHEMA after the collection already exists (e.g.
+ * description_source, added 2026-08-21) is otherwise silently written
+ * onto each document's JSON by the importer without ever being declared
+ * in the collection's schema, so it's stored but NOT facetable/filterable
+ * (a facet/filter query against it 404s: "Could not find a facet field").
+ * Found by direct post-sync verification against Typesense, not assumed.
+ * Also caught (and would have "fixed" incorrectly on the first attempt): a
+ * SECOND, pre-existing instance of this same gap on `photo_url` (added to
+ * SCHEMA in 20260810180400 web-side, apparently never reconciled onto the
+ * live collection either) — real, left in scope to fix alongside
+ * description_source since the mechanism is identical.
+ */
+async function reconcileSchemaFields(client: Typesense.Client): Promise<string[]> {
+  const live = await client.collections(COLLECTION_NAME).retrieve();
+  const liveFieldNames = new Set(live.fields?.map((f) => f.name) ?? []);
+  // `id` is Typesense's implicit reserved primary-key field — it is never
+  // listed in retrieve()'s fields array and the API rejects any attempt to
+  // alter it ("Field `id` cannot be altered"), so it must never be treated
+  // as "missing" even though it's absent from `liveFieldNames`. Confirmed
+  // directly: the first version of this function, without this exclusion,
+  // sent `id` to collections().update() and Typesense returned HTTP 400.
+  const missing = (SCHEMA.fields as CollectionFieldSchema[]).filter((f) => f.name !== "id" && !liveFieldNames.has(f.name));
+  if (missing.length === 0) return [];
+  logger.info({ collection: COLLECTION_NAME, fields: missing.map((f) => f.name) }, "typesense: adding missing schema field(s) to existing collection");
+  await client.collections(COLLECTION_NAME).update({ fields: missing });
+  return missing.map((f) => f.name);
+}
+
 async function ensureCollection(client: Typesense.Client): Promise<boolean> {
   try {
     await client.collections(COLLECTION_NAME).retrieve();
     logger.info({ collection: COLLECTION_NAME }, "typesense: collection exists");
+    const added = await reconcileSchemaFields(client);
+    if (added.length > 0) {
+      logger.info({ collection: COLLECTION_NAME, added }, "typesense: schema field(s) added — existing documents need a re-import to populate the new field(s) in the index");
+    }
     return false;
   } catch (err: unknown) {
     if (err instanceof Typesense.Errors.ObjectNotFound) {

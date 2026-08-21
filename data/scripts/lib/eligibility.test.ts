@@ -121,6 +121,34 @@ describe("computeSignals: has_real_directions", () => {
   });
 });
 
+// ───── has_template_description — added 2026-08-21 (combined eligibility
+// + provenance + review pass). Unlike every other signal above, this is
+// master_place-level (a master_place_generated_content row), not derived
+// from a source_record's payloads, so it's set directly on the aggregate
+// rather than via computeSignals/foldSignalsInto. ─────────────────────
+
+describe("isStrong / isWeak / bucketOf: has_template_description qualifies STRONG alone", () => {
+  it("a row with ONLY a template description (no other signal) is STRONG", () => {
+    const agg = emptyAggregatedSignals();
+    agg.has_template_description = true;
+    expect(isStrong(agg)).toBe(true);
+    expect(isWeak(agg)).toBe(false);
+    expect(bucketOf(agg)).toBe("STRONG");
+  });
+
+  it("no signals at all, has_template_description false, is still NONE", () => {
+    const agg = emptyAggregatedSignals();
+    expect(agg.has_template_description).toBe(false);
+    expect(bucketOf(agg)).toBe("NONE");
+  });
+
+  it("a WEAK row (phone/hours only) is unaffected when has_template_description is false", () => {
+    const agg = emptyAggregatedSignals();
+    foldSignalsInto(agg, computeSignals({ contact: { phone: "555" } }, {}));
+    expect(bucketOf(agg)).toBe("WEAK");
+  });
+});
+
 // ───── Existing OSM-shape signals — confirm unchanged by the refactor ───
 
 describe("computeSignals: existing OSM-shape signals (unchanged)", () => {

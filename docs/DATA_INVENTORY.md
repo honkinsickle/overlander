@@ -88,7 +88,68 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
-> **⚠️ Re-measured 2026-08-20 `[queried TEST, read-only]` — SUPERSEDES every
+> **⚠️ Re-measured 2026-08-21 `[queried TEST, read-only]` — SUPERSEDES every
+> box below for totals.** Six-state state-boundary rebuild (real TIGER/Line
+> point-in-polygon, replacing the old bbox classifier corpus-wide), the
+> NONE-bucket template-description pipeline (10,292 rows, two backfill/fix
+> rounds), the eligibility change folding template descriptions into
+> STRONG, the `description_source` provenance field, the `needs_review`
+> flag mechanism, and the Typesense sync fix. No PROD touched. Full
+> session narrative: `docs/STATE.md` §2026-08-21. Current TEST:
+>
+> | metric | value |
+> |---|--:|
+> | `master_place` | **160,703** |
+> | `source_record` total (all / active) | **170,428 / 78,983** |
+> | `place_match` total / pending | 170,454 / **5,065** |
+> | `master_place_search_export` (view) | **32,734** |
+> | `master_place` with `source_count = 0` | **89,815** |
+>
+> **`source_record` by `source_id` (active / all):** osm **19,411 /
+> 109,492** · padus **36,358 / 37,701** · usfs **6,324 / 6,330** · ridb
+> **6,005 / 6,013** · nps **5,283 / 5,283** · atlas_oddities **2,870 /
+> 2,870** · state_parks **1,736 / 1,736** · blm **869 / 876** ·
+> google_resolved 122 / 122 · google 5 / 5. osm's active/all gap widened
+> further from the prior 2026-08-20 box (22,977 → 19,411 active) — this
+> session's corpus-wide placeholder-name deactivation pass (3,516 rows,
+> all categories, NONE-bucket + exact-literal placeholder name) landed on
+> top of the two 2026-08-20 category-scoped passes.
+>
+> **`master_place.state` — real TIGER/Line point-in-polygon, corpus-wide**
+> (new column this session, backfilled once, NOT a live-recomputed field —
+> see `docs/decisions/2026-08-21-template-eligibility-provenance-review-decisions.md`
+> §1): **null 128,210** (out-of-scope / land_status / unresolvable-geometry
+> rows — this is corpus-wide, not the in-scope 32,734) · **CA 13,380** ·
+> **OR 5,317** · **WA 4,828** · **UT 3,953** · **AZ 3,863** · **NV 1,152**.
+> Sums exactly to `master_place` total (128,210 + 32,493 = 160,703).
+>
+> **STRONG/WEAK/NONE, in-scope population, current `eligibility.ts`
+> (including the new `has_template_description` signal):** **STRONG
+> 32,399 · WEAK 100 · NONE 235**, total 32,734. Before the eligibility
+> change (`has_template_description` forced off, computed in the same
+> pass): STRONG 22,107 · WEAK 100 · NONE 10,527 — WEAK is unchanged either
+> way, confirming no WEAK-bucket row carries template content.
+>
+> **`description_source` distribution on the view (fresh):** **source
+> 15,582 · template 8,535 · null 8,617** (sums exactly to 32,734). No
+> `llm` rows exist yet. Cross-check: `10,292 − 8,535 = 1,757` matches the
+> independently-measured "dual" row count (real `master_place.description`
+> non-null AND a template row present, `description_source` resolves to
+> `'source'`) exactly.
+>
+> **`master_place_generated_content`:** **10,292** rows total, all
+> `generation_method='template'` (0 `llm`). **`needs_review=true`: 1** —
+> the Astoria Column, flagged this session as the first real exercise of
+> the mechanism.
+>
+> Full detail: `docs/measurements/2026-08-21-state-boundary-fix-all-six-states.md`,
+> `docs/measurements/2026-08-21-eligibility-provenance-review.md`,
+> `docs/measurements/2026-08-21-typesense-description-source.md`, and the
+> three-part / stale-template cleanup docs from the same date.
+
+> **⚠️ Re-measured 2026-08-20 `[queried TEST, read-only]` —
+> SUPERSEDED by the box above for totals; kept for the incremental
+> history.** Every
 > box below for totals.** Investigation-and-fix session: BLM/RIDB eligibility
 > signal fixes + backfill, an OSM NONE-bucket investigation (no corpus
 > writes), and two placeholder-name deactivation passes (picnic_area,
