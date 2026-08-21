@@ -62,13 +62,35 @@ means six `--bbox` runs (or a corridor polygon) for either.
   is superseded by the completed characterization run — outstanding
   land-status product question now lives in the "PAD-US `land_status`
   corpus weight" entry below.
-- **BLM investigation — deferred.** No standalone BLM ingester exists.
-  `padus.ts`'s own header states PAD-US + BLM SMA are **one combined
-  source** (PAD-US primary, SMA a later tie-breaker) — so BLM land-status
-  data is already partially represented through PAD-US, which changes the
-  shape of "should we build a BLM ingester" from "greenfield" to "is the
-  PAD-US path sufficient." Scoped in a prior handoff; needs a fresh
-  session to actually decide.
+- ~~**BLM investigation — deferred.** No standalone BLM ingester exists.~~
+  **SUPERSEDED / DONE — `blm-rec.ts` landed on `main` as PR #232**
+  (`a501744`). `source_id="blm"`, 876-row six-state primitive-campsite
+  ingest scoped. Spec: `docs/specs/blm-primitive-campsite-ingest.md`.
+  The PAD-US + BLM SMA "combined source" framing above is orthogonal —
+  #232 is a *recreation-points* ingester (`BLM_Natl_Recs_pts` layer 23),
+  not a land-status source.
+
+## State parks source — LIVE ON PROD, 156 pending triage (updated 2026-08-20)
+
+Spec: `docs/specs/state-parks-source-architecture.md` (v4).
+Branch: `state-park-systems-enumeration` (not yet on `main`).
+
+~~**BUILD COMPLETE.**~~ **LIVE ON PROD.** 1,736 source_records ingested,
+1,584 confirmed, 156 pending manual_review, 0 rejected. Category-compatibility
+fix (`recreation_area ↔ public_land/land_status`) applied — ADR
+`2026-08-20-recreation-area-land-status-compatibility.md`.
+
+**PROD manual_review triage (156 records):** NOT yet triaged. TEST triage
+decisions (two rounds: 100 + 177 records) were made against TEST-specific
+candidates. PROD pending breakdown: name_dominant_low_conf 59, close_nameless
+53, blended_residual 44.
+
+**Code not yet on `main`:** Branch `state-park-systems-enumeration` needs PR +
+merge. Migrations are already applied to both TEST and PROD.
+
+**Still blocked (separate investigation):** description field_precedence —
+visitor-website investigation underway. Source_id `state_parks_web` not
+finalized.
 
 ## PAD-US polygon-source ER — investigated across all six states, no over-merge (2026-08-14, resolved history)
 

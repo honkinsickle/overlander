@@ -37,6 +37,10 @@ program
     "--site-types <list>",
     "USFS only: restrict INFRA layer to comma-separated site-type tokens (trailhead|campground|group_campground|camping_area|picnic_site|group_picnic_site). Default = all six.",
   )
+  .option(
+    "--state <code>",
+    "State parks only: two-letter state code (CA|AZ|NV|UT|WA|OR) or ALL. Required for state_parks source.",
+  )
   .option("--dry-run", "validate + log without writing", false)
   .parse(process.argv);
 
@@ -47,6 +51,7 @@ const opts = program.opts<{
   families?: string;
   parkCodes?: string;
   siteTypes?: string;
+  state?: string;
   dryRun?: boolean;
 }>();
 
@@ -97,9 +102,13 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/blm-rec.ts");
       return mod.default;
     }
+    case "state_parks": {
+      const mod = await import("./sources/state-parks.ts");
+      return mod.default;
+    }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks`,
       );
   }
 }
@@ -117,6 +126,7 @@ const ingestOpts: IngestOptions = {
   ...(opts.siteTypes
     ? { siteTypes: opts.siteTypes.split(",").map((s) => s.trim()).filter(Boolean) }
     : {}),
+  ...(opts.state ? { state: opts.state } : {}),
 };
 
 loadSource(opts.source)

@@ -21,5 +21,6 @@ export const limits: Record<string, LimitFunction> = {
   padus: pLimit(4), // USGS PAD-US ArcGIS Online FeatureServer; no documented limit, be polite.
   usfs: pLimit(4), // USFS EDW ArcGIS REST (apps.fs.usda.gov); no documented limit, be polite.
   blm: pLimit(4), // BLM gis.blm.gov ArcGIS REST (BLM_Natl_Recs_pts); no documented limit, be polite.
+  state_parks: pLimit(4), // Per-state ArcGIS endpoints (6 states); no documented limit, be polite.
   ioverlander: pLimit(1), // No public API. Be polite.
 };

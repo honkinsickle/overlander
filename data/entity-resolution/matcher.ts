@@ -183,6 +183,8 @@ export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
     campground: 0.7,
     facility: 0.8,
     park_feature: 0.5,
+    public_land: 0.7,
+    land_status: 0.5,
   },
   gas_station: { gas_station: 1.0, fuel: 1.0 },
   fuel: { fuel: 1.0, gas_station: 1.0 },
