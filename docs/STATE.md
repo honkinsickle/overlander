@@ -1,4 +1,4 @@
-# STATE — branch `fix/amenities-render-shape` · 2026-08-18 (⚠ newest section is the **amenities + category-curation session**: toilet/water/dump_station reactivated on TEST with templated descriptions, then **narrowed so only described rows stay live** (1,008 description-less rows pulled back out). 25 commits, **2 unpushed at time of writing**, no PR opened. **Both viewpoint reactivations have since RUN** — the NPS slice and the OSM described/filter-C subset. Open now: **88 unlinked viewpoint source_records** (83 nps + 5 osm) that are active but reach no surface without materialization. ⚠ Typesense is **stale** against the DB: sync still blocked by cluster OOM. The section below it is the last `main` state, 2026-08-17. TEST-only throughout; no PROD writes.)
+# STATE — `main` · 2026-08-20 (⚠ state_parks LIVE ON PROD — 1,736 SRs, 1,584 confirmed, 156 pending. Amenities/curation session from 2026-08-18 also merged. Typesense still stale.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
 review gate; update in the SAME commit as the work. No SHAs — deliberately.
@@ -73,6 +73,139 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-20 — state_parks LIVE ON PROD (1,736 SRs, 1,584 confirmed, 156 pending triage)
+
+**BUILD + PROD session.** Ingester code, migration, tests, TEST ingest/triage,
+and PROD ingest/materialize all complete. Branch `state-park-systems-enumeration`
+carries code (not yet on `main`); migrations applied to both TEST and PROD.
+
+**What was built:**
+- `data/ingestion/sources/state-parks.ts` — six-state ingester with padus-style
+  boundary dissolve (CA/UT/OR/WA) and campsite aggregation (AZ 1,346 sites → 14
+  park-level groups, WA 6,124 sites → 73 park-level groups)
+- `data/ingestion/sources/state-parks.test.ts` — 30 unit tests (was 18, expanded
+  to cover AZ name resolution, NV category mapping, park_id linkage, WA active-
+  only centroid)
+- `supabase/migrations/20260820120000_state_parks_field_precedence.sql` — 8 seed
+  rows applied to TEST
+- Registration in `manual.ts` (`--state` flag), `rate-limit.ts`, `_types.ts`
+
+**TEST corpus position `[queried TEST 2026-08-20]`:**
+
+| State | Parks | Campgrounds | Facilities | Skipped | Total written |
+|---|---|---|---|---|---|
+| CA | 394 | 509 | — | 11 | 914 |
+| AZ | 34 | 14 | — | 0 | 48 |
+| NV | 27 | 22 | 56 | 284 | 105 |
+| UT | 47 | — | — | 0 | 47 |
+| WA | 207 | 73 | — | 0 | 280 |
+| OR | 342 | — | — | 0 | 342 |
+| **Total** | **1,051** | **618** | **56** | **295** | **1,736** |
+
+**TEST materialize results `[queried TEST 2026-08-20]`:**
+- **881** new_master_place (deterministic — no match found)
+- **58** auto_linked (name_dominant — merged into existing MP)
+- **797** manual_review (663 blended_residual + 64 close_nameless + 70
+  name_dominant_low_conf)
+- **0** errors
+
+**Manual-review queue (797 records) — dominant pattern `[queried TEST]`:**
+blended_residual (663/797 = 83%) is overwhelmingly state_parks park-boundary
+records matching PAD-US land-status polygons (608/663 = 92% of blended_residual
+candidates are PAD-US). The match is typically: same name, distance ≤50m (96%
+within 50m), name_sim ≥0.9, but **cat_compat=0.0** (recreation_area vs
+land_status) — which is why they don't auto-link. These are real same-place
+matches that the category mismatch correctly blocks from auto-confirm.
+
+**Fixes applied during build (from self-audit):**
+1. AZ campground names resolved via nearest-point matching against
+   State_Park_Points (no shared join key exists between the two AZ layers;
+   all 14 matches verified unambiguous with minimum 1.17km margin)
+2. NV facility category mapping fixed (was: all → park_feature; now:
+   Campground → campground, Trailhead → trailhead, rest → park_feature)
+3. park_id linkage added to AZ and WA aggregated campground rows
+4. WA/NV parks routed through dissolve path (polygon geometry, not points)
+5. NV facilities stableKey changed from guid (whitespace on all 362
+   state-park records) to objectid (accepted risk, same class as NV parks
+   name-key)
+
+**Category-compatibility fix applied (ADR `2026-08-20-recreation-area-land-status-compatibility.md`):**
+Added `recreation_area ↔ public_land = 0.7` and `recreation_area ↔ land_status
+= 0.5` to `CATEGORY_COMPATIBILITY` in matcher.ts. On TEST, this auto-confirmed
+484 of the 608 PAD-US same-place matches. Applied to PROD via the materialize
+run.
+
+**PROD corpus position `[queried PROD 2026-08-20]`:**
+
+| metric | value |
+|---|--:|
+| `source_record` (state_parks, active) | **1,736** |
+| — by state | CA 914 · AZ 48 · NV 105 · UT 47 · WA 280 · OR 342 |
+| `place_match` confirmed | **1,584** |
+| `place_match` pending (manual_review) | **156** (name_dominant_low_conf 59 · close_nameless 53 · blended_residual 44) |
+| `place_match` rejected | **0** |
+
+**PROD manual_review (156 records) NOT triaged.** TEST triage decisions were
+made against TEST-specific candidate records and should not be assumed to
+transfer. PROD triage is a separate step.
+
+**Migrations applied to PROD this session:**
+- `20260817120000_resolve_place_match.sql` (from merged PR #230)
+- `20260818140000–20260819190000` (5 ledger-alignment stubs, no-ops)
+- `20260820120000_state_parks_field_precedence.sql` (8 seed rows)
+
+## 2026-08-18 — state parks source enumeration complete; architecture spec READY FOR BUILD
+
+~~**Investigation-only session.** No code written, no migration, no TEST/PROD
+writes. Branch `state-park-systems-enumeration` carries one uncommitted file:
+`docs/specs/state-parks-source-architecture.md` (v4, READY FOR BUILD).
+
+**What this session produced:**
+
+1. **Six-state data source enumeration** (CA, AZ, NV, UT, WA, OR): every
+   state's parks agency publishes public, unauthenticated ArcGIS endpoints.
+   All endpoint URLs verified live `[2026-08-18]`. Depth varies:
+   - **AZ**: 1,346 individual campsites with per-site amenity fields (hookups,
+     ADA, surface — but data from **2016**)
+   - **WA**: 6,124 campsite location points (name/park/active only, no
+     amenities) + 913 activity points
+   - **CA**: 531 campground/camp-area points (per-campground, not per-site).
+     CSP publishes 8 layers monthly.
+   - **NV**: 362 state-park-specific facility points (filterable via
+     `jurisdicti='NV State Parks'`)
+   - **OR**: 422 boundary polygons (342 distinct parks by `FULL_NAME`),
+     boundaries-only
+   - **UT**: 77 boundary polygons (47 distinct parks by `parkabbid`),
+     boundaries-only
+
+2. **Architecture spec** (`docs/specs/state-parks-source-architecture.md`, v4):
+   - Single `source_id = "state_parks"`, depth-varying `normalized_payload`
+   - Per-endpoint stable keys verified (GlobalID where available; `name` for NV
+     — accepted risk, 27-record scope; `ParkName` for WA boundaries — ParkCode
+     has 3 collisions)
+   - Dissolve keys verified per state: CA `UNITNBR` (461→394, CSP official=280),
+     UT `parkabbid` (77→47), OR `FULL_NAME` (422→342)
+   - `source_quality_score = 0.7` (0.5 for stale AZ campsites), calibrated
+     against existing scale
+   - 8 `field_precedence` seed rows designed (identity at priority 4, sparse
+     operational appended last; description excluded — sourced from visitor
+     websites, not GIS)
+   - AZ campsite `data_vintage: "2016"` field for staleness marking
+   - Expected ~9,414 total `source_record` rows
+   - **All open questions resolved.** Only the `description` placeholder (§10a)
+     is blocked, pending a separate visitor-website investigation.
+
+3. **Decisions recorded** (Adam, 2026-08-18):
+   - Scope: six states confirmed (same as OSM corridor scope)
+   - Depth: campground/site-level where available; boundaries-only for OR/UT
+   - Fee/seasonal-closure: omitted entirely — no state publishes via GIS
+   - NV key: `name` accepted despite no GlobalID (27-record blast radius)
+   - CA SUBTYPE: ingest all ~394 UNITNBR groups, filter downstream
+   - Description: from visitor websites, not GIS — separate investigation underway
+   - OSM: fallback-only (3–122 operator-tagged features per state, sparse)
+
+**No database, corpus, or schema changes this session. No PROD/TEST writes.**
 
 ## 2026-08-18 — amenities + category-curation session; toilet/water/dump_station reactivated with templated descriptions, then narrowed to the described subset (branch `fix/amenities-render-shape`, **PUSHED, no PR**)
 

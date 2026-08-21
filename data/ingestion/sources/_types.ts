@@ -30,6 +30,9 @@ export interface IngestOptions {
    *  vocabulary. Undefined = all six mapped types (v1 default). Unknown
    *  tokens throw at parse time. */
   siteTypes?: string[];
+  /** State parks-specific: two-letter state code (CA, AZ, NV, UT, WA, OR)
+   *  or "ALL" to ingest all six states. Required for state_parks source. */
+  state?: string;
 }
 
 export interface IngestResult {
