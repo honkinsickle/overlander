@@ -12,6 +12,106 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-21 (later) — master_place enrichment columns (ADR step 1), branch `master-place-enrichment-columns`
+
+- **Added four nullable columns to `master_place` — `rating`, `review_count`,
+  `price_tier`, `photo_url` — not five.** The ADR names five fields but
+  `description` has existed since the Phase 1 migration and is owned by
+  `recompute_master_place()`; re-adding or writing it directly would have
+  violated the schema invariant and been erased on the next recompute. Applied
+  to TEST only. `price_tier` is `smallint` 1–4 to match the existing web
+  convention (`priceTier?: 1 | 2 | 3 | 4`), not a text enum — nothing in the
+  codebase uses a textual price representation.
+- **Investigated all six ingested sources by full-scan census of every
+  source_record payload rather than by reading the normalizers**, and that
+  choice paid: two photo fields are sitting in `raw_payload` completely
+  unmapped by their ingesters — BLM `props.PHOTO_LINK` (102 rows) and state
+  parks `props.Imagelink` (138 rows, **all Washington** — see the correction
+  bullet below). Same shape as the BLM `WEB_LINK` miss from 2026-08-20. The
+  backfill reads them from raw_payload so the 221 photos aren't dropped;
+  fixing the normalizers is a flagged follow-up.
+- **rating / reviewCount / priceTier are measured zero across the entire
+  corpus, not "we couldn't find a good one."** Four near-misses were examined
+  and rejected by name rather than waved off: OSM `stars` (8 rows, hotel
+  classification), OSM/USFS fee booleans, NPS `fees[].cost` (dollar amounts),
+  RIDB fee *descriptions*. Inferring a 1–4 tier from any of them would be
+  fabrication. One instructive false positive: RIDB `IsPreview` matched a
+  review-count regex on the substring `review` — the census reports candidates
+  for judgement instead of auto-mapping, which is why that didn't ship.
+- **The columns were still added despite three of them being empty
+  corpus-wide** — that is the ADR's actual point (the renderer stops branching
+  on provenance). But flagged hard in the migration header: the only source
+  carrying all three is Google Place Details, whose `rating`/`userRatingCount`
+  are explicitly non-cacheable, so these columns are **not** a destination for
+  Google data.
+- **7,360 master_place rows backfilled with `photo_url`** (nps 4,690 · ridb
+  2,449 · blm 88 · state_parks 133). Cross-checked against the export view's
+  existing photo lateral rather than trusted: 6,430 identical, and the 23 that
+  differ were *explained* not assumed — 23/23 link more than one
+  photo-carrying nps/ridb source_record, and the view's lateral has no
+  tie-breaker within a source, so its pick is arbitrary while the column's is
+  a total order.
+- **A same-day self-audit caught four claims in the above that were wrong or
+  under-scoped. Corrected in the report and STATE.md; recording them here
+  because the mistakes are more instructive than the fixes.**
+  - **"0 view-only, the column is a strict superset as designed" — the
+    measurement was right, the reason was invented.** The export view's photo
+    lateral does **not** filter `is_active`; the RPC does. Nothing structural
+    makes the column a superset. It held only because TEST currently has 0
+    inactive nps and 0 inactive ridb rows carrying a photo — the first
+    deactivation of a photo-carrying NPS/RIDB record breaks it. Classic
+    green-for-the-wrong-reason: the check couldn't distinguish "superset by
+    construction" from "superset by today's data".
+  - **"The 907 column-only rows are excluded by the view's filters" was an
+    asserted attribution, and 214 of them contradict it.** Measured split:
+    693 absent from the view (filters), 214 *present in it with a NULL
+    photo_url* because their photo is blm/state_parks and the lateral reads
+    only nps/ridb. That 214 is the actual argument for repointing the view.
+  - **The state_parks findings are Washington-only and were reported as
+    "state parks".** `props.Imagelink` 138/138 WA, `props.Description` 97/97
+    WA, across all 1,736 rows of a six-state source. No BLM state breakdown
+    was determined, so none is claimed.
+  - **The rating/reviewCount/priceTier absence rested on a regex census,
+    which is a discovery instrument, not an absence proof — and it leaked.**
+    `price` is not a substring of `pricing`, so OSM's `pricing`/
+    `pricing:display`/`pricing:check_method`/`pricing:check_required` tags
+    were never reported (1 row; checkout metadata, not a tier). Re-established
+    by enumerating the full key space per source — nps 156 leaf names, ridb
+    84, state_parks 119, blm 36, usfs 112, atlas_oddities 19, osm 950. **The
+    conclusion survived**; two more near-misses surfaced and were rejected
+    (NPS `relevanceScore` = API search relevance; USFS `development_scale` /
+    `usage_level` = site classifications).
+- **Found a broader gap while measuring description: `blm` and
+  `atlas_oddities` have NO `field_precedence` rows for ANY field.** Because
+  `resolve_field()` INNER JOINs that table, both sources contribute zero
+  resolved fields to `master_place` — 138 BLM-linked and 95 state_parks-linked
+  master_places carry a real source description while
+  `master_place.description` is NULL. Not fixed: seeding precedence is a
+  product decision, and the state-parks spec §10a excluded description on
+  purpose. Reported, not reversed.
+- **The LLM description pilot has already gone to bulk on TEST — STATE.md is
+  stale on this.** `master_place_generated_content` now holds 7,433
+  `generation_method='llm'` rows (`claude-sonnet-4-5`, prompt
+  `2026-08-20b-antifab`, generated today 19:23–19:37 UTC, almost certainly a
+  parallel workspace) against STATE.md's "0 llm". Untouched by this branch.
+  **Verdict on the overlap question: the description column should NOT draw
+  from that output** — the generated-content table's own migration header
+  records that a `master_place` column was considered and rejected for exactly
+  this, and `description_source` derives `'source'` from
+  `master_place.description IS NOT NULL`, so LLM text there would be
+  mislabeled on both the export view and Typesense. Also corrected the
+  framing: the pilot targets the STRONG/WEAK bucket with no real description
+  (7,154), **not** the NONE bucket — the NONE bucket was the template pass.
+- **`photo_url` is a snapshot, not resolver-owned** — same staleness class as
+  `master_place.state`, and deliberately so: wiring it into
+  `recompute_master_place()` needs `field_precedence` seeding (Adam's call)
+  and a dedicated step, since `resolve_field()` reads
+  `normalized_payload->><field>` while the photo lives at
+  `normalized_payload.photo.url`. The backfill is idempotent and
+  self-clearing, so re-running it after a materialize is the interim
+  mitigation. Full report:
+  `docs/measurements/2026-08-21-master-place-enrichment-columns.md`.
+
 ## 2026-08-21 — state-boundary rebuild, NONE-bucket templates, eligibility + provenance + review
 
 - **A manual spot-check (Astoria Column, WA/OR border, labeled Oregon
