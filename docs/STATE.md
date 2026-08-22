@@ -1,3 +1,5 @@
+# STATE — branch `master-place-enrichment-columns` · 2026-08-21 (**newest truth: the `master_place` enrichment-columns branch — ADR step 1. Committed locally on `master-place-enrichment-columns`, sitting at `origin/main`'s tip `c370115`, NOT pushed, no PR.** ⚠ **The branch was NOT created by this work** — Conductor had already created it from `c370115` and renamed the workspace's original `andorra` branch onto that name; the reflog shows `branch: Created from c3701154…` then `Branch: renamed refs/heads/andorra to …`. This work **verified** HEAD was at `origin/main`'s tip before committing; it did not perform the fork. Two migrations applied to **TEST only**; **no PROD *database* reads or writes** — one `supabase projects list` call did read PROD project metadata via the Supabase **management API**, disclosed for accuracy; it touches no table. See `## 2026-08-21 (later)` immediately below. ⚠ **One STATE.md claim below is now measured-false:** §2026-08-21's "10,292 generated_content rows, all `generation_method='template'`, 0 `llm`" — TEST now holds **7,433 `llm` rows** as well, generated later the same day by a different workspace. Corrected in the section below and in `docs/LOG.md`; the original line is left in place per this file's convention. Older masthead text preserved below, now historical — it describes `main` at `c370115`, which is still this branch's fork point.)
+
 # STATE — branch `main` · 2026-08-21 (⚠ **PR #243 is now MERGED** — squash-merged to `main` as `5a822ab` `[git log, 2026-08-21]`, corrected below; the "open, not yet merged" framing further down this file is now STALE. **Newest truth: a template-description / eligibility / provenance / review session, done directly on local `main`** — see `## 2026-08-21` right below. ~~**This session's work (code + migrations + scripts) is UNCOMMITTED as of this docs pass, sitting directly on local `main`, not yet on a branch, not pushed.**~~ **CORRECTED 2026-08-21 — NOW MERGED:** the corpus-quality work squash-merged to `main` as **`d6c55ac` (#244)**, and the place-data resolver ADR added afterward squash-merged as **`4fbd051` (#245)**; current `origin/main` tip is **`4fbd051`**. The "uncommitted / not yet on a branch / not pushed" framing here and throughout §2026-08-21 is now STALE. ~~Per CLAUDE.md's own standing rule (`main` is protected, every change goes branch → PR → Adam merges), that code needs to move to a branch before it can reach `origin`.~~ This docs pass commits only `docs/` — see the section below for the exact uncommitted-file inventory. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged, unpushed-since branch, status unchanged from before. Older masthead text preserved below, now historical.)
 
 Position, not changelog. `git log` is the changelog. Overwrite in place at every
@@ -73,6 +75,182 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-21 (later) — master_place enrichment columns (place-data resolver ADR, step 1)
+
+Newest truth. Branch `master-place-enrichment-columns` — pre-existing
+(Conductor created it from `c370115` and renamed `andorra` onto it; **this
+work did not create or fork it**, it verified HEAD sat at `origin/main`'s tip
+first), **committed locally, not pushed, no PR**. Implements step 1 of
+`docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
+**TEST (`znldzjdatkogdktymtvi`) only — no PROD *database* reads or writes**
+(one `supabase projects list` management-API call read PROD project metadata;
+no table was touched). Every figure here was computed this session against
+TEST; full methodology — including the four corrections a self-audit pass
+applied to it — in
+`docs/measurements/2026-08-21-master-place-enrichment-columns.md`.
+
+### What shipped
+
+Two migrations, both applied to TEST via `db:push-verify -- --test`:
+
+- `20260821060000_master_place_enrichment_columns.sql` — **four** nullable
+  columns on `master_place`: `rating numeric(2,1)`, `review_count integer`,
+  `price_tier smallint` (1–4, matching the web `priceTier?: 1|2|3|4`
+  convention — not a text enum), `photo_url text`, each with a null-permissive
+  range check and a column comment.
+- `20260821070000_backfill_master_place_photo_url.sql` —
+  `backfill_master_place_photo_url(uuid[])`, set-based, same posture as
+  `backfill_state_for_ids()`.
+
+Plus four scripts (`data/scripts/`): the full-scan payload census, the scope
+measurement, the backfill (`npm run -w data backfill:mp-enrichment`, with
+`--dry-run` / `--report`), and the column-vs-export-view cross-check.
+
+**The ADR names FIVE fields; four columns were added.** `description` already
+exists on `master_place` (Phase 1 migration) and is owned by
+`recompute_master_place()` — deliberately not re-added, not altered, not
+written.
+
+### Per-source finding — measured, not assumed
+
+Full scan of **every** `source_record` row for all ten `source_id` values
+(170,428 rows), walking `raw_payload` **and** `normalized_payload`:
+
+| source | rating | reviewCount | priceTier | description | photoUrl |
+|---|---|---|---|---|---|
+| OSM | ✗ | ✗ | ✗ | ✓ 2,749 | ✗ |
+| NPS | ✗ | ✗ | ✗ | ✓ 5,281 | ✓ 4,876 |
+| RIDB | ✗ | ✗ | ✗ | ✓ 5,795 | ✓ 2,667 |
+| state parks | ✗ | ✗ | ✗ | ✓ 97 — **WA only** | ⚠ 138 **unmapped** — **WA only** |
+| Atlas Obscura | ✗ | ✗ | ✗ | ✗ 0 | ✗ |
+| BLM | ✗ | ✗ | ✗ | ✓ 169 | ⚠ 102 **unmapped** |
+| USFS | ✗ | ✗ | ✗ | ✓ 6,323 | ✗ |
+
+**⚠ Two photo fields sit in `raw_payload` that their ingesters never map** —
+BLM `props.PHOTO_LINK` and state_parks `props.Imagelink`. Same class as the
+BLM `WEB_LINK` miss of 2026-08-20. The backfill reads them from `raw_payload`
+so the 221 photos aren't dropped; the normalizer fix is a follow-up.
+
+⚠ **SCOPE — the state_parks findings are WASHINGTON ONLY (corrected
+2026-08-21).** `state_parks` covers six states (CA/AZ/NV/UT/WA/OR, 1,736
+rows), but both fields credited to it are on its WA layer alone, measured
+across all 1,736 active rows: `props.Imagelink` **138/138 WA**,
+`props.Description` **97/97 WA**. An earlier version of this table reported
+them as "state parks" with no state scope, which reads as six-state coverage.
+It is not. **No BLM state breakdown was determined** — this section makes no
+claim in either direction about how BLM's 102 photo / 169 description rows
+distribute.
+
+**rating / review_count / price_tier are 0 corpus-wide.** No ingested source
+carries any of them. Four near-misses examined and rejected by name (OSM
+`stars` 8 rows = hotel classification; OSM/USFS fee booleans; NPS
+`fees[].cost` = dollar amounts; RIDB fee *descriptions*). The columns were
+still added — that is the ADR's point.
+
+**⚠ Do not populate those three from Google.** `rating`/`userRatingCount` are
+explicitly non-cacheable under Google's Places policy
+(`docs/measurements/2026-08-20-google-places-details-compliance-check.md`).
+Recorded in the migration header.
+
+### photo_url backfill — 7,360 rows
+
+nps 4,690 · ridb 2,449 · blm 88 · state_parks 133 (**all 133 Washington** —
+see the scope note above). Verified: re-run reports **0 changed**
+(idempotent); 0 empty strings; rating/review_count/price_tier still 0/0/0
+(script-asserted). Against the export view's existing photo lateral: 6,430
+identical, 907 column-only, and the **23 that differ were explained, not
+assumed** — 23/23 link more than one photo-carrying nps/ridb source_record,
+where the view's lateral has no intra-source tie-breaker and the column does.
+
+⚠ **"0 view-only" is MEASURED, NOT GUARANTEED — corrected 2026-08-21.** An
+earlier version of this section called the column "a strict superset, as
+designed." It is not. The export view's photo lateral
+(`20260821040000:63-67`) does **not** filter `is_active`; the RPC does. So the
+view can serve a photo from a deactivated source_record that the column
+excludes. The reason 0 view-only held is simply that TEST currently has **0
+inactive nps** and **0 inactive ridb** rows carrying a photo url `[queried
+TEST 2026-08-21]`. **The first deactivation of a photo-carrying NPS/RIDB
+source_record breaks it** — and deactivation passes are routine here. Whoever
+repoints the view at the column must decide the `is_active` question first.
+
+⚠ **The 907 column-only rows split 693 / 214 — corrected 2026-08-21.** An
+earlier version said they were all excluded by the view's filters. Measured:
+**693** are absent from the view (its `is_searchable` / `source_count > 0` /
+`six_state_footprint()` filters), and **214** are *present in the view with a
+NULL `photo_url`* — their photo comes from blm/state_parks, which the view's
+nps/ridb-only lateral does not read. Repointing the view at the column would
+fill those 214 in, not just deduplicate logic.
+
+### description — the gap is `field_precedence`, not a missing column
+
+`master_place.description` non-null: **16,490** of 160,703.
+`resolve_field()` INNER JOINs `field_precedence`, so a source with no
+`description` precedence row can never contribute one. **`blm` and
+`atlas_oddities` have NO `field_precedence` rows for ANY field** — they
+contribute zero resolved fields to `master_place`. Measured consequence:
+**138** BLM-linked and **95** state_parks-linked master_places carry a real
+source description while `master_place.description` is NULL (138/138 and
+95/95). **Not fixed** — seeding precedence is a product decision, and the
+state-parks spec §10a excluded `description` deliberately.
+
+### LLM description pilot — overlap reported, nothing run
+
+⚠ **Corrects §2026-08-21 below.** That section says "10,292 generated_content
+rows, all `generation_method='template'`, 0 `llm`". `[queried TEST
+2026-08-21]` the table now holds **17,725** rows: 10,292 `template` **and
+7,433 `llm`** (`claude-sonnet-4-5`, prompt `2026-08-20b-antifab`, generated
+19:23–19:37 UTC the same day — almost certainly a parallel Conductor
+workspace). Model/prompt uniformity is from a **1,000-row sample**, not the
+population. **Untouched by this branch.**
+
+**Verdict: the `description` column backfill should NOT draw from that output,
+and doesn't need to.** `master_place_generated_content`'s own migration header
+records that a `master_place` column was **considered and rejected** for
+generated content; and `description_source` derives `'source'` from
+`master_place.description IS NOT NULL`, so LLM text there would be mislabeled
+on both the export view and Typesense. The read path (real description →
+generated fallback, with `description_source` live in Postgres and Typesense)
+already exists. Separate follow-up, largely already-built infrastructure.
+
+**Framing correction:** the pilot targets **STRONG/WEAK-bucket rows with no
+real description** (8,782 → **7,154** after excluding `atlas_oddities`), *not*
+the NONE bucket — the NONE bucket was the template pass.
+
+### OPEN — not decided, do not treat as settled
+
+1. **`photo_url` is a SNAPSHOT, not `recompute_master_place()`-owned** — it
+   will go stale on the next deactivation/materialize. Same class as
+   `master_place.state`. Wiring it in needs `field_precedence` seeding (Adam's
+   call) *and* a dedicated resolver step, because `resolve_field()` reads
+   `normalized_payload->><field>` while the photo lives at
+   `normalized_payload.photo.url`. Interim mitigation: the backfill is
+   idempotent and self-clearing — re-run it after a materialize.
+2. **BLM `PHOTO_LINK` / state_parks `Imagelink` unmapped in their
+   normalizers** — fixing that (plus re-normalization, like
+   `backfill-blm-website.ts`) would also feed the export view's lateral, so
+   search would gain those 221 photos.
+3. **`master_place_search_export.photo_url` still comes from the lateral**, so
+   it and the column differ on 221 blm/state_parks rows plus the 23
+   arbitrary-pick rows. Repointing the view is ADR step 2, not step 1.
+   **Decide the `is_active` divergence as part of it** — the lateral does not
+   filter it, the column does (see the ⚠ note above).
+4. **`blm` and `atlas_oddities` have no `field_precedence` rows at all.**
+5. **state_parks / blm `description` precedence rows** — a product decision.
+6. **No PROD apply, no push, no PR.** Both migrations are TEST-only. **If
+   `20260821060000` is ever adapted for PROD: its three CHECK constraints take
+   an ACCESS EXCLUSIVE lock and full-scan to validate. Cheap at TEST's current
+   size; PROD's `master_place` row count has NOT been measured and no claim is
+   made about it. Use `NOT VALID` + a later `VALIDATE CONSTRAINT` there.**
+8. **The `rating` (0–5) and `price_tier` (1–4) CHECK ranges are Google's
+   scales.** Foursquare — a live source per the ADR — rates 0–10. Nothing in
+   the codebase produces a Foursquare rating today, so no live conflict; it is
+   a deferred decision for whoever first populates these from Foursquare.
+7. Adjacent, unchanged: **`master_place.state` is still a snapshot** not wired
+   into `recompute_master_place` (item 2 of the section below). The ADR
+   suggested checking whether it relates to the new columns — it does, but
+   only in kind: `photo_url` now shares the same staleness class. No causal
+   link found.
 
 ## 2026-08-21 — state-boundary rebuild (real TIGER/Line, all six states), NONE-bucket template pipeline, eligibility + provenance + review mechanism, Typesense sync fix
 

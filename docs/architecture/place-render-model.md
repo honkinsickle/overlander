@@ -17,6 +17,22 @@ states how it was verified — `[read source]`, `[grep]`, `[queried TEST]`,
 
 Paths are relative to `web/` unless noted.
 
+> ⚠ **PARTIALLY SUPERSEDED — implementation has begun.**
+> [`docs/decisions/2026-08-21-place-data-resolver-consolidation.md`](../decisions/2026-08-21-place-data-resolver-consolidation.md)
+> supersedes this doc's description of the enrichment hydration path, the
+> per-component client cache model, and the placement of `rating` /
+> `reviewCount` / `priceTier` / `photoUrl` on the tile-or-enrichment response.
+> **Step 1 of that ADR has landed on TEST** (branch
+> `master-place-enrichment-columns`, migrations `20260821060000` /
+> `20260821070000`): `master_place` now carries `rating`, `review_count`,
+> `price_tier` and `photo_url` as nullable columns, with `photo_url`
+> backfilled on 7,360 rows and the other three NULL corpus-wide because no
+> ingested source carries them. What this doc says about *where those four
+> fields live* is therefore out of date; everything else still holds. Steps
+> 2–4 (the `resolvePlaces()` consolidation, canonical-id migration, shared
+> cache) are not started. See
+> [`docs/measurements/2026-08-21-master-place-enrichment-columns.md`](../measurements/2026-08-21-master-place-enrichment-columns.md).
+
 ---
 
 ## 0. Instruments and DB provenance
