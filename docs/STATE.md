@@ -1,4 +1,6 @@
-# STATE — branch `master-place-enrichment-columns` · 2026-08-21 (**newest truth: the `master_place` enrichment-columns branch — ADR step 1. Committed locally on `master-place-enrichment-columns`, sitting at `origin/main`'s tip `c370115`, NOT pushed, no PR.** ⚠ **The branch was NOT created by this work** — Conductor had already created it from `c370115` and renamed the workspace's original `andorra` branch onto that name; the reflog shows `branch: Created from c3701154…` then `Branch: renamed refs/heads/andorra to …`. This work **verified** HEAD was at `origin/main`'s tip before committing; it did not perform the fork. Two migrations applied to **TEST only**; **no PROD *database* reads or writes** — one `supabase projects list` call did read PROD project metadata via the Supabase **management API**, disclosed for accuracy; it touches no table. See `## 2026-08-21 (later)` immediately below. ⚠ **One STATE.md claim below is now measured-false:** §2026-08-21's "10,292 generated_content rows, all `generation_method='template'`, 0 `llm`" — TEST now holds **7,433 `llm` rows** as well, generated later the same day by a different workspace. Corrected in the section below and in `docs/LOG.md`; the original line is left in place per this file's convention. Older masthead text preserved below, now historical — it describes `main` at `c370115`, which is still this branch's fork point.)
+# STATE — branch `main` · 2026-08-22 (⚠ **PR #247 is now MERGED** — squash-merged to `main` as **`4f2a6af`**, now the `origin/main` tip `[git log, 2026-08-22]`. The "committed locally / NOT pushed / no PR" framing in the masthead below and throughout §2026-08-21 (later) is **STALE**; corrected in place per this file's convention. **The migrations remain applied to TEST ONLY — merging the PR did not apply anything to PROD**, and every OPEN item in that section except the push/PR one still stands. Note the squash means the branch's own SHA `7110a6e` is NOT an ancestor of `main` — the trees are identical, which is the usual pattern here, not a discrepancy. This docs pass commits only `docs/`.)
+
+# ~~STATE — branch `master-place-enrichment-columns` · 2026-08-21~~ (**superseded by the masthead above — MERGED as `4f2a6af` (#247).** Historical text preserved: **newest truth: the `master_place` enrichment-columns branch — ADR step 1.** ~~Committed locally on `master-place-enrichment-columns`, sitting at `origin/main`'s tip `c370115`, NOT pushed, no PR.~~ ⚠ **The branch was NOT created by this work** — Conductor had already created it from `c370115` and renamed the workspace's original `andorra` branch onto that name; the reflog shows `branch: Created from c3701154…` then `Branch: renamed refs/heads/andorra to …`. This work **verified** HEAD was at `origin/main`'s tip before committing; it did not perform the fork. Two migrations applied to **TEST only**; **no PROD *database* reads or writes** — one `supabase projects list` call did read PROD project metadata via the Supabase **management API**, disclosed for accuracy; it touches no table. See `## 2026-08-21 (later)` immediately below. ⚠ **One STATE.md claim below is now measured-false:** §2026-08-21's "10,292 generated_content rows, all `generation_method='template'`, 0 `llm`" — TEST now holds **7,433 `llm` rows** as well, generated later the same day by a different workspace. Corrected in the section below and in `docs/LOG.md`; the original line is left in place per this file's convention. Older masthead text preserved below, now historical — it describes `main` at `c370115`, which is still this branch's fork point.)
 
 # STATE — branch `main` · 2026-08-21 (⚠ **PR #243 is now MERGED** — squash-merged to `main` as `5a822ab` `[git log, 2026-08-21]`, corrected below; the "open, not yet merged" framing further down this file is now STALE. **Newest truth: a template-description / eligibility / provenance / review session, done directly on local `main`** — see `## 2026-08-21` right below. ~~**This session's work (code + migrations + scripts) is UNCOMMITTED as of this docs pass, sitting directly on local `main`, not yet on a branch, not pushed.**~~ **CORRECTED 2026-08-21 — NOW MERGED:** the corpus-quality work squash-merged to `main` as **`d6c55ac` (#244)**, and the place-data resolver ADR added afterward squash-merged as **`4fbd051` (#245)**; current `origin/main` tip is **`4fbd051`**. The "uncommitted / not yet on a branch / not pushed" framing here and throughout §2026-08-21 is now STALE. ~~Per CLAUDE.md's own standing rule (`main` is protected, every change goes branch → PR → Adam merges), that code needs to move to a branch before it can reach `origin`.~~ This docs pass commits only `docs/` — see the section below for the exact uncommitted-file inventory. `fix/amenities-render-shape` (2026-08-18 section further below) remains a SEPARATE, still-unmerged, unpushed-since branch, status unchanged from before. Older masthead text preserved below, now historical.)
 
@@ -76,12 +78,21 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-21 (later) — master_place enrichment columns (place-data resolver ADR, step 1)
+## 2026-08-21 (later) — master_place enrichment columns (place-data resolver ADR, step 1) — **MERGED as `4f2a6af` (#247)**
+
+> **⚠ CORRECTED 2026-08-22 — MERGED.** Everything this section describes
+> squash-merged to `main` as **`4f2a6af` (#247)**, now the `origin/main` tip.
+> The "committed locally, not pushed, no PR" framing below is STALE and struck
+> through where it appears. **What did NOT change on merge: both migrations
+> are still applied to TEST only** — `20260821060000` and `20260821070000` are
+> in TEST's ledger and PROD has neither — **and every OPEN item below except
+> the push/PR one is still open.** Merging a PR is not a PROD apply.
 
 Newest truth. Branch `master-place-enrichment-columns` — pre-existing
 (Conductor created it from `c370115` and renamed `andorra` onto it; **this
 work did not create or fork it**, it verified HEAD sat at `origin/main`'s tip
-first), **committed locally, not pushed, no PR**. Implements step 1 of
+first), ~~**committed locally, not pushed, no PR**~~ **MERGED as `4f2a6af`
+(#247)**. Implements step 1 of
 `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
 **TEST (`znldzjdatkogdktymtvi`) only — no PROD *database* reads or writes**
 (one `supabase projects list` management-API call read PROD project metadata;
@@ -237,7 +248,9 @@ the NONE bucket — the NONE bucket was the template pass.
    filter it, the column does (see the ⚠ note above).
 4. **`blm` and `atlas_oddities` have no `field_precedence` rows at all.**
 5. **state_parks / blm `description` precedence rows** — a product decision.
-6. **No PROD apply, no push, no PR.** Both migrations are TEST-only. **If
+6. **No PROD apply.** ~~no push, no PR~~ **— RESOLVED 2026-08-22: pushed and
+   merged as `4f2a6af` (#247). The PROD half is NOT resolved and is not
+   affected by the merge.** Both migrations are still TEST-only. **If
    `20260821060000` is ever adapted for PROD: its three CHECK constraints take
    an ACCESS EXCLUSIVE lock and full-scan to validate. Cheap at TEST's current
    size; PROD's `master_place` row count has NOT been measured and no claim is
