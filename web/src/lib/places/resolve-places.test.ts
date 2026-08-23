@@ -17,6 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   resolvePlaces,
+  enrichByGoogleId,
   classifyVerificationTier,
   sortByVerificationTier,
   isSuggestable,
@@ -519,6 +520,86 @@ test("a null from placeDetails leaves the place un-enriched rather than blanking
   });
   assert.equal(r.places[0].title, "Kept");
   assert.equal(r.places[0].rating, undefined);
+});
+
+// ── enrichByGoogleId (the standalone map-returning capability) ─────────
+
+test("enrichByGoogleId: a resolved id is present with its fields", async () => {
+  const map = await enrichByGoogleId([GID], {
+    placeDetails: async () => ({ rating: 4.5, reviewCount: 12 }),
+  });
+  assert.deepEqual(Object.keys(map), [GID]);
+  assert.equal(map[GID].rating, 4.5);
+  assert.equal(map[GID].reviewCount, 12);
+});
+
+test("enrichByGoogleId: resolved-empty {} is INCLUDED (present key, empty object)", async () => {
+  const map = await enrichByGoogleId([GID], {
+    placeDetails: async () => ({}), // Google resolved the place, nothing to add
+  });
+  assert.ok(GID in map, "the {} entry must be present");
+  assert.deepEqual(map[GID], {});
+});
+
+test("enrichByGoogleId: a null/failed lookup is OMITTED (no key at all)", async () => {
+  const map = await enrichByGoogleId([GID], {
+    placeDetails: async () => null, // missing key / network / non-OK
+  });
+  assert.ok(!(GID in map), "a failed id must not appear in the map");
+  assert.deepEqual(Object.keys(map), []);
+});
+
+test("enrichByGoogleId: the {}-vs-omit distinction across a mixed set", async () => {
+  const resolved = "ChIJ_resolved";
+  const empty = "ChIJ_empty";
+  const failed = "ChIJ_failed";
+  const map = await enrichByGoogleId([resolved, empty, failed], {
+    placeDetails: async (id) =>
+      id === resolved ? { rating: 4 } : id === empty ? {} : null,
+  });
+  // Present: resolved (with fields) and empty ({}). Absent: failed.
+  assert.deepEqual(new Set(Object.keys(map)), new Set([resolved, empty]));
+  assert.equal(map[resolved].rating, 4);
+  assert.deepEqual(map[empty], {});
+  assert.ok(!(failed in map));
+});
+
+test("enrichByGoogleId: partial results across MULTIPLE batches are all merged", async () => {
+  const ids = ["a", "b", "c", "d", "e"];
+  const map = await enrichByGoogleId(ids, {
+    batchSize: 2, // forces 3 sequential batches (2,2,1)
+    // odd-indexed ids fail (null), even-indexed resolve
+    placeDetails: async (id) =>
+      ids.indexOf(id) % 2 === 0 ? { rating: ids.indexOf(id) } : null,
+  });
+  assert.deepEqual(new Set(Object.keys(map)), new Set(["a", "c", "e"]));
+  assert.equal(map.a.rating, 0);
+  assert.equal(map.c.rating, 2);
+  assert.equal(map.e.rating, 4);
+});
+
+test("enrichByGoogleId: dedupes ids — placeDetails runs once per UNIQUE id", async () => {
+  const calls: string[] = [];
+  const map = await enrichByGoogleId([GID, GID, "ChIJ_other", GID], {
+    placeDetails: async (id) => {
+      calls.push(id);
+      return { rating: 3 };
+    },
+  });
+  assert.deepEqual(calls.slice().sort(), [GID, "ChIJ_other"].sort());
+  assert.deepEqual(new Set(Object.keys(map)), new Set([GID, "ChIJ_other"]));
+});
+
+test("enrichByGoogleId: empty input makes no calls and returns an empty map", async () => {
+  let calls = 0;
+  const map = await enrichByGoogleId([], {
+    placeDetails: async () => {
+      calls += 1;
+      return {};
+    },
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(map, {});
 });
 
 // ── Verification tier ────────────────────────────────────────────────

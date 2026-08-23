@@ -1,9 +1,12 @@
 # Enrich-by-id capability for `resolvePlaces()` — plan (investigation only)
 
-**Status:** PLAN ONLY, 2026-08-23. No code changed. This scopes the resolver-side
-capability that the Date Detail cutover was found to require — the prerequisite that
-unblocks `docs/architecture/resolve-places-date-detail-cutover-plan.md` (PR #261, **pending
-review, not yet on `main`** at the time of writing).
+**Status:** ✅ **BUILT 2026-08-23** (branch `feat/enrich-by-id`) — `enrichByGoogleId()` is a
+sibling export in `resolve-places.ts` and `enrichPlaces()` now consumes it; additive,
+nothing wired into a route yet. The plan below is preserved; §6 records what actually
+shipped. This capability is the prerequisite that unblocks
+`docs/architecture/resolve-places-date-detail-cutover-plan.md` (PR #261, **still pending
+review / not on `main`** at build time — so its doc could not be updated from this branch;
+see §7).
 
 **Scope of this doc:** what `resolvePlaces()` needs so it can, given a bare Google
 `place_id` (or a set), return the enrichment fields (`rating / reviewCount / priceTier /
@@ -131,9 +134,23 @@ map — mirroring how `enrichPlaces`'s `idFor` yields `null` for a non-Google pl
 
 ---
 
-## 6. (Q4) The change — a new function + a refactor; estimate of what's touched
+## 6. (Q4) The change — a new function + a refactor
 
-**Recommended shape (implementation NOT done here):**
+> ✅ **BUILT as planned.** `enrichByGoogleId(ids, opts?)` is exported from
+> `web/src/lib/places/resolve-places.ts` (dedupe → batches of `ENRICH_BATCH` → injectable
+> `placeDetails` → `Record<string, PlaceRich>`, **including `{}`, omitting `null`**,
+> cache-less). `enrichPlaces()` now calls it internally — the duplicated loop is gone — and
+> is behaviour-preserving (the pre-existing enrichment tests pass unchanged as the
+> regression guard). Seven `enrichByGoogleId` tests added:
+> resolved-present, `{}` included, `null` omitted, the `{}`-vs-omit distinction across a
+> mixed set, partial results merged across multiple batches (via `batchSize`), dedupe
+> (one call per unique id), and empty input. Gates: `npm run -w web typecheck` and
+> `npx next build` both exit 0; resolver suite 43/43. **Open decisions resolved:** home =
+> `resolve-places.ts` (co-located); return = `Record` (matches the route's `details` 1:1);
+> batch constant = `ENRICH_BATCH`, overridable via `opts.batchSize` (the route's `BATCH_SIZE`
+> was left in place — unifying the two constants is deferred, both are 40).
+
+**Recommended shape (as built):**
 
 1. **New export in `web/src/lib/places/resolve-places.ts`:**
    `enrichByGoogleId(ids: string[], opts?: { signal?; placeDetails?; batchSize? }):
@@ -189,8 +206,10 @@ is a **thin route wrapper** — the shape the Date Detail plan §6 option 1 call
 - **Resolved-empty `{}` must survive** the delegation (§1) — `enrichByGoogleId` includes it,
   the route surfaces it, the client's `!hydrated[id]` guard stays correct.
 
-**What changes in the Date Detail cutover plan** (`resolve-places-date-detail-cutover-plan.md`,
-once this capability exists):
+**What changes in the Date Detail cutover plan** (`resolve-places-date-detail-cutover-plan.md`).
+⚠ **This edit is DEFERRED, not done here:** that doc lives in PR #261, which is **not yet
+merged to `main`**, so it does not exist on this capability's branch and cannot be updated
+from it. Apply the following to it when #261 merges (or fold these into #261 directly):
 - §2 blocker (shape mismatch / `ids`-scope-returns-empty) → **resolved**: the map-returning
   capability is the bridge.
 - §4's "the flag gates nothing / premature to wire" note → **lifts**: `DATE_DETAIL_USE_RESOLVER`
