@@ -12,7 +12,27 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-08-21 (later) — master_place enrichment columns (ADR step 1), branch `master-place-enrichment-columns`
+## 2026-08-22 — #247 merged; doc-currency pass
+
+- **PR #247 (the 2026-08-21 master_place enrichment-columns work) merged to
+  `main` as `4f2a6af`**, now the `origin/main` tip. The section below still
+  framed it as committed-locally-not-pushed; corrected in place, not
+  rewritten, per this file's convention.
+- **The squash means the branch SHA `7110a6e` is NOT an ancestor of `main`.**
+  Worth stating because `git merge-base --is-ancestor` answers "no" and that
+  reads as unmerged. It isn't — `git diff 7110a6e 4f2a6af` is empty, so the
+  trees are identical. Same squash-into-a-new-SHA pattern as #237 and #244;
+  check the tree, not the ancestry, when a branch here looks unmerged.
+- **Merging changed nothing about the database.** Both migrations
+  (`20260821060000`, `20260821070000`) are still applied to **TEST only** and
+  PROD has neither. Every follow-up that PR flagged as deliberately-not-done
+  is still open, and is now tracked in `BACKLOG.md` rather than only inside
+  the merged section's OPEN list: `photo_url` not wired into
+  `recompute_master_place()`, the BLM/state_parks photo fields unmapped in
+  their normalizers, and the export view still reading its own lateral rather
+  than the new column.
+
+## 2026-08-21 (later) — master_place enrichment columns (ADR step 1), branch `master-place-enrichment-columns` (**MERGED as `4f2a6af`, #247**)
 
 - **Added four nullable columns to `master_place` — `rating`, `review_count`,
   `price_tier`, `photo_url` — not five.** The ADR names five fields but

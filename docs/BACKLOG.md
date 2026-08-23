@@ -16,6 +16,65 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## master_place enrichment columns — SHIPPED TO TEST (#247, `4f2a6af`, 2026-08-22); four follow-ups open
+
+Step 1 of `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
+Full measured report: `docs/measurements/2026-08-21-master-place-enrichment-columns.md`.
+
+**Shipped — TEST ONLY. PROD has neither migration.** `master_place` now
+carries `rating numeric(2,1)`, `review_count integer`, `price_tier smallint`
+(1–4, matching the web `priceTier?: 1|2|3|4` convention) and `photo_url text`,
+all nullable. **`description` was NOT added — it already existed** since the
+Phase 1 migration and is owned by `recompute_master_place()` via
+`field_precedence`, so the ADR's five fields became four columns.
+
+`photo_url` backfilled on **7,360** rows (nps 4,690 · ridb 2,449 · blm 88 ·
+state_parks 133, the last all Washington). **`rating` / `review_count` /
+`price_tier` are 0 corpus-wide** — no ingested source carries any of them,
+established by enumerating the full key space per source, not a regex census.
+They ship empty on purpose: the point is that the card layer stops branching
+on provenance. ⚠ **They are not a destination for Google data** —
+`rating`/`userRatingCount` are explicitly non-cacheable.
+
+### Open follow-ups
+
+1. **`photo_url` is a SNAPSHOT, not `recompute_master_place()`-owned.** It
+   will go stale on the next deactivation/materialize. Same class as
+   `master_place.state`. Wiring it in needs a `field_precedence` row per
+   contributing source (**a product decision, Adam's call**) *and* a dedicated
+   resolver step — `resolve_field()` reads `normalized_payload->><field>`
+   while the photo lives at `normalized_payload.photo.url`, so it needs the
+   `geometry_polygon` treatment (Step 5), not a plain precedence entry.
+   **Interim mitigation: `npm run -w data backfill:mp-enrichment` is
+   idempotent and self-clearing — re-run it after any materialize.**
+2. **BLM `props.PHOTO_LINK` (102 rows) and state_parks `props.Imagelink` (138
+   rows) are unmapped in their normalizers.** Both sit in `raw_payload` and
+   never reach `normalized_payload` — same class as the BLM `WEB_LINK` miss of
+   2026-08-20. The backfill reads them straight from `raw_payload` so the 221
+   photos aren't dropped, but the durable fix is a normalizer change plus a
+   re-normalization backfill (exactly like `backfill-blm-website.ts`), which
+   would also feed the export view's lateral. **Ceiling note: the state_parks
+   half is Washington-only** — the other five states publish no such field, so
+   this widens coverage within WA, not across six states.
+3. **`master_place_search_export.photo_url` still comes from its own lateral,
+   not the new column.** They already differ on 221 blm/state_parks rows plus
+   23 rows where the lateral's pick is arbitrary. Repointing the view is ADR
+   step 2. ⚠ **Settle `is_active` first:** the lateral does **not** filter it
+   and the RPC does, so the two resolve over different row sets. "0 view-only"
+   was measured, not structural — it holds only while no *inactive* nps/ridb
+   record carries a photo url, and the first deactivation of one breaks it.
+4. **PROD apply, if it ever happens.** The three CHECK constraints take an
+   ACCESS EXCLUSIVE lock and full-scan to validate. Cheap at TEST's size;
+   **PROD's `master_place` row count has not been measured and no claim is
+   made.** Use `NOT VALID` + a later `VALIDATE CONSTRAINT` there.
+
+Adjacent, not caused by this work: **`blm` and `atlas_oddities` have NO
+`field_precedence` rows for ANY field**, so they contribute zero resolved
+fields to `master_place` — 138 BLM-linked and 95 state_parks-linked places
+carry a real source description while `master_place.description` is NULL.
+Seeding those rows is a product decision; the state-parks spec §10a excluded
+`description` deliberately.
+
 ## `fed_exact` is category-blind AND name-blind within 10m (2026-08-17)
 
 `matchOne` Step 1 (`findFederalAnchor`, `data/entity-resolution/matcher.ts`)
