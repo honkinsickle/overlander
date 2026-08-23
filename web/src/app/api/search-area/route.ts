@@ -1,16 +1,5 @@
 import { NextResponse } from "next/server";
-import { discover } from "@/lib/discovery/discovery";
-import {
-  googlePlacesSource,
-  googleTextSearchSource,
-} from "@/lib/discovery/google-places";
-import { recGovSource } from "@/lib/discovery/rec-gov";
-import { foursquareSource } from "@/lib/discovery/foursquare";
-import { usfsSource } from "@/lib/discovery/usfs";
-import { blmSource } from "@/lib/discovery/blm";
-import { search } from "@/lib/search";
-import { hydratePlacesByIds } from "@/lib/trip-browse/hydrate";
-import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
+import { resolveSearchArea } from "./handler";
 
 /**
  * GET /api/search-area?bbox=W,S,E,N&q=&categories=
@@ -30,65 +19,20 @@ import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
  *
  * `categories` is the corpus `primary_category` vocabulary (what Find-Nearby
  * tiles already carry), so the federated facet is a direct pass-through.
+ *
+ * This handler is a THIN WRAPPER: it parses/validates, owns the LRU cache and
+ * the debug gate, and shapes the response. The fanout/merge lives in
+ * `./handler`, behind `SEARCH_AREA_USE_RESOLVER` (see below).
  */
 
-/** Corpus `primary_category` → live slide bucket, for the categories that
- *  Google actually covers via TYPES_BY_CATEGORY. Primaries omitted here are
- *  overland-specific (dispersed_camping, trailhead, water, shower,
- *  dump_station, ev_charging, grocery, car_repair, …) — Google has no honest
- *  type for them, so they run federated-only rather than borrowing an
- *  unrelated live result. */
-const LIVE_SLIDE_FOR_PRIMARY: Record<string, SlideCategoryKey> = {
-  // FOOD — Google food types: restaurant / cafe / bar / bakery
-  cafe: "food",
-  restaurant: "food",
-  fast_food_restaurant: "food",
-  diner: "food",
-  american_restaurant: "food",
-  italian_restaurant: "food",
-  mexican_restaurant: "food",
-  chinese_restaurant: "food",
-  indian_restaurant: "food",
-  french_restaurant: "food",
-  brazilian_restaurant: "food",
-  taco_restaurant: "food",
-  pizza_restaurant: "food",
-  hamburger_restaurant: "food",
-  chicken_restaurant: "food",
-  breakfast_restaurant: "food",
-  family_restaurant: "food",
-  fine_dining_restaurant: "food",
-  steak_house: "food",
-  sandwich_shop: "food",
-  bar_and_grill: "food",
-  gastropub: "food",
-  brewpub: "food",
-  // FUEL — Google: gas_station
-  gas_station: "fuel",
-  truck_stop: "fuel",
-  // CAMPING — Google: campground / rv_park
-  campground: "camping",
-  rv_park: "camping",
-  camping_cabin: "camping",
-  // OVERNIGHT — Google: lodging / hotel
-  hotel: "overnight",
-  motel: "overnight",
-  resort_hotel: "overnight",
-  // SCENIC — Google: tourist_attraction / park / national_park
-  viewpoint: "scenic",
-  peak: "scenic",
-  mountain_peak: "scenic",
-  scenic_spot: "scenic",
-  // ODDITY — Google: museum / art_gallery / historical_landmark. Enables the
-  // broad "oddity" category chip (the Find-Nearby filter row) to pull live
-  // museums/galleries; the corpus carries no oddity rows, so federated is
-  // empty here by design.
-  museum: "oddity",
-  art_gallery: "oddity",
-  historical_landmark: "oddity",
-};
-
-const LIMIT = 24;
+/** Cut the search-area fanout over to the consolidated `resolvePlaces()`
+ *  service. Mirrors the `USE_FEDERATED_POIS` pattern: an env boolean, default
+ *  OFF. OFF = the exact pre-cutover live/federated body (zero behaviour change).
+ *  ON = `resolvePlaces()`. Flip to `true` in Vercel to roll out; a redeploy
+ *  starts a fresh process, so the in-process cache below never serves a
+ *  stale other-mode payload across a flip. See the cutover-plan doc. */
+const SEARCH_AREA_USE_RESOLVER =
+  process.env.SEARCH_AREA_USE_RESOLVER === "true";
 
 // ── in-process LRU cache (same pattern as the trip-browse route) ───────
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -167,110 +111,33 @@ export async function GET(req: Request) {
     return NextResponse.json(cached, { headers: { "x-cache": "HIT" } });
   }
 
-  // Sources that THREW (network/DNS unreachable) this request — corpus and/or
-  // named live sources. Distinguishes "a source is down" from "a source
-  // returned no matches", so the client can say which half is missing. Mutated
-  // synchronously inside each half's catch; both halves are single-threaded JS.
-  const failedSources = new Set<string>();
-  // Per-source error MESSAGE for the failed sources. Only surfaced in the
-  // response behind a debug gate (below) — a Supabase/DB error can name table
-  // or column internals, so it must never reach ordinary users.
-  const sourceErrors: Record<string, string> = {};
-  const noteError = (sourceId: string, error: unknown): void => {
-    failedSources.add(sourceId);
-    sourceErrors[sourceId] = error instanceof Error ? error.message : String(error);
-  };
-
-  // ── LIVE half ────────────────────────────────────────────────────────
-  const livePromise: Promise<BrowsePlace[]> = (async () => {
-    try {
-      if (q) {
-        // Free-text → Google searchText only (FSQ has no text path).
-        return await discover({
-          bboxes: [bbox],
-          categories: [],
-          sources: [googleTextSearchSource],
-          textQuery: q,
-          signal: req.signal,
-          onSourceError: noteError,
-        });
-      }
-      // Category tiles → searchNearby fanout, mapped to the buckets Google
-      // covers. Overland-only categories drop out here (federated-only).
-      const slideKeys = Array.from(
-        new Set(
-          (categories ?? [])
-            .map((c) => LIVE_SLIDE_FOR_PRIMARY[c])
-            .filter((k): k is SlideCategoryKey => Boolean(k)),
-        ),
-      );
-      if (slideKeys.length === 0) return [];
-      return await discover({
-        bboxes: [bbox],
-        categories: slideKeys,
-        sources: [
-          googlePlacesSource,
-          foursquareSource,
-          recGovSource,
-          usfsSource,
-          blmSource,
-        ],
-        signal: req.signal,
-        onSourceError: (id) => failedSources.add(id),
-      });
-    } catch (err) {
-      console.warn("[search-area] live discovery failed:", err);
-      return [];
-    }
-  })();
-
-  // ── FEDERATED half ───────────────────────────────────────────────────
-  const federatedPromise: Promise<BrowsePlace[]> = (async () => {
-    try {
-      const hits = await search({
-        query: q ?? "*",
-        categories: categories ?? undefined,
-        bbox,
-        limit: LIMIT,
-      });
-      if (hits.length === 0) return [];
-      return await hydratePlacesByIds(hits.map((h) => h.id));
-    } catch (err) {
-      console.error("[search-area] FEDERATED_DOWN", err);
-      noteError("corpus", err);
-      return [];
-    }
-  })();
-
-  const [live, federated] = await Promise.all([livePromise, federatedPromise]);
-
-  // Merge — distinct id namespaces (live `gpl/…`/`osm/…`, federated `mp:…`)
-  // so a cross-source dedupe isn't needed; guard against accidental dupes by
-  // keeping first occurrence.
-  const seen = new Set<string>();
-  const places: BrowsePlace[] = [];
-  for (const p of [...live, ...federated]) {
-    if (seen.has(p.id)) continue;
-    seen.add(p.id);
-    places.push(p);
-  }
-
-  const failed = [...failedSources];
   // Debug gate for the per-source error text: `?debug=1` or the server env
   // SEARCH_DEBUG_ERRORS=1. Off by default so internal DB error strings never
-  // leak to ordinary users.
+  // leak to ordinary users. (A Supabase error can name table/column internals.)
   const debug =
     searchParams.get("debug") === "1" || process.env.SEARCH_DEBUG_ERRORS === "1";
+
+  const { places, counts, failedSources, sourceErrors } = await resolveSearchArea(
+    {
+      bbox,
+      q,
+      categories,
+      signal: req.signal,
+      debug,
+      useResolver: SEARCH_AREA_USE_RESOLVER,
+    },
+  );
+
   const payload = {
     source: "search-area",
     places,
-    counts: { live: live.length, federated: federated.length },
-    failedSources: failed,
-    ...(debug && failed.length > 0 ? { sourceErrors } : {}),
+    counts,
+    failedSources,
+    ...(debug && failedSources.length > 0 ? { sourceErrors } : {}),
   };
   // Don't pin a transient failure: only cache a fully-successful result, so a
   // recovered source isn't masked by a 15-min-stale error payload. (A debug
-  // response with failures is never cached — failed.length > 0 here.)
-  if (failed.length === 0) cacheSet(cacheKey, payload);
+  // response with failures is never cached — failedSources.length > 0 here.)
+  if (failedSources.length === 0) cacheSet(cacheKey, payload);
   return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
 }
