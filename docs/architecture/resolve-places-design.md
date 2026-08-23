@@ -90,6 +90,13 @@ conservative thing and the choice is named.
 
 ### D1. The two endpoints speak different category vocabularies, and the maps are not inverses
 
+> **RESOLVED 2026-08-23 (#254).** `SLIDE_TO_PRIMARY_CATEGORY.camping` narrowed to
+> `[campground, dispersed_camping, rv_park, camping_cabin]`; `facility` → `interest`,
+> `recreation_area` → `scenic`. The two maps are still structurally different (the
+> `LIVE_SLIDE_FOR_PRIMARY` subset design is intentional), but the camping-specific
+> conflation that made them contradictory is fixed. `resolvePlaces()` keeps both
+> vocabularies in the scope discriminator as designed.
+
 `search-area` takes **corpus `primary_category`** (`campground`, `gas_station`).
 `trip-browse` takes **`SlideCategoryKey`** (`camping`, `fuel`).
 
@@ -97,16 +104,21 @@ They translate through two *different, hand-maintained* maps that are not round-
 equivalent: `LIVE_SLIDE_FOR_PRIMARY` (search-area, route-local) is deliberately a
 **subset** — "only where Google has honest type coverage", so overland-only primaries
 run federated-only — while `SLIDE_TO_PRIMARY_CATEGORY` (`trip-browse/federated.ts`) is
-the full canonical map. `campground → camping` one way; `camping → [dispersed_camping,
-campground, recreation_area, facility, rv_park, camping_cabin]` the other.
+the full canonical map. ~~`campground → camping` one way; `camping → [dispersed_camping,
+campground, recreation_area, facility, rv_park, camping_cabin]` the other.~~
 
-**Not reconcilable by picking one.** `resolvePlaces()` therefore keeps both vocabularies
+~~**Not reconcilable by picking one.**~~ `resolvePlaces()` therefore keeps both vocabularies
 in the scope discriminator: `bbox` scope takes `primary_category[]`, `day-corridor` scope
-takes `SlideCategoryKey[]`, exactly as the endpoints do now. **Collapsing them to one
-vocabulary is a real product decision** — it changes which places a given chip returns —
-and is deferred.
+takes `SlideCategoryKey[]`, exactly as the endpoints do now.
 
 ### D2. There are THREE different doors into `master_place`, with different membership rules
+
+> **RESOLVED 2026-08-23 (#255, #256).** Replaced by the Verified/Unverified tier
+> system. Both surfaces now show all places; Unverified sorts after Verified,
+> and `isSuggestable()` gates trip-stop auto-suggestion to Verified only.
+> `description_source` is surfaced from both Typesense (bbox scope) and the
+> `pois_along_corridor` RPC (corridor scope, migration `20260823120000`).
+> See `docs/decisions/2026-08-23-verified-unverified-place-tiers.md`.
 
 | path | door | filters |
 |---|---|---|
@@ -114,26 +126,33 @@ and is deferred.
 | trip-browse | `pois_along_corridor` SECURITY DEFINER RPC | searchable, non-land_status, **`source_count > 0`**, **excludes template-only descriptions**, **excludes `needs_review`** |
 | places/details | none — pure Google | — |
 
-**The RPC excludes template-only-description rows and `needs_review` rows
+~~**The RPC excludes template-only-description rows and `needs_review` rows
 (`20260821050000`); the search-hydrate path does not.** So the same place can be
 corridor-invisible and search-visible. That is a live corpus-membership divergence, not
 a style difference, and it is **not** something a resolver should paper over — whichever
-rule wins changes what users see. Flagged; unresolved.
+rule wins changes what users see. Flagged; unresolved.~~
 
 ### D3. `POST /api/places/details` does not return places at all
+
+> **RESOLVED 2026-08-23.** Decision: Date Detail auto-hydrates on open,
+> preserving current production behavior (POST /api/places/details fires
+> automatically). Search and day-scoped browse do NOT auto-hydrate (never
+> their behavior). `resolvePlaces()` supports this via `enrich: true` (opt-in,
+> default off). Date Detail is the one caller expected to pass it at cutover.
 
 It returns **enrichment fragments keyed by Google place_id**, to be grafted onto tiles
 that already exist client-side. It is a `Record<string, PlaceRich>`, not a
 `BrowsePlace[]`.
 
-Folding it into a `BrowsePlace[]`-returning resolver is **not** a like-for-like
+Folding it into a `BrowsePlace[]`-returning resolver is ~~**not**~~ a like-for-like
 substitution — the caller's contract is "patch what I already have", not "give me
 places". `resolvePlaces()` models this as *enrichment applied during resolution* (§4c):
 a federated place carrying a `placeId` can have live Google rich fields merged onto it
-before it is returned. **That is a behaviour change relative to the endpoint**, because
+before it is returned. ~~**That is a behaviour change relative to the endpoint**, because
 the endpoint lets the client decide when to hydrate and the resolver decides for it.
-Whether Date Detail can accept that is a cutover question. Enrichment is therefore
-**opt-in and off by default** (`enrich: false`).
+Whether Date Detail can accept that is a cutover question.~~ Enrichment is
+**opt-in and off by default** (`enrich: false`). Date Detail passes `enrich: true` at
+cutover to preserve its existing auto-hydration behavior.
 
 ### D4. Live source list ORDER differs, and order is load-bearing
 
@@ -333,4 +352,9 @@ callers use. Flagged as the natural next step, deliberately out of scope.
    imports it, and standing it up would require the cutover this session is forbidden to
    do.
 3. **Step 1's columns are unread** (§4e).
-4. **D1–D9 are all unresolved by construction.**
+4. ~~**D1–D9 are all unresolved by construction.**~~ **D1, D2, D3 resolved
+   2026-08-23** (#254, #255, #256). The three blockers that the original commit
+   message identified as preventing cutover are all resolved. D4–D9 remain
+   unresolved but are not blockers — they are named differences that
+   `resolvePlaces()` handles via parameters, not reconciliation gaps.
+   **Cutover planning is now unblocked.**
