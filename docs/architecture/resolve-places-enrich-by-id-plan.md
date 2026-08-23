@@ -125,9 +125,15 @@ Confirmed, not assumed `[read source]`:
   enriches the tile's *Google* id.
 
 So "Google-id enrichment only" is not an assumed constraint — it is what the surface
-actually does. The capability should take Google place_ids and need not handle `mp:`/other
-forms. (If a non-Google id is passed, the safe behaviour is to skip it — no entry in the
-map — mirroring how `enrichPlaces`'s `idFor` yields `null` for a non-Google place.)
+actually does. The capability takes **raw Google place_ids** (not places) and need not
+handle `mp:`/other forms. (Note the layering: `enrichPlaces`'s `idFor`
+`[resolve-places.ts:513-514]` is the *place → id* extraction step and lives in
+`enrichPlaces`, not in the proposed `enrichByGoogleId`, which receives ids directly. So a
+non-Google id passed to `enrichByGoogleId` is not filtered by `idFor`; it would simply
+resolve to `null` from `placeDetails` (Google not-found / non-OK) and be omitted from the
+map — the same null-omit path as any failed id. An implementation *may* pre-filter
+obviously non-Google ids to save a wasted upstream call, but that is an optimisation, not
+required for correctness — the route does not pre-filter today.)
 
 ---
 
