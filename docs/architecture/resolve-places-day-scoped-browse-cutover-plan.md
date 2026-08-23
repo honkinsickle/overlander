@@ -160,6 +160,7 @@ new flag does not subsume `USE_FEDERATED_POIS` — it delegates the data decisio
   mirroring `SEARCH_AREA_USE_RESOLVER` / `DATE_DETAIL_USE_RESOLVER`. Warranted here (unlike
   Day Column) because there is a real endpoint to wrap. OFF = the exact pre-cutover body; ON
   = `resolvePlaces()` day-corridor with `include.federated = USE_FEDERATED_POIS`.
+  **✅ BUILT (§8).**
 - **Rollback: a clean flag-flip** — this is a **read path**, so (as with Search/Date Detail)
   a redeploy with the flag off restores prior behaviour for every request; the route's own
   15-min cache is per-process, so a flip = fresh process = no stale other-mode payload.
@@ -217,3 +218,51 @@ only real design decisions are (a) that `TRIP_BROWSE_USE_RESOLVER` and the exist
 running the new flag together with `USE_FEDERATED_POIS` on — in the default (federated-off)
 configuration it is a no-op. Implementation is a Search-style thin wrapper + `handler.ts`,
 not attempted here.
+
+---
+
+## 8. Cutover — IMPLEMENTED (flag-gated, default OFF)
+
+Wired on branch `feat/trip-browse-resolver-cutover`. The last of the four surface cutovers.
+
+**Flag:** `TRIP_BROWSE_USE_RESOLVER` (env boolean, mirrors `SEARCH_AREA_USE_RESOLVER` /
+`DATE_DETAIL_USE_RESOLVER`). **Default: OFF.** Flip to `"true"` in Vercel to roll out; a
+redeploy = fresh process = fresh cache, so no stale other-mode payload survives a flip.
+
+**Shape (thin wrapper, per §6):** `route.ts` keeps the category validation (7-bucket + 400s),
+the 15-min cache, the fixture fast path, the trip/day + geometry derivation, and the
+`{ source, places }` response. The "produce the ranked places" step moved to
+`handler.ts` (`produceBrowsePlaces`), behind a dependency seam so all four flag
+combinations are unit-testable without network/DB:
+- **`TRIP_BROWSE_USE_RESOLVER` OFF → `viaLegacy`:** the pre-cutover discover-fanout body,
+  verbatim (legacy constants kept local so the flag-off path can't be perturbed by a
+  resolver-side edit).
+- **ON → `viaResolver`:** `resolvePlaces()` day-corridor scope, with
+  **`include: { federated: USE_FEDERATED_POIS }`** — the one line that keeps the two flags
+  orthogonal (the resolver reads no env). The supabase client is created by the route (only
+  when `USE_FEDERATED_POIS`) and passed in; `viaResolver` falls back to `viaLegacy` when
+  `dayStart` is absent (the missing-endpoint edge, §6.2).
+- No `enrich` (day-scoped browse never auto-hydrated, like Search).
+- The client (`CategoryBrowsePanel`) is **untouched**; `{ source, places }` is unchanged.
+
+**Verified:**
+- `handler.test.ts` — 8 tests covering **all four** `TRIP_BROWSE_USE_RESOLVER` ×
+  `USE_FEDERATED_POIS` combinations: (off,off) legacy untagged live-only; (off,on) legacy
+  tags live + merges federated; (on,off) resolvePlaces with `federated:false` and no client;
+  (on,on) `federated:true` with the client in scope; the missing-`dayStart` legacy fallback;
+  and **the one behaviour change** — (on,on) **Verified-before-Unverified end-to-end through
+  the REAL resolvePlaces** (unverified-near vs verified-far → verified-far first, i.e. tier
+  beats distance), with a uniform-tier negative-control confirming the base sort is distance.
+- `web/scripts/verify-trip-browse-wired.ts` — LIVE TEST (`znldzjdatkogdktymtvi`, hard TEST
+  assert) on `la-to-deadhorse/day-1` (`scenic,camping`). **both-off:** live-only, all
+  untagged, 0 federated — matches today. **both-on:** federated rows merged, **every place
+  source-stamped (0 untagged), tier-sorted (0 ordering violations)** with the live block
+  (verified) ahead of the federated block (unverified). The contrast (0 federated / all-
+  untagged vs many-federated / all-stamped) is the non-vacuous proof the resolver path ran.
+  (⚠ It drives `produceBrowsePlaces`, the route's delegate, not the full `GET`: the route's
+  `createSupabaseServerClient()` needs a request-scoped `cookies()` context unavailable under
+  `tsx`. Everything except the thin GET wrapper is exercised.)
+- Gates: `npm run -w web typecheck` exit 0, `npx next build` exit 0.
+
+**Not done (intentionally):** neither flag flipped on; no `web/src/components` change; the
+write-path/baking consolidation (§7) remains out of scope.
