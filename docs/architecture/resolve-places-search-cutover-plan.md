@@ -16,9 +16,11 @@ not recalled. Companion: `resolve-places-design.md` (the service design, D1–D9
 > **⚠ HEADLINE FINDING — there is one real blocker.** The Verified/Unverified tiering
 > (#255/#256) is **non-functional on the `bbox` (Search) path of `resolvePlaces()` as
 > built.** Every federated Search result would classify as `unverified`. The resolver's
-> own bbox tier tests pass only because their fake `hydratePlacesByIds` behaves
-> **unlike the real one** in exactly the two ways that matter. Details in §4. This must
-> be fixed before a Search cutover that honours #255/#256. Everything else is mechanical.
+> bbox tier tests validate a fake `hydratePlacesByIds` that behaves **unlike the real one**
+> in exactly the two ways that matter, so a green suite would not catch it (the fake's
+> divergence is confirmed by reading; the suite was **not executed here** — `web/node_modules`
+> is absent). Details in §4. This must be fixed before a Search cutover that honours
+> #255/#256. Everything else is mechanical.
 
 ---
 
@@ -200,8 +202,15 @@ is ordering — quiet, but wrong.
 
 **Fix (recommended — single-source the classification):** thread `description_source`
 through `hydratePlacesByIds`. It already lives on `master_place_search_export`
-(the Typesense sync source, added for #256) — add it to the geo `SELECT`, set
-`row.description_source`, and let `mapMasterPlaceRow` classify. Then:
+(the Typesense sync source — added 2026-08-21 via migration `20260821040000`, **not**
+#256, which added it to the corridor RPC) — add it to the geo `SELECT`, set
+`row.description_source`, and let `mapMasterPlaceRow` classify. **Independent
+corroboration:** that migration's own header comment already documents this exact gap —
+"a narrow id/lng/lat/photo_url projection — `description_source` is not [selected by the
+hydrate path]… the map filter toggle additionally requires adding `description_source`
+to it" `[read source: supabase/migrations/20260821040000_search_export_description_source.sql:11-14]`.
+The gap is known; what §4 adds is that `resolvePlaces()`'s bbox tier classification
+silently depends on it being closed. Then:
 - Both the current route **and** the resolver bbox path get correct tiers from one place.
 - `resolveFederated`'s parallel `descriptionSources` map and `stamp`'s bbox-derivation
   branch become **redundant and should be deleted** (the corridor path already relies on
