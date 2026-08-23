@@ -78,6 +78,35 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-23 — LLM description pilot: where the code and run artifacts live
+
+Pointers only. **The decision and the not-yet-live status are in
+`docs/decisions/2026-08-23-llm-description-suggestion-eligibility.md` (#249) —
+not restated here.** This section exists because that ADR does not say *where
+the pilot's code and evidence are*, and the run artifacts are gitignored, so
+nothing else in the repo points at them.
+
+The 2026-08-21 run (7,433 `generation_method='llm'` rows, TEST only) was
+produced by three scripts, surfaced in the PR that carries this section:
+
+| script | role |
+|---|---|
+| `data/scripts/measure-llm-target-population-2026-08-21.ts` | builds the run-set (STRONG/WEAK, no real description, atlas_oddities excluded) |
+| `data/scripts/generate-llm-descriptions-2026-08-21.ts` | the generator — insert-per-row, resume-safe, skips any MP that already has a description row |
+| `data/scripts/spotcheck-llm-descriptions-2026-08-21.ts` | post-run fabrication spot-check |
+
+Full methodology and every figure:
+`docs/measurements/2026-08-21-llm-description-full-population-run.md`.
+
+⚠ **The run-set and the per-row run log are NOT in the repo** — they live under
+the gitignored `.context/` of the workspace that ran it
+(`.context/measurements/llm-target-population-2026-08-21.json`, 7,433 entries;
+`.context/measurements/llm-description-run-2026-08-21.jsonl`, 7,433 lines, one
+per row, carrying the prompt text and token counts). They exist in the
+Conductor workspaces `corpus-address-field-survey` and `puebla`. **Anything
+needing the per-row prompt or token accounting has to read them there; they are
+not recoverable from the repo or from the database.**
+
 ## 2026-08-21 (later) — master_place enrichment columns (place-data resolver ADR, step 1) — **MERGED as `4f2a6af` (#247)**
 
 > **⚠ CORRECTED 2026-08-22 — MERGED.** Everything this section describes
