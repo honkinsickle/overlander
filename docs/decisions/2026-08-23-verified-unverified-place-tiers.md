@@ -71,7 +71,13 @@ Live-sourced places (from Google, Foursquare, etc.) are always Verified.
 - This is implemented inside `resolvePlaces()` only; the old per-surface
   endpoints are NOT modified. The tier takes effect when surfaces cut over to
   `resolvePlaces()` (ADR step 3, a separate decision).
-- Day-corridor scope: federated places from the `pois_along_corridor` RPC do
+- ~~Day-corridor scope: federated places from the `pois_along_corridor` RPC do
   not currently carry `description_source`, so corridor-scoped federated
   results have no `description_source` signal and default to Unverified. This
-  is conservative and correct until the RPC is updated to surface the field.
+  is conservative and correct until the RPC is updated to surface the field.~~
+  **RESOLVED 2026-08-23:** migration `20260823120000` adds `description_source`
+  to the `pois_along_corridor` RPC's RETURNS TABLE (same CASE derivation as
+  `master_place_search_export`). `MasterPlaceRow` and `mapMasterPlaceRow` now
+  carry it through to `BrowsePlace.verified`, so corridor-scoped federated
+  results classify correctly as Verified or Unverified based on their real
+  description_source, not defaulting. TEST only — PROD apply is separate.
