@@ -42,20 +42,32 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   reports all 1,595 lines as "added" — that is the squash artifact again, and
   it is the wrong instrument here. **Compare file content, not the three-dot
   diff, when deciding whether a squash-merged branch is redundant.**
-- **The branch could NOT be deleted: `git branch -d` refuses it, because it is
-  checked out in the `puebla` worktree.** Also found: the Conductor directories
-  `corpus-address-field-survey` and `puebla` are **not two worktrees** — both
-  `.git` files point at the *same* gitdir
-  (`.git/worktrees/puebla`), so one is a filesystem copy of the other. Only
-  `puebla` is registered with git.
-- **⚠ Do not delete those workspaces without preserving `.context/` first.**
-  They hold the ONLY copies of the pilot's run-set
-  (`llm-target-population-2026-08-21.json`, 2.1 MB) and its per-row run log
+- **The Conductor directories `corpus-address-field-survey` and `puebla` were
+  not two worktrees** — both `.git` files pointed at the *same* gitdir
+  (`.git/worktrees/puebla`), so one was a filesystem copy of the other, and
+  only `puebla` was registered with git. Consequence: `git worktree remove
+  puebla` deleted **both** directories in one step.
+- **Cleanup completed 2026-08-23, artifacts archived first.** Order run:
+  archive → `git worktree remove puebla` → delete branch. **⚠ The pilot's
+  `.context/` held the ONLY copies** of the run-set
+  (`llm-target-population-2026-08-21.json`, 2.1 MB) and the per-row run log
   (`llm-description-run-2026-08-21.jsonl`, 4.7 MB — prompt text and token
-  counts for all 7,433 rows). Both are gitignored via
-  `.git/info/exclude`, so they are recoverable from neither the repo nor the
-  database. Deleting the workspaces destroys the per-row prompt/token record
-  permanently.
+  counts for all 7,433 rows), both gitignored via `.git/info/exclude` and so
+  recoverable from neither the repo nor the database. The whole `.context`
+  tree was copied to **`~/archives/llm-description-run-2026-08-21/`** and
+  verified by SHA-256 before anything was removed. That sweep caught a fourth
+  file the narrow two-file brief would have destroyed: the original task brief
+  the run was executed under (`.context/attachments/…/pasted_text_…txt`).
+- **`git branch -d` refused the redundant branch — and its reason was the
+  squash artifact again, in git's own safety check.** `-d` tests **ancestry**,
+  and the branch tip is not an ancestor of `main` because #250/#251
+  squash-merged its content into new SHAs, so git reports "not fully merged"
+  about a branch whose every file is byte-identical on `main`. Deleted with
+  `-D` after the content check (0 files unique to the branch) and the archive
+  both passed. **Third time the squash artifact has produced a misleading
+  signal** — after `merge-base --is-ancestor` and the three-dot diff. The
+  through-line: for a squash-merged branch, ancestry-based tools all lie;
+  compare content.
 - **Two fixes proposed in #251 are explicitly NOT applied and are now parked in
   `BACKLOG.md`** rather than living only inside a measurement doc: the RIDB
   `full=true` fetch-layer gap, and the address/geocoding schema proposal.
