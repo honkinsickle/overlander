@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { placeDetails, type PlaceRich } from "@/lib/discovery/google-places";
-import { BATCH_SIZE, chunk, parsePlaceIds } from "./batch";
+import { type PlaceRich } from "@/lib/discovery/google-places";
+import { parsePlaceIds } from "./batch";
+import { fetchDetailsMap } from "./handler";
 
 /**
  * POST /api/places/details  { placeIds: string[] }
@@ -16,13 +17,23 @@ import { BATCH_SIZE, chunk, parsePlaceIds } from "./batch";
  * cache, and NOTHING is persisted to the DB. Place Details failures resolve
  * to a missing key for that id — the tile stays essentials.
  *
- * EVERY id is served. This route used to `.slice(0, 40)` in `parsePlaceIds`,
- * dropping the remainder with no error and no signal — 51 of the 91 ids day 1
- * of `la-to-deadhorse` asks for. It now walks the ids in batches of
- * `BATCH_SIZE`, one batch at a time, so the concurrency ceiling that 40 always
- * really was is preserved while nothing is discarded. Pure helpers (and the
- * archaeology on the number 40) live in `./batch`.
+ * THIN WRAPPER: this handler parses/validates, owns the 15-min cache below, and
+ * shapes the `{ details }` response. The id → PlaceRich production lives in
+ * `./handler`, behind `DATE_DETAIL_USE_RESOLVER` (see below). Every id is
+ * served in both flag states — batched at `BATCH_SIZE` (the fan-out ceiling,
+ * archaeology in `./batch`); nothing is discarded.
  */
+
+/** Cut this route's fetch over to the consolidated `enrichByGoogleId()`
+ *  capability (#263). Mirrors `SEARCH_AREA_USE_RESOLVER` / `USE_FEDERATED_POIS`:
+ *  an env boolean, default OFF. OFF = the exact pre-cutover inline loop (zero
+ *  behaviour change). ON = cache-misses delegated to `enrichByGoogleId()`. The
+ *  15-min cache below STAYS either way — `enrichByGoogleId` is cache-less by
+ *  design (this is option 1 of the cutover plan, not the shared-cache work).
+ *  A flip is a redeploy → fresh process → fresh cache, so no stale other-mode
+ *  entry survives a flip. */
+const DATE_DETAIL_USE_RESOLVER =
+  process.env.DATE_DETAIL_USE_RESOLVER === "true";
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 1000;
@@ -75,40 +86,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const details: Record<string, PlaceRich> = {};
-  // Batches run SEQUENTIALLY; the ids inside one batch run concurrently. That
-  // ordering is the whole point: it holds the fan-out at BATCH_SIZE concurrent
-  // upstream calls (what the old `MAX_IDS = 40` actually bounded) while serving
-  // every id. 91 ids is three batches of ≤40, never 91 at once.
-  //
-  // The cost is latency: a >40-id request now takes as long as its batches in
-  // series rather than one round trip. That is the deliberate trade for not
-  // dropping ids, and the common case is unchanged — ≤40 ids is exactly one
-  // batch, identical to the previous behaviour.
-  for (const batch of chunk(placeIds, BATCH_SIZE)) {
-    await Promise.all(
-      batch.map(async (id) => {
-        const cached = cacheGet(id);
-        const rich = cached ? cached.value : await placeDetails(id, req.signal);
-        if (!cached) cacheSet(id, rich);
-        // Surface RESOLVED ids — including a resolved-but-EMPTY `{}`, which is
-        // a real place Google simply has nothing to add about (a route, a
-        // natural feature, a trailhead: exactly what this product drives past).
-        // Only `null` — missing key, network error, or non-OK HTTP — stays out.
-        //
-        // Why `{}` must ride through: omitting it made "this id is dead" and
-        // "this place has nothing to add" arrive identically as a missing key,
-        // so the client re-requested it forever (the `!hydrated[id]` guard reads
-        // a missing key as "not yet fetched"). Letting `{}` land in `hydrated`
-        // stops both retry paths — the windowing hydrate and the fetch-on-open
-        // fallback — while `null` still retries, which is what we want for a
-        // genuine failure. Every reader tolerates an empty PlaceRich: its fields
-        // are all optional and the merge sites fall back with `??`.
-        // See docs/BACKLOG.md § "Places enrichment: empty vs missing".
-        if (rich) details[id] = rich;
-      }),
-    );
-  }
+  // Produce the id → PlaceRich map. The resolved-empty `{}` vs `null` semantics
+  // (a `{}` rides through so the client's `!hydrated[id]` guard stops
+  // re-requesting a place Google has nothing to add about; a `null` stays out
+  // but is cached negatively) live in `./handler` and are identical in both
+  // flag states. See docs/BACKLOG.md § "Places enrichment: empty vs missing".
+  const details: Record<string, PlaceRich> = await fetchDetailsMap(
+    placeIds,
+    {
+      useResolver: DATE_DETAIL_USE_RESOLVER,
+      signal: req.signal,
+      cache: { get: cacheGet, set: cacheSet },
+    },
+  );
 
   return NextResponse.json({ details });
 }

@@ -179,12 +179,9 @@ Per the Search pattern (`SEARCH_AREA_USE_RESOLVER`), the flag for this surface w
 - **`DATE_DETAIL_USE_RESOLVER`** — env boolean, **default OFF**, `=== "true"` to enable,
   mirroring `USE_FEDERATED_POIS`.
 
-**✅ NOW WIREABLE 2026-08-23 (#263).** The "gates nothing" note below has **lifted**:
-`enrichByGoogleId()` exists, so the ON branch can be written coherently — delegate the
-fetch to `enrichByGoogleId()` and return the same `{ details }` map. `DATE_DETAIL_USE_RESOLVER`
-should be introduced **in the cutover PR, alongside the route wrapper** (§6 option 1), default
-OFF. The flag-flip mechanics below still hold (redeploy = fresh process/cache; no cache-key
-change needed).
+**✅ WIRED 2026-08-23 (see §7).** `DATE_DETAIL_USE_RESOLVER` (env boolean, default OFF,
+`=== "true"`) now gates the route: OFF = the pre-cutover inline loop; ON = cache-misses
+delegated to `enrichByGoogleId()`. The "gates nothing" note below is fully discharged.
 
 > **⚠ (Original) But it gates nothing today (flagged, not dropped).** The user asked for a
 > flag name and I've named it. Wiring it now would gate a branch that cannot be written
@@ -260,3 +257,47 @@ wrapper (option 1): the ON branch delegates the fetch to `enrichByGoogleId()`,
 and its 15-min cache, and the client is untouched. Tiering and #254 are non-issues for this
 surface (§3) — a real simplification relative to Search, and the one piece of good news
 here.
+
+---
+
+## 7. Cutover — IMPLEMENTED (flag-gated, default OFF)
+
+Wired on branch `feat/date-detail-resolver-cutover`.
+
+**Flag:** `DATE_DETAIL_USE_RESOLVER` (env boolean, mirrors `SEARCH_AREA_USE_RESOLVER` /
+`USE_FEDERATED_POIS`). **Default: OFF** — unset/anything-but-`"true"` runs the exact
+pre-cutover inline loop. Flip to `"true"` in Vercel to roll out; a redeploy starts a fresh
+process, so the in-process cache never serves a stale other-mode entry across a flip.
+
+**Shape (thin wrapper, per §6 option 1):** `route.ts` keeps parse/validate + the 15-min
+per-lambda cache + the `{ details }` response shape. The id → `PlaceRich` production moved to
+`web/src/app/api/places/details/handler.ts` (`fetchDetailsMap`), behind a dependency seam +
+injected cache ops so both flag states are unit-testable without network:
+- **OFF → `viaLegacy`:** the pre-cutover inline batched fetch loop, verbatim.
+- **ON → `viaResolver`:** cache first (the cache **stays at the route** — `enrichByGoogleId()`
+  is cache-less by design, so this is option 1, NOT ADR step 4's shared cache), then delegate
+  the misses to `enrichByGoogleId()`. A miss absent from that map resolved to `null` and is
+  cached negatively — preserving the exact cache behaviour the legacy path writes.
+- The client (`day-detail-corridor-column.tsx`) is **untouched**; the `{ details:
+  Record<placeId, PlaceRich> }` shape is byte-for-byte identical in both states.
+
+**Verified:**
+- `handler.test.ts` — 8 tests, both flag states: OFF fetches via `placeDetails`, includes
+  resolved (incl. `{}`), omits `null`, uses the cache; ON delegates misses to
+  `enrichByGoogleId` (not `placeDetails`), caches a `null`-omitted miss negatively, serves
+  cached ids without re-fetch. **Two PARITY tests** assert OFF and ON produce the **same
+  `details` map** and leave the **cache in the same state** — the flag-off-unchanged +
+  flag-on-matches proof.
+- `web/scripts/verify-places-details-wired.ts` — LIVE (real Google Place Details; **no DB —
+  pure passthrough**). Flag ON drove the real `POST`: 200, real enrichment
+  (rating/reviews/photo/hours) for two real place_ids, and a garbage id **omitted** (null
+  path survives). Flag-OFF contrast on the same ids returned **byte-identical** enrichment —
+  both are Google passthroughs, so unlike Search there is no output difference; the routing
+  difference (ON → `enrichByGoogleId`, OFF → `placeDetails`) is proven at unit level by the
+  handler spies, and the live run proves the ON path is correct end-to-end (it would fail if
+  the wiring dropped ids or returned empty).
+- Gates: `npm run -w web typecheck` exit 0, `npx next build` exit 0; handler 8/8, batch
+  helpers 11/11.
+
+**Not done (intentionally):** the flag is NOT flipped on; no `web/src/components` change; the
+shared client cache (ADR step 4) is untouched — the route keeps its own 15-min cache.
