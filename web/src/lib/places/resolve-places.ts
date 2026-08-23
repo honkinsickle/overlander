@@ -244,18 +244,26 @@ function chunk<T>(items: T[], size: number): T[][] {
 /** Stamp canonical id, provenance, and verification tier. `source` is set
  *  UNCONDITIONALLY, unlike either endpoint — design §D7.
  *  Live-sourced places are always verified. Federated places derive their
- *  tier from description_source, which the caller must supply via the
- *  `descriptionSources` map (keyed on master_place uuid). */
+ *  tier from either: (a) the `descriptionSources` map (bbox scope, keyed on
+ *  master_place uuid from Typesense hits), or (b) a `verified` field already
+ *  set on the place by `mapMasterPlaceRow` (corridor scope, from the RPC's
+ *  description_source column). */
 function stamp(
   p: BrowsePlace,
   origin: "live" | "master_place",
   descriptionSources?: Map<string, "source" | "template" | "llm" | null>,
 ): BrowsePlace {
   const id = canonicalizePlaceId(p.id);
-  const verified: VerificationTier =
-    origin === "live"
-      ? "verified"
-      : classifyVerificationTier(descriptionSources?.get(p.id) ?? null);
+  let verified: VerificationTier;
+  if (origin === "live") {
+    verified = "verified";
+  } else if (p.verified) {
+    // Already set by mapMasterPlaceRow (corridor path) — preserve it.
+    verified = p.verified;
+  } else {
+    // Derive from the Typesense description_source map (bbox path).
+    verified = classifyVerificationTier(descriptionSources?.get(p.id) ?? null);
+  }
   return { ...p, id, source: origin, verified };
 }
 

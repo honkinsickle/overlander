@@ -193,6 +193,71 @@ test("day-corridor drops places beyond the corridor and sorts by distance from s
   );
 });
 
+test("day-corridor: federated places carry verified from mapMasterPlaceRow (not defaulted)", async () => {
+  const start: [number, number] = [-122.7, 45.5];
+  const end: [number, number] = [-122.6, 45.5];
+  const verifiedPlace = place(`mp:${UUID}`, {
+    coords: [-122.65, 45.5],
+    category: "scenic",
+    verified: "verified",
+  });
+  const unverifiedPlace = place(`mp:${UUID2}`, {
+    coords: [-122.66, 45.5],
+    category: "scenic",
+    verified: "unverified",
+  });
+  const r = await resolvePlaces({
+    scope: {
+      kind: "day-corridor",
+      start,
+      end,
+      categories: ["scenic"],
+      supabase: {} as never,
+    },
+    include: { live: false },
+    deps: deps({
+      fetchFederatedPois: async () => [verifiedPlace, unverifiedPlace],
+    }),
+  });
+  const byId = new Map(r.places.map((p) => [p.id, p]));
+  assert.equal(byId.get(`mp:${UUID}`)?.verified, "verified");
+  assert.equal(byId.get(`mp:${UUID2}`)?.verified, "unverified");
+});
+
+test("day-corridor: verified sort applies — verified before unverified after corridor distance sort", async () => {
+  const start: [number, number] = [-122.7, 45.5];
+  const end: [number, number] = [-122.5, 45.5];
+  // Unverified place is closer to start, verified is farther
+  const unverifiedNear = place(`mp:${UUID}`, {
+    coords: [-122.69, 45.5],
+    category: "scenic",
+    verified: "unverified",
+    title: "Unverified-near",
+  });
+  const verifiedFar = place(`mp:${UUID2}`, {
+    coords: [-122.55, 45.5],
+    category: "scenic",
+    verified: "verified",
+    title: "Verified-far",
+  });
+  const r = await resolvePlaces({
+    scope: {
+      kind: "day-corridor",
+      start,
+      end,
+      categories: ["scenic"],
+      supabase: {} as never,
+    },
+    include: { live: false },
+    deps: deps({
+      fetchFederatedPois: async () => [unverifiedNear, verifiedFar],
+    }),
+  });
+  assert.deepEqual(r.places.map((p) => p.title), [
+    "Verified-far", "Unverified-near",
+  ]);
+});
+
 test("day-corridor runs live-only when no supabase client is supplied", async () => {
   let rpcCalls = 0;
   const r = await resolvePlaces({
