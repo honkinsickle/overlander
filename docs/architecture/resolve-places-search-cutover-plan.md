@@ -293,21 +293,63 @@ Either way the cache + response shaping stay at the route, so a revert/flip is i
    resolver tests use a real-contract fake; and `web/scripts/verify-hydrate-tier.ts`
    proves it live on TEST (with a negative control). See the §4 Resolution note.
    Cutover no longer ships wrong ordering on this axis.
-2. **STILL OPEN — the *wired route* has not run end-to-end** (design §5 gap 2). The tier
-   fix is proven at the `hydratePlacesByIds` level, but nothing has driven the **wired
-   `/api/search-area` → `resolvePlaces()` route** yet (nothing imports the resolver from
-   the route). Before cutover, stand up a scripted TEST verification of the wired route
-   exercising: free-text, category tiles, an all-overland category set (federated-only),
-   a source-down case (`failedSources` wording), and verified ordering. Because web unit
-   tests don't gate CI (#3 below), **that script is the real gate.**
-3. **GAP (pre-existing, not introduced) — web tests don't run in CI.** The §4 unit test
-   protects local runs only; rely on the §6.2 script + Adam's review for the merge gate.
-4. **MECHANICAL — wrapper details:** don't pass `limit`, don't pass `enrich`, decide
-   `counts` passthrough, fold the duplicated `LIVE_SLIDE_FOR_PRIMARY` into the shared
-   module. All named in §1/§4; none block once decided.
+2. **✅ RESOLVED — the *wired route* now runs end-to-end (§7).**
+   `web/scripts/verify-search-area-wired.ts` drives the real `GET` handler with the flag
+   on against TEST and passed; flag-off contrast confirms the legacy path is unchanged.
+3. **GAP (pre-existing, not introduced) — web tests don't run in CI.** The unit tests
+   (`handler.test.ts`, `resolve-places.test.ts`) protect local runs only; rely on the §7
+   verify script + Adam's review for the merge gate.
+4. **✅ RESOLVED — wrapper details (§7):** no `limit`, no `enrich`, `counts` trimmed to
+   `{live, federated}`, and the duplicated `LIVE_SLIDE_FOR_PRIMARY` folded into the shared
+   `resolve-places` export. All done and asserted in `handler.test.ts`.
 
-**Bottom line:** Search is genuinely the right first surface — client contract matches,
-ids are stable, #254 and #257 are already honoured. But the cutover is **not a pure route
-swap**: it needs the §4 hydrate fix (shared code) and a real end-to-end verification first.
-Sequence: fix hydrate + resolver test → TEST verify script green → thin-wrapper the route
-behind an env flag → verify in TEST → hand to Adam.
+**Bottom line:** Search was the right first surface — client contract matches, ids are
+stable, #254 and #257 are honoured, and the §4 tier fix landed via #259. The cutover is
+now **implemented and flag-gated** (§7), default OFF. Remaining before it's the live
+default: the wider wired-route matrix (free-text, all-overland-only, a real source-down
+case) and Adam's decision to flip the flag in Vercel.
+
+---
+
+## 7. Cutover — IMPLEMENTED (flag-gated, default OFF)
+
+Wired on branch `feat/search-area-resolver-cutover`.
+
+**Flag:** `SEARCH_AREA_USE_RESOLVER` (env boolean, mirrors `USE_FEDERATED_POIS`).
+**Default: OFF** — unset/anything-but-`"true"` runs the exact pre-cutover body. Flip to
+`"true"` in Vercel to roll out; a redeploy starts a fresh process, so the in-process LRU
+never serves a stale other-mode payload across a flip (no need to key the cache on the flag).
+
+**Shape (thin wrapper, per §1):** `route.ts` keeps parse/validate + LRU cache + debug gate
++ response shape. The fanout/merge moved to `web/src/app/api/search-area/handler.ts`
+(`resolveSearchArea`), behind a dependency seam so both flag states are unit-testable
+without network/DB:
+- **OFF → `viaLegacy`:** the pre-cutover live/federated/merge body, verbatim.
+- **ON → `viaResolver`:** `resolvePlaces()` bbox scope. **No `limit`** (would newly cap the
+  merged set), **no `enrich`** (#257). `counts` trimmed to `{live, federated}` so the
+  response shape is identical across flag states. `includeErrorDetail` = the debug gate.
+- The route's duplicate `LIVE_SLIDE_FOR_PRIMARY` is gone — `handler.ts` imports the one
+  `resolve-places` exports, so the legacy and resolver paths can't drift (D1).
+
+**Verified:**
+- `handler.test.ts` — 10 tests, both flag states: OFF preserves the body (live-then-federated
+  merge, first-occurrence dedupe, overland-only → federated-only, contained `corpus` failure,
+  counts); ON forwards the bbox scope with q/categories, passes neither `limit` nor `enrich`,
+  never touches discover/search/hydrate directly, and — driving the **real** `resolvePlaces`
+  with faked internal deps — tier-sorts verified-before-unverified with real `mp:` ids; #254
+  category set forwarded verbatim.
+- `web/scripts/verify-search-area-wired.ts` — LIVE TEST (`znldzjdatkogdktymtvi`, read-only,
+  hard TEST-URL assert). Flag ON drove the real `GET`: 200, federated all correctly
+  `verified`, 0 tier-ordering violations, and **every place `source`-stamped** — the
+  definitive marker that the resolver path ran, since the legacy path leaves live results
+  untagged. Flag-OFF contrast on the same query: identical corpus, but **all live places
+  untagged** — proving OFF is the unchanged legacy body. (Scope note: the sampled top-N by
+  prominence were all verified, so the live run did not exercise a *mixed*-tier reorder; the
+  mixed-tier sort is covered by `handler.test.ts` + `resolve-places.test.ts`, and unverified
+  classification against real data by #259's `verify-hydrate-tier.ts`.)
+- Gates: `npm run -w web typecheck` exit 0, `npx next build` exit 0, resolver + place-id
+  63/63, handler 10/10.
+
+**Not done (intentionally):** the flag is NOT flipped on; no `web/src/components` change; the
+wider wired-route matrix (free-text, all-overland-only, live source-down) is left for the
+rollout step.
