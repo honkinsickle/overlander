@@ -132,6 +132,9 @@ export type MasterPlaceRow = {
    *  master_place. Same optionality as google_place_id: the corridor RPC
    *  joins it. */
   nps_photo_url?: string | null;
+  /** Description provenance from the RPC's CASE derivation (same logic as
+   *  master_place_search_export). 'source' | 'llm' | 'template' | null. */
+  description_source?: "source" | "template" | "llm" | null;
 };
 
 function prettyCategory(c: string): string {
@@ -221,6 +224,13 @@ export function mapMasterPlaceRow(
     // one AND the tile has no Google photo path. The card renders any photoUrl
     // identically, so a corpus photo needs no render change.
     ...(row.nps_photo_url ? { photoUrl: row.nps_photo_url } : {}),
+    // Verification tier derived from the RPC's description_source column.
+    // Same classification as classifyVerificationTier() in resolve-places.ts
+    // (inlined to avoid circular dependency).
+    verified:
+      row.description_source === "source" || row.description_source === "llm"
+        ? "verified" as const
+        : "unverified" as const,
   };
 }
 

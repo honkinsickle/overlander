@@ -81,6 +81,33 @@ test("no amenities on the row → no amenities on the tile", () => {
   assert.equal(tile.amenities, null);
 });
 
+// ── verification tier from description_source (RPC column) ──────────────
+
+test("description_source='source' → verified", () => {
+  const tile = mapMasterPlaceRow(row({ description_source: "source" }), "camping");
+  assert.equal(tile.verified, "verified");
+});
+
+test("description_source='llm' → verified (per eligibility ADR)", () => {
+  const tile = mapMasterPlaceRow(row({ description_source: "llm" }), "camping");
+  assert.equal(tile.verified, "verified");
+});
+
+test("description_source='template' → unverified", () => {
+  const tile = mapMasterPlaceRow(row({ description_source: "template" }), "camping");
+  assert.equal(tile.verified, "unverified");
+});
+
+test("description_source=null → unverified", () => {
+  const tile = mapMasterPlaceRow(row({ description_source: null }), "camping");
+  assert.equal(tile.verified, "unverified");
+});
+
+test("description_source absent → unverified", () => {
+  const tile = mapMasterPlaceRow(row(), "camping");
+  assert.equal(tile.verified, "unverified");
+});
+
 // ── category bucket assignments ──────────────────────────────────────────
 
 test("camping bucket contains only real camping categories", () => {
