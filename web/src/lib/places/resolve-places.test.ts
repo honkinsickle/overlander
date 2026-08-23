@@ -15,7 +15,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolvePlaces, type ResolveDeps } from "./resolve-places";
+import {
+  resolvePlaces,
+  classifyVerificationTier,
+  sortByVerificationTier,
+  isSuggestable,
+  type ResolveDeps,
+} from "./resolve-places";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 
 const UUID = "531b1c71-96f2-4002-bc4e-cc1b6db49dc1";
@@ -400,4 +406,126 @@ test("a null from placeDetails leaves the place un-enriched rather than blanking
   });
   assert.equal(r.places[0].title, "Kept");
   assert.equal(r.places[0].rating, undefined);
+});
+
+// ── Verification tier ────────────────────────────────────────────────
+
+test("classifyVerificationTier: source → verified", () => {
+  assert.equal(classifyVerificationTier("source"), "verified");
+});
+
+test("classifyVerificationTier: llm → verified (per the eligibility ADR)", () => {
+  assert.equal(classifyVerificationTier("llm"), "verified");
+});
+
+test("classifyVerificationTier: template → unverified", () => {
+  assert.equal(classifyVerificationTier("template"), "unverified");
+});
+
+test("classifyVerificationTier: null/undefined → unverified", () => {
+  assert.equal(classifyVerificationTier(null), "unverified");
+  assert.equal(classifyVerificationTier(undefined), "unverified");
+});
+
+test("sortByVerificationTier puts verified before unverified, preserving order within tiers", () => {
+  const a = place("a", { title: "Verified-1", verified: "verified" });
+  const b = place("b", { title: "Unverified-1", verified: "unverified" });
+  const c = place("c", { title: "Verified-2", verified: "verified" });
+  const d = place("d", { title: "Unverified-2", verified: "unverified" });
+  const sorted = sortByVerificationTier([b, a, d, c]);
+  assert.deepEqual(sorted.map((p) => p.title), [
+    "Verified-1", "Verified-2", "Unverified-1", "Unverified-2",
+  ]);
+});
+
+test("isSuggestable: verified → true, unverified → false", () => {
+  assert.ok(isSuggestable(place("a", { verified: "verified" })));
+  assert.ok(!isSuggestable(place("b", { verified: "unverified" })));
+});
+
+test("isSuggestable: no verified field → false (absence = unverified)", () => {
+  assert.ok(!isSuggestable(place("c")));
+});
+
+test("live places are always stamped verified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { federated: false },
+    deps: deps({ discover: async () => [place("node/1")] }),
+  });
+  assert.equal(r.places[0].verified, "verified");
+});
+
+test("federated places with description_source='source' are verified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [
+        { id: UUID, description_source: "source" } as never,
+      ],
+      hydratePlacesByIds: async () => [place(UUID)],
+    }),
+  });
+  assert.equal(r.places[0].verified, "verified");
+});
+
+test("federated places with description_source='llm' are verified (eligibility ADR)", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [
+        { id: UUID, description_source: "llm" } as never,
+      ],
+      hydratePlacesByIds: async () => [place(UUID)],
+    }),
+  });
+  assert.equal(r.places[0].verified, "verified");
+});
+
+test("federated places with description_source='template' are unverified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [
+        { id: UUID, description_source: "template" } as never,
+      ],
+      hydratePlacesByIds: async () => [place(UUID)],
+    }),
+  });
+  assert.equal(r.places[0].verified, "unverified");
+});
+
+test("federated places with no description_source are unverified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [{ id: UUID } as never],
+      hydratePlacesByIds: async () => [place(UUID)],
+    }),
+  });
+  assert.equal(r.places[0].verified, "unverified");
+});
+
+test("verified places sort before unverified in the merged result set", async () => {
+  const UUID3 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [
+        { id: UUID, description_source: "template" } as never,
+        { id: UUID2, description_source: "source" } as never,
+        { id: UUID3, description_source: "llm" } as never,
+      ],
+      hydratePlacesByIds: async (ids) =>
+        ids.map((id) => place(id, { title: `place-${id.slice(0, 4)}` })),
+    }),
+  });
+  assert.deepEqual(r.places.map((p) => p.verified), [
+    "verified", "verified", "unverified",
+  ]);
 });

@@ -60,6 +60,39 @@ import {
 export type Coord = [number, number];
 export type Bbox = [west: number, south: number, east: number, north: number];
 
+// ── Verification tier ────────────────────────────────────────────────
+
+export type VerificationTier = "verified" | "unverified";
+
+/** Classify a federated place's verification tier from its description_source.
+ *  - 'source' or 'llm' → verified (real or LLM-grounded description)
+ *  - 'template', null, or undefined → unverified
+ *  Live-sourced places are always verified (they come from real APIs). */
+export function classifyVerificationTier(
+  descriptionSource: "source" | "template" | "llm" | null | undefined,
+): VerificationTier {
+  return descriptionSource === "source" || descriptionSource === "llm"
+    ? "verified"
+    : "unverified";
+}
+
+/** Stable sort: verified places first, original order preserved within
+ *  each tier. */
+export function sortByVerificationTier(places: BrowsePlace[]): BrowsePlace[] {
+  return places.slice().sort((a, b) => {
+    const av = a.verified === "verified" ? 0 : 1;
+    const bv = b.verified === "verified" ? 0 : 1;
+    return av - bv;
+  });
+}
+
+/** A place is suggestable (eligible for proactive trip-stop recommendation)
+ *  only when verified. Unverified places are still fully searchable and
+ *  manually addable. */
+export function isSuggestable(place: BrowsePlace): boolean {
+  return place.verified === "verified";
+}
+
 // ── Scope ─────────────────────────────────────────────────────────────
 
 export type ResolveScope =
@@ -208,10 +241,22 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-/** Stamp canonical id + provenance. `source` is set UNCONDITIONALLY, unlike
- *  either endpoint — design §D7. */
-function stamp(p: BrowsePlace, origin: "live" | "master_place"): BrowsePlace {
-  return { ...p, id: canonicalizePlaceId(p.id), source: origin };
+/** Stamp canonical id, provenance, and verification tier. `source` is set
+ *  UNCONDITIONALLY, unlike either endpoint — design §D7.
+ *  Live-sourced places are always verified. Federated places derive their
+ *  tier from description_source, which the caller must supply via the
+ *  `descriptionSources` map (keyed on master_place uuid). */
+function stamp(
+  p: BrowsePlace,
+  origin: "live" | "master_place",
+  descriptionSources?: Map<string, "source" | "template" | "llm" | null>,
+): BrowsePlace {
+  const id = canonicalizePlaceId(p.id);
+  const verified: VerificationTier =
+    origin === "live"
+      ? "verified"
+      : classifyVerificationTier(descriptionSources?.get(p.id) ?? null);
+  return { ...p, id, source: origin, verified };
 }
 
 /** Graft PlaceRich onto a place without overwriting anything it already has.
@@ -271,15 +316,21 @@ export async function resolvePlaces(
 
   const scope = input.scope;
 
+  /** description_source by raw place id, populated by the federated path
+   *  when Typesense search results are available. */
+  const descriptionSources = new Map<string, "source" | "template" | "llm" | null>();
+
   const [live, federated] = await Promise.all([
     half("live", wantLive, () => resolveLive(scope, input, deps, noteError)),
-    half("corpus", wantFederated, () => resolveFederated(scope, input, deps)),
+    half("corpus", wantFederated, () =>
+      resolveFederated(scope, input, deps, descriptionSources)),
   ]);
 
   // ── Merge ───────────────────────────────────────────────────────────
   // Live first, so live wins an id tie — matching /api/search-area's order.
   const liveStamped = live.map((p) => stamp(p, "live"));
-  const fedStamped = federated.map((p) => stamp(p, "master_place"));
+  const fedStamped = federated.map((p) =>
+    stamp(p, "master_place", descriptionSources));
 
   const byCanonical = new Map<string, BrowsePlace>();
   for (const p of [...liveStamped, ...fedStamped]) {
@@ -312,6 +363,11 @@ export async function resolvePlaces(
       .sort((a, b) => a.fromStart - b.fromStart)
       .map((s) => s.place);
   }
+
+  // ── Verification-tier sort: verified first, then unverified ─────────
+  // Applied AFTER corridor distance sort / cross-source dedupe, so within
+  // each tier the existing sort order (distance, relevance) is preserved.
+  merged = sortByVerificationTier(merged);
 
   if (typeof input.limit === "number" && input.limit >= 0) {
     merged = merged.slice(0, input.limit);
@@ -411,6 +467,7 @@ async function resolveFederated(
   scope: ResolveScope,
   input: ResolvePlacesInput,
   deps: ResolveDeps,
+  descriptionSources: Map<string, "source" | "template" | "llm" | null>,
 ): Promise<BrowsePlace[]> {
   if (scope.kind === "ids") {
     const { masterPlaceUuids } = partitionPlaceIds(scope.ids);
@@ -426,6 +483,9 @@ async function resolveFederated(
       limit: input.limit ?? DEFAULT_TYPESENSE_LIMIT,
     });
     if (hits.length === 0) return [];
+    for (const h of hits) {
+      descriptionSources.set(h.id, h.description_source ?? null);
+    }
     return deps.hydratePlacesByIds(hits.map((h) => h.id));
   }
 

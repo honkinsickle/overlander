@@ -102,6 +102,11 @@ export type BrowsePlace = {
    *  "carried through, no render consumer yet" status as mvumCorridor above.
    *  NULL for non-applicable rows; absent on live results. */
   amenities?: Record<string, unknown> | null;
+  /** Verification tier: "verified" when backed by a real source description
+   *  or an LLM-generated description; "unverified" when template-only,
+   *  needs_review, or no description at all. Live-sourced places (Google,
+   *  Foursquare, etc.) are always verified. Absent when unknown. */
+  verified?: "verified" | "unverified";
 };
 
 const BASE_PILLS = {
