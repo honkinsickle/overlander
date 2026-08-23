@@ -75,10 +75,15 @@ export async function hydratePlacesByIds(
     .eq("is_searchable", true)
     .neq("primary_category", "land_status");
 
-  // View: geometry split into lng/lat doubles.
+  // View: geometry split into lng/lat doubles, plus description_source — the
+  // export view's CASE derivation ('source' | 'template' | 'llm' | null) that
+  // mapMasterPlaceRow classifies into the verified/unverified tier. The base
+  // master_place table has no description_source (it's a derived column on the
+  // view), so it must come from here; without it every hydrated place would
+  // default to 'unverified' regardless of true tier.
   const geoQuery = supabase
     .from("master_place_search_export")
-    .select("id,lng,lat,photo_url")
+    .select("id,lng,lat,photo_url,description_source")
     .in("id", ids);
 
   const [baseRes, geoRes] = await Promise.all([baseQuery, geoQuery]);
@@ -93,10 +98,31 @@ export async function hydratePlacesByIds(
   const baseById = new Map<string, HydrateRow>(
     (baseRes.data as HydrateRow[]).map((r) => [r.id, r]),
   );
-  const geoById = new Map<string, { lng: number; lat: number; photo_url: string | null }>(
-    (geoRes.data as { id: string; lng: number; lat: number; photo_url: string | null }[]).map((r) => [
+  const geoById = new Map<
+    string,
+    {
+      lng: number;
+      lat: number;
+      photo_url: string | null;
+      description_source: "source" | "template" | "llm" | null;
+    }
+  >(
+    (
+      geoRes.data as {
+        id: string;
+        lng: number;
+        lat: number;
+        photo_url: string | null;
+        description_source: "source" | "template" | "llm" | null;
+      }[]
+    ).map((r) => [
       r.id,
-      { lng: r.lng, lat: r.lat, photo_url: r.photo_url },
+      {
+        lng: r.lng,
+        lat: r.lat,
+        photo_url: r.photo_url,
+        description_source: r.description_source,
+      },
     ]),
   );
 
@@ -126,6 +152,11 @@ export async function hydratePlacesByIds(
       overlander_tags: base.overlander_tags,
       contact: base.contact,
       description: base.description,
+      // Verified/Unverified tier source. From the export view's CASE
+      // derivation (above), so mapMasterPlaceRow classifies the tier the same
+      // way the corridor RPC path already does — no longer defaulting every
+      // search-hydrated place to 'unverified'.
+      description_source: geo.description_source,
       attribution: base.attribution,
       hours: base.hours,
       // Previously hardcoded null — this SELECT never fetched either column,

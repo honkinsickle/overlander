@@ -23,10 +23,58 @@ import {
   type ResolveDeps,
 } from "./resolve-places";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
+import {
+  mapMasterPlaceRow,
+  type MasterPlaceRow,
+} from "@/lib/trip-browse/federated";
 
 const UUID = "531b1c71-96f2-4002-bc4e-cc1b6db49dc1";
 const UUID2 = "7af6a3d1-3a16-479c-926e-3eee7a2ba65c";
 const GID = "ChIJN1t_tDeuEmsRUsoyG83frY4";
+
+type DescSource = "source" | "template" | "llm" | null;
+
+/** A federated master_place row shaped as `hydratePlacesByIds` (via the export
+ *  view) and `pois_along_corridor` hand it to `mapMasterPlaceRow`. Minimal but
+ *  real-shaped: it carries `description_source`, which is the whole point. */
+function federatedRow(uuid: string, description_source: DescSource): MasterPlaceRow {
+  return {
+    id: uuid,
+    canonical_name: `place-${uuid.slice(0, 4)}`,
+    primary_category: "campground",
+    lng: -122.68,
+    lat: 45.52,
+    prominence_score: 0,
+    mvum_corridor: null,
+    overlander_tags: null,
+    amenities: null,
+    hours: null,
+    contact: null,
+    access: null,
+    services: null,
+    capacity: null,
+    seasonality: null,
+    cell_signal: null,
+    geometry_polygon: null,
+    description: null,
+    attribution: null,
+    description_source,
+  };
+}
+
+/** A fake `hydratePlacesByIds` that matches the REAL function's contract: each
+ *  id runs through the REAL `mapMasterPlaceRow`, so returned places carry
+ *  `mp:<uuid>` ids and a `verified` tier derived from `description_source` —
+ *  exactly what production emits. This is what the previous fakes got wrong
+ *  (they returned bare-uuid ids and omitted `verified`), which is how the
+ *  bbox tier blocker hid behind a green suite. `dsByUuid` supplies each id's
+ *  tier source; ids absent from it resolve to `null` → unverified. */
+function realContractHydrate(dsByUuid: Record<string, DescSource>) {
+  return async (ids: string[]): Promise<BrowsePlace[]> =>
+    ids.map((id) =>
+      mapMasterPlaceRow(federatedRow(id, dsByUuid[id] ?? null), "camping"),
+    );
+}
 
 function place(id: string, extra: Partial<BrowsePlace> = {}): BrowsePlace {
   return {
@@ -521,76 +569,110 @@ test("live places are always stamped verified", async () => {
   assert.equal(r.places[0].verified, "verified");
 });
 
-test("federated places with description_source='source' are verified", async () => {
-  const r = await resolvePlaces({
-    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
-    include: { live: false },
-    deps: deps({
-      search: async () => [
-        { id: UUID, description_source: "source" } as never,
-      ],
-      hydratePlacesByIds: async () => [place(UUID)],
-    }),
-  });
-  assert.equal(r.places[0].verified, "verified");
-});
+// ── bbox tier: end-to-end through the REAL mapMasterPlaceRow ─────────────
+// These drive resolvePlaces → resolveFederated → the real-contract hydrate
+// (which runs the REAL mapMasterPlaceRow) → stamp. `description_source` is
+// supplied on the federated row exactly as the export view would carry it, so
+// the classifier and its plumbing are exercised, not a simplified stand-in.
+// (The one link a unit test can't cover is the DB SELECT in hydrate.ts that
+// reads description_source off the view — that is the fix itself and is
+// verified by inspection; see the cutover-plan doc for the live-TEST note.)
 
-test("federated places with description_source='llm' are verified (eligibility ADR)", async () => {
-  const r = await resolvePlaces({
-    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
-    include: { live: false },
-    deps: deps({
-      search: async () => [
-        { id: UUID, description_source: "llm" } as never,
-      ],
-      hydratePlacesByIds: async () => [place(UUID)],
-    }),
-  });
-  assert.equal(r.places[0].verified, "verified");
-});
-
-test("federated places with description_source='template' are unverified", async () => {
-  const r = await resolvePlaces({
-    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
-    include: { live: false },
-    deps: deps({
-      search: async () => [
-        { id: UUID, description_source: "template" } as never,
-      ],
-      hydratePlacesByIds: async () => [place(UUID)],
-    }),
-  });
-  assert.equal(r.places[0].verified, "unverified");
-});
-
-test("federated places with no description_source are unverified", async () => {
+test("bbox: description_source='source' → verified end-to-end, real mp: id", async () => {
   const r = await resolvePlaces({
     scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
     include: { live: false },
     deps: deps({
       search: async () => [{ id: UUID } as never],
-      hydratePlacesByIds: async () => [place(UUID)],
+      hydratePlacesByIds: realContractHydrate({ [UUID]: "source" }),
+    }),
+  });
+  assert.equal(r.places[0].verified, "verified");
+  // The real hydrate contract: mp:<uuid> id, not a bare uuid. The old fake
+  // returned a bare uuid, which is how the blocker hid.
+  assert.equal(r.places[0].id, `mp:${UUID}`);
+});
+
+test("bbox: description_source='llm' → verified (eligibility ADR)", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [{ id: UUID } as never],
+      hydratePlacesByIds: realContractHydrate({ [UUID]: "llm" }),
+    }),
+  });
+  assert.equal(r.places[0].verified, "verified");
+});
+
+test("bbox: description_source='template' → unverified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [{ id: UUID } as never],
+      hydratePlacesByIds: realContractHydrate({ [UUID]: "template" }),
     }),
   });
   assert.equal(r.places[0].verified, "unverified");
 });
 
-test("verified places sort before unverified in the merged result set", async () => {
+test("bbox: no description_source → unverified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [{ id: UUID } as never],
+      hydratePlacesByIds: realContractHydrate({ [UUID]: null }),
+    }),
+  });
+  assert.equal(r.places[0].verified, "unverified");
+});
+
+test("bbox: verified (source, llm) sort before unverified (template) in the merged set", async () => {
   const UUID3 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
   const r = await resolvePlaces({
     scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
     include: { live: false },
     deps: deps({
       search: async () => [
-        { id: UUID, description_source: "template" } as never,
-        { id: UUID2, description_source: "source" } as never,
-        { id: UUID3, description_source: "llm" } as never,
+        { id: UUID } as never,
+        { id: UUID2 } as never,
+        { id: UUID3 } as never,
       ],
-      hydratePlacesByIds: async (ids) =>
-        ids.map((id) => place(id, { title: `place-${id.slice(0, 4)}` })),
+      hydratePlacesByIds: realContractHydrate({
+        [UUID]: "template",
+        [UUID2]: "source",
+        [UUID3]: "llm",
+      }),
     }),
   });
-  assert.deepEqual(r.places.map((p) => p.verified), [
-    "verified", "verified", "unverified",
-  ]);
+  // Verified (source, llm) first, unverified (template) last. Order within a
+  // tier preserved, so the two verified keep their pre-sort order.
+  assert.deepEqual(
+    r.places.map((p) => p.verified),
+    ["verified", "verified", "unverified"],
+  );
+  assert.deepEqual(
+    r.places.map((p) => p.id),
+    [`mp:${UUID2}`, `mp:${UUID3}`, `mp:${UUID}`],
+  );
+});
+
+// REGRESSION GUARD for the blocker: with the real-contract hydrate, a
+// 'source' corpus result MUST NOT come back unverified. A fake that returns a
+// bare-uuid id + omits `verified` (the old shape) would have silently passed
+// the pre-fix code; this asserts the id form so that shape can't return.
+test("bbox: a real-contract 'source' result never regresses to unverified", async () => {
+  const r = await resolvePlaces({
+    scope: { kind: "bbox", bbox: [-1, -1, 1, 1], categories: ["campground"] },
+    include: { live: false },
+    deps: deps({
+      search: async () => [{ id: UUID } as never],
+      hydratePlacesByIds: realContractHydrate({ [UUID]: "source" }),
+    }),
+  });
+  assert.equal(r.places.length, 1);
+  assert.equal(r.places[0].id, `mp:${UUID}`);
+  assert.notEqual(r.places[0].verified, "unverified");
 });

@@ -245,27 +245,16 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 /** Stamp canonical id, provenance, and verification tier. `source` is set
  *  UNCONDITIONALLY, unlike either endpoint — design §D7.
- *  Live-sourced places are always verified. Federated places derive their
- *  tier from either: (a) the `descriptionSources` map (bbox scope, keyed on
- *  master_place uuid from Typesense hits), or (b) a `verified` field already
- *  set on the place by `mapMasterPlaceRow` (corridor scope, from the RPC's
- *  description_source column). */
-function stamp(
-  p: BrowsePlace,
-  origin: "live" | "master_place",
-  descriptionSources?: Map<string, "source" | "template" | "llm" | null>,
-): BrowsePlace {
+ *  Live-sourced places are always verified. Federated places carry `verified`
+ *  already, set by `mapMasterPlaceRow` from `description_source` — for BOTH
+ *  the corridor path (RPC row) and the bbox/id path (the export view column,
+ *  threaded through `hydratePlacesByIds`). So tier classification is
+ *  single-sourced in `mapMasterPlaceRow`; this function only preserves it
+ *  (defaulting to unverified if somehow absent, e.g. a hand-built fixture). */
+function stamp(p: BrowsePlace, origin: "live" | "master_place"): BrowsePlace {
   const id = canonicalizePlaceId(p.id);
-  let verified: VerificationTier;
-  if (origin === "live") {
-    verified = "verified";
-  } else if (p.verified) {
-    // Already set by mapMasterPlaceRow (corridor path) — preserve it.
-    verified = p.verified;
-  } else {
-    // Derive from the Typesense description_source map (bbox path).
-    verified = classifyVerificationTier(descriptionSources?.get(p.id) ?? null);
-  }
+  const verified: VerificationTier =
+    origin === "live" ? "verified" : p.verified ?? "unverified";
   return { ...p, id, source: origin, verified };
 }
 
@@ -326,21 +315,16 @@ export async function resolvePlaces(
 
   const scope = input.scope;
 
-  /** description_source by raw place id, populated by the federated path
-   *  when Typesense search results are available. */
-  const descriptionSources = new Map<string, "source" | "template" | "llm" | null>();
-
   const [live, federated] = await Promise.all([
     half("live", wantLive, () => resolveLive(scope, input, deps, noteError)),
     half("corpus", wantFederated, () =>
-      resolveFederated(scope, input, deps, descriptionSources)),
+      resolveFederated(scope, input, deps)),
   ]);
 
   // ── Merge ───────────────────────────────────────────────────────────
   // Live first, so live wins an id tie — matching /api/search-area's order.
   const liveStamped = live.map((p) => stamp(p, "live"));
-  const fedStamped = federated.map((p) =>
-    stamp(p, "master_place", descriptionSources));
+  const fedStamped = federated.map((p) => stamp(p, "master_place"));
 
   const byCanonical = new Map<string, BrowsePlace>();
   for (const p of [...liveStamped, ...fedStamped]) {
@@ -477,7 +461,6 @@ async function resolveFederated(
   scope: ResolveScope,
   input: ResolvePlacesInput,
   deps: ResolveDeps,
-  descriptionSources: Map<string, "source" | "template" | "llm" | null>,
 ): Promise<BrowsePlace[]> {
   if (scope.kind === "ids") {
     const { masterPlaceUuids } = partitionPlaceIds(scope.ids);
@@ -493,9 +476,10 @@ async function resolveFederated(
       limit: input.limit ?? DEFAULT_TYPESENSE_LIMIT,
     });
     if (hits.length === 0) return [];
-    for (const h of hits) {
-      descriptionSources.set(h.id, h.description_source ?? null);
-    }
+    // Tier classification is NOT re-derived from the Typesense hit's
+    // description_source here — hydratePlacesByIds reads the same field from
+    // the export view and mapMasterPlaceRow classifies it, so the tier is
+    // single-sourced. Passing the id list is all the bbox path needs.
     return deps.hydratePlacesByIds(hits.map((h) => h.id));
   }
 

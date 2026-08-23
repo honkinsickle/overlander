@@ -13,14 +13,23 @@ Evidence convention per `trip-resolution.md`. Every current-behaviour claim belo
 tagged `[read source]` / `[measured 2026-08-23]` and was re-read in full this session,
 not recalled. Companion: `resolve-places-design.md` (the service design, D1–D9).
 
-> **⚠ HEADLINE FINDING — there is one real blocker.** The Verified/Unverified tiering
-> (#255/#256) is **non-functional on the `bbox` (Search) path of `resolvePlaces()` as
-> built.** Every federated Search result would classify as `unverified`. The resolver's
-> bbox tier tests validate a fake `hydratePlacesByIds` that behaves **unlike the real one**
-> in exactly the two ways that matter, so a green suite would not catch it (the fake's
-> divergence is confirmed by reading; the suite was **not executed here** — `web/node_modules`
-> is absent). Details in §4. This must be fixed before a Search cutover that honours
-> #255/#256. Everything else is mechanical.
+> **✅ HEADLINE FINDING — RESOLVED (PR against main, branch `fix/hydrate-description-source`).**
+> The Verified/Unverified tiering (#255/#256) was **non-functional on the `bbox` (Search)
+> path of `resolvePlaces()` as built** — every federated Search result classified as
+> `unverified`, and the resolver's bbox tier tests validated a fake `hydratePlacesByIds`
+> that behaved unlike the real one, so a green suite did not catch it. **Fixed:**
+> `hydratePlacesByIds` now selects `description_source` from `master_place_search_export`
+> and threads it into `mapMasterPlaceRow`, so the tier is single-sourced in that projector
+> for both the bbox/id and corridor paths; the resolver's redundant `descriptionSources`
+> map + `stamp()` bbox branch are deleted; the test fakes now match the real contract
+> (`mp:<uuid>` ids + real classification through `mapMasterPlaceRow`); and a live TEST
+> verification (`web/scripts/verify-hydrate-tier.ts`, with a negative control) confirms it
+> end-to-end. See the "Resolution" note in §4 and §6. The rest of the cutover is still
+> mechanical and NOT done here — this PR fixes the blocker only.
+>
+> _Original finding preserved below for the record._ Every federated Search result would
+> classify as `unverified`; the resolver's bbox tier tests validated a fake that behaved
+> unlike the real one. Details in §4.
 
 ---
 
@@ -162,10 +171,38 @@ never auto-hydrated `[read source]`. The wrapper simply **must not pass `enrich`
 Search keeps its no-live-Google-Details behaviour exactly. Confirmed by the enrich default
 and the §D3 resolution. **No change needed beyond "don't pass `enrich`."**
 
-### #255 / #256 (Verified/Unverified tiers) — ❌ NOT reflected on the Search (`bbox`) path
+### #255 / #256 (Verified/Unverified tiers) — ✅ RESOLVED (was the blocker)
 
-This is the blocker. The tier system was **built into `resolvePlaces()`**, but the `bbox`
-data path never actually feeds it real `description_source`, so it silently degrades to
+> **Resolution (branch `fix/hydrate-description-source`).** The mechanism traced below
+> was the bug. Fixed by threading `description_source` through the read, single-sourcing
+> classification, deleting the dead plumbing, and proving it live:
+> - **`hydrate.ts`** — the geo `SELECT` on `master_place_search_export` now includes
+>   `description_source`, carried into the `MasterPlaceRow` so `mapMasterPlaceRow`
+>   classifies the tier. This is the actual fix — the one line the tier depended on.
+> - **`resolve-places.ts`** — the `descriptionSources` map and `stamp()`'s bbox-derivation
+>   branch (steps 3–4 below) are **deleted**. `stamp()` now just preserves the `verified`
+>   `mapMasterPlaceRow` already sets (live → always verified). Classification is
+>   single-sourced in `mapMasterPlaceRow` for every scope. (`classifyVerificationTier`
+>   is kept as the exported, unit-tested canonical statement of the rule.)
+> - **`resolve-places.test.ts`** — the tier fakes now match the real contract: a
+>   `realContractHydrate` helper runs ids through the **real `mapMasterPlaceRow`**, so
+>   fakes return `mp:<uuid>` ids and a real `verified` tier. A regression guard asserts
+>   the `mp:` id form so the old bare-uuid + no-`verified` fake shape can't return.
+> - **`web/scripts/verify-hydrate-tier.ts`** — a READ-ONLY live TEST check drives the real
+>   `hydratePlacesByIds` and asserts each survivor's tier equals the export view's
+>   `description_source`. **Passed** on TEST (`znldzjdatkogdktymtvi`), with a **negative
+>   control**: reverting just the SELECT flips every `source`/`llm` survivor to
+>   `unverified` (the blocker), confirming the check isn't vacuous.
+>
+> Gates: `npm run -w web typecheck` and `npx next build` both exit 0; resolver suite
+> 36/36, place-id 27/27 — **executed**, not just read (deps installed via `npm install`;
+> they hoist to the repo-root `node_modules`, which is why a `web/node_modules` check
+> reads absent).
+>
+> _The original analysis is preserved below for the record._
+
+This was the blocker. The tier system was **built into `resolvePlaces()`**, but the `bbox`
+data path never actually fed it real `description_source`, so it silently degraded to
 "everything unverified."
 
 **Mechanism, traced end to end `[read source]`:**
@@ -251,16 +288,18 @@ Either way the cache + response shaping stay at the route, so a revert/flip is i
 
 ## 6. What blocks a safe cutover today
 
-1. **BLOCKER — #255/#256 bbox tier path is non-functional (§4).** Fix `hydrate.ts` to
-   carry `description_source`, delete the now-redundant resolver bbox-tier plumbing, and
-   add a real-contract resolver test. Without this, cutover ships wrong ordering and
-   defeats the tier work.
-2. **BLOCKER-ish — the service has never run end-to-end** (design §5 gap 2). It is
-   verified only against fakes. Stand up a scripted TEST verification of the **wired**
-   route (real Typesense + `hydratePlacesByIds` + Supabase, TEST project) exercising:
-   free-text, category tiles, an all-overland category set (federated-only), a
-   source-down case (`failedSources` wording), and the post-fix verified ordering.
-   Because web unit tests don't gate CI (#3 below), **this script is the real gate.**
+1. **✅ RESOLVED — #255/#256 bbox tier path (§4).** `hydrate.ts` now carries
+   `description_source`; the redundant resolver bbox-tier plumbing is deleted; the
+   resolver tests use a real-contract fake; and `web/scripts/verify-hydrate-tier.ts`
+   proves it live on TEST (with a negative control). See the §4 Resolution note.
+   Cutover no longer ships wrong ordering on this axis.
+2. **STILL OPEN — the *wired route* has not run end-to-end** (design §5 gap 2). The tier
+   fix is proven at the `hydratePlacesByIds` level, but nothing has driven the **wired
+   `/api/search-area` → `resolvePlaces()` route** yet (nothing imports the resolver from
+   the route). Before cutover, stand up a scripted TEST verification of the wired route
+   exercising: free-text, category tiles, an all-overland category set (federated-only),
+   a source-down case (`failedSources` wording), and verified ordering. Because web unit
+   tests don't gate CI (#3 below), **that script is the real gate.**
 3. **GAP (pre-existing, not introduced) — web tests don't run in CI.** The §4 unit test
    protects local runs only; rely on the §6.2 script + Adam's review for the merge gate.
 4. **MECHANICAL — wrapper details:** don't pass `limit`, don't pass `enrich`, decide
