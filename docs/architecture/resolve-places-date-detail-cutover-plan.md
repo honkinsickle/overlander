@@ -13,14 +13,23 @@ Evidence convention per `trip-resolution.md`. Every current-behaviour claim is t
 `resolve-places-design.md` (the service design, esp. **D3**) and
 `resolve-places-search-cutover-plan.md` (the Search cutover, the model this follows).
 
-> **⛔ HEADLINE FINDING — Date Detail is NOT a thin route swap like Search, and there is a
-> hard blocker.** Date Detail's route, `POST /api/places/details`, is an **enrich-by-id**
-> service: it takes bare Google `place_id`s and returns `{ details: Record<placeId,
-> PlaceRich> }` — enrichment *fragments*, not places. `resolvePlaces()` returns
-> `BrowsePlace[]` and has **no mode that emits that map**. Worse, in `ids` scope it returns
-> **nothing** for bare Google ids (traced in §2). So `enrich: true` cannot be "passed at
-> cutover" the way the ADR's D3 note imagined — there is no place to enrich, and no
-> place-shaped output the consumer can read. This surface needs a **new enrich-ids
+> **✅ BLOCKER RESOLVED 2026-08-23 — the enrich-ids capability now exists (#263).**
+> `enrichByGoogleId(ids) → Record<placeId, PlaceRich>` was built as a sibling in
+> `resolve-places.ts` (the "new enrich-ids capability" this finding called for), so the
+> shape gap below is bridged: a caller can now get the `place_id → PlaceRich` map from the
+> resolver. Date Detail's cutover is therefore **unblocked** and becomes the thin route
+> wrapper of §6 option 1 — **still not done here** (the route wiring +
+> `DATE_DETAIL_USE_RESOLVER` is the next PR). See §2, §4, §6 for the updated status. The
+> original finding is preserved below for the record.
+>
+> **⛔ HEADLINE FINDING (original) — Date Detail is NOT a thin route swap like Search, and
+> there is a hard blocker.** Date Detail's route, `POST /api/places/details`, is an
+> **enrich-by-id** service: it takes bare Google `place_id`s and returns `{ details:
+> Record<placeId, PlaceRich> }` — enrichment *fragments*, not places. `resolvePlaces()`
+> returns `BrowsePlace[]` and has **no mode that emits that map**. Worse, in `ids` scope it
+> returns **nothing** for bare Google ids (traced in §2). So `enrich: true` cannot be
+> "passed at cutover" the way the ADR's D3 note imagined — there is no place to enrich, and
+> no place-shaped output the consumer can read. This surface needs a **new enrich-ids
 > capability on `resolvePlaces()` (or a sibling)**, not a wrapper. Details in §2; options
 > in §6. The Search-style flag/rollback are moot until that capability exists.
 
@@ -67,7 +76,16 @@ id" from "nothing to add" so the client stops re-requesting); only `null` is wit
 
 ---
 
-## 2. Can `resolvePlaces({ enrich: true })` serve this? — NO (the blocker), traced
+## 2. Can `resolvePlaces({ enrich: true })` serve this? — NO (the blocker) — ✅ RESOLVED via `enrichByGoogleId()` (#263)
+
+> **✅ RESOLVED 2026-08-23 (#263).** The contract mismatch traced below is real and stands
+> as the reason `enrich: true` / `ids` scope can't serve Date Detail. It is bridged not by
+> changing `resolvePlaces()`'s return, but by the sibling `enrichByGoogleId(ids) →
+> Record<placeId, PlaceRich>` — which returns exactly the map the consumer needs, with the
+> same include-`{}`/omit-`null` semantics as `POST /api/places/details`. So the cutover no
+> longer waits on the resolver; it is now the route wrapper of §6 option 1. The analysis
+> below is preserved as the record of *why* the map capability (not a scope extension) was
+> the right shape.
 
 **Contract mismatch.** The consumer needs **`Record<placeId, PlaceRich>`**;
 `resolvePlaces()` returns **`{ places: BrowsePlace[], counts, failedSources }`**
@@ -161,15 +179,22 @@ Per the Search pattern (`SEARCH_AREA_USE_RESOLVER`), the flag for this surface w
 - **`DATE_DETAIL_USE_RESOLVER`** — env boolean, **default OFF**, `=== "true"` to enable,
   mirroring `USE_FEDERATED_POIS`.
 
-**⚠ But it gates nothing today (flagged, not dropped).** The user asked for a flag name and
-I've named it. Wiring it now would gate a branch that cannot be written coherently (§2):
-there is no `resolvePlaces` call that returns `{ details }`. Adding the flag before the
-enrich-ids capability (§6) exists would create a dead/degenerate ON branch — the exact
-"a check that cannot do its job" anti-pattern. **Recommendation: introduce
-`DATE_DETAIL_USE_RESOLVER` in the SAME change that adds the enrich-ids capability**, not
-before. (The route reads env at module load and the client reads env only via the server,
-so — as with Search — a flag flip = redeploy = fresh process/cache; no cache-key change
-needed when it does land.)
+**✅ NOW WIREABLE 2026-08-23 (#263).** The "gates nothing" note below has **lifted**:
+`enrichByGoogleId()` exists, so the ON branch can be written coherently — delegate the
+fetch to `enrichByGoogleId()` and return the same `{ details }` map. `DATE_DETAIL_USE_RESOLVER`
+should be introduced **in the cutover PR, alongside the route wrapper** (§6 option 1), default
+OFF. The flag-flip mechanics below still hold (redeploy = fresh process/cache; no cache-key
+change needed).
+
+> **⚠ (Original) But it gates nothing today (flagged, not dropped).** The user asked for a
+> flag name and I've named it. Wiring it now would gate a branch that cannot be written
+> coherently (§2): there is no `resolvePlaces` call that returns `{ details }`. Adding the
+> flag before the enrich-ids capability (§6) exists would create a dead/degenerate ON branch
+> — the exact "a check that cannot do its job" anti-pattern. **Recommendation: introduce
+> `DATE_DETAIL_USE_RESOLVER` in the SAME change that adds the enrich-ids capability**, not
+> before. (The route reads env at module load and the client reads env only via the server,
+> so — as with Search — a flag flip = redeploy = fresh process/cache; no cache-key change
+> needed when it does land.)
 
 ---
 
@@ -193,15 +218,18 @@ byte (no `web/src/components` change), exactly as the Search cutover preserved i
 
 ## 6. Blocker and options
 
-**The blocker (§2):** `resolvePlaces()` has no capability that maps a list of Google
-`place_id`s to `PlaceRich` (or to any place-shaped output the consumer can read). That is
-the D3 divergence, unresolved for this surface. Until it exists, Date Detail cannot cut
-over.
+**The blocker (§2) — ✅ RESOLVED 2026-08-23 (#263):** `resolvePlaces()` had no capability
+that maps a list of Google `place_id`s to `PlaceRich`. That capability now exists —
+`enrichByGoogleId()`, the standalone map-returning function of option 1 — so the D3
+divergence is bridged and Date Detail *can* cut over. What remains is the route wrapper
+(next PR), not the resolver.
 
 **Options, least-to-most invasive:**
 
 1. **Add an enrich-ids capability to `resolvePlaces` (or a small sibling), then make the
-   route a thin wrapper. — RECOMMENDED.** Give the resolver a way to take Google
+   route a thin wrapper. — RECOMMENDED · ✅ TAKEN PATH.** The capability half is **done**
+   (`enrichByGoogleId()`, #263); the route-wrapper half is the pending Date Detail cutover
+   PR. Give the resolver a way to take Google
    `place_id`s and return their `PlaceRich` (the standalone version of what `enrichPlaces`
    does internally). The route then calls it and returns the existing `{ details }` map
    unchanged; the client is untouched. This finally centralises the `placeDetails` call +
@@ -222,12 +250,13 @@ over.
    step 4's shared cache lands. Revisit Date Detail *after* the enrich-ids capability
    exists (option 1), or fold it into the step-4 cache work directly.
 
-**Bottom line:** Search was a route that *resolves places*, so `resolvePlaces` bbox was a
-near-drop-in. Date Detail's route *enriches ids the client already holds* and returns a
-`place_id → PlaceRich` map — a shape `resolvePlaces` deliberately treats as an internal
-step, never an output (D3). The Date Detail cutover therefore requires a **new resolver
-capability first** (option 1), best done together with ADR step 4's shared cache; the
-`DATE_DETAIL_USE_RESOLVER` flag and rollback slot in cleanly once that capability exists,
-but wiring them before it would gate an empty branch. Tiering and #254 are non-issues for
-this surface (§3) — a real simplification relative to Search, and the one piece of good
-news here.
+**Bottom line (updated 2026-08-23, #263):** Search was a route that *resolves places*, so
+`resolvePlaces` bbox was a near-drop-in. Date Detail's route *enriches ids the client
+already holds* and returns a `place_id → PlaceRich` map — a shape `resolvePlaces`
+deliberately treats as an internal step, never an output (D3). That "new resolver capability
+first" is now **done** (`enrichByGoogleId()`, #263), so the cutover is the remaining route
+wrapper (option 1): the ON branch delegates the fetch to `enrichByGoogleId()`,
+`DATE_DETAIL_USE_RESOLVER` gates it (default OFF), the route keeps its `{ details }` shape
+and its 15-min cache, and the client is untouched. Tiering and #254 are non-issues for this
+surface (§3) — a real simplification relative to Search, and the one piece of good news
+here.
