@@ -18,10 +18,7 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   // Real camping place types only. Standalone amenities (dump_station, water,
   // toilet, …) are NOT here — they're suppressed from browse entirely (see
   // SUPPRESSED_PRIMARY_CATEGORIES below), not cards in their own right.
-  camping: [
-    "dispersed_camping", "campground", "recreation_area", "facility",
-    "rv_park", "camping_cabin",
-  ],
+  camping: ["dispersed_camping", "campground", "rv_park", "camping_cabin"],
   fuel: ["gas_station", "ev_charging", "truck_stop"],
   food: [
     "restaurant", "grocery", "grocery_store", "cafe", "diner",
@@ -39,6 +36,7 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Record<SlideCategoryKey, string[]> = {
     // decision B — park_feature (3168, 24%) is mixed natural/interpretive but
     // unsplittable by primary_category; → scenic preserves today's behavior.
     "park_feature",
+    "recreation_area",
   ],
   overnight: ["hotel", "resort_hotel", "motel"],
   // attraction: the formal cultural set only.
@@ -60,7 +58,7 @@ export const SLIDE_TO_PRIMARY_CATEGORY: Record<SlideCategoryKey, string[]> = {
     "timed_entry", "venue_reservations", "car_repair", "car_wash", "marina",
     "tree_permit", "atm", "bus_stop", "government_office", "kiosk", "library",
     "national_fish_hatchery", "point_of_interest", "sports_activity_location",
-    "amphitheatre", "mobile_home_park",
+    "amphitheatre", "mobile_home_park", "facility",
   ],
 };
 

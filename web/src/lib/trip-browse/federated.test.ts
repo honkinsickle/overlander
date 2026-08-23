@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapMasterPlaceRow } from "./federated";
+import {
+  mapMasterPlaceRow,
+  primaryCategoryToSlideKey,
+  SLIDE_TO_PRIMARY_CATEGORY,
+} from "./federated";
 
 /** Minimal pois_along_corridor row — only the required fields, plus whichever
  *  optional join columns a case exercises. */
@@ -75,6 +79,25 @@ test("amenities survives row → tile for a source field_precedence resolves (ri
 test("no amenities on the row → no amenities on the tile", () => {
   const tile = mapMasterPlaceRow(row({ amenities: null }), "camping");
   assert.equal(tile.amenities, null);
+});
+
+// ── category bucket assignments ──────────────────────────────────────────
+
+test("camping bucket contains only real camping categories", () => {
+  const camping = new Set(SLIDE_TO_PRIMARY_CATEGORY.camping);
+  const expected = new Set(["campground", "dispersed_camping", "rv_park", "camping_cabin"]);
+  assert.deepEqual(camping, expected);
+});
+
+test("facility is NOT in the camping bucket", () => {
+  assert.ok(!SLIDE_TO_PRIMARY_CATEGORY.camping.includes("facility"));
+  assert.equal(primaryCategoryToSlideKey("facility"), "interest");
+});
+
+test("recreation_area is in the scenic bucket, not camping", () => {
+  assert.ok(!SLIDE_TO_PRIMARY_CATEGORY.camping.includes("recreation_area"));
+  assert.ok(SLIDE_TO_PRIMARY_CATEGORY.scenic.includes("recreation_area"));
+  assert.equal(primaryCategoryToSlideKey("recreation_area"), "scenic");
 });
 
 // NOTE on OSM + amenities: this function does not, and should not, know
