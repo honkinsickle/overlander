@@ -503,6 +503,56 @@ async function resolveFederated(
 
 // ── Enrichment (the /api/places/details role) ──────────────────────────
 
+/**
+ * Fetch live Google Place Details for a set of Google `place_id`s and return
+ * them as a `place_id → PlaceRich` map — the resolver-side equivalent of what
+ * `POST /api/places/details` serves, exposed so a caller (Date Detail's route,
+ * once cut over) can enrich ids it already holds without a place resolution.
+ * See docs/architecture/resolve-places-enrich-by-id-plan.md.
+ *
+ * Semantics MATCH the route's `details` map exactly:
+ *   - one `placeDetails(id, signal)` per id, deduped (first-occurrence order),
+ *     in sequential batches of `batchSize` (a concurrency ceiling), each
+ *     batch's ids concurrent.
+ *   - a RESOLVED entry — INCLUDING a resolved-but-EMPTY `{}` (a real place
+ *     Google has nothing to add about) — lands in the map.
+ *   - a `null` (missing key / network / non-OK) is OMITTED. Present-`{}` vs
+ *     absent-key is the "resolved vs failed" signal callers rely on
+ *     (the client's `!hydrated[id]` guard reads an absent key as "not fetched
+ *     yet" and re-requests).
+ *
+ * CACHE-LESS by design, like `enrichPlaces` — the resolver holds no cache
+ * (that stays at the route / ADR step 4), so it also can't reproduce the
+ * 15-minute negative-cache trap. Takes RAW ids: a non-Google id is not
+ * pre-filtered here — it resolves to `null` from `placeDetails` and is omitted,
+ * the same path as any failed lookup.
+ */
+export async function enrichByGoogleId(
+  ids: string[],
+  opts: {
+    signal?: AbortSignal;
+    /** Injectable for tests; defaults to the real Google Place Details call. */
+    placeDetails?: ResolveDeps["placeDetails"];
+    /** Concurrency ceiling per batch. Defaults to the resolver's ENRICH_BATCH. */
+    batchSize?: number;
+  } = {},
+): Promise<Record<string, PlaceRich>> {
+  const fetchDetails = opts.placeDetails ?? placeDetails;
+  const batchSize = opts.batchSize ?? ENRICH_BATCH;
+  const unique = Array.from(new Set(ids));
+  const out: Record<string, PlaceRich> = {};
+  for (const batch of chunk(unique, batchSize)) {
+    await Promise.all(
+      batch.map(async (id) => {
+        const r = await fetchDetails(id, opts.signal);
+        // `{}` (resolved-empty) is truthy → included; `null` → omitted.
+        if (r) out[id] = r;
+      }),
+    );
+  }
+  return out;
+}
+
 async function enrichPlaces(
   places: BrowsePlace[],
   deps: ResolveDeps,
@@ -518,22 +568,16 @@ async function enrichPlaces(
   );
   if (wanted.length === 0) return places;
 
-  const rich = new Map<string, PlaceRich>();
-  for (const batch of chunk(wanted, ENRICH_BATCH)) {
-    await Promise.all(
-      batch.map(async (gid) => {
-        // A null (missing key / network / non-OK) simply leaves the place
-        // un-enriched. Deliberately NOT cached here — the resolver holds no
-        // cache, so it also can't reproduce the 15-minute negative-cache trap.
-        const r = await deps.placeDetails(gid, signal);
-        if (r) rich.set(gid, r);
-      }),
-    );
-  }
+  // Delegate the fetch/batch loop to the shared, map-returning capability —
+  // same fetch, same batching, same include-`{}`/omit-`null` semantics.
+  const rich = await enrichByGoogleId(wanted, {
+    signal,
+    placeDetails: deps.placeDetails,
+  });
 
   return places.map((p) => {
     const gid = idFor(p);
-    const r = gid ? rich.get(gid) : undefined;
+    const r = gid ? rich[gid] : undefined;
     return r ? applyRich(p, r) : p;
   });
 }
