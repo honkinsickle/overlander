@@ -12,65 +12,56 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-08-23 — #249/#251/#250 merged; the stranded pilot branch surfaced and retired
+## 2026-08-22 (later) — `resolvePlaces()` built as an additive service (ADR step 2), branch `feat/resolve-places-service`
 
-- **Three PRs merged, in this order: `0dd11a6` (#249), `4bfd183` (#251),
-  `e96d1e7` (#250).** #249 records the LLM-description trip-suggestion
-  eligibility decision; #251 surfaces the address-coverage survey and the RIDB
-  `FACILITYADDRESS` investigation; #250 surfaces the LLM generation scripts.
-  **None of the three touched a database, schema, search sync, or Typesense.**
-- **An unpushed branch was hiding two unrelated workstreams, and the
-  pre-push review is what caught it.** The task was framed as "push
-  `corpus-address-field-survey`, it contains the LLM script". It contained
-  **three commits across two workstreams** — the LLM pilot *and* an
-  address-coverage / RIDB investigation — plus a `STATE.md` edit forked at
-  `d6c55ac` (#244) that conflicted with `main` and would have fought the
-  corrections merged in #248. Splitting into #250 and #251 came out of the
-  review, not the original plan. **The lesson is cheap and repeatable: diff an
-  unmerged branch against `main` before pushing it, not after.**
-- **The stale `STATE.md` hunk was dropped rather than reapplied**, and the
-  drop was checked rather than assumed: every unique figure in it —
-  3,135,552 input tokens, 253,304 output, `n=60` spot-check at 3.3%, the
-  7,154→7,433 target drift, the resolved model id, even the cost — is present
-  in the measurement doc #250 carries, at higher precision (`$13.2062`, which
-  the hunk had rounded to `$13.21`). Only genuinely new pointers were added to
-  current `STATE.md`.
-- **`corpus-address-field-survey` is now fully redundant — verified, not
-  assumed.** Per-file content comparison against `main`: 7 of its 8 files are
-  byte-identical, **0 files exist only on the branch**, and the 8th is the
-  stale `STATE.md`. Note the three-dot diff (`origin/main...53d70bb`) still
-  reports all 1,595 lines as "added" — that is the squash artifact again, and
-  it is the wrong instrument here. **Compare file content, not the three-dot
-  diff, when deciding whether a squash-merged branch is redundant.**
-- **The Conductor directories `corpus-address-field-survey` and `puebla` were
-  not two worktrees** — both `.git` files pointed at the *same* gitdir
-  (`.git/worktrees/puebla`), so one was a filesystem copy of the other, and
-  only `puebla` was registered with git. Consequence: `git worktree remove
-  puebla` deleted **both** directories in one step.
-- **Cleanup completed 2026-08-23, artifacts archived first.** Order run:
-  archive → `git worktree remove puebla` → delete branch. **⚠ The pilot's
-  `.context/` held the ONLY copies** of the run-set
-  (`llm-target-population-2026-08-21.json`, 2.1 MB) and the per-row run log
-  (`llm-description-run-2026-08-21.jsonl`, 4.7 MB — prompt text and token
-  counts for all 7,433 rows), both gitignored via `.git/info/exclude` and so
-  recoverable from neither the repo nor the database. The whole `.context`
-  tree was copied to **`~/archives/llm-description-run-2026-08-21/`** and
-  verified by SHA-256 before anything was removed. That sweep caught a fourth
-  file the narrow two-file brief would have destroyed: the original task brief
-  the run was executed under (`.context/attachments/…/pasted_text_…txt`).
-- **`git branch -d` refused the redundant branch — and its reason was the
-  squash artifact again, in git's own safety check.** `-d` tests **ancestry**,
-  and the branch tip is not an ancestor of `main` because #250/#251
-  squash-merged its content into new SHAs, so git reports "not fully merged"
-  about a branch whose every file is byte-identical on `main`. Deleted with
-  `-D` after the content check (0 files unique to the branch) and the archive
-  both passed. **Third time the squash artifact has produced a misleading
-  signal** — after `merge-base --is-ancestor` and the three-dot diff. The
-  through-line: for a squash-merged branch, ancestry-based tools all lie;
-  compare content.
-- **Two fixes proposed in #251 are explicitly NOT applied and are now parked in
-  `BACKLOG.md`** rather than living only inside a measurement doc: the RIDB
-  `full=true` fetch-layer gap, and the address/geocoding schema proposal.
+- **Built `resolvePlaces()` and wired it to nothing.** One signature over three
+  scopes (`ids` | `bbox` | `day-corridor`), LIVE + FEDERATED concurrently,
+  merge on canonical id, `BrowsePlace[]` out. The three endpoints it will
+  eventually replace show **zero diff**, and a repo-wide grep confirms **no
+  importer** outside `web/src/lib/places/`. Verified, not asserted — that was
+  the whole constraint of the session.
+- **Re-reading the three handlers found nine divergences that a resolver
+  cannot silently reconcile**, all written up in
+  `docs/architecture/resolve-places-design.md` §2 rather than resolved. The
+  three that actually block cutover: the two endpoints speak **different
+  category vocabularies** whose translation maps are not inverses
+  (`LIVE_SLIDE_FOR_PRIMARY` is a deliberate subset, `SLIDE_TO_PRIMARY_CATEGORY`
+  is the full map); there are **three doors into `master_place` with different
+  membership** — the corridor RPC excludes template-only descriptions and
+  `needs_review` rows, the search-hydrate service-role path does not, so a
+  place can be corridor-invisible and search-visible; and **`POST
+  /api/places/details` does not return places** — it returns `PlaceRich`
+  fragments keyed by Google place_id, for grafting onto tiles the client
+  already has. Folding that in means the resolver decides when to hydrate
+  instead of the caller, so enrichment shipped opt-in and off.
+- **The id problem is bigger than the ADR's "add a normalization step".** Not
+  three forms but **eight, in two schemes** — federated `mp:` + colon, live
+  `<prefix>/` + slash. And **the live prefix is not the `SourceId`**: `gpl`≠
+  `google`, `fsq`≠`foursquare`, `ridb`≠`rec-gov`, `node`≠`osm`. Four of six
+  would be wrong if the map were derived instead of written out.
+- **A typo in a test fixture found a real parser bug.** A stray colon in an
+  `fsq/…` fixture failed, and the failure was correct: checking `:` before `/`
+  reads `fsq/abc:def` as prefix `fsq/abc`, fails the `mp` test, and returns
+  `opaque` — an unresolvable id with no error. External ids are opaque
+  third-party tokens and nothing promises they avoid `:`. Fixed to pick the
+  scheme by whichever separator comes first; kept as a regression test. Worth
+  recording because the bug was invisible to every hand-written fixture — it
+  took an accident.
+- **Deliberately not built:** no cache (ADR step 4 puts one on the client; a
+  server cache here would be a second, competing one, and the three endpoints'
+  cache grains don't reconcile anyway), no env reads (`USE_FEDERATED_POIS`-style
+  gating is the caller's via `include`), no trip/day lookup (`day-corridor`
+  takes coordinates, not a `tripId` — a place service shouldn't couple to the
+  trip repository or its RLS).
+- **Two gaps that limit what "verified by tests" means here.** Web tests **do
+  not run in CI** — the `test` job is `npm run -w data test` only and
+  `web/package.json` has no `test` script, so the 47 tests are not enforced on
+  merge (pre-existing, not introduced). And the service has **never run against
+  live infrastructure** — it is verified through a dependency seam with fakes,
+  because nothing imports it and standing it up would require the cutover this
+  session was told not to do.
+- **No DB, network, or API calls at all this session** — not TEST, not PROD,
+  not the management API.
 
 ## 2026-08-22 — #247 merged; doc-currency pass
 

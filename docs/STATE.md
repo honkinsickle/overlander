@@ -1,4 +1,4 @@
-# STATE — branch `main` · 2026-08-23 (⚠ **Three more PRs MERGED since the masthead below** — in merge order: **`0dd11a6` (#249)** the LLM-description trip-suggestion eligibility ADR; **`4bfd183` (#251)** the address-coverage survey + RIDB `FACILITYADDRESS` investigation; **`e96d1e7` (#250)** the LLM description generation scripts. `e96d1e7` is the current `origin/main` tip `[git log, 2026-08-23]`. **Nothing in any of the three changed a database, a schema, the search sync, or Typesense** — #249 and #251 are docs/read-only, and #250 surfaces a script that had already run on TEST rather than re-running it. **The LLM eligibility decision remains recorded-but-not-in-effect** (see the ADR): Typesense is still unsynced and no app code reads `generated_content`. Two proposed fixes from #251 are explicitly NOT applied and are now parked in `BACKLOG.md`. **Branch housekeeping — DONE 2026-08-23:** `corpus-address-field-survey` is fully redundant (verified by per-file content comparison, 0 files exist only on it) and has been **deleted**, along with the `puebla` worktree and its stray duplicate directory. Its `.context/` run artifacts were archived OUTSIDE the repo first — see `docs/LOG.md` 2026-08-23 for the location and the ⚠ about them being the only copies.)
+# STATE — branch `feat/resolve-places-service` · 2026-08-22 (**newest truth: `resolvePlaces()` built as an ADDITIVE service — ADR step 2. Committed locally, rebased onto `origin/main` at `d185d0d`, NOT pushed, no PR.** Nothing is cut over: `/api/search-area`, `/api/trip-browse/:tripId/:dayId` and `POST /api/places/details` are byte-for-byte untouched and remain the live paths, and the new code has **zero importers** outside its own directory. **No database, network, or API calls of any kind in that session** — no TEST reads, no PROD reads, no management-API calls; the work is static source reading plus local tests. See `## 2026-08-22 (later)` right below. ✅ **The merge-order note this masthead used to carry is DISCHARGED:** `docs/reflect-247-merge` landed as **`d185d0d` (#248)**, and this branch has been rebased on top of it. Both #247's merge-status corrections and this branch's additions are present — neither was dropped in the rebase. The `main`-branch masthead immediately below is #248's and is preserved verbatim.)
 
 # STATE — branch `main` · 2026-08-22 (⚠ **PR #247 is now MERGED** — squash-merged to `main` as **`4f2a6af`**, now the `origin/main` tip `[git log, 2026-08-22]`. The "committed locally / NOT pushed / no PR" framing in the masthead below and throughout §2026-08-21 (later) is **STALE**; corrected in place per this file's convention. **The migrations remain applied to TEST ONLY — merging the PR did not apply anything to PROD**, and every OPEN item in that section except the push/PR one still stands. Note the squash means the branch's own SHA `7110a6e` is NOT an ancestor of `main` — the trees are identical, which is the usual pattern here, not a discrepancy. This docs pass commits only `docs/`.)
 
@@ -80,34 +80,74 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-23 — LLM description pilot: where the code and run artifacts live
+## 2026-08-22 (later) — `resolvePlaces()` built, ADR step 2 — ADDITIVE, nothing cut over
 
-Pointers only. **The decision and the not-yet-live status are in
-`docs/decisions/2026-08-23-llm-description-suggestion-eligibility.md` (#249) —
-not restated here.** This section exists because that ADR does not say *where
-the pilot's code and evidence are*, and the run artifacts are gitignored, so
-nothing else in the repo points at them.
+Newest truth. Branch `feat/resolve-places-service`, **rebased onto
+`origin/main` at `d185d0d`** (originally forked at `4f2a6af`; `d185d0d` is
+#248, the doc-currency pass for #247), **committed locally, not pushed, no
+PR**. Implements step 2 of
+`docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
+**No DB/network/API calls this session at all** — not TEST, not PROD, not the
+management API. Static source reading plus local tests.
 
-The 2026-08-21 run (7,433 `generation_method='llm'` rows, TEST only) was
-produced by three scripts, surfaced as **`e96d1e7` (#250)**:
+### What exists now
 
-| script | role |
-|---|---|
-| `data/scripts/measure-llm-target-population-2026-08-21.ts` | builds the run-set (STRONG/WEAK, no real description, atlas_oddities excluded) |
-| `data/scripts/generate-llm-descriptions-2026-08-21.ts` | the generator — insert-per-row, resume-safe, skips any MP that already has a description row |
-| `data/scripts/spotcheck-llm-descriptions-2026-08-21.ts` | post-run fabrication spot-check |
+- `docs/architecture/resolve-places-design.md` — the design, including a
+  **nine-item list of divergences between the three endpoints that are NOT
+  reconcilable by picking one** (§2, D1–D9). Read that before any cutover.
+- `web/src/lib/places/place-id.ts` — canonical id normalization.
+- `web/src/lib/places/resolve-places.ts` — the service. One signature over
+  three scopes (`ids` | `bbox` | `day-corridor`), LIVE + FEDERATED concurrently,
+  merge on canonical id, returns `BrowsePlace[]` **unchanged**.
+- 47 tests (27 id + 20 resolver), all passing.
 
-Full methodology and every figure:
-`docs/measurements/2026-08-21-llm-description-full-population-run.md`.
+### The additive constraint — verified, not asserted
 
-⚠ **The run-set and the per-row run log are NOT in the repo** — they live under
-the gitignored `.context/` of the workspace that ran it
-(`.context/measurements/llm-target-population-2026-08-21.json`, 7,433 entries;
-`.context/measurements/llm-description-run-2026-08-21.jsonl`, 7,433 lines, one
-per row, carrying the prompt text and token counts). They exist in the
-Conductor workspaces `corpus-address-field-survey` and `puebla`. **Anything
-needing the per-row prompt or token accounting has to read them there; they are
-not recoverable from the repo or from the database.**
+`/api/search-area`, `/api/trip-browse/:tripId/:dayId` and
+`POST /api/places/details` show **zero diff**; the only changed paths this
+session are the new design doc and the new `web/src/lib/places/` directory.
+A repo-wide grep finds **no importer** of `resolvePlaces`/`place-id` outside
+that directory. `Day.waypoints`, the client cache, and all four surface
+components are untouched.
+
+### The id problem was bigger than "add a normalization step"
+
+The ADR describes normalizing between `master_place.id`, `mp:<uuid>` and
+`google_place_id`. Re-reading the adapters found **eight** id forms in **two
+schemes**: federated uses `mp:` + colon, live uses `<prefix>/` + slash
+(`gpl/`, `fsq/`, `ridb/`, `usfs/`, `blm/`, `node/`). And **the live prefix is
+not the `SourceId`** — `gpl`≠`google`, `fsq`≠`foursquare`, `ridb`≠`rec-gov`,
+`node`≠`osm` — so the map is hand-written; deriving it would be wrong for four
+of six sources.
+
+**A real parser bug was found by an accidental typo in a test fixture.**
+Checking `:` before `/` (the obvious implementation) misreads any live id whose
+external id contains a colon — `fsq/abc:def` parses as prefix `fsq/abc`, fails
+the `mp` test, and returns `opaque`: silently unresolvable, no error. Fixed to
+decide the scheme by whichever separator comes **first**, and pinned by a
+regression test.
+
+### OPEN — not decided, do not treat as settled
+
+1. **D1–D9 in the design doc are all unresolved by construction.** The two
+   endpoints speak **different category vocabularies** whose maps are not
+   inverses (D1); there are **three different doors into `master_place` with
+   different membership rules** — the corridor RPC excludes template-only and
+   `needs_review` rows, the search-hydrate path does not (D2); and
+   **`POST /api/places/details` does not return places at all** — it returns
+   enrichment fragments keyed by Google place_id, so folding it in is not a
+   like-for-like substitution (D3). Each changes what a user sees.
+2. **Web tests do not run in CI.** The `test` job runs `npm run -w data test`
+   only and `web/package.json` has no `test` script. The 47 tests here run via
+   `npx tsx --test` and are **not enforced on merge**. Pre-existing gap, not
+   introduced here.
+3. **No live end-to-end run.** Verified through a dependency seam with fakes;
+   never executed against TEST Supabase, Typesense, or Google, because nothing
+   imports it and standing it up would require the forbidden cutover.
+4. **Step 1's new `master_place` columns are still unread.** Neither
+   `hydratePlacesByIds` nor `pois_along_corridor` selects `rating` /
+   `review_count` / `price_tier` / `photo_url`; widening either is a change to
+   shared code other callers use.
 
 ## 2026-08-21 (later) — master_place enrichment columns (place-data resolver ADR, step 1) — **MERGED as `4f2a6af` (#247)**
 

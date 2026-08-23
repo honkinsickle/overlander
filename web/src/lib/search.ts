@@ -73,6 +73,10 @@ export interface SearchResult {
   text_match_score: number;
   /** Typesense highlight ranges for matched substrings. */
   highlights?: SearchResponseHit<PlaceDocument>["highlights"];
+  /** Provenance of the place's description: 'source' (real), 'template',
+   *  'llm', or undefined when null in the corpus. From the Typesense
+   *  `description_source` facet field. */
+  description_source?: "source" | "template" | "llm";
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -93,6 +97,7 @@ interface PlaceDocument {
   has_water?: boolean;
   has_dump_station?: boolean;
   is_federal?: boolean;
+  description_source?: "source" | "template" | "llm";
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -229,5 +234,6 @@ function toSearchResult(hit: SearchResponseHit<PlaceDocument>): SearchResult {
   const distance = hit.geo_distance_meters?.location;
   if (typeof distance === "number") result.distance_m = distance;
   if (hit.highlights && hit.highlights.length > 0) result.highlights = hit.highlights;
+  if (doc.description_source) result.description_source = doc.description_source;
   return result;
 }
