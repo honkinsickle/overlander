@@ -16,6 +16,51 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## RIDB `FACILITYADDRESS` — fetch-layer gap, fix designed and NOT applied (#251, `4bfd183`, 2026-08-21)
+
+Investigation: `docs/measurements/2026-08-21-ridb-facilityaddress-investigation.md`.
+Recorded here because that doc's proposed fix is explicitly **not applied**, and
+a proposal living only inside a measurement doc is easy to lose.
+
+**What it found.** `FACILITYADDRESS` is empty on 100% of ingested RIDB facility
+rows, and the cause is **the fetch layer, not the normalizer**: `fetchPaginated`
+(`data/ingestion/sources/ridb.ts`) never sends RIDB's `full=true`, and the
+`/facilities` search endpoint returns entity sub-arrays empty without it.
+`normalizeFacility` also never maps the field, but the doc notes that is moot —
+nothing was captured to map. Confirmed against the live API: the same facility
+returns `FACILITYADDRESS: []` without `full=true` and populated with it.
+
+**⚠ The upside is smaller than the raw presence rate suggests** — on the doc's
+80-facility check, **68/80 (85.0%)** carry at least one address record but only
+**32/80 (40.0%)** have a real street line; the rest are largely state-only,
+which the corpus already knows from `master_place.state`. Some populated
+addresses are **administrative-office addresses, not the POI's physical
+location** — so a naive backfill would introduce wrong locations, not just thin
+ones. Read the doc before implementing.
+
+**Not done:** the `full=true` fetch change, the normalizer mapping, and any
+re-ingest or backfill. All are proposed in §4 of that doc and none is applied.
+
+## Human-readable address / reverse-geocoding — sized, schema proposed, NOT applied (#251, `4bfd183`, 2026-08-21)
+
+Survey: `docs/measurements/2026-08-21-address-coverage-survey.md`. Read-only
+sizing done **before** picking a geocoding provider, with no external geocoding
+API calls.
+
+**The gap, measured against TEST:** of **32,734** in-scope master_places
+(`master_place_search_export`), **4,994 (15.3%)** carry any address token from
+any source and **3,478 (10.6%)** have a street+city. **27,740 (84.7%) have
+nothing address-like at all.** Concentrated in osm-only (11,901), ridb-only
+(4,033), nps-only (4,008) and usfs-only (3,428) rows.
+
+Also recorded: `normalized_payload.contact.address` is populated on **no**
+source; Google's `formatted_address` exists but is **non-compliant to persist**
+(same caching rule as rating/userRatingCount); and RIDB's empty
+`FACILITYADDRESS` is the item above.
+
+**Not done:** the proposed schema (§6 of that doc), any provider choice, and any
+geocoding run. The survey deliberately stops at sizing.
+
 ## master_place enrichment columns — SHIPPED TO TEST (#247, `4f2a6af`, 2026-08-22); four follow-ups open
 
 Step 1 of `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
