@@ -128,8 +128,10 @@ export type ResolvePlacesInput = {
    *  `USE_FEDERATED_POIS = false` without the resolver reading env. */
   include?: { live?: boolean; federated?: boolean };
   /** Graft live Google Place Details onto places carrying a `placeId`.
-   *  DEFAULT OFF — see design §D3: the endpoint lets the client choose when to
-   *  hydrate, and doing it here is a real behaviour change. */
+   *  DEFAULT OFF. Date Detail is the one caller expected to pass `true` —
+   *  it auto-hydrates on open today (POST /api/places/details), and this
+   *  flag preserves that behavior at cutover. Search and day-scoped browse
+   *  should NOT pass it (they never auto-hydrated). See design §D3. */
   enrich?: boolean;
   /** Also dedupe across the live/federated boundary with the existing
    *  `sameSpot()` heuristic. DEFAULT OFF — neither endpoint does this today. */
