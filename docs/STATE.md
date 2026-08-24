@@ -84,6 +84,88 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 — top-pick-per-category plan (PLAN ONLY) + two live findings
+
+Newest truth. Branch `top-pick-per-category-plan` (Conductor renamed `monrovia`
+onto that name — `git reflog`; this work did not fork or rename it), forked at
+`origin/main`'s tip `dce1a72`. **This is a docs-only change. Nothing
+implemented, no code touched, no DB writes.** TEST reads only; no PROD access.
+
+**New plan doc:** `docs/architecture/top-pick-per-category-bake-plan.md` — bake
+one "top pick" per category per corridor stop, combining corpus + live Google,
+stored compliantly. Same plan-doc-first posture as the four surface cutovers.
+Its load-bearing findings:
+
+- **Live discovery already returns `rating`/`reviewCount` inline** — **146 of
+  169** places on `la-to-portland`/`day-3` `categories=all` `[measured
+  2026-08-24]`. So ranking needs **no `enrichByGoogleId()` at bake**, and a
+  rating used to rank and then discarded is never persisted — the compliance
+  constraint and the cost concern both dissolve at once.
+- **`Day.segmentSuggestions` (`BrowsePlace[]`) cannot hold a compliant Google
+  pick** — `BrowsePlace.title` is required, and `displayName` is non-persistable.
+  The feature needs its own thin `Day.topPicks` field (id + category + rank +
+  source).
+- **Day Column's day-select hydrate already fits an id-only pick**
+  (`day-detail-corridor-column.tsx:307-349` + `hydratePlaces()` :818), and that
+  route is already on `enrichByGoogleId()` behind `DATE_DETAIL_USE_RESOLVER`.
+  **One concrete gap: the title cannot be recovered.** `PlaceRich` has no name
+  field even though `DETAILS_FIELD_MASK` already requests `displayName` — it is
+  fetched and discarded. Fixing that costs nothing extra at Google.
+- **Two of the nine UI category buckets are not live-discoverable.**
+  `SlideCategoryKey` has 9 members; `SLIDE_CATEGORIES` and
+  `ALL_SLIDE_CATEGORIES` both omit `interest` and `urban`.
+- **Scope `[queried TEST 2026-08-24]`:** `la-to-portland` 11 days / **32**
+  corridor cities (2–5 per day) / **2,543** baked `segmentSuggestions`;
+  `la-to-deadhorse` 66 days / **115** corridor cities (0–9 per day) / **0**
+  suggestions (pre-fold reference).
+- ~~Six open decisions (O1–O6) need a human call before building~~ **RESOLVED
+  IN PART 2026-08-24 (second commit on the same branch/PR #273): five of six
+  decided by Adam.** **O1 — Google always wins** (a live Google result takes the
+  pick regardless of rating and regardless of the corpus candidate's tier;
+  corpus is the fallback only when no live Google result exists — this
+  supersedes the cascading Verified-corpus-first rule the plan originally
+  proposed). **O2 — the title gap is resolved by design:** an explicit
+  loading/refresh state on view while the live fetch runs, not a stored or
+  recovered name, not placeholder data. **O3 — scope to the 7
+  live-discoverable categories;** `interest`/`urban` explicitly out of scope.
+  **O4 — two flags** (`BAKE_TOP_PICKS`, `TOP_PICKS_UI`), accepted as proposed.
+  **O6 (partial-failure half) — fail soft per pick:** a down/rate-limited source
+  means no top pick for that category on that stop, never a failed bake.
+  ⚠ **STILL OPEN: O5 — staleness policy** (frozen rank over volatile ratings:
+  accept and re-bake on demand, or add a TTL / re-rank-on-serve path?). The O1
+  decision makes O5 sharper, since nearly every pick is now a Google pick whose
+  rating is re-fetched live while its rank stays frozen at bake. Two named
+  residuals also remain: **O1a** the minimum review-count floor for ranking
+  among several Google results, and **O6a** the wall-clock budget on the
+  trip-creation path. One reading was applied rather than asserted — O2 as
+  written asks about corpus-vs-Google storage symmetry, and the doc records the
+  id-only-for-both interpretation explicitly so it can be corrected.
+
+**Two findings from the live session that preceded it, both verified against a
+running dev server on TEST:**
+
+1. **"Explore more {city} →" is a dead stub** — `onClick={noop}` in BOTH
+   spines (`day-detail-corridor.tsx:864` read, `day-detail-node-blocks.tsx:643`
+   edit), under a live TODO at `:43`. The **day-level** "Explore more of Day NN"
+   IS wired (`:697` → `openBrowseFor`), so only the city-scoped link is missing.
+   It is the natural "more" link for the top-pick feature — tracked there as a
+   dependency, deliberately not fixed.
+2. **The "Google fills the everyday-category gap" design already works, and is
+   NOT flag-gated.** `la-to-portland`/`day-3` `categories=fuel,food` returned
+   **53** places with all four flags on (17 fuel / 36 food; 52 live + 1
+   `master_place`) and **52** with them off (16 fuel / 36 food) — same names,
+   real gas stations `[measured 2026-08-24]`. The resolver flags change only the
+   code path and the `source`/`verified` stamping. The Day Column's missing
+   gas/food is the **baked corpus-only pool**, exactly as designed — the corpus
+   contributed **1 of 53** on that day.
+
+**Also confirmed read-only this session:** the 2026-08-20 Google Places
+compliance check answers *persistent DB storage* only. It never analysed caching
+duration, ephemeral-vs-persistent, or cross-user reuse, and the Service Specific
+Terms were never read un-truncated (its strongest first-party source is Google's
+policy page). Any future shared/persistent Google cache needs a fresh reading,
+not an extrapolation. The plan doc records this as §9.
+
 ## 2026-08-23 — four-surface resolver cutover complete (all flag-gated OFF)
 
 Newest truth. Branch work all merged to `main` (`origin/main` tip `b227e65`).
