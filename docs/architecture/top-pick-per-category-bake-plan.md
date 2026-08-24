@@ -4,6 +4,14 @@
 cutover plans (#258 / #261 / #262 / #267 / #268): investigate first, write the
 plan, implement in a separate change behind a flag.
 
+**Decisions taken 2026-08-24 (Adam):** O1 ranking rule (**Google always wins**),
+O2 title gap (**explicit loading state, no stored name**), O3 categories
+(**7, not 9 — `interest`/`urban` out of scope**), O4 flags (**two, as
+proposed**), O6 partial-failure (**fail soft per pick**). **O5 (staleness
+policy) is still OPEN**, plus two named residuals — **O1a** the minimum
+review-count floor and **O6a** the wall-clock budget. Full register in §8;
+§2/§3/§5/§6 carry the decisions inline.
+
 **The feature.** At trip creation/bake time, select and store ONE "top pick"
 place per category for each major stop, combining corpus and live Google data.
 Day Column renders that single pick per category by default, with a "more"
@@ -117,37 +125,49 @@ This matters twice over:
   persisted. **Ranking is a transient computation; only the ordinal survives.**
   This is the crux of the whole design and it is clean.
 
-### Proposed rule (needs a human call — see §8)
+### The rule — DECIDED 2026-08-24 (O1), flat, not cascading
 
-Per (stop, category), pick the first survivor of:
+**Google always wins.** Per (stop, category):
 
 1. **Filter to candidates**, live + federated, for that category within the
    stop's radius.
-2. **Corpus Verified first.** A `source === 'master_place'` place whose
-   `verified` tier is `verified` wins. Rationale: it's ours, storable in full,
-   renders with zero client fetch, and its description is real (that is what
-   `description_source` means). Ties broken by corridor distance, which
-   `resolvePlaces()` has already applied.
-3. **Then live Google by rating**, with a **minimum review count** to stop a
-   single 5.0 review beating a 4.4 with 781. The threshold is an open decision.
-4. **Then corpus Unverified.** Better a real corridor place than nothing.
-5. **Then live without a rating** — measured as 23 of 169 on the sample day, so
-   this branch is real, not theoretical.
-6. **Else: no pick for that category at this stop.** Must be representable.
-   Measured: `oddity` returned **0** results on that day, and `interest` /
+2. **If ANY live Google result exists for that category, a Google result is the
+   pick** — regardless of its rating, and regardless of whether a corpus
+   candidate exists or what tier that corpus candidate carries. Verified corpus
+   does **not** outrank Google.
+3. **Corpus is the fallback only when no live Google result is available** for
+   that (stop, category).
+4. **Else: no pick for that category at this stop.** Must be representable.
+   Measured: `oddity` returned **0** results on the sample day, and `interest` /
    `urban` cannot be discovered live at all (§5).
 
-Two deliberate consequences worth surfacing to review:
+> **Supersedes the originally-proposed cascading rule** (Verified corpus → Google
+> by rating → Unverified corpus → unrated → none). That version made a
+> 4.9-rated restaurant lose to a verified corpus row with no rating; the flat
+> rule removes that inversion. The cascade is preserved here only as the
+> superseded text it is.
 
-- **Rule 2 systematically prefers corpus over a better-rated Google place.** A
-  4.9-rated restaurant loses to a verified corpus row with no rating. That may
-  be the wrong product call — it is a values choice (ours-and-storable vs
-  best-for-the-user), not a technical one. **Flagged as open decision O1.**
-- **Ratings are volatile.** The rank is frozen at bake; the rating that
-  justified it is re-fetched live and may have moved. The pick can therefore
-  look stale or wrong ("why is this the top pick, it's 3.1?"). Re-bake is the
-  only correction. Same staleness class as the `#254` category drift that forced
-  the `la-to-portland` re-bake on 2026-08-23.
+**What this rule does NOT settle — the intra-Google tie-break.** "Google's live
+pick" presupposes choosing *among* Google results when several exist for a
+category, which is the common case (the sample day returned **37** food and
+**15** fuel results for one day `[measured 2026-08-24]`). Ranking those by
+`rating` still needs a **minimum review-count floor**, or a single 5.0 review
+beats a 4.4 backed by 781. **No floor value has been set** — see O1's residual
+in §8. Nothing in the corpus or the code implies one.
+
+**Consequence that survives the simplification:** ratings are volatile. The rank
+is frozen at bake; the rating that justified it is re-fetched live and may have
+moved, so a pick can read as stale or wrong ("why is this the top pick, it's
+3.1?"). Re-bake is the only correction. Same staleness class as the `#254`
+category drift that forced the `la-to-portland` re-bake on 2026-08-23. **This is
+exactly what O5 asks about, and O5 is still open** (§8).
+
+**Second-order effect of Google-always-wins, worth stating plainly:** it makes
+the feature *more* dependent on the live path than the cascade did, so most
+picks will be id-only and need hydration to display (§3), and a rate-limited or
+down Google makes a category fall back to corpus rather than simply reorder.
+That raises the stakes on the loading state (O2) and on fail-soft (O6) — both
+now decided.
 
 ---
 
@@ -220,18 +240,44 @@ field at all** — even though `DETAILS_FIELD_MASK` (:267) *does* request
 **no additional billing and no mask change** — it is currently fetched and
 discarded.
 
-Two rendering consequences that are genuinely new work, not reuse:
+### How the title gap is resolved — DECIDED 2026-08-24 (O2)
 
-- **A pre-hydration placeholder state.** Today every tile has a real title at
-  first paint. An id-only pick has none until the fetch lands, so
-  `CategoryListCard` needs a skeleton/placeholder treatment. Ungated, this is a
-  visible flash of empty cards on every day-select.
-- **A hydration-failure state.** `placeDetails()` returns `null` on missing key,
-  network error, or non-OK, and the route negatively caches `null` for 15
-  minutes (`route.ts:38`). An id-only pick that fails to hydrate has **nothing
-  to render at all** — unlike today's tiles, which degrade to essentials. The
-  card must be able to disappear or show a genuine error, and per the RUNBOOK
-  gotcha, a transient blip is replayed as failure for the rest of that window.
+**By design, with an explicit loading state — NOT by storing or recovering the
+name, and NOT with placeholder data.**
+
+On view, if a pick needs live data to display, the user is shown an honest
+loading/refresh state (e.g. *"Refreshing your trip…"*) while the live fetch
+runs. This is the existing `enrichByGoogleId()` hydration pattern (already wired
+behind `DATE_DETAIL_USE_RESOLVER`) plus a real UI state — not a workaround that
+fabricates or caches a title.
+
+Three things follow, and they are the actual implementation work:
+
+- **The loading state is a first-class state, not a skeleton afterthought.**
+  Today every tile has a real title at first paint. An id-only pick has none
+  until the fetch lands, so the card needs a genuine "refreshing" treatment.
+  Under the Google-always-wins rule (§2) **most picks will be id-only**, so this
+  state is the common path on every day-select, not an edge case.
+- **A hydration-failure state is still required.** `placeDetails()` returns
+  `null` on missing key, network error, or non-OK, and the route negatively
+  caches `null` for 15 minutes (`route.ts:38`). An id-only pick that fails to
+  hydrate has **nothing to render at all** — unlike today's tiles, which degrade
+  to essentials. The card must be able to disappear or show a genuine error,
+  and per the RUNBOOK gotcha, one transient blip is replayed as failure for the
+  rest of that window.
+- **`PlaceRich.name` is still needed.** The loading state resolves *what the
+  user sees while waiting*; it does not conjure a title when the fetch lands.
+  The step-1 change stands — add `name` to `PlaceRich`, return `p.displayName`
+  from `placeDetails()`, graft it into `title`.
+
+⚠ **Reading applied to O2, flag it if wrong.** O2 as written asks a narrower
+question: *do corpus picks get the same storage treatment as Google picks?* The
+decision above is phrased around *picks that need live data*, which implies:
+**one storage shape (id-only) for both**, with the render differentiated — a
+corpus pick resolves locally against the already-baked pool and shows **no**
+loading state, a Google pick fetches and does. That is the reading recorded
+here. If the intent was instead to store corpus picks in full as `BrowsePlace`,
+say so and this section changes.
 
 ---
 
@@ -280,9 +326,19 @@ pre-fold reference, not because the fold failed.
 (`trip-browse route.ts:16-24`) and `ALL_SLIDE_CATEGORIES`
 (`google-places.ts:26-34`) both omit **`interest`** and **`urban`**. ⚠ **So two
 of the "existing 9 UI category buckets" named in the brief cannot be filled from
-live discovery at all.** They would be corpus-only or excluded — **open decision
-O3**. (Minor doc bug noticed in passing, not fixed: the route's docstring at
-:99 says `categories=all` is "all 6"; the array holds 7.)
+live discovery at all.**
+
+**DECIDED 2026-08-24 (O3) — correction accepted.** The feature is scoped to the
+**7 live-discoverable categories** (`SLIDE_CATEGORIES` / `ALL_SLIDE_CATEGORIES`:
+`scenic`, `food`, `oddity`, `attraction`, `camping`, `overnight`, `fuel`), not
+all 9 UI buckets. **`interest` and `urban` are explicitly OUT OF SCOPE** for
+this feature — they get no top pick — **until/unless they become
+live-discoverable.** This composes with the Google-always-wins rule (§2): a
+category with no live path has no primary source under that rule, so scoping it
+out is the consistent choice rather than a special corpus-only branch.
+
+(Minor doc bug noticed in passing, not fixed: the route's docstring at :99 says
+`categories=all` is "all 6"; the array holds 7.)
 
 **Derived work units** (arithmetic on the measured numbers above): 32 stops × 7
 discoverable categories = **224** (stop, category) pairs for the 11-day trip;
@@ -311,13 +367,22 @@ five corridor live sources were unhealthy at the moment this plan was written.
 A bake that fans out per stop per category across those sources will hit
 partial failure routinely, so:
 
-- **The bake must fail soft per (stop, category)**, exactly as
-  `fetchCorpusForPolyline` already fails soft to `[]` (:136-138). A missing pick
-  is a normal outcome, never a failed trip creation.
+- **The bake must fail soft per (stop, category) — DECIDED 2026-08-24 (O6,
+  partial-failure half).** Exactly as `fetchCorpusForPolyline` already fails
+  soft to `[]` (:136-138). **A category whose source is down or rate-limited
+  simply has no top pick shown for that category on that stop. It never fails
+  the whole bake, and never fails the trip creation.** A missing pick is a
+  normal outcome, and §2 rule 4 already requires "no pick" to be representable
+  — this decision makes that the failure path too, not just the empty-result
+  path. Note the interaction with §2: because Google always wins, a
+  rate-limited Google does not merely reorder a category — it demotes that
+  category to its corpus fallback, or to no pick at all if the corpus has
+  none.
 - **Latency is the bigger risk than dollars.** These calls sit on the trip-
   creation path. Serializing 805 fanouts would be untenable; even well-batched,
   this needs a concurrency cap and a wall-clock budget with a partial-result
-  bail-out.
+  bail-out. **The wall-clock budget itself is NOT decided — see O6's residual
+  in §8.**
 - **`p-limit(1)`-style throttling** is already the standing rule for ingestion
   (root `CLAUDE.md` §Forbidden patterns). The same discipline should apply here.
 
@@ -340,10 +405,12 @@ Proposed sequencing, each independently revertable:
 | 3 | Bake writes `Day.topPicks`; nothing reads it | `BAKE_TOP_PICKS` (default OFF) | flag off + `stripBakedCorridors` clears the field |
 | 4 | Day Column renders picks + placeholder/failure states | `TOP_PICKS_UI` (default OFF) | flag off → falls back to today's full pool |
 
-**Two flags, not one**, so the write and the read roll back independently — a
-bad ranking rule can be fixed without hiding the UI, and a bad UI can be hidden
-without re-baking. Same posture as `TRIP_BROWSE_USE_RESOLVER` and
-`USE_FEDERATED_POIS` being deliberately orthogonal (#269).
+**Two flags, not one — DECIDED 2026-08-24 (O4), accepted as proposed.** The
+write and the read roll back independently: a bad ranking rule can be fixed
+without hiding the UI, and a bad UI can be hidden without re-baking. Same
+posture as `TRIP_BROWSE_USE_RESOLVER` and `USE_FEDERATED_POIS` being
+deliberately orthogonal (#269). `BAKE_TOP_PICKS` and `TOP_PICKS_UI`, both
+default OFF.
 
 **`stripBakedCorridors` must learn about `topPicks`** (§1) or a re-bake will
 silently preserve stale picks — the same failure mode as the pre-#254 category
@@ -363,33 +430,115 @@ review are the real gate.
    nothing at Google, and is independently useful — it is currently a fetched-
    and-discarded field.
 2. Fix the "Explore more {city}" link as its own change.
-3. Only then bake `topPicks`, behind `BAKE_TOP_PICKS`, ranking from
-   already-returned discovery ratings, storing id + category + rank + source.
-4. Render behind `TOP_PICKS_UI`, reusing the existing day-select hydrate.
+3. Only then bake `topPicks`, behind `BAKE_TOP_PICKS`, over the **7**
+   live-discoverable categories (O3), applying the **Google-always-wins** rule
+   (O1) against already-returned discovery ratings, failing soft per pick (O6),
+   storing id + category + rank + source.
+4. Render behind `TOP_PICKS_UI`, reusing the existing day-select hydrate, with
+   the explicit loading/refresh state (O2) as a first-class state rather than a
+   skeleton.
+
+**Two things to settle before step 3 can be written, and one before step 4
+ships:** O1a (review-count floor) and O6a (wall-clock budget) both bind step 3;
+**O5 (staleness) bites hardest once trips are baked and ageing**, so it can
+trail step 3 but should not trail a production rollout.
 
 ---
 
-## 8. Open decisions — need a human call before building
+## 8. Decisions register — five DECIDED 2026-08-24, one still OPEN
 
-- **O1 — the ranking rule itself.** Does a Verified corpus place outrank a
-  better-rated Google place (§2 rule 2)? This is the product call at the centre
-  of the feature. Sub-question: what minimum review count qualifies a rating?
-  Nothing in the corpus or the code implies a value.
-- **O2 — do corpus picks get the same treatment as Google picks?** Storing
-  id-only for both is one code path but forces a lookup for data already baked.
-  Storing corpus picks in full is faster to render and legal, but forks the
-  shape. The brief explicitly raises this; it is not resolved here.
-- **O3 — `interest` and `urban`.** Two of the nine UI buckets are not
-  live-discoverable (§5). Corpus-only picks, or excluded from the feature?
-- **O4 — flag granularity.** Two flags as proposed, or one? Two costs more
-  wiring and buys independent rollback on a write path that cannot be un-baked.
-- **O5 — staleness policy.** A frozen rank over volatile ratings will drift.
-  Accept and re-bake on demand, or add a TTL / re-rank-on-serve path? Note that
-  re-ranking at serve reintroduces the per-serve cost the bake exists to avoid.
-- **O6 — bake latency budget.** What wall-clock is acceptable on the
-  trip-creation path, and what is the partial-result behaviour when the budget
-  is exceeded? Given three of five live sources were failing at the time of
-  writing (§5), partial results are the expected case, not the edge case.
+Original O1–O6 text is preserved verbatim under each heading (struck where
+superseded), per this repo's append-and-annotate convention. **O5 is the only
+item with no decision. Two decided items carry a named residual.**
+
+### O1 — the ranking rule itself · **DECIDED (with a residual)**
+
+> ~~Does a Verified corpus place outrank a better-rated Google place (§2 rule
+> 2)? This is the product call at the centre of the feature. Sub-question: what
+> minimum review count qualifies a rating? Nothing in the corpus or the code
+> implies a value.~~
+
+**Decision (Adam, 2026-08-24): No — Google always wins.** A live Google result
+takes the pick for its category regardless of its rating and regardless of the
+corpus candidate's Verified/Unverified tier. Corpus is used **only** when no
+live Google result exists for that (stop, category). The cascading rule is
+superseded by the flat rule now in §2.
+
+⚠ **RESIDUAL — O1a, still unset: the minimum review-count floor.** The
+sub-question above was **not** answered and is not mooted by the flat rule:
+choosing *among* several Google results for one category still needs a rating
+tie-break, and without a floor a single 5.0 review beats a 4.4 with 781
+reviews. The sample day returned 37 food and 15 fuel results for a single day,
+so multi-candidate categories are the norm. **No value is recorded here because
+none was given.**
+
+### O2 — corpus picks vs Google picks · **DECIDED (reading applied — verify)**
+
+> ~~Do corpus picks get the same treatment as Google picks? Storing id-only for
+> both is one code path but forces a lookup for data already baked. Storing
+> corpus picks in full is faster to render and legal, but forks the shape. The
+> brief explicitly raises this; it is not resolved here.~~
+
+**Decision (Adam, 2026-08-24):** the title gap is resolved **by design, not by
+storing the title.** On view, a pick that needs live data shows an explicit
+loading/refresh state (*"Refreshing your trip…"*) while the fetch runs — the
+existing `enrichByGoogleId()` hydration pattern plus a real UI state, not
+placeholder data and not a cached name. Recorded in §3.
+
+⚠ **Reading applied:** the decision is phrased around *picks that need live
+data*, which this doc reads as **one storage shape (id-only) for both**, with
+the render differentiated — corpus resolves locally with no loading state,
+Google fetches. **If the intent was to store corpus picks in full, §3 and this
+entry both change.**
+
+### O3 — `interest` and `urban` · **DECIDED**
+
+> ~~Two of the nine UI buckets are not live-discoverable (§5). Corpus-only
+> picks, or excluded from the feature?~~
+
+**Decision (Adam, 2026-08-24): correction accepted — excluded.** Scope the
+feature to the **7 live-discoverable categories**; `interest` and `urban` are
+explicitly out of scope until/unless they become live-discoverable. Recorded
+in §5.
+
+### O4 — flag granularity · **DECIDED**
+
+> ~~Two flags as proposed, or one? Two costs more wiring and buys independent
+> rollback on a write path that cannot be un-baked.~~
+
+**Decision (Adam, 2026-08-24): two flags, accepted as proposed** —
+`BAKE_TOP_PICKS` and `TOP_PICKS_UI`, both default OFF. Recorded in §6.
+
+### O5 — staleness policy · **STILL OPEN — no decision recorded**
+
+> **A frozen rank over volatile ratings will drift. Accept and re-bake on
+> demand, or add a TTL / re-rank-on-serve path? Note that re-ranking at serve
+> reintroduces the per-serve cost the bake exists to avoid.**
+
+**Not addressed.** Left open deliberately rather than inferred from the other
+five. **The Google-always-wins decision (O1) makes this sharper, not softer:**
+with corpus demoted to a fallback, nearly every pick is now a Google pick whose
+justifying rating is fetched fresh at render while the *rank* stays frozen at
+bake — so the displayed rating and the reason-for-ranking can visibly disagree.
+There is already precedent for the failure mode: the pre-#254 category freeze
+required an in-place re-bake of `la-to-portland` on 2026-08-23.
+
+### O6 — bake latency budget · **DECIDED in part (partial-failure half)**
+
+> ~~What wall-clock is acceptable on the trip-creation path, and~~ what is the
+> partial-result behaviour when the budget is exceeded? Given three of five live
+> sources were failing at the time of writing (§5), partial results are the
+> expected case, not the edge case.
+
+**Decision (Adam, 2026-08-24) — partial-failure half:** the bake **fails soft
+per pick**. A category whose source is down or rate-limited simply shows no top
+pick for that category on that stop; it never fails the whole bake. Recorded
+in §5.
+
+⚠ **RESIDUAL — O6a, still unset: the wall-clock budget.** "What wall-clock is
+acceptable on the trip-creation path" was not answered. Fail-soft defines what
+happens on error; it does not define when a slow-but-not-failing fanout should
+be abandoned.
 
 ---
 

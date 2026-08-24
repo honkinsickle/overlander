@@ -118,9 +118,28 @@ Its load-bearing findings:
   corridor cities (2–5 per day) / **2,543** baked `segmentSuggestions`;
   `la-to-deadhorse` 66 days / **115** corridor cities (0–9 per day) / **0**
   suggestions (pre-fold reference).
-- Six open decisions (O1–O6) need a human call before building — the ranking
-  rule itself, corpus-vs-Google storage symmetry, the two undiscoverable
-  buckets, flag granularity, staleness, and a bake latency budget.
+- ~~Six open decisions (O1–O6) need a human call before building~~ **RESOLVED
+  IN PART 2026-08-24 (second commit on the same branch/PR #273): five of six
+  decided by Adam.** **O1 — Google always wins** (a live Google result takes the
+  pick regardless of rating and regardless of the corpus candidate's tier;
+  corpus is the fallback only when no live Google result exists — this
+  supersedes the cascading Verified-corpus-first rule the plan originally
+  proposed). **O2 — the title gap is resolved by design:** an explicit
+  loading/refresh state on view while the live fetch runs, not a stored or
+  recovered name, not placeholder data. **O3 — scope to the 7
+  live-discoverable categories;** `interest`/`urban` explicitly out of scope.
+  **O4 — two flags** (`BAKE_TOP_PICKS`, `TOP_PICKS_UI`), accepted as proposed.
+  **O6 (partial-failure half) — fail soft per pick:** a down/rate-limited source
+  means no top pick for that category on that stop, never a failed bake.
+  ⚠ **STILL OPEN: O5 — staleness policy** (frozen rank over volatile ratings:
+  accept and re-bake on demand, or add a TTL / re-rank-on-serve path?). The O1
+  decision makes O5 sharper, since nearly every pick is now a Google pick whose
+  rating is re-fetched live while its rank stays frozen at bake. Two named
+  residuals also remain: **O1a** the minimum review-count floor for ranking
+  among several Google results, and **O6a** the wall-clock budget on the
+  trip-creation path. One reading was applied rather than asserted — O2 as
+  written asks about corpus-vs-Google storage symmetry, and the doc records the
+  id-only-for-both interpretation explicitly so it can be corrected.
 
 **Two findings from the live session that preceded it, both verified against a
 running dev server on TEST:**
