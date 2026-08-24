@@ -95,6 +95,14 @@ export type PoolPOI = {
   rating: number | null;
   priceTier: number | null;
   tags: string[] | null;
+  /** Does the corpus row carry a real photo / description? Not sent to the
+   *  model (buildFactsMessage picks its own subset) — these exist so the
+   *  start-of-day backfill can prefer a row that will actually RENDER as a
+   *  card over one that renders as an empty placeholder. Measured need: the
+   *  first backfill runs picked `atlas_oddities` rows, which carry neither
+   *  `[measured 2026-08-25]`. */
+  hasPhoto: boolean;
+  hasDescription: boolean;
 };
 
 /** One baseline segment from segmentByPace (a pacing seed, not the final day). */
@@ -137,6 +145,8 @@ function toPoolPOI(p: BrowsePlace): PoolPOI {
     rating: p.rating ?? null,
     priceTier: p.priceTier ?? null,
     tags: p.overlanderTags ?? null,
+    hasPhoto: Boolean(p.photoUrl),
+    hasDescription: Boolean(p.description && p.description.trim()),
   };
 }
 

@@ -2870,6 +2870,19 @@ conclusion.
   unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
   and 231 NPS rows to 146.
 
+## Surfaced 2026-08-25 (start-of-day key-stop backfill)
+
+- **A kept/backfilled pool-hit can fail to materialize as a tile under its
+  spine node — pre-existing, not introduced by the backfill.** Observed twice:
+  `Victorville Supercharger` (2026-08-24) and one backfilled pick
+  (2026-08-25) that did not appear under its day's first node. In the second
+  case it may have bucketed under a neighbouring node — **not verified either
+  way**. Suspected mechanism, UNVERIFIED: the audit's `poolByName` spans the
+  whole route while `bakeGeneratedDays` folds corpus per day
+  (`fetchCorpusForSegment`), so a name the audit can ground may sit outside
+  that day's fold. Until this is settled, "the audit kept it" does not
+  guarantee "a card renders for it".
+
 ## Surfaced 2026-08-20 (Google Places compliance check)
 
 - **Live-fetch-at-render Google data (ratings/hours/testimonials) — PARKED,
