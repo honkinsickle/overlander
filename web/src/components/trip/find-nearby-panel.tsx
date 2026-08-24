@@ -22,6 +22,8 @@ import {
 import type { Trip, Day } from "@/lib/trips/types";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import { TierSectionHeader } from "@/components/trip/tier-section-header";
+import { splitByTier } from "@/lib/trip-browse/tier-sections";
 import {
   browsePlaceToWaypoint,
   computeCardStats,
@@ -727,7 +729,19 @@ function SearchAreaResults({
       )}
 
       <div ref={gridRef} style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        {shownPlaces.map((place) => {
+        {splitByTier(shownPlaces).map((row) => {
+          // Verified / Unverified dividers — only present when the resolver
+          // flag is on (the data carries a sorted tier); see splitByTier.
+          if (row.kind === "header") {
+            return (
+              <TierSectionHeader
+                key={`tier-${row.tier}`}
+                tier={row.tier}
+                style={{ width: "100%" }}
+              />
+            );
+          }
+          const place = row.place;
           const slideKey: SlideCategoryKey = place.category ?? "interest";
           const ctx: CardCtx = {
             category: slideKey,

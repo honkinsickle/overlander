@@ -14,6 +14,8 @@ import {
   type CardCtx,
 } from "@/lib/trip-browse/card-stats";
 import { LocationBrowseCard } from "@/components/trip/location-browse-card";
+import { TierSectionHeader } from "@/components/trip/tier-section-header";
+import { splitByTier } from "@/lib/trip-browse/tier-sections";
 import { PlaceSearch } from "@/components/trip/place-search";
 import {
   type BrowseCardCategory,
@@ -452,15 +454,25 @@ function PanelBody({ target, expanded }: { target: BrowseTarget; expanded: boole
                       padding: expanded ? 8 : 16,
                     }}
                   >
-                    {places.map((p) => (
-                      <BrowseCardCell
-                        key={p.id}
-                        place={p}
-                        target={target}
-                        expanded={expanded}
-                        isAdded={addedIds.has(p.id)}
-                      />
-                    ))}
+                    {splitByTier(places).map((row) =>
+                      row.kind === "header" ? (
+                        // Verified / Unverified dividers — only present when the
+                        // resolver flag is on (data carries a sorted tier).
+                        <TierSectionHeader
+                          key={`tier-${row.tier}`}
+                          tier={row.tier}
+                          style={{ gridColumn: "1 / -1" }}
+                        />
+                      ) : (
+                        <BrowseCardCell
+                          key={row.place.id}
+                          place={row.place}
+                          target={target}
+                          expanded={expanded}
+                          isAdded={addedIds.has(row.place.id)}
+                        />
+                      ),
+                    )}
                   </div>
                 )}
       </div>
