@@ -16,6 +16,50 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Stale pre-#254 baked categories in reference trips other than la-to-portland (flagged 2026-08-24)
+
+#254 narrowed the Camping slide bucket and moved `recreation_area → scenic` /
+`facility → interest`. Baked reference trips freeze the category mapping at bake
+time, so any reference trip baked before #254 still renders the OLD icons (e.g.
+`recreation_area` places showing the camping/tent icon). This session re-baked
+**only `la-to-portland`** (TEST) to fix its stale icons; **other baked reference
+trips were not checked or re-baked** and may carry the same staleness.
+
+- **Remedy is known and low-risk:** `web/scripts/bake-reference.ts` re-bakes in
+  place (strip → re-derive spine → re-fold corpus with today's mapping), route
+  unchanged. It is currently hardcoded to `la-to-deadhorse`; this session added a
+  transient `--trip <id>` generalization and then reverted it. A small committed
+  change to accept `--trip` would make re-baking arbitrary references routine.
+- **Scope NOT measured** — which reference trips are pre-#254 and by how much was
+  not enumerated. `dawson-vancouver-cassiar` is FROZEN and must NOT be re-baked.
+
+## Everyday-category corpus coverage gap (gas / food / grocery) (flagged 2026-08-24)
+
+Read-only investigation this session (TEST): a user browsing near Kernville, CA
+saw only camping/scenic suggestions and no gas/grocery/restaurants. Confirmed this
+is a **real corpus-coverage reflection, NOT a bake or suppression artifact** — the
+bake reads the searchable corpus, and near Kernville that corpus is entirely
+recreation, so there is nothing everyday to surface.
+
+- **Measured shape `[queried TEST 2026-08-24]`:** the searchable corpus within
+  ~30 km of Kernville is 97 rows, 100% recreation categories (campground,
+  facility, trailhead, dispersed_camping, recreation_area, park, picnic_area,
+  oddity), **0** everyday. Corpus-wide on `master_place_search_export` (exact
+  counts): ev_charging ~2,886 and grocery ~546 exist but are geographically
+  concentrated (a gas/grocery/EV sample skews heavily to SoCal/desert, ~0 within
+  ½° of Kernville); gas_station 1, restaurant 3, cafe 2, truck_stop 0 are
+  near-absent corpus-wide.
+- **Why:** the ten ingestion sources are recreation-oriented; OSM (the only
+  everyday-amenity source) was ingested selectively — EV/grocery in places, fuel
+  retired per BACKLOG #214, restaurants/cafes never a focus.
+- **⚠ Honesty caveat:** a first census hit the 1000-row default cap and was
+  non-representative (over-counted gas_station); the numbers above are from exact
+  `count` / export-view queries and a geographic sample. Treat the geographic
+  characterization as approximate.
+- **Not an action yet** — this is a coverage/ingestion decision (add an everyday
+  amenity source, or re-introduce OSM fuel), not a bug. Recorded so the "no gas
+  near town X" pattern isn't re-investigated as a bake defect.
+
 ## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
 
 ADR `2026-08-21-place-data-resolver-consolidation.md` decision 4: **one shared

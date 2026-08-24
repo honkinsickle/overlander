@@ -81,3 +81,27 @@ Live-sourced places (from Google, Foursquare, etc.) are always Verified.
   carry it through to `BrowsePlace.verified`, so corridor-scoped federated
   results classify correctly as Verified or Unverified based on their real
   description_source, not defaulting. TEST only — PROD apply is separate.
+
+## 2026-08-24 — the tier is made VISIBLE (section headers, #271)
+
+Through the cutovers (ADR step 3) the tier existed but only reordered results —
+users never saw it. #271 (`dce1a72`) adds a visible divider so the two blocks are
+labelled.
+
+**Decision:** insert a "Verified" / "Unverified" section header at each tier
+boundary of the already-sorted result list, but ONLY when the data supports it.
+
+- **Data-gating rule:** headers render only when every place in the list carries
+  `verified` AND the list is already sorted verified-first. That shape is produced
+  exclusively by the `resolvePlaces()` path, so legacy / not-cut-over surfaces
+  (and any surface whose flag is off) show the plain list unchanged. This keeps
+  the headers honest — they never appear over a list that wasn't actually tiered.
+- **Surfaces:** find-nearby panel (Search) and category-browse panel (day-scoped
+  browse). **Not** Day Column — it renders baked `CorridorPlace`, which has no
+  `verified` field, so there is no tier to divide.
+- **Single-tier lists still get one header** (consistency; an all-Unverified list
+  reading "Unverified" is a useful warning, not noise).
+- **Placement, not reordering:** headers are computed from the existing sorted
+  order (`sortByVerificationTier`, decided above); #271 adds no new sort or
+  classification logic. Pure presentation — `web/src/lib/trip-browse/tier-sections.ts`
+  (`splitByTier` / `hasSortedTierData`) + `web/src/components/trip/tier-section-header.tsx`.
