@@ -84,6 +84,60 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 — key-stop corridor spread: prompt-only change, measured partially effective
+
+Newest truth. Branch `prompt-keystop-spread` off `origin/main` (`dce1a72`).
+**One product file changed — `web/src/lib/itinerary/master-prompt.ts` — plus
+docs.** No code paths, no schema, no migrations. TEST only; no PROD access.
+
+**The obvious hypothesis was wrong, and that is the main finding.** Clustered
+key stops were assumed to come from the model not seeing the corridor cities.
+**`corridorCities` has always been in the prompt** — `buildFactsMessage` sends
+`{id, name, kind, milesFromStart}`, derived by `deriveCorridorCities` inside
+`preComputeFacts` (`facts.ts:180-186`) `[read source]`. The model had the spine
+and was simply never asked to use it for placement. No plumbing was needed.
+
+**The change:** `SYSTEM_PROMPT`'s `keyStops[]` contract gains a SPREAD
+paragraph (the day's stops should read as a progression across the cities
+inside it; start-of-day called out as the easy-to-leave-empty part), and
+`buildFactsMessage` repeats it beside the city list. **Explicitly not a quota**
+— both say skipping a city is fine and coverage is a tie-breaker, never
+padding. Nothing downstream enforces it.
+
+**Measured, same route + dates (San Diego → South Lake Tahoe, 08-25→08-28),
+three runs after vs two comparable before, read from persisted payloads:**
+- **Improved:** all three post-change runs placed a curated stop at
+  **Riverside** and at the day's end city. Neither before-run had both.
+- **NOT improved:** **San Diego and Oceanside were empty in every post-change
+  run** — the exact start-of-day gap the new text names. One *pre*-change run
+  did cover San Diego, so on that city this is not an improvement.
+- **Confound, stated not smoothed over:** day-1 shape shifted (all post-change
+  runs planned San Diego → Bishop; before-runs ended day 1 at Alabama Hills /
+  Fossil Falls). A longer day 1 plausibly suppresses early stops by itself.
+  **Not a clean A/B; small sample — three runs after, two before, one route.**
+- Run-to-run consistency rose sharply post-change (same Riverside stop and same
+  end stop all three times). Whether that is the instruction working or reduced
+  diversity is **not established** by this sample.
+
+Full before/after + the confound: `docs/decisions/2026-08-24-keystop-corridor-spread.md`.
+`docs/architecture/generation-pipeline.md` updated with the corridorCities fact
+and the distribution preference.
+
+**Unchanged and still open:** `day.audit` / `day.keyStops` are not persisted, so
+key-stop behaviour stays unmeasurable after the fact without temporary
+instrumentation (added and fully reverted twice this session). Guaranteeing
+start-of-day coverage would need a different mechanism (post-generation
+placement, or a re-ask loop) with its own padding risk — deliberately not
+attempted.
+
+⚠ **Uncommitted and NOT in this PR:** a dev-only email+password sign-in
+(`web/src/lib/auth/dev-signin.ts`, `app/auth/actions.ts`,
+`app/auth/sign-in/page.tsx`), built earlier today on branch
+`dev-password-signin`. Reason it exists: **Google is not an enabled provider on
+TEST** — `/auth/v1/settings` returns email-only `[measured 2026-08-24]` — so the
+only sign-in button in the UI cannot complete there. Gated on dev build AND an
+explicit flag AND the TEST project. Sitting in the working tree, no PR opened.
+
 ## 2026-08-23 — four-surface resolver cutover complete (all flag-gated OFF)
 
 Newest truth. Branch work all merged to `main` (`origin/main` tip `b227e65`).
