@@ -16,6 +16,64 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
+
+ADR `2026-08-21-place-data-resolver-consolidation.md` decision 4: **one shared
+client-side cache (React Query, keyed by canonical id)** that all place surfaces
+read/write through, so a rating fetched during Search stays warm when Date Detail
+opens the same place. Deferred at ADR time ("sequenced after step 1 … not yet
+started").
+
+**Now ready.** The three READ surfaces are cut over to `resolvePlaces()` and each
+still runs its **own per-route in-process cache** — Search's 15-min LRU, Date
+Detail's 15-min per-id cache (kept deliberately, since `enrichByGoogleId()` is
+cache-less), and Day-scoped browse's 15-min LRU. That per-route duplication is
+exactly what the shared client cache removes; the enrich-by-id and Date Detail
+plans both call the route's local cache "the seam where step 4 replaces it."
+
+- **Scope:** a client-side React-Query (or equivalent) layer keyed by the
+  canonical id from `place-id.ts`, shared across the find-nearby panel, Date
+  Detail hydration, and the browse panel. The server routes can keep their caches
+  or shed them once the client layer is authoritative.
+- **⚠ Honesty note:** there is **no pre-written "build once a second surface needs
+  it" trigger** in the docs — the deferral was framed only as "after step 1, not
+  yet started." The readiness here is that the surfaces now *exist*, not that a
+  named condition was tripped.
+- Prereq met: canonical id (`place-id.ts`) exists and every cutover stamps it.
+  Not blocked by anything; it is the last ADR step.
+
+## Day Column write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)
+
+Day Column is a passive renderer of baked `Trip.days`; it has no endpoint, so it
+was **not** a route cutover (#267 `4757067`). For it to ever reflect
+`resolvePlaces()` output, the **write path** that bakes `segmentSuggestions` would
+have to source via the resolver:
+
+- `bake-corridors.ts::foldFederatedCorridorSupply` (behind `USE_FEDERATED_CORRIDOR`,
+  default off) already reads corpus via `fetchCorpusForPolyline` →
+  `pois_along_corridor` + `mapMasterPlaceRow` — the **same RPC + mapper**
+  `resolvePlaces()`'s day-corridor federated half uses. So routing it through the
+  resolver is largely redundant for Day Column today.
+- **Why it's genuinely different from the read cutovers:** it *bakes into persisted
+  `Trip.days`*, so tier/category/enrichment become a frozen snapshot (stale until
+  re-bake), and **rollback is a re-bake, not a flag-flip** (and `dawson-vancouver-cassiar`
+  is FROZEN — could not be re-baked). Persisting live Google fields would also hit
+  the 30-day cache-limit compliance issue.
+- **Recommendation (from the Day Column plan):** decide this as generation-pipeline
+  work on its own terms, or fold it into ADR step 4 — not as a standalone "Day
+  Column" change.
+
+## RIDB `facility` rows that are actually campgrounds — small data correction (flagged 2026-08-23)
+
+A set of RIDB `source_record` rows are typed `facility` (RIDB's residual
+catch-all) but their names contain "camp"/"campground" — real campgrounds
+miscategorized at ingest. Separate from #254's category *mapping* fix (which moved
+`facility` OUT of the Camping slide bucket); this is a *data* correction of the
+underlying `primary_category` on those specific rows. Small, self-contained.
+**Count NOT re-measured this session** — size it before acting; do not carry a
+remembered number as fact. Flagged in the session-start handoff; not previously in
+this list.
+
 ## RIDB `FACILITYADDRESS` — fetch-layer gap, fix designed and NOT applied (#251, `4bfd183`, 2026-08-21)
 
 Investigation: `docs/measurements/2026-08-21-ridb-facilityaddress-investigation.md`.

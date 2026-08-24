@@ -1,3 +1,5 @@
+# STATE — branch `main` · 2026-08-23 (later) (**newest truth: ALL FOUR originally-planned place-data surface cutovers are COMPLETE or resolved-as-not-needed; `origin/main` tip is `b227e65` (#269).** The read-surface half of the resolver-consolidation ADR is done: **Search** cut over behind `SEARCH_AREA_USE_RESOLVER` (#260 `d62f660`; a real tier blocker on the bbox path was found + fixed first — #259 `9c212a6`); **Date Detail** behind `DATE_DETAIL_USE_RESOLVER` (#266 `a086cb8`), which needed a NEW resolver capability `enrichByGoogleId()` (#263 `bc2c9c2`) because `resolvePlaces()` couldn't serve bare Google ids — a different gap from the tier bug; **Day-scoped browse** behind `TRIP_BROWSE_USE_RESOLVER` (#269 `b227e65`), wired alongside the existing `USE_FEDERATED_POIS` (orthogonal, both stay); and **Day Column** needs NO cutover — it's a passive `Trip.days` renderer with no endpoint (#267 `4757067`), its real work deferred to a write-path/baking consolidation. **All three new flags default OFF — nothing from this arc is live in production.** Also today: Camping narrowed (#254 `f70dbd0`), Verified/Unverified tiers + corridor-RPC `description_source` (#255/#256 `476f052`/`d7faf5e`), auto-hydration decision (#257 `af97048`), plus a plan doc per surface (#258/#261/#262/#264/#265/#267/#268). **ADR step 4 (shared client cache) is now READY TO BUILD** — three read surfaces are cut over and each still runs its own per-route cache, the redundancy step 4 removes; tracked in BACKLOG. See `## 2026-08-23` below. **⚠ The masthead immediately below is STALE only on its "Next work is the Search cutover — planned, not started" line** — that whole arc is now done; its technical description of the #254–#257 state is preserved verbatim.)
+
 # STATE — working branch `sucre` · 2026-08-23 (**newest truth: `resolvePlaces()` is fully LANDED on `main`, and so are the three step-2 blocker resolutions.** The `resolvePlaces()` service file landed on `main` via **#255** (`476f052`, "resolvePlaces() rebase") `[git log --follow, 2026-08-23]`; the three step-2 blocker resolutions merged as **#254** (category narrowing — a separate branch), **#255/#256** (Verified/Unverified tiers), and **#257** (auto-hydration doc). `origin/main` tip is **`af97048` (#257)**. This workspace's branch `sucre` sits exactly at `origin/main` (0 ahead / 0 behind, clean tree) `[git, 2026-08-23]`. Still **nothing is cut over**: `/api/search-area`, `/api/trip-browse/:tripId/:dayId` and `POST /api/places/details` remain the live paths, and `resolvePlaces()` still has **zero importers** in `src/app`/`src/components`. Next work is the **Search cutover** — planned, not started; see `docs/architecture/resolve-places-search-cutover-plan.md`, which flags one real blocker (the #255/#256 tier path is non-functional on the `bbox`/Search path as built). **The masthead immediately below is STALE on branch + merge status only** — its "committed locally, NOT pushed, no PR" framing described the pre-merge state of `feat/resolve-places-service` and no longer holds; its technical description of the service is preserved verbatim.)
 
 # ~~STATE — branch `feat/resolve-places-service` · 2026-08-22~~ (**⚠ SUPERSEDED 2026-08-23 — MERGED as #254–#257, see masthead above.** Historical: **newest truth: `resolvePlaces()` built as an ADDITIVE service — ADR step 2. ~~Committed locally, rebased onto `origin/main` at `d185d0d`, NOT pushed, no PR.~~** Nothing is cut over: `/api/search-area`, `/api/trip-browse/:tripId/:dayId` and `POST /api/places/details` are byte-for-byte untouched and remain the live paths, and the new code has **zero importers** outside its own directory. **No database, network, or API calls of any kind in that session** — no TEST reads, no PROD reads, no management-API calls; the work is static source reading plus local tests. See `## 2026-08-22 (later)` right below. ✅ **The merge-order note this masthead used to carry is DISCHARGED:** `docs/reflect-247-merge` landed as **`d185d0d` (#248)**, and this branch has been rebased on top of it. Both #247's merge-status corrections and this branch's additions are present — neither was dropped in the rebase. The `main`-branch masthead immediately below is #248's and is preserved verbatim.)
@@ -81,6 +83,64 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-23 — four-surface resolver cutover complete (all flag-gated OFF)
+
+Newest truth. Branch work all merged to `main` (`origin/main` tip `b227e65`).
+Every cutover was **plan-doc-first, then implement**, and each implementation is
+a **thin route wrapper behind an env flag, default OFF** — the route stays
+byte-for-byte itself when the flag is off, and the client is never touched.
+
+**The four surfaces, as they actually resolved:**
+
+- **Search** — `GET /api/search-area` → `resolvePlaces()` bbox scope, behind
+  `SEARCH_AREA_USE_RESOLVER` (#260 `d62f660`). Plan #258 `1b7104b`. **A real
+  blocker was found and fixed first (#259 `9c212a6`):** the Verified/Unverified
+  tier was non-functional on the bbox/hydrate path because `hydratePlacesByIds`
+  never selected `description_source` — `mapMasterPlaceRow` therefore stamped
+  every search-hydrated place `unverified`. Fixed by threading `description_source`
+  through hydrate and single-sourcing classification in `mapMasterPlaceRow`.
+- **Date Detail** — `POST /api/places/details` → behind `DATE_DETAIL_USE_RESOLVER`
+  (#266 `a086cb8`). Plan #261 `ab9b1dd`. **Its blocker was DIFFERENT from the
+  tier bug:** `resolvePlaces()` returns `BrowsePlace[]` and, in `ids` scope,
+  returns nothing for bare Google `place_id`s (they parse `opaque`) — it had no
+  mode that produces the `place_id → PlaceRich` map this endpoint is. So a NEW
+  capability was built: `enrichByGoogleId()` (#263 `bc2c9c2`, plan #262 `8486e89`),
+  the standalone map-returning version of `enrichPlaces()`'s inner loop. The route
+  ON-branch delegates cache-misses to it and keeps its own 15-min cache
+  (cache-less by design — this is option 1, not ADR step 4).
+- **Day Column** — **NO cutover** (#267 `4757067`). Verified against code: it is a
+  passive renderer of baked `Trip.days` (`placePool`), with zero live calls of its
+  own (the only fetches in that component are Date Detail's). No endpoint to wrap.
+  For it to ever reflect `resolvePlaces()` output, the **write path** that bakes
+  `segmentSuggestions` (`bake-corridors.ts` corpus fold, behind `USE_FEDERATED_CORRIDOR`)
+  would source via `resolvePlaces()` — a generation-pipeline change with
+  staleness/re-bake semantics, deferred (BACKLOG).
+- **Day-scoped browse** — `GET /api/trip-browse/:tripId/:dayId` →
+  `resolvePlaces()` day-corridor scope, behind `TRIP_BROWSE_USE_RESOLVER`
+  (#269 `b227e65`, plan #268 `8a8cfe3`). The cleanest of the four: the day-corridor
+  scope was designed to mirror this endpoint (byte-identical radii/sources/buffer).
+  The one subtlety: it already had `USE_FEDERATED_POIS` — the two flags are
+  **orthogonal** and both stay; the wrapper wires `include: { federated:
+  USE_FEDERATED_POIS }`. The one new behaviour (Verified-before-Unverified sort)
+  only reorders when `USE_FEDERATED_POIS` is on, and is never displayed.
+
+**Flags now in the tree, ALL default OFF (nothing live in prod from this arc):**
+`SEARCH_AREA_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`
+(+ the pre-existing `USE_FEDERATED_POIS`, still OFF).
+
+**Verification posture (per cutover):** unit tests for every flag state (the
+handler modules have a dependency seam), plus a live TEST end-to-end check
+against the wired path with a non-vacuous contrast. Web tests still do NOT run
+in CI (pre-existing gap) — the live scripts + review are the real gate.
+
+**Two things now teed up (BACKLOG):**
+1. **ADR step 4 — shared client cache: READY TO BUILD.** Three read surfaces are
+   cut over, each keeping its own per-route cache; the shared React-Query cache
+   keyed by canonical id is the consolidation that removes that redundancy. Not a
+   pre-written "second surface" trigger — the readiness is that the surfaces now
+   exist.
+2. **Day Column write-path/baking consolidation** — deferred, newly tracked.
 
 ## 2026-08-22 (later) — `resolvePlaces()` built, ADR step 2 — ADDITIVE, nothing cut over
 
