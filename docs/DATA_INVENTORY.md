@@ -383,6 +383,18 @@ projects `[queried catalog, TEST + PROD, 2026-07-27]`.
   `la-to-portland`. **Zero `expedition-*` rows** — generation cannot write to PROD.
   `[queried catalog; hash-reference-trips.ts before/after for the 2026-07-25 add]`
 
+> **Note 2026-08-24 — `la-to-portland` (TEST) re-baked in place.** Its stored
+> `payload` was re-baked with post-#254 code to clear stale baked categories
+> (`recreation_area` places had frozen as `camping` before #254 moved
+> `recreation_area → scenic`). **Row identity unchanged** — same id, and route /
+> days / city-stops / `routePolyline` are unchanged; only the baked suggestion
+> categories and corpus fold were refreshed, and `updated_at` advanced to
+> 2026-08-24. TEST only — PROD's `la-to-portland` was NOT touched. A transient
+> comparison copy `la-to-portland-fresh-20260823` was created and then deleted, so
+> the TEST row set is unchanged from the point-in-time list above. Re-bake tool:
+> `web/scripts/bake-reference.ts`. Other reference trips may still hold pre-#254
+> categories — see `docs/BACKLOG.md`.
+
 How `getTrip` serves these rows (reader split, derivation, caching):
 [`docs/architecture/trip-resolution.md`](architecture/trip-resolution.md).
 

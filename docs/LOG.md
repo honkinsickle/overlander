@@ -12,6 +12,53 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-24 — tier made visible (#271), flags flipped ON + live-verified in TEST, la-to-portland re-baked, three read-only investigations
+
+- **Made the Verified/Unverified tier visible — #271 (`dce1a72`, now `origin/main`
+  tip).** Prior to this the tier only affected sort order. New pure module
+  `web/src/lib/trip-browse/tier-sections.ts` (`splitByTier` + `hasSortedTierData`)
+  and presentational `tier-section-header.tsx`, wired into the find-nearby (Search)
+  and category-browse (day-scoped) panels. **Data-gated:** headers show only when
+  every result carries `verified` AND the list is sorted verified-first — the shape
+  only `resolvePlaces()` produces — so legacy/uncut surfaces are untouched. Not in
+  Day Column (it renders baked `CorridorPlace`, which has no `verified`). Single-tier
+  lists still get one header (an all-Unverified list reads as a warning).
+- **Flipped all four flags ON in TEST and live-verified each; left them on.**
+  `SEARCH_AREA_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`,
+  `USE_FEDERATED_POIS` = `true` in `web/.env.development.local` (TEST-facing,
+  gitignored). Search: Kanab/Bryce query, Verified-then-Unverified, 0 violations.
+  Date Detail: real place_ids, on-vs-off enrichment identical (only the ephemeral
+  Google photo token rotates — the expected result for a passthrough). Day-scoped
+  browse with `USE_FEDERATED_POIS` also on (last untested combo): Verified live +
+  federated Unverified, all stamped/sorted, federation purely additive. **This is a
+  local dev-config change only — code and prod defaults stay OFF, nothing live in
+  prod from this arc.**
+- **Re-baked `reference_trips.la-to-portland` in place (TEST only)** to clear stale
+  pre-#254 baked categories — `recreation_area` places (Bishop Field Office, Movie
+  Road, Mobius Arch) had frozen as `camping`; #254 moved `recreation_area → scenic`.
+  Used `bake-reference.ts`, temporarily generalized to `--trip <id>` then reverted
+  (committed script still hardcoded to `la-to-deadhorse`). Route/days/routePolyline
+  unchanged; only categories + corpus fold refreshed. A comparison copy
+  `la-to-portland-fresh-20260823` was created then deleted.
+- **Learned/confirmed via three read-only investigations.** (a) The stale camping
+  icons were a frozen pre-#254 bake, not a code defect — confirmed by matching the
+  baked `camping` against current `master_place.primary_category = recreation_area`
+  and `primaryCategoryToSlideKey → scenic`; fixed for la-to-portland by the re-bake.
+  (b) "Headquarters" (Kernville Day 3) is a real campground (RIDB facility), correctly
+  `camping` — only a generic display name, NOT a miscategorization. (c) Kernville's
+  lack of gas/food/grocery is a REAL corpus-coverage reflection, not a bake artifact:
+  the searchable corpus within ~30 km of Kernville is 100% recreation, so there is
+  nothing everyday for the bake to suppress; corpus-wide, ev_charging and grocery
+  exist but cluster away from Kernville, while gas/restaurant/cafe are near-absent
+  (OSM fuel retired per #214). Caveat recorded: a first census hit the 1000-row
+  default cap and was non-representative — the figures used are from exact
+  `count`/export-view queries. All TEST.
+- **A repeated hygiene note:** background `next dev` servers do not survive session
+  teardown (no completion record); the TEST env flags in `.env.development.local`
+  DO persist across sessions on this machine. And "#N is merged" was reported ahead
+  of GitHub twice earlier in the arc — confirm via `gh pr view` / `git log`, never
+  assume.
+
 ## 2026-08-23 — all four place-data surface cutovers landed (flag-gated, off), + the enrichByGoogleId capability
 
 - **Completed the read-surface half of the resolver-consolidation ADR: all four

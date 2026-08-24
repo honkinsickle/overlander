@@ -1,3 +1,5 @@
+# STATE — branch `main` · 2026-08-24 (**newest truth: the resolver read-cutover arc is now VISIBLE and LIVE-VERIFIED in TEST.** Two things happened on top of the 2026-08-23 cutover work. (1) **#271 (`dce1a72`, now the `origin/main` tip)** makes the Verified/Unverified tier VISIBLE — section headers divide category/search results into a Verified and an Unverified block (`web/src/lib/trip-browse/tier-sections.ts` + `web/src/components/trip/tier-section-header.tsx`), wired into the find-nearby (Search) and category-browse (day-scoped) panels; deliberately NOT Day Column (no tier data there). The headers are **data-gated** — they render ONLY when every result carries `verified` AND the list is sorted verified-first, which only the `resolvePlaces()` path produces. (2) **All three resolver flags PLUS `USE_FEDERATED_POIS` were flipped ON in TEST and live-verified** (`SEARCH_AREA_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`, `USE_FEDERATED_POIS` — all `=true` in `web/.env.development.local`, TEST-facing, gitignored). Each check passed and each flag was LEFT ON in TEST. **In code and in production every flag still defaults OFF — nothing from this arc is live in prod; the TEST env flip is a local dev-config change, not a code change.** Also this session, TEST-only: **`reference_trips.la-to-portland` was re-baked in place** to clear stale pre-#254 baked categories (`recreation_area` places had frozen as `camping`/tent icon; #254 moved `recreation_area → scenic`, and re-baking picks it up) — route/days/routePolyline unchanged, only suggestion categories + corpus fold refreshed. And three **read-only** investigations (no code/data change): the stale-icon root cause (confirmed = frozen pre-#254 bake, fixed for la-to-portland by the re-bake above); "Headquarters" on Kernville Day 3 is a REAL campground (RIDB facility, correctly `camping`) with only a generic display name; and Kernville's absence of everyday categories (gas/food/grocery) is a REAL corpus-coverage reflection, NOT a bake/suppression artifact — see BACKLOG. See `## 2026-08-24` below. **The 2026-08-23 (later) masthead below is STALE only on its `origin/main` tip line (`b227e65`/#269 → now `dce1a72`/#271)** — its technical description of the four cutovers stands verbatim.)
+
 # STATE — branch `main` · 2026-08-23 (later) (**newest truth: ALL FOUR originally-planned place-data surface cutovers are COMPLETE or resolved-as-not-needed; `origin/main` tip is `b227e65` (#269).** The read-surface half of the resolver-consolidation ADR is done: **Search** cut over behind `SEARCH_AREA_USE_RESOLVER` (#260 `d62f660`; a real tier blocker on the bbox path was found + fixed first — #259 `9c212a6`); **Date Detail** behind `DATE_DETAIL_USE_RESOLVER` (#266 `a086cb8`), which needed a NEW resolver capability `enrichByGoogleId()` (#263 `bc2c9c2`) because `resolvePlaces()` couldn't serve bare Google ids — a different gap from the tier bug; **Day-scoped browse** behind `TRIP_BROWSE_USE_RESOLVER` (#269 `b227e65`), wired alongside the existing `USE_FEDERATED_POIS` (orthogonal, both stay); and **Day Column** needs NO cutover — it's a passive `Trip.days` renderer with no endpoint (#267 `4757067`), its real work deferred to a write-path/baking consolidation. **All three new flags default OFF — nothing from this arc is live in production.** Also today: Camping narrowed (#254 `f70dbd0`), Verified/Unverified tiers + corridor-RPC `description_source` (#255/#256 `476f052`/`d7faf5e`), auto-hydration decision (#257 `af97048`), plus a plan doc per surface (#258/#261/#262/#264/#265/#267/#268). **ADR step 4 (shared client cache) is now READY TO BUILD** — three read surfaces are cut over and each still runs its own per-route cache, the redundancy step 4 removes; tracked in BACKLOG. See `## 2026-08-23` below. **⚠ The masthead immediately below is STALE only on its "Next work is the Search cutover — planned, not started" line** — that whole arc is now done; its technical description of the #254–#257 state is preserved verbatim.)
 
 # STATE — working branch `sucre` · 2026-08-23 (**newest truth: `resolvePlaces()` is fully LANDED on `main`, and so are the three step-2 blocker resolutions.** The `resolvePlaces()` service file landed on `main` via **#255** (`476f052`, "resolvePlaces() rebase") `[git log --follow, 2026-08-23]`; the three step-2 blocker resolutions merged as **#254** (category narrowing — a separate branch), **#255/#256** (Verified/Unverified tiers), and **#257** (auto-hydration doc). `origin/main` tip is **`af97048` (#257)**. This workspace's branch `sucre` sits exactly at `origin/main` (0 ahead / 0 behind, clean tree) `[git, 2026-08-23]`. Still **nothing is cut over**: `/api/search-area`, `/api/trip-browse/:tripId/:dayId` and `POST /api/places/details` remain the live paths, and `resolvePlaces()` still has **zero importers** in `src/app`/`src/components`. Next work is the **Search cutover** — planned, not started; see `docs/architecture/resolve-places-search-cutover-plan.md`, which flags one real blocker (the #255/#256 tier path is non-functional on the `bbox`/Search path as built). **The masthead immediately below is STALE on branch + merge status only** — its "committed locally, NOT pushed, no PR" framing described the pre-merge state of `feat/resolve-places-service` and no longer holds; its technical description of the service is preserved verbatim.)
@@ -84,7 +86,83 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
-## 2026-08-23 — four-surface resolver cutover complete (all flag-gated OFF)
+## 2026-08-24 — tier made visible (#271), all flags flipped ON + live-verified in TEST, la-to-portland re-baked, three read-only investigations
+
+Newest truth. `origin/main` tip `dce1a72` (#271). No PROD access this session.
+Everything below is either a merged UI change, a TEST-only env/dev-config flip, a
+TEST-only data refresh, or a read-only investigation.
+
+### 1. Verified/Unverified section headers — #271 (`dce1a72`)
+
+The tier from #255/#256 previously only affected sort order — invisible to users.
+#271 makes it visible:
+- `web/src/lib/trip-browse/tier-sections.ts` — pure `splitByTier()` +
+  `hasSortedTierData()`; inserts a header at each tier boundary of the
+  already-sorted list.
+- `web/src/components/trip/tier-section-header.tsx` — presentational divider,
+  design tokens only.
+- Wired into `find-nearby-panel.tsx` (Search) and `category-browse-panel.tsx`
+  (day-scoped browse). **NOT** Day Column — it renders baked `CorridorPlace`,
+  which drops `verified`, so there is no tier data to divide.
+- **Data-gated:** headers render ONLY when every result carries `verified` AND
+  the list is sorted verified-first. Only the `resolvePlaces()` path produces
+  that shape, so legacy / not-cut-over surfaces get the plain list unchanged.
+- Design choice: a single-tier result still gets one header (consistency, and an
+  all-Unverified list reads as a warning).
+
+### 2. All flags ON in TEST, live-verified (flags LEFT ON in TEST)
+
+`web/.env.development.local` (gitignored, TEST-facing) now carries all four
+`=true`: `SEARCH_AREA_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER`,
+`TRIP_BROWSE_USE_RESOLVER`, `USE_FEDERATED_POIS`. Each was flipped and checked
+with real usage; each check passed and the flag was left on. **This is a local
+dev-config change, not a code change — in code and in prod all four still default
+OFF. Nothing from this arc is live in production.**
+
+- **Search** (`SEARCH_AREA_USE_RESOLVER`) — real Kanab/Bryce camping query;
+  Verified block then Unverified block, 0 ordering violations; corpus half
+  identical off-vs-on (count delta = benign live-USFS variance).
+- **Date Detail** (`DATE_DETAIL_USE_RESOLVER`) — real Google `place_id`s;
+  on-vs-off enrichment IDENTICAL (only the ephemeral Google photo token rotates).
+  Correct — it is a pure Google passthrough (`enrichByGoogleId()`), so no visible
+  difference is the expected result.
+- **Day-scoped browse** — both `TRIP_BROWSE_USE_RESOLVER` AND `USE_FEDERATED_POIS`
+  on (the last untested combination). la-to-deadhorse day 1, camping+scenic: a
+  Verified live block plus a federated Unverified block, all source-stamped and
+  tier-sorted, 0 violations; federation purely additive vs the fed-off run.
+
+### 3. `reference_trips.la-to-portland` re-baked in place — TEST only
+
+Re-baked via the maintained `web/scripts/bake-reference.ts` (temporarily
+generalized to accept `--trip <id>`, then reverted — the committed script is
+still hardcoded to `la-to-deadhorse`). Reason: la-to-portland was baked before
+#254, so its `recreation_area` places (Bishop Field Office, Movie Road, Mobius
+Arch Loop Trail) were frozen as `camping` (tent icon). #254 moved
+`recreation_area → scenic`; re-baking with today's code picks that up. Route,
+days, city-stops, and `routePolyline` are unchanged — only the baked suggestion
+categories and corpus fold were refreshed. `updated_at` now 2026-08-24. A
+throwaway comparison copy (`la-to-portland-fresh-20260823`) was created then
+DELETED — it no longer exists. See DATA_INVENTORY §`reference_trips`.
+
+⚠ **Other reference trips may still carry stale pre-#254 categories** — only
+la-to-portland was re-baked. Tracked in BACKLOG.
+
+### 4. Three read-only investigations (no code, no data change)
+
+- **Stale-icon root cause — CONFIRMED.** Day Column renders the baked category
+  verbatim; pre-#254 bakes froze `recreation_area → camping`. Fixed for
+  la-to-portland by the §3 re-bake; the general staleness is the BACKLOG item.
+- **"Headquarters" (Kernville Day 3) — NOT miscategorized.** It is a genuine
+  campground (RIDB facility), `primary_category = campground` → camping is
+  correct; only its RIDB-short display name is confusingly generic. Nearby "Kern
+  River Ranger District" / "Riverkern Beach Picnic Site" are `facility → interest`,
+  also correct. A different pattern from the stale-bake one.
+- **Kernville "no everyday categories" (gas/food/grocery) — REAL coverage gap,
+  NOT a bake artifact.** The bake reads the searchable corpus; near Kernville that
+  corpus is entirely recreation, so there is nothing everyday to suppress. Tracked
+  in BACKLOG with the measured shape and its honesty caveat.
+
+
 
 Newest truth. Branch work all merged to `main` (`origin/main` tip `b227e65`).
 Every cutover was **plan-doc-first, then implement**, and each implementation is
