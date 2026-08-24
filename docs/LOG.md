@@ -12,6 +12,54 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-23 — all four place-data surface cutovers landed (flag-gated, off), + the enrichByGoogleId capability
+
+- **Completed the read-surface half of the resolver-consolidation ADR: all four
+  originally-planned surfaces are cut over or resolved-as-not-needed.** Each was
+  plan-doc-first then a thin route wrapper behind an env flag, default OFF, client
+  untouched. `origin/main` tip is now `b227e65`. Search #260 (`d62f660`), Date
+  Detail #266 (`a086cb8`), Day Column #267 (`4757067`, no cutover), Day-scoped
+  browse #269 (`b227e65`). Plans: #258/#261/#262/#264/#265/#267/#268.
+- **Search's blocker was the tier bug; Date Detail's was a different, deeper gap —
+  worth not conflating.** Search: the Verified/Unverified tier was dead on the
+  bbox/hydrate path because `hydratePlacesByIds` never selected `description_source`,
+  so `mapMasterPlaceRow` stamped every hydrated place `unverified`. Fixed by
+  threading the field through hydrate (#259 `9c212a6`). Date Detail: `resolvePlaces()`
+  returns `BrowsePlace[]` and, in `ids` scope, returns **nothing** for bare Google
+  `place_id`s — it has no mode that yields the `place_id → PlaceRich` map the endpoint
+  is. So a new capability was built, `enrichByGoogleId()` (#263 `bc2c9c2`), and
+  `enrichPlaces()` refactored to consume it. Same fetch, cache-less (the route keeps
+  its own 15-min cache — this is ADR option 1, NOT step 4's shared cache).
+- **Day Column turned out to be no cutover at all** — verified against code, it's a
+  passive `Trip.days` renderer (`placePool`) with zero live calls of its own; the only
+  fetches in that component are Date Detail's. There is no endpoint to wrap. Its real
+  work is a write-path/baking consolidation (`bake-corridors.ts` corpus fold, behind
+  `USE_FEDERATED_CORRIDOR`), deferred to BACKLOG. The four-surface framing over-counted
+  Day Column.
+- **Day-scoped browse was the cleanest** — `resolvePlaces()` day-corridor scope was
+  literally designed from this endpoint (byte-identical radii/sources/buffer, measured).
+  The wrinkle: it already had `USE_FEDERATED_POIS`, so the new `TRIP_BROWSE_USE_RESOLVER`
+  is **orthogonal** — the wrapper maps `include: { federated: USE_FEDERATED_POIS }`,
+  preserving all four flag combinations. The one new behaviour, Verified-before-Unverified
+  sort, only reorders when `USE_FEDERATED_POIS` is on and is never displayed
+  (`LocationBrowseCard` drops the tier).
+- **A naming collision worth remembering:** Date Detail / Day Column / Day-scoped browse
+  cards render `verified={!!p.placeId}` — a "Google-backed" boolean — which is NOT
+  `BrowsePlace.verified` (the #255/#256 tier). The tier is computed but dropped before
+  the card everywhere except where `resolvePlaces()` uses it for *sorting*.
+- **Verification lesson repeated from prior sessions:** unit tests prove routing (dep-seam
+  spies) but can't prove the wired route end-to-end; each cutover added a live TEST script
+  driving the wired path with a non-vacuous contrast (Search: live results source-stamped
+  under the resolver vs untagged legacy; Date Detail: real Google enrichment + a garbage id
+  omitted; Day-scoped browse: 0-federated/all-untagged vs many-federated/all-stamped). For
+  the two Google-passthrough routes (Date Detail, and the trip-browse full GET) the live
+  driver had to call the delegate, not the full route, because the route's client helpers
+  need a request-scoped `cookies()`/Next context `tsx` can't provide — flagged in each PR.
+- **ADR step 4 (shared client cache) is now ready to build** (three read surfaces cut over,
+  each with its own cache) — recorded in BACKLOG. Note: there was no pre-written "build once
+  a second surface needs it" trigger in the docs; the readiness is simply that the surfaces
+  now exist. **Nothing from this arc is live in production — all three flags default OFF.**
+
 ## 2026-08-22 (later) — `resolvePlaces()` built as an additive service (ADR step 2), branch `feat/resolve-places-service`
 
 - **Built `resolvePlaces()` and wired it to nothing.** One signature over three
