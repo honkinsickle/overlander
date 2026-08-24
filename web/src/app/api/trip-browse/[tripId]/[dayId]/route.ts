@@ -2,21 +2,10 @@ import { NextResponse } from "next/server";
 import { getTrip } from "@/lib/trips/repository";
 import {
   BROWSE_PLACES,
-  type BrowsePlace,
   type SlideCategoryKey,
 } from "@/lib/trip-browse/places";
-import { bboxFromCoords, discover } from "@/lib/discovery/discovery";
-import { recGovSource } from "@/lib/discovery/rec-gov";
-import { foursquareSource } from "@/lib/discovery/foursquare";
-import { googlePlacesSource } from "@/lib/discovery/google-places";
-import { usfsSource } from "@/lib/discovery/usfs";
-import { blmSource } from "@/lib/discovery/blm";
-import {
-  haversineMi,
-  pointToPolylineMi,
-} from "@/lib/routing/point-to-polyline";
-import { fetchFederatedPois } from "@/lib/trip-browse/federated";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { produceBrowsePlaces } from "./handler";
 
 // The buckets the live discovery fanout actually queries for the "all" view.
 // `attraction` is included: the live mappers (OSM/Foursquare/Google) now have
@@ -34,37 +23,21 @@ const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "fuel",
 ];
 
-/** Per-category search radius around each day endpoint. Camping leans
- *  wider because overlanders detour further for the right site (and
- *  BLM/NFS dispersed sites tend to sit between towns, not in them).
- *  Food stays tight so dense urban bboxes don't time out Overpass. */
-const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
-  food: 5,
-  scenic: 15,
-  oddity: 25,
-  overnight: 15,
-  camping: 50,
-  fuel: 10,
-  attraction: 15,
-  interest: 15,
-  urban: 10,
-};
-
-/** Soft corridor — places within this far from today's route polyline
- *  rank above places beyond it. Matches the "within 10 miles of today's
- *  route" Browse-panel spec. */
-const CORRIDOR_MI = 10;
-
-/** Server-side flag (default OFF). When off, this handler is byte-for-byte
- *  unchanged — the federated master_place corridor read is never invoked
- *  and no result is tagged. When on, federated POIs from the
- *  pois_along_corridor RPC are merged ALONGSIDE the live fanout (additive,
- *  never a replacement). */
+/** Server-side flag (default OFF). Gates whether federated `pois_along_corridor`
+ *  rows are merged into the feed. Independent of the resolver flag below — see
+ *  the cutover plan §3. */
 const USE_FEDERATED_POIS = process.env.USE_FEDERATED_POIS === "true";
 
-/** Federated corridor read uses meters (RPC casts ::geography); 16000m ≈
- *  the 10mi CORRIDOR_MI client-side filter, so federated rows clear it. */
-const FEDERATED_BUFFER_M = 16000;
+/** Cut the day-scoped browse feed over to the consolidated `resolvePlaces()`
+ *  service (day-corridor scope). Mirrors `SEARCH_AREA_USE_RESOLVER` /
+ *  `DATE_DETAIL_USE_RESOLVER`: an env boolean, default OFF. OFF = the exact
+ *  pre-cutover discover-fanout body (zero behaviour change). ON = resolvePlaces()
+ *  with `include.federated` wired to `USE_FEDERATED_POIS`, so the two flags stay
+ *  orthogonal (all four combinations preserve today's behaviour). A flip is a
+ *  redeploy → fresh process → fresh cache, so no stale other-mode payload
+ *  survives a flip. See docs/architecture/resolve-places-day-scoped-browse-cutover-plan.md. */
+const TRIP_BROWSE_USE_RESOLVER =
+  process.env.TRIP_BROWSE_USE_RESOLVER === "true";
 
 /** In-process response cache. Browse data is expensive to compute
  *  (~7s single-category, ~13s all-fanout) but identical across requests
@@ -124,6 +97,12 @@ function cacheSet(key: string, payload: unknown): void {
  *   GET /api/trip-browse/:tripId/:dayId?category=scenic         (single)
  *   GET /api/trip-browse/:tripId/:dayId?categories=scenic,food  (multi)
  *   GET /api/trip-browse/:tripId/:dayId?categories=all          (all 6)
+ *
+ * THIN WRAPPER: this handler validates the category set, owns the LRU cache,
+ * runs the fixture fast path, resolves the trip/day geometry, and shapes the
+ * `{ source, places }` response. The "produce the ranked places" step lives in
+ * `./handler`, behind `TRIP_BROWSE_USE_RESOLVER` (with `USE_FEDERATED_POIS`
+ * wired through as the orthogonal data flag).
  *
  * Single-category responses preserve the legacy shape `{ source, places }`.
  * Multi-category responses use `{ source: "discovery", places }` where each
@@ -233,101 +212,24 @@ export async function GET(
   }
 
   // Federated path is opt-in. Create the anon+JWT server client once (only
-  // when flagged) so each category's RPC call reuses it. The day segment
-  // (start→end) is the SAME 2-point line the corridor filter below uses.
+  // when flagged) so the corridor RPC calls reuse it — passed to both the
+  // legacy and resolver paths in `./handler`.
   const federatedClient = USE_FEDERATED_POIS
     ? await createSupabaseServerClient()
     : null;
-  const dayEndCoord = day.coords;
 
-  // Fan out one discover() call per category in parallel — discover()
-  // itself dedupes within each call but not across categories, which is
-  // fine since a single place rarely qualifies for two slideKeys.
-  const perCategory = await Promise.all(
-    requested.map(async (slideKey) => {
-      const bboxes = points.map((p) =>
-        bboxFromCoords(p, RADIUS_KM_BY_CATEGORY[slideKey]),
-      );
-      const places = await discover({
-        bboxes,
-        categories: [slideKey],
-        sources: [
-          googlePlacesSource,
-          recGovSource,
-          foursquareSource,
-          usfsSource,
-          blmSource,
-        ],
-        signal: req.signal,
-      });
-      const live = places.map<BrowsePlace>((p) => ({ ...p, category: slideKey }));
+  const places = await produceBrowsePlaces({
+    requested,
+    dayStart,
+    dayEnd: day.coords,
+    points,
+    useResolver: TRIP_BROWSE_USE_RESOLVER,
+    useFederated: USE_FEDERATED_POIS,
+    supabase: federatedClient,
+    signal: req.signal,
+  });
 
-      // Flag OFF: byte-for-byte the legacy path — untagged live results.
-      if (!USE_FEDERATED_POIS) return live;
-
-      // Flag ON: tag live origin, then merge federated RPC rows alongside.
-      const liveTagged = live.map<BrowsePlace>((p) => ({
-        ...p,
-        source: "live" as const,
-      }));
-      if (!federatedClient || !dayStart || !dayEndCoord) return liveTagged;
-      const federated = await fetchFederatedPois({
-        supabase: federatedClient,
-        slideKey,
-        start: dayStart,
-        end: dayEndCoord,
-        bufferMeters: FEDERATED_BUFFER_M,
-        signal: req.signal,
-      });
-      return [...liveTagged, ...federated];
-    }),
-  );
-  const merged = perCategory.flat();
-
-  // Cross-category de-dupe by id — same place can show up in two
-  // categories occasionally (e.g. a campground tagged as both camping
-  // and scenic). Keep the first occurrence.
-  const seen = new Set<string>();
-  const unique: BrowsePlace[] = [];
-  for (const p of merged) {
-    if (seen.has(p.id)) continue;
-    seen.add(p.id);
-    unique.push(p);
-  }
-
-  // Filter to within CORRIDOR_MI of today's route; sort by haversine
-  // distance from day-start ascending. The "Within 10 mi of today"
-  // panel header makes the filter explicit — places beyond the
-  // corridor used to slip in (ranked lower) but now drop out entirely.
-  //
-  // Corridor is computed against TODAY'S segment only — a synthetic
-  // two-point line from day-start → day-end. Using the trip-level
-  // polyline let places near a different day's segment slip in (e.g.
-  // a viewpoint near Day 27 appearing on Day 16's panel because the
-  // full trip passes within 10mi of both).
-  const dayEnd = day.coords;
-  const daySegment: [number, number][] =
-    dayStart && dayEnd
-      ? [dayStart, dayEnd]
-      : dayEnd
-        ? [dayEnd]
-        : dayStart
-          ? [dayStart]
-          : [];
-  const scored = unique
-    .map((p) => ({
-      place: p,
-      milesOffRoute:
-        daySegment.length > 0
-          ? pointToPolylineMi(p.coords, daySegment)
-          : 0,
-      fromStart: dayStart ? haversineMi(p.coords, dayStart) : Infinity,
-    }))
-    .filter((s) => s.milesOffRoute <= CORRIDOR_MI);
-  scored.sort((a, b) => a.fromStart - b.fromStart);
-  const sorted = scored.map((s) => s.place);
-
-  const payload = { source: "discovery", places: sorted };
+  const payload = { source: "discovery", places };
   cacheSet(cacheK, payload);
   return NextResponse.json(payload, { headers: { "x-cache": "MISS" } });
 }
