@@ -109,6 +109,24 @@ is `SYSTEM_PROMPT`; the user turn is `buildFactsMessage(input, facts)`
 (`master-prompt.ts`). The Anthropic SDK is imported dynamically via a
 non-literal specifier so it is not a static build dependency.
 
+**`corridorCities` has always been IN the prompt** — `buildFactsMessage` sends
+`{id, name, kind, milesFromStart}` per city, derived by `deriveCorridorCities`
+inside `preComputeFacts` (`facts.ts`) over the whole anchor route `[read
+source 2026-08-24]`. This is worth stating because the obvious hypothesis for
+clustered key stops — "the model can't spread across cities it never sees" — is
+**false**, and was measured false before the prompt was changed. The model had
+the spine and simply was not asked to use it for placement.
+
+**Key-stop DISTRIBUTION is a prompt preference, not a mechanism** (added
+2026-08-24). `SYSTEM_PROMPT`'s `keyStops[]` contract now asks the model to
+spread stops across the corridor cities that fall inside a day rather than
+clustering them, calling out the start-of-day gap specifically, and
+`buildFactsMessage` repeats the instruction next to the city list. It is
+deliberately **not** a quota: the text says explicitly not to pad, and nothing
+downstream enforces coverage. See
+`docs/decisions/2026-08-24-keystop-corridor-spread.md` for the measured
+before/after and what did NOT improve.
+
 **The audit** (`auditItinerary`, `web/src/lib/itinerary/audit.ts`) runs after,
 in three tiers `[read source]`:
 

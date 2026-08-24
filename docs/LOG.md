@@ -12,6 +12,45 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-24 — key stops cluster at the end of a day; the fix was one prompt paragraph, and it half-worked
+
+- **Chased a clustering complaint to the wrong root cause first, and the
+  correction is the useful part.** A generated day put every curated stop in its
+  back half, leaving San Diego / Oceanside / Riverside / Silver Lakes as bare
+  "Explore N more" nodes. The natural hypothesis — the model can't spread across
+  cities it never sees — is **false**. `buildFactsMessage` has always sent
+  `corridorCities` with `milesFromStart`, built by `deriveCorridorCities` inside
+  `preComputeFacts`. Checking that *before* designing a fix turned a plumbing
+  change into a prompt edit.
+- **Ruled out a silent-drop bug first, with temporary instrumentation.** Two
+  generations logged the raw LLM `keyStops` per day plus every grounding
+  outcome: **zero dropped** in both, every stop accounted for as pool-hit or
+  live-resolve. So "no curated stop at this city" is the LLM not naming one, not
+  the corridor guard eating it. Instrumentation was added and fully reverted
+  twice; it is not in the tree.
+- **Which cities get a card varies run to run on the SAME route.** One run put a
+  curated card on San Diego (Lucha Libre Taco Shop, ~2 mi); another put nothing
+  before Ridgecrest. Worth remembering before reading a single generation as
+  evidence of anything structural.
+- **The change is a preference, not a mechanism.** `SYSTEM_PROMPT` now asks for
+  a progression across the day's corridor cities and names the start-of-day gap;
+  `buildFactsMessage` repeats it next to the list. Both say explicitly: do not
+  pad, skipping a city is fine, coverage is only a tie-breaker. Nothing
+  downstream counts cities.
+- **Measured honestly: partially effective, and the headline gap is unfixed.**
+  Three post-change runs on the same route all covered **Riverside** and the end
+  city — an improvement. All three still left **San Diego and Oceanside empty**,
+  which is precisely what the new text calls out, and one *pre*-change run had
+  covered San Diego. Confound stated rather than smoothed: day-1 shape shifted
+  (post-change runs all ran San Diego → Bishop), so it is not a clean A/B, and
+  the sample is small.
+- **A side finding that unblocked all of this:** Google is not an enabled
+  provider on TEST (`/auth/v1/settings` → email only), so the single "Continue
+  with Google" button cannot complete there — the standing "no dev sign-in path"
+  gap is real. A dev-only password sign-in was built to work around it and is
+  **uncommitted**, deliberately out of this PR.
+- Decision doc: `docs/decisions/2026-08-24-keystop-corridor-spread.md`.
+
 ## 2026-08-23 — all four place-data surface cutovers landed (flag-gated, off), + the enrichByGoogleId capability
 
 - **Completed the read-surface half of the resolver-consolidation ADR: all four

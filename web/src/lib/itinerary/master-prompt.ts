@@ -71,6 +71,19 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
        ("Braeburn Lodge — cinnamon buns worth the stop", "Glacier Inn — get
        Hyderized") — the way a great guide weaves food into the day. Food stops
        are grounded like every other name.
+       SPREAD THEM ALONG THE DAY. corridorCities in ENGINE FACTS lists the towns
+       the route actually passes, each with milesFromStart; the day's stops
+       should read as a progression across that span, not a cluster at one end.
+       Before you finalize a day, look at which corridor cities fall inside it
+       and ask whether a worthwhile stop exists near the ones you have skipped —
+       especially near the START of the day, which is easy to leave empty. A
+       traveler pulling out in the morning wants somewhere to stop in the first
+       hour, not only after lunch.
+       This is a preference, NOT a quota: do NOT invent, pad, or stretch to put
+       a stop at every city. If a stretch genuinely has nothing worth stopping
+       for, leave it — a thin real day beats a padded one, and you still stay
+       within the 2–4 entries. Coverage is the tie-breaker when several
+       candidates are equally good, not a rule that overrides quality.
      - overnight { name|null, desc|null, type, rationale } — the real place
        NAME (pooled or not), or desc for a typical/assumed spot; the
        rationale MUST say why it fits the rig +
@@ -144,6 +157,12 @@ export function buildFactsMessage(
     "pool). Reason over them per the GROUNDING CONTRACT — reference every",
     "place by its plain NAME (pooled or not; there is no id field), and honor",
     "every FIXED anchor on its date.",
+    "",
+    "`corridorCities` is the town spine of the route, ordered by",
+    "milesFromStart. Use it when placing each day's keyStops: work out which",
+    "cities fall within the day and spread the stops across that span rather",
+    "than clustering them near the end. Skipping a city is fine when nothing",
+    "there is worth the stop — do not pad to cover one.",
     "",
     "```json",
     JSON.stringify(payload, null, 2),
