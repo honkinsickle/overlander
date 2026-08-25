@@ -67,6 +67,7 @@ function day(
   overnightName: string | null,
   overnightRef: string | null,
   overnightGoogleId: string | null = null,
+  fuzzy: { name: string; coords: [number, number] } | null = null,
 ): DayPlan {
   const audit: DayAudit = {
     distanceConfidence: "measured",
@@ -76,6 +77,8 @@ function day(
     resolvedPlaces: [],
     overnightRef,
     overnightGoogleId,
+    overnightName: fuzzy?.name ?? null,
+    overnightCoords: fuzzy?.coords ?? null,
   };
   return {
     n: 1,
@@ -175,4 +178,33 @@ test("bakeGeneratedDays does NOT paper over the no-tile gap: pool-hit with no fo
     0,
     "no tile exists for the overnight → nothing marked, not synthesized",
   );
+});
+
+test("bakeGeneratedDays fuzzy-marks a pool-hit overnight to a same-place google: tile by name + proximity", async () => {
+  // No mp: fold tile, no google_place_id — but the place is on the spine as a
+  // live-resolve google: tile (a keyStop) with a matching name at the same
+  // coords. The audit carried the overnight's pool name + coords → fuzzy links.
+  const auditedDay = day(
+    "Hope Valley Campground",
+    "mp:hopevalley-not-in-fold",
+    null,
+    { name: "Hope Valley Campground", coords: MID },
+  );
+  auditedDay.audit!.resolvedPlaces = [
+    {
+      name: "Hope Valley Campground",
+      displayName: "Hope Valley Campground",
+      placeId: "ChIJhope",
+      coords: MID,
+      category: "campground",
+      where: "keyStop",
+    },
+  ];
+  const audited = { days: [auditedDay] } as unknown as ItineraryOutput;
+
+  const baked = await bakeGeneratedDays(audited, INPUT, fakeClient([]), DAY_ROUTES);
+
+  const marked = baked[0].segmentSuggestions.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1, "the same-place google: tile is fuzzy-matched");
+  assert.equal(marked[0].id, "google:ChIJhope");
 });

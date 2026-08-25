@@ -20,7 +20,7 @@ import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
 import { deriveCorridorCities, DEFAULT_CORRIDOR_PARAMS } from "@/lib/corridor/derive";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
-import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
+import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
 import gazetteer from "@/lib/corridor/data/gazetteer";
 import { stripNodeIdentical } from "@/lib/corridor/node-identity";
@@ -69,27 +69,77 @@ export function overnightTileRef(outcome: GroundOutcome): string | null {
  * overnight is off this day's corridor), nothing is marked — the caller keeps
  * the prose "Overnight —" line as the fallback, same posture as #275.
  */
+/** ~805 m — inside Adam's 500 m–1 km window. A CHOSEN constant (flagged): loose
+ *  enough for corpus-vs-Google coord drift on the same place, tight enough to
+ *  mean "clearly the same physical location", not "same general area". */
+export const FUZZY_OVERNIGHT_RADIUS_MI = 0.5;
+
+function overnightNameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+}
+
+/** STRICT fuzzy name match: every token of the SHORTER name is present in the
+ *  longer one, and the shorter name has ≥2 tokens (a lone generic word like
+ *  "Convict" or "Lake" is never enough). "Convict Lake" ≈ "Convict Lake
+ *  Campground" ✓; "Convict Lake Campground" vs "Convict Creek Trailhead" ✗. Err
+ *  strict — a false positive would mislabel where the traveller sleeps. */
+export function fuzzyOvernightNameMatch(a: string, b: string): boolean {
+  const ta = overnightNameTokens(a);
+  const tb = overnightNameTokens(b);
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  if (short.length < 2) return false;
+  const longSet = new Set(long);
+  return short.every((t) => longSet.has(t));
+}
+
 export function markOvernightTile(
   tiles: BrowsePlace[],
   ref: string | null,
   note: string,
   googleId?: string | null,
+  fuzzy?: { name: string; coords: [number, number] } | null,
 ): BrowsePlace[] {
   if (!ref) return tiles;
-  // Cross-scheme reconciliation (Follow-up 4 / #283 Day 4): a pool-hit
-  // overnight's ref is `mp:<uuid>`, but the tile representing the SAME place on
-  // the spine may be a live-resolve `google:<placeId>` tile (a keyStop or the
-  // day's endpoint), which the exact-id match can't reach. When the pool POI
-  // carries a `google_place_id`, fall back to it — but ONLY when no exact-ref
-  // tile exists, so a present tile is never double-marked. Inert when the pool
-  // row has no google_place_id (`googleId` null), so the separate no-tile gap
-  // (an overnight absent from the day's fold entirely) is NOT papered over.
+  // Tier 1 (#279) exact id + Tier 2 (#284) google_place_id bridge: a pool-hit
+  // overnight's `mp:` ref, or — when no exact-ref tile exists — the pool POI's
+  // google_place_id matching a `google:<gid>` / `placeId` tile for the same
+  // place. Never double-marks a present tile.
   const hasExact = tiles.some((t) => t.id === ref);
   const gid = !hasExact && googleId ? googleId : null;
-  const isOvernightTile = (t: BrowsePlace) =>
+  const idMatch = (t: BrowsePlace) =>
     t.id === ref || (gid != null && (t.id === `google:${gid}` || t.placeId === gid));
+
+  // Tier 3 (#285) — fuzzy name + proximity — runs ONLY when NO id-based tile
+  // matched, so tiers 1 and 2 always win a conflict. BOTH the strict name bar
+  // AND the tight radius must clear; pick the single CLOSEST qualifying tile.
+  // Never a best-guess: nothing clears → nothing marked (prose fallback, exactly
+  // like today). Compares against the day's own tiles only — no corpus search.
+  // Does NOT address the no-tile gap (Convict Lake / layover): if the place has
+  // no tile at all, there is no candidate here and it stays unmarked.
+  let fuzzyId: string | null = null;
+  if (fuzzy?.name && fuzzy.coords && !tiles.some(idMatch)) {
+    const cands = tiles
+      .filter(
+        (t) =>
+          !!t.title &&
+          haversineMi(t.coords, fuzzy.coords) <= FUZZY_OVERNIGHT_RADIUS_MI &&
+          fuzzyOvernightNameMatch(fuzzy.name, t.title),
+      )
+      .sort(
+        (a, b) => haversineMi(a.coords, fuzzy.coords) - haversineMi(b.coords, fuzzy.coords),
+      );
+    fuzzyId = cands[0]?.id ?? null;
+  }
+
   return tiles.map((t) =>
-    isOvernightTile(t)
+    idMatch(t) || (fuzzyId != null && t.id === fuzzyId)
       ? { ...t, isOvernight: true, curated: true, keyStopNote: t.keyStopNote ?? note }
       : t,
   );
@@ -227,11 +277,16 @@ export async function bakeGeneratedDays(
       // off this day's corridor (ref null or matches no tile).
       const overnightNote =
         day.overnight.rationale || day.overnight.name || "overnight";
+      const overnightName = day.audit?.overnightName ?? null;
+      const overnightCoords = day.audit?.overnightCoords ?? null;
       const marked = markOvernightTile(
         cardTiles,
         day.audit?.overnightRef ?? null,
         overnightNote,
         day.audit?.overnightGoogleId ?? null,
+        overnightName && overnightCoords
+          ? { name: overnightName, coords: overnightCoords }
+          : null,
       );
 
       return { n: day.n, corridorCities, segmentSuggestions: marked };

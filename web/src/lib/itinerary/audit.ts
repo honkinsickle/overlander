@@ -543,6 +543,10 @@ export async function auditItinerary(
     // A pool-hit overnight's google_place_id (when its corpus row has one) — lets
     // the bake reconcile the `mp:` ref to a live-resolve `google:` tile.
     let overnightGoogleId: string | null = null;
+    // The pool-hit overnight's canonical name + coords — the last-resort fuzzy
+    // match key when neither id tier finds its tile (#285).
+    let overnightName: string | null = null;
+    let overnightCoords: [number, number] | null = null;
     if (overnight.name) {
       const outcome = await groundReference(overnight.name, "overnight", {
         poolByName,
@@ -551,10 +555,14 @@ export async function auditItinerary(
         onCorridor,
       });
       overnightRef = overnightTileRef(outcome);
-      if (outcome.kind === "pool-hit") overnightGoogleId = outcome.poi.placeId ?? null;
       if (outcome.kind === "pool-hit") {
         // Pooled overnight — keep the name (the note shows it); its corpus tile
-        // arrives via the federated fold. Nothing to strip.
+        // arrives via the federated fold. Carry the google_place_id + the name /
+        // coords so the bake can reconcile the `mp:` ref to a live-resolve
+        // `google:` tile (#284) or fuzzy-match it (#285). Nothing to strip.
+        overnightGoogleId = outcome.poi.placeId ?? null;
+        overnightName = outcome.poi.name;
+        overnightCoords = outcome.poi.coords;
       } else if (outcome.kind === "resolved") {
         resolvedPlaces.push({ ...outcome.place, name: overnight.name, where: "overnight" });
         report.resolved.push({ day: day.n, name: overnight.name, where: "overnight" });
@@ -643,6 +651,8 @@ export async function auditItinerary(
         resolvedPlaces,
         overnightRef,
         overnightGoogleId,
+        overnightName,
+        overnightCoords,
       },
     });
     dayRoutes.push({

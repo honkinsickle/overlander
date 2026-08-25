@@ -343,3 +343,57 @@ two no-match/no-paper-over cases. `bake-overnight-integration.test.ts` — the f
 `bakeGeneratedDays` wiring reconciles a pool-hit `mp:` ref to a live-resolve
 `google:` tile, and leaves the no-tile pool-hit unmarked. 149 itinerary tests
 pass; typecheck + build exit 0.
+
+---
+
+## Follow-up 6 (2026-08-24) — FIX: fuzzy name + proximity as tier 3
+
+Closes the tile-present half of the Follow-up 4/5 gap the `google_place_id` bridge
+couldn't (backcountry rows have no Google id). Adam's call: fuzzy match, not a
+Google backfill, to avoid a Google-coverage dependency on off-grid places.
+
+**Three tiers now, tried in order; a later tier runs ONLY if all earlier ones
+miss (so #279 and #284 always win a conflict):**
+1. exact `mp:`/`google:` id (#279);
+2. the pool POI's `google_place_id` bridge (#284);
+3. **fuzzy name + proximity (#285).**
+
+**The tier-3 rule (Adam's spec — both bars must clear independently):**
+- **Name — STRICT** (`fuzzyOvernightNameMatch`): every token of the SHORTER
+  normalized name is present in the longer, and the shorter has **≥2 tokens** (a
+  lone generic word never matches). "Convict Lake" ≈ "Convict Lake Campground" ✓;
+  "Convict Lake Campground" vs "Convict Creek Trailhead" ✗.
+- **Distance — TIGHT:** `FUZZY_OVERNIGHT_RADIUS_MI = 0.5` (~805 m), inside Adam's
+  500 m–1 km window.
+- **No best-guess:** among tiles clearing BOTH bars, mark the single **closest**;
+  if none clears, mark nothing (prose fallback, exactly like today).
+- **Scope:** compares the overnight's pool POI (name + coords, carried on
+  `DayAudit.overnightName` / `overnightCoords`) against **the day's own tiles
+  only** — no corpus-wide search (confirmed per the brief).
+
+⚠ **Two CHOSEN thresholds, flagged (my judgment, not measured):** the 0.5 mi
+radius, and the strict-subset + ≥2-token name rule. Both err strict per the
+brief (a false positive would mislabel where the traveller sleeps). Tunable — a
+product/confidence call if they need loosening.
+
+**Step-4 re-check against the #283 corridor** (computed this session against real
+corpus + Google coords; **not** a live LLM re-generation — spend was not approved
+in this task, so that end-to-end run is offered, not done):
+- **Hope Valley (Day 4) — NOW MARKS ✓.** Real data: corpus "Hope Valley
+  Campground" @ `-119.9298,38.7302` vs Google tile "Hope Valley" @
+  `-119.9307,38.7309` → name subset match, **0.067 mi** apart (≪ 0.5) `[queried
+  TEST + Google Places details]`. This mirrors bake exactly (pool name vs google
+  tile title).
+- **Convict Lake (Day 1 / Day 2 layover) — still correctly does NOT mark.** No
+  tile exists at all for it (fold miss + not live-resolved), so tier 3 has no
+  candidate. This fix does not address the no-tile gap, by design.
+- **Twin Lakes (Day 3), Fallen Leaf (Day 5) — unchanged, still mark** via tier 1
+  (exact id); tier 3 never runs for them.
+
+**Does NOT paper over the no-tile gap** (Convict Lake / layover) — test-locked.
+
+**Tests:** `overnight-tile.test.ts` — clear match, name-only near-miss, distance-
+only near-miss, single-generic-token, genuine no-match, and tier-1/tier-2
+priority-over-fuzzy. `bake-overnight-integration.test.ts` — the full
+`bakeGeneratedDays` wiring fuzzy-marks a same-place `google:` tile. 158 itinerary
+tests pass; typecheck + build exit 0.

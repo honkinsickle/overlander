@@ -101,6 +101,12 @@ export type DayAudit = {
    *  (the ref is already `google:`), a desc-only/dropped overnight, or a corpus
    *  row with no Google link. */
   overnightGoogleId: string | null;
+  /** The pool-hit overnight's canonical name + coords — the last-resort
+   *  fuzzy-match key (#285) when neither the exact id nor the google_place_id
+   *  bridge finds the overnight's tile. null on a live-resolve / desc-only /
+   *  dropped overnight (those don't need the fuzzy tier). */
+  overnightName: string | null;
+  overnightCoords: [number, number] | null;
 };
 
 /** One key stop: a grounded place NAME + inline context note (purpose / caveat
