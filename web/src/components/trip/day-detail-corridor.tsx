@@ -80,6 +80,10 @@ export type CorridorPlace = {
   /** Inline context for a curated key stop ("fuel + lunch, hot tub") — rendered
    *  as the tile's status line. Absent on pool tiles. */
   keyStopNote?: string;
+  /** True when this pick IS the day's grounded overnight (notes-to-spine). Set
+   *  alongside `curated` by the bake so the overnight is featured on the spine
+   *  and badged distinctly from an ordinary key stop. */
+  isOvernight?: boolean;
   /** Real price tier ($–$$$$) from a Google-backed source. Fetched by the
    *  hydrate endpoint and now grafted at both merge sites (day-detail-
    *  corridor-column.tsx's hydratePlaces() and synth()), same "carried
@@ -89,6 +93,15 @@ export type CorridorPlace = {
    *  docs/architecture/place-pipeline-trace.md §3. */
   priceTier?: 1 | 2 | 3 | 4;
 };
+
+/** Status line for a curated pick. A featured overnight (notes-to-spine) reads
+ *  distinctly from an ordinary key stop by prefixing its status with
+ *  "Overnight"; everything else shows its key-stop note unchanged. */
+function pickStatus(p: CorridorPlace): string | undefined {
+  if (p.isOvernight)
+    return p.keyStopNote ? `Overnight · ${p.keyStopNote}` : "Overnight";
+  return p.keyStopNote;
+}
 
 type Props = {
   /** e.g. "Day 1 — Sat, May 30th". */
@@ -612,7 +625,7 @@ export function DayDetailCorridor({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
-                  status={p.keyStopNote}
+                  status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   curatedMenu={buildCuratedMenu?.(p)}
                   editMode={editMode}
@@ -883,7 +896,7 @@ function CityNode({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
-                  status={p.keyStopNote}
+                  status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   onRemove={
                     p.removable && onRemovePlace
@@ -906,7 +919,7 @@ function CityNode({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
-                  status={p.keyStopNote}
+                  status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   onRemove={
                     p.removable && onRemovePlace
@@ -996,7 +1009,7 @@ function KeyStopNode({
             place={place}
             verified={!!place.placeId}
             category={place.category}
-            status={place.keyStopNote}
+            status={pickStatus(place)}
             onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
             curatedMenu={buildCuratedMenu?.(place)}
             editMode={editMode}
@@ -1058,7 +1071,7 @@ function MileTick({
               place={p}
               verified={!!p.placeId}
               category={p.category}
-              status={p.keyStopNote}
+              status={pickStatus(p)}
               onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
               curatedMenu={buildCuratedMenu?.(p)}
               editMode={editMode}

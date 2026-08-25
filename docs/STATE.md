@@ -84,11 +84,44 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (impl) — overnight linked to its spine tile (notes-to-spine, overnight slice)
+
+Newest truth. Branch `overnight-spine-tile` off `origin/main`. Implements the
+overnight slice from `docs/decisions/notes-to-spine-gap.md` (PR #278, merged as
+`a744057`); decision doc `docs/decisions/2026-08-24-overnight-spine-tile-link.md`.
+Web only; no schema, no migration, no DB access. Gates: `typecheck` + `next
+build` both exit 0; 140 itinerary tests pass (2 new suites).
+
+**What:** the overnight was already grounded but never marked on the spine and
+was emitted three times (unlabeled tile + "Camping" block + "Overnight —" prose
+line). Now: `audit.ts` records `DayAudit.overnightRef` (canonical tile id, by
+IDENTITY — a corpus id on a pool-hit, `google:<placeId>` on a live-resolve —
+via `overnightTileRef`); `bake.ts:markOvernightTile` flags that one tile
+`isOvernight` + `curated` (featured, badged) with a no-op fallback when the ref
+is null or matches no tile; the "Camping" briefing block derives from the tile;
+and `to-trip.ts` drops the redundant "Overnight —" notes line when the overnight
+is on the spine. `MAX_BACKFILLS_PER_DAY` and the #276 backfill are untouched —
+this links an already-resolved place, it does not resolve or pick.
+
+**Note — production had NO overnight→tile match before this;** the "substring
+match" #278 mentioned was only in that investigation's throwaway script. This is
+the first real match, and it is by id.
+
+**Existing trips unaffected** (bake/notes run only at generation; on render, no
+`isOvernight` tile ⇒ old behavior). **Not verified via a live generation**
+(needs authed wizard + LLM); covered by unit tests + the type/build gate.
+Flagged UX calls (keep the Camping block? exact badge? overnight-is-end-town) in
+the decision doc — not decided.
+
+⚠ **Doc-drift note (unchanged, flagged not fixed):** this file's top masthead is
+dated 2026-08-23 (branch `main`/`sucre`, resolver cutover) and predates the
+#274–#276 merges — same stale masthead PR #278 flagged. Left as-is.
+
 ## 2026-08-24 (investigation) — notes-to-spine gap: scoped, not implemented
 
-Newest truth. Branch `dubai`. **Investigation only — no code changed**; the
-deliverable is `docs/decisions/notes-to-spine-gap.md` plus this + a BACKLOG
-entry. TEST reads only (24 generated trips in `public.trips`); no PROD access.
+Branch `dubai`. **Investigation only — no code changed** (PR #278, merged as
+`a744057`); deliverable `docs/decisions/notes-to-spine-gap.md`. TEST reads only
+(24 generated trips in `public.trips`); no PROD access.
 
 **Question:** places named in a generated day's Overnight / Logistics / Fuel /
 Reserve notes render only as prose — should they also be spine nodes?
@@ -107,17 +140,11 @@ through untouched. So:
   name are *also* already spine nodes/tiles — naive extraction would mostly
   duplicate.
 
-**Recommended:** cheap overnight-labeling slice first (no new resolution, no
-cap interaction); service-stop spining is a separate product-gated decision,
-preferring structured emission at generation time over lossy prose parsing.
-Cap/gating vs. #275/#276 and several visual-distinction/duplication calls are
-flagged as **open product questions**, not decided. Full detail + the four
-investigation questions in the decision doc.
-
-⚠ **Doc-drift note (unchanged from session start):** the top masthead of this
-file is dated 2026-08-23 (branch `main`/`sucre`, resolver cutover) and predates
-the #274–#276 merges and this branch — left as-is; reconciling it is separate
-work.
+**Recommended:** cheap overnight-labeling slice first (the 08-24 impl above);
+service-stop spining is a separate product-gated decision, preferring structured
+emission at generation time over lossy prose parsing. Cap/gating vs. #275/#276
+and several visual-distinction/duplication calls are flagged as **open product
+questions**, not decided.
 
 ## 2026-08-25 (later) — corridor-city backfill: #275 extended past the start anchor
 

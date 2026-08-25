@@ -90,6 +90,11 @@ export type DayAudit = {
   flags: AuditFlag[];
   /** Tier-2 names that resolved live + passed the corridor guard. */
   resolvedPlaces: ResolvedPlace[];
+  /** Canonical id of the tile that IS this day's grounded overnight — a corpus
+   *  id on a pool-hit, `google:<placeId>` on a live-resolve. The bake links the
+   *  overnight to its own tile by this id (not a name substring). null when the
+   *  overnight is desc-only or was dropped, so the prose fallback stands. */
+  overnightRef: string | null;
 };
 
 /** One key stop: a grounded place NAME + inline context note (purpose / caveat

@@ -16,6 +16,19 @@ export function DayBriefingCard({ day }: { day: Day }) {
   const hasContent =
     day.description || day.weather || (day.notes && day.notes.length > 0);
   if (!hasContent) return null;
+
+  // The overnight's single source of truth is its spine tile when the bake
+  // linked one (notes-to-spine). Derive the Camping block from that tile so the
+  // block and the spine node never carry independent copies; fall back to the
+  // structured `day.overnight` only for a desc-only / off-corridor overnight
+  // that has no tile.
+  const overnightTile = day.segmentSuggestions?.find((t) => t.isOvernight);
+  const overnightName = overnightTile?.title ?? day.overnight?.selected.name;
+  const overnightMeta = overnightTile
+    ? undefined
+    : day.overnight?.selected.cost;
+  const overnightNote =
+    overnightTile?.keyStopNote ?? day.overnight?.selected.notes;
   const route = [
     day.miles && `${day.miles} mi`,
     day.driveHours && `${day.driveHours} hrs`,
@@ -110,7 +123,7 @@ export function DayBriefingCard({ day }: { day: Day }) {
           </div>
         )}
 
-        {day.overnight && (
+        {overnightName && (
           <div className="flex flex-col" style={{ gap: 4 }}>
             <span
               className="uppercase"
@@ -132,10 +145,10 @@ export function DayBriefingCard({ day }: { day: Day }) {
                 color: "#CFCFCF",
               }}
             >
-              {day.overnight.selected.name}
-              {day.overnight.selected.cost && ` · ${day.overnight.selected.cost}`}
+              {overnightName}
+              {overnightMeta && ` · ${overnightMeta}`}
             </span>
-            {day.overnight.selected.notes && (
+            {overnightNote && (
               <span
                 style={{
                   fontFamily: "var(--ff-sans)",
@@ -144,7 +157,7 @@ export function DayBriefingCard({ day }: { day: Day }) {
                   color: "#8A8A8A",
                 }}
               >
-                {day.overnight.selected.notes}
+                {overnightNote}
               </span>
             )}
           </div>

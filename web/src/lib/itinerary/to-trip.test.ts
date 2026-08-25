@@ -125,3 +125,60 @@ test("itineraryToTrip without dayRoutes: only first-day start + last-day end (ba
   assert.equal(trip.days[1].coords, undefined);
   assert.deepEqual(trip.days[2].coords, [-123.12, 49.28], "last day falls back to last anchor");
 });
+
+// ── Overnight notes-to-spine dedup ──────────────────────────────────────
+// When the overnight is present on the spine as a marked tile, its "Overnight
+// —" prose line is redundant and must be dropped (the tile is the single
+// source of truth). When it is NOT on the spine (desc-only / off-corridor), the
+// prose line stays as the fallback.
+
+function overnightTileFixture(): import("./bake").BakedDay {
+  return {
+    n: 1,
+    segmentSuggestions: [
+      {
+        id: "mp:watchman",
+        coords: [-113, 37],
+        title: "Watchman Campground",
+        photoAlt: "Watchman Campground",
+        pills: [],
+        stats: [],
+        mention: { primary: "", secondary: "" },
+        description: "",
+        pullquote: { text: "", name: "", meta: "" },
+        placeInfo: { address: "" },
+        cta: "",
+        isOvernight: true,
+        curated: true,
+      },
+    ],
+  };
+}
+
+const OUTPUT_NAMED_OVERNIGHT: ItineraryOutput = {
+  days: [
+    {
+      ...OUTPUT.days[0],
+      overnight: { name: "Watchman Campground", desc: null, type: "camp", rationale: "level sites near the shuttle" },
+    },
+  ],
+  foodThread: "test",
+} as unknown as ItineraryOutput;
+
+test("itineraryToTrip drops the Overnight — notes line when the overnight is a marked spine tile", () => {
+  const trip = itineraryToTrip("test-id", INPUT, FACTS, OUTPUT_NAMED_OVERNIGHT, [overnightTileFixture()]);
+  const overnightLines = trip.days[0].notes?.filter((n) => n.startsWith("Overnight —")) ?? [];
+  assert.equal(overnightLines.length, 0, "the redundant prose line is dropped");
+  // The tile is still the source of truth on the spine.
+  assert.ok(
+    trip.days[0].segmentSuggestions?.some((t) => t.isOvernight),
+    "the overnight tile survives as the single source of truth",
+  );
+});
+
+test("itineraryToTrip keeps the Overnight — line when the overnight is NOT on the spine (fallback)", () => {
+  // desc-only overnight (OUTPUT.days[0].overnight.name === null), no baked tile.
+  const trip = itineraryToTrip("test-id", INPUT, FACTS, OUTPUT);
+  const overnightLines = trip.days[0].notes?.filter((n) => n.startsWith("Overnight —")) ?? [];
+  assert.equal(overnightLines.length, 1, "prose fallback stands when nothing is on the spine");
+});

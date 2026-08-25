@@ -23,6 +23,7 @@ import { pointToPolylineMi, haversineMi } from "@/lib/routing/point-to-polyline"
 import type { EngineFacts, GenerationInput, PoolPOI } from "./facts";
 import { computeFuelGaps, type ComputedFuelGap } from "./fuel-gaps";
 import { PlaceResolver, type ResolvedName } from "./resolve";
+import { overnightTileRef } from "./bake";
 import {
   pickBackfillStops,
   anchorIsBare,
@@ -74,6 +75,13 @@ const DROPPED_OVERNIGHT_FLAG: AuditFlag = {
     "The planner's suggested overnight couldn't be verified and was removed — this day has NO confirmed overnight; plan your own before you go.",
 };
 
+/** The outcome of grounding one place NAME. Exported so the bake can derive the
+ *  overnight's canonical tile id from it (`overnightTileRef`). */
+export type GroundOutcome =
+  | { kind: "pool-hit"; poi: PoolPOI }
+  | { kind: "resolved"; place: ResolvedName }
+  | { kind: "drop"; reason: string; reasonText: string; flag: AuditFlag };
+
 /** Ground one place NAME (the model never emits ids — nothing to fabricate).
  *  POOL-FIRST: match the name to a pooled POI by name (keeping its corpus
  *  id/rating/coords, no Google spend); else resolve the name live and GUARD
@@ -87,11 +95,7 @@ async function groundReference(
     biasCoord: [number, number];
     onCorridor: (c: [number, number]) => boolean;
   },
-): Promise<
-  | { kind: "pool-hit"; poi: PoolPOI }
-  | { kind: "resolved"; place: ResolvedName }
-  | { kind: "drop"; reason: string; reasonText: string; flag: AuditFlag }
-> {
+): Promise<GroundOutcome> {
   // Pool-first: the model named a place we already have — keep its corpus data.
   const hit = matchPool(ref, ctx.poolByName);
   if (hit) return { kind: "pool-hit", poi: hit };
@@ -533,6 +537,9 @@ export async function auditItinerary(
 
     // Overnight: always a NAME → pool-first, else resolve+guard, else desc.
     let overnight = { ...day.overnight };
+    // Canonical id of the tile that IS the overnight, so the bake can link it by
+    // identity (see `overnightTileRef`). Null on desc-only / drop.
+    let overnightRef: string | null = null;
     if (overnight.name) {
       const outcome = await groundReference(overnight.name, "overnight", {
         poolByName,
@@ -540,6 +547,7 @@ export async function auditItinerary(
         biasCoord,
         onCorridor,
       });
+      overnightRef = overnightTileRef(outcome);
       if (outcome.kind === "pool-hit") {
         // Pooled overnight — keep the name (the note shows it); its corpus tile
         // arrives via the federated fold. Nothing to strip.
@@ -629,6 +637,7 @@ export async function auditItinerary(
         statedDriveHours: Math.round(statedHrs * 10) / 10,
         flags,
         resolvedPlaces,
+        overnightRef,
       },
     });
     dayRoutes.push({
