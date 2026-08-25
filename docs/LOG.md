@@ -12,6 +12,39 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (wrap) — session close
+
+- **Three PRs merged in one arc**, each step measured before the next was
+  designed: #274 made corridor spread a prompt *preference*; measuring it showed
+  start-of-day still empty, so #275 added the *mechanism*; measuring that showed
+  mid-day cities uncovered, so #276 widened it. The discipline that paid off was
+  refusing to design the next step until the previous one had been measured on
+  real generations.
+- **Two docs PRs (#272, #273) never merged**, so the doc set on `main` has a gap
+  for the 2026-08-23/24 sessions and does not contain the top-pick plan. Flagged
+  in STATE rather than duplicated — rewriting their content would create two
+  sources of truth for the same sessions.
+- **The dev sign-in is still homeless.** Built because Google is not an enabled
+  provider on TEST (`/auth/v1/settings` → email only), which makes the only
+  sign-in button in the UI unusable there. It has ridden along as uncommitted
+  working-tree state across four branches; one `git clean` loses it. Needs a
+  land-or-drop call.
+- **Two read-only findings worth more than the code they came from.** Trip
+  creation *does* call Google Places (`PlaceResolver` inside the audit) — an
+  earlier "no live Google call in the bake path" claim was true only for the
+  fork path. And `bake.ts`'s `resolvedToTile` persists Google `displayName` into
+  `trips.payload` on every generated trip, **not** TEST-gated, which the
+  2026-08-20 compliance check did not catalogue.
+- **A self-audit mid-session caught six of my own errors**, including a
+  fabricated "three of five corridor live sources were unhealthy" (it was two of
+  five measured, with Google unprobed) and a wrong line citation repeated across
+  a doc, a PR body and two reports. Worth repeating: the errors that survived
+  longest were the ones stated most confidently.
+- **Date drift to be aware of:** entries dated 2026-08-25 were written while
+  local time was still 2026-08-24 (UTC had rolled). The dating is consistent
+  within the merged docs; noting it so the gap between LOG dates and git commit
+  dates isn't read as a discrepancy later.
+
 ## 2026-08-25 (later) — extending the backfill to corridor cities, and the three ways it embarrassed itself first
 
 - **Reused rather than rebuilt.** `pickBackfillStops` is a loop over #275's
