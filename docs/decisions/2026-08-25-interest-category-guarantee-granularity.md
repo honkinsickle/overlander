@@ -120,11 +120,18 @@ surfaces a DISTINCT urban POI near the anchor, never the anchor town itself.
 
 ## What is NOT in scope
 
-- The user-facing **chip UI** — the wizard has only the single `fuel` checkbox
-  today (blocker **F**, spec §11 step 1). The 6 pool-side categories can't yet
-  be selected from the UI; they reach the audit only via
-  `GenerationInput.guaranteedCategories`. This feature is wired end-to-end but
-  dark from the wizard until the chip row ships. Open thread.
+- ~~The user-facing **chip UI** (blocker **F**).~~ **RESOLVED 2026-08-25 (later
+  same day).** The wizard now renders a multi-select chip row for the 6 pool-side
+  categories in the "Interest categories" section, alongside the fuel checkbox —
+  `GUARANTEE_CHIP_CATEGORIES` (`web/src/lib/plan/guarantee-categories.ts`),
+  drift-locked to `GUARANTEE_CATEGORIES` by `guarantee-categories.test.ts`.
+  **Deviation flagged:** the driving task asked for "all 8 categories besides
+  fuel", but that premise treated `overnight` as absent from the taxonomy. It is
+  not — `overnight` is the `SlideCategoryKey` name for the display category
+  `hotel` (isomorphic via `palette.ts`). So `hotel`(=`overnight`) and `interest`,
+  both excluded from the backend gate, get NO chip (a chip that silently no-ops
+  would mislead — the same reasoning that kept the fuel PR from shipping a
+  "1-of-8-working" row). The honest, backend-serviceable set is 6, not 8.
 - Path A / the Mapbox fuel swap (unrelated).
 - `preComputeFacts` → `resolvePlaces()` migration (deferred BACKLOG item —
   the guarantee ships against the existing pool source deliberately).

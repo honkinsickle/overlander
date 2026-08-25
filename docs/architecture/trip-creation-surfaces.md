@@ -292,6 +292,7 @@ tree contains `main` → `region`s → a bare `button`, no form]`.
 | `maxDailyDriveMi` | range slider | 100–700 step 25 | `350` | — | must be `> 0` |
 | `bufferDays` | `Stepper` | number 0–30 | `0` | no | — |
 | `avoid[]` | chips | rock-crawl, tolls, ferries, rushed legs | `[]` | no | — |
+| `guaranteedCategories[]` | 6 chips + fuel checkbox | `scenic·food·camping·attraction·oddity·urban` (chips) + `fuel` (checkbox) | `[]` | no | — |
 | `vehicleId` | `<select>` | fixture id | first vehicle | yes | "Pick a vehicle." |
 | `rig.build[]` | chips | 8 options | from vehicle | no | — |
 | `rig.fuelRangeMi` | `Stepper` | 50–1000 step 10 | from vehicle | — | — |

@@ -8,6 +8,7 @@ import { DEFAULT_RIG, vehicleTitle } from "@/lib/vehicles/types";
 import { LocationAutocomplete } from "@/components/plan/location-autocomplete";
 import { DateRangeInput } from "@/components/plan/date-range-input";
 import { SelectableChip } from "@/components/plan/selectable-chip";
+import { GUARANTEE_CHIP_CATEGORIES } from "@/lib/plan/guarantee-categories";
 import {
   AVOID_OPTIONS,
   BUILD_OPTIONS,
@@ -149,10 +150,10 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
     useState<ExpeditionForm["returnRouting"]>("shortest");
   const [vehicleId, setVehicleId] = useState(firstVehicle?.id ?? "");
   const [rig, setRig] = useState(firstVehicle?.rig ?? DEFAULT_RIG);
-  // Interest-Category-Chips scaffold (`docs/specs/interest-category-chips.md`,
-  // PR #287, §11 step 2). Payload wiring is ready for all 8 chip categories;
-  // today only the `fuel` value is wired through to a mechanism
-  // (`fuel-live-resolve.ts`). Chip UI for the other 7 is F+D-blocked per §11.
+  // Interest-Category-Chips. Holds the user-selected guarantee categories as
+  // `SlideCategoryKey` strings — `fuel` from the checkbox (live-resolve path)
+  // plus any of the 6 pool-side chips (`GUARANTEE_CHIP_CATEGORIES`). Forwarded
+  // to the audit via `ExpeditionForm.guaranteedCategories`.
   const [guaranteedCategories, setGuaranteedCategories] = useState<string[]>([]);
 
   const lastIdx = destinations.length - 1;
@@ -483,38 +484,60 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
         </div>
       </Section>
 
-      {/* ── Interest categories (Interest-Category-Chips, `docs/specs/interest-
-          category-chips.md` PR #287) ─────────────────────────────────
-          A single fuel checkbox today — the full 8-chip row is F+D-blocked
-          per spec §11. Placement between "Trip details" and "Your rig"
-          matches the target layout so this section can grow into the 8-chip
-          row in place. */}
+      {/* ── Interest categories (Interest-Category-Chips) ────────────────
+          Multi-select chips for the pool-side categories the D-B per-city
+          guarantee mechanism honors — the 6 in `GUARANTEE_CATEGORIES`
+          (anchor-backfill.ts). `fuel` keeps its own checkbox (separate
+          live-resolve path); `hotel`/`overnight` and `interest` get no chip
+          because the backend gate no-ops them — see
+          `lib/plan/guarantee-categories.ts` and the ADR. */}
       <Section
         title="Interest categories"
         hint="Guarantee certain kinds of stop appear on your trip. Priority within the existing 2-per-day cap — not additional stops."
       >
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={guaranteedCategories.includes("fuel")}
-            onChange={(e) =>
-              setGuaranteedCategories((l) =>
-                e.target.checked
-                  ? Array.from(new Set([...l, "fuel"]))
-                  : l.filter((c) => c !== "fuel"),
-              )
-            }
-          />
-          <span className="flex flex-col gap-1">
-            <span className="text-sm">Guarantee a fuel stop at each anchor</span>
-            <span className="text-xs opacity-70">
-              Calls Google Places live for a gas station near each day-start
-              and mid-corridor city that doesn&apos;t already have one in
-              range. Costs a few cents per trip (capped per-generation).
+        <div className="flex flex-col gap-4">
+          <div className="flex gap-2 flex-wrap">
+            {GUARANTEE_CHIP_CATEGORIES.map(({ key, label }) => (
+              <SelectableChip
+                key={key}
+                id={key}
+                label={label}
+                accent={`var(--cat-${key}-title)`}
+                name="guaranteedCategories"
+                checked={guaranteedCategories.includes(key)}
+                onChange={() =>
+                  setGuaranteedCategories((l) =>
+                    l.includes(key)
+                      ? l.filter((c) => c !== key)
+                      : [...l, key],
+                  )
+                }
+              />
+            ))}
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={guaranteedCategories.includes("fuel")}
+              onChange={(e) =>
+                setGuaranteedCategories((l) =>
+                  e.target.checked
+                    ? Array.from(new Set([...l, "fuel"]))
+                    : l.filter((c) => c !== "fuel"),
+                )
+              }
+            />
+            <span className="flex flex-col gap-1">
+              <span className="text-sm">Guarantee a fuel stop at each anchor</span>
+              <span className="text-xs opacity-70">
+                Calls Google Places live for a gas station near each day-start
+                and mid-corridor city that doesn&apos;t already have one in
+                range. Costs a few cents per trip (capped per-generation).
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        </div>
       </Section>
 
       {/* ── Rig (§02) ──────────────────────────────────────────────── */}

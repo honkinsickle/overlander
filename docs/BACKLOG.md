@@ -47,12 +47,17 @@ The per-city guarantee mechanism SHIPPED (`pickGuaranteedStop` + two-phase
 `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`. Left
 open:
 
-- **Chip UI (blocker F).** The wizard has only the single `fuel` checkbox
-  today; the 6 pool-side guaranteed categories (`scenic`, `food`, `oddity`,
-  `attraction`, `camping`, `urban`) can't be selected from the UI — they reach
-  the audit only via `GenerationInput.guaranteedCategories`. The mechanism is
-  wired end-to-end but **dark from the wizard** until the chip row ships (spec
-  `docs/specs/interest-category-chips.md` §11 step 1, blocked on F).
+- ~~**Chip UI (blocker F).**~~ **RESOLVED 2026-08-25** — the wizard now renders
+  a multi-select chip row for the 6 pool-side guaranteed categories (`scenic`,
+  `food`, `camping`, `attraction`, `oddity`, `urban`) in the "Interest
+  categories" section, alongside the existing `fuel` checkbox. Chip list =
+  `web/src/lib/plan/guarantee-categories.ts` (`GUARANTEE_CHIP_CATEGORIES`),
+  drift-locked to the backend `GUARANTEE_CATEGORIES` gate by
+  `guarantee-categories.test.ts`. **`hotel`(=`overnight`) and `interest` get NO
+  chip** — both are excluded from the backend gate (B.2 / junk-drawer), so a chip
+  would silently no-op; deliberate deviation from the task's "8 categories" ask
+  (that ask predated resolving that `overnight` = the display `hotel` category).
+  See STATE.md 2026-08-25 (build) — interest-category chip UI.
 - **`fuel`/`overnight` in the guarantee gate (blockers B.1/B.2).** Both are
   excluded from `GUARANTEE_CATEGORIES` per spec §11 step 6 — `fuel` is inert in
   the pool-only path (handled by live-resolve path A), `overnight` would
@@ -165,12 +170,12 @@ verification detail: `docs/decisions/2026-08-25-fuel-live-resolve.md`.
   actual pool-hit-dedupe rate. Not measured; needed to validate the
   analytical cost bound (~$1.20-$2.60/trip worst case for a 10-20 day
   trip, bounded by `RESOLVE_CAP`).
-- **Chip row expansion.** Single fuel checkbox today. When Adam decides D
-  (audit-loop granularity) + F (chip UI shape) from the scoping doc §11,
-  the checkbox is replaced by the full 8-chip row and the other 6
-  pool-serviceable categories (`camping, scenic, food, oddity, attraction,
-  urban`) are wired to `pickAnchorStop`-style pool-backfill (§11 steps
-  5-7).
+- ~~**Chip row expansion.**~~ **DONE 2026-08-25** — the fuel checkbox now sits
+  alongside a 6-chip multi-select row (`camping, scenic, food, oddity,
+  attraction, urban`), each wired to `pickGuaranteedStop` pool-backfill via
+  `guaranteedCategories`. NOTE the old "full 8-chip row" framing was wrong: only
+  6 categories are backend-serviceable — `hotel`/`overnight` and `interest` are
+  excluded from `GUARANTEE_CATEGORIES`, so the honest row is 6, not 8.
 
 ## Notes-to-spine — overnight slice DONE; service stops remain (2026-08-24)
 
