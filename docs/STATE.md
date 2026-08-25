@@ -84,6 +84,41 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (investigation) — notes-to-spine gap: scoped, not implemented
+
+Newest truth. Branch `dubai`. **Investigation only — no code changed**; the
+deliverable is `docs/decisions/notes-to-spine-gap.md` plus this + a BACKLOG
+entry. TEST reads only (24 generated trips in `public.trips`); no PROD access.
+
+**Question:** places named in a generated day's Overnight / Logistics / Fuel /
+Reserve notes render only as prose — should they also be spine nodes?
+
+**Finding — it is two problems, not one.** Traced the path `[read source]`:
+note strings are LLM-authored structured output (`schema.ts`), composed into
+`day.notes: string[]` by `to-trip.ts:dayNotes`, and rendered as pure prose by
+`DayBriefingCard` (no tokenization). Only the **overnight** is grounded
+(`audit.ts` `groundReference`); `logistics`/`obligations`/`fuelGaps` are passed
+through untouched. So:
+- **Overnight** is already grounded and already on the spine (node or tile) on
+  **96 of 104** overnight-bearing days `[measured 2026-08-24, TEST; lenient
+  substring match — an upper-ish bound, not exact]`; 4 days are desc-only. Its
+  gap is **labeling**, not resolution.
+- **Logistics/Fuel/Reserve** are genuinely prose-only, but most places they
+  name are *also* already spine nodes/tiles — naive extraction would mostly
+  duplicate.
+
+**Recommended:** cheap overnight-labeling slice first (no new resolution, no
+cap interaction); service-stop spining is a separate product-gated decision,
+preferring structured emission at generation time over lossy prose parsing.
+Cap/gating vs. #275/#276 and several visual-distinction/duplication calls are
+flagged as **open product questions**, not decided. Full detail + the four
+investigation questions in the decision doc.
+
+⚠ **Doc-drift note (unchanged from session start):** the top masthead of this
+file is dated 2026-08-23 (branch `main`/`sucre`, resolver cutover) and predates
+the #274–#276 merges and this branch — left as-is; reconciling it is separate
+work.
+
 ## 2026-08-25 (later) — corridor-city backfill: #275 extended past the start anchor
 
 Newest truth. Branch `corridor-city-backfill`. ~~**stacked on
