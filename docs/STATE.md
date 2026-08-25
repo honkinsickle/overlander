@@ -1,3 +1,5 @@
+# STATE — branch `main` · 2026-08-25 (interest-category-guarantee) (**newest truth: the interest-category GUARANTEE shipped at decision D-B (per-city) — a user-selected pool-side category is now featured at EACH corridor city the day passes that lacks it, from the corpus pool, within the existing per-day backfill cap.** Branch `feat/guarantee-selector` off `origin/main` (`3e48dda`, #290). Resolves blocker **D** of `docs/specs/interest-category-chips.md`; ADR `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md` (formalizes the report-only brief `interest-category-chips-D.md`, left in place). Ships spec §11 steps 5–7: (1) **step 5** — per-anchor missing-category computation in `audit.ts` (`missingAt(coords)`, per-city D-B), coverage attributed from pool-hit `SlideCategoryKey`s (+ `restaurant`→`food` for live-resolves via `RESOLVED_TO_GUARANTEE`); (2) **step 6** — NEW pure selector `pickGuaranteedStop` in `anchor-backfill.ts` ALONGSIDE `pickAnchorStop`, own broader gate `GUARANTEE_CATEGORIES` = the 5 openers **+ `urban`** (the urban-gate call — spec §5/§9-B — resolved by giving the selector its own gate, NOT widening the opener's), takes `pool` as input, **NOT** routed through `resolvePlaces()` (deferred BACKLOG item); (3) **step 7** — two-phase `pickBackfillStops` (Option A: guarantee wins the shared cap first, openers fill remainder). Flag `INTEREST_CATEGORY_GUARANTEE` (ON by default, same posture as `KEYSTOP_ANCHOR_BACKFILL`). `fuel`/`overnight` **excluded** from the gate per spec §11 step 6 (B.1/B.2 unresolved) — flagged, not silently built around. **Local gate PASSES** on both workspaces (web typecheck + `next build` + data typecheck all exit 0); 180 itinerary tests pass (37 in `anchor-backfill.test.ts`: 25 pre-existing unchanged + 12 new). **Live-verified read-only on TEST** via `web/scripts/verify-guarantee-percity.ts` (real `preComputeFacts` + `auditItinerary`, no LLM, no writes): on San Diego→SF and Sacramento→Reno a `scenic` guarantee produced two `guaranteed` scenic picks at two DISTINCT corridor cities (per-city density), control run = openers only. **Chip UI still dark** (blocker F — wizard has only the fuel checkbox; the 6 categories reach the audit only via `guaranteedCategories`) and **cross-category cap saturation** flagged — both in BACKLOG + the ADR. `origin/main` tip unchanged at **`3e48dda` (#290)** until this PR merges. The masthead immediately below (test-only-signin) remains authoritative on that path.)
+
 # STATE — branch `main` · 2026-08-25 (test-only-signin) (**newest truth: added a TEST-only "Continue as seed test user" button to `/auth/sign-in` so Adam can sign in on TEST without going through Google OAuth — Google is not an enabled provider on TEST (`/auth/v1/settings` returns email-only [measured 2026-08-24]), so the production sign-in button cannot complete there and was blocking dev workflows.** Branch `feat/test-only-signin` off `origin/main` (`04e9855`, since merged with `864b752` (#289) below). Ships: (1) `isTestSupabaseUrl()` + `isNonProductionRuntime()` + `isTestOnlyBypassAllowed()` in `web/src/lib/supabase/env.ts` — 16 TDD-first unit tests locking every URL-attack and NODE_ENV failure mode; (2) new server action `signInAsSeedTestUser` in `web/src/app/auth/actions.ts` — gated on `isTestOnlyBypassAllowed()`, calls `supabase.auth.signInWithPassword` for the fixture creds `seed-owner@overlander.test` / `seed-pw-manual-edit-8471` (the same TEST-only pair seeded by `web/scripts/seed-test-user.ts`); (3) additive button on `/auth/sign-in` — outline styling, subdued, below the primary Google button, with a distinct amber "TEST only · seed-owner@overlander.test" caption. **Google sign-in path is NOT modified** — the existing action + button + OAuth callback are byte-for-byte unchanged; this is purely additive. **⚠ MUST NEVER RUN AGAINST PROD — three independent gates prevent it:** (a) `NEXT_PUBLIC_SUPABASE_URL` must equal `https://znldzjdatkogdktymtvi.supabase.co` exactly (fails on undefined, empty, wrong scheme, PROD ref, prefix/suffix/subdomain attacks); (b) `process.env.NODE_ENV` must be `"development"` or `"test"` (production builds always fail this); (c) `seed-owner@overlander.test` doesn't exist on PROD Supabase, so even if both gates were somehow bypassed GoTrue would refuse the credential. Gate runs at BOTH render time AND server-action submit time — a hand-crafted POST that skips the render check still hits the gate inside the action. **Live verification (2026-08-25):** TEST env → button renders + `signInWithPassword` returns `access_token` for user `a2f74eb2…`; PROD-URL simulation (env override, no PROD data access) → button hidden, only "Continue with Google" visible. Local gate PASSES on both workspaces. Full decision + reversal instructions: `docs/decisions/2026-08-25-test-only-signin-bypass.md`. `origin/main` tip now **`864b752` (#289)** (Mapbox fuel-source merged after this branch was cut; merged in cleanly, only STATE/LOG/BACKLOG conflicts — additive both sides, both entries kept). The masthead immediately below (2026-08-25 mapbox-fuel-source) remains authoritative on that path's position.)
 
 # STATE — branch `main` · 2026-08-25 (mapbox-fuel-source) (**newest truth: fuel discovery on the web-client browse surfaces (`/api/trip-browse`, `/api/search-area`) moved from Google Places to Mapbox Search Box. Compliance-driven — Google Places rendered on a non-Google map requires the UI Kit; Mapbox Search Box on Mapbox GL JS doesn't.** Branch `feat/mapbox-fuel-source` off `origin/main` (`04e9855`, which now includes PR #288's fuel-live-resolve merge). New module `web/src/lib/discovery/mapbox-search-box.ts` — a `WaypointSource` implementing the Mapbox Search Box category endpoint for `gas_station`, 13 TDD-first unit tests. `SourceId` union gains `"mapbox"`; `SOURCE_LABEL` in `to-browse-place.ts` gains `mapbox: "Mapbox"`. Google's `TYPES_BY_CATEGORY.fuel` emptied (was `["gas_station"]`) — Google no longer emits fuel from the category fanout. Mapbox source added at head of BOTH `LIVE_SOURCES` (legacy) AND `DEFAULT_BBOX_LIVE_SOURCES` / `DEFAULT_CORRIDOR_LIVE_SOURCES` (resolver defaults), so fuel-via-Mapbox works identically regardless of `SEARCH_AREA_USE_RESOLVER` / `TRIP_BROWSE_USE_RESOLVER` state (both still OFF). **NO npm dep added** (hand-rolled fetch — flagged over `@mapbox/search-js-core`, which is autocomplete+session-token+retrieve machinery for a flow this source doesn't use). **D7 (BrowsePlace.source per-source tagging) resolved:** kept `BrowsePlace.source` at its binary `"live" | "master_place"` distinction; per-source id lives on `SourceResult.sourceId` (already the case), which is what `SOURCE_LABEL` reads for the tile's "Sourced from Mapbox" mention. **⚠ Path A (fuel-live-resolve, PR #288 `04e9855`) remains on Google** — audit-time `pickFuelAtAnchor` calls `PlaceResolver.resolveNearby("gas_station", ...)`, still hits Google, still persists `google:<placeId>` tiles into `trips.payload`. Explicitly out of scope this session per Adam's direction; separate follow-up. See `docs/decisions/2026-08-25-mapbox-fuel-source.md`. **Local gate PASSES** on both workspaces (typecheck + `next build` + data typecheck all exit 0); 66 tests pass across mapbox-search-box, resolve-places, and both handler test files (one existing assertion updated: fanout size 5→6). **No live TEST run this session** — no `NEXT_PUBLIC_MAPBOX_TOKEN` exercised, no state-by-state coverage comparison computed. Merged as **`864b752` (#289)**.)
@@ -91,6 +93,68 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-25 (build) — interest-category guarantee at decision D-B (per-city)
+
+Newest truth. Branch `feat/guarantee-selector` off `origin/main` (`3e48dda`).
+TDD-first; 37 `anchor-backfill` tests (25 pre-existing unchanged + 12 new) +
+180 itinerary tests pass; local gate exits 0 on both workspaces. Live-verified
+read-only on TEST. ADR + BACKLOG updated.
+
+**Decision:** D-B (per-city) resolves blocker **D** of
+`docs/specs/interest-category-chips.md`. Adam chose D-B over the brief's D-A
+recommendation for **density around the actual cities passed** rather than an
+even one-per-day spread. Full rationale + the flagged consequences:
+`docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`.
+
+**What shipped (spec §11 steps 5–7):**
+- **Step 5** — `audit.ts` backfill block computes per-anchor missing
+  categories (`missingAt(coords)`): the user's pool-side guaranteed categories
+  minus those covered by a kept stop within `ANCHOR_NEAR_MI`. Per-city, so the
+  same category can be outstanding (and picked) at more than one city on a day.
+  Coverage attributed from pool-hit `SlideCategoryKey`s; only `restaurant`→
+  `food` maps a live-resolved keyStop (`RESOLVED_TO_GUARANTEE`).
+- **Step 6** — NEW pure selector `pickGuaranteedStop` in `anchor-backfill.ts`,
+  ALONGSIDE `pickAnchorStop` (not a replacement). Own gate
+  `GUARANTEE_CATEGORIES` = `scenic, food, oddity, attraction, camping` **+
+  `urban`**. Same shared gates + `rank`. Takes `pool` as input — **NOT**
+  `resolvePlaces()` (deferred).
+- **Step 7** — two-phase `pickBackfillStops`: phase 1 guarantee (Option A —
+  wins the shared `MAX_BACKFILLS_PER_DAY` cap first, per-city, per-category in
+  selection order), phase 2 the existing opener loop for remaining slots.
+  Backward-compatible: no `missingCategories` ⇒ phase 1 no-op, byte-identical
+  to before.
+
+**`urban` gate (spec §5 / task Step 5) — RESOLVED by the selector's own gate.**
+`urban` stays out of `OPENER_CATEGORIES` (unrequested opener = tautology) but is
+IN `GUARANTEE_CATEGORIES` (an explicit user guarantee is not a tautology). Still
+passes `isCityTautology`, so it surfaces a distinct urban POI, never the anchor
+town. Chosen over widening the opener gate (which would regress the opener path).
+
+**Flag:** `INTEREST_CATEGORY_GUARANTEE` — ON by default (kill switch), same
+posture/rationale as `KEYSTOP_ANCHOR_BACKFILL`. Pool-only, no network.
+
+**Flagged deviations (per the ask, not dropped):** (1) `fuel`/`overnight`
+EXCLUDED from the gate — spec §11 step 6 says don't merge until B.1/B.2 resolve;
+(2) rank order is the spec's recommended default, not an Adam pick; (3)
+cross-category cap saturation (a `[scenic, food]` guarantee can yield 2 scenic /
+0 food under the 2-slot cap — observed live); (4) coverage attribution is
+pool-hit-first. All in the ADR + BACKLOG.
+
+**NOT touched:** the chip UI (blocker F — wizard still has only the fuel
+checkbox; the 6 categories reach the audit only via `guaranteedCategories`, so
+the feature is wired end-to-end but dark from the wizard), path A / Mapbox swap,
+`preComputeFacts`/`fetchCorpusForSegment/Polyline` (deferred BACKLOG item).
+
+**Live TEST verification (read-only, no LLM, no writes):**
+`web/scripts/verify-guarantee-percity.ts` drives real `preComputeFacts` +
+`auditItinerary` with a synthetic empty-keyStops itinerary. San Diego→SF
+(1266 pool POIs, 9 corridor cities) and Sacramento→Reno (434 POIs, 4 cities):
+a `scenic` guarantee produced two `guaranteed` scenic picks at two DISTINCT
+corridor cities (per-city density confirmed); control = openers only; guarantee
+won the cap over the opener (Option A). TEST corpus is scenic-heavy (one
+corridor had 2 `food` rows, another 0), so a `food`/`oddity` guarantee is
+data-limited there — a corpus-coverage reality, not a mechanism defect.
 
 ## 2026-08-25 (build) — TEST-only "Continue as seed test user" sign-in bypass
 

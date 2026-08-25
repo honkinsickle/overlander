@@ -9,6 +9,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   pickAnchorStop,
+  pickGuaranteedStop,
+  GUARANTEE_CATEGORIES,
   hasStopNearAnchor,
   anchorStopNote,
   ANCHOR_NEAR_MI,
@@ -303,4 +305,201 @@ test("tautology guard is exact, not substring — 'Riverside Park' survives near
   assert.equal(isCityTautology("Carson City", "Carson City, NV"), true);
   assert.equal(isCityTautology("Riverside Park", "Riverside, CA"), false);
   assert.equal(isCityTautology("Top Gun House", "Oceanside, CA"), false);
+});
+
+// ── Interest-category guarantee selector (decision D-B, per-city) ────────
+// The guarantee is a SIBLING to the opener, not a replacement — same gates and
+// rank, but a WIDER category gate (adds `urban`) filtered to what the user
+// selected and this anchor is still missing.
+
+/** A guaranteed-stop input with sensible defaults (a `scenic` guarantee). */
+function G(over: Partial<Parameters<typeof pickGuaranteedStop>[0]> = {}) {
+  return {
+    anchor: ANCHOR,
+    pool: [] as PoolPOI[],
+    keptRefs: NONE,
+    onCorridor: ALLOW,
+    missingCategories: new Set(["scenic"]),
+    ...over,
+  };
+}
+
+test("GUARANTEE_CATEGORIES is the 6 pool-side categories — wider than the opener set", () => {
+  assert.ok(GUARANTEE_CATEGORIES.has("urban"), "urban is the whole point of the wider gate");
+  for (const c of ["scenic", "food", "oddity", "attraction", "camping"]) {
+    assert.ok(GUARANTEE_CATEGORIES.has(c));
+  }
+  for (const c of ["interest", "fuel", "overnight"]) {
+    assert.ok(!GUARANTEE_CATEGORIES.has(c), `${c} must stay out of the pool guarantee gate`);
+  }
+});
+
+test("guarantee: picks a candidate whose category is outstanding at the anchor", () => {
+  const got = pickGuaranteedStop(G({ pool: [poi({ id: "mp:sc", category: "scenic" })] }));
+  assert.equal(got?.id, "mp:sc");
+});
+
+test("guarantee: returns null when nothing is outstanding here (empty missing set)", () => {
+  const got = pickGuaranteedStop(
+    G({ pool: [poi({ category: "scenic" })], missingCategories: new Set() }),
+  );
+  assert.equal(got, null);
+});
+
+test("guarantee: admits `urban` — the gate difference from the opener", () => {
+  const town = poi({ id: "mp:u", name: "Old Town District", category: "urban" });
+  // The opener refuses urban (a town under its own node is a tautology) ...
+  assert.equal(
+    pickAnchorStop({ anchor: ANCHOR, pool: [town], keptRefs: NONE, onCorridor: ALLOW }),
+    null,
+  );
+  // ... but a user-selected urban guarantee surfaces a distinct urban POI.
+  const got = pickGuaranteedStop(G({ pool: [town], missingCategories: new Set(["urban"]) }));
+  assert.equal(got?.id, "mp:u");
+});
+
+test("guarantee: refuses interest/fuel/overnight even when named outstanding", () => {
+  for (const category of ["interest", "fuel", "overnight"]) {
+    const got = pickGuaranteedStop(
+      G({ pool: [poi({ category })], missingCategories: new Set([category]) }),
+    );
+    assert.equal(got, null, `${category} is not a pool guarantee category`);
+  }
+});
+
+test("guarantee: only the outstanding category qualifies — a food row won't satisfy a scenic miss", () => {
+  const got = pickGuaranteedStop(
+    G({ pool: [poi({ category: "food" })], missingCategories: new Set(["scenic"]) }),
+  );
+  assert.equal(got, null);
+});
+
+test("guarantee: inherits the shared gates — dedupe, proximity, onCorridor, tautology", () => {
+  assert.equal(
+    pickGuaranteedStop(G({ pool: [poi({ id: "mp:sc", category: "scenic" })], keptRefs: new Set(["mp:sc"]) })),
+    null,
+    "deduped by id",
+  );
+  assert.equal(
+    pickGuaranteedStop(G({ pool: [poi({ category: "scenic", coords: offset(ANCHOR_NEAR_MI + 10) })] })),
+    null,
+    "beyond the proximity gate",
+  );
+  assert.equal(
+    pickGuaranteedStop(G({ pool: [poi({ category: "scenic" })], onCorridor: () => false })),
+    null,
+    "rejected by the corridor guard",
+  );
+  assert.equal(
+    pickGuaranteedStop(
+      G({
+        pool: [poi({ id: "mp:c", name: "Carson City, Nevada", category: "urban" })],
+        anchorLabel: "Carson City, NV",
+        missingCategories: new Set(["urban"]),
+      }),
+    ),
+    null,
+    "a town is not the thing to see in itself, even for urban",
+  );
+});
+
+// ── Two-phase contention: guarantee wins the cap first (Option A) ────────
+
+function guaranteedAnchor(
+  coords: [number, number],
+  label: string,
+  kind: "start" | "corridor",
+  missing: string[],
+) {
+  return { coords, label, kind, missingCategories: new Set(missing) };
+}
+
+test("guarantee wins the cap before an opener does (Option A)", () => {
+  // One slot, one anchor missing `scenic`, and both a scenic and an opener
+  // candidate nearby. The guarantee must claim the slot.
+  const anchors = [guaranteedAnchor(ANCHOR, "Start", "start", ["scenic"])];
+  const pool = [
+    poi({ id: "mp:opener", category: "attraction", coords: offset(1) }),
+    poi({ id: "mp:scenic", category: "scenic", coords: offset(2) }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [], max: 1 });
+  assert.equal(picks.length, 1);
+  assert.equal(picks[0].poi.id, "mp:scenic");
+  assert.equal(picks[0].guaranteed, true);
+  assert.equal(picks[0].category, "scenic");
+});
+
+test("per-city: the same category is guaranteed at EACH city passed (D-B density)", () => {
+  const anchors = [
+    guaranteedAnchor(ANCHOR, "City A", "corridor", ["scenic"]),
+    guaranteedAnchor(FAR, "City B", "corridor", ["scenic"]),
+  ];
+  const pool = [
+    poi({ id: "mp:a", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:b", category: "scenic", coords: FAR }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [] });
+  assert.equal(picks.length, 2);
+  assert.deepEqual(picks.map((p) => p.poi.id).sort(), ["mp:a", "mp:b"]);
+  assert.ok(picks.every((p) => p.guaranteed && p.category === "scenic"));
+});
+
+test("guarantee and opener share ONE cap — guarantee takes a slot, opener fills the rest", () => {
+  const anchors = [
+    guaranteedAnchor(ANCHOR, "Start", "start", ["scenic"]),
+    guaranteedAnchor(FAR, "City", "corridor", []), // bare, no guarantee
+  ];
+  const pool = [
+    poi({ id: "mp:scenic", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:opener", category: "attraction", coords: FAR }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [] });
+  assert.equal(picks.length, 2);
+  assert.equal(picks.find((p) => p.guaranteed)?.poi.id, "mp:scenic");
+  assert.equal(picks.find((p) => !p.guaranteed)?.poi.id, "mp:opener");
+});
+
+test("an anchor served by a guarantee is NOT also given an opener", () => {
+  const anchors = [guaranteedAnchor(ANCHOR, "Start", "start", ["scenic"])];
+  const pool = [
+    poi({ id: "mp:scenic", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:attr", category: "attraction", coords: offset(2) }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [] });
+  assert.equal(picks.length, 1);
+  assert.equal(picks[0].poi.id, "mp:scenic");
+});
+
+test("keptCoords suppresses an opener on a covered anchor (the moved bare check)", () => {
+  const anchors = [{ coords: ANCHOR, label: "Start", kind: "start" as const }];
+  const pool = [poi({ id: "mp:x", category: "scenic", coords: offset(1) })];
+  // A kept stop sits within the radius → the anchor is covered → no opener.
+  assert.deepEqual(
+    pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [offset(2)] }),
+    [],
+  );
+  // Kept stop too far → the anchor is bare → the opener fires.
+  const bare = pickBackfillStops({
+    anchors, pool, keptRefs: NONE, onCorridor: ALLOW,
+    keptCoords: [offset(ANCHOR_NEAR_MI + 10)],
+  });
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0].poi.id, "mp:x");
+});
+
+test("includeOpeners:false runs the guarantee phase alone", () => {
+  const anchors = [
+    guaranteedAnchor(ANCHOR, "Start", "start", ["scenic"]),
+    guaranteedAnchor(FAR, "City", "corridor", []),
+  ];
+  const pool = [
+    poi({ id: "mp:scenic", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:opener", category: "attraction", coords: FAR }),
+  ];
+  const picks = pickBackfillStops({
+    anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [], includeOpeners: false,
+  });
+  assert.equal(picks.length, 1);
+  assert.equal(picks[0].poi.id, "mp:scenic");
+  assert.equal(picks[0].guaranteed, true);
 });

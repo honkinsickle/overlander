@@ -26,10 +26,10 @@ import { PlaceResolver, type ResolvedName } from "./resolve";
 import { overnightTileRef } from "./bake";
 import {
   pickBackfillStops,
-  anchorIsBare,
   anchorStopNote,
   corridorStopNote,
   ANCHOR_NEAR_MI,
+  GUARANTEE_CATEGORIES,
   type BackfillAnchor,
 } from "./anchor-backfill";
 import { pickFuelAtAnchor } from "./fuel-live-resolve";
@@ -99,6 +99,32 @@ const FUEL_LIVE_CATEGORIES: ReadonlySet<string> = new Set([
  *  today. Flagged in the fuel-live-resolve decision doc — the fix is a rig
  *  field addition, not a change here. */
 const FUEL_LIVE_INCLUDED_TYPE = "gas_station";
+
+/** Interest-category guarantee (`anchor-backfill.ts:pickGuaranteedStop`).
+ *
+ *  ON by default, kill switch `INTEREST_CATEGORY_GUARANTEE=false` — the same
+ *  posture and rationale as `BACKFILL_ENABLED`: the whole wizard is gated
+ *  behind `ENABLE_PLANNER_WIZARD` (which prod never sets), so shipping OFF
+ *  would ship a fix that does nothing. Pool-only, no network — distinct from
+ *  the fuel path above, which is why it does NOT share fuel's default-OFF
+ *  posture. Fires only when the user selected a pool-side guaranteed category
+ *  (`GenerationInput.guaranteedCategories` ∩ `GUARANTEE_CATEGORIES`). Decision:
+ *  `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`. */
+const GUARANTEED_CATEGORIES_ENABLED =
+  process.env.INTEREST_CATEGORY_GUARANTEE !== "false";
+
+/** Raw Google `primaryType` (via `inferCategory`) → guaranteed SlideCategoryKey,
+ *  for attributing a LIVE-RESOLVED keyStop to a guarantee category when testing
+ *  per-anchor coverage. Pool-hits already carry a SlideCategoryKey directly; of
+ *  `inferCategory`'s normalized outputs only `restaurant` maps to a guaranteed
+ *  category (`food`). Other resolved types (`lodging`→overnight, `gas_station`
+ *  →fuel, and unmapped passthrough types like `tourist_attraction`) are NOT in
+ *  `GUARANTEE_CATEGORIES`, so a live-resolved scenic/attraction viewpoint does
+ *  not count as coverage — biasing slightly toward an extra (density) pick,
+ *  which is D-B's intent and is bounded by the per-day cap + dedupe. */
+const RESOLVED_TO_GUARANTEE: Readonly<Record<string, string>> = {
+  restaurant: "food",
+};
 
 const UNVERIFIED_OVERNIGHT_DESC =
   "Unverified overnight removed by the audit — find and confirm your own.";
@@ -253,6 +279,11 @@ export type AuditReport = {
     kind: "start" | "corridor";
     /** The anchor's display label (day start place, or corridor city). */
     anchor: string;
+    /** True when it satisfied a user-selected interest guarantee (decision
+     *  D-B, per-city) rather than a bare-anchor opener. */
+    guaranteed?: boolean;
+    /** The guaranteed category satisfied, when `guaranteed`. */
+    category?: string;
   }[];
   /** Tier-2 names resolved live + passed the corridor guard (→ ingest). */
   resolved: {
@@ -482,26 +513,50 @@ export async function auditItinerary(
       }
     }
 
-    // ── Start-of-day backfill (follow-up to #274) ──────────────────────
-    // #274's prompt SPREAD instruction improved mid-corridor and day-end
-    // coverage but left the START of a day frequently empty. If the model kept
-    // nothing near this day's start anchor, pick one opener from the pool it
-    // was already given. Deterministic, no re-ask, no network — and it returns
-    // null rather than padding when nothing clears the bar. See
-    // `anchor-backfill.ts` for why rating is not part of that bar.
-    if (BACKFILL_ENABLED && dayStartCoord) {
-      // A kept stop's coords come from one of two places depending on how it
-      // ground: a pool-hit's ref IS the corpus id, a live-resolve's ref is the
-      // name and its coords live on the ResolvedPlace. Check both, or a day
-      // whose opener was live-resolved would look empty and get a duplicate.
-      const keptCoords: [number, number][] = [
+    // ── Start-of-day backfill (#274) + interest-category guarantee (D-B) ──
+    // Two coverage kinds share ONE per-day cap (`MAX_BACKFILLS_PER_DAY`),
+    // guarantee-first (spec §5.4 Option A). The OPENER half (#274/#275/#276):
+    // if the model kept nothing near a bare anchor, pick a pool opener there.
+    // The GUARANTEE half (decision D-B, per-city): for each anchor the day
+    // passes, if a user-selected interest category isn't already covered NEAR
+    // that anchor, pick a pool stop of that category. Both are deterministic,
+    // no re-ask, no network — see `anchor-backfill.ts` for why rating isn't a
+    // bar. Decision: `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`.
+    //
+    // Pool-side guaranteed categories the user selected AND this mechanism can
+    // satisfy (the selector's own gate — spec §9-B). `fuel` is handled by the
+    // live-resolve path below; `overnight`/`interest` are excluded there.
+    const guaranteedPool = GUARANTEED_CATEGORIES_ENABLED
+      ? (input.guaranteedCategories ?? []).filter((c) => GUARANTEE_CATEGORIES.has(c))
+      : [];
+    const wantGuarantee = guaranteedPool.length > 0;
+
+    if ((BACKFILL_ENABLED || wantGuarantee) && dayStartCoord) {
+      // Every kept stop's coords AND its guarantee-relevant category. Coords
+      // drive the opener's bare-anchor test (a pool-hit's ref IS its corpus id,
+      // a live-resolve's ref is its name with coords on the ResolvedPlace —
+      // check both, or a live-resolved opener looks empty and gets a duplicate).
+      // Category drives the per-anchor guarantee coverage test: pool-hits carry
+      // a SlideCategoryKey directly; live-resolves carry a raw Google type, of
+      // which only `restaurant`→`food` maps to a guaranteed category (see
+      // `RESOLVED_TO_GUARANTEE`).
+      const keptStopCats: { coords: [number, number]; category: string | null }[] = [
         ...keptStops
-          .map((k) => poolById.get(k.name)?.coords)
-          .filter((c): c is [number, number] => !!c),
+          .map((k) => {
+            const p = poolById.get(k.name);
+            return p ? { coords: p.coords, category: p.category } : null;
+          })
+          .filter(
+            (x): x is { coords: [number, number]; category: string | null } => !!x,
+          ),
         ...resolvedPlaces
           .filter((r) => r.where === "keyStop")
-          .map((r) => r.coords),
+          .map((r) => ({
+            coords: r.coords,
+            category: RESOLVED_TO_GUARANTEE[r.category ?? ""] ?? null,
+          })),
       ];
+      const keptCoords: [number, number][] = keptStopCats.map((kc) => kc.coords);
 
       // Which corridor cities does THIS day pass through?
       //
@@ -530,22 +585,49 @@ export async function auditItinerary(
         .filter((c) => !endpointCoords.some((e) => haversineMi(c.coords, e) <= ANCHOR_NEAR_MI))
         .sort((a, b) => a.milesFromStart - b.milesFromStart);
 
+      // Per-anchor missing guaranteed categories (D-B, per-city): a category is
+      // "covered" at an anchor when a kept stop OF THAT CATEGORY sits within
+      // ANCHOR_NEAR_MI of it; the outstanding rest are this anchor's guarantees.
+      // Per-city means the same category can be outstanding at more than one
+      // anchor and get picked at each — the density D-B was chosen for.
+      const missingAt = (coords: [number, number]): ReadonlySet<string> => {
+        if (!wantGuarantee) return new Set<string>();
+        const covered = new Set(
+          keptStopCats
+            .filter((kc) => kc.category && haversineMi(kc.coords, coords) <= ANCHOR_NEAR_MI)
+            .map((kc) => kc.category as string),
+        );
+        return new Set(guaranteedPool.filter((c) => !covered.has(c)));
+      };
+
       // Traveller order: the start first, then each town as it is reached, so
-      // that when the per-day cap bites it drops the LATEST gaps.
+      // that when the per-day cap bites it drops the LATEST gaps. NOT
+      // pre-filtered by bareness — `pickBackfillStops` runs the opener bare
+      // check itself (phase 2), because a guarantee can need an anchor the
+      // opener would skip (an anchor with a kept food stop is not bare, but can
+      // still be missing a guaranteed `scenic`).
       const anchors: BackfillAnchor[] = [
-        { coords: dayStartCoord, label: day.startPlace, kind: "start" as const },
+        {
+          coords: dayStartCoord,
+          label: day.startPlace,
+          kind: "start" as const,
+          missingCategories: missingAt(dayStartCoord),
+        },
         ...midCorridorCities.map((c) => ({
           coords: c.coords,
           label: c.name,
           kind: "corridor" as const,
+          missingCategories: missingAt(c.coords),
         })),
-      ].filter((a) => anchorIsBare(keptCoords, a.coords));
+      ];
 
       const picks = pickBackfillStops({
         anchors,
         pool: facts.poolPOIs,
         keptRefs: new Set([...keptStops.map((k) => k.name), ...backfilledTripWide]),
+        keptCoords,
         onCorridor,
+        includeOpeners: BACKFILL_ENABLED,
       });
 
       for (const pick of picks) {
@@ -565,6 +647,7 @@ export async function auditItinerary(
           name: pick.poi.name,
           kind: pick.kind,
           anchor: pick.anchorLabel,
+          ...(pick.guaranteed ? { guaranteed: true, category: pick.category } : {}),
         });
       }
     }

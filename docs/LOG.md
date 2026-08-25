@@ -12,6 +12,59 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (build) — interest-category guarantee at D-B (per-city)
+
+- **Task: convert the D-decision brief to an ADR, then build spec §11 steps
+  5–7 at granularity D-B (per-city), against the EXISTING pool source — NOT
+  `resolvePlaces()`.** Adam had already made the D pick (per-city over the
+  brief's D-A recommendation) for density around the actual corridor cities a
+  traveller passes.
+- **Recon first paid off.** The spec files aren't in the working tree: the
+  `-D.md` brief lives only in historical commits (deleted from all branch
+  HEADs), the full `interest-category-chips.md` (with §11) only on branch
+  `scope-interest-category-chips`. `feat/guarantee-selector` existed but was
+  **empty** (no diff vs main) — so no prior code scaffolding; built from
+  scratch. `guaranteedCategories` plumbing (wizard→`GenerationInput`) already
+  landed in #288 for the fuel path, so steps 2–3 were done.
+- **`urban` gate resolved by the selector's OWN gate**, not by widening the
+  opener's `OPENER_CATEGORIES`. The opener excludes `urban` (a town under its
+  own node is a tautology for an unrequested pick); an explicit user guarantee
+  is not that, so `pickGuaranteedStop` gets a wider `GUARANTEE_CATEGORIES` (the
+  5 openers + `urban`). Widening the opener gate would have regressed the
+  opener path. This is also the path spec §9-B implicitly picked.
+- **Two-phase `pickBackfillStops` kept backward-compatible.** Phase 1
+  (guarantee, Option A) runs first, phase 2 is the existing opener loop. Moved
+  the opener's bare-anchor filter from the audit caller INTO the function
+  (via a new `keptCoords` param defaulting to `[]`), so all 25 pre-existing
+  unit tests pass unchanged and the guarantee phase can see anchors the opener
+  would have skipped (an anchor with a kept food stop isn't bare but can still
+  miss a guaranteed `scenic`).
+- **Flagged, not silently built around:** `fuel`/`overnight` stay OUT of the
+  guarantee gate per spec §11 step 6 (B.1/B.2 unresolved — fuel is path A +
+  inert here, overnight duplicates the dedicated slot); rank order is the
+  spec's recommended default; cross-category cap saturation is real (a
+  `[scenic, food]` guarantee gave 2 scenic / 0 food live — the 2-slot cap +
+  per-city + selection order); coverage attribution is pool-hit-first
+  (`restaurant`→`food` the only live-resolve overlap).
+- **Live TEST verify, read-only, no LLM.** Wrote
+  `verify-guarantee-percity.ts` driving real `preComputeFacts` +
+  `auditItinerary` (Mapbox token borrowed per the RUNBOOK, TEST Supabase
+  untouched, no writes → no cleanup). San Diego→SF and Sacramento→Reno both
+  showed two `guaranteed` scenic picks at two distinct corridor cities
+  (per-city density), control run = openers only. The TEST corpus is
+  scenic-heavy (one corridor had 2 `food` rows, another 0) — a `food` guarantee
+  is data-limited there, a corpus-coverage fact, not a defect.
+- **Deferred item logged first (task Step 0):** the
+  `preComputeFacts`→`resolvePlaces()` corpus-fetch duplication (two wrappers,
+  same RPC, different args), blocked on polyline scope + suppression-filter
+  parity. In BACKLOG (the more detailed entry #291 filed the same day stands;
+  my duplicate was dropped in the rebase).
+- ADR: `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`.
+  Gate green on both workspaces; 180 itinerary tests pass. Branch
+  `feat/guarantee-selector`, PR #292.
+- **Supersedes #291's "not committed, not written this session" note** below:
+  that wrap paused the build before code; this session completed it.
+
 ## 2026-08-25 (wrap) — interest-category-chips arc: D-brief filed, migration finding logged; no code shipped this session
 
 - **What landed this session** = one working file staged into main + one
