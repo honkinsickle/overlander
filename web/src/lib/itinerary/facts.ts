@@ -84,6 +84,14 @@ export type GenerationInput = {
    *  Prompt CONTEXT only — the engine never consumes it, so it is not a
    *  preComputeFacts input; it rides along to buildFactsMessage. */
   objective?: string;
+  /** Interest-Category-Chips guaranteed categories, `SlideCategoryKey` values
+   *  (`docs/specs/interest-category-chips.md`, PR #287, Decision A: `overnight`
+   *  end-to-end). Empty/absent = no guarantees. Today only `"fuel"` is wired —
+   *  the fuel-live-resolve module (`fuel-live-resolve.ts`) reads this from the
+   *  audit and calls Google Places for a nearby fuel stop at each anchor
+   *  where the LLM's keyStops don't already cover fuel. Other categories are
+   *  D-blocked pending the audit-loop-granularity decision (spec §11). */
+  guaranteedCategories?: string[];
 };
 
 /** A pooled POI, trimmed to what the LLM needs to reason + reference. */

@@ -16,6 +16,39 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Fuel-live-resolve — SHIPPED behind `FUEL_LIVE_RESOLVE=true`, followups tracked (2026-08-25)
+
+New module `web/src/lib/itinerary/fuel-live-resolve.ts` +
+`PlaceResolver.resolveNearby` extension. Feature-flagged OFF by default —
+opposite posture from `KEYSTOP_ANCHOR_BACKFILL` because this issues live
+Google `searchNearby` calls per anchor (new external cost). Full decision +
+verification detail: `docs/decisions/2026-08-25-fuel-live-resolve.md`.
+
+**Followups (all flagged in the decision doc, none done):**
+
+- **Rig fuel-type field.** `RigProfile` today has `fuelRangeMi: number`
+  only — no `fuelType` / `powertrain` distinction. EV rigs get `gas_station`
+  picks today (hardcoded `FUEL_LIVE_INCLUDED_TYPE` at the audit callsite;
+  `pickFuelAtAnchor` takes `fuelType` as a param). Fix scope: add
+  `RigProfile.fuelType?: 'gas' | 'electric'`, wire wizard input, thread
+  through `expeditionToGenerationInput`, read in `audit.ts`.
+- **Audit-hook integration test.** The pure `pickFuelAtAnchor` module is
+  unit-tested (9 tests); the audit wiring (~50 lines) is verified only by
+  typecheck + `next build` + feature-flag-OFF containment.
+  `auditItinerary` constructs its `PlaceResolver` internally
+  (`audit.ts:352`), so an integration test needs a DI-seam refactor or
+  env-var setup.
+- **Telemetry when the flag flips ON.** Actual per-trip Google call count,
+  actual pool-hit-dedupe rate. Not measured; needed to validate the
+  analytical cost bound (~$1.20-$2.60/trip worst case for a 10-20 day
+  trip, bounded by `RESOLVE_CAP`).
+- **Chip row expansion.** Single fuel checkbox today. When Adam decides D
+  (audit-loop granularity) + F (chip UI shape) from the scoping doc §11,
+  the checkbox is replaced by the full 8-chip row and the other 6
+  pool-serviceable categories (`camping, scenic, food, oddity, attraction,
+  urban`) are wired to `pickAnchorStop`-style pool-backfill (§11 steps
+  5-7).
+
 ## Notes-to-spine — overnight slice DONE; service stops remain (2026-08-24)
 
 Investigation (PR #278, `docs/decisions/notes-to-spine-gap.md`) found the gap is

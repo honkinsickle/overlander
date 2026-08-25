@@ -1,3 +1,5 @@
+# STATE — branch `main` · 2026-08-25 (fuel-live-resolve) (**newest truth: first BUILD landed off the Interest-Category-Chips scoping arc — a `fuel`-category guarantee via live Google Places, corpus-independent, feature-flagged OFF by default.** Branch `feat/fuel-live-resolve` off `origin/main` (`1fda7de`, #286). Ships: (1) new module `web/src/lib/itinerary/fuel-live-resolve.ts` with `pickFuelAtAnchor()` + 9 unit tests (all pass, TDD-first); (2) `PlaceResolver.resolveNearby(includedType, biasCoords)` extension in `resolve.ts` — hits Google `places:searchNearby`, shares the per-generation cap with existing `resolve()`; (3) `GenerationInput.guaranteedCategories?: string[]` + `ExpeditionForm.guaranteedCategories?: SlideCategoryKey[]` payload wiring (§11 steps 2-3 unblocked); (4) audit-loop hook in `audit.ts` gated on `FUEL_LIVE_RESOLVE=true` env var + `guaranteedCategories.includes("fuel")` — runs AFTER `pickBackfillStops` per anchor, dedupes against kept fuel-family stops within `ANCHOR_NEAR_MI`; (5) single fuel checkbox in the wizard (deliberate — the 8-chip row is F+D-blocked; a 1-of-8-working row would be misleading, replace-in-place when D+F resolve). **Adam's assumption "electric vs. gas already known from the vehicle profile" is FALSE** — no `fuelType` field exists on `RigProfile`, so `includedTypes` is hardcoded `"gas_station"` today; EV rigs get gas picks. Flagged in the decision doc, fix scope = rig field addition. **Feature flag is OFF by default** — opposite posture from `KEYSTOP_ANCHOR_BACKFILL` because this issues external Google calls (new cost source), unlike the in-memory backfill. **Local gate PASSES:** `npm run -w web typecheck` + `cd web && npx next build` + `npm run -w data typecheck` all exit 0. **Audit-hook integration coverage is thin** — the pure module is unit-tested, the audit wiring is typecheck-only (resolver is constructed inside `auditItinerary` so injection needs a refactor); flagged. Full decision doc: `docs/decisions/2026-08-25-fuel-live-resolve.md`. This PR is a SIBLING to PR #287 (scoping), not a stack — branch off origin/main. `origin/main` tip unchanged at **`1fda7de` (#286)**; PR #287 still open on separate branch. The masthead immediately below (2026-08-24, notes-to-spine chain) remains authoritative on last shipped-to-main code position.)
+
 # STATE — branch `main` · 2026-08-24 (**newest truth: the notes-to-spine OVERNIGHT slice shipped and was then hardened across a chain of follow-ups; the overnight is now linked to its spine tile through THREE matching tiers, with one slice still parked.** `#279` (`1cb200e`) links a grounded overnight to its spine tile by IDENTITY (not a substring) — marks it `isOvernight`+`curated`, the Camping block derives from it, the redundant "Overnight —" prose line drops; desc-only/off-corridor → prose fallback. Follow-ups: a "tile missing" report was diagnosed as pre-deploy trips, **not a bug** (#280 `3a42746`), and #279 confirmed working live (#281 `060af08`); a real gap was found and reproduced live (#282 `8679a21`, #283 `783fe51`) — a pool-hit overnight whose place is on the spine under a DIFFERENT id (`google:` live-resolve) or missing from the per-day corpus fold entirely, so the `mp:` ref matches no tile; id-reconciliation via `google_place_id` was built but is **INERT on backcountry data** (0/351 #283-corridor rows carry one — those rows have no linked Google source) (#284 `53f551d`); and a **fuzzy name+proximity tier is OPEN as #285** (strict name subset ≥2 tokens AND ≤0.5 mi, closest wins, no-match→prose) — it closes the tile-present case (Hope Valley confirmed on real coords, 0.067 mi) but NOT the no-tile / layover case (Convict Lake — needs tile synthesis, parked). **The Logistics/Fuel/Reserve service-stop half of notes-to-spine is untouched** — prose-only, a separate product-gated decision (`docs/decisions/notes-to-spine-gap.md`). Two flagged product/UX calls stay open: the overnight badge is a subtle "Overnight ·" status prefix, and #285's 0.5 mi / name thresholds are chosen. `origin/main` tip **`53f551d` (#284)**; **#285 open**. Detail in the `## 2026-08-24` dated sections below and `docs/decisions/2026-08-24-overnight-spine-tile-link.md` (Follow-ups 1–6). The masthead immediately below (2026-08-23, resolver cutover) is STALE on position but preserved per this file's convention; the earlier key-stop backfill arc (#274–#276) has its own dated sections further down.)
 
 # STATE — branch `main` · 2026-08-23 (later) (**newest truth: ALL FOUR originally-planned place-data surface cutovers are COMPLETE or resolved-as-not-needed; `origin/main` tip is `b227e65` (#269).** The read-surface half of the resolver-consolidation ADR is done: **Search** cut over behind `SEARCH_AREA_USE_RESOLVER` (#260 `d62f660`; a real tier blocker on the bbox path was found + fixed first — #259 `9c212a6`); **Date Detail** behind `DATE_DETAIL_USE_RESOLVER` (#266 `a086cb8`), which needed a NEW resolver capability `enrichByGoogleId()` (#263 `bc2c9c2`) because `resolvePlaces()` couldn't serve bare Google ids — a different gap from the tier bug; **Day-scoped browse** behind `TRIP_BROWSE_USE_RESOLVER` (#269 `b227e65`), wired alongside the existing `USE_FEDERATED_POIS` (orthogonal, both stay); and **Day Column** needs NO cutover — it's a passive `Trip.days` renderer with no endpoint (#267 `4757067`), its real work deferred to a write-path/baking consolidation. **All three new flags default OFF — nothing from this arc is live in production.** Also today: Camping narrowed (#254 `f70dbd0`), Verified/Unverified tiers + corridor-RPC `description_source` (#255/#256 `476f052`/`d7faf5e`), auto-hydration decision (#257 `af97048`), plus a plan doc per surface (#258/#261/#262/#264/#265/#267/#268). **ADR step 4 (shared client cache) is now READY TO BUILD** — three read surfaces are cut over and each still runs its own per-route cache, the redundancy step 4 removes; tracked in BACKLOG. See `## 2026-08-23` below. **⚠ The masthead immediately below is STALE only on its "Next work is the Search cutover — planned, not started" line** — that whole arc is now done; its technical description of the #254–#257 state is preserved verbatim.)
@@ -85,6 +87,96 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-25 (build) — fuel-category guarantee via live Google Places (feature-flagged OFF)
+
+Newest truth. Branch `feat/fuel-live-resolve` off `origin/main` (`1fda7de`,
+#286). First BUILD from the Interest-Category-Chips scoping arc (PR #287,
+still open on a sibling branch — the two are independent PRs). TDD-first;
+9 unit tests pass; local gate exits 0 on both workspaces (`typecheck`,
+`next build`, `data typecheck`). No PROD reads, no DB writes, no live LLM
+run.
+
+**What shipped:**
+- `web/src/lib/itinerary/fuel-live-resolve.ts` — new module. Pure(ish);
+  `pickFuelAtAnchor({anchor, keptFuelCoords, fuelType, resolver, onCorridor})
+  → Promise<FuelPick | null>`. 9 tests locked (dedupe below `ANCHOR_NEAR_MI`,
+  no-Google-call on hit; resolver not-found/capped/no-key all return null;
+  off-corridor rejected; happy-path shape; bias-coord wiring; fuelType
+  passthrough).
+- `PlaceResolver.resolveNearby(includedType, biasCoords)` extension in
+  `web/src/lib/itinerary/resolve.ts` — hits `places:searchNearby` for one
+  `includedType`, 5 km circle, `rankPreference: DISTANCE`,
+  `maxResultCount: 1`. Cache key namespaced `nearby:<type>:<lng>:<lat>` (no
+  collision with existing text-search cache). Shares `RESOLVE_CAP` +
+  `liveCalls` counter with `resolve()`.
+- `GenerationInput.guaranteedCategories?: string[]` +
+  `ExpeditionForm.guaranteedCategories?: SlideCategoryKey[]` payload wiring
+  (§11 steps 2 + 3 from the scoping doc, unblocked). `expeditionToGenerationInput`
+  copies through; wizard has a `useState<string[]>([])` alongside the other
+  eleven state hooks.
+- Wizard: **single fuel checkbox** in a new "Interest categories" `<Section>`
+  between "Trip details" and "Your rig" (spec §1 placement). Deliberately
+  NOT the full 8-chip row — that's F+D-blocked per §11, and a 1-of-8-working
+  row is misleading; replace-in-place when D+F resolve.
+- Audit-loop hook in `web/src/lib/itinerary/audit.ts` (~50 lines) —
+  runs AFTER `pickBackfillStops` per day, gated on
+  `FUEL_LIVE_RESOLVE=true` env var + `input.guaranteedCategories?.includes("fuel")`
+  + `dayStartCoord`. Computes `keptFuelCoords` from pool-hits
+  (`category === "fuel"`) + live-resolves (raw type in
+  `FUEL_LIVE_CATEGORIES = {gas_station, truck_stop,
+  electric_vehicle_charging_station}`). Iterates the same anchor list the
+  general backfill uses (day-start + mid-corridor cities on the day's
+  polyline). Each successful pick appends to `keptStops` +
+  `resolvedPlaces` + local `keptFuelCoords` dedupe.
+- Decision doc: `docs/decisions/2026-08-25-fuel-live-resolve.md`.
+
+**Two flags Adam explicitly asked me to check + surface, not silently
+build around** (already reported in PR #287; recapped here since this is
+where they resolve):
+- **Rig fuel-type — the ask's premise was FALSE `[grep 2026-08-25]`.**
+  Adam wrote "per the rig profile's fuel type (electric vs. gas, already
+  known from the vehicle profile)" — no `fuelType`/`powertrain`/`electric`
+  field exists on either `RigProfile` shape (`facts.ts:68-77`,
+  `web/src/lib/vehicles/types.ts:23-35`); both carry `fuelRangeMi: number`
+  only. Wizard has no fuel-type input. **How this ships today:**
+  `FUEL_LIVE_INCLUDED_TYPE = "gas_station"` hardcoded at the audit callsite;
+  EV rigs get gas picks. `pickFuelAtAnchor` itself takes `fuelType` as a
+  parameter — the fix is a rig-field addition, not a module change.
+- **Feature-flag posture flipped from `KEYSTOP_ANCHOR_BACKFILL`.**
+  `KEYSTOP_ANCHOR_BACKFILL` is ON by default because it's in-memory
+  (pool-only). `FUEL_LIVE_RESOLVE` is OFF by default because it issues
+  live Google `searchNearby` calls — new external cost source. Flagged
+  as a decision in the doc; Adam asked me to flag whether a flag was
+  needed at all (answer: yes, and default OFF).
+
+**Cost bound (analytical, not measured):** shared per-generation cap is
+`Math.max(80, days × 8)` (`audit.ts:352`). Worst case for a 10-day trip
+= 40 fuel anchors + ~15 LLM keystop resolves = 55 calls; fits under 80.
+Worst case for a 20-day trip = 80 fuel + 30 keystop = 110; fits under
+`max(80, 160)`. Cost per call is 2.5-3.2¢ per `resolve.ts:15-16`
+docstring (stated range, not measured this session). Analytical worst
+case ≈ $1.20–$2.60 per trip for the fuel branch, assuming zero pool
+dedupe. Realistic case not measured — dedupe rate depends on how often
+the LLM already picks fuel.
+
+**Verification gaps to flag:**
+- **Audit-hook integration coverage is thin.** The pure `pickFuelAtAnchor`
+  module is unit-tested (9 tests); the audit wiring is verified only by
+  typecheck + `next build` + feature-flag-OFF containment. `auditItinerary`
+  constructs its `PlaceResolver` internally (`audit.ts:352`) — an
+  integration test would need either a DI-seam refactor or an env-var
+  setup. Not added; flagged in the decision doc.
+- **No live TEST run.** Nothing actually called Google this session (no
+  key set in this workspace). First real invocation lands when Adam
+  turns `FUEL_LIVE_RESOLVE=true` in a dev env.
+
+**Not touched:** the general backfill (`anchor-backfill.ts` /
+`pickAnchorStop` / `pickBackfillStops`) is unmodified — the fuel path is
+deliberately a separate mechanism per Adam's direction. The other 6
+guarantee-eligible categories (`camping, scenic, food, oddity, attraction,
+urban`) remain D-blocked in the scoping doc §11 (need the audit-loop
+granularity call before their integration lands).
 
 ## 2026-08-24 (fix) — fuzzy name+proximity tier closes the tile-present overnight gap
 

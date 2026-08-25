@@ -149,6 +149,11 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
     useState<ExpeditionForm["returnRouting"]>("shortest");
   const [vehicleId, setVehicleId] = useState(firstVehicle?.id ?? "");
   const [rig, setRig] = useState(firstVehicle?.rig ?? DEFAULT_RIG);
+  // Interest-Category-Chips scaffold (`docs/specs/interest-category-chips.md`,
+  // PR #287, §11 step 2). Payload wiring is ready for all 8 chip categories;
+  // today only the `fuel` value is wired through to a mechanism
+  // (`fuel-live-resolve.ts`). Chip UI for the other 7 is F+D-blocked per §11.
+  const [guaranteedCategories, setGuaranteedCategories] = useState<string[]>([]);
 
   const lastIdx = destinations.length - 1;
   const setDest = (id: number, patch: Partial<ExpeditionDestination>) =>
@@ -203,8 +208,13 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
       vehicleId,
       vehicleTitle: v ? vehicleTitle(v) : "",
       rig,
+      // Cast: `guaranteedCategories` is stored as `string[]` in local state so
+      // one setter serves any future chip additions without a type churn;
+      // ExpeditionForm requires `SlideCategoryKey[]`. Values fed in today are
+      // hardcoded `"fuel"` from the checkbox below, so the cast is safe.
+      guaranteedCategories: guaranteedCategories as ExpeditionForm["guaranteedCategories"],
     };
-  }, [destinations, startDate, endDate, objective, budget, maxDailyDriveMi, bufferDays, avoid, returnRouting, vehicleId, rig, vehicles]);
+  }, [destinations, startDate, endDate, objective, budget, maxDailyDriveMi, bufferDays, avoid, returnRouting, vehicleId, rig, guaranteedCategories, vehicles]);
 
   const validationError = validateExpeditionForm(form);
   const isValid = validationError === null;
@@ -471,6 +481,40 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
             />
           </div>
         </div>
+      </Section>
+
+      {/* ── Interest categories (Interest-Category-Chips, `docs/specs/interest-
+          category-chips.md` PR #287) ─────────────────────────────────
+          A single fuel checkbox today — the full 8-chip row is F+D-blocked
+          per spec §11. Placement between "Trip details" and "Your rig"
+          matches the target layout so this section can grow into the 8-chip
+          row in place. */}
+      <Section
+        title="Interest categories"
+        hint="Guarantee certain kinds of stop appear on your trip. Priority within the existing 2-per-day cap — not additional stops."
+      >
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={guaranteedCategories.includes("fuel")}
+            onChange={(e) =>
+              setGuaranteedCategories((l) =>
+                e.target.checked
+                  ? Array.from(new Set([...l, "fuel"]))
+                  : l.filter((c) => c !== "fuel"),
+              )
+            }
+          />
+          <span className="flex flex-col gap-1">
+            <span className="text-sm">Guarantee a fuel stop at each anchor</span>
+            <span className="text-xs opacity-70">
+              Calls Google Places live for a gas station near each day-start
+              and mid-corridor city that doesn&apos;t already have one in
+              range. Costs a few cents per trip (capped per-generation).
+            </span>
+          </span>
+        </label>
       </Section>
 
       {/* ── Rig (§02) ──────────────────────────────────────────────── */}
