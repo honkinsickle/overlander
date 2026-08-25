@@ -16,27 +16,34 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
-## Notes-to-spine gap — INVESTIGATED, not implemented (2026-08-24)
+## Notes-to-spine — overnight slice DONE; service stops remain (2026-08-24)
 
-Places named in a generated day's Overnight / Logistics / Fuel / Reserve notes
-render only as prose; the ask is to also show them as spine nodes/tiles. Full
-investigation + recommended approach in
-`docs/decisions/notes-to-spine-gap.md`. Key findings that reshape the work:
+Investigation (PR #278, `docs/decisions/notes-to-spine-gap.md`) found the gap is
+**two problems, not one**: the **overnight** is already grounded and already on
+the spine (node or tile) on **96 of 104** overnight-bearing days `[measured
+2026-08-24, TEST; lenient substring match]` — its gap was *labeling*, not
+resolution; **Logistics / Fuel / Reserve** are genuinely prose-only, but most
+places they name are *also* already spine nodes/tiles, so naive extraction would
+mostly duplicate.
 
-- **It is two problems, not one.** The **overnight** is already grounded and
-  already on the spine (as node or tile) on **96 of 104** overnight-bearing
-  days `[measured 2026-08-24, TEST; lenient substring match]` — its gap is
-  *labeling*, not resolution. **Logistics / Fuel / Reserve** are genuinely
-  prose-only (no place slot, never grounded), but most places they name are
-  *also* already spine nodes/tiles — a naive extraction would mostly duplicate.
-- **Recommended:** do the cheap overnight-labeling slice first (no new
-  resolution, no cap interaction); treat service-stop spining as a separate,
-  product-gated decision, preferring **structured emission at generation time**
-  over lossy post-hoc prose parsing.
-- **Open product/UX questions** (flagged, undecided): cap accounting vs.
-  `MAX_BACKFILLS_PER_DAY`, visual distinction of an errand vs. a key stop,
-  duplication policy for already-on-spine names, overnight labeling. See the
-  decision doc's Open Questions.
+The overnight slice is now implemented on branch `overnight-spine-tile`
+(decision doc `docs/decisions/2026-08-24-overnight-spine-tile-link.md`): the
+grounded overnight is linked to its spine tile by identity, marked/featured, the
+Camping block derives from it, and the redundant prose line is dropped. Remaining
+and still open:
+
+- **Logistics / Fuel / Reserve service stops** — prose-only, never grounded.
+  Per `docs/decisions/notes-to-spine-gap.md`, a separate, product-gated
+  decision, preferring structured emission at generation time over post-hoc
+  prose parsing. Not started.
+- **Flagged UX calls on the overnight slice** (from its decision doc): whether
+  the Camping briefing block should remain once the overnight is a labeled spine
+  node; the exact overnight affordance (status prefix vs. distinct badge/node);
+  and labeling the end **node** as the overnight when the overnight IS the end
+  town (its tile is stripped as node-identical, so no separate tile is marked).
+- **Not verified via a live generation** — the overnight link is unit-tested +
+  gate-verified only; a real wizard+LLM run has not exercised the audit→bake
+  path end to end.
 
 ## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
 

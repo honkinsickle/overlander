@@ -89,15 +89,22 @@ const SILENT_FLAG_KINDS = new Set([
   "distance-snapped",
 ]);
 
-function dayNotes(dp: DayPlan): string[] {
+function dayNotes(dp: DayPlan, overnightOnSpine: boolean): string[] {
   const notes: string[] = [];
 
-  const overnightRef = dp.overnight.name
-    ? dp.overnight.name
-    : dp.overnight.desc ?? "overnight (TBD)";
-  notes.push(
-    `Overnight — ${dp.overnight.type}: ${overnightRef}. ${dp.overnight.rationale}`,
-  );
+  // The overnight's own prose line is redundant when the overnight is featured
+  // on the spine as a marked tile — that tile is the single source of truth
+  // (notes-to-spine, overnight slice). Keep the line only as the fallback for a
+  // desc-only / off-corridor overnight with no tile (same posture as #275:
+  // fallback prose over nothing).
+  if (!overnightOnSpine) {
+    const overnightRef = dp.overnight.name
+      ? dp.overnight.name
+      : dp.overnight.desc ?? "overnight (TBD)";
+    notes.push(
+      `Overnight — ${dp.overnight.type}: ${overnightRef}. ${dp.overnight.rationale}`,
+    );
+  }
   if (dp.logistics) notes.push(`Logistics — ${dp.logistics}`);
   for (const o of dp.obligations) notes.push(obligationLine(o));
 
@@ -156,7 +163,9 @@ export function itineraryToTrip(
       driveHours: Math.round(dp.driveHours * 10) / 10,
       description: dp.rationale,
       weather: dp.weather ? { arrival: dp.weather } : undefined,
-      notes: dayNotes(dp),
+      // Drop the redundant "Overnight —" line when the bake linked the overnight
+      // to a spine tile (`isOvernight`) — that tile now carries it.
+      notes: dayNotes(dp, baked?.segmentSuggestions?.some((t) => t.isOvernight) ?? false),
       // Structured overnight = the LLM's curated camp pick + why, so the
       // briefing's Camping section renders it as a recommendation (not just a
       // notes line). Only when a real place was named (else it stays desc-only).

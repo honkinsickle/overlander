@@ -29,7 +29,7 @@ import type { CorridorCity } from "@/lib/trips/types";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import type { GenerationInput } from "./facts";
 import type { ItineraryOutput, ResolvedPlace } from "./schema";
-import type { DayRoute } from "./audit";
+import type { DayRoute, GroundOutcome } from "./audit";
 
 /** Exactly the client `fetchCorpusForSegment` accepts. */
 type ServerClientLike = Parameters<typeof fetchCorpusForSegment>[2];
@@ -43,6 +43,44 @@ export type BakedDay = {
    *  ids are what the spine's placeIds reference. */
   segmentSuggestions: BrowsePlace[];
 };
+
+/**
+ * The canonical id of the tile that IS a grounded overnight, or null.
+ *
+ * IDENTITY, not a name substring: a pool-hit overnight's tile carries the
+ * corpus id the pool POI already has (the same id `fetchCorpusForSegment`
+ * emits and the keyStop pool-hit path keys on); a live-resolved overnight's
+ * tile is `resolvedToTile`'s `google:<placeId>`. A dropped/desc-only overnight
+ * has no tile — return null and let the prose fallback stand.
+ */
+export function overnightTileRef(outcome: GroundOutcome): string | null {
+  if (outcome.kind === "pool-hit") return outcome.poi.id;
+  if (outcome.kind === "resolved") return `google:${outcome.place.placeId}`;
+  return null;
+}
+
+/**
+ * Flag the one tile that IS the day's overnight (matched by id from
+ * `overnightTileRef`) so it is the single source of truth for the overnight:
+ * `isOvernight` badges it, `curated` features it on the spine rather than
+ * demoting it in the pool, and its note becomes the tile's status line.
+ *
+ * Pure. When `ref` is null (desc-only / dropped) or matches no tile (the
+ * overnight is off this day's corridor), nothing is marked — the caller keeps
+ * the prose "Overnight —" line as the fallback, same posture as #275.
+ */
+export function markOvernightTile(
+  tiles: BrowsePlace[],
+  ref: string | null,
+  note: string,
+): BrowsePlace[] {
+  if (!ref) return tiles;
+  return tiles.map((t) =>
+    t.id === ref
+      ? { ...t, isOvernight: true, curated: true, keyStopNote: t.keyStopNote ?? note }
+      : t,
+  );
+}
 
 /** A resolved tier-2 place as a browsable tile (real place_id → hydratable). */
 function resolvedToTile(rp: ResolvedPlace): BrowsePlace {
@@ -169,7 +207,20 @@ export async function bakeGeneratedDays(
         }
       }
 
-      return { n: day.n, corridorCities, segmentSuggestions: cardTiles };
+      // Link the grounded overnight to its own tile by canonical id (identity,
+      // not a name match), so the one tile is the single source of truth — the
+      // spine badges it, the briefing derives from it, and `to-trip` drops the
+      // redundant "Overnight —" note. No-op when the overnight is desc-only /
+      // off this day's corridor (ref null or matches no tile).
+      const overnightNote =
+        day.overnight.rationale || day.overnight.name || "overnight";
+      const marked = markOvernightTile(
+        cardTiles,
+        day.audit?.overnightRef ?? null,
+        overnightNote,
+      );
+
+      return { n: day.n, corridorCities, segmentSuggestions: marked };
     }),
   );
 }

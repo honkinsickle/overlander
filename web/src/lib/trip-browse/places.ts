@@ -77,6 +77,13 @@ export type BrowsePlace = {
    *  "cinnamon buns worth the stop" note the LLM attaches to the stop. Rendered
    *  as the tile's status line. Set by the bake for curated tiles only. */
   keyStopNote?: string;
+  /** True when this tile IS the day's grounded overnight (notes-to-spine,
+   *  overnight slice). The overnight is already grounded by the audit; the bake
+   *  links it to its own tile by canonical id (not a name substring) so the one
+   *  tile is the single source of truth for the overnight — the spine badges it,
+   *  the briefing derives from it, and the redundant "Overnight —" notes line is
+   *  dropped. Set alongside `curated` so it is featured, not demoted. */
+  isOvernight?: boolean;
   /** Along-route distance-from-day-start (miles), projected onto the day's
    *  polyline at bake time. Set by the generated-day bake for curated key
    *  stops so they render IN their spine position (ordered, with mileage)

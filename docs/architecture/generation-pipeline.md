@@ -391,11 +391,11 @@ Every key present on the stored day `[queried TEST]`, traced to its setter in
 | `driveHours` | `1.7` | **computed (engine-measured)** — same |
 | `description` | *"Cross Hwy 14 and drop through Red Canyon's orange spires…"* | **LLM-authored** (`dp.rationale`) |
 | `weather` | `{ arrival: "Cooler at elevation (Bryce ~8,000 ft, 75°F day / 45°F night); afternoon thunderstorms likely." }` | **LLM-authored** — see §4 |
-| `notes` | 3 entries (overnight / logistics / a BOOK obligation) | **LLM-authored**, composed by `dayNotes` |
-| `overnight` | `{ selected: { name: "Ruby's Inn", type: "lodge", … } }` | **LLM-authored**, name **audit-validated** (pool-hit or Google-resolved, else dropped) |
+| `notes` | 3 entries (overnight / logistics / a BOOK obligation) | **LLM-authored**, composed by `dayNotes`. The "Overnight —" line is **dropped** when the overnight is linked to a spine tile (below) — the tile is then its single source of truth `[2026-08-24]` |
+| `overnight` | `{ selected: { name: "Ruby's Inn", type: "lodge", … } }` | **LLM-authored**, name **audit-validated** (pool-hit or Google-resolved, else dropped). When grounded, the audit records `DayAudit.overnightRef` (the tile's canonical id) and the bake links it to its spine tile (below) `[2026-08-24]` |
 | `heroImage` | a `upload.wikimedia.org` Commons URL | **source-derived** — `attachHeroPhotos`, Wikipedia/Commons by destination name |
 | `corridorCities` | 2 nodes | **computed** — `deriveCorridorCities` over route geometry + bundled gazetteer |
-| `segmentSuggestions` | 5 tiles | **source-derived** — corpus rows and/or Google responses (§2) |
+| `segmentSuggestions` | 5 tiles | **source-derived** — corpus rows and/or Google responses (§2). The tile matching `overnightRef` is flagged `isOvernight` + `curated` by `bake.ts:markOvernightTile` (identity, not name), so the overnight is featured + badged on the spine and the Camping block/prose line derive from it `[2026-08-24]` |
 | `waypoints` | `[]` | **literal** — `itineraryToTrip` always sets `[]` |
 
 Two fields inside `overnight` deserve the distinction: `overnight.selected.name`

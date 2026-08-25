@@ -1211,6 +1211,7 @@ export function placePool(day: Day): CorridorPlace[] {
       milesFromStart: p.milesFromStart,
       coords: p.coords,
       keyStopNote: p.keyStopNote,
+      isOvernight: p.isOvernight,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
