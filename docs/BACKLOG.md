@@ -16,6 +16,28 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Notes-to-spine gap — INVESTIGATED, not implemented (2026-08-24)
+
+Places named in a generated day's Overnight / Logistics / Fuel / Reserve notes
+render only as prose; the ask is to also show them as spine nodes/tiles. Full
+investigation + recommended approach in
+`docs/decisions/notes-to-spine-gap.md`. Key findings that reshape the work:
+
+- **It is two problems, not one.** The **overnight** is already grounded and
+  already on the spine (as node or tile) on **96 of 104** overnight-bearing
+  days `[measured 2026-08-24, TEST; lenient substring match]` — its gap is
+  *labeling*, not resolution. **Logistics / Fuel / Reserve** are genuinely
+  prose-only (no place slot, never grounded), but most places they name are
+  *also* already spine nodes/tiles — a naive extraction would mostly duplicate.
+- **Recommended:** do the cheap overnight-labeling slice first (no new
+  resolution, no cap interaction); treat service-stop spining as a separate,
+  product-gated decision, preferring **structured emission at generation time**
+  over lossy post-hoc prose parsing.
+- **Open product/UX questions** (flagged, undecided): cap accounting vs.
+  `MAX_BACKFILLS_PER_DAY`, visual distinction of an errand vs. a key stop,
+  duplication policy for already-on-spine names, overnight labeling. See the
+  decision doc's Open Questions.
+
 ## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
 
 ADR `2026-08-21-place-data-resolver-consolidation.md` decision 4: **one shared
