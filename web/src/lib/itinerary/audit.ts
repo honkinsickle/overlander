@@ -23,6 +23,11 @@ import { pointToPolylineMi, haversineMi } from "@/lib/routing/point-to-polyline"
 import type { EngineFacts, GenerationInput, PoolPOI } from "./facts";
 import { computeFuelGaps, type ComputedFuelGap } from "./fuel-gaps";
 import { PlaceResolver, type ResolvedName } from "./resolve";
+import {
+  pickAnchorStop,
+  hasStopNearAnchor,
+  anchorStopNote,
+} from "./anchor-backfill";
 import type {
   AuditFlag,
   DayPlan,
@@ -46,6 +51,16 @@ const GUARD_MI = 60;
 // straight-line from Prince George — just over the 60mi line; a Tombstone run
 // ~47mi). Mis-resolutions to the wrong region are ~1000mi+ off and still fail.
 const DWELL_GUARD_MI = 120;
+
+/** Start-of-day key-stop backfill (`anchor-backfill.ts`).
+ *
+ *  ON by default, with `KEYSTOP_ANCHOR_BACKFILL=false` as the kill switch —
+ *  the inverse of this repo's usual default-OFF flag posture, deliberately.
+ *  The usual posture guards LIVE production paths; generation is not one:
+ *  the whole wizard is already gated behind `ENABLE_PLANNER_WIZARD`, which
+ *  prod never sets. Shipping this OFF would mean shipping a fix that does
+ *  nothing. The switch exists so a bad pick can be disabled without a revert. */
+const BACKFILL_ENABLED = process.env.KEYSTOP_ANCHOR_BACKFILL !== "false";
 
 const UNVERIFIED_OVERNIGHT_DESC =
   "Unverified overnight removed by the audit — find and confirm your own.";
@@ -184,6 +199,12 @@ export type AuditReport = {
     where: "keyStop" | "overnight";
     reason: string;
   }[];
+  /** Start-of-day openers added by the backfill because the model kept
+   *  nothing near the day's start anchor (`anchor-backfill.ts`). Empty when
+   *  the model covered every start itself OR when nothing cleared the bar —
+   *  the two are deliberately indistinguishable here; `summary` reports the
+   *  count so a run's behaviour is visible without persisting the report. */
+  anchorBackfills: { day: number; poiId: string; name: string }[];
   /** Tier-2 names resolved live + passed the corridor guard (→ ingest). */
   resolved: {
     day: number;
@@ -239,11 +260,15 @@ export async function auditItinerary(
   const poolByName = new Map<string, PoolPOI>(
     facts.poolPOIs.map((p) => [normalizePlaceName(p.name), p]),
   );
+  // Same pool keyed by corpus id — a kept pool-hit's ref IS its id, so this is
+  // how the backfill looks up what the model already placed.
+  const poolById = new Map<string, PoolPOI>(facts.poolPOIs.map((p) => [p.id, p]));
   const capMi = input.params.maxDailyDriveMi;
 
   const report: AuditReport = {
     distanceSnaps: [],
     droppedPois: [],
+    anchorBackfills: [],
     resolved: [],
     fuel: { computed: [], claimed: output.fuelGaps, claimedGapsCorroborated: false },
     structural: [],
@@ -400,6 +425,43 @@ export async function auditItinerary(
       } else {
         report.droppedPois.push({ day: day.n, poiId: g.poiId, where: "keyStop", reason: g.reason });
         flags.push(g.flag);
+      }
+    }
+
+    // ── Start-of-day backfill (follow-up to #274) ──────────────────────
+    // #274's prompt SPREAD instruction improved mid-corridor and day-end
+    // coverage but left the START of a day frequently empty. If the model kept
+    // nothing near this day's start anchor, pick one opener from the pool it
+    // was already given. Deterministic, no re-ask, no network — and it returns
+    // null rather than padding when nothing clears the bar. See
+    // `anchor-backfill.ts` for why rating is not part of that bar.
+    if (BACKFILL_ENABLED && dayStartCoord) {
+      // A kept stop's coords come from one of two places depending on how it
+      // ground: a pool-hit's ref IS the corpus id, a live-resolve's ref is the
+      // name and its coords live on the ResolvedPlace. Check both, or a day
+      // whose opener was live-resolved would look empty and get a duplicate.
+      const keptCoords: [number, number][] = [
+        ...keptStops
+          .map((k) => poolById.get(k.name)?.coords)
+          .filter((c): c is [number, number] => !!c),
+        ...resolvedPlaces
+          .filter((r) => r.where === "keyStop")
+          .map((r) => r.coords),
+      ];
+      if (!hasStopNearAnchor(keptCoords, dayStartCoord)) {
+        const pick = pickAnchorStop({
+          anchor: dayStartCoord,
+          pool: facts.poolPOIs,
+          keptRefs: new Set(keptStops.map((k) => k.name)),
+          onCorridor,
+        });
+        if (pick) {
+          // Prepend: this is the day's FIRST stop, and bake orders the spine by
+          // along-route mile anyway — leading here keeps the audited object
+          // reading in travel order too.
+          keptStops.unshift({ name: pick.id, note: anchorStopNote(day.startPlace) });
+          report.anchorBackfills.push({ day: day.n, poiId: pick.id, name: pick.name });
+        }
       }
     }
 
@@ -564,6 +626,7 @@ export async function auditItinerary(
   report.summary =
     `audited ${output.days.length} days · ${snapCount} distance(s) snapped · ` +
     `${report.resolved.length} name(s) resolved live (${resolver.callCount} Google lookups) · ` +
+    `${report.anchorBackfills.length} start-of-day backfill(s) · ` +
     `${droppedCount} place(s) dropped · ${computedGaps.length} fuel gap(s) computed · ` +
     `${report.structural.length} structural issue(s)`;
 

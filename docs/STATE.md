@@ -84,6 +84,70 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-25 — start-of-day key-stop backfill: a MECHANISM, after #274's nudge fell short
+
+Newest truth. Branch `keystop-anchor-backfill` off `origin/main` (`a61c381`,
+#274). TEST only; no PROD access. **Gates: typecheck + build exit 0; 17 unit
+tests pass** (`anchor-backfill.test.ts` + the existing `ground-keystop.test.ts`).
+
+**Why:** #274 made spread a prompt *preference* and measured that start-of-day
+stayed frequently empty. This adds the mechanism. Prior findings that shaped
+it: nothing was being dropped, and which cities get a stop varies run to run.
+
+**What:** `web/src/lib/itinerary/anchor-backfill.ts` (pure, unit-tested) called
+from `audit.ts` after the key-stop loop. If nothing the model kept sits near a
+day's START anchor, pick one opener from `facts.poolPOIs` — the palette the
+model already had. **Deterministic; no LLM re-ask, no network call.** Options
+weighed and rejected (re-ask loop = latency + spend + padding risk; live Google
+searchNearby = crosses the deliberate resolve.ts / discovery separation) are in
+the decision doc.
+
+**The bar is all hard gates, never a score:** opener category only (`scenic`,
+`food`, `oddity`, `attraction`, `camping` — excludes the `interest` junk
+drawer, `urban`, `fuel`, `overnight`); within `ANCHOR_NEAR_MI` (a **chosen
+constant**, far tighter than the audit's `GUARD_MI`); must clear the caller's
+own `onCorridor` guard unchanged; must not duplicate a kept stop (by corpus id
+AND by name). **Returns null and leaves the day bare when nothing qualifies** —
+the explicit requirement. Note is strictly positional and asserts nothing about
+the place; a test enforces that.
+
+**Flag `KEYSTOP_ANCHOR_BACKFILL=false` kills it — ON by default**, inverting the
+repo's usual default-OFF posture deliberately: that posture guards live prod
+paths, and generation is already gated behind `ENABLE_PLANNER_WIZARD` which
+prod never sets. Shipping OFF would ship a fix that does nothing.
+
+**Measured across five live generations, start city varied (Bishop, San Diego,
+Reno):**
+- **Fires when it should, quiet when it shouldn't.** The Bishop run — the
+  originally reported failure — logged **zero** backfills because the model
+  covered Bishop itself that run. Correct non-firing, not a miss.
+- ⚠ **A real defect surfaced live and was fixed mid-flight.** The first runs
+  picked `atlas_oddities` rows three times out of four ("Mick Jagger's Urinal",
+  "Space Whale", "Kesey Square") — NULL photo, NULL description, NULL rating,
+  i.e. rows that render as an empty placeholder. Ranking on proximity alone
+  systematically surfaces the THINNEST rows, and rating cannot counter it
+  (`master_place.rating` is NULL corpus-wide `[measured 2026-08-21]`). Fix:
+  `PoolPOI` gained `hasPhoto`/`hasDescription` (derived in `toPoolPOI`, **not**
+  sent to the model) and `rank` prefers a renderable row — a **preference, not a
+  gate**, or it would empty the very starts this exists to cover. After it,
+  every materialized backfill carried both photo and description.
+
+**Known limits, stated not smoothed:** materialization under the start node is
+**not guaranteed** — one backfilled pick did not appear under its day's first
+node; it may have bucketed under a neighbouring node, **not verified either
+way**. Same pre-existing class as the 2026-08-24 Victorville pool-hit
+observation, **not introduced here**; now tracked in BACKLOG. Also: the backfill
+runs for every day's START anchor but **not** day-END (measured evidence showed
+ends already covered, and the end node hosts the overnight) — a flagged
+deviation from the "ideally end-of-day too" brief.
+
+Decision doc: `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md`.
+`generation-pipeline.md` gains a Tier-2b section.
+
+⚠ **Still uncommitted and NOT in this PR:** the dev-only email+password sign-in
+(`web/src/lib/auth/dev-signin.ts` + the two `app/auth` files). Unchanged status
+from 2026-08-24.
+
 ## 2026-08-24 — key-stop corridor spread: prompt-only change, measured partially effective
 
 Newest truth. Branch `prompt-keystop-spread` off `origin/main` (`dce1a72`).

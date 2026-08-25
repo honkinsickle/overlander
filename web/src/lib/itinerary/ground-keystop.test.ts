@@ -26,6 +26,8 @@ test("pool-hit: grounds name→corpus id, carries the note, never calls the reso
     coords: [-129.07, 59.37],
     rating: 4.7,
     priceTier: null,
+    hasPhoto: false,
+    hasDescription: false,
     tags: null,
   };
   const poolByName = new Map([["boya lake provincial park", poi]]);

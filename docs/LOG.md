@@ -12,6 +12,36 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 — the prompt nudge wasn't enough, so the backfill became a mechanism — and its first picks were junk
+
+- **#274 shipped a preference; this shipped the mechanism.** Start-of-day stayed
+  empty after the prompt change, so the audit now backfills one opener from the
+  corpus pool when the model kept nothing near a day's start. Deterministic, no
+  re-ask, no network call — chosen over a re-ask loop (latency + spend + it
+  invites the padding we're trying to avoid) and over a live Google lookup
+  (crosses the deliberate `resolve.ts` / `discovery/google-places.ts` split).
+- **The bar is the feature, and it is all hard gates.** Category, proximity, the
+  caller's own corridor guard, no duplicates — and `null` when nothing clears
+  it. Twelve of the seventeen tests are about what it must REFUSE, because the
+  failure that matters is a padded stop, not a missing one.
+- **Its first live picks were embarrassing, and that was the useful part.**
+  Three of four were `atlas_oddities` rows — "Mick Jagger's Urinal", "Space
+  Whale", "Kesey Square" — with no photo, no description, no rating: cards that
+  render blank. Proximity-only ranking systematically surfaces the THINNEST rows
+  in the corpus, and rating can't counter it because `master_place.rating` is
+  NULL corpus-wide. Fixed by teaching `PoolPOI` whether a row will actually
+  render and ranking on it — as a preference, not a gate, or the fix would empty
+  the starts the feature exists to fill.
+- **The originally-reported case now passes for the boring reason.** The Bishop
+  run logged zero backfills — the model covered Bishop itself that time. Correct
+  non-firing. A single run still can't be read as evidence either way; run-to-run
+  variance on the same route remains large.
+- **A limit I could not close:** one backfilled pick didn't show under its day's
+  first spine node. It may have bucketed under a neighbour — not verified. Same
+  shape as the Victorville pool-hit from 2026-08-24, so pre-existing rather than
+  introduced. Parked in BACKLOG rather than guessed at.
+- Decision doc: `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md`.
+
 ## 2026-08-24 — key stops cluster at the end of a day; the fix was one prompt paragraph, and it half-worked
 
 - **Chased a clustering complaint to the wrong root cause first, and the

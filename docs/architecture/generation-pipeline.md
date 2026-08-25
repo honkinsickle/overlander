@@ -135,6 +135,18 @@ in three tiers `[read source]`:
   A gap over `DISTANCE_SNAP_TOLERANCE_MI = 15` adds an *info* flag. Fuel gaps
   are **replaced wholesale** with `computeFuelGaps(...)` output — the LLM's
   `fuelGaps` are discarded, kept only as `report.fuel.claimed`.
+- **Tier 2b — start-of-day backfill** (`anchor-backfill.ts`, added 2026-08-25,
+  kill switch `KEYSTOP_ANCHOR_BACKFILL=false`, ON by default). After the model's
+  own stops are ground, if nothing kept sits near a day's START anchor, one
+  opener is picked from `facts.poolPOIs` — deterministic, no LLM call, no
+  network call. Hard gates only (opener category, proximity to the anchor, the
+  same `onCorridor` guard, not already kept); **returns null and leaves the day
+  bare when nothing qualifies.** Ranking prefers rows carrying a photo /
+  description, because the corpus `oddity` bucket is dominated by
+  `atlas_oddities` rows that render blank — a preference, not a gate. Does NOT
+  run for day-END anchors (already covered; the end node hosts the overnight).
+  Recorded on `AuditReport.anchorBackfills` and in `summary`. Rationale + the
+  measured defect: `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md`.
 - **Tier 2 — ground or drop.** Every `keyStops[].name` and `overnight.name` goes
   through `groundReference`: **pool-first** (exact normalized-name match against
   `poolPOIs`, no Google spend), else **live-resolve** via `PlaceResolver`, else
