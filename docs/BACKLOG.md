@@ -57,11 +57,19 @@ Remaining and still open:
   or `placeId`-carrying tile) when the exact `mp:` ref misses. **But inert on
   today's backcountry data** — `google_place_id` is RPC-join-sourced and **0 of
   351** #283-corridor rows carry one `[queried TEST]`, so Hope Valley et al.
-  still don't mark. **Remaining to close it:** backfill `google_place_id`
-  (re-introduces Google + coverage gap — data-quality call), or name+proximity
-  reconciliation (fuzzy — confidence threshold is a product call). Tile synthesis
-  for the no-tile / layover case (Convict Lake) is a separate, out-of-scope
-  piece. Decision doc Follow-up 3–5.
+  still don't mark. **FUZZY TIER built (Follow-up 6) — closes the tile-present
+  case:** when both id tiers miss, `markOvernightTile` fuzzy-matches the
+  overnight's pool name + coords against the day's tiles (strict name subset +
+  ≥2 tokens, AND ≤ 0.5 mi). Confirmed: Hope Valley (Day 4) now marks — corpus
+  "Hope Valley Campground" vs Google "Hope Valley", 0.067 mi apart `[queried TEST
+  + Google details]`. Tiers 1/2 still win conflicts. **Two chosen thresholds
+  (0.5 mi, subset+≥2-token) flagged as tunable product calls.** Decision doc
+  Follow-up 3–6.
+  **STILL OPEN — the no-tile / layover case (Convict Lake):** when the overnight
+  has NO tile at all on the day (dwell day's empty fold, or off-corridor), there
+  is nothing to fuzzy-match. Closing it needs **tile synthesis** from the
+  overnight's grounded coords — deliberately out of scope so far. This is the
+  last remaining slice of the gap.
   (The earlier name-collision hypothesis — 7 "Silver Strand" rows — does NOT
   bite: pool and fold agree on the single eligible `mp:54182e9b`.)
 - **Badge prominence (Q3)** — the "Overnight ·" affordance renders but is a

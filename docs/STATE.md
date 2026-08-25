@@ -84,6 +84,31 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (fix) — fuzzy name+proximity tier closes the tile-present overnight gap
+
+Newest truth. Branch `fix/overnight-fuzzy-match` off `origin/main` (#282–#284 all
+merged — no open stack). Code + tests. Decision doc Follow-up 6.
+
+Adds **tier 3** to overnight tile-marking: when the exact id (#279) and the
+`google_place_id` bridge (#284) both miss, fuzzy-match the overnight's pool POI
+(name + coords, carried on `DayAudit.overnightName`/`overnightCoords`) against
+**the day's own tiles**. Both bars must clear: **name** strict (every token of
+the shorter name in the longer, ≥2 tokens; "Convict Lake" ≈ "Convict Lake
+Campground", not "Convict Creek Trailhead") **and** **distance** `≤ 0.5 mi`
+(~805 m). Mark the single closest qualifier; none clears → nothing marked (prose
+fallback). Tiers 1/2 always win a conflict (tier 3 runs only when they miss).
+
+**Step-4 re-check (real corpus + Google coords, no LLM re-gen — offered, not
+run):** **Hope Valley (Day 4) now MARKS** — corpus "Hope Valley Campground" vs
+Google "Hope Valley", **0.067 mi** apart `[queried TEST + Google details]`.
+**Convict Lake (layover) still correctly does NOT mark** — no tile exists at all
+(the separate no-tile gap, untouched by design). Twin Lakes / Fallen Leaf still
+mark via tier 1.
+
+⚠ **Two CHOSEN thresholds flagged** (0.5 mi radius; strict subset + ≥2-token name
+rule) — err strict per the brief, tunable if a looser confidence bar is wanted (a
+product call). 158 itinerary tests pass; typecheck + build exit 0.
+
 ## 2026-08-24 (fix) — mp:/google: id reconciliation for overnight marking (correct, but inert on today's backcountry data)
 
 Newest truth. Branch `fix/overnight-id-reconciliation`, **stacked on #283 →

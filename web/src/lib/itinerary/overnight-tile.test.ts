@@ -145,3 +145,84 @@ test("markOvernightTile: googleId set but no tile carries it marks nothing", () 
   const out = markOvernightTile(tiles, "mp:x", "note", "ChIJnowhere");
   assert.equal(out.filter((t) => t.isOvernight).length, 0);
 });
+
+// ── markOvernightTile: fuzzy name + proximity fallback (tier 3, #285) ──────
+// When neither the exact `mp:`/`google:` id match nor the google_place_id bridge
+// hits, fall back to matching the overnight's pool POI (name + coords) against
+// the day's candidate tiles. BOTH name (strict fuzzy) AND distance (tight) must
+// clear. No match → no mark (behaves like today). Never a best-guess.
+
+const HV: [number, number] = [-119.92, 38.75]; // Hope Valley
+const NEAR: [number, number] = [-119.9205, 38.7505]; // ~0.06 mi
+const FAR: [number, number] = [-119.96, 38.75]; // ~2.1 mi
+
+function tileAt(id: string, title: string, coords: [number, number]) {
+  return { ...tile(id, title), coords };
+}
+
+test("markOvernightTile fuzzy: marks a same-place google: tile by name + proximity when id tiers miss", () => {
+  const tiles = [tileAt("google:ChIJhv", "Hope Valley Campground", NEAR), tileAt("mp:other", "Somewhere Else", FAR)];
+  const out = markOvernightTile(tiles, "mp:hopevalley-not-in-fold", "note", null, {
+    name: "Hope Valley Campground",
+    coords: HV,
+  });
+  const marked = out.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0].id, "google:ChIJhv");
+});
+
+test("markOvernightTile fuzzy: 'Convict Lake' ≈ 'Convict Lake Campground' (subset) matches", () => {
+  const out = markOvernightTile([tileAt("google:x", "Convict Lake", NEAR)], "mp:x", "note", null, {
+    name: "Convict Lake Campground",
+    coords: HV,
+  });
+  assert.equal(out.filter((t) => t.isOvernight).length, 1);
+});
+
+test("markOvernightTile fuzzy: name near-miss does NOT match ('Convict Creek Trailhead')", () => {
+  const out = markOvernightTile([tileAt("google:x", "Convict Creek Trailhead", NEAR)], "mp:x", "note", null, {
+    name: "Convict Lake Campground",
+    coords: HV,
+  });
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
+
+test("markOvernightTile fuzzy: distance near-miss does NOT match (right name, too far)", () => {
+  const out = markOvernightTile([tileAt("google:x", "Hope Valley Campground", FAR)], "mp:x", "note", null, {
+    name: "Hope Valley Campground",
+    coords: HV,
+  });
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
+
+test("markOvernightTile fuzzy: single generic token does NOT match (err strict)", () => {
+  const out = markOvernightTile([tileAt("google:x", "Convict", NEAR)], "mp:x", "note", null, {
+    name: "Convict Lake Campground",
+    coords: HV,
+  });
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
+
+test("markOvernightTile fuzzy: genuine no-match marks nothing (behaves like today)", () => {
+  const out = markOvernightTile([tileAt("google:x", "Different Lake", FAR)], "mp:x", "note", null, {
+    name: "Hope Valley Campground",
+    coords: HV,
+  });
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
+
+test("markOvernightTile fuzzy: exact id match (tier 1) wins — fuzzy never overrides it", () => {
+  const tiles = [tileAt("mp:hopevalley", "Hope Valley Campground", FAR), tileAt("google:ChIJhv", "Hope Valley Campground", NEAR)];
+  const out = markOvernightTile(tiles, "mp:hopevalley", "note", null, { name: "Hope Valley Campground", coords: HV });
+  const marked = out.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1, "only the exact-ref tile is marked");
+  assert.equal(marked[0].id, "mp:hopevalley");
+});
+
+test("markOvernightTile fuzzy: google_place_id bridge (tier 2) wins over fuzzy", () => {
+  const tiles = [tileAt("google:ChIJgid", "Hope Valley Campground", FAR), tileAt("google:ChIJother", "Hope Valley Campground", NEAR)];
+  const out = markOvernightTile(tiles, "mp:x", "note", "ChIJgid", { name: "Hope Valley Campground", coords: HV });
+  const marked = out.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1, "the tier-2 google_place_id tile is marked, not the nearer fuzzy one");
+  assert.equal(marked[0].id, "google:ChIJgid");
+});
