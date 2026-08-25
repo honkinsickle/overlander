@@ -32,6 +32,7 @@ import {
   ANCHOR_NEAR_MI,
   type BackfillAnchor,
 } from "./anchor-backfill";
+import { pickFuelAtAnchor } from "./fuel-live-resolve";
 import type {
   AuditFlag,
   DayPlan,
@@ -65,6 +66,39 @@ const DWELL_GUARD_MI = 120;
  *  prod never sets. Shipping this OFF would mean shipping a fix that does
  *  nothing. The switch exists so a bad pick can be disabled without a revert. */
 const BACKFILL_ENABLED = process.env.KEYSTOP_ANCHOR_BACKFILL !== "false";
+
+/** Fuel-category guarantee (`fuel-live-resolve.ts`).
+ *
+ *  OFF by default, opt-in with `FUEL_LIVE_RESOLVE=true`. **Deliberately OFF**,
+ *  the opposite posture from `BACKFILL_ENABLED` above: the general backfill is
+ *  in-memory (pool-only, no external calls), while this path issues live
+ *  Google Places `searchNearby` calls per anchor whenever the user picked
+ *  `fuel` — new external cost. Ship OFF, flip on per-environment.
+ *
+ *  Only fires when `GenerationInput.guaranteedCategories` includes `"fuel"` —
+ *  a user selection on the wizard's Interest-Category-Chips section
+ *  (`docs/specs/interest-category-chips.md`, PR #287). Bounded by
+ *  `PlaceResolver`'s shared per-generation `RESOLVE_CAP`. */
+const FUEL_LIVE_RESOLVE_ENABLED = process.env.FUEL_LIVE_RESOLVE === "true";
+
+/** Google `primaryType` values that count as a fuel stop for the guarantee's
+ *  dedupe check. Kept separate from `SLIDE_TO_PRIMARY_CATEGORY.fuel` — that
+ *  federated umbrella is corpus-normalized to `"fuel"`, so pool-hits are
+ *  handled by a plain `=== "fuel"` check; this set applies to live-resolved
+ *  places whose `category` came from `inferCategory` (raw Google type). */
+const FUEL_LIVE_CATEGORIES: ReadonlySet<string> = new Set([
+  "gas_station",
+  "truck_stop",
+  "electric_vehicle_charging_station",
+]);
+
+/** Which Google `includedTypes` value to search for when a fuel guarantee
+ *  fires. Today hardcoded to `"gas_station"`: the rig profile has no fuel-type
+ *  field (`RigProfile` at `facts.ts:68-77`, `web/src/lib/vehicles/types.ts:23-35`
+ *  both carry `fuelRangeMi: number` only), so EV rigs get gas-station picks
+ *  today. Flagged in the fuel-live-resolve decision doc — the fix is a rig
+ *  field addition, not a change here. */
+const FUEL_LIVE_INCLUDED_TYPE = "gas_station";
 
 const UNVERIFIED_OVERNIGHT_DESC =
   "Unverified overnight removed by the audit — find and confirm your own.";
@@ -532,6 +566,89 @@ export async function auditItinerary(
           kind: pick.kind,
           anchor: pick.anchorLabel,
         });
+      }
+    }
+
+    // ── Fuel-category guarantee (fuel-live-resolve.ts) ─────────────────
+    // Runs AFTER the general backfill so it sees every kept fuel-family stop
+    // (LLM + backfill + earlier fuel picks on this day). Separate mechanism,
+    // separate posture: the general backfill is corpus-pool-only, this path
+    // calls Google `places:searchNearby` live per anchor when fuel is missing
+    // — see `docs/specs/interest-category-chips.md` §5.2 B.1 for why fuel
+    // needs its own path (pool has thin fuel coverage in the far-north /
+    // off-corridor regions the fuel-POI layer is meant to fill; the layer
+    // hasn't shipped yet, per `expedition-planner.md` §8.5). Adam picked the
+    // live-resolve workaround over waiting for the layer.
+    if (
+      FUEL_LIVE_RESOLVE_ENABLED &&
+      input.guaranteedCategories?.includes("fuel") &&
+      dayStartCoord
+    ) {
+      // Kept stops that already carry a fuel-family category — pool-hits are
+      // normalized to `"fuel"` (SlideCategoryKey via toPoolPOI), live-resolves
+      // carry the raw Google `primaryType` from inferCategory. Both surfaces
+      // count toward the "anchor already has fuel" test in pickFuelAtAnchor.
+      const keptFuelCoords: [number, number][] = [
+        ...keptStops
+          .map((k) => poolById.get(k.name))
+          .filter((p): p is PoolPOI => !!p && p.category === "fuel")
+          .map((p) => p.coords),
+        ...resolvedPlaces
+          .filter(
+            (r) =>
+              r.where === "keyStop" &&
+              r.category != null &&
+              FUEL_LIVE_CATEGORIES.has(r.category),
+          )
+          .map((r) => r.coords),
+      ];
+
+      // Anchors — same construction as the backfill block just above, in
+      // traveller order. Do NOT filter by anchorIsBare: fuel dedupe is
+      // category-specific (a kept restaurant near the anchor does not
+      // satisfy a fuel guarantee); pickFuelAtAnchor does the fuel-family
+      // dedupe internally.
+      const fuelEndpointCoords: [number, number][] = [dayStartCoord];
+      if (dayEndCoord) fuelEndpointCoords.push(dayEndCoord);
+      const fuelMidCorridorCities =
+        (dayPolyline ?? []).length === 0
+          ? []
+          : facts.corridorCities
+              .filter((c) => pointToPolylineMi(c.coords, dayPolyline!) <= GUARD_MI)
+              .filter(
+                (c) =>
+                  !fuelEndpointCoords.some(
+                    (e) => haversineMi(c.coords, e) <= ANCHOR_NEAR_MI,
+                  ),
+              )
+              .sort((a, b) => a.milesFromStart - b.milesFromStart);
+      const fuelAnchors: BackfillAnchor[] = [
+        { coords: dayStartCoord, label: day.startPlace, kind: "start" as const },
+        ...fuelMidCorridorCities.map((c) => ({
+          coords: c.coords,
+          label: c.name,
+          kind: "corridor" as const,
+        })),
+      ];
+
+      for (const anchor of fuelAnchors) {
+        const pick = await pickFuelAtAnchor({
+          anchor,
+          keptFuelCoords,
+          fuelType: FUEL_LIVE_INCLUDED_TYPE,
+          resolver,
+          onCorridor,
+        });
+        if (!pick) continue;
+        keptStops.push({ name: pick.resolved.displayName, note: pick.note });
+        resolvedPlaces.push({
+          ...pick.resolved,
+          name: pick.resolved.displayName,
+          where: "keyStop",
+        });
+        // Feed subsequent anchors on this day so we don't pick another fuel
+        // stop 5 mi away from the one we just picked.
+        keptFuelCoords.push(pick.resolved.coords);
       }
     }
 

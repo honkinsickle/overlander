@@ -17,6 +17,7 @@
  */
 
 const TEXT_ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
+const NEARBY_ENDPOINT = "https://places.googleapis.com/v1/places:searchNearby";
 const RESOLVE_FIELD_MASK =
   "places.id,places.displayName,places.location,places.formattedAddress,places.types,places.primaryType";
 
@@ -149,6 +150,93 @@ export class PlaceResolver {
               place: {
                 placeId: p.id,
                 displayName: p.displayName?.text ?? name,
+                coords: [p.location.longitude, p.location.latitude],
+                category: inferCategory(p.primaryType),
+              },
+            }
+          : { status: "not-found" };
+      }
+    } catch {
+      result = { status: "not-found" };
+    }
+
+    this.cache.set(key, result);
+    return result;
+  }
+
+  /**
+   * Nearest-place lookup: Google's `places:searchNearby` for one `includedType`
+   * (e.g. `"gas_station"`, `"electric_vehicle_charging_station"`) inside a
+   * 5-km circle around `biasCoords`. Returns the single top result.
+   *
+   * Used by the `fuel` category guarantee (`fuel-live-resolve.ts`) — the
+   * general backfill selector (`anchor-backfill.ts`) is corpus-pool-only.
+   * Shares this resolver's cap + cost counter with `resolve()`.
+   */
+  async resolveNearby(
+    includedType: string,
+    biasCoords: [number, number],
+  ): Promise<ResolveStatus> {
+    // Cache key includes type + rounded coords (~11m at 4 decimal places),
+    // so re-asking for the same anchor is free. Distinct from resolve()'s
+    // by-name key — no collision possible.
+    const key = `nearby:${includedType}:${biasCoords[0].toFixed(4)}:${biasCoords[1].toFixed(4)}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      const r: ResolveStatus = { status: "no-key" };
+      this.cache.set(key, r);
+      return r;
+    }
+    if (this.liveCalls >= this.cap) {
+      return { status: "capped" };
+    }
+
+    this.liveCalls++;
+    let result: ResolveStatus;
+    try {
+      const res = await fetch(NEARBY_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": RESOLVE_FIELD_MASK,
+        },
+        body: JSON.stringify({
+          includedTypes: [includedType],
+          maxResultCount: 1,
+          rankPreference: "DISTANCE",
+          locationRestriction: {
+            circle: {
+              center: { latitude: biasCoords[1], longitude: biasCoords[0] },
+              // 5 km — same order as `discovery/google-places.ts`'s nearby
+              // fanout; a fuel stop farther than that isn't "at this anchor."
+              radius: 5000,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        result = { status: "not-found" };
+      } else {
+        const json = (await res.json()) as {
+          places?: {
+            id: string;
+            displayName?: { text: string };
+            location: { latitude: number; longitude: number };
+            primaryType?: string;
+          }[];
+        };
+        const p = json.places?.[0];
+        result = p
+          ? {
+              status: "resolved",
+              place: {
+                placeId: p.id,
+                displayName: p.displayName?.text ?? includedType,
                 coords: [p.location.longitude, p.location.latitude],
                 category: inferCategory(p.primaryType),
               },

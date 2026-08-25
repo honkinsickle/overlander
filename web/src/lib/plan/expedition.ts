@@ -14,6 +14,7 @@ import type {
   TripParams,
 } from "@/lib/itinerary/facts";
 import type { RigProfile } from "@/lib/vehicles/types";
+import type { SlideCategoryKey } from "@/lib/trip-browse/places";
 import { isInPlanningRegion, PLANNING_REGION_NAMES } from "./planning-region";
 
 /** One row of the destinations list (reference-doc §01 start/end + §03 events).
@@ -65,6 +66,13 @@ export type ExpeditionForm = {
   vehicleId: string;
   vehicleTitle: string;
   rig: RigProfile;
+  /** Interest-Category-Chips (`docs/specs/interest-category-chips.md`, §11
+   *  step 3, PR #287). Categories the user asks the trip to guarantee, using
+   *  the `SlideCategoryKey` vocabulary end-to-end (Decision A: `overnight`,
+   *  not `hotel`). Empty/absent = no guarantees. Currently only the `"fuel"`
+   *  value is wired downstream (fuel-live-resolve.ts). Other categories are
+   *  D-blocked pending the audit-loop-granularity call (spec §11 steps 5–7). */
+  guaranteedCategories?: SlideCategoryKey[];
 };
 
 /** Reference-doc §01 Avoid chips. */
@@ -136,6 +144,7 @@ export function expeditionToGenerationInput(
     params,
     rig,
     objective: form.objective.trim() || undefined,
+    guaranteedCategories: form.guaranteedCategories,
   };
 }
 

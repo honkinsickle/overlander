@@ -12,6 +12,72 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (build) — fuel-live-resolve: first BUILD out of the Interest-Category-Chips arc
+
+- **The scoping doc (PR #287) had already found this gap; Adam's decision
+  was to skip the corpus entirely for fuel.** §5.2 B.1 in the spec:
+  backfill is `facts.poolPOIs`-only (`anchor-backfill.ts:11-13` explicit),
+  never reaches Google. Fuel-POI corpus coverage is thin where it matters
+  (far-north / off-corridor); the fuel-POI layer per
+  `expedition-planner.md §8.5` hasn't shipped. Adam's call: always call
+  Google live for fuel, no fallback. Standalone step, not a modification
+  to `pickAnchorStop`.
+- **Tests-first, per TDD skill.** Wrote 9 tests for `pickFuelAtAnchor`
+  before the module existed — RED confirmed, then implemented, GREEN. All
+  9 pass in ~150ms. Covers pool-hit dedupe (no Google call), all four
+  `PlaceResolver` failure modes (not-found / capped / no-key / off-corridor),
+  happy-path shape, bias-coord wiring, `fuelType` passthrough, and the
+  `ANCHOR_NEAR_MI` dedupe threshold.
+- **Extended `PlaceResolver` with `resolveNearby(includedType, biasCoords)`.**
+  Mirrors `resolve()`'s auth / cap / cache / abort posture. Distinct cache
+  key namespace (`nearby:<type>:<lng>:<lat>`), so no collision with the
+  existing text-search cache. Shared per-generation cap + `liveCalls`
+  counter — a fuel guarantee competes for the same budget as LLM keystop
+  live-resolves. The impl (real fetch to Google `places:searchNearby`) is
+  NOT test-driven because there's no local mock harness for `fetch` in this
+  codebase; the DI-seam tests cover the module contract, and the real fetch
+  follows `resolve()`'s pattern byte-for-byte.
+- **Adam's assumption that fuel type is "already known from the vehicle
+  profile" turned out FALSE `[grep 2026-08-25]`** — no `fuelType` field on
+  either `RigProfile` (`facts.ts:68-77` or `web/src/lib/vehicles/types.ts:23-35`);
+  both carry `fuelRangeMi: number` only. Wizard has no fuel-type input.
+  Shipped with `FUEL_LIVE_INCLUDED_TYPE = "gas_station"` hardcoded at the
+  audit callsite; EV rigs get gas picks today. `pickFuelAtAnchor` itself
+  takes `fuelType` as a parameter — the fix is a rig-field addition, not
+  a module change. Flagged in the decision doc.
+- **Feature flag posture flipped from the sibling backfill.**
+  `KEYSTOP_ANCHOR_BACKFILL` is ON by default (in-memory, no external cost).
+  `FUEL_LIVE_RESOLVE` is OFF by default because it issues Google
+  `searchNearby` per anchor — new external cost source. Adam asked me to
+  flag whether a flag was needed at all; answer yes and default OFF. Both
+  flagged in the decision doc.
+- **Chose a single fuel checkbox in the wizard over an 8-chip row.** The
+  §11 spec sketches an 8-chip row for the guarantee section; that row is
+  F+D-blocked (F: chip UI shape; D: audit-loop granularity for the other
+  6 categories). Shipping 1-of-8-working chips would set false
+  expectations. A single purpose-built checkbox with explicit copy ("Calls
+  Google Places live for a gas station near each day-start and mid-corridor
+  city that doesn't already have one in range") is honest about the
+  mechanism and replaces in place when D+F resolve.
+- **Audit-hook integration coverage is thin.** The pure module has 9 unit
+  tests; the audit wiring (~50 lines) is verified only by typecheck +
+  `next build`. `auditItinerary` constructs its `PlaceResolver` internally
+  (`audit.ts:352`) — an integration test needs either a DI-seam refactor
+  or an env-var setup. Considered extracting a `collectFuelPicksForDay`
+  helper but landed on ship-as-is + feature-flag-OFF containment for now;
+  flagged in the decision doc as a follow-up.
+- **Cost bound is analytical, not measured.** Cap is
+  `Math.max(80, days × 8)` per `audit.ts:352` — shared between fuel picks
+  and LLM keystop resolves. Analytical worst case for a 10-day trip fits
+  under 80 comfortably (~40 fuel + ~15 keystop). Realistic dedupe rate not
+  measured; no live TEST run this session (no Google key in this
+  workspace). First real invocation lands when Adam flips
+  `FUEL_LIVE_RESOLVE=true` in a dev env.
+- **Sibling PR to #287, not a stack.** Branched off `origin/main` for
+  independence — the scoping doc iterates on its own branch, this build
+  ships on its own. Two-way merge conflict on STATE.md / LOG.md /
+  BACKLOG.md is expected but small.
+
 ## 2026-08-24 — notes-to-spine, then the overnight-marking chain (#278–#285)
 
 - **The notes-to-spine ask was two problems, not one (#278, merged).** Places
