@@ -415,6 +415,40 @@ Reachability comes from `getTrip()`, not from this Set. Removing the id would
 leave the trip reachable but strip its reference treatment — a behaviour change
 dressed as a de-link. Left intact.
 
+## TEST generation footprint — point-in-time 2026-08-25
+
+`[queried TEST 2026-08-25]`, service-role read. Recorded because the
+2026-08-24/25 key-stop work (#274 → #275 → #276) drove wizard generations
+repeatedly, and every generation writes two places.
+
+| metric | value |
+|---|--:|
+| `public.trips` (TEST, all owners) | **26** |
+| `source_record` where `source_id = 'google_resolved'` | **167** |
+| trips created since `2026-08-24T00:00:00Z` | **20** |
+| `google_resolved` rows created since `2026-08-24T00:00:00Z` | **45** |
+
+⚠ **The `google_resolved` figure of 122 that appears throughout the sections
+below is a 2026-08-20 point-in-time and is now stale** — those lines are dated
+snapshots and are deliberately left as written, per this file's convention. The
+table above supersedes them for current state only.
+
+**Why it grows:** `generateExpeditionTripAction` calls `enqueueResolvedPlaces`
+after every successful generation, upserting each tier-2 live-resolved place as
+a `google_resolved` source_record. It is **idempotent on
+`(source_id, external_id)`** — a repeated place updates rather than duplicates,
+which is why 20 trips produced fewer new rows than they did resolutions. The
+write is gated `projectLabel === "TEST"`
+(`expedition-actions.ts:161`); **PROD carries no `google_resolved` rows and this
+session did not touch PROD.**
+
+The 20 trips are throwaway test artifacts from measuring key-stop coverage, not
+curated content. They were deliberately left in place rather than deleted, so
+the before/after comparisons in
+`docs/decisions/2026-08-25-start-of-day-keystop-backfill.md` and
+`docs/decisions/2026-08-25-corridor-city-keystop-backfill.md` remain
+re-inspectable.
+
 ## `public.trips` — notable rows
 
 User trips (owner-scoped RLS). Not an exhaustive listing — only rows worth

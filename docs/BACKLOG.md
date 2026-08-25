@@ -2870,6 +2870,44 @@ conclusion.
   unresolved in both — and the reason 175 OSM rows resolve to 170 master_places
   and 231 NPS rows to 146.
 
+## Surfaced 2026-08-25 (session wrap)
+
+- **Dev-only email+password sign-in exists as UNCOMMITTED working-tree state —
+  land it or drop it.** `web/src/lib/auth/dev-signin.ts` +
+  `app/auth/actions.ts` + `app/auth/sign-in/page.tsx`. Built because **Google is
+  not an enabled provider on the TEST project** — `/auth/v1/settings` returns
+  email-only `[measured 2026-08-24]` — so the UI's single "Continue with Google"
+  button cannot complete there and `/plan/expedition` is otherwise unreachable
+  for testing. Gated on dev build AND `ENABLE_DEV_PASSWORD_SIGNIN=true` AND the
+  TEST project ref, so production is structurally unaffected. It has been
+  carried across four branches as uncommitted state and **any `git clean` loses
+  it**. This closes CLAUDE.md's standing "no dev sign-in path for verifying
+  authed browser surfaces" gap if landed.
+
+- **`bake.ts` persists Google `displayName` into `trips.payload` on every
+  generated trip — a compliance instance the 2026-08-20 check did not
+  catalogue.** `resolvedToTile` (`bake.ts:52`) sets `title: rp.displayName` on
+  each tier-2 live-resolved tile. `displayName` has no caching exception under
+  the policy recorded in
+  `docs/measurements/2026-08-20-google-places-details-compliance-check.md`.
+  **Unlike the `google_resolved` corpus writeback** (`expedition-actions.ts:161`,
+  gated `projectLabel === "TEST"`), **this write is not TEST-gated.** Recorded
+  from a read of the source, **not audited** — volume, whether it predates a
+  review, and whether it was already accepted as known risk are all unchecked.
+  Same family as the untriaged `google_resolved`/`google` source_record item
+  below.
+
+- **Two docs PRs left open (#272, #273), so the doc set on `main` has a gap.**
+  #272 carries the 2026-08-23/24 wrap; #273 carries the top-pick-per-category
+  plan. Neither is on `main`. Merging both closes it; nothing else is blocked on
+  them.
+
+- **Top-pick-per-category plan (#273) has one genuinely open decision plus two
+  residuals.** O5 staleness policy (a frozen rank over volatile ratings) was
+  never answered; O1a (minimum review-count floor for ranking among several
+  Google results) and O6a (wall-clock budget on the trip-creation path) are
+  sub-questions that the answered decisions do not reach. Detail in the plan doc.
+
 ## Surfaced 2026-08-25 (start-of-day key-stop backfill)
 
 - **A kept/backfilled pool-hit can fail to materialize as a tile under its

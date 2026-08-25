@@ -84,6 +84,61 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-25 (wrap) — session close: three key-stop PRs merged, two docs PRs still OPEN, dev sign-in unlanded
+
+Newest truth. `origin/main` tip **`446c527` (#276)**. This entry is the wrap;
+the three sections below carry the technical detail and are unchanged.
+
+**Merged this session:** #274 (`a61c381`, prompt SPREAD preference), #275
+(`683890c`, start-of-day backfill mechanism), #276 (`446c527`, extended to
+mid-corridor cities). The arc ran prompt-nudge → measured shortfall → mechanism
+→ measured shortfall → wider mechanism, each step measured before the next was
+designed.
+
+⚠ **TWO DOCS PRs ARE STILL OPEN AND THEIR CONTENT IS NOT ON `main`:**
+- **#272** — the 2026-08-23/24 wrap (tier headers #271, flag live-verification,
+  the `la-to-portland` re-bake). Touches STATE, LOG, BACKLOG, DATA_INVENTORY
+  and a decision doc.
+- **#273** — `docs/architecture/top-pick-per-category-bake-plan.md`, PLAN ONLY,
+  plus its STATE section. Five of its six open decisions were answered
+  (O1/O2/O3/O4/O6); **O5 staleness policy is still open**, plus residuals O1a
+  (review-count floor) and O6a (wall-clock budget).
+**Consequence:** the doc set on `main` has a gap for 2026-08-23/24 and does not
+contain the top-pick plan. Merging both closes it. Flagged rather than
+duplicated here — rewriting their content into this entry would create two
+sources of truth for the same sessions.
+
+⚠ **Dev-only email+password sign-in is STILL UNCOMMITTED, no PR** —
+`web/src/lib/auth/dev-signin.ts` plus `app/auth/actions.ts` and
+`app/auth/sign-in/page.tsx`. It exists because **Google is not an enabled
+provider on TEST**: `/auth/v1/settings` returns email-only `[measured
+2026-08-24]`, so the single "Continue with Google" button in the UI cannot
+complete there and the wizard is otherwise unreachable for testing. Gated on
+dev build AND explicit flag AND the TEST project ref. It has been carried
+across four branches as working-tree state and will be lost by any `git clean`.
+**Needs a call: land it, or delete it and accept the cookie-injection path.**
+
+**Read-only findings from this session that are NOT recorded elsewhere:**
+- **Trip creation DOES call Google Places.** `generateAndAudit` →
+  `auditItinerary` constructs a `PlaceResolver` (`audit.ts:314`) which calls
+  `places:searchText`. An earlier claim in the top-pick plan (#273) that "there
+  is no live Google call anywhere in the bake path" is **true only for the fork
+  path** (`bake-corridors.ts`) and **false for the generation pipeline**
+  `[read source 2026-08-25]`.
+- **A Google-compliance instance not in the 2026-08-20 catalogue.**
+  `bake.ts:52` `resolvedToTile` writes `title: rp.displayName` — Google's
+  `displayName` — into `Day.segmentSuggestions`, i.e. into `trips.payload`, on
+  **every generated trip**. Unlike the `google_resolved` corpus writeback
+  (`expedition-actions.ts:161`, gated `projectLabel === "TEST"`), this write is
+  **not TEST-gated**. The 2026-08-20 compliance check catalogued `ingest.ts` and
+  the `google` ingester but not this path. Recorded, not audited — see BACKLOG.
+
+**TEST footprint from this session `[queried TEST 2026-08-25]`:** `public.trips`
+**26**; `source_record` where `source_id='google_resolved'` **167**. Since
+`2026-08-24T00:00:00Z`: **20** trips generated and **45** `google_resolved`
+rows created, all from wizard runs driving the backfill work. No PROD access at
+any point this session.
+
 ## 2026-08-25 (later) — corridor-city backfill: #275 extended past the start anchor
 
 Newest truth. Branch `corridor-city-backfill`. ~~**stacked on

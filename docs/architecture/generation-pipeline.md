@@ -127,6 +127,23 @@ downstream enforces coverage. See
 `docs/decisions/2026-08-24-keystop-corridor-spread.md` for the measured
 before/after and what did NOT improve.
 
+⚠ **THE GENERATION PATH CALLS GOOGLE, AND PERSISTS ONE OF ITS FIELDS**
+`[read source 2026-08-25]`. Two facts that are easy to get wrong:
+
+1. **`generateAndAudit` makes live Google calls.** `auditItinerary` constructs a
+   `PlaceResolver` (`audit.ts:314`) which hits `places:searchText` to ground any
+   name the model used that is not in the corpus pool. A claim that "there is no
+   live Google call anywhere in the bake path" is true **only** of the FORK path
+   (`bake-corridors.ts`, corpus-only) and false here.
+2. **`resolvedToTile` writes Google's `displayName` into the stored payload.**
+   `bake.ts:52` sets `title: rp.displayName` on every tier-2 tile, so it lands in
+   `Day.segmentSuggestions` → `trips.payload`. `displayName` has no caching
+   exception under
+   `docs/measurements/2026-08-20-google-places-details-compliance-check.md`, and
+   **unlike** the `google_resolved` corpus writeback
+   (`expedition-actions.ts:161`, gated `projectLabel === "TEST"`) this write is
+   **not TEST-gated**. Recorded, not audited — tracked in `docs/BACKLOG.md`.
+
 **The audit** (`auditItinerary`, `web/src/lib/itinerary/audit.ts`) runs after,
 in three tiers `[read source]`:
 
