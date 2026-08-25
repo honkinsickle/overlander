@@ -37,13 +37,19 @@ both overnights linked/marked/featured, Camping block derives, prose line
 dropped, one card per place.** See the decision doc's Follow-up + Follow-up 2.
 Remaining and still open:
 
-- **Residual pool-hit id-mismatch — does NOT bite, stays theoretically open.**
-  TEST has 7 "Silver Strand" `master_place` rows, but the pool and the corridor
-  fold both surface the single eligible one (`mp:54182e9b`) — they agree, so a
-  pool-hit Silver Strand overnight would match. Not observed live (the LLM chose
-  live-resolve overnights, which are immune). If pool vs `pois_along_corridor`
-  ever diverge on a name, a fix would key both on the same canonical id or ground
-  by geographic disambiguation. Scoped in the decision doc; not fixed.
+- **REAL pool-hit coverage gap — CONFIRMED, not fixed (2026-08-24).** A pool-hit
+  overnight is grounded to a trip-wide pool POI (`overnightRef = mp:…`), but
+  `markOvernightTile` only marks tiles in the **per-day corpus fold**
+  (`fetchCorpusForSegment`). When the overnight campground is in the pool but the
+  day's fold doesn't surface it, no tile carries the ref → it stays unmarked
+  (prose fallback) even under #279. Confirmed live: `c64ebc1c` Day 2/3 (William
+  Kent, Kaspian) — in the pool, absent from the day's fold, unmarked; while Big
+  Reservoir (pool-hit, in fold) marked `[queried TEST]`. Live-resolve overnights
+  are immune (they synthesize a tile). **Fix scope:** synthesize + bucket a tile
+  from the pool POI when the fold misses it — crosses the audit→bake seam
+  (needs the overnight's coords/name, not just its id). Decision doc Follow-up 3.
+  (The earlier name-collision hypothesis — 7 "Silver Strand" rows — does NOT
+  bite: pool and fold agree on the single eligible `mp:54182e9b`.)
 - **Badge prominence (Q3)** — the "Overnight ·" affordance renders but is a
   subtle status-line text prefix, visually identical to a key-stop note
   (screenshot-confirmed). Whether to strengthen it is a UX call. Not decided.
