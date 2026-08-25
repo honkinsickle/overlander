@@ -63,7 +63,11 @@ function corpusRow(id: string, name: string, coords: [number, number]) {
   };
 }
 
-function day(overnightName: string | null, overnightRef: string | null): DayPlan {
+function day(
+  overnightName: string | null,
+  overnightRef: string | null,
+  overnightGoogleId: string | null = null,
+): DayPlan {
   const audit: DayAudit = {
     distanceConfidence: "measured",
     statedDistanceMi: 50,
@@ -71,6 +75,7 @@ function day(overnightName: string | null, overnightRef: string | null): DayPlan
     flags: [],
     resolvedPlaces: [],
     overnightRef,
+    overnightGoogleId,
   };
   return {
     n: 1,
@@ -129,5 +134,45 @@ test("bakeGeneratedDays flags NOTHING when overnightRef is null (desc-only fallb
     baked[0].segmentSuggestions.filter((t) => t.isOvernight).length,
     0,
     "no tile is flagged when there is no overnight ref",
+  );
+});
+
+test("bakeGeneratedDays reconciles a pool-hit overnight (mp: ref, no mp: tile) to a live-resolve google: tile via overnightGoogleId", async () => {
+  // Overnight grounded pool-first to an mp: id that the day's fold does NOT
+  // surface, but the same place is on the spine as a live-resolve google: tile
+  // (a keyStop here). The pool row carried a google_place_id → reconcile.
+  const auditedDay = day("Hope Valley Campground", "mp:hopevalley-not-in-fold", "ChIJhope");
+  auditedDay.audit!.resolvedPlaces = [
+    {
+      name: "Hope Valley Campground",
+      displayName: "Hope Valley Campground",
+      placeId: "ChIJhope",
+      coords: MID,
+      category: "campground",
+      where: "keyStop",
+    },
+  ];
+  const audited = { days: [auditedDay] } as unknown as ItineraryOutput;
+
+  const baked = await bakeGeneratedDays(audited, INPUT, fakeClient([]), DAY_ROUTES);
+
+  const marked = baked[0].segmentSuggestions.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1, "the google: tile is reconciled and marked");
+  assert.equal(marked[0].id, "google:ChIJhope");
+});
+
+test("bakeGeneratedDays does NOT paper over the no-tile gap: pool-hit with no fold tile and no google id stays unmarked", async () => {
+  // Convict Lake case: overnight in the pool but absent from the day's fold,
+  // no google_place_id → nothing to mark. Prose fallback must stand.
+  const audited = {
+    days: [day("Convict Lake Campground", "mp:convict-not-in-fold", null)],
+  } as unknown as ItineraryOutput;
+
+  const baked = await bakeGeneratedDays(audited, INPUT, fakeClient([]), DAY_ROUTES);
+
+  assert.equal(
+    baked[0].segmentSuggestions.filter((t) => t.isOvernight).length,
+    0,
+    "no tile exists for the overnight → nothing marked, not synthesized",
   );
 });

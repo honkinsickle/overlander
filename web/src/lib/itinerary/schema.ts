@@ -95,6 +95,12 @@ export type DayAudit = {
    *  overnight to its own tile by this id (not a name substring). null when the
    *  overnight is desc-only or was dropped, so the prose fallback stands. */
   overnightRef: string | null;
+  /** The pool-hit overnight's `google_place_id`, when its corpus row carries
+   *  one — lets the bake reconcile an `mp:` ref to a live-resolve `google:` tile
+   *  for the same place (see `markOvernightTile`). null on a live-resolve
+   *  (the ref is already `google:`), a desc-only/dropped overnight, or a corpus
+   *  row with no Google link. */
+  overnightGoogleId: string | null;
 };
 
 /** One key stop: a grounded place NAME + inline context note (purpose / caveat

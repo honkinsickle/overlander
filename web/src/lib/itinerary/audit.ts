@@ -540,6 +540,9 @@ export async function auditItinerary(
     // Canonical id of the tile that IS the overnight, so the bake can link it by
     // identity (see `overnightTileRef`). Null on desc-only / drop.
     let overnightRef: string | null = null;
+    // A pool-hit overnight's google_place_id (when its corpus row has one) — lets
+    // the bake reconcile the `mp:` ref to a live-resolve `google:` tile.
+    let overnightGoogleId: string | null = null;
     if (overnight.name) {
       const outcome = await groundReference(overnight.name, "overnight", {
         poolByName,
@@ -548,6 +551,7 @@ export async function auditItinerary(
         onCorridor,
       });
       overnightRef = overnightTileRef(outcome);
+      if (outcome.kind === "pool-hit") overnightGoogleId = outcome.poi.placeId ?? null;
       if (outcome.kind === "pool-hit") {
         // Pooled overnight — keep the name (the note shows it); its corpus tile
         // arrives via the federated fold. Nothing to strip.
@@ -638,6 +642,7 @@ export async function auditItinerary(
         flags,
         resolvedPlaces,
         overnightRef,
+        overnightGoogleId,
       },
     });
     dayRoutes.push({

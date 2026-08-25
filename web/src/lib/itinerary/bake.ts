@@ -73,10 +73,23 @@ export function markOvernightTile(
   tiles: BrowsePlace[],
   ref: string | null,
   note: string,
+  googleId?: string | null,
 ): BrowsePlace[] {
   if (!ref) return tiles;
+  // Cross-scheme reconciliation (Follow-up 4 / #283 Day 4): a pool-hit
+  // overnight's ref is `mp:<uuid>`, but the tile representing the SAME place on
+  // the spine may be a live-resolve `google:<placeId>` tile (a keyStop or the
+  // day's endpoint), which the exact-id match can't reach. When the pool POI
+  // carries a `google_place_id`, fall back to it — but ONLY when no exact-ref
+  // tile exists, so a present tile is never double-marked. Inert when the pool
+  // row has no google_place_id (`googleId` null), so the separate no-tile gap
+  // (an overnight absent from the day's fold entirely) is NOT papered over.
+  const hasExact = tiles.some((t) => t.id === ref);
+  const gid = !hasExact && googleId ? googleId : null;
+  const isOvernightTile = (t: BrowsePlace) =>
+    t.id === ref || (gid != null && (t.id === `google:${gid}` || t.placeId === gid));
   return tiles.map((t) =>
-    t.id === ref
+    isOvernightTile(t)
       ? { ...t, isOvernight: true, curated: true, keyStopNote: t.keyStopNote ?? note }
       : t,
   );
@@ -218,6 +231,7 @@ export async function bakeGeneratedDays(
         cardTiles,
         day.audit?.overnightRef ?? null,
         overnightNote,
+        day.audit?.overnightGoogleId ?? null,
       );
 
       return { n: day.n, corridorCities, segmentSuggestions: marked };

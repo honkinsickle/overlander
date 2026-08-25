@@ -286,3 +286,60 @@ place / coords / `google_place_id`, not just the raw ref id), and/or synthesizes
 tile from the overnight's own grounded coords when none is present — both cross the
 audit→bake seam. Flagged, not implemented. Whether an off-corridor / layover
 overnight should be forced onto the spine at all stays a product question.
+
+---
+
+## Follow-up 5 (2026-08-24) — FIX: reconcile `mp:` and `google:` ids for the same place
+
+Implements the id-reconciliation half of the Follow-up 4 gap (Adam's scope:
+id-linking only; tile synthesis for the no-tile case is explicitly out).
+
+**What was built.** `markOvernightTile` gains a `googleId` argument: when the
+overnight's exact `mp:` ref matches no tile, it falls back to the pool POI's
+`google_place_id`, marking a tile whose id is `google:<gid>` **or** whose
+`placeId` is `<gid>` — in ADDITION to, and preferring, the exact-id match (an
+existing tile is never double-marked). Plumbing: `PoolPOI` gains `placeId`
+(carried from the corpus tile's `google_place_id`, which `mapMasterPlaceRow`
+already sets from the corridor RPC's join); `toPoolPOI` carries it; the audit
+records `DayAudit.overnightGoogleId` for a pool-hit overnight; `bake` passes it
+through. This fixes the Follow-up 4 **Day-4 / Hope Valley shape** — a pool-hit
+overnight whose place is on the spine as a live-resolve `google:` tile.
+
+⚠ **CRUCIAL DATA FINDING — this does NOT fix the reported backcountry cases yet,
+and here is why.** `master_place.google_place_id` is **not a column**; the
+corridor RPC surfaces it via a JOIN to a linked google source_record. Measured on
+the #283 corridor: **0 of 351 rows carried a `google_place_id`** — Hope Valley
+(`mp:780e086d`), Convict Lake, Twin Lakes, Fallen Leaf, New Shady Rest are all
+NULL `[queried TEST 2026-08-24]`. These backcountry corpus rows have no linked
+Google source, so there is **no id to bridge `mp:` ↔ `google:`**. The fix is
+**correct and inert**: it activates the moment a pool row has a `google_place_id`,
+and it is verified by unit + integration tests using such a row — but on today's
+backcountry data it changes nothing, because the bridge id is absent exactly
+where the gap bites. So the *reported* Hope Valley overnight will still not mark
+until its `google_place_id` is populated. **Reported per the standing rule, not
+silently shipped as a full fix.**
+
+**What it deliberately does NOT do (verified by test).** It does **not** paper
+over the separate no-tile gap (Convict Lake / layover, Follow-up 3): when neither
+an exact-ref tile nor a `googleId`-matched tile exists, nothing is marked and the
+prose fallback stands. A test locks this.
+
+**Scope to actually close the backcountry cases (FLAGGED, not built here):**
+1. **Backfill `google_place_id` on corpus rows** — an on-demand Google lookup at
+   generation, or a batch enrichment pass. But it re-introduces a Google
+   dependency and coverage gap for exactly the off-grid places the corpus exists
+   to cover, so it partially defeats the corpus's purpose. A data-quality
+   decision beyond overnights.
+2. **Name + proximity reconciliation** — match the overnight's grounded coords +
+   name to a nearby spine tile without a shared id. This fixes the backcountry
+   case but is **fuzzy**: how close / how similar before two places are treated
+   as identical is a **product/confidence call — flagged, not decided.**
+3. **Tile synthesis** (the Convict Lake no-tile case) — out of scope by Adam's
+   instruction; tracked separately.
+
+**Tests:** `overnight-tile.test.ts` — cross-scheme match via `google:<id>` and
+via `placeId`, exact-ref-wins/no-double-mark (regression of #279's path), and
+two no-match/no-paper-over cases. `bake-overnight-integration.test.ts` — the full
+`bakeGeneratedDays` wiring reconciles a pool-hit `mp:` ref to a live-resolve
+`google:` tile, and leaves the no-tile pool-hit unmarked. 149 itinerary tests
+pass; typecheck + build exit 0.
