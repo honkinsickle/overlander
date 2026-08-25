@@ -84,6 +84,54 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-25 (later) — corridor-city backfill: #275 extended past the start anchor
+
+Newest truth. Branch `corridor-city-backfill`. ~~**stacked on
+`keystop-anchor-backfill` (#275) because #275 is still OPEN, not merged** —
+`origin/main` is at `a61c381` (#274). This PR therefore carries #275's commit
+as well.~~ **CORRECTED 2026-08-25 — #275 has since MERGED** as **`683890c`**,
+now the `origin/main` tip, and this branch was **rebased onto it**. Git skipped
+the branch's own copy of #275's commit as already-applied (the squash means its
+SHA is not an ancestor of `main` while the trees are identical — the usual
+pattern here), so the PR is now a **single commit** carrying only the
+corridor-city work. TEST only.
+
+**What:** `pickBackfillStops` — a thin ordered loop over the existing
+`pickAnchorStop`, so every gate, the ranking and the null-rather-than-pad
+contract are inherited unchanged. Anchors per day = start, then each
+mid-corridor city in along-route order. No parallel mechanism.
+
+**Cap — a stated call, `MAX_BACKFILLS_PER_DAY = 2`** across start + corridor
+together. Covering every bare city would let machine picks outnumber the
+model's 2–4 real ones and turn "key stops" into a list of towns. Two, not one,
+because the start anchor routinely takes a slot. When the cap bites it keeps
+the **earliest** anchors.
+
+**Notes distinguish the kinds** — `"at the start of the day"` vs `"along the
+way through"`. This matters because `KeyStop.note` is the only part of the
+decision that survives generation.
+
+**Three defects found live and fixed here:** a town featured as the thing to
+see in that town ("Carson City, Nevada" under the Carson City node — cleared
+the category gate honestly as `park_feature`, so `isCityTautology` was added,
+exact-after-state-stripping so "Riverside Park" survives); the same place
+featured on two days (dedupe was per-day, now trip-wide); and a city attributed
+to a dwell day it never passes through (mid-corridor selection reused
+`onCorridor`, which degrades to a wide straight-line radius on dwell days — now
+uses the day's polyline).
+
+**Measured, San Diego → Reno:** before, Oceanside and Riverside both `(EMPTY)`.
+After, Oceanside → **Top Gun House** `[BF:corridor]` in every run; Riverside →
+**Trujillo Adobe** `[BF:corridor]`. **Silver Lakes and Carson City correctly
+stayed bare** rather than being padded.
+
+**Limit worth knowing:** richness is a preference, so a thin row still wins when
+it is the only candidate — Top Gun House carries no photo/description and its
+card renders blank. A corpus ceiling, not a logic error.
+
+24 unit tests pass; typecheck + build exit 0. Instrumentation added and fully
+reverted.
+
 ## 2026-08-25 — start-of-day key-stop backfill: a MECHANISM, after #274's nudge fell short
 
 Newest truth. Branch `keystop-anchor-backfill` off `origin/main` (`a61c381`,

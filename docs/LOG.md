@@ -12,6 +12,34 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (later) — extending the backfill to corridor cities, and the three ways it embarrassed itself first
+
+- **Reused rather than rebuilt.** `pickBackfillStops` is a loop over #275's
+  `pickAnchorStop`, adding only ordering, a cap and dedupe — so the gates and
+  the null-rather-than-pad contract could not drift between the two cases.
+- **Capped machine picks at two per day, and said why.** Covering every bare
+  corridor city was the obvious move and the wrong one: the model supplies 2–4
+  real key stops, so unbounded backfill turns "key stops" into a list of towns.
+  When the cap bites it keeps the earliest anchors — an empty morning is felt
+  more than an empty afternoon.
+- **Three defects only live runs would have found.** A corpus row literally
+  named "Carson City, Nevada" got featured as the stop for Carson City — the
+  `urban` exclusion misses it because the row is `park_feature`. The same
+  wilderness got featured on two consecutive days, because dedupe was per-day.
+  And Carson City got attributed to a Mammoth→Mammoth dwell day, because
+  mid-corridor selection reused `onCorridor`, which on a dwell day is a wide
+  straight-line radius rather than a route test. All three are now gated,
+  trip-wide-deduped, and polyline-based respectively.
+- **The target gap is closed:** Oceanside went from `(EMPTY)` to Top Gun House
+  in every post-change run, Riverside to Trujillo Adobe. Silver Lakes and Carson
+  City stayed bare — correctly, nothing qualified.
+- **The honest ceiling is the corpus, not the logic.** Top Gun House has no
+  photo and no description, so its card renders blank. Richness is a preference,
+  not a gate, precisely so a bare node isn't preferred to a real-but-thin place.
+- Stacked on #275, which is still unmerged — noted in the PR rather than
+  silently rebasing.
+- Decision doc: `docs/decisions/2026-08-25-corridor-city-keystop-backfill.md`.
+
 ## 2026-08-25 — the prompt nudge wasn't enough, so the backfill became a mechanism — and its first picks were junk
 
 - **#274 shipped a preference; this shipped the mechanism.** Start-of-day stayed

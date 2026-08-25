@@ -24,9 +24,12 @@ import type { EngineFacts, GenerationInput, PoolPOI } from "./facts";
 import { computeFuelGaps, type ComputedFuelGap } from "./fuel-gaps";
 import { PlaceResolver, type ResolvedName } from "./resolve";
 import {
-  pickAnchorStop,
-  hasStopNearAnchor,
+  pickBackfillStops,
+  anchorIsBare,
   anchorStopNote,
+  corridorStopNote,
+  ANCHOR_NEAR_MI,
+  type BackfillAnchor,
 } from "./anchor-backfill";
 import type {
   AuditFlag,
@@ -204,7 +207,15 @@ export type AuditReport = {
    *  the model covered every start itself OR when nothing cleared the bar —
    *  the two are deliberately indistinguishable here; `summary` reports the
    *  count so a run's behaviour is visible without persisting the report. */
-  anchorBackfills: { day: number; poiId: string; name: string }[];
+  anchorBackfills: {
+    day: number;
+    poiId: string;
+    name: string;
+    /** Which gap it filled — a day opener, or a town passed through. */
+    kind: "start" | "corridor";
+    /** The anchor's display label (day start place, or corridor city). */
+    anchor: string;
+  }[];
   /** Tier-2 names resolved live + passed the corridor guard (→ ingest). */
   resolved: {
     day: number;
@@ -290,6 +301,11 @@ export async function auditItinerary(
     return p;
   };
 
+  // Backfilled POIs are deduped across the WHOLE trip, not just within a day.
+  // Measured need: two consecutive days can share a corridor city (day N ends
+  // where day N+1 starts, or both pass the same town), and a per-day set let
+  // the same place be featured on both `[measured 2026-08-25]`.
+  const backfilledTripWide = new Set<string>();
   const auditedDays: DayPlan[] = [];
   const dayRoutes: DayRoute[] = [];
   // Cap is a runaway guard, not a budget throttle — scale it so it never
@@ -448,20 +464,70 @@ export async function auditItinerary(
           .filter((r) => r.where === "keyStop")
           .map((r) => r.coords),
       ];
-      if (!hasStopNearAnchor(keptCoords, dayStartCoord)) {
-        const pick = pickAnchorStop({
-          anchor: dayStartCoord,
-          pool: facts.poolPOIs,
-          keptRefs: new Set(keptStops.map((k) => k.name)),
-          onCorridor,
+
+      // Which corridor cities does THIS day pass through?
+      //
+      // `facts.corridorCities` is the WHOLE-ROUTE spine — the audit has no
+      // per-day spine, because that is derived later in `bakeGeneratedDays`.
+      // Rather than duplicate that derivation, reuse the day's own corridor
+      // guard: a city the guard accepts is on this day's line. Then drop the
+      // ones that ARE the day's endpoints — the start is handled as its own
+      // anchor below, and the end node hosts the overnight, so a curated stop
+      // there is closer to duplication than coverage (the same end-anchor
+      // reasoning #275 recorded).
+      const endpointCoords: [number, number][] = [dayStartCoord];
+      if (dayEndCoord) endpointCoords.push(dayEndCoord);
+      //
+      // ⚠ Uses the day's POLYLINE directly, NOT `onCorridor`. On a dwell /
+      // out-and-back day `onCorridor` degrades to a wide straight-line radius
+      // from the base town (`DWELL_GUARD_MI`), which is right for verifying an
+      // excursion but far too loose to mean "a town this day drives through" —
+      // a live run attributed Carson City to a Mammoth→Mammoth dwell day that
+      // way `[measured 2026-08-25]`. A day with no forward polyline passes
+      // through nothing, so it contributes no mid-corridor anchors at all.
+      const midCorridorCities = (dayPolyline ?? []).length === 0
+        ? []
+        : facts.corridorCities
+        .filter((c) => pointToPolylineMi(c.coords, dayPolyline!) <= GUARD_MI)
+        .filter((c) => !endpointCoords.some((e) => haversineMi(c.coords, e) <= ANCHOR_NEAR_MI))
+        .sort((a, b) => a.milesFromStart - b.milesFromStart);
+
+      // Traveller order: the start first, then each town as it is reached, so
+      // that when the per-day cap bites it drops the LATEST gaps.
+      const anchors: BackfillAnchor[] = [
+        { coords: dayStartCoord, label: day.startPlace, kind: "start" as const },
+        ...midCorridorCities.map((c) => ({
+          coords: c.coords,
+          label: c.name,
+          kind: "corridor" as const,
+        })),
+      ].filter((a) => anchorIsBare(keptCoords, a.coords));
+
+      const picks = pickBackfillStops({
+        anchors,
+        pool: facts.poolPOIs,
+        keptRefs: new Set([...keptStops.map((k) => k.name), ...backfilledTripWide]),
+        onCorridor,
+      });
+
+      for (const pick of picks) {
+        backfilledTripWide.add(pick.poi.id);
+        const note =
+          pick.kind === "start"
+            ? anchorStopNote(pick.anchorLabel)
+            : corridorStopNote(pick.anchorLabel);
+        // The start opener leads; corridor fills append. Bake re-orders the
+        // spine by along-route mile regardless, so this only affects how the
+        // audited object reads.
+        if (pick.kind === "start") keptStops.unshift({ name: pick.poi.id, note });
+        else keptStops.push({ name: pick.poi.id, note });
+        report.anchorBackfills.push({
+          day: day.n,
+          poiId: pick.poi.id,
+          name: pick.poi.name,
+          kind: pick.kind,
+          anchor: pick.anchorLabel,
         });
-        if (pick) {
-          // Prepend: this is the day's FIRST stop, and bake orders the spine by
-          // along-route mile anyway — leading here keeps the audited object
-          // reading in travel order too.
-          keptStops.unshift({ name: pick.id, note: anchorStopNote(day.startPlace) });
-          report.anchorBackfills.push({ day: day.n, poiId: pick.id, name: pick.name });
-        }
       }
     }
 

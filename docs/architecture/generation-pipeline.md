@@ -135,7 +135,8 @@ in three tiers `[read source]`:
   A gap over `DISTANCE_SNAP_TOLERANCE_MI = 15` adds an *info* flag. Fuel gaps
   are **replaced wholesale** with `computeFuelGaps(...)` output — the LLM's
   `fuelGaps` are discarded, kept only as `report.fuel.claimed`.
-- **Tier 2b — start-of-day backfill** (`anchor-backfill.ts`, added 2026-08-25,
+- **Tier 2b — anchor backfill** (start anchors AND mid-corridor cities since
+  2026-08-25; originally start-only) (`anchor-backfill.ts`, added 2026-08-25,
   kill switch `KEYSTOP_ANCHOR_BACKFILL=false`, ON by default). After the model's
   own stops are ground, if nothing kept sits near a day's START anchor, one
   opener is picked from `facts.poolPOIs` — deterministic, no LLM call, no
@@ -145,8 +146,16 @@ in three tiers `[read source]`:
   description, because the corpus `oddity` bucket is dominated by
   `atlas_oddities` rows that render blank — a preference, not a gate. Does NOT
   run for day-END anchors (already covered; the end node hosts the overnight).
-  Recorded on `AuditReport.anchorBackfills` and in `summary`. Rationale + the
-  measured defect: `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md`.
+  Recorded on `AuditReport.anchorBackfills` (with `kind: "start" | "corridor"`)
+  and in `summary`. **Capped at `MAX_BACKFILLS_PER_DAY` across both kinds** so
+  machine picks cannot outnumber the model's own; when the cap bites it keeps
+  the earliest anchors. Mid-corridor anchors are selected off the day's
+  **polyline**, not `onCorridor` — the latter degrades to a wide straight-line
+  radius on dwell days and mis-attributes towns. A candidate that reduces to the
+  anchor city's own name is rejected (`isCityTautology`), and backfilled ids are
+  deduped **trip-wide**. Rationale + the measured defects:
+  `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md` and
+  `docs/decisions/2026-08-25-corridor-city-keystop-backfill.md`.
 - **Tier 2 — ground or drop.** Every `keyStops[].name` and `overnight.name` goes
   through `groundReference`: **pool-first** (exact normalized-name match against
   `poolPOIs`, no Google spend), else **live-resolve** via `PlaceResolver`, else
