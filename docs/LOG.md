@@ -12,6 +12,55 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-24 — notes-to-spine, then the overnight-marking chain (#278–#285)
+
+- **The notes-to-spine ask was two problems, not one (#278, merged).** Places
+  named in a day's Overnight/Logistics/Fuel/Reserve notes render only as prose.
+  Traced it: only the OVERNIGHT is structured + grounded — and already on the
+  spine as a tile/node on **96 of 104** overnight-bearing days in a TEST sample
+  `[computed]`; Logistics/Fuel/Reserve are free-text with no place slot, and most
+  places they name are ALREADY spine nodes, so naive extraction mostly
+  duplicates. Overnight slice = cheap labeling; service stops parked.
+- **Shipped the overnight→spine-tile link (#279, merged).** Audit records the
+  overnight's canonical tile id (identity, not substring); bake marks that tile
+  `isOvernight`+`curated`; the Camping block derives from it; the redundant
+  "Overnight —" prose line drops. Desc-only/off-corridor → prose fallback.
+- **A "tile missing" report was NOT a bug — deploy lag (#280, #281).** Every
+  generated TEST trip lacked `isOvernight` because they predate #279's deploy; an
+  integration test proved the wiring, and a live gen (#281, approved spend)
+  confirmed it end-to-end (San Elijo/San Onofre marked). The badge is a subtle
+  "Overnight ·" status prefix — flagged as a UX call, not decided.
+- **"New Shady Rest missing" = timing again (#282) — but it surfaced a REAL
+  gap.** A pool-hit overnight is grounded to a trip-wide pool id, but bake only
+  marks tiles in the PER-DAY corpus fold; when the fold misses the campground, no
+  tile carries the ref → unmarked even on #279 code.
+- **Reproduced the gap live (#283, approved spend):** Bishop→Mammoth(dwell)→
+  Tahoe, all 5 overnights pool-hits, **2 marked / 3 not** `[computed]`, incl. the
+  predicted LAYOVER trigger. Root cause broadened: the overnight ref (`mp:`) and
+  the tile that represents the place (fold `mp:`, or a live-resolve `google:`
+  endpoint) can differ or be absent — independent paths, different id schemes.
+- **id-reconciliation built but INERT (#284, merged).** `markOvernightTile` falls
+  back to the pool row's `google_place_id` to bridge `mp:`↔`google:`. But that id
+  is RPC-join-sourced from a linked Google source_record, and **0 of 351** rows
+  on the #283 TEST corridor carry one (backcountry has no Google link)
+  `[computed]` — correct, but changes nothing on today's data. Flagged, not
+  smoothed over.
+- **Fuzzy name+proximity tier (#285, OPEN).** Adam's call: fuzzy match over a
+  Google backfill, to avoid a Google-coverage dependency on off-grid places.
+  Third tier after exact id + google_place_id: strict name subset (≥2 tokens) AND
+  ≤0.5 mi, closest wins, no-match→prose. Confirmed on real corpus+Google coords
+  (no LLM): Hope Valley now marks (**0.067 mi** apart) `[computed]`. Convict Lake
+  (layover) still can't — no tile exists at all; that last slice needs tile
+  synthesis, still parked.
+- **Learned:** the corpus deliberately lacks Google ids for backcountry — that is
+  WHY the id bridge is inert and fuzzy was needed. The overnight is usually the
+  day's endpoint, so its tile is duplicated in the payload but the render dedups
+  by id. And pool-grounding's own name match is EXACT-only (fuzzy was removed
+  there earlier for mis-binding "Cedar City"→"Cedar City Field Office"), so #285's
+  fuzzy is scoped narrowly to overnight-only + name AND distance to avoid that
+  class. Two flagged product calls remain open: the badge prominence, and #285's
+  chosen thresholds.
+
 ## 2026-08-25 (later) — extending the backfill to corridor cities, and the three ways it embarrassed itself first
 
 - **Reused rather than rebuilt.** `pickBackfillStops` is a loop over #275's
