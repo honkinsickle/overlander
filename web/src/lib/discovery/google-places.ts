@@ -50,7 +50,13 @@ const TYPES_BY_CATEGORY: Record<SlideCategoryKey, string[]> = {
   oddity: [],
   camping: ["campground", "rv_park"],
   overnight: ["lodging", "hotel"],
-  fuel: ["gas_station"],
+  // Fuel moved to `mapboxSearchBoxSource` (2026-08-25) — Mapbox Search Box
+  // category endpoint. Compliance: Google Places on a non-Google map requires
+  // the Places UI Kit; Mapbox Search Box results on a Mapbox map do not. See
+  // `discovery/mapbox-search-box.ts` and the decision doc. Path A
+  // (`itinerary/fuel-live-resolve.ts`, PR #288) still calls Google directly
+  // for its audit-time nearby lookup — that's a separate follow-up.
+  fuel: [],
   // Corpus-backed (federated) buckets — no live Google Places fanout.
   interest: [],
   urban: [],

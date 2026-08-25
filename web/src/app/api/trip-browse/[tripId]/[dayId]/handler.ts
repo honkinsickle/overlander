@@ -21,6 +21,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { bboxFromCoords, discover } from "@/lib/discovery/discovery";
 import { googlePlacesSource } from "@/lib/discovery/google-places";
+import { mapboxSearchBoxSource } from "@/lib/discovery/mapbox-search-box";
 import { recGovSource } from "@/lib/discovery/rec-gov";
 import { foursquareSource } from "@/lib/discovery/foursquare";
 import { usfsSource } from "@/lib/discovery/usfs";
@@ -50,7 +51,12 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
 };
 const CORRIDOR_MI = 10;
 const FEDERATED_BUFFER_M = 16000;
+// Mapbox Search Box heads the list as the fuel-only provider. Google's
+// TYPES_BY_CATEGORY.fuel was emptied 2026-08-25 so fuel comes only from
+// Mapbox; other categories still come from Google/FSQ/rec-gov/USFS/BLM. Head
+// position is for dedupe-canonical (see the mirror comment in resolve-places.ts).
 const LIVE_SOURCES = [
+  mapboxSearchBoxSource,
   googlePlacesSource,
   recGovSource,
   foursquareSource,

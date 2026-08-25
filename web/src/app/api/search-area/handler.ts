@@ -25,6 +25,7 @@ import { recGovSource } from "@/lib/discovery/rec-gov";
 import { foursquareSource } from "@/lib/discovery/foursquare";
 import { usfsSource } from "@/lib/discovery/usfs";
 import { blmSource } from "@/lib/discovery/blm";
+import { mapboxSearchBoxSource } from "@/lib/discovery/mapbox-search-box";
 import { search } from "@/lib/search";
 import { hydratePlacesByIds } from "@/lib/trip-browse/hydrate";
 import {
@@ -155,10 +156,16 @@ async function viaLegacy(
         ),
       );
       if (slideKeys.length === 0) return [];
+      // Mapbox Search Box heads the list as the fuel-only provider (2026-08-25);
+      // Google's TYPES_BY_CATEGORY.fuel was emptied so fuel comes only from
+      // Mapbox. Head position is for dedupe-canonical (mirror of the source
+      // list in resolve-places.ts). Non-fuel categories still fan out to
+      // Google/FSQ/rec-gov/USFS/BLM as before.
       return await deps.discover({
         bboxes: [bbox],
         categories: slideKeys,
         sources: [
+          mapboxSearchBoxSource,
           googlePlacesSource,
           foursquareSource,
           recGovSource,

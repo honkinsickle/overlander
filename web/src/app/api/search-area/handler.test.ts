@@ -155,8 +155,10 @@ test("flag off: category tiles fan out live over the mapped slide keys", async (
   // campground + rv_park both map to the 'camping' slide bucket (deduped).
   const dArg = discoverArg as { categories?: unknown; sources?: unknown[] } | null;
   assert.deepEqual(dArg?.categories, ["camping"]);
-  // The 5-source fanout order is preserved.
-  assert.equal((dArg?.sources ?? []).length, 5);
+  // The 6-source fanout order is preserved (mapbox added 2026-08-25 as the
+  // fuel-only provider; it's still in the list even when categories don't
+  // include fuel — its own query() short-circuits to [] in that case).
+  assert.equal((dArg?.sources ?? []).length, 6);
 });
 
 test("flag off: an all-overland category set makes NO live call, federated still runs", async () => {
