@@ -395,7 +395,7 @@ Every key present on the stored day `[queried TEST]`, traced to its setter in
 | `overnight` | `{ selected: { name: "Ruby's Inn", type: "lodge", … } }` | **LLM-authored**, name **audit-validated** (pool-hit or Google-resolved, else dropped). When grounded, the audit records `DayAudit.overnightRef` (the tile's canonical id) and the bake links it to its spine tile (below) `[2026-08-24]` |
 | `heroImage` | a `upload.wikimedia.org` Commons URL | **source-derived** — `attachHeroPhotos`, Wikipedia/Commons by destination name |
 | `corridorCities` | 2 nodes | **computed** — `deriveCorridorCities` over route geometry + bundled gazetteer |
-| `segmentSuggestions` | 5 tiles | **source-derived** — corpus rows and/or Google responses (§2). The tile matching `overnightRef` is flagged `isOvernight` + `curated` by `bake.ts:markOvernightTile` (identity, not name), so the overnight is featured + badged on the spine and the Camping block/prose line derive from it `[2026-08-24]` |
+| `segmentSuggestions` | 5 tiles | **source-derived** — corpus rows and/or Google responses (§2). The tile matching `overnightRef` is flagged `isOvernight` + `curated` by `bake.ts:markOvernightTile` (identity, not name), so the overnight is featured + badged on the spine and the Camping block/prose line derive from it. When the exact `mp:` ref misses, it falls back to the pool POI's `google_place_id` (`DayAudit.overnightGoogleId`) to reconcile a live-resolve `google:` tile for the same place — inert when the corpus row has no Google link `[2026-08-24]` |
 | `waypoints` | `[]` | **literal** — `itineraryToTrip` always sets `[]` |
 
 Two fields inside `overnight` deserve the distinction: `overnight.selected.name`

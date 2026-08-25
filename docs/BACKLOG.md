@@ -52,9 +52,16 @@ Remaining and still open:
   that represents the place (fold `mp:`, or endpoint/keyStop live-resolve
   `google:`) can differ or be absent — one day (Hope Valley) had the place on the
   spine as a `google:` endpoint tile while the overnight ref was the `mp:` id, so
-  it stayed unmarked. **Fix scope:** link by canonical place / coords /
-  `google_place_id` (not raw id) and/or synthesize a tile from the overnight's
-  grounded coords — crosses the audit→bake seam. Decision doc Follow-up 3 + 4.
+  it stayed unmarked. **PARTIAL FIX built (Follow-up 5):** `markOvernightTile`
+  now falls back to the pool POI's `google_place_id` (matching a `google:<id>`
+  or `placeId`-carrying tile) when the exact `mp:` ref misses. **But inert on
+  today's backcountry data** — `google_place_id` is RPC-join-sourced and **0 of
+  351** #283-corridor rows carry one `[queried TEST]`, so Hope Valley et al.
+  still don't mark. **Remaining to close it:** backfill `google_place_id`
+  (re-introduces Google + coverage gap — data-quality call), or name+proximity
+  reconciliation (fuzzy — confidence threshold is a product call). Tile synthesis
+  for the no-tile / layover case (Convict Lake) is a separate, out-of-scope
+  piece. Decision doc Follow-up 3–5.
   (The earlier name-collision hypothesis — 7 "Silver Strand" rows — does NOT
   bite: pool and fold agree on the single eligible `mp:54182e9b`.)
 - **Badge prominence (Q3)** — the "Overnight ·" affordance renders but is a

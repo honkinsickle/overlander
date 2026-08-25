@@ -84,6 +84,35 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (fix) — mp:/google: id reconciliation for overnight marking (correct, but inert on today's backcountry data)
+
+Newest truth. Branch `fix/overnight-id-reconciliation`, **stacked on #283 →
+#282 (both open)**. Code change + tests. Decision doc Follow-up 5.
+
+**Built (Adam's scope: id-linking only, no tile synthesis):** `markOvernightTile`
+takes a `googleId` — when the overnight's exact `mp:` ref matches no tile, it
+falls back to the pool POI's `google_place_id`, marking a tile whose id is
+`google:<gid>` or whose `placeId` is `<gid>`, in addition to and preferring the
+exact match (no double-mark). Plumbing: `PoolPOI.placeId` (from the corpus tile's
+`google_place_id`), `toPoolPOI` carries it, `DayAudit.overnightGoogleId`, `bake`
+threads it. Fixes the Follow-up 4 Day-4 / Hope Valley shape (pool-hit overnight
+whose place is on the spine as a live-resolve `google:` tile).
+
+⚠ **Does NOT fix the reported backcountry cases yet — measured why.**
+`master_place.google_place_id` is not a column; the corridor RPC joins it from a
+linked google source_record, and **0 of 351 rows on the #283 corridor carry one**
+(Hope Valley, Convict Lake, … all NULL) `[queried TEST]`. No bridge id → the fix
+is correct but **inert** on backcountry data; it activates once a pool row has a
+`google_place_id`. Reported, not shipped as a full fix. Does NOT paper over the
+separate no-tile gap (Convict Lake / layover) — test-locked.
+
+**Flagged, not built:** backfill `google_place_id` (re-introduces Google + a
+coverage gap for the off-grid places the corpus exists for — data-quality call),
+or name+proximity reconciliation (fuzzy — confidence threshold is a product
+call). Tile synthesis stays out per instruction.
+
+Gates: 149 itinerary tests pass; typecheck + build exit 0.
+
 ## 2026-08-24 (verify) — pool-hit overnight gap REPRODUCED live (dwell + backcountry); root cause broadened
 
 Newest truth. Branch `verify/overnight-dwell-backcountry`, **stacked on

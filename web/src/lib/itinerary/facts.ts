@@ -103,6 +103,12 @@ export type PoolPOI = {
    *  `[measured 2026-08-25]`. */
   hasPhoto: boolean;
   hasDescription: boolean;
+  /** The place's `google_place_id` when the corpus row carries one (the corridor
+   *  RPC surfaces it via a join to a linked google source_record; null for the
+   *  many corpus rows — esp. backcountry — with no Google link). Carried so a
+   *  pool-hit overnight can be reconciled to a live-resolve `google:` spine tile
+   *  for the same place (see `markOvernightTile`). NOT sent to the model. */
+  placeId?: string;
 };
 
 /** One baseline segment from segmentByPace (a pacing seed, not the final day). */
@@ -147,6 +153,7 @@ function toPoolPOI(p: BrowsePlace): PoolPOI {
     tags: p.overlanderTags ?? null,
     hasPhoto: Boolean(p.photoUrl),
     hasDescription: Boolean(p.description && p.description.trim()),
+    ...(p.placeId ? { placeId: p.placeId } : {}),
   };
 }
 

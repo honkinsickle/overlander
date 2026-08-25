@@ -103,3 +103,45 @@ test("markOvernightTile: ref matching no tile (off-corridor overnight) marks not
   const out = markOvernightTile(tiles, "google:notpresent", "note");
   assert.equal(out.filter((t) => t.isOvernight).length, 0);
 });
+
+// ── markOvernightTile: cross-scheme reconciliation (Follow-up 4 / #283 Day 4) ──
+// A pool-hit overnight's ref is `mp:…`, but the tile that represents the same
+// place on the spine may be a live-resolve `google:…` tile (from a keyStop /
+// endpoint). When the pool POI carries a google_place_id, mark that tile too —
+// in ADDITION to (and preferring) the existing exact-id match.
+
+test("markOvernightTile: mp: ref with no mp: tile marks the matching google: tile via googleId", () => {
+  const tiles = [tile("google:ChIJhope", "Hope Valley Campground"), tile("mp:other", "Other")];
+  const out = markOvernightTile(tiles, "mp:hopevalley", "creekside sites", "ChIJhope");
+  const marked = out.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0].id, "google:ChIJhope");
+  assert.equal(marked[0].curated, true);
+});
+
+test("markOvernightTile: googleId also matches a tile carrying that id as its placeId", () => {
+  const t = { ...tile("mp:z", "Hope Valley Campground"), placeId: "ChIJhope" };
+  const out = markOvernightTile([t], "mp:hopevalley", "note", "ChIJhope");
+  assert.equal(out.filter((x) => x.isOvernight).length, 1);
+  assert.equal(out[0].isOvernight, true);
+});
+
+test("markOvernightTile: exact ref wins — no double-mark when both an mp: tile and a google: tile exist", () => {
+  const tiles = [tile("mp:hopevalley", "Hope Valley Campground"), tile("google:ChIJhope", "Hope Valley Campground")];
+  const out = markOvernightTile(tiles, "mp:hopevalley", "note", "ChIJhope");
+  const marked = out.filter((t) => t.isOvernight);
+  assert.equal(marked.length, 1, "only the exact-ref tile is marked");
+  assert.equal(marked[0].id, "mp:hopevalley");
+});
+
+test("markOvernightTile: no ref tile and null googleId (backcountry) marks nothing — no paper-over", () => {
+  const tiles = [tile("mp:other", "Other")];
+  const out = markOvernightTile(tiles, "mp:convictlake", "note", null);
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
+
+test("markOvernightTile: googleId set but no tile carries it marks nothing", () => {
+  const tiles = [tile("mp:other", "Other")];
+  const out = markOvernightTile(tiles, "mp:x", "note", "ChIJnowhere");
+  assert.equal(out.filter((t) => t.isOvernight).length, 0);
+});
