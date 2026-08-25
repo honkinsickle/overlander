@@ -12,6 +12,119 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (scoping) — Interest-Category chips: scoping doc + A/B/C decided, no code
+
+### Session part 2 — A/B/C decided, D–H open, two flags surfaced
+
+- **A/B/C decisions arrived mid-session** (Adam) — recorded in
+  `docs/specs/interest-category-chips.md` §9 with reasoning: (A) `overnight`
+  end-to-end, not `hotel`; (B) guarantee gate covers 8 of 9 (all except
+  `interest`); (C) Option A guarantee-wins-strictly.
+- **B verification found two load-bearing caveats before writing "decided"** —
+  Adam had explicitly asked to check them, not build around. Both confirmed
+  `[read source 2026-08-25]`:
+  - **B.1 `fuel` in the gate is inert with today's mechanism.** Traced from
+    `pickAnchorStop` (`anchor-backfill.ts:131`) → `candidates: PoolPOI[]`
+    (`:116`) → `pool: facts.poolPOIs` at the caller
+    (`audit.ts:510-515`) → `preComputeFacts` (`facts.ts:167-257`) which folds
+    corpus-only via `fetchCorpusForSegment`/`fetchCorpusForPolyline` in
+    `bake-corridors.ts`. No `PlaceResolver` / Google / `fetch` in the backfill
+    path — `anchor-backfill.ts:11-13` comment is explicit. Adam's assumption
+    that "fuel resolves via Google Places live-resolve" describes the
+    LLM→audit path (`audit.ts:100-107` → `resolve.ts:19` `places:searchText`)
+    for LLM-emitted `keyStops` names, NOT the backfill. Fuel pool candidates
+    DO exist when corpus rows have `primary_category ∈ {gas_station,
+    ev_charging, truck_stop}` (`federated.ts:22`) — but those rows are absent
+    in the far-north/off-corridor regions the fuel-POI layer (per
+    `expedition-planner.md §8.5`) is meant to cover.
+  - **B.2 `overnight` in the gate DUPLICATES the existing overnight
+    mechanism.** LLM's overnight is a dedicated required per-day slot at
+    `schema.ts:281-295, :310`, grounded independently at `audit.ts:550-557`,
+    marked as the day's single `isOvernight` via `markOvernightTile` at
+    `bake.ts:282-290, :141-145`. A backfill pick, by contrast, lands as an
+    extra `KeyStop` on `day.keyStops` at `audit.ts:526-527`, is featured as a
+    curated card via `noteByRef` at `bake.ts:216-221`, and NEVER enters the
+    `overnightRef`/`markOvernightTile` path. If backfill picks a different
+    hotel/motel row than the LLM's overnight (three-row source pool per
+    `SLIDE_TO_PRIMARY_CATEGORY.overnight = [hotel, resort_hotel, motel]`,
+    `federated.ts:41`), the day carries TWO overnight-category features with
+    no dedupe — the anchor-covered test at `audit.ts:463-470` reads keyStop
+    coords only, not overnight coords.
+- **Both flags reported per the ask, not built around.** Written into the spec
+  §5.2 and §9 B as "resolved-with-caveats"; the implementation plan §11
+  defers wiring `fuel` and `overnight` chips into the selector until Adam
+  re-decides. Chips can render (disabled or with a caveat tooltip) without
+  blocking the other 6 categories.
+- **Implementation plan §11 added** — 10 steps, each labelled unblocked /
+  partially blocked / blocked, with the blocker-to-step map at the end.
+  Steps that can ship in a first PR without ANY of D–H: 2, 3, 4a, 8-scenic-
+  only, 9 (payload/state plumbing + `scenic` removal + flag scaffold). Steps
+  5 (audit-loop change), 6 (new selector), 7 (contention wiring) are all
+  blocked on D — cannot even prototype cleanly because the shape of
+  `missingGuaranteedCategories` diverges per D option.
+- **Convention: default is not decided.** The plan writes recommended
+  defaults for E (rank order), F (chip order/copy), G (Preferences fate), H
+  (prompt posture) so a reader can see the shape — but every recommendation
+  is labelled as such, and no code should ship the default silently.
+
+### Session part 1 — initial scoping doc
+
+- **Framing that changed the shape of the answer.** The ask read like "add a
+  chip row and wire it up," but tracing the four subsystems (wizard state,
+  payload schema, LLM prompt, backfill selector) surfaced two facts that
+  dominate design before any UI decisions matter, so the doc leads with them
+  rather than the UI. Both are `[read source 2026-08-25]`.
+- **The 9-category taxonomy exists in two canonical forms and the app
+  translates between them.** `Category` (display, `"hotel"`) at
+  `web/src/components/primitives/detail-card.tsx:58-67`; `SlideCategoryKey`
+  (data-fetch + generation pipeline, `"overnight"`) at
+  `web/src/lib/trip-browse/places.ts:7-16`. A wizard chip labelled `hotel`
+  reaching `pickAnchorStop` as the literal `"hotel"` will never match a pool POI
+  — `PoolPOI.category` is set from `BrowsePlace.category?: SlideCategoryKey` and
+  carries `"overnight"`. Bridge functions live at
+  `web/src/lib/trip-browse/palette.ts:48-63`. This is a decision the wizard
+  can't dodge — every downstream string check has an opinion.
+- **`OPENER_CATEGORIES` is a strict 5-of-9 subset** — excludes `interest`
+  ("junk drawer", explicit comment at `web/src/lib/itinerary/anchor-
+  backfill.ts:41-42`), `urban`, `fuel`, `overnight`/`hotel`. So four of the nine
+  categories in the assignment silently no-op through today's selector if the
+  guarantee shares that gate. If the guarantee uses its own broader gate, the
+  `interest` and `fuel` decisions get inherited from what were, at the time,
+  considered calls (interest's junk-drawer status, fuel's missing corpus layer).
+- **`scenic` as a Preferences chip has zero downstream enforcement.** Grepped
+  every consumer: it reaches the LLM as an array element on `payload.rig` and no
+  code path reads it. Removing it (per Adam's collision resolution) touches 5
+  files, none of which are DB or code that would silently break something
+  further. But **removal from `PREFERENCE_OPTIONS` will NOT drop existing seed
+  rigs** — three seeded vehicles at `web/src/lib/vehicles/repository.ts:24, 39,
+  54` still carry `"scenic"` in their `rig.preferences` array and will render as
+  unknown chips until edited. In-memory only, so purely a code cleanup.
+- **The 9-category vocabulary is never enumerated to the LLM today.** The
+  system prompt (`web/src/lib/itinerary/master-prompt.ts:15-111`) does not list
+  the nine; the model sees category strings only per-POI on
+  `payload.poolPOIs[].category`; and `keyStops[]` output schema imposes no
+  category enum. Whichever taxonomy form Adam picks, this feature is the first
+  time the vocabulary would be named to the model at all.
+- **No per-day facts sent to the LLM either.** `buildFactsMessage` sends
+  `{ params, rig, anchors, route, corridorCities, poolPOIs }` — trip-level.
+  Days are the LLM's own output; the audit derives per-day corridor membership
+  from `facts.corridorCities` via the day's polyline at `audit.ts:492-497`.
+  Points at where a "guaranteed categories" fact would land structurally.
+- **Wizard is a single flat page, not a stepper.** Despite the name
+  `ExpeditionWizard`, no `PlanStep` slice to fit into — the change is one new
+  `<Section>` inserted between `expedition-wizard.tsx:474` and `:477`.
+- **Referenced style templates don't exist.** The assignment named
+  `docs/specs/search-resolution.md` and `docs/specs/corridor-ranking.md` as
+  patterns; neither is in the repo `[grep]`. Style pattern taken from
+  `expedition-planner.md`, `state-parks-source-architecture.md`, and
+  `corridor-cities-spec.md`. Flagged in the spec front-matter.
+- **Product calls left in Adam's court, not decided:** taxonomy source of
+  truth (A), category gate (B), contention model — three options (C),
+  trip-wide vs per-city vs per-day granularity (D), rank order (E), UI
+  specifics (F), Preferences-as-a-whole (G), prompt posture (H). Build is
+  blocked on all eight. Full detail in `docs/specs/interest-category-chips.md`
+  §9.
+
 ## 2026-08-24 — notes-to-spine, then the overnight-marking chain (#278–#285)
 
 - **The notes-to-spine ask was two problems, not one (#278, merged).** Places

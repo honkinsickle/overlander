@@ -16,6 +16,57 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Interest-Category chips — A/B/C DECIDED, blocked on D–H + two verified caveats (2026-08-25)
+
+New wizard section between "Trip details" and "Your rig", 8 of the 9 taxonomy
+categories as multi-select chips (`interest` excluded, per B). Guarantee
+semantics = priority within the existing `MAX_BACKFILLS_PER_DAY = 2` cap
+(Option A: guarantee-first, per C). `overnight` is the label and the internal
+key (no `hotel↔overnight` translation, per A). Same PR also removes `scenic`
+from the `PREFERENCE_OPTIONS` soft chips — 5-file in-memory cleanup, no
+migration.
+
+Spec: `docs/specs/interest-category-chips.md` (PR #287, open). §11 in that spec
+is the piece-by-piece implementation plan with blocker-to-step map.
+
+### Decided 2026-08-25 (Adam)
+
+- **A** — `overnight` end-to-end (both wizard label and internal rep).
+- **B** — guarantee-selector's own broader gate: 8 of 9 categories (all except
+  `interest`). **Two caveats verified `[read source 2026-08-25]`, not built
+  around:** (B.1) `fuel` in the gate is INERT with today's mechanism —
+  backfill is `facts.poolPOIs`-only; fires only when corpus has
+  `gas_station`/`ev_charging`/`truck_stop` rows near an anchor. (B.2)
+  `overnight` in the gate DUPLICATES the existing overnight slot from
+  #279–#285 — a backfill overnight pick lands as an extra `KeyStop`, no
+  dedupe against the LLM's overnight. Adam's re-consideration of whether
+  `fuel`/`overnight` chips ship at all is a follow-up open call, tracked in
+  the spec §9 B.
+- **C** — Option A: guarantee wins strictly (`min(missing, cap)` first,
+  anchors fill remainder). Corridor coverage drops to zero on days with 2+
+  missing guaranteed categories — accepted as OK because it only happens when
+  the user opted in.
+
+### Still open (D–H)
+
+- **D. Granularity.** Trip-wide vs per-city vs per-day. Blocks the audit-loop
+  change (spec §11 steps 5, 6, 7).
+- **E. Rank order** inside the guarantee-selector. Partial blocker for step 6.
+- **F. UI shape** — chip order, icons, sub-copy, caveat tooltips for B.1/B.2.
+  Partial blocker for step 1 (safe to prototype, not ship).
+- **G. Preferences fate** — keep the other four soft chips, collapse, or
+  retire? Doesn't block a `scenic`-only removal (step 8).
+- **H. Prompt posture** — preference-to-weave vs stronger contract. Blocks the
+  system-prompt copy line (step 4b), not the payload plumbing (step 4a).
+
+### Unblocked in a first PR without any of D–H
+
+Spec §11 steps 2, 3, 4a, 8-scenic-only, 9 — payload/state plumbing plus
+`scenic` removal plus feature flag scaffold. Nothing user-visible fires until
+steps 5–7 land (D-gated).
+
+Not touched: no code, schema, DB, migrations, LLM runs, live generation.
+
 ## Notes-to-spine — overnight slice DONE; service stops remain (2026-08-24)
 
 Investigation (PR #278, `docs/decisions/notes-to-spine-gap.md`) found the gap is

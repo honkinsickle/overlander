@@ -1,4 +1,6 @@
-# STATE — branch `main` · 2026-08-24 (**newest truth: the notes-to-spine OVERNIGHT slice shipped and was then hardened across a chain of follow-ups; the overnight is now linked to its spine tile through THREE matching tiers, with one slice still parked.** `#279` (`1cb200e`) links a grounded overnight to its spine tile by IDENTITY (not a substring) — marks it `isOvernight`+`curated`, the Camping block derives from it, the redundant "Overnight —" prose line drops; desc-only/off-corridor → prose fallback. Follow-ups: a "tile missing" report was diagnosed as pre-deploy trips, **not a bug** (#280 `3a42746`), and #279 confirmed working live (#281 `060af08`); a real gap was found and reproduced live (#282 `8679a21`, #283 `783fe51`) — a pool-hit overnight whose place is on the spine under a DIFFERENT id (`google:` live-resolve) or missing from the per-day corpus fold entirely, so the `mp:` ref matches no tile; id-reconciliation via `google_place_id` was built but is **INERT on backcountry data** (0/351 #283-corridor rows carry one — those rows have no linked Google source) (#284 `53f551d`); and a **fuzzy name+proximity tier is OPEN as #285** (strict name subset ≥2 tokens AND ≤0.5 mi, closest wins, no-match→prose) — it closes the tile-present case (Hope Valley confirmed on real coords, 0.067 mi) but NOT the no-tile / layover case (Convict Lake — needs tile synthesis, parked). **The Logistics/Fuel/Reserve service-stop half of notes-to-spine is untouched** — prose-only, a separate product-gated decision (`docs/decisions/notes-to-spine-gap.md`). Two flagged product/UX calls stay open: the overnight badge is a subtle "Overnight ·" status prefix, and #285's 0.5 mi / name thresholds are chosen. `origin/main` tip **`53f551d` (#284)**; **#285 open**. Detail in the `## 2026-08-24` dated sections below and `docs/decisions/2026-08-24-overnight-spine-tile-link.md` (Follow-ups 1–6). The masthead immediately below (2026-08-23, resolver cutover) is STALE on position but preserved per this file's convention; the earlier key-stop backfill arc (#274–#276) has its own dated sections further down.)
+# STATE — branch `main` · 2026-08-25 (scoping) (**newest truth: still no code; the Interest-Category Chips scoping doc landed and A/B/C are now DECIDED, D–H still open; a piece-by-piece implementation plan (§11) records what's unblocked vs. still waiting.** Doc: `docs/specs/interest-category-chips.md` (PR #287, open on branch `scope-interest-category-chips`). **A** — `overnight` end-to-end (no `hotel↔overnight` translation, reasoning: "hotel" excludes campgrounds, which is most overnights). **B** — guarantee-selector gets its OWN broader gate covering 8 of 9 categories (`camping, urban, scenic, food, oddity, attraction, overnight, fuel`), `interest` never shown. **C** — Option A "guarantee wins strictly" (guarantee-first fills up to `min(missing, cap)`, corridor anchors serve the remainder). **⚠ Two flags surfaced during verification `[read source 2026-08-25]`:** (B.1) `fuel` in the gate is INERT with today's mechanism — `pickAnchorStop`/`pickBackfillStops` iterate `facts.poolPOIs` only and never reach `PlaceResolver`/Google (`anchor-backfill.ts:11-13` explicit), so a fuel guarantee only fires when the corpus has `primary_category ∈ {gas_station, ev_charging, truck_stop}` (`federated.ts:22`) rows near an anchor — Adam's "resolves via Google Places live-resolve" assumption describes the LLM→audit path (`audit.ts:100-107` → `resolve.ts:19`) for LLM-emitted `keyStops`, not backfill; (B.2) `overnight` in the gate DUPLICATES the existing overnight mechanism — the LLM overnight is a dedicated per-day slot (`schema.ts:281-295, :310`) grounded independently and marked as the day's single `isOvernight` via `markOvernightTile` (`bake.ts:282-290, :141-145`), while a backfill pick lands as an extra `KeyStop` (`audit.ts:526-527`) with no dedupe against the overnight slot. **Both flags reported, not built around** — recommend Adam re-decide whether `fuel`/`overnight` chips ship at all. **D still blocks the audit-loop change (steps 5–7); E, F, G, H block partial pieces.** Steps that can ship today without any of D–H: 2/3/4a/8-scenic-only/9 (payload plumbing + scenic removal + flag). `origin/main` tip unchanged at **`1fda7de` (#286)**; PR #287 grows in place. The masthead immediately below (2026-08-24, notes-to-spine chain) remains authoritative on last shipped code position.)
+
+ and was then hardened across a chain of follow-ups; the overnight is now linked to its spine tile through THREE matching tiers, with one slice still parked.** `#279` (`1cb200e`) links a grounded overnight to its spine tile by IDENTITY (not a substring) — marks it `isOvernight`+`curated`, the Camping block derives from it, the redundant "Overnight —" prose line drops; desc-only/off-corridor → prose fallback. Follow-ups: a "tile missing" report was diagnosed as pre-deploy trips, **not a bug** (#280 `3a42746`), and #279 confirmed working live (#281 `060af08`); a real gap was found and reproduced live (#282 `8679a21`, #283 `783fe51`) — a pool-hit overnight whose place is on the spine under a DIFFERENT id (`google:` live-resolve) or missing from the per-day corpus fold entirely, so the `mp:` ref matches no tile; id-reconciliation via `google_place_id` was built but is **INERT on backcountry data** (0/351 #283-corridor rows carry one — those rows have no linked Google source) (#284 `53f551d`); and a **fuzzy name+proximity tier is OPEN as #285** (strict name subset ≥2 tokens AND ≤0.5 mi, closest wins, no-match→prose) — it closes the tile-present case (Hope Valley confirmed on real coords, 0.067 mi) but NOT the no-tile / layover case (Convict Lake — needs tile synthesis, parked). **The Logistics/Fuel/Reserve service-stop half of notes-to-spine is untouched** — prose-only, a separate product-gated decision (`docs/decisions/notes-to-spine-gap.md`). Two flagged product/UX calls stay open: the overnight badge is a subtle "Overnight ·" status prefix, and #285's 0.5 mi / name thresholds are chosen. `origin/main` tip **`53f551d` (#284)**; **#285 open**. Detail in the `## 2026-08-24` dated sections below and `docs/decisions/2026-08-24-overnight-spine-tile-link.md` (Follow-ups 1–6). The masthead immediately below (2026-08-23, resolver cutover) is STALE on position but preserved per this file's convention; the earlier key-stop backfill arc (#274–#276) has its own dated sections further down.)
 
 # STATE — branch `main` · 2026-08-23 (later) (**newest truth: ALL FOUR originally-planned place-data surface cutovers are COMPLETE or resolved-as-not-needed; `origin/main` tip is `b227e65` (#269).** The read-surface half of the resolver-consolidation ADR is done: **Search** cut over behind `SEARCH_AREA_USE_RESOLVER` (#260 `d62f660`; a real tier blocker on the bbox path was found + fixed first — #259 `9c212a6`); **Date Detail** behind `DATE_DETAIL_USE_RESOLVER` (#266 `a086cb8`), which needed a NEW resolver capability `enrichByGoogleId()` (#263 `bc2c9c2`) because `resolvePlaces()` couldn't serve bare Google ids — a different gap from the tier bug; **Day-scoped browse** behind `TRIP_BROWSE_USE_RESOLVER` (#269 `b227e65`), wired alongside the existing `USE_FEDERATED_POIS` (orthogonal, both stay); and **Day Column** needs NO cutover — it's a passive `Trip.days` renderer with no endpoint (#267 `4757067`), its real work deferred to a write-path/baking consolidation. **All three new flags default OFF — nothing from this arc is live in production.** Also today: Camping narrowed (#254 `f70dbd0`), Verified/Unverified tiers + corridor-RPC `description_source` (#255/#256 `476f052`/`d7faf5e`), auto-hydration decision (#257 `af97048`), plus a plan doc per surface (#258/#261/#262/#264/#265/#267/#268). **ADR step 4 (shared client cache) is now READY TO BUILD** — three read surfaces are cut over and each still runs its own per-route cache, the redundancy step 4 removes; tracked in BACKLOG. See `## 2026-08-23` below. **⚠ The masthead immediately below is STALE only on its "Next work is the Search cutover — planned, not started" line** — that whole arc is now done; its technical description of the #254–#257 state is preserved verbatim.)
 
@@ -85,6 +87,76 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-25 (scoping) — Interest-Category chips: doc landed; A/B/C decided; D–H open; two flags surfaced
+
+Newest truth. Branch `scope-interest-category-chips` off `origin/main`
+(`1fda7de`, #286). **Docs only — no code, no schema, no DB access.** PR #287
+(open, grows in place across two commits — initial scoping, then A/B/C
+decisions + implementation plan §11). Deliverable:
+`docs/specs/interest-category-chips.md`.
+
+**Feature framing:** a new "Interest categories" `<Section>` in the trip-creation
+wizard, between "Trip details" and "Your rig", with all 9 taxonomy categories
+(camping, urban, scenic, food, fuel, hotel, oddity, attraction, interest) as
+multi-select chips. Selection = "guaranteed" the category appears — but as
+**priority within the existing `MAX_BACKFILLS_PER_DAY = 2` cap
+(`web/src/lib/itinerary/anchor-backfill.ts:205` `[read source 2026-08-25]`), NOT
+an additional budget.** Same slots serve both corridor-city backfill (#276) and
+category-miss backfill.
+
+**Same feature resolves a naming collision:** `scenic` today is one of five
+`PREFERENCE_OPTIONS` soft chips (`web/src/lib/plan/expedition.ts:91-97` `[read
+source 2026-08-25]`) that reach the LLM as a raw JSON array and are read by
+**nothing downstream** (§3 of the spec). It becomes a category with guarantee
+semantics in the new section and comes out of Preferences. Removal touches 5
+files (`expedition.ts:91-97`, `types.ts:32-34`, `repository.ts` three seed rigs
+at `:24,39,54`, `expedition-planner.md:274`), all in-memory / doc-only —
+no migration.
+
+**Two surprises the trace surfaced that dominate the design space:**
+- The 9-category taxonomy exists in **two canonical forms** the app translates
+  between: `Category` (display, `"hotel"`, `web/src/components/primitives/detail-card.tsx:58-67`)
+  vs `SlideCategoryKey` (data-fetch + pipeline, `"overnight"`,
+  `web/src/lib/trip-browse/places.ts:7-16`) `[read source 2026-08-25]`. **A
+  resolved (Adam picked `overnight` end-to-end, no translation.**
+- **`OPENER_CATEGORIES` (`anchor-backfill.ts:45-51`) is a strict subset of 5 of
+  9** — excludes `interest` (explicit "junk drawer" comment `:41-42`), `urban`,
+  `fuel`, `overnight`/`hotel`. **B resolved: guarantee-selector uses its own
+  broader gate covering 8 of 9 (all except `interest`).**
+
+**A/B/C DECIDED 2026-08-25 (Adam):**
+- **A** — `overnight` end-to-end. No `hotel↔overnight` translation. Reasoning:
+  "hotel" excludes campgrounds, which is most overnights.
+- **B** — guarantee-selector's own broader gate, 8 of 9 categories. `interest`
+  never shown as chip. **⚠ Two flags verified `[read source 2026-08-25]`, not
+  built around:** (B.1) `fuel` in the gate is INERT with today's mechanism —
+  backfill is `facts.poolPOIs`-only (`anchor-backfill.ts:11-13` explicit),
+  never calls `PlaceResolver`/Google; fires only when corpus has
+  `primary_category ∈ {gas_station, ev_charging, truck_stop}` near an anchor.
+  (B.2) `overnight` in the gate DUPLICATES the existing overnight mechanism —
+  LLM's overnight is a dedicated per-day slot (`schema.ts:281-295, :310`)
+  grounded independently and marked as the day's single `isOvernight` via
+  `markOvernightTile` (`bake.ts:282-290`); a backfill overnight pick lands as
+  an extra `KeyStop` with no dedupe. Recommend Adam re-decide whether
+  fuel/overnight chips ship at all.
+- **C** — Option A: guarantee wins strictly (`min(missing, cap)` first, anchors
+  fill remainder). Corridor coverage can drop to zero on a day with 2+ missing
+  guaranteed categories — accepted as OK because it only happens when the user
+  opted in.
+
+**D–H still open, 5 decisions:** trip-wide vs per-city vs per-day (D),
+selector rank order (E), UI shape (F), Preferences-as-a-whole (G), prompt
+posture (H). See spec §11 for the piece-by-piece implementation plan and
+blocker-to-step map. **Steps that can ship without any of D–H:** payload
+plumbing (steps 2/3/4a), `scenic` removal (step 8 scenic-only), flag
+scaffold (step 9). All other steps depend on at least one of D–H.
+
+**Not verified:** no LLM run, no live generation, no DB read this session. This
+is a scoping doc, style-matched to `docs/specs/expedition-planner.md` and
+`corridor-cities-spec.md`. The assignment referenced `search-resolution.md` and
+`corridor-ranking.md` as pattern templates; neither exists in the repo
+`[grep 2026-08-25]` — flagged in the spec front-matter.
 
 ## 2026-08-24 (fix) — fuzzy name+proximity tier closes the tile-present overnight gap
 
