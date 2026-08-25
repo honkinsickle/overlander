@@ -1,5 +1,45 @@
 # Backlog — open work
 
+## `preComputeFacts` → `resolvePlaces()` migration — deferred (2026-08-25)
+
+The trip-generation pool-fetch (`fetchCorpusForSegment` /
+`fetchCorpusForPolyline` in `web/src/lib/trips/bake-corridors.ts`) runs
+parallel to `resolvePlaces()`'s corpus-fetch (`fetchFederatedPois` in
+`web/src/lib/trip-browse/federated.ts`), both hitting the same
+`pois_along_corridor` RPC with different args and downstream composition.
+Migrating `preComputeFacts` to route through `resolvePlaces()` would
+unify them at the client-wrapper layer (the RPC itself is already the
+shared substrate). Deferred, blocked on:
+
+1. **Polyline-scope capability gap.** `resolvePlaces()` day-corridor
+   scope takes only `{start: Coord, end: Coord}` — a 2-point segment.
+   But `preComputeFacts` fetches BOTH per-segment folds AND a
+   route-following polyline fold (`facts.ts:225-238`) with the
+   downsampled route geometry. The comment at `facts.ts:213-218` names
+   the Cassiar fuel pumps as the canonical case — on Hwy 37 but
+   14–24 mi off the straight chord, so the 16 km chord buffer misses
+   them. Extending `resolvePlaces()` day-corridor to accept an
+   arbitrary polyline (or adding a new scope) is required before
+   `preComputeFacts` can route through it losslessly.
+
+2. **Suppression-filter parity unverified.** `fetchCorpusForPolyline`
+   applies `isSuppressedCategory(r.primary_category)` client-side
+   (`bake-corridors.ts:132`) to drop standalone amenities
+   (dump_station, water, toilet, etc.). The resolver-mediated path
+   funnels through `mapMasterPlaceRow` in `federated.ts:271`; whether
+   the same suppression filter applies there — or whether
+   `preComputeFacts`-via-resolver would let suppressed rows through —
+   is unverified this session and needs confirming before any swap.
+
+Not in scope for the guarantee-selector build (spec §11 steps 5/6/7).
+`pickAnchorStop`, `pickGuaranteedStop`, and every pool-consuming
+selector already take `pool: PoolPOI[]` as an input parameter and don't
+touch the fetch layer — this migration is upstream of them, and can
+happen without changing selector code once the two blockers above
+resolve.
+
+Flagged from this session's investigation; not from a landed PR.
+
 ## TEST-only sign-in bypass — SHIPPED, one open thread (2026-08-25)
 
 Additive "Continue as seed test user" button on `/auth/sign-in`. Structural
