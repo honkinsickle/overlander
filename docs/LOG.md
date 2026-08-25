@@ -12,6 +12,52 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (wrap) — interest-category-chips arc: D-brief filed, migration finding logged; no code shipped this session
+
+- **What landed this session** = one working file staged into main + one
+  BACKLOG entry. No code changes. Fresh branch `feat/guarantee-selector`
+  was cut off `origin/main` for the guarantee-selector build (spec §11
+  steps 5/6/7), then paused before any code was written.
+- **`docs/specs/interest-category-chips-D.md`** — new. A three-option
+  analysis (D-A per-day / D-B per-city / D-C trip-wide) of the
+  granularity decision blocking spec §11 steps 5/6/7. Written as a
+  review-first brief, not an ADR — its own header carries `Status:
+  AWAITING PICK. Not committed to any branch.` Recommendation in §6 is
+  D-A (per-day) with confidence flagged as medium-high on the reasoning,
+  low on the calibration (no measurement of how often trips already
+  cover user-selected categories via LLM output).
+- **BACKLOG addition: `preComputeFacts` → `resolvePlaces()` migration.**
+  Investigation this session confirmed the trip-generation pool-fetch
+  (`fetchCorpusForSegment`/`fetchCorpusForPolyline` in
+  `web/src/lib/trips/bake-corridors.ts`) runs a parallel corpus-fetch
+  path to `resolvePlaces()`'s corpus half (`fetchFederatedPois`) — both
+  hitting the same `pois_along_corridor` RPC with different args and
+  downstream composition. Migration blocked on (i) `resolvePlaces()`
+  day-corridor scope taking only `{start, end}` 2-point coords, not the
+  arbitrary-polyline route-following geometry `preComputeFacts` uses to
+  catch POIs that curve >16km off the chord (Cassiar case, per
+  `facts.ts:213-218` comment); (ii) suppression-filter parity unverified
+  between the two paths.
+- **Small correction to spec §11's phrasing, discovered while re-reading
+  the loop for the D-brief:** §11 step 5 says "the loop shape differs
+  meaningfully per option" (per D-A / D-B / D-C). Actually reading
+  `pickBackfillStops` at `anchor-backfill.ts:241-267`, all three options
+  keep the per-day iteration — what differs is where the missing-set
+  lives (day-scoped vs anchor-scoped vs trip-scoped). §11's conclusion
+  still stands (the Set shape diverges enough that prototyping one
+  wouldn't cleanly transfer), but the phrasing overstates the code diff.
+  Noted in the D-brief's appendix.
+- **Not committed, not written this session** — the guarantee-selector
+  ADR, the `pickGuaranteedStop` implementation, the audit-loop changes
+  for spec §11 steps 5/6/7. All named in a task that was interrupted
+  before any code was written.
+- **Dropped from this wrap** — three investigation reports (fuel-note
+  gap near Truckee; six non-fuel categories chip→generation wiring;
+  `pickAnchorStop` data source vs `resolvePlaces()`). Session-
+  conversation only, no repo artifact backs them beyond the BACKLOG
+  entry above and the D-brief. Findings are recoverable from the code
+  they cite if needed.
+
 ## 2026-08-25 (build) — TEST-only sign-in bypass to unblock dev workflows
 
 - **Started with investigation-first per Adam's Step 1.** STATE.md had
