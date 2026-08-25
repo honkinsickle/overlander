@@ -16,6 +16,34 @@ thing worked, it moves into STATE.md §Queued.
 > `six_state_footprint()`, −9 Idaho +2 San Juan, 16,661→16,654) landed as **#209**;
 > the `promote.ts` `DEFAULT_BATCH_SIZE 500 → 25` + calibration fix landed as **#210**.
 
+## Interest-Category chips — SCOPED, blocked on 8 product decisions (2026-08-25)
+
+New wizard section between "Trip details" and "Your rig", all 9 taxonomy
+categories as multi-select chips, guarantee semantics = priority within the
+existing `MAX_BACKFILLS_PER_DAY = 2` cap (NOT additive). Same PR also removes
+`scenic` from the `PREFERENCE_OPTIONS` soft chips (naming collision) — 5-file
+in-memory cleanup, no migration.
+
+Scoping doc: `docs/specs/interest-category-chips.md`. Build blocked on the eight
+decisions in §9 (A–H) — most-load-bearing first:
+
+- **A. Two-canonical-taxonomies.** `Category` (display, `"hotel"`) vs
+  `SlideCategoryKey` (pipeline, `"overnight"`). Chip label `hotel` reaching
+  the selector as `"hotel"` never matches a pool POI. Decide user-facing label
+  vs internal representation and where the translation lives.
+- **B. Category gate.** `OPENER_CATEGORIES` excludes 4 of the 9 (`interest`,
+  `urban`, `fuel`, `overnight`/`hotel`). Does the guarantee-selector share it
+  (guarantee unenforceable for those four) or use its own?
+- **C. Contention model.** Three options (guarantee-first, guarantee-in-slack,
+  interleave/merit) for how a guarantee-miss and a corridor-anchor-miss share
+  the same 2-slot cap on the same day. No pick.
+- **D–H.** Trip-wide vs per-city vs per-day; rank order; UI specifics
+  (chip order, icons, `interest` visibility, sub-copy); Preferences-as-a-whole
+  (keep / collapse / retire); prompt posture (preference-to-weave vs stronger
+  contract).
+
+Not touched: no code, schema, DB, migrations, LLM runs, live generation.
+
 ## Notes-to-spine — overnight slice DONE; service stops remain (2026-08-24)
 
 Investigation (PR #278, `docs/decisions/notes-to-spine-gap.md`) found the gap is
