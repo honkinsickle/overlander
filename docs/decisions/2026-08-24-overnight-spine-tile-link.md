@@ -129,3 +129,57 @@ Where `isOvernight` is set, the affordance is the `pickStatus` "Overnight ·"
 status-line prefix from #279 — subtle, and possibly not distinct enough from an
 ordinary key stop. Whether it needs a stronger badge/icon is the same open UX
 question already logged above; not decided here.
+
+---
+
+## Follow-up 2 (2026-08-24) — live-generation confirmation
+
+Ran a real generation on the dev server's #279 code (LLM spend approved) to
+confirm the fix end-to-end and probe the residual. Method: drove the real
+`preComputeFacts → generateAndAudit → bakeGeneratedDays` pipeline via a script
+against **TEST** (service-role, API keys injected from `.env.local`, hard
+TEST-only assertion), inspecting the transient `day.audit.overnightRef` directly;
+persisted one throwaway reference slug for a browser render, then deleted it.
+Route: San Diego → Los Angeles, 3 days, beach-camping objective.
+
+**#279 works end-to-end — CONFIRMED.** Both overnights (San Elijo State Beach
+day 1, San Onofre State Beach day 2) got `overnightRef` set (live-resolve,
+`google:<placeId>`), the ref **matched the baked tile by id**, and that tile
+carried `isOvernight=true` + `curated=true`. In the rendered day view: the
+overnight is featured as a Key Stop with an "Overnight · …" status, the **Camping
+briefing block derives from the tile**, the redundant **"Overnight —" notes line
+is gone**, and there is **one** card per place. So the earlier "missing" report
+was pre-#279-deploy trips (per #280), not a defect.
+
+**Silver Strand residual — does NOT manifest** (but stays theoretically open).
+Direct probe: despite **7** `master_place` rows named "Silver Strand", the
+generation pool surfaced exactly **one** eligible entry (`mp:54182e9b`, the
+campground) and the Coronado corridor fold surfaced the **same** id — they agree,
+so a pool-hit Silver Strand overnight would match `[queried TEST 2026-08-24]`.
+Eligibility filtering (the pool query + `pois_along_corridor` exclusions of
+land_status/boundary rows) collapses the collision. **Caveat:** the live LLM
+chose *live-resolve* overnights (immune by construction), so a pool-hit overnight
+being marked was not directly observed live — the id agreement plus
+`bake-overnight-integration.test.ts` cover that path. **If it ever bites**, the
+divergence would be the trip-wide pool (`preComputeFacts`) vs the per-day fold
+(`pois_along_corridor`) selecting *different* rows for one name; a fix would make
+both key on the same canonical id, or ground the overnight with geographic
+disambiguation rather than name alone. Flagged, not fixed.
+
+**Badge prominence (Q3) — renders, but subtle (screenshot-confirmed).** The
+overnight card is visually identical to any Key Stop card (photo, amber title,
+"yoTrippin Verified ★ rating", green-dot status line, Details →); the ONLY
+differentiator is the leading text "Overnight ·" in the same gray status-line
+styling as an ordinary key-stop note. No distinct color, icon, badge, or border.
+This matches the original "reads as a normal verified card" report. Whether to
+strengthen it (a colored badge / icon / dedicated node style) is a **UX call —
+flagged, not decided.**
+
+**Minor data-cleanliness (new):** the overnight is usually the same place as the
+day's *endpoint* (and sometimes also a key stop), so `resolvedPlaces` carries
+2–3 same-id entries (`where:"endpoint"` + `"overnight"` [+ `"keyStop"`]) → 2–3
+same-id tiles in the persisted `segmentSuggestions`, all flagged `isOvernight`.
+**The render dedupes by id** (`byId` / `curatedPicks` Maps in
+`day-detail-corridor.tsx`), so exactly one card shows — harmless visually, but
+messy stored data. A tidy-up would dedupe `resolvedPlaces`/tiles by id in
+`bake.ts`. Flagged, not fixed.
