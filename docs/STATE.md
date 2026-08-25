@@ -84,6 +84,32 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (verify) — pool-hit overnight gap REPRODUCED live (dwell + backcountry); root cause broadened
+
+Newest truth. Branch `verify/overnight-dwell-backcountry`, **stacked on
+`verify/new-shady-rest-timing` (#282, not yet merged)**. Docs only, no
+production code. Live generation on #279 code (LLM spend approved), TEST. Full
+write-up: decision doc Follow-up 4.
+
+Ran Bishop → Mammoth (dwell) → South Lake Tahoe with an off-highway-campground
+objective to trigger #282's risk cases. **All 5 overnights were pool-hits;
+2 marked, 3 not** (computed this run):
+- **Marked:** Twin Lakes (day 3), Fallen Leaf (day 5) — pool-hit, tile in the
+  day's fold.
+- **Fold-miss (matches #282):** Convict Lake on day 1 AND the day-2 **layover** —
+  the predicted dwell-day trigger, reproduced.
+- **NEW sub-case (day 4, Hope Valley):** the place IS on the spine but as a
+  live-resolve **`google:` tile** (the endpoint), while the overnight grounded
+  pool-first to the **`mp:` id** → id-scheme mismatch → unmarked.
+
+**Root cause broadened:** the overnight's ref id (pool-first `mp:`) and the id of
+the tile that actually represents the place (per-day fold `mp:`, or endpoint/
+keyStop live-resolve `google:`) can **differ or be absent** — independent paths,
+different id schemes. #279 marks only when they coincide. A fix links by
+canonical place / coords / `google_place_id` (not raw id) and/or synthesizes a
+tile from the overnight's grounded coords — crosses the audit→bake seam.
+**Flagged, not fixed.**
+
 ## 2026-08-24 (verify) — "New Shady Rest missing": timing for that trip, but a REAL pool-hit gap found
 
 Newest truth. Branch `verify/new-shady-rest-timing` off `origin/main`. Docs only,
