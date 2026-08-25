@@ -1,5 +1,24 @@
 # Backlog — open work
 
+## TEST-only sign-in bypass — SHIPPED, one open thread (2026-08-25)
+
+Additive "Continue as seed test user" button on `/auth/sign-in`. Structural
+PROD prevention (URL match + `NODE_ENV`). Google sign-in path unchanged.
+Full decision: `docs/decisions/2026-08-25-test-only-signin-bypass.md`.
+
+**Open thread — was flagged in STATE.md, discharged by this work:** the
+"uncommitted dev-only email+password sign-in" note in STATE.md
+(2026-08-24, 2026-08-25) can be removed — that work was never
+committed anywhere accessible, and this PR supersedes the intent. When
+this PR merges, the STATE.md flag should retire.
+
+**Followup consideration (not a defect):** if the fixture password
+`seed-pw-manual-edit-8471` ever needs to change, three files change
+together: `web/scripts/seed-test-user.ts:15` (source of truth) +
+`web/src/app/auth/actions.ts` (the bypass action) +
+`web/scripts/mint-dev-session.ts` (cookie-injection fallback).
+Documented in the decision doc's Consequences section.
+
 ## Fuel × Google — three residual paths after the Mapbox browse-source swap (2026-08-25)
 
 The compliance-driven fuel swap (see
