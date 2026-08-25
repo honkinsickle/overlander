@@ -84,6 +84,32 @@ later entry corrects an earlier one and the earlier one stays.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
 
+## 2026-08-24 (verify) — overnight link CONFIRMED live; badge subtle; Silver Strand collision doesn't bite
+
+Newest truth. Branch `verify/overnight-live-generation` off `origin/main`. No
+production code changed — docs only. Ran a **real generation** on #279 code (LLM
+spend approved) against TEST to confirm the fix end-to-end. Full write-up:
+`docs/decisions/2026-08-24-overnight-spine-tile-link.md` (Follow-up 2).
+
+- **#279 works end-to-end — CONFIRMED.** SD→LA coastal gen: both overnights
+  (San Elijo, San Onofre) got `overnightRef` (live-resolve), matched their baked
+  tile by id, marked `isOvernight`+`curated`, featured on the spine; the Camping
+  block derives from the tile, the "Overnight —" notes line is dropped, one card
+  per place. The earlier "missing" was pre-#279-deploy trips (#280).
+- **Silver Strand residual — does NOT manifest.** 7 `master_place` "Silver
+  Strand" rows, but the pool and the Coronado fold both surface the single
+  eligible `mp:54182e9b` — they agree `[queried TEST]`. Caveat: the LLM picked
+  live-resolve overnights (immune), so a pool-hit overnight was not observed
+  marked live; covered by id-agreement + the integration test. Still
+  theoretically open; scope of a fix flagged in the doc.
+- **Badge prominence (Q3) — renders but SUBTLE (screenshot-confirmed).** The
+  overnight card is identical to a Key Stop card except the leading "Overnight ·"
+  text in the same gray status line — no distinct colour/icon/badge. UX call,
+  flagged not decided.
+- **New minor:** overnight == day endpoint ⇒ 2–3 same-id tiles all flagged
+  `isOvernight` in stored data; the render dedupes by id so one card shows.
+  Harmless visually; a `bake.ts` dedupe would tidy it. Flagged.
+
 ## 2026-08-24 (diagnosis) — "overnight tile missing" reported → pre-#279-deploy trips, not a code bug
 
 Newest truth. Branch `fix/overnight-tile-diagnosis` off `origin/main`. No
