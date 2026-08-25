@@ -12,6 +12,42 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (build) — interest-category chip UI (blocker F resolved)
+
+- **Task: build the wizard chip UI for the interest-category guarantee** that
+  #292 wired end-to-end but left dark (only the fuel checkbox existed).
+- **Flagged ambiguity RESOLVED before building.** The task asked whether
+  "overnight" in #292's exclusion meant `camping`+`hotel` combined, and whether
+  `camping`/`hotel` should get chips. Finding: `guaranteedCategories` is typed
+  `SlideCategoryKey[]`, and in that taxonomy **`overnight` IS the display
+  category `hotel`** — isomorphic via `palette.ts` (`overnight ↔ hotel`, the
+  data-fetch vs display split). So "overnight" is NOT camping+hotel; it is
+  exactly hotel. The backend gate `GUARANTEE_CATEGORIES` (anchor-backfill.ts)
+  acts on **6** categories: `scenic, food, oddity, attraction, camping, urban`.
+  **`camping` DOES act** (the task's worry was unfounded); only `hotel`
+  (=`overnight`, blocker B.2) and `interest` (junk drawer) are backend no-ops.
+- **Decision: render 6 chips, not the task's 8.** Showing `hotel`/`interest`
+  chips would silently no-op — the same "misleading row" the fuel PR avoided,
+  and consistent with every doc's "6 pool-side categories" framing. Deviation
+  from the task's "8 categories" flagged in the PR, BACKLOG, and the ADR.
+- **Built:** `web/src/lib/plan/guarantee-categories.ts`
+  (`GUARANTEE_CHIP_CATEGORIES`, 6 entries) + `guarantee-categories.test.ts`
+  (3 tests, TDD-first — drift-locks the chip set to the backend
+  `GUARANTEE_CATEGORIES` gate). Wizard "Interest categories" section now renders
+  a `SelectableChip` row (per-category `--cat-{key}-title` accent, multi-select)
+  above the existing fuel checkbox. `fuel` stays a checkbox (distinct
+  live-resolve semantics + cost caption). Layout fit 6 chips on one row cleanly —
+  no redesign.
+- **Live-verified on TEST via headless-Chrome CDP** (dev server 3210, minted
+  seed-owner session): all 6 chips render with labels (Scenic/Food/Camping/
+  Attraction/Oddity/Towns), all `onScreen` + **reachable** (`elementFromPoint` at
+  each chip center lands inside it, not occluded — the reachability lesson).
+  Real pixel-clicks toggled `guaranteedCategories`: scenic+camping → both
+  checked, others false (multi-select); toggling scenic off left camping checked
+  (independent). Screenshot captured. Gates: web typecheck + `next build` +
+  data typecheck all exit 0; 14 plan tests (incl. 3 new) + 37 anchor-backfill
+  pass.
+
 ## 2026-08-25 (build) — interest-category guarantee at D-B (per-city)
 
 - **Task: convert the D-decision brief to an ADR, then build spec §11 steps
