@@ -243,3 +243,46 @@ pool POI (coords + name), not just its id, to `bake` (today only
 spine bucketing, so: **flagged with scope, not implemented.** Whether an
 off-corridor overnight *should* be forced onto the spine at all (vs. left as the
 Camping/notes prose) is also a product call — flagged.
+
+---
+
+## Follow-up 4 (2026-08-24) — live reproduction of the pool-hit gap (dwell + backcountry)
+
+Ran a live generation on #279 code (LLM spend approved) deliberately targeting
+Follow-up 3's risk cases: Bishop → Mammoth (dwell 1 night = a layover day) →
+South Lake Tahoe, objective forcing dispersed/off-highway USFS campgrounds.
+**All five overnights grounded as pool-hits (`mp:` refs).** Per-day result
+(computed this run):
+
+| Day | Type | Overnight | ref | tile | isOvernight |
+|---|---|---|---|---|---|
+| 1 | drive | Convict Lake Campground | `mp:e97401d5…` | none in fold | ✗ |
+| 2 | **layover** | Convict Lake Campground | `mp:e97401d5…` | none in fold | ✗ |
+| 3 | drive | Twin Lakes Campground | `mp:96a77e1f…` | matched | ✓ |
+| 4 | drive | Hope Valley Campground | `mp:780e086d…` | present at a **different id** `google:ChIJ…` | ✗ |
+| 5 | drive | Fallen Leaf Campground | `mp:cf68537e…` | matched | ✓ |
+
+**Two marked, three unmarked — a clean live reproduction of the Follow-up 3 gap**,
+including the predicted **layover** trigger (Day 2: a dwell day's degenerate route
+yields no fold, so the overnight has no tile). Days 1–2 (Convict Lake) are the
+plain fold-miss: the pool has it, the day's fold does not, no tile carries the ref.
+
+**Refinement — the root cause is broader than "fold miss."** Day 4 (Hope Valley)
+is a NEW sub-case: the overnight place **is** on the spine, but as a live-resolve
+**`google:` tile** (from the day's *endpoint* resolution — `endPlace` was the
+campground), while the **overnight grounded pool-first to the `mp:` id**. Same
+place, two id schemes, so `markOvernightTile` (id-exact) doesn't connect them. So
+the real statement of the gap is: **the id the overnight ref carries (pool-first
+`mp:` from the audit) and the id of the tile that actually represents the place on
+the spine can differ or be absent, because overnight grounding (pool-first) and
+tile production (per-day fold `mp:` + endpoint/keyStop live-resolve `google:`) are
+independent paths with different id schemes.** #279 marks only when they coincide
+(Days 3, 5). This subsumes both the plain fold-miss (Follow-up 3) and the
+`mp:`-vs-`google:` mismatch seen here.
+
+**Not fixed — this only sharpens the fix scope.** A robust fix links the overnight
+to whatever tile represents its place regardless of id scheme (match by canonical
+place / coords / `google_place_id`, not just the raw ref id), and/or synthesizes a
+tile from the overnight's own grounded coords when none is present — both cross the
+audit→bake seam. Flagged, not implemented. Whether an off-corridor / layover
+overnight should be forced onto the spine at all stays a product question.

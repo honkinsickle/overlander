@@ -45,9 +45,16 @@ Remaining and still open:
   (prose fallback) even under #279. Confirmed live: `c64ebc1c` Day 2/3 (William
   Kent, Kaspian) — in the pool, absent from the day's fold, unmarked; while Big
   Reservoir (pool-hit, in fold) marked `[queried TEST]`. Live-resolve overnights
-  are immune (they synthesize a tile). **Fix scope:** synthesize + bucket a tile
-  from the pool POI when the fold misses it — crosses the audit→bake seam
-  (needs the overnight's coords/name, not just its id). Decision doc Follow-up 3.
+  are immune (they synthesize a tile). **Reproduced live again (Follow-up 4):**
+  Bishop→Mammoth(dwell)→Tahoe, all 5 overnights pool-hits, 2 marked / 3 not,
+  including the predicted **layover-day** trigger (Convict Lake) `[computed]`.
+  **Root cause broadened:** the ref id (pool-first `mp:`) and the id of the tile
+  that represents the place (fold `mp:`, or endpoint/keyStop live-resolve
+  `google:`) can differ or be absent — one day (Hope Valley) had the place on the
+  spine as a `google:` endpoint tile while the overnight ref was the `mp:` id, so
+  it stayed unmarked. **Fix scope:** link by canonical place / coords /
+  `google_place_id` (not raw id) and/or synthesize a tile from the overnight's
+  grounded coords — crosses the audit→bake seam. Decision doc Follow-up 3 + 4.
   (The earlier name-collision hypothesis — 7 "Silver Strand" rows — does NOT
   bite: pool and fold agree on the single eligible `mp:54182e9b`.)
 - **Badge prominence (Q3)** — the "Overnight ·" affordance renders but is a
