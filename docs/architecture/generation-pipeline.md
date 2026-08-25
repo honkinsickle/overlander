@@ -156,6 +156,22 @@ in three tiers `[read source]`:
   deduped **trip-wide**. Rationale + the measured defects:
   `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md` and
   `docs/decisions/2026-08-25-corridor-city-keystop-backfill.md`.
+- **Tier 2b (guarantee) — interest-category guarantee** (`pickGuaranteedStop`,
+  `anchor-backfill.ts`, added 2026-08-25, kill switch
+  `INTEREST_CATEGORY_GUARANTEE=false`, ON by default). Shares the SAME per-day
+  cap and the same block as the opener above, running **first** within it
+  (Option A). When the user selected pool-side interest categories
+  (`GenerationInput.guaranteedCategories ∩ GUARANTEE_CATEGORIES`), each anchor
+  the day passes (**decision D-B, per-city**) that lacks a selected category
+  near it gets one pool pick of that category — so the same category can be
+  featured at more than one city on a day. Same gates + rank as the opener but
+  over a WIDER gate that adds `urban` (the opener excludes it as a tautology; an
+  explicit guarantee is not). `fuel` (path A) and `overnight` (dedicated slot)
+  are excluded. Pool-only, no network. Recorded on `AuditReport.anchorBackfills`
+  with `guaranteed: true` + `category`. Rationale + the per-city choice, the
+  `urban`-gate decision, and the flagged consequences (cap saturation across
+  categories, rank-order default):
+  `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`.
 - **Tier 2 — ground or drop.** Every `keyStops[].name` and `overnight.name` goes
   through `groundReference`: **pool-first** (exact normalized-name match against
   `poolPOIs`, no Google spend), else **live-resolve** via `PlaceResolver`, else

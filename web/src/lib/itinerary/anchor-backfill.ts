@@ -51,6 +51,35 @@ const OPENER_CATEGORIES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Categories the interest-category GUARANTEE selector may surface — its OWN
+ * gate, deliberately WIDER than `OPENER_CATEGORIES`, resolving the `urban`
+ * question spec §5 / §9-B left open.
+ *
+ * The five openers PLUS `urban`. `urban` is excluded from `OPENER_CATEGORIES`
+ * because featuring a town under its own node is a tautology for an
+ * *unrequested* opener — but when the user EXPLICITLY guarantees `urban` that
+ * objection no longer holds; they asked for a town-flavoured stop. It still
+ * passes `isCityTautology`, so the guarantee surfaces a DISTINCT urban POI near
+ * the anchor, never the anchor town itself.
+ *
+ * Excluded, each for a recorded reason:
+ *   - `interest` — the junk-drawer bucket (same reason as `OPENER_CATEGORIES`).
+ *   - `fuel` — handled by the live-resolve path (`fuel-live-resolve.ts`), and
+ *     inert in this pool-only mechanism (spec §5.2 B.1). Stays out until B.1
+ *     resolves.
+ *   - `overnight` — would duplicate the dedicated per-day overnight slot the
+ *     #279–#285 chain owns (spec §5.2 B.2). Stays out until B.2 resolves.
+ */
+export const GUARANTEE_CATEGORIES: ReadonlySet<string> = new Set([
+  "scenic",
+  "food",
+  "oddity",
+  "attraction",
+  "camping",
+  "urban",
+]);
+
+/**
  * How close to the day's start anchor a candidate must sit.
  *
  * A CHOSEN CONSTANT, not a measured threshold. The intent is "somewhere you'd
@@ -145,6 +174,61 @@ export function pickAnchorStop(input: AnchorBackfillInput): PoolPOI | null {
   return candidates.sort((a, b) => rank(a, anchor) - rank(b, anchor))[0];
 }
 
+export type GuaranteedStopInput = {
+  /** `[lng, lat]` of the anchor (day start OR a mid-corridor city — D-B). */
+  anchor: [number, number];
+  /** Display label of the anchor, when known — rejects a city-tautology pick. */
+  anchorLabel?: string;
+  /** The palette the model itself was given (`facts.poolPOIs`). */
+  pool: PoolPOI[];
+  /** Refs already kept for this day — corpus ids on pool-hits, names on
+   *  live-resolves, plus anything already backfilled this day. */
+  keptRefs: ReadonlySet<string>;
+  /** The caller's day-corridor guard, applied unchanged. */
+  onCorridor: (coord: [number, number]) => boolean;
+  /** The outstanding guaranteed categories to satisfy AT THIS ANCHOR. A
+   *  candidate must fall in one of these AND clear `GUARANTEE_CATEGORIES`. An
+   *  empty set means nothing is outstanding here → always null. */
+  missingCategories: ReadonlySet<string>;
+};
+
+/**
+ * Pick one pool POI that satisfies an outstanding interest guarantee at this
+ * anchor, or null when nothing qualifies (the same null-rather-than-pad
+ * contract `pickAnchorStop` holds).
+ *
+ * Sibling to `pickAnchorStop`, NOT a replacement — same gates (dedupe,
+ * `isCityTautology`, `ANCHOR_NEAR_MI`, `onCorridor`) and the same `rank`, but
+ * over the broader `GUARANTEE_CATEGORIES` and filtered to categories the user
+ * actually selected and this anchor is missing. Pure — no I/O, no network; it
+ * reads only the in-memory pool (deliberately NOT `resolvePlaces()` —
+ * see the deferred BACKLOG item).
+ *
+ * ⚠ RANK ORDER (spec blocker E) is the spec's RECOMMENDED default, not an
+ * Adam pick: on-category (implicit — the filter admits only outstanding
+ * categories) → richness (`hasPhoto`/`hasDescription`, reusing `rank`) →
+ * proximity. Flagged in the decision doc; a one-line change if Adam wants a
+ * different order.
+ */
+export function pickGuaranteedStop(input: GuaranteedStopInput): PoolPOI | null {
+  const { anchor, anchorLabel, pool, keptRefs, onCorridor, missingCategories } = input;
+  if (missingCategories.size === 0) return null;
+
+  const candidates = pool.filter((p) => {
+    if (keptRefs.has(p.id) || keptRefs.has(p.name)) return false;
+    if (!p.category || !GUARANTEE_CATEGORIES.has(p.category)) return false;
+    // Only a category the user selected AND this anchor still misses.
+    if (!missingCategories.has(p.category)) return false;
+    // Even for a guaranteed `urban`, a town is not the thing to see in itself.
+    if (anchorLabel && isCityTautology(p.name, anchorLabel)) return false;
+    if (haversineMi(p.coords, anchor) > ANCHOR_NEAR_MI) return false;
+    return onCorridor(p.coords);
+  });
+  if (candidates.length === 0) return null;
+
+  return candidates.sort((a, b) => rank(a, anchor) - rank(b, anchor))[0];
+}
+
 /**
  * Lower is better: rating, then how well the row will actually RENDER, then
  * proximity.
@@ -212,12 +296,24 @@ export type BackfillPick = {
   kind: "start" | "corridor";
   /** Display label of the anchor (day start place, or corridor city name). */
   anchorLabel: string;
+  /** True when this pick satisfied a user-selected interest GUARANTEE (phase 1)
+   *  rather than a bare-anchor opener (phase 2). Observability only — both
+   *  carry the same strictly-positional `KeyStop.note`. */
+  guaranteed?: boolean;
+  /** The guaranteed category this pick satisfied, when `guaranteed`. */
+  category?: string;
 };
 
 export type BackfillAnchor = {
   coords: [number, number];
   label: string;
   kind: "start" | "corridor";
+  /** Outstanding guaranteed categories to satisfy at THIS anchor (decision
+   *  D-B, per-city). Absent/empty ⇒ this anchor runs the opener path only,
+   *  exactly as before the guarantee existed. Per-city means the SAME category
+   *  can appear on more than one anchor's set on a day, so it can be guaranteed
+   *  at each city passed — the density D-B was chosen for. */
+  missingCategories?: ReadonlySet<string>;
 };
 
 /**
@@ -243,25 +339,79 @@ export function pickBackfillStops(input: {
   pool: PoolPOI[];
   keptRefs: ReadonlySet<string>;
   onCorridor: (coord: [number, number]) => boolean;
+  /** Coords of stops the day ALREADY keeps, for the opener phase's bare-anchor
+   *  test. Defaults to `[]` (every anchor treated bare), so callers that
+   *  pre-filter anchors and every existing test are unaffected. When the
+   *  guarantee phase is used, pass the day's kept coords and the full
+   *  (unfiltered) anchor list — the opener phase does its own bare check so it
+   *  can see anchors the guarantee needs but the opener would have skipped. */
+  keptCoords?: readonly [number, number][];
+  /** Run the phase-2 opener backfill. Default true. Set false to run the
+   *  guarantee phase alone (opener kill switch, independent of the guarantee). */
+  includeOpeners?: boolean;
   max?: number;
 }): BackfillPick[] {
   const { anchors, pool, onCorridor } = input;
   const max = input.max ?? MAX_BACKFILLS_PER_DAY;
+  const includeOpeners = input.includeOpeners ?? true;
+  const keptCoords = input.keptCoords ?? [];
   const taken = new Set(input.keptRefs);
   const picks: BackfillPick[] = [];
+  const servedByGuarantee = new Set<BackfillAnchor>();
 
+  // ── Phase 1 — GUARANTEE wins the cap first (Option A, decision C). ─────────
+  // Per-city (decision D-B): each anchor carries its OWN missing set, so the
+  // same category can be guaranteed at more than one city on a day, up to the
+  // shared per-day cap. Each outstanding category at an anchor gets one pick
+  // attempt; a satisfied category threads its POI into `taken` so a later
+  // anchor can't re-feature the same place.
   for (const anchor of anchors) {
     if (picks.length >= max) break;
-    const poi = pickAnchorStop({
-      anchor: anchor.coords,
-      anchorLabel: anchor.label,
-      pool,
-      keptRefs: taken,
-      onCorridor,
-    });
-    if (!poi) continue; // nothing qualified here — the node stays bare
-    picks.push({ poi, kind: anchor.kind, anchorLabel: anchor.label });
-    taken.add(poi.id);
+    const missing = anchor.missingCategories;
+    if (!missing || missing.size === 0) continue;
+    for (const category of missing) {
+      if (picks.length >= max) break;
+      const poi = pickGuaranteedStop({
+        anchor: anchor.coords,
+        anchorLabel: anchor.label,
+        pool,
+        keptRefs: taken,
+        onCorridor,
+        missingCategories: new Set([category]),
+      });
+      if (!poi) continue;
+      picks.push({
+        poi,
+        kind: anchor.kind,
+        anchorLabel: anchor.label,
+        guaranteed: true,
+        category,
+      });
+      taken.add(poi.id);
+      servedByGuarantee.add(anchor);
+    }
+  }
+
+  // ── Phase 2 — corridor OPENERS fill any slots the guarantee left. ─────────
+  // Preserves the pre-guarantee behaviour exactly: an anchor is eligible when
+  // the day keeps nothing near it (bare vs the ORIGINAL `keptCoords`) and it
+  // wasn't already served by a guarantee pick; cross-anchor dedupe via `taken`.
+  if (includeOpeners) {
+    for (const anchor of anchors) {
+      if (picks.length >= max) break;
+      if (servedByGuarantee.has(anchor)) continue;
+      if (!anchorIsBare(keptCoords, anchor.coords)) continue;
+      const poi = pickAnchorStop({
+        anchor: anchor.coords,
+        anchorLabel: anchor.label,
+        pool,
+        keptRefs: taken,
+        onCorridor,
+      });
+      if (!poi) continue; // nothing qualified here — the node stays bare
+      picks.push({ poi, kind: anchor.kind, anchorLabel: anchor.label });
+      taken.add(poi.id);
+    }
   }
   return picks;
 }

@@ -40,6 +40,32 @@ resolve.
 
 Flagged from this session's investigation; not from a landed PR.
 
+## Interest-category guarantee (D-B) — open threads after the build (2026-08-25)
+
+The per-city guarantee mechanism SHIPPED (`pickGuaranteedStop` + two-phase
+`pickBackfillStops` + per-anchor missing computation). Decision:
+`docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`. Left
+open:
+
+- **Chip UI (blocker F).** The wizard has only the single `fuel` checkbox
+  today; the 6 pool-side guaranteed categories (`scenic`, `food`, `oddity`,
+  `attraction`, `camping`, `urban`) can't be selected from the UI — they reach
+  the audit only via `GenerationInput.guaranteedCategories`. The mechanism is
+  wired end-to-end but **dark from the wizard** until the chip row ships (spec
+  `docs/specs/interest-category-chips.md` §11 step 1, blocked on F).
+- **`fuel`/`overnight` in the guarantee gate (blockers B.1/B.2).** Both are
+  excluded from `GUARANTEE_CATEGORIES` per spec §11 step 6 — `fuel` is inert in
+  the pool-only path (handled by live-resolve path A), `overnight` would
+  duplicate the dedicated per-day slot. Revisit if/when B.1/B.2 resolve.
+- **Cross-category cap saturation.** Under the 2-slot cap, per-city + Option A
+  lets one earlier-selected category consume both slots at the first two cities
+  before a second category gets a turn (observed live: `[scenic, food]` →
+  2 scenic, 0 food). Inherent to the design; a future refinement could
+  round-robin categories before repeating one.
+- **Rank order (blocker E)** is the spec's recommended default (on-category →
+  richness → proximity), not an explicit Adam pick — a one-line change if a
+  different order is wanted.
+
 ## TEST-only sign-in bypass — SHIPPED, one open thread (2026-08-25)
 
 Additive "Continue as seed test user" button on `/auth/sign-in`. Structural
