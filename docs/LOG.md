@@ -75,6 +75,61 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   the app shouldn't import from `scripts/`; comment in both files
   names the pair so they change together if the password ever moves.
 
+## 2026-08-25 (build) — Mapbox Search Box replaces Google for fuel on the browse surfaces
+
+- **Framing: compliance-driven scope, not a general Google → Mapbox rewrite.**
+  Google Places on a non-Google map requires the Places UI Kit as a
+  compliant display path; Mapbox Search Box on a Mapbox map doesn't. Fuel is
+  moved to Mapbox on the web-client browse surfaces (`/api/trip-browse`,
+  `/api/search-area`) for that reason. Other 8 slide categories untouched.
+- **The pre-work sniff test paid off.** Grepped every existing source for
+  `"fuel"` / `gas_station` / `truck_stop`: only Google's
+  `TYPES_BY_CATEGORY.fuel = ["gas_station"]` matched (`[grep 2026-08-25]`).
+  Foursquare, rec-gov, USFS, BLM don't handle fuel. So emptying Google's
+  fuel entry cleanly removes fuel from Google's fanout — no other source is
+  a shadow provider.
+- **Sidestepped a flag-scope trap.** `TRIP_BROWSE_USE_RESOLVER` /
+  `SEARCH_AREA_USE_RESOLVER` are per-surface, not per-category. Flipping
+  them ON would move 8 other categories to the resolver path as a side
+  effect. Inventing per-category routing was explicitly forbidden in Step 3.
+  Answer: add `mapboxSearchBoxSource` to BOTH legacy `LIVE_SOURCES` AND
+  `DEFAULT_*_LIVE_SOURCES`, so fuel-via-Mapbox is identical on both paths
+  and the flag state doesn't matter for fuel. No per-category mechanism
+  invented.
+- **D7 resolution — kept `BrowsePlace.source` binary.** Adam's task
+  suggested "mapbox-live" as a possible new value on `BrowsePlace.source`.
+  I kept `BrowsePlace.source` at `"live" | "master_place"` (its existing
+  binary) and added `"mapbox"` to `SourceId` on `SourceResult.sourceId`
+  only. Rationale: `BrowsePlace.source` drives hydration eligibility and
+  cache-key behavior (coarse binary is load-bearing); per-source
+  attribution belongs on `sourceId`, where `SOURCE_LABEL` already reads it
+  for the "Sourced from Mapbox" tile mention. Documented in the SourceId
+  union comment so a future reader doesn't re-derive.
+- **NO npm dep added.** Considered `@mapbox/search-js-core`; rejected
+  because its abstractions (session tokens, suggest+retrieve two-step
+  flow, autocomplete) target a different flow than the category endpoint
+  I'm calling. Hand-rolled fetch is ~40 lines and clears
+  `web/CLAUDE.md`'s ask-before-dep bar without proportional benefit.
+  Flagged in the decision doc as the chosen tradeoff.
+- **Two residual Google-fuel paths flagged, not touched.** Free-text
+  search still assigns `"fuel"` to gas_station-typed results via
+  `categoryForGoogleTypes` — different UX (user typed a query). Corpus
+  ingester still writes Google `gas_station` to `master_place` — warehousing
+  is a separate compliance category. Both scoped separately.
+- **Path A (PR #288, `04e9855` fuel-live-resolve) still on Google.**
+  Explicit out-of-scope per Adam. Migration needs either a new
+  `resolvePlaces()` scope or a Mapbox resolver + tile-id-scheme rename.
+  Tracked in BACKLOG + STATE.md open-thread note.
+- **Handler-test regression caught + fixed.** Existing
+  `search-area/handler.test.ts:159` asserted 5 sources in the fanout;
+  now 6 (Mapbox added). One-line assertion update. No other test needed
+  a change — the handler tests DI at the `discover` seam and don't
+  introspect source-list contents beyond count.
+- **Local gate exit 0 on both workspaces.** 66 tests pass across
+  mapbox-search-box, resolve-places, and both handler test files. First
+  live invocation waits on someone hitting the browse surfaces with
+  `NEXT_PUBLIC_MAPBOX_TOKEN` set — not done this session.
+
 ## 2026-08-25 (build) — fuel-live-resolve: first BUILD out of the Interest-Category-Chips arc
 
 - **The scoping doc (PR #287) had already found this gap; Adam's decision

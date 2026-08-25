@@ -9,6 +9,7 @@ const SOURCE_LABEL: Record<SourceId, string> = {
   wikipedia: "Wikipedia",
   foursquare: "Foursquare",
   google: "Google",
+  mapbox: "Mapbox",
   usfs: "USFS",
   blm: "BLM",
   fixture: "Editorial",

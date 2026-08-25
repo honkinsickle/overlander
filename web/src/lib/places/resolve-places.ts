@@ -42,6 +42,7 @@ import { foursquareSource } from "@/lib/discovery/foursquare";
 import { recGovSource } from "@/lib/discovery/rec-gov";
 import { usfsSource } from "@/lib/discovery/usfs";
 import { blmSource } from "@/lib/discovery/blm";
+import { mapboxSearchBoxSource } from "@/lib/discovery/mapbox-search-box";
 import { search } from "@/lib/search";
 import { hydratePlacesByIds } from "@/lib/trip-browse/hydrate";
 import { fetchFederatedPois } from "@/lib/trip-browse/federated";
@@ -178,8 +179,18 @@ const REAL_DEPS: ResolveDeps = {
 // ── Defaults, mirrored from the endpoints ─────────────────────────────
 
 /** /api/search-area's category fanout order. NOT the same order as
- *  trip-browse's — see design §D4; both are preserved rather than merged. */
+ *  trip-browse's — see design §D4; both are preserved rather than merged.
+ *
+ *  `mapboxSearchBoxSource` (2026-08-25) sits at the head as the fuel-only
+ *  provider — Google no longer emits fuel (`TYPES_BY_CATEGORY.fuel = []`),
+ *  and Mapbox returns [] for non-fuel categories, so the two sources are
+ *  effectively disjoint by category. Head position doesn't matter for
+ *  ordering between them; it matters for dedupe (`discover()` keeps
+ *  results[0] as canonical when the same physical place is returned by
+ *  multiple sources), and fuel is the ONE category we care about being
+ *  Mapbox-canonical when it appears. */
 export const DEFAULT_BBOX_LIVE_SOURCES: WaypointSource[] = [
+  mapboxSearchBoxSource,
   googlePlacesSource,
   foursquareSource,
   recGovSource,
@@ -189,8 +200,11 @@ export const DEFAULT_BBOX_LIVE_SOURCES: WaypointSource[] = [
 
 /** /api/trip-browse's order. foursquare and rec-gov are swapped relative to
  *  the above; whichever comes first supplies the canonical title when Google
- *  has no result for a place. */
+ *  has no result for a place.
+ *
+ *  `mapboxSearchBoxSource` at head — same reasoning as above. */
 export const DEFAULT_CORRIDOR_LIVE_SOURCES: WaypointSource[] = [
+  mapboxSearchBoxSource,
   googlePlacesSource,
   recGovSource,
   foursquareSource,

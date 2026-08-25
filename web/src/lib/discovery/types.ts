@@ -2,7 +2,19 @@ import type { SlideCategoryKey } from "@/lib/trip-browse/places";
 
 /** Provenance for a discovered place. Becomes part of the reliability
  *  score (multi-source confirmation) and the `mention.secondary` line
- *  on the planning slide. */
+ *  on the planning slide.
+ *
+ *  `mapbox` (added 2026-08-25) is the Mapbox Search Box category-endpoint
+ *  source — see `discovery/mapbox-search-box.ts`. Today it only handles the
+ *  `fuel` slide category; the SourceId itself is generic. Adam's D7-resolution
+ *  call for the fuel-Mapbox swap: keep the per-source id fine-grained here on
+ *  `SourceResult.sourceId` (this union), and leave `BrowsePlace.source` at
+ *  its existing binary `"live" | "master_place"` distinction — a Mapbox-live
+ *  place still projects to `source: "live"` in the browse UI, because
+ *  BrowsePlace.source is about hydration eligibility (per D7 in
+ *  docs/architecture/resolve-places-design.md), not per-source attribution.
+ *  Per-source attribution is what `sourceId` here is for, and it surfaces via
+ *  `SOURCE_LABEL` in `to-browse-place.ts` as the "Mapbox" mention on the tile. */
 export type SourceId =
   | "osm"
   | "nps"
@@ -11,6 +23,7 @@ export type SourceId =
   | "wikipedia"
   | "foursquare"
   | "google"
+  | "mapbox"
   | "usfs"
   | "blm"
   | "fixture";

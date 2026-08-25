@@ -1,4 +1,6 @@
-# STATE — branch `main` · 2026-08-25 (test-only-signin) (**newest truth: added a TEST-only "Continue as seed test user" button to `/auth/sign-in` so Adam can sign in on TEST without going through Google OAuth — Google is not an enabled provider on TEST (`/auth/v1/settings` returns email-only [measured 2026-08-24]), so the production sign-in button cannot complete there and was blocking dev workflows.** Branch `feat/test-only-signin` off `origin/main` (`04e9855`). Ships: (1) `isTestSupabaseUrl()` + `isNonProductionRuntime()` + `isTestOnlyBypassAllowed()` in `web/src/lib/supabase/env.ts` — 16 TDD-first unit tests locking every URL-attack and NODE_ENV failure mode; (2) new server action `signInAsSeedTestUser` in `web/src/app/auth/actions.ts` — gated on `isTestOnlyBypassAllowed()`, calls `supabase.auth.signInWithPassword` for the fixture creds `seed-owner@overlander.test` / `seed-pw-manual-edit-8471` (the same TEST-only pair seeded by `web/scripts/seed-test-user.ts`); (3) additive button on `/auth/sign-in` — outline styling, subdued, below the primary Google button, with a distinct amber "TEST only · seed-owner@overlander.test" caption. **Google sign-in path is NOT modified** — the existing action + button + OAuth callback are byte-for-byte unchanged; this is purely additive. **⚠ MUST NEVER RUN AGAINST PROD — three independent gates prevent it:** (a) `NEXT_PUBLIC_SUPABASE_URL` must equal `https://znldzjdatkogdktymtvi.supabase.co` exactly (fails on undefined, empty, wrong scheme, PROD ref, prefix/suffix/subdomain attacks); (b) `process.env.NODE_ENV` must be `"development"` or `"test"` (production builds always fail this); (c) `seed-owner@overlander.test` doesn't exist on PROD Supabase, so even if both gates were somehow bypassed GoTrue would refuse the credential. Gate runs at BOTH render time AND server-action submit time — a hand-crafted POST that skips the render check still hits the gate inside the action. **Live verification (2026-08-25):** TEST env → button renders + `signInWithPassword` returns `access_token` for user `a2f74eb2…`; PROD-URL simulation (env override, no PROD data access) → button hidden, only "Continue with Google" visible. Local gate PASSES on both workspaces. Full decision + reversal instructions: `docs/decisions/2026-08-25-test-only-signin-bypass.md`. `origin/main` tip unchanged at **`04e9855` (#288)**. The masthead immediately below (2026-08-25 fuel-live-resolve) remains authoritative on that path's position.)
+# STATE — branch `main` · 2026-08-25 (test-only-signin) (**newest truth: added a TEST-only "Continue as seed test user" button to `/auth/sign-in` so Adam can sign in on TEST without going through Google OAuth — Google is not an enabled provider on TEST (`/auth/v1/settings` returns email-only [measured 2026-08-24]), so the production sign-in button cannot complete there and was blocking dev workflows.** Branch `feat/test-only-signin` off `origin/main` (`04e9855`, since merged with `864b752` (#289) below). Ships: (1) `isTestSupabaseUrl()` + `isNonProductionRuntime()` + `isTestOnlyBypassAllowed()` in `web/src/lib/supabase/env.ts` — 16 TDD-first unit tests locking every URL-attack and NODE_ENV failure mode; (2) new server action `signInAsSeedTestUser` in `web/src/app/auth/actions.ts` — gated on `isTestOnlyBypassAllowed()`, calls `supabase.auth.signInWithPassword` for the fixture creds `seed-owner@overlander.test` / `seed-pw-manual-edit-8471` (the same TEST-only pair seeded by `web/scripts/seed-test-user.ts`); (3) additive button on `/auth/sign-in` — outline styling, subdued, below the primary Google button, with a distinct amber "TEST only · seed-owner@overlander.test" caption. **Google sign-in path is NOT modified** — the existing action + button + OAuth callback are byte-for-byte unchanged; this is purely additive. **⚠ MUST NEVER RUN AGAINST PROD — three independent gates prevent it:** (a) `NEXT_PUBLIC_SUPABASE_URL` must equal `https://znldzjdatkogdktymtvi.supabase.co` exactly (fails on undefined, empty, wrong scheme, PROD ref, prefix/suffix/subdomain attacks); (b) `process.env.NODE_ENV` must be `"development"` or `"test"` (production builds always fail this); (c) `seed-owner@overlander.test` doesn't exist on PROD Supabase, so even if both gates were somehow bypassed GoTrue would refuse the credential. Gate runs at BOTH render time AND server-action submit time — a hand-crafted POST that skips the render check still hits the gate inside the action. **Live verification (2026-08-25):** TEST env → button renders + `signInWithPassword` returns `access_token` for user `a2f74eb2…`; PROD-URL simulation (env override, no PROD data access) → button hidden, only "Continue with Google" visible. Local gate PASSES on both workspaces. Full decision + reversal instructions: `docs/decisions/2026-08-25-test-only-signin-bypass.md`. `origin/main` tip now **`864b752` (#289)** (Mapbox fuel-source merged after this branch was cut; merged in cleanly, only STATE/LOG/BACKLOG conflicts — additive both sides, both entries kept). The masthead immediately below (2026-08-25 mapbox-fuel-source) remains authoritative on that path's position.)
+
+# STATE — branch `main` · 2026-08-25 (mapbox-fuel-source) (**newest truth: fuel discovery on the web-client browse surfaces (`/api/trip-browse`, `/api/search-area`) moved from Google Places to Mapbox Search Box. Compliance-driven — Google Places rendered on a non-Google map requires the UI Kit; Mapbox Search Box on Mapbox GL JS doesn't.** Branch `feat/mapbox-fuel-source` off `origin/main` (`04e9855`, which now includes PR #288's fuel-live-resolve merge). New module `web/src/lib/discovery/mapbox-search-box.ts` — a `WaypointSource` implementing the Mapbox Search Box category endpoint for `gas_station`, 13 TDD-first unit tests. `SourceId` union gains `"mapbox"`; `SOURCE_LABEL` in `to-browse-place.ts` gains `mapbox: "Mapbox"`. Google's `TYPES_BY_CATEGORY.fuel` emptied (was `["gas_station"]`) — Google no longer emits fuel from the category fanout. Mapbox source added at head of BOTH `LIVE_SOURCES` (legacy) AND `DEFAULT_BBOX_LIVE_SOURCES` / `DEFAULT_CORRIDOR_LIVE_SOURCES` (resolver defaults), so fuel-via-Mapbox works identically regardless of `SEARCH_AREA_USE_RESOLVER` / `TRIP_BROWSE_USE_RESOLVER` state (both still OFF). **NO npm dep added** (hand-rolled fetch — flagged over `@mapbox/search-js-core`, which is autocomplete+session-token+retrieve machinery for a flow this source doesn't use). **D7 (BrowsePlace.source per-source tagging) resolved:** kept `BrowsePlace.source` at its binary `"live" | "master_place"` distinction; per-source id lives on `SourceResult.sourceId` (already the case), which is what `SOURCE_LABEL` reads for the tile's "Sourced from Mapbox" mention. **⚠ Path A (fuel-live-resolve, PR #288 `04e9855`) remains on Google** — audit-time `pickFuelAtAnchor` calls `PlaceResolver.resolveNearby("gas_station", ...)`, still hits Google, still persists `google:<placeId>` tiles into `trips.payload`. Explicitly out of scope this session per Adam's direction; separate follow-up. See `docs/decisions/2026-08-25-mapbox-fuel-source.md`. **Local gate PASSES** on both workspaces (typecheck + `next build` + data typecheck all exit 0); 66 tests pass across mapbox-search-box, resolve-places, and both handler test files (one existing assertion updated: fanout size 5→6). **No live TEST run this session** — no `NEXT_PUBLIC_MAPBOX_TOKEN` exercised, no state-by-state coverage comparison computed. Merged as **`864b752` (#289)**.)
 
 # STATE — branch `main` · 2026-08-25 (fuel-live-resolve) (**newest truth: first BUILD landed off the Interest-Category-Chips scoping arc — a `fuel`-category guarantee via live Google Places, corpus-independent, feature-flagged OFF by default.** Branch `feat/fuel-live-resolve` off `origin/main` (`1fda7de`, #286). Ships: (1) new module `web/src/lib/itinerary/fuel-live-resolve.ts` with `pickFuelAtAnchor()` + 9 unit tests (all pass, TDD-first); (2) `PlaceResolver.resolveNearby(includedType, biasCoords)` extension in `resolve.ts` — hits Google `places:searchNearby`, shares the per-generation cap with existing `resolve()`; (3) `GenerationInput.guaranteedCategories?: string[]` + `ExpeditionForm.guaranteedCategories?: SlideCategoryKey[]` payload wiring (§11 steps 2-3 unblocked); (4) audit-loop hook in `audit.ts` gated on `FUEL_LIVE_RESOLVE=true` env var + `guaranteedCategories.includes("fuel")` — runs AFTER `pickBackfillStops` per anchor, dedupes against kept fuel-family stops within `ANCHOR_NEAR_MI`; (5) single fuel checkbox in the wizard (deliberate — the 8-chip row is F+D-blocked; a 1-of-8-working row would be misleading, replace-in-place when D+F resolve). **Adam's assumption "electric vs. gas already known from the vehicle profile" is FALSE** — no `fuelType` field exists on `RigProfile`, so `includedTypes` is hardcoded `"gas_station"` today; EV rigs get gas picks. Flagged in the decision doc, fix scope = rig field addition. **Feature flag is OFF by default** — opposite posture from `KEYSTOP_ANCHOR_BACKFILL` because this issues external Google calls (new cost source), unlike the in-memory backfill. **Local gate PASSES:** `npm run -w web typecheck` + `cd web && npx next build` + `npm run -w data typecheck` all exit 0. **Audit-hook integration coverage is thin** — the pure module is unit-tested, the audit wiring is typecheck-only (resolver is constructed inside `auditItinerary` so injection needs a refactor); flagged. Full decision doc: `docs/decisions/2026-08-25-fuel-live-resolve.md`. This PR is a SIBLING to PR #287 (scoping), not a stack — branch off origin/main. `origin/main` tip unchanged at **`1fda7de` (#286)**; PR #287 still open on separate branch. The masthead immediately below (2026-08-24, notes-to-spine chain) remains authoritative on last shipped-to-main code position.)
 
@@ -168,6 +170,103 @@ gate inside the action.
 
 **Full decision + reversal instructions:**
 `docs/decisions/2026-08-25-test-only-signin-bypass.md`.
+
+## 2026-08-25 (build) — Mapbox Search Box as the `fuel` source (web-client browse surfaces)
+
+Newest truth. Branch `feat/mapbox-fuel-source` off `origin/main` (`04e9855`,
+now includes PR #288). TDD-first; 13 tests pass; local gate exits 0 on both
+workspaces. No live TEST run this session — no `NEXT_PUBLIC_MAPBOX_TOKEN`
+exercised.
+
+**Feature framing:** Google Places on a non-Google map requires the Places UI
+Kit as a compliant display path. This app renders on Mapbox GL JS. Mapbox
+Search Box results are display-permitted on a Mapbox map without an equivalent
+UI Kit constraint. Fuel-station discovery on the web-client browse surfaces
+(`/api/trip-browse`, `/api/search-area`) moves from Google to Mapbox for that
+compliance reason; 8 other slide categories stay on Google.
+
+**What shipped:**
+- **New source: `web/src/lib/discovery/mapbox-search-box.ts`** — a
+  `WaypointSource` calling the Mapbox Search Box category endpoint
+  (`https://api.mapbox.com/search/searchbox/v1/category/gas_station`) with
+  `bbox`, `limit=25`, `access_token=NEXT_PUBLIC_MAPBOX_TOKEN`. Fuel-only
+  today (returns `[]` for non-fuel category requests). Testable via
+  `createMapboxSearchBoxSource({fetchImpl, tokenFn})` DI seam; 13 unit
+  tests lock URL, parser, category filter, no-token guard, HTTP failure
+  modes, happy path, bbox/token passthrough.
+- **`SourceId` union gains `"mapbox"`** (`web/src/lib/discovery/types.ts:6-31`)
+  + `SOURCE_LABEL.mapbox = "Mapbox"` (`to-browse-place.ts:12`) — the
+  per-source id surfaces as the "Sourced from Mapbox" mention on the tile.
+- **Google fuel disabled at source:** `TYPES_BY_CATEGORY.fuel = []`
+  (was `["gas_station"]`) in `web/src/lib/discovery/google-places.ts:53`.
+  Google's category-fanout returns [] for fuel-only requests (via the
+  `includedTypes.length === 0` early-return at `:114`); no HTTP call to
+  Google for fuel.
+- **Source-list wiring across FOUR call sites** — Mapbox at head of:
+  - `LIVE_SOURCES` in `web/src/app/api/trip-browse/[tripId]/[dayId]/handler.ts:57`
+  - the inline sources array in `web/src/app/api/search-area/handler.ts:164`
+  - `DEFAULT_BBOX_LIVE_SOURCES` in `web/src/lib/places/resolve-places.ts`
+  - `DEFAULT_CORRIDOR_LIVE_SOURCES` in `web/src/lib/places/resolve-places.ts`
+
+  Head position is for `discover()`'s dedupe canonicalization, not fanout
+  order (Mapbox and Google are disjoint by category after the change).
+- **D7 resolved** — kept `BrowsePlace.source` at its binary `"live" |
+  "master_place"` distinction; added per-source id `"mapbox"` on
+  `SourceResult.sourceId` only. Mapbox-sourced tiles project to `source:
+  "live"` (same as any other live source). Reasoning: `BrowsePlace.source`
+  drives hydration eligibility and cache-key behavior (coarse binary);
+  per-source attribution belongs on `sourceId` where `SOURCE_LABEL` already
+  reads it. Documented in the `SourceId` union comment for the next
+  reader.
+
+**Wiring choice — why fuel-via-Mapbox works on BOTH legacy AND resolver
+paths, without inventing a per-category flag mechanism:**
+- `TRIP_BROWSE_USE_RESOLVER` / `SEARCH_AREA_USE_RESOLVER` are per-surface,
+  not per-category. Flipping them globally would move 8 other categories
+  through the resolver as a side effect — explicitly out of scope.
+- Solution: add Mapbox to BOTH legacy source lists AND resolver defaults.
+  Fuel-via-Mapbox is now identical on both paths; the flag state
+  literally doesn't matter for fuel. No per-category flag mechanism
+  invented (per Adam's Step 3 explicit constraint).
+- Both flags remain OFF by default (unchanged).
+
+**Adam-flagged deviations, called out per Step 5:**
+- **NO npm dep added** — `@mapbox/search-js-*` would carry autocomplete +
+  session-token + retrieve-by-id machinery for the /suggest+/retrieve
+  two-step flow that this source doesn't use. The category endpoint is one
+  URL + one JSON parse; hand-rolled fetch is ~40 lines vs pulling the SDK.
+  Ask-before-dep bar in `web/CLAUDE.md` cleared by hand-rolling. Flagged.
+- **Free-text search remains a residual Google-fuel path.**
+  `categoryForGoogleTypes` (`google-places.ts:410`) still assigns
+  `"fuel"` to a `gas_station`-typed text-search result via
+  `googleTextSearchSource`. Adam's task scoped the swap to category
+  discovery (categoryical fanout); free-text is distinct UX. Not touched;
+  flagged as a residual for possible follow-up.
+- **Mapbox Search Box category endpoint returns fewer rich fields than
+  Google.** No rating, no price tier, no photos, no hours. Fuel tiles
+  will render without those. Not a regression per se — Google fuel tiles
+  rarely carried photos either — but a UX consequence to name.
+
+**⚠ Path A (audit-time fuel-live-resolve, PR #288 `04e9855`) remains on
+Google.** `pickFuelAtAnchor` + `PlaceResolver.resolveNearby("gas_station",
+...)` in `web/src/lib/itinerary/fuel-live-resolve.ts` +
+`web/src/lib/itinerary/resolve.ts:176-253` + `audit.ts:634-652` — all
+untouched this session per Adam's direction. Path A persists
+`google:<placeId>` tiles into `trips.payload.days[].segmentSuggestions` via
+the audit-time bake. Migrating it to Mapbox needs either a new scope in
+`resolvePlaces()` or a separate Mapbox resolver + tile-id-scheme rename;
+tracked in BACKLOG.
+
+**Not verified this session:**
+- **No live TEST run.** `NEXT_PUBLIC_MAPBOX_TOKEN` not exercised in this
+  workspace. First real invocation lands when the browse surfaces are
+  hit against TEST with the token set.
+- **No state-by-state coverage comparison.** Adam asked for a possible
+  spot-check across CA/AZ/NV/UT/WA/OR versus Google's prior results;
+  the comparison would need a live Mapbox response, which this session
+  didn't produce.
+
+**Full decision doc:** `docs/decisions/2026-08-25-mapbox-fuel-source.md`.
 
 ## 2026-08-25 (build) — fuel-category guarantee via live Google Places (feature-flagged OFF)
 
