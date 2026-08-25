@@ -1,5 +1,43 @@
 # Backlog — open work
 
+## Fuel × Google — three residual paths after the Mapbox browse-source swap (2026-08-25)
+
+The compliance-driven fuel swap (see
+`docs/decisions/2026-08-25-mapbox-fuel-source.md`) moved fuel discovery on
+the web-client browse surfaces (`/api/trip-browse`, `/api/search-area`) from
+Google Places to Mapbox Search Box. Three separate fuel-Google touchpoints
+remain untouched, each a distinct follow-up:
+
+- **Path A — audit-time fuel-live-resolve (PR #288, `04e9855`).**
+  `pickFuelAtAnchor` in `web/src/lib/itinerary/fuel-live-resolve.ts` calls
+  `PlaceResolver.resolveNearby("gas_station", ...)` in
+  `web/src/lib/itinerary/resolve.ts:176-253`, wired at `audit.ts:634-652`.
+  Persists `google:<placeId>` tiles into `trips.payload.days[].segmentSuggestions`
+  via `bake.ts:resolvedToTile`. Migration to Mapbox needs either (i) a new
+  `nearby-coord` scope on `resolvePlaces()` supporting per-generation cap
+  semantics, or (ii) a separate `MapboxResolver` on the audit path + a
+  tile-id-scheme rename (`google:` → `mbx:`) that ripples to
+  `place-id.ts`, the `SOURCE_TO_LIVE_ID_PREFIX` map, `bake.ts:151`, and
+  `canonicalizePlaceId` in `resolve-places.ts:255`. Bigger surface than
+  the browse-source swap.
+
+- **Free-text search fuel classification.**
+  `categoryForGoogleTypes` (`web/src/lib/discovery/google-places.ts:410`)
+  still assigns `"fuel"` to `gas_station`-typed results from
+  `googleTextSearchSource`. A user typing "Chevron" in search-area
+  free-text can still surface a Google-sourced fuel tile. Migrating this
+  needs Mapbox's `/suggest+/retrieve` two-step flow with session tokens —
+  either the `@mapbox/search-js-core` SDK (needs Adam approval per
+  `web/CLAUDE.md` ask-before-dep) or a hand-rolled 2-endpoint flow with
+  session-token management.
+
+- **Corpus ingester.** `data/ingestion/sources/google-places.ts:52-59`
+  still ingests `gas_station` as one of six primary types, writing to
+  `master_place` with `google:<place_id>` external_id. Corpus warehousing
+  is a separate compliance category from live-fetch-at-render; Adam
+  explicitly scoped this out of the current swap.
+
+
 Durable and deferred work. This is the long list; the **active cut** — what is
 queued or in-flight right now — lives in `docs/STATE.md` (§Queued, §In-flight)
 and is authoritative for the current branch. When an item here becomes the next
