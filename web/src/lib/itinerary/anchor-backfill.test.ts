@@ -12,6 +12,11 @@ import {
   hasStopNearAnchor,
   anchorStopNote,
   ANCHOR_NEAR_MI,
+  pickBackfillStops,
+  anchorIsBare,
+  corridorStopNote,
+  MAX_BACKFILLS_PER_DAY,
+  isCityTautology,
 } from "./anchor-backfill";
 import type { PoolPOI } from "./facts";
 
@@ -177,4 +182,125 @@ test("the note is strictly positional — it asserts nothing about the place", (
   assert.match(note, /Bishop, CA/);
   // No quality/description language that the corpus did not supply.
   assert.doesNotMatch(note, /best|famous|must|worth|great|popular|stunning/i);
+});
+
+// ── Multi-anchor (mid-corridor) coverage ────────────────────────────────
+// The start-anchor gates above are inherited unchanged by pickBackfillStops;
+// these cover only what the multi-anchor layer ADDS — cap, order, dedupe.
+
+const FAR: [number, number] = [-117.0, 37.363]; // ~76mi east of ANCHOR
+
+function anchorAt(coords: [number, number], label: string, kind: "start" | "corridor") {
+  return { coords, label, kind };
+}
+
+test("fills a mid-corridor city, not just the start", () => {
+  const atFar = poi({ id: "mp:far", coords: FAR });
+  const picks = pickBackfillStops({
+    anchors: [anchorAt(FAR, "Oceanside, CA", "corridor")],
+    pool: [atFar],
+    keptRefs: NONE,
+    onCorridor: ALLOW,
+  });
+  assert.equal(picks.length, 1);
+  assert.equal(picks[0].kind, "corridor");
+  assert.equal(picks[0].anchorLabel, "Oceanside, CA");
+});
+
+test("CAPS machine picks per day so key stops stay a signal", () => {
+  // Four bare anchors, each with its own qualifying candidate.
+  const anchors = [
+    anchorAt(ANCHOR, "Start", "start"),
+    anchorAt(offset(40), "City A", "corridor"),
+    anchorAt(offset(80), "City B", "corridor"),
+    anchorAt(offset(120), "City C", "corridor"),
+  ];
+  const pool = [
+    poi({ id: "mp:s", coords: ANCHOR }),
+    poi({ id: "mp:a", coords: offset(40) }),
+    poi({ id: "mp:b", coords: offset(80) }),
+    poi({ id: "mp:c", coords: offset(120) }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW });
+  assert.equal(picks.length, MAX_BACKFILLS_PER_DAY);
+});
+
+test("when the cap bites it keeps the EARLIEST anchors — an empty morning beats an empty afternoon", () => {
+  const anchors = [
+    anchorAt(ANCHOR, "Start", "start"),
+    anchorAt(offset(40), "Early", "corridor"),
+    anchorAt(offset(80), "Late", "corridor"),
+  ];
+  const pool = [
+    poi({ id: "mp:s", coords: ANCHOR }),
+    poi({ id: "mp:early", coords: offset(40) }),
+    poi({ id: "mp:late", coords: offset(80) }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW });
+  assert.deepEqual(picks.map((p) => p.poi.id), ["mp:s", "mp:early"]);
+});
+
+test("never features the same POI twice across anchors on one day", () => {
+  // One shared candidate sits within range of two adjacent anchors.
+  const shared = poi({ id: "mp:shared", coords: offset(2) });
+  const picks = pickBackfillStops({
+    anchors: [anchorAt(ANCHOR, "A", "corridor"), anchorAt(offset(4), "B", "corridor")],
+    pool: [shared],
+    keptRefs: NONE,
+    onCorridor: ALLOW,
+  });
+  assert.equal(picks.length, 1, "the second anchor must not re-pick the first's POI");
+});
+
+test("a corridor city with nothing qualifying stays BARE — no padding", () => {
+  const picks = pickBackfillStops({
+    anchors: [anchorAt(FAR, "Barren, CA", "corridor")],
+    pool: [poi({ id: "mp:elsewhere", coords: ANCHOR })], // in range of ANCHOR, not FAR
+    keptRefs: NONE,
+    onCorridor: ALLOW,
+  });
+  assert.deepEqual(picks, []);
+});
+
+test("a bare anchor is skipped without consuming a cap slot", () => {
+  const anchors = [
+    anchorAt(FAR, "Barren", "corridor"),          // nothing nearby
+    anchorAt(ANCHOR, "Served", "corridor"),       // has a candidate
+    anchorAt(offset(40), "AlsoServed", "corridor"),
+  ];
+  const pool = [poi({ id: "mp:1", coords: ANCHOR }), poi({ id: "mp:2", coords: offset(40) })];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW });
+  assert.deepEqual(picks.map((p) => p.poi.id), ["mp:1", "mp:2"]);
+});
+
+test("anchorIsBare is the inverse of coverage, on the same radius", () => {
+  assert.equal(anchorIsBare([offset(2)], ANCHOR), false);
+  assert.equal(anchorIsBare([offset(ANCHOR_NEAR_MI + 10)], ANCHOR), true);
+  assert.equal(anchorIsBare([], ANCHOR), true);
+});
+
+test("corridor and start notes are distinguishable, both strictly positional", () => {
+  const start = anchorStopNote("San Diego, CA");
+  const corridor = corridorStopNote("Oceanside, CA");
+  assert.notEqual(start, corridor);
+  assert.match(corridor, /Oceanside, CA/);
+  assert.doesNotMatch(corridor, /best|famous|must|worth|great|popular|stunning/i);
+});
+
+test("REFUSES a candidate that is just the anchor city itself (the Carson City case)", () => {
+  const cityRow = poi({ id: "mp:city", name: "Carson City, Nevada", category: "scenic" });
+  const picks = pickBackfillStops({
+    anchors: [anchorAt(ANCHOR, "Carson City, NV", "corridor")],
+    pool: [cityRow],
+    keptRefs: NONE,
+    onCorridor: ALLOW,
+  });
+  assert.deepEqual(picks, []);
+});
+
+test("tautology guard is exact, not substring — 'Riverside Park' survives near Riverside", () => {
+  assert.equal(isCityTautology("Carson City, Nevada", "Carson City, NV"), true);
+  assert.equal(isCityTautology("Carson City", "Carson City, NV"), true);
+  assert.equal(isCityTautology("Riverside Park", "Riverside, CA"), false);
+  assert.equal(isCityTautology("Top Gun House", "Oceanside, CA"), false);
 });
