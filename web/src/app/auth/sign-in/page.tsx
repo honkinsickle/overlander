@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { signInWithGoogle } from "../actions";
+import { signInWithGoogle, signInAsSeedTestUser } from "../actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isConfigured } from "@/lib/supabase/env";
+import { isConfigured, isTestOnlyBypassAllowed } from "@/lib/supabase/env";
 
 type Search = { next?: string; error?: string };
 
@@ -18,6 +18,12 @@ export default async function SignInPage(props: {
     } = await supabase.auth.getUser();
     if (user) redirect(nextPath);
   }
+
+  // TEST-only dev-signin bypass. Structural gates (URL match + non-prod
+  // NODE_ENV) — see lib/supabase/env.ts. Server action rechecks the same
+  // gates before signing in, so a manually-crafted POST can't skip past
+  // this render check.
+  const showTestBypass = isTestOnlyBypassAllowed();
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-bg-base text-text-primary px-6">
@@ -45,11 +51,28 @@ export default async function SignInPage(props: {
           </button>
         </form>
 
+        {showTestBypass && (
+          <form action={signInAsSeedTestUser} className="w-full flex flex-col gap-2">
+            <input type="hidden" name="next" value={nextPath} />
+            <button
+              type="submit"
+              className="w-full h-11 rounded border border-text-primary/40 bg-transparent text-text-primary font-sans text-sm font-medium hover:bg-text-primary/5 transition-colors flex items-center justify-center gap-3"
+            >
+              Continue as seed test user
+            </button>
+            <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-amber/80">
+              TEST only · seed-owner@overlander.test
+            </p>
+          </form>
+        )}
+
         {error && (
           <p className="font-mono text-[11px] text-red-400 max-w-xs">
             {error === "supabase_not_configured"
               ? "Auth isn't configured in this environment yet."
-              : decodeURIComponent(error)}
+              : error === "test_bypass_not_allowed"
+                ? "Test-user sign-in isn't available in this environment."
+                : decodeURIComponent(error)}
           </p>
         )}
 

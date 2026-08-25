@@ -12,6 +12,69 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (build) — TEST-only sign-in bypass to unblock dev workflows
+
+- **Started with investigation-first per Adam's Step 1.** STATE.md had
+  been carrying an open thread for weeks: "uncommitted dev-only
+  email+password sign-in ... sitting in the working tree, no PR opened."
+  I expected to find it on some branch (I'd seen `dev-password-signin`
+  in the branch list earlier) and either land it or refine it. Reality:
+  that branch is stale (tip `dce1a72` = #271, before all recent work),
+  and the auth files STATE.md described (`web/src/lib/auth/dev-signin.ts`
+  + two `app/auth` extras) don't exist on it or in the current working
+  tree. The uncommitted work is on another Conductor workspace's disk
+  or was discarded. Built fresh.
+- **The gate isn't middleware — it's per-page.** `web/src/proxy.ts`
+  (Next 16 renamed middleware → proxy) doesn't force sign-in; it just
+  refreshes cookies and sends onboarding-incomplete users to `/welcome`.
+  Sign-in is enforced individually by pages that need it
+  (`/welcome`, `/plan/expedition`), all redirecting to
+  `/auth/sign-in?next=…`. That means the bypass didn't need any
+  middleware changes — just adding a second sign-in method on the
+  sign-in page.
+- **Picked (b) — additive button, not auto-sign-in.** Adam offered
+  (a) auto-sign-in on TEST or (b) additive button. Went with (b):
+  explicit click is less surprising, keeps signout+resignin testable,
+  and doesn't put a hidden auth mechanism behind an env check. Additive
+  keeps the Google path byte-for-byte untouched (Adam's explicit
+  constraint).
+- **Structural fail-closed gates, no runtime flag.** Adam's language
+  was precise: "not just 'off by default' but something that fails
+  closed if the environment check is wrong or missing." Two structural
+  gates: (a) `NEXT_PUBLIC_SUPABASE_URL` exactly matches the TEST
+  project URL (rejects wrong scheme, prefix/suffix/subdomain attacks,
+  PROD ref, undefined, empty); (b) `NODE_ENV` is `"development"` or
+  `"test"` (rejects `"production"`, undefined, empty, anything else).
+  Both must be true, at both render time AND server-action submit time.
+  Considered adding a third env-flag gate — decided against because it
+  would make the button opt-in on every dev workspace (defeating "no
+  10-minute detours") without meaningfully increasing safety beyond
+  what URL+NODE_ENV already give.
+- **Third gate is data-shaped, not code:** the fixture user
+  `seed-owner@overlander.test` doesn't exist on PROD Supabase. Even if
+  both structural gates were somehow bypassed, GoTrue would reject the
+  credential. Belt + suspenders + backup.
+- **TDD first.** 16 unit tests written before the env helper existed,
+  enumerating every URL-attack shape and every `NODE_ENV` failure mode
+  I could think of (undefined, empty, `"staging"`, `"prod"`, `"dev"`
+  — the last is a common typo, must be `"development"`). All pass.
+- **PROD-safety live-verified, not just unit-tested.** Beyond the
+  unit tests, restarted `next dev` on a fresh port with
+  `NEXT_PUBLIC_SUPABASE_URL` overridden to the PROD ref (TEST anon key
+  kept, so no PROD data access happened). `/auth/sign-in` HTML
+  contained ONLY "Continue with Google" — the bypass button and its
+  TEST-only caption were absent. This is the "verify explicitly, don't
+  just assume the environment check works" check Adam asked for.
+- **Live TEST verification of the happy path:** `POST /auth/v1/token`
+  against TEST with the fixture creds returned an `access_token` for
+  user `a2f74eb2…` — the same user `mint-dev-session.ts` produces via
+  the same `signInWithPassword` call.
+- **Duplicated the fixture password on purpose.** Now referenced from
+  two places: `seed-test-user.ts:15` (source of truth) and
+  `auth/actions.ts` (the bypass). The seed script is a dev tool and
+  the app shouldn't import from `scripts/`; comment in both files
+  names the pair so they change together if the password ever moves.
+
 ## 2026-08-25 (build) — fuel-live-resolve: first BUILD out of the Interest-Category-Chips arc
 
 - **The scoping doc (PR #287) had already found this gap; Adam's decision

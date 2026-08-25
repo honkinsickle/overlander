@@ -1,3 +1,5 @@
+# STATE — branch `main` · 2026-08-25 (test-only-signin) (**newest truth: added a TEST-only "Continue as seed test user" button to `/auth/sign-in` so Adam can sign in on TEST without going through Google OAuth — Google is not an enabled provider on TEST (`/auth/v1/settings` returns email-only [measured 2026-08-24]), so the production sign-in button cannot complete there and was blocking dev workflows.** Branch `feat/test-only-signin` off `origin/main` (`04e9855`). Ships: (1) `isTestSupabaseUrl()` + `isNonProductionRuntime()` + `isTestOnlyBypassAllowed()` in `web/src/lib/supabase/env.ts` — 16 TDD-first unit tests locking every URL-attack and NODE_ENV failure mode; (2) new server action `signInAsSeedTestUser` in `web/src/app/auth/actions.ts` — gated on `isTestOnlyBypassAllowed()`, calls `supabase.auth.signInWithPassword` for the fixture creds `seed-owner@overlander.test` / `seed-pw-manual-edit-8471` (the same TEST-only pair seeded by `web/scripts/seed-test-user.ts`); (3) additive button on `/auth/sign-in` — outline styling, subdued, below the primary Google button, with a distinct amber "TEST only · seed-owner@overlander.test" caption. **Google sign-in path is NOT modified** — the existing action + button + OAuth callback are byte-for-byte unchanged; this is purely additive. **⚠ MUST NEVER RUN AGAINST PROD — three independent gates prevent it:** (a) `NEXT_PUBLIC_SUPABASE_URL` must equal `https://znldzjdatkogdktymtvi.supabase.co` exactly (fails on undefined, empty, wrong scheme, PROD ref, prefix/suffix/subdomain attacks); (b) `process.env.NODE_ENV` must be `"development"` or `"test"` (production builds always fail this); (c) `seed-owner@overlander.test` doesn't exist on PROD Supabase, so even if both gates were somehow bypassed GoTrue would refuse the credential. Gate runs at BOTH render time AND server-action submit time — a hand-crafted POST that skips the render check still hits the gate inside the action. **Live verification (2026-08-25):** TEST env → button renders + `signInWithPassword` returns `access_token` for user `a2f74eb2…`; PROD-URL simulation (env override, no PROD data access) → button hidden, only "Continue with Google" visible. Local gate PASSES on both workspaces. Full decision + reversal instructions: `docs/decisions/2026-08-25-test-only-signin-bypass.md`. `origin/main` tip unchanged at **`04e9855` (#288)**. The masthead immediately below (2026-08-25 fuel-live-resolve) remains authoritative on that path's position.)
+
 # STATE — branch `main` · 2026-08-25 (fuel-live-resolve) (**newest truth: first BUILD landed off the Interest-Category-Chips scoping arc — a `fuel`-category guarantee via live Google Places, corpus-independent, feature-flagged OFF by default.** Branch `feat/fuel-live-resolve` off `origin/main` (`1fda7de`, #286). Ships: (1) new module `web/src/lib/itinerary/fuel-live-resolve.ts` with `pickFuelAtAnchor()` + 9 unit tests (all pass, TDD-first); (2) `PlaceResolver.resolveNearby(includedType, biasCoords)` extension in `resolve.ts` — hits Google `places:searchNearby`, shares the per-generation cap with existing `resolve()`; (3) `GenerationInput.guaranteedCategories?: string[]` + `ExpeditionForm.guaranteedCategories?: SlideCategoryKey[]` payload wiring (§11 steps 2-3 unblocked); (4) audit-loop hook in `audit.ts` gated on `FUEL_LIVE_RESOLVE=true` env var + `guaranteedCategories.includes("fuel")` — runs AFTER `pickBackfillStops` per anchor, dedupes against kept fuel-family stops within `ANCHOR_NEAR_MI`; (5) single fuel checkbox in the wizard (deliberate — the 8-chip row is F+D-blocked; a 1-of-8-working row would be misleading, replace-in-place when D+F resolve). **Adam's assumption "electric vs. gas already known from the vehicle profile" is FALSE** — no `fuelType` field exists on `RigProfile`, so `includedTypes` is hardcoded `"gas_station"` today; EV rigs get gas picks. Flagged in the decision doc, fix scope = rig field addition. **Feature flag is OFF by default** — opposite posture from `KEYSTOP_ANCHOR_BACKFILL` because this issues external Google calls (new cost source), unlike the in-memory backfill. **Local gate PASSES:** `npm run -w web typecheck` + `cd web && npx next build` + `npm run -w data typecheck` all exit 0. **Audit-hook integration coverage is thin** — the pure module is unit-tested, the audit wiring is typecheck-only (resolver is constructed inside `auditItinerary` so injection needs a refactor); flagged. Full decision doc: `docs/decisions/2026-08-25-fuel-live-resolve.md`. This PR is a SIBLING to PR #287 (scoping), not a stack — branch off origin/main. `origin/main` tip unchanged at **`1fda7de` (#286)**; PR #287 still open on separate branch. The masthead immediately below (2026-08-24, notes-to-spine chain) remains authoritative on last shipped-to-main code position.)
 
 # STATE — branch `main` · 2026-08-24 (**newest truth: the notes-to-spine OVERNIGHT slice shipped and was then hardened across a chain of follow-ups; the overnight is now linked to its spine tile through THREE matching tiers, with one slice still parked.** `#279` (`1cb200e`) links a grounded overnight to its spine tile by IDENTITY (not a substring) — marks it `isOvernight`+`curated`, the Camping block derives from it, the redundant "Overnight —" prose line drops; desc-only/off-corridor → prose fallback. Follow-ups: a "tile missing" report was diagnosed as pre-deploy trips, **not a bug** (#280 `3a42746`), and #279 confirmed working live (#281 `060af08`); a real gap was found and reproduced live (#282 `8679a21`, #283 `783fe51`) — a pool-hit overnight whose place is on the spine under a DIFFERENT id (`google:` live-resolve) or missing from the per-day corpus fold entirely, so the `mp:` ref matches no tile; id-reconciliation via `google_place_id` was built but is **INERT on backcountry data** (0/351 #283-corridor rows carry one — those rows have no linked Google source) (#284 `53f551d`); and a **fuzzy name+proximity tier is OPEN as #285** (strict name subset ≥2 tokens AND ≤0.5 mi, closest wins, no-match→prose) — it closes the tile-present case (Hope Valley confirmed on real coords, 0.067 mi) but NOT the no-tile / layover case (Convict Lake — needs tile synthesis, parked). **The Logistics/Fuel/Reserve service-stop half of notes-to-spine is untouched** — prose-only, a separate product-gated decision (`docs/decisions/notes-to-spine-gap.md`). Two flagged product/UX calls stay open: the overnight badge is a subtle "Overnight ·" status prefix, and #285's 0.5 mi / name thresholds are chosen. `origin/main` tip **`53f551d` (#284)**; **#285 open**. Detail in the `## 2026-08-24` dated sections below and `docs/decisions/2026-08-24-overnight-spine-tile-link.md` (Follow-ups 1–6). The masthead immediately below (2026-08-23, resolver cutover) is STALE on position but preserved per this file's convention; the earlier key-stop backfill arc (#274–#276) has its own dated sections further down.)
@@ -87,6 +89,85 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-25 (build) — TEST-only "Continue as seed test user" sign-in bypass
+
+Newest truth. Branch `feat/test-only-signin` off `origin/main` (`04e9855`).
+TDD-first; 16 unit tests pass; local gate exits 0 on both workspaces.
+Live-verified on TEST and PROD-simulation this session.
+
+**Why:** Google OAuth is not an enabled provider on TEST Supabase
+(`/auth/v1/settings` returns email-only `[measured 2026-08-24]`), so the
+"Continue with Google" button — the ONLY sign-in method in the UI — cannot
+complete against TEST. Dev workflows needing an authenticated session
+required cookie injection via `mint-dev-session.ts`. This adds a second
+button on `/auth/sign-in` (TEST-only, structural gates) that signs in as
+the pre-existing seed user `seed-owner@overlander.test` via
+`signInWithPassword`.
+
+**What shipped:**
+- `web/src/lib/supabase/env.ts` — `TEST_SUPABASE_PROJECT_REF` +
+  `TEST_SUPABASE_URL` constants; `isTestSupabaseUrl()` (rejects
+  undefined, empty, wrong-scheme, prefix/suffix/subdomain attacks, PROD);
+  `isNonProductionRuntime()` (fails closed on undefined/empty/unexpected);
+  `isTestOnlyBypassAllowed()` combining both. 16 unit tests locking every
+  failure mode.
+- `web/src/app/auth/actions.ts` — new `signInAsSeedTestUser` server
+  action. Gates on `isTestOnlyBypassAllowed()` FIRST, then
+  `isConfigured()`, then calls
+  `supabase.auth.signInWithPassword({email: "seed-owner@overlander.test",
+  password: "seed-pw-manual-edit-8471"})`. Hardcoded TEST fixture
+  credentials — same pair used by `mint-dev-session.ts` and seeded by
+  `seed-test-user.ts:15`. On gate failure redirects to
+  `/auth/sign-in?error=test_bypass_not_allowed`.
+- `web/src/app/auth/sign-in/page.tsx` — additive `<form>` block below
+  the Google button, visible only when `isTestOnlyBypassAllowed()`
+  returns true. Subdued outline styling, distinct amber "TEST only ·
+  seed-owner@overlander.test" caption. Error toast recognises the new
+  `test_bypass_not_allowed` code with a friendly message.
+- **Google sign-in path unchanged.** `signInWithGoogle` + the OAuth
+  callback route + the "Continue with Google" button + the "Google · only
+  sign-in method for v1" caption are all byte-for-byte the same. This is
+  purely additive.
+
+**⚠ Structural PROD-safety — three independent gates, all fail closed:**
+
+1. **URL match** — `NEXT_PUBLIC_SUPABASE_URL` must equal
+   `https://znldzjdatkogdktymtvi.supabase.co` exactly (with an optional
+   trailing slash). Rejects undefined, empty, `http://` scheme, PROD ref
+   (`nqzeywzcowujzyegxbsr`), prefix attacks
+   (`znldzjdatkogdktymtvi-evil.supabase.co`), suffix attacks
+   (`znldzjdatkogdktymtvi.supabase.co.evil.com`), subdomain attacks
+   (`evil.znldzjdatkogdktymtvi.supabase.co`). All these cases have named
+   unit tests.
+2. **Runtime match** — `process.env.NODE_ENV` must be `"development"` or
+   `"test"`. Production builds (Next.js sets `NODE_ENV="production"`),
+   undefined, empty string, and unexpected values (`"staging"`,
+   `"prod"`, `"dev"`) all fail closed.
+3. **Data-shaped backup** — `seed-owner@overlander.test` does not exist
+   on PROD Supabase; even if both structural gates were bypassed, GoTrue
+   would reject with `invalid_credentials`.
+
+Both structural gates run at BOTH render time AND server-action submit
+time — a hand-crafted POST that skips the render check still hits the
+gate inside the action.
+
+**Live verification (this session):**
+- **TEST env** — `next dev` on `.env.development.local` (TEST URL).
+  `/auth/sign-in` HTML contained "Continue as seed test user" + "TEST
+  only · seed-owner@overlander.test" alongside the Google button.
+  `POST /auth/v1/token?grant_type=password` against TEST auth server
+  with fixture creds returned an `access_token` for user id
+  `a2f74eb2…` — the same user `mint-dev-session.ts` produces.
+- **PROD-URL simulation** — restarted `next dev` on port 3211 with
+  `NEXT_PUBLIC_SUPABASE_URL="https://nqzeywzcowujzyegxbsr.supabase.co"`
+  overridden. TEST anon key kept, so no PROD data access happened.
+  `/auth/sign-in` HTML contained ONLY "Continue with Google" — the
+  bypass button and TEST-only caption were absent. Render-side gate
+  confirmed working.
+
+**Full decision + reversal instructions:**
+`docs/decisions/2026-08-25-test-only-signin-bypass.md`.
 
 ## 2026-08-25 (build) — fuel-category guarantee via live Google Places (feature-flagged OFF)
 
