@@ -12,7 +12,62 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-08-25 (scoping) — Interest-Category chips: scoping doc, no code
+## 2026-08-25 (scoping) — Interest-Category chips: scoping doc + A/B/C decided, no code
+
+### Session part 2 — A/B/C decided, D–H open, two flags surfaced
+
+- **A/B/C decisions arrived mid-session** (Adam) — recorded in
+  `docs/specs/interest-category-chips.md` §9 with reasoning: (A) `overnight`
+  end-to-end, not `hotel`; (B) guarantee gate covers 8 of 9 (all except
+  `interest`); (C) Option A guarantee-wins-strictly.
+- **B verification found two load-bearing caveats before writing "decided"** —
+  Adam had explicitly asked to check them, not build around. Both confirmed
+  `[read source 2026-08-25]`:
+  - **B.1 `fuel` in the gate is inert with today's mechanism.** Traced from
+    `pickAnchorStop` (`anchor-backfill.ts:131`) → `candidates: PoolPOI[]`
+    (`:116`) → `pool: facts.poolPOIs` at the caller
+    (`audit.ts:510-515`) → `preComputeFacts` (`facts.ts:167-257`) which folds
+    corpus-only via `fetchCorpusForSegment`/`fetchCorpusForPolyline` in
+    `bake-corridors.ts`. No `PlaceResolver` / Google / `fetch` in the backfill
+    path — `anchor-backfill.ts:11-13` comment is explicit. Adam's assumption
+    that "fuel resolves via Google Places live-resolve" describes the
+    LLM→audit path (`audit.ts:100-107` → `resolve.ts:19` `places:searchText`)
+    for LLM-emitted `keyStops` names, NOT the backfill. Fuel pool candidates
+    DO exist when corpus rows have `primary_category ∈ {gas_station,
+    ev_charging, truck_stop}` (`federated.ts:22`) — but those rows are absent
+    in the far-north/off-corridor regions the fuel-POI layer (per
+    `expedition-planner.md §8.5`) is meant to cover.
+  - **B.2 `overnight` in the gate DUPLICATES the existing overnight
+    mechanism.** LLM's overnight is a dedicated required per-day slot at
+    `schema.ts:281-295, :310`, grounded independently at `audit.ts:550-557`,
+    marked as the day's single `isOvernight` via `markOvernightTile` at
+    `bake.ts:282-290, :141-145`. A backfill pick, by contrast, lands as an
+    extra `KeyStop` on `day.keyStops` at `audit.ts:526-527`, is featured as a
+    curated card via `noteByRef` at `bake.ts:216-221`, and NEVER enters the
+    `overnightRef`/`markOvernightTile` path. If backfill picks a different
+    hotel/motel row than the LLM's overnight (three-row source pool per
+    `SLIDE_TO_PRIMARY_CATEGORY.overnight = [hotel, resort_hotel, motel]`,
+    `federated.ts:41`), the day carries TWO overnight-category features with
+    no dedupe — the anchor-covered test at `audit.ts:463-470` reads keyStop
+    coords only, not overnight coords.
+- **Both flags reported per the ask, not built around.** Written into the spec
+  §5.2 and §9 B as "resolved-with-caveats"; the implementation plan §11
+  defers wiring `fuel` and `overnight` chips into the selector until Adam
+  re-decides. Chips can render (disabled or with a caveat tooltip) without
+  blocking the other 6 categories.
+- **Implementation plan §11 added** — 10 steps, each labelled unblocked /
+  partially blocked / blocked, with the blocker-to-step map at the end.
+  Steps that can ship in a first PR without ANY of D–H: 2, 3, 4a, 8-scenic-
+  only, 9 (payload/state plumbing + `scenic` removal + flag scaffold). Steps
+  5 (audit-loop change), 6 (new selector), 7 (contention wiring) are all
+  blocked on D — cannot even prototype cleanly because the shape of
+  `missingGuaranteedCategories` diverges per D option.
+- **Convention: default is not decided.** The plan writes recommended
+  defaults for E (rank order), F (chip order/copy), G (Preferences fate), H
+  (prompt posture) so a reader can see the shape — but every recommendation
+  is labelled as such, and no code should ship the default silently.
+
+### Session part 1 — initial scoping doc
 
 - **Framing that changed the shape of the answer.** The ask read like "add a
   chip row and wire it up," but tracing the four subsystems (wizard state,

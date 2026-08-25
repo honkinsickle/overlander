@@ -1,7 +1,18 @@
 # Spec — Interest Category chips (wizard guarantee section)
 
-**Status:** SCOPING draft. Do not build from this yet — the paragraphs labelled
-"Open — Adam" and the option lists in §5.4 are unresolved.
+**Status:** SCOPING — **A / B / C decided 2026-08-25** (see §9). D–H still open;
+build is unblocked for the `scenic` removal + wizard state plumbing pieces, but
+gated on D–H for the audit-loop change and prompt copy. See §11 for the
+piece-by-piece implementation plan and where each blocker sits.
+
+**⚠ Two flags surfaced during A/B/C verification:** (i) `fuel` in the guarantee
+gate is INERT with today's mechanism — backfill is corpus-pool-only, no
+live-resolve escape hatch; a fuel guarantee only fires if `master_place` has
+`primary_category ∈ {gas_station, ev_charging, truck_stop}` rows within
+`ANCHOR_NEAR_MI` of the anchor. (ii) `overnight` in the guarantee gate would
+DUPLICATE the existing per-day overnight slot from the #279–#285 chain — a
+backfill overnight pick lands as an extra `KeyStop` with no dedupe against the
+LLM's own overnight. See §9 B for the resolved-with-caveat findings.
 
 **Owner:** Adam (product) — this doc surfaces unknowns and enumerates options; it
 does not decide them.
@@ -85,18 +96,16 @@ wizard chip labelled `hotel` reaches the selector as the literal string `"hotel"
 it will silently never match a pool POI, because pool rows carry
 `"overnight"` for that category.
 
-**Two survivable paths, both need a decision:**
-
-- **(a) UI shows `hotel`, code stores `overnight` internally.** Translation at
-  the wizard→payload boundary. Consistent with today's rendering (the browse
-  panel and design tokens use `hotel` — `web/src/lib/trip-browse/palette.ts:36`
-  `[read source 2026-08-25]`).
-- **(b) UI and code both use `overnight`.** Consistent with the pool/backfill
-  path, but users see a word they don't see anywhere else in the app today.
-
-**Open — Adam:** which of (a)/(b), or a third framing you'd prefer. The rest of
-this spec is written assuming (a) — chip label `hotel`, internal `overnight` —
-and flags where that choice bites.
+**RESOLVED 2026-08-25 (Adam) — (b): `overnight` end-to-end.** Both the wizard
+chip label and the internal representation. Rationale: `hotel` implies lodging
+and misleadingly excludes campgrounds, which is most of what this app's
+overnights actually are — `overnight` is the accurate umbrella term for the user
+too, not just internally. No `hotel↔overnight` translation is needed at the
+wizard→payload boundary for this category. See §9 A for the full decision
+capture. **But see §9 B — `overnight` as a guarantee-gate member has a separate
+duplication problem with the existing per-day overnight slot, which does not
+affect this A decision but does affect whether we ship `overnight` on the chip
+row at all.**
 
 **Also load-bearing:** the 9-category vocabulary is **never enumerated to the
 LLM** today. The system prompt (`web/src/lib/itinerary/master-prompt.ts:15-111`
@@ -236,13 +245,46 @@ The strict subset excludes `interest` (explicit — "junk drawer" comment at
 today's selector: the candidate can't clear the `OPENER_CATEGORIES` gate. Four of
 the nine assignment-listed categories are affected.
 
-**Open — Adam:** does the guarantee-selector share `pickAnchorStop`'s category
-gate, or use its own? If shared, the guarantee can only ever enforce five
-categories, matching what the corpus-quality reasoning behind `OPENER_CATEGORIES`
-already accepted. If separate, we need a stated policy for the four excluded
-ones — most sharply for `interest`, whose "junk drawer" status was a considered
-call, not an oversight; and for `fuel`, which the fuel-POI layer (`expedition-
-planner.md` §8.5) hasn't shipped yet.
+**RESOLVED 2026-08-25 (Adam) — the guarantee-selector uses its OWN broader
+gate, 8 of the 9 categories:**
+
+- **Include (8):** `camping`, `scenic`, `food`, `oddity`, `attraction` (the
+  existing 5 from `OPENER_CATEGORIES`) plus `urban`, `overnight`, `fuel`.
+- **Exclude (1):** `interest` — never shown as a wizard chip. Its "junk drawer"
+  status stands.
+
+**Two caveats found while verifying this decision** `[read source 2026-08-25]`
+(details in §9 B):
+
+1. **`fuel` in the guarantee gate is INERT with today's mechanism.** Backfill is
+   corpus-pool-only — `pickAnchorStop`/`pickBackfillStops` iterate
+   `facts.poolPOIs` (populated from `master_place` RPCs at `facts.ts:217-230`)
+   and NEVER call `PlaceResolver` / Google / any network. Comment at
+   `anchor-backfill.ts:11-13` is explicit: "no LLM re-ask, no network call —
+   `facts.poolPOIs` is already in memory." The `SLIDE_TO_PRIMARY_CATEGORY.fuel`
+   mapping (`web/src/lib/trip-browse/federated.ts:22`) covers
+   `gas_station`/`ev_charging`/`truck_stop` — so pool fuel candidates DO exist
+   if those corpus rows exist near a day's anchors, but the "resolves via Google
+   Places live-resolve" assumption applies to the LLM→audit path
+   (`audit.ts:100-107` → `resolve.ts:19` `places:searchText`) for LLM-emitted
+   `keyStops` names, NOT to backfill.
+2. **`overnight` in the guarantee gate DUPLICATES the existing overnight
+   mechanism.** The LLM's overnight is a dedicated per-day slot
+   (`web/src/lib/itinerary/schema.ts:281-295, :310`), required on every day
+   (`schema.ts:310`), grounded independently (`audit.ts:550-557`), and marked on
+   its tile as the single `isOvernight` via `markOvernightTile`
+   (`bake.ts:282-290`, `:141-145`). A backfill pick, by contrast, lands as an
+   extra `KeyStop` on `day.keyStops` (`audit.ts:526-527`) — it is NOT fed into
+   `overnightRef` and does NOT trigger `markOvernightTile`. Adding `overnight`
+   to the backfill gate would let the day carry (a) the LLM's overnight
+   (spine-badged `isOvernight`) AND (b) a different hotel/motel row featured as
+   a curated key-stop card, with no dedupe between them (the anchor-covered
+   test at `audit.ts:463-470` reads keyStop coords only, not overnight coords).
+
+**Both caveats reported per Adam's ask; neither has been silently built around.**
+Recommend Adam re-consider whether `overnight` should stay in the gate at all,
+and whether `fuel` should ship as a chip today given its no-fire posture. See §9
+B for the resolution asks.
 
 ### 5.3 Where in the audit's per-day loop the guarantee fires
 
@@ -277,14 +319,17 @@ computes both `missingCorridorAnchors` (today's set) and `missingGuaranteedCateg
   more (a bare Riverside vs a missing `scenic` for the trip) is a real product
   judgement to state, not a knob.
 
-**Open — Adam:** pick one, or a fourth. Independent from that: is the guarantee
-**trip-wide** (once satisfied on any day, it's done) or **per-city** (a
-guaranteed category should appear at every mid-corridor city and every
-start/end)? The assignment text reads per-city ("guaranteed to show up in every
-city on the route"); the mechanism above assumes per-day, which is what the audit
-loop natively supports. Per-city inside a day is a further granularity — it
-would run the guarantee against each mid-corridor anchor in `audit.ts:501-507`
-rather than each day.
+**RESOLVED 2026-08-25 (Adam) — Option A: guarantee wins strictly.** Missing
+guaranteed categories get first crack, up to `min(missing, cap)`; remaining
+slots serve corridor anchors as today. Deliberately chosen for simplicity, not
+because it's necessarily final. **Adam is aware that on a day with 2+ missing
+guaranteed categories, corridor coverage drops to zero — considered acceptable
+because it only happens when the user explicitly opted into those categories.**
+Flag if real usage suggests Option B or C would be a better fit; do not silently
+tune. **Trip-wide vs per-city vs per-day granularity (D) is still open** — see
+§9 D and §11 (this decision C is written against a per-day model but is
+compatible with all three; the audit loop is the natural home per-day, per-city
+requires anchor-level accounting).
 
 ### 5.5 A ranking wrinkle worth naming
 
@@ -410,35 +455,122 @@ outside the assignment but worth flagging alongside.
 
 ## 9. Open questions / decisions for Adam
 
-Consolidated from throughout — each item names a `§` for context.
+Consolidated from throughout — each item names a `§` for context. **A/B/C
+decided 2026-08-25; D–H still open.**
 
-- **A. Two-taxonomies (§2).** Chip label `hotel` vs `overnight` internally, or
-  use `overnight` end-to-end? Everything downstream of the wizard runs on
-  `SlideCategoryKey` (`overnight`). **Confirm** which label the user sees, and
-  therefore where the translation lives.
-- **B. Category gate (§5.2).** Does the guarantee-selector share
-  `OPENER_CATEGORIES` — silently making the guarantee unenforceable for
-  `interest`, `urban`, `fuel`, `hotel/overnight` — or use its own broader gate?
-  If broader, what's the policy on `interest` (its "junk drawer" status is a
-  considered call) and on `fuel` (the fuel-POI corpus layer hasn't shipped)?
-  **Confirm** category gate for the new selector.
-- **C. Contention model (§5.4).** Option A (guarantee-first), B (guarantee-in-
-  slack), C (interleave/merit) — or a fourth. **Pick one.**
-- **D. Trip-wide vs per-city vs per-day (§5.4).** The assignment phrasing reads
-  per-city; the audit's native granularity is per-day. **Confirm** which the
-  guarantee enforces.
-- **E. Rank order (§5.5).** For the guarantee-selector's `rank()`: on-category
-  first, then richness, then proximity — or a different order? **Confirm.**
-- **F. Chip section shape (§6).** Sub-copy phrasing, icons on chips, order, and
-  whether `interest` is exposed. **Product calls.**
-- **G. Preferences-as-a-whole (§7).** Keep Preferences alongside Categories
-  (rig vibe vs trip intent framing), collapse Preferences into the new section,
-  or retire Preferences entirely (given none of its remaining four items are
-  enforced downstream)? Broader than the assignment — flagged, not decided.
-- **H. Prompt posture (§4.2).** Word the guaranteed-categories fact as a
-  preference-to-weave (matching #274 corridor-cities posture) or as a stronger
-  contract? The mechanism enforces it either way — the prompt's job is model
-  behaviour, not enforcement. **Confirm** the copy stance.
+### ✅ A. Two-taxonomies (§2) — RESOLVED 2026-08-25 (Adam)
+
+**Decision:** use `overnight` end-to-end — both wizard chip label and internal
+representation. Not `hotel`. **Reasoning:** "hotel" implies lodging and
+misleadingly excludes campgrounds, which is most of what this app's overnights
+actually are — "overnight" is the accurate umbrella term for the user too, not
+just internally. **Effect:** no `hotel↔overnight` translation at the
+wizard→payload boundary for this category. Cross-check §2, §11-step-3.
+
+### ✅ B. Category gate (§5.2) — RESOLVED 2026-08-25 (Adam), with two caveats
+
+**Decision:** the guarantee-selector uses its **own broader gate** covering **8
+of the 9** categories — `camping, scenic, food, oddity, attraction` (existing
+`OPENER_CATEGORIES` five) plus `urban, overnight, fuel`. `interest` is
+**excluded from the wizard chip row entirely**; its "junk drawer" status
+(`anchor-backfill.ts:41-42`) stands.
+
+**Verified before writing this in `[read source 2026-08-25]` — two caveats stand:**
+
+- **B.1 `fuel` is inert with today's mechanism** (per §5.2 explanation).
+  Backfill iterates `facts.poolPOIs` only (`anchor-backfill.ts:11-13` explicit),
+  never reaches Google/live-resolve. Fuel guarantee only fires when the corpus
+  has `primary_category ∈ {gas_station, ev_charging, truck_stop}`
+  (`federated.ts:22`) near an anchor. Adam's assumption "fuel resolves via
+  Google Places live-resolve" describes the LLM→audit path
+  (`audit.ts:100-107` → `resolve.ts:19`) for LLM-emitted `keyStops` names, NOT
+  the backfill. **Ask for Adam:** ship `fuel` as a chip today (accepting it
+  will silently fail to fire in most of the app's target regions until the
+  fuel-POI corpus layer per `expedition-planner.md §8.5` ships), OR omit `fuel`
+  from the chip row until then, OR extend the backfill selector with a
+  live-resolve path (significant scope — a new mechanism, not a wiring change).
+- **B.2 `overnight` in the gate DUPLICATES the existing per-day overnight slot.**
+  Concrete duplication (per §5.2): the LLM emits an `overnight` block per day
+  (`schema.ts:281-295, :310` — required); that block is grounded and marked as
+  the day's single `isOvernight` tile via `overnightRef` / `markOvernightTile`
+  (`audit.ts:550-557`, `bake.ts:282-290, :141-145`). A backfill pick, in
+  contrast, lands as an extra `KeyStop` on `day.keyStops` (`audit.ts:526-527`),
+  is featured as a curated key-stop card via `noteByRef` (`bake.ts:216-221`),
+  and NEVER enters the overnight-marking path. If the backfill picks a
+  different hotel/motel row than the LLM's overnight (common — pool has 3
+  `SLIDE_TO_PRIMARY_CATEGORY.overnight` types: `hotel, resort_hotel, motel`,
+  `federated.ts:41`), the day carries two overnight-category features with no
+  dedupe (the anchor-covered test at `audit.ts:463-470` reads keyStop coords
+  only). **Ask for Adam:** the mechanism cannot honour `overnight` as a
+  guarantee without either (a) removing it from the chip row (recommended for a
+  first ship — the LLM overnight slot already ensures every day has an
+  overnight), or (b) building overnight-guarantee as a separate mechanism that
+  reaches the `overnightRef` path instead of the keyStops path (materially
+  larger scope than the rest of this feature).
+
+**Working assumption for §11's implementation plan:** proceed with the 8-chip
+gate as decided, but **do NOT wire `fuel` and `overnight` chips into the
+selector until B.1 / B.2 are re-decided**. The chips can be rendered
+(disabled, or with an explanatory tooltip) and the selector integration for
+those two deferred without blocking the other 6. Flagging rather than picking.
+
+### ✅ C. Contention model (§5.4) — RESOLVED 2026-08-25 (Adam)
+
+**Decision:** Option A — guarantee wins strictly. Missing guaranteed categories
+get first crack, up to `min(missing, cap)`; remaining slots serve corridor
+anchors as today. **Reasoning:** deliberate starting point for simplicity;
+corridor coverage dropping to zero on a day with 2+ missing guaranteed
+categories is acceptable because it only happens when the user explicitly opted
+into those categories. Flag if real usage suggests Option B or C would be a
+better fit later; do not silently tune. Cross-check §5.4, §11-step-6.
+
+### ⏳ D. Trip-wide vs per-city vs per-day (§5.4) — OPEN
+
+The assignment phrasing reads per-city; the audit's native granularity is
+per-day. **Confirm** which the guarantee enforces. **This blocks §11 steps 5
+(audit-loop change) and 6 (selector integration).** Options with tradeoffs:
+
+- **Per-day (audit-loop native):** compute `missingGuaranteedCategories` once
+  per day at `audit.ts:451-536`, feed into the backfill loop. Cheapest to
+  implement, but reads "one of each category per trip is fine as long as it's
+  on any day" — which does not match the assignment's per-city phrasing.
+- **Per-city (assignment-native):** compute misses per mid-corridor anchor
+  (`audit.ts:501-507`) inside the day. Matches the phrasing; more chatty (a
+  guaranteed `food` category on a 4-city day = up to 4 pick opportunities);
+  tension with the per-day 2-slot cap.
+- **Trip-wide (satisfice-once):** once a guaranteed category has appeared any
+  day of the trip, it's done. Weakest guarantee; consistent with how
+  corridor-cities coverage was framed as a preference in #274.
+
+### ⏳ E. Rank order (§5.5) — OPEN
+
+For the guarantee-selector's `rank()`: on-category first, then richness, then
+proximity — or a different order? **Confirm.** **Blocks §11 step 6** (the
+selector's internal ranking). Compatible with any order — this is a one-line
+call.
+
+### ⏳ F. Chip section shape (§6) — OPEN
+
+Sub-copy phrasing, icons on chips, order, and whether tooltips/badges surface
+the B.1/B.2 caveats to the user. **Product calls.** **Partially blocks §11
+step 1** (the wizard section can render with defaults but F is required before
+merging user-visible copy).
+
+### ⏳ G. Preferences-as-a-whole (§7) — OPEN
+
+Keep Preferences alongside Categories (rig vibe vs trip intent framing),
+collapse Preferences into the new section, or retire Preferences entirely
+(given none of its remaining four items are enforced downstream)? **Does NOT
+block §11 step 8** (scenic removal proceeds regardless); does affect whether
+step 8 also removes the other four chips.
+
+### ⏳ H. Prompt posture (§4.2) — OPEN
+
+Word the guaranteed-categories fact as a preference-to-weave (matching #274
+corridor-cities posture) or as a stronger contract? The mechanism enforces it
+either way — the prompt's job is model behaviour, not enforcement. **Blocks
+§11 step 4** (the system-prompt copy line); does NOT block §11 step 3
+(payload plumbing).
 
 ---
 
@@ -471,3 +603,193 @@ Consolidated from throughout — each item names a `§` for context.
   version of the corridor coverage nudge; the model for §4.2's posture.
 - `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md` — the mechanism
   that added `pickAnchorStop` and `KEYSTOP_ANCHOR_BACKFILL`.
+
+---
+
+## 11. Implementation plan — what's unblocked, what waits on D–H
+
+Numbered by natural build order. Each step lists **what** the code change is,
+**where** it lands, and — if applicable — **which of D–H must resolve before
+this step can be merged** (not started; scoping and prototyping can proceed for
+some).
+
+### Step 1 — Wizard `<Section title="Interest categories">` — PARTIALLY UNBLOCKED
+
+Insert a new `<Section>` in `web/src/components/plan/expedition-wizard.tsx`
+between the JSX blocks at `:474` and `:477`. Body: a `<ChipGroup>` of the 8
+chip categories per B (`camping, urban, scenic, food, oddity, attraction,
+overnight, fuel`), multi-select, default `[]`.
+
+**Blocked on F** for shipped copy — sub-copy phrasing, whether to icon-adorn
+chips (existing preference chips are text-only), chip order (default =
+`BROWSE_CARD_CATEGORIES` order minus `interest`, i.e. `camping, scenic,
+attraction, oddity, food, fuel, hotel→overnight, urban`), and whether B.1/B.2
+caveats need in-UI treatment (e.g., a "may not fire in remote areas" tooltip
+on the `fuel` chip, an explanation of the LLM-overnight interaction on the
+`overnight` chip). **Can prototype with defaults now; do not merge user-visible
+copy until F resolves.**
+
+### Step 2 — Wizard form state — UNBLOCKED
+
+Add `const [guaranteedCategories, setGuaranteedCategories] = useState<
+SlideCategoryKey[]>([])` alongside the other 11 `useState`s at
+`expedition-wizard.tsx:137-151`. Project into the `ExpeditionForm` `useMemo` at
+`:182-207`. No decisions gate this — pure plumbing.
+
+### Step 3 — Payload type + mapper — UNBLOCKED
+
+- Add `guaranteedCategories?: SlideCategoryKey[]` (**note: `SlideCategoryKey`,
+  per A** — `overnight` end-to-end, no translation) to `ExpeditionForm`
+  (`web/src/lib/plan/expedition.ts:47-68`) and to `GenerationInput`
+  (`web/src/lib/itinerary/facts.ts:79-87`).
+- Wire through `expeditionToGenerationInput`
+  (`expedition.ts:100-140`) — one-line copy.
+
+### Step 4 — LLM fact payload wiring — SPLIT
+
+- **4a. Payload plumbing (UNBLOCKED):** add `guaranteedCategories` to the
+  payload object built at `web/src/lib/itinerary/master-prompt.ts:121-142`
+  alongside `corridorCities`. Trip-level fact, not per-day (matches how
+  `corridorCities` is delivered).
+- **4b. `SYSTEM_PROMPT` copy line (BLOCKED on H):** the wording of how the model
+  should treat the fact — preference-to-weave (matching #274) vs stronger
+  contract. Do not draft the copy until H resolves.
+
+### Step 5 — Audit-loop change: compute `missingGuaranteedCategories` per day — BLOCKED on D
+
+At `web/src/lib/itinerary/audit.ts:451-536`, after the LLM's `keyStops` are
+ground into `keptStops` (`:436-449`) but before the existing backfill runs
+(`:510-515`), compute:
+
+```
+coveredCategories = new Set(keptStops.map((s) => poolById.get(s.name)?.category))
+missingGuaranteedCategories = new Set(guaranteedCategories).difference(coveredCategories)
+```
+
+**Where the miss is computed depends on D:**
+
+- **Per-day (D-A):** as above — one Set per day, feeds the day's backfill loop.
+  Trivial.
+- **Per-city (D-B):** compute per mid-corridor anchor at `:501-507` — a Map
+  from anchor to missing Set — and change §11-step-6 to iterate anchors, not
+  days. Requires refactoring the current anchor loop to track guarantees per
+  anchor.
+- **Trip-wide (D-C):** the Set is trip-scoped (not per-day); after each day's
+  backfill picks, anything picked is subtracted from the outstanding trip-wide
+  set. Requires new state above the per-day loop.
+
+**Cannot merge this step until D is picked.** The shape of the Set diverges
+enough that prototyping one now would need re-work for either of the other two.
+
+### Step 6 — New guarantee-selector — BLOCKED on D + E; partially on B (fuel/overnight)
+
+New function alongside `pickAnchorStop` in
+`web/src/lib/itinerary/anchor-backfill.ts` — pure, unit-tested, no I/O.
+Signature roughly:
+
+```
+pickGuaranteedStop({ pool, anchor, keptRefs, onCorridor, missingCategories }): PoolPOI | null
+```
+
+Gates:
+
+- broader `GUARANTEE_CATEGORIES` set (the 8 per B — or 6 if the fuel/overnight
+  decisions in B.1/B.2 resolve toward exclusion), instead of `OPENER_CATEGORIES`;
+- shared with `pickAnchorStop`: dedupe on `p.id`/`p.name`, `isCityTautology`,
+  `ANCHOR_NEAR_MI`, `onCorridor`;
+- new: `missingCategories.has(p.category)` (only surface candidates that
+  actually satisfy an outstanding guarantee).
+
+**Rank order — BLOCKED on E.** Recommended default: on-category (implicit —
+already filtered) → richness (`hasPhoto`/`hasDescription`, matching
+`pickAnchorStop`'s learned preference for renderable rows) → proximity. Adam
+picks.
+
+**B.1/B.2 interaction:** if a `fuel` chip is selected, this selector will
+return `null` for that category in ~any far-north region until the fuel-POI
+layer ships — silent no-op, per the B.1 caveat. If an `overnight` chip is
+selected, this selector will surface `hotel`/`resort_hotel`/`motel` pool rows
+that then become extra `KeyStop` cards on days that already have an LLM
+overnight, per the B.2 caveat. **Do not merge fuel/overnight wiring until B.1
+/ B.2 resolve.**
+
+### Step 7 — Contention wiring in `pickBackfillStops` — BLOCKED on D (Option A shape holds for all D)
+
+Change `web/src/lib/itinerary/anchor-backfill.ts:241-267` to a two-phase pick:
+
+1. Call `pickGuaranteedStop` up to `min(missing, cap)` times (Option A per C).
+2. Fall through to the existing `pickAnchorStop` loop for any remaining slot
+   count.
+
+Both phases share the `taken` set and count toward `MAX_BACKFILLS_PER_DAY`.
+Both feed the same trip-wide dedupe `backfilledTripWide` at `audit.ts:312`.
+
+**The two-phase shape holds regardless of D**, but **which loop it hangs off of
+depends on D** (per-day = the current day loop; per-city = a nested anchor
+loop; trip-wide = a new outer accumulator). Cannot merge until D resolves.
+
+### Step 8 — `scenic` removal from Preferences — UNBLOCKED
+
+Independent, no decisions gate this. Per §7:
+
+- `web/src/lib/plan/expedition.ts:91-97` — drop `"scenic"` from
+  `PREFERENCE_OPTIONS`.
+- `web/src/lib/vehicles/types.ts:32-34` — update docstring.
+- `web/src/lib/vehicles/repository.ts:24, 39, 54` — drop `"scenic"` from the
+  three seed rigs (in-memory only, no migration).
+- `docs/specs/expedition-planner.md:274` — companion doc edit.
+
+**G-adjacent:** if G resolves toward "retire Preferences entirely," this step
+expands to drop the whole `PREFERENCE_OPTIONS` array and the `<ChipGroup>` at
+`expedition-wizard.tsx:550-560`. If G resolves toward "keep," step 8 is
+scenic-only. **Ship step 8 either way** — it doesn't have to wait on G if the
+scenic-only ship is preferred.
+
+### Step 9 — Feature flag + kill switch — UNBLOCKED
+
+Add `GUARANTEED_CATEGORIES_ENABLED = process.env.INTEREST_CATEGORY_GUARANTEE
+!== "false"` next to `BACKFILL_ENABLED` at `web/src/lib/itinerary/audit.ts:67`
+(kill switch, ON by default — matching the #275 pattern and its rationale at
+`audit.ts:59-66`: generation is already gated behind `ENABLE_PLANNER_WIZARD`
+which prod never sets, so shipping OFF would ship a fix that does nothing).
+Gates the guarantee logic in steps 5–7; step 4 payload plumbing runs
+unconditionally (no user impact from carrying an unused field).
+
+### Step 10 — Tests + decision doc — LARGELY UNBLOCKED
+
+- Unit tests for the new `pickGuaranteedStop` (gate: 8-cat inclusion,
+  `interest` exclusion, no-match returns null, on-category-only filter).
+- Unit tests for the contention shape in `pickBackfillStops` — the Option A
+  guarantee-first ordering.
+- Integration test on `bakeGeneratedDays` (fake corridor RPC, no LLM) that a
+  day whose LLM `keyStops` miss a guaranteed category gets a backfill pick and
+  the resulting `Trip.days[n].keyStops` carries it.
+- Decision doc: new
+  `docs/decisions/2026-08-XX-interest-category-chips.md` summarizing
+  A/B/C decisions, the two verified caveats (B.1/B.2), the D–H decisions when
+  made, and the chosen contention model. Follow the pattern of
+  `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md`.
+
+### Blocker-to-step map
+
+| Blocker | Blocks steps |
+|---|---|
+| **D** (granularity) | 5, 6, 7 |
+| **E** (rank order) | 6 (partial — a merge blocker, not a build blocker; default is safe to prototype) |
+| **F** (UI shape) | 1 (partial — safe to prototype with defaults, not to ship copy) |
+| **G** (Preferences fate) | 8 (partial — scenic-only ship is safe regardless) |
+| **H** (prompt posture) | 4b (the system-prompt copy line — not 4a payload plumbing) |
+| **B.1** (`fuel` inert) | 6, 1 (partial — determines whether `fuel` chip ships) |
+| **B.2** (`overnight` duplicates) | 6, 1 (partial — determines whether `overnight` chip ships) |
+
+### What can ship in a first PR without any of D–H
+
+Steps 2, 3, 4a, 8 (scenic-only), 9 — payload/state plumbing plus scenic
+removal plus flag. Nothing user-visible fires until steps 5–7 land. Sensible
+first cut if Adam wants forward motion before the D–H decisions land.
+
+**Do not build any of the D–H-gated steps until Adam picks each blocker
+explicitly** — do not default-choose D-A, E-photos-first, F-defaults,
+G-keep-others, or H-preference-to-weave silently. Every default in this doc is
+labelled as recommended, not decided.
+
