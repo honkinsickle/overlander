@@ -59,6 +59,16 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > carry it (retrievable — *not* a declared schema field, see BACKLOG). Source
 > photos: 1,622 `ridb` + 4,451 `nps` = 6,073 source_records carry
 > `normalized_payload.photo.url`.
+>
+> **⚠ NPS photo coverage expanded (PR #298, TEST-only as of 2026-08-26):**
+> the NPS ingester now extracts photos from ALL three record types —
+> `nps:place:*` (already had photos), `nps:campground:*`, and `nps:park:*`.
+> On TEST, 305 additional source_records gained `normalized_payload.photo`
+> (5,181 total NPS with photos), and 192 master_place rows gained
+> `photo_url` (7,443 total across all sources). **PROD numbers above are
+> stale — they will rise once PR #298 merges and the PROD backfill runs**
+> (`backfill:nps-photo -- --confirm` then `backfill:mp-enrichment --
+> --confirm`).
 
 - **master_place:** 13,629 total · 13,629 searchable · 0 non-searchable.
 - **Searchable latitude range:** −88.6 → 70.2 (13,629 rows). The corridor proper

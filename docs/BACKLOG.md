@@ -458,6 +458,29 @@ carry a real source description while `master_place.description` is NULL.
 Seeding those rows is a product decision; the state-parks spec §10a excluded
 `description` deliberately.
 
+## Non-NPS POI photo sourcing — open (2026-08-26)
+
+NPS/RIDB photos now cover ~7,443 master_place rows on TEST (PR #298). The
+remaining ~153k corpus POIs (OSM, Google text-search, BLM, state parks, Atlas
+Obscura, etc.) have no corpus-native photo — cards render a category-colored
+block with an icon badge. Google hydration grafts a live photo for POIs with a
+`placeId`, but the majority of corpus POIs (especially OSM-sourced) have none.
+
+**Candidate sources researched (decision pending):**
+- **Wikimedia Commons / Wikidata** (primary candidate) — many OSM nodes carry a
+  `wikidata` tag linking to a Wikidata entity, which in turn links to Commons
+  images. Free, cacheable, CC-licensed. Coverage is uneven (strong for named
+  landmarks, weak for trailheads/campgrounds).
+- **Mapillary** (fallback) — street-level imagery keyed by coordinates. Coverage
+  along highways is good; off-highway and backcountry is sparse. API returns the
+  nearest photo within a radius, so the result is "a photo near this place," not
+  "a photo of this place" — a quality distinction.
+
+**Not started:** no integration built, no coverage numbers measured, no
+architecture decision on how photos from these sources would flow through the
+existing `normalized_payload.photo` → corridor RPC → card pipeline. Separate
+from the NPS photo work (which uses a first-party, authoritative API).
+
 ## `fed_exact` is category-blind AND name-blind within 10m (2026-08-17)
 
 `matchOne` Step 1 (`findFederalAnchor`, `data/entity-resolution/matcher.ts`)
