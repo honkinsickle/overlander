@@ -57,7 +57,7 @@ const RPC_CHUNK = 500;
 /** Source precedence for photo_url, mirroring the SQL in the RPC. Kept here
  *  only so the dry-run preview reports the same winner split the RPC will
  *  actually write — the RPC is the single source of truth for the write. */
-const PHOTO_SOURCES = ["nps", "ridb", "blm", "state_parks"] as const;
+const PHOTO_SOURCES = ["nps", "ridb", "wikipedia", "blm", "state_parks"] as const;
 type PhotoSource = (typeof PHOTO_SOURCES)[number];
 
 type Db = SupabaseClient;

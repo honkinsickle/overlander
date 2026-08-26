@@ -30,7 +30,7 @@ type Props = {
   /** Only the fields this row renders — any full BrowsePlace satisfies it. */
   place: Pick<
     BrowsePlace,
-    "title" | "photoUrl" | "photoAlt" | "rating" | "reviewCount"
+    "title" | "photoUrl" | "photoCredit" | "photoAlt" | "rating" | "reviewCount"
   >;
   category: BrowseCardCategory;
   /** Status line, e.g. "Open · 6a–10p". Omit to hide the row. */
@@ -141,6 +141,22 @@ export function CategoryListCard({
         >
           <CategoryIconV2 category={category as CategoryIconV2Name} size={22} />
         </span>
+        {place.photoCredit && (
+          <span
+            className="absolute truncate"
+            style={{
+              bottom: 2,
+              right: 3,
+              maxWidth: 120,
+              fontSize: 8,
+              lineHeight: "10px",
+              color: "rgba(255,255,255,0.7)",
+              textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+            }}
+          >
+            {place.photoCredit}
+          </span>
+        )}
       </div>
 
       {/* Content — title / verified / status + Details. */}

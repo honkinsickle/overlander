@@ -53,6 +53,7 @@ export type CorridorPlace = {
   title: string;
   category: BrowseCardCategory;
   photoUrl?: string;
+  photoCredit?: string;
   photoAlt: string;
   rating?: number;
   reviewCount?: number;

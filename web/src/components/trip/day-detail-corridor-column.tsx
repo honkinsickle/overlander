@@ -1199,6 +1199,7 @@ export function placePool(day: Day): CorridorPlace[] {
       category:
         p.category === "overnight" ? "camping" : (p.category ?? "interest"),
       photoUrl: p.photoUrl,
+      photoCredit: p.photoCredit,
       photoAlt: p.photoAlt,
       rating: p.rating,
       reviewCount: p.reviewCount,
