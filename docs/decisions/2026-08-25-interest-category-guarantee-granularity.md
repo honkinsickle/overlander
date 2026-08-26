@@ -103,15 +103,34 @@ surfaces a DISTINCT urban POI near the anchor, never the anchor town itself.
   `pickAnchorStop`'s `rank`) → proximity. A one-line change if a different order
   is wanted. Flagged.
 
-- **Cross-category saturation under the cap.** Because phase 1 iterates
-  anchors-then-categories in traveller/selection order, on a multi-city day a
-  single earlier category can consume BOTH cap slots at the first two cities
-  before a second selected category gets a turn. Observed live: a
-  `[scenic, food]` guarantee yielded two `scenic` picks and zero `food`
-  (also because the corpus is scenic-heavy). This is inherent to Option A + a
-  2-slot cap + per-city and was acknowledged in the D-B brief §3. A future
-  refinement could round-robin categories before repeating one; not built —
-  flagged.
+- ~~**Cross-category saturation under the cap.**~~ **CORRECTED 2026-08-25
+  (later same day) — this was misdiagnosed. The dominant symptom was a SCOPE
+  BUG, not the category-monopoly tradeoff.** The cap was written
+  `MAX_BACKFILLS_PER_DAY` and enforced per-DAY: phase 1 broke at
+  `picks.length >= max` across ALL of a day's anchors, so the traveller-first
+  day-START anchor routinely consumed the whole day budget and every
+  mid-corridor city that day got ZERO — despite real candidates existing.
+  Measured on trip `ab146c1d` (San Diego → Reno): the two day-1 picks landed at
+  the San Diego start (scenic + camping), and Oceanside / Riverside /
+  Silver Lakes were starved even though `pickGuaranteedStop` returns a real
+  candidate at each `[measured 2026-08-25]`. The D-B spec is per-CITY density,
+  so this was a **correctness bug against the spec**, not a tuning tradeoff.
+  **Fixed:** renamed and rescoped to `MAX_BACKFILLS_PER_CITY` — each anchor
+  (start, mid-corridor, end) carries its OWN budget of 2, with no day-level
+  break in either phase. Re-run on the same trip's real pool: all four day-1
+  anchors now receive their own picks (2 each). Locked by
+  `anchor-backfill.test.ts` ("each city gets its OWN budget of 2 — an early
+  anchor does not starve a later one").
+  - **The genuine category-monopoly case still exists, now at per-CITY scope:**
+    within a single city's 2 slots, one selected category iterated first can
+    take both before another gets a turn (a `[scenic, food]` city where scenic
+    ranks first twice). Still flagged; a future refinement could round-robin
+    categories within a city. Not built.
+  - **Consequence to weigh:** removing the per-day ceiling means a multi-city
+    day can now surface materially more machine picks than before (up to 2 ×
+    cities passed, plus openers). The old per-day cap's "a key stop at every
+    town is a list of towns" concern is now bounded per-city, not per-day — a
+    deliberate consequence of honoring the D-B density spec, flagged here.
 
 - **Coverage attribution is pool-hit-first.** Live-resolved keyStops (raw Google
   types) mostly don't count as category coverage (only `restaurant`→`food`),

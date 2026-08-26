@@ -493,7 +493,7 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
           `lib/plan/guarantee-categories.ts` and the ADR. */}
       <Section
         title="Interest categories"
-        hint="Guarantee certain kinds of stop appear on your trip. Priority within the existing 2-per-day cap — not additional stops."
+        hint="Guarantee certain kinds of stop appear on your trip. Priority within the existing per-city stop cap — not additional stops."
       >
         <div className="flex flex-col gap-4">
           <div className="flex gap-2 flex-wrap">
