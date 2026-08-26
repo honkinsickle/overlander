@@ -12,6 +12,46 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-26 (redesign) — corridor-city selection: strict 3mi proximity
+
+- **Design change (Adam's decision, delivered as an attachment):** replace the
+  prominence + 50mi-`minSpacing` selection in `deriveCorridorCities` with a
+  strict rule — a city is a corridor node iff its offset from the day polyline
+  is ≤ 3mi. No prominence, no spacing suppression, no gap-fill fallback. This
+  is one redesign that fixes BOTH prior symptoms: SF/Sacramento false-positives
+  (now excluded by the tight gate) AND the Concord/Fairfield/Vacaville/Davis
+  false-negatives (no longer suppressed).
+- **Scoped `bufferMi` correctly.** `bufferMi` (15mi) is SHARED — bucket.ts,
+  bake.ts, stretches.ts, seeds.ts read it as the on-corridor tolerance. Changing
+  it globally would have side effects the task forbade. Added a NEW `corridorMi`
+  (3mi) used ONLY by the city-inclusion gate; `bufferMi` untouched.
+- **maxNodes 4 → 40** (pathology backstop, along-route truncation, never
+  prominence). Forced by data: strict inclusion surfaces many real cities on a
+  dense day (measured 21 Palo Alto→Colusa, 29 San Jose→Reno), and Davis was
+  ~18th along its route — a low cap would re-drop the named cities.
+- **Dedup:** added a tight 0.5mi same-point dedup (keep more prominent). Flagged
+  it was a NO-OP on the measured trips (closest real pair 0.77mi); it guards
+  true duplicate rows only. Same tight radius replaced the old 50mi
+  seed-vs-gazetteer dedup.
+- **Removed** `minSpacingMi` + `maxGapMi` params (no non-test consumers) and the
+  greedy/gap-fill selection. Rewrote ~9 derive.test.ts tests built on the old
+  model; added the two NAMED regression tests (Concord/Fairfield/Vacaville and
+  Davis/Sacramento). Rewrote the #295 day-corridor test (its whole-route-vs-
+  per-day contrast relied on the now-removed suppression) to test per-day
+  geometric scoping directly.
+- **Verified on real geometry** (TEST `trips` table was reset mid-task by a
+  parallel workspace, so I routed the same endpoints rather than reading the
+  now-deleted rows): Concord/Fairfield/Vacaville IN, Woodland (9.63mi) + SF
+  (11.56mi) OUT; Davis IN, **Sacramento OUT at its real 3.09mi offset**; a rural
+  US-395 day yields ZERO corridor cities (valid). 119 corridor + 182 itinerary
+  tests pass; gate exits 0 on both workspaces.
+- **Woodland drop** documented as a real, accepted tradeoff (previously-validated
+  legit city, +9mi detour) — NOT recast as "off the road."
+- **Top flag:** density cascade — 21–29 corridor cities/day on dense suburban
+  routes, which multiplies backfill anchors (#295 shares the derivation). Filed
+  in BACKLOG + the ADR as the key product/density follow-up. Did NOT generate a
+  trip end-to-end (Adam will).
+
 ## 2026-08-26 (fix) — audit/bake corridor-anchor granularity mismatch
 
 - **Investigation → fix.** After the per-city cap fix (#294) merged, a fresh

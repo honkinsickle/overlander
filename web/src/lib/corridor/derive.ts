@@ -1,25 +1,33 @@
 /**
- * Corridor city-node derivation — the §2.1.2 six-step filter from
- * docs/corridor-cities-spec.md. Turns a day's route polyline + the
- * bundled GeoNames gazetteer into the ordered corridorCities[] spine
- * (Start → intermediates → End).
+ * Corridor city-node derivation. Turns a day's route polyline + the bundled
+ * GeoNames gazetteer into the ordered corridorCities[] spine (Start →
+ * intermediates → End).
+ *
+ * ⚠ REDESIGNED 2026-08-26 (ADR docs/decisions/2026-08-26-corridor-city-strict-
+ * proximity.md). The old §2.1.2 model — a 15mi buffer pre-filter followed by
+ * greedy-by-prominence selection with a 50mi minimum spacing and an adaptive
+ * gap-fill — is REPLACED by a strict proximity rule: a city is a corridor node
+ * iff its straight-line offset from the polyline is ≤ `corridorMi` (3mi) and it
+ * meets the population floor. No prominence ranking, no spacing suppression, no
+ * gap-fill fallback. The spacing model let one prominent city suppress
+ * genuinely-on-route neighbours (SF hid Concord/Fairfield/Vacaville; Sacramento
+ * hid Davis); removing it is the whole point. A day may have zero corridor
+ * cities — that is valid and deliberate, not padded.
  *
  * Pure function: no I/O. The caller loads the gazetteer
- * (src/lib/corridor/data/cities-na.json) and supplies the day's
- * polyline slice. All geometry goes through the shared
- * alongRouteMiles() helper (spec §2.4) — no projection math here.
+ * (src/lib/corridor/data/cities-na.json) and supplies the day's polyline slice.
+ * All geometry goes through the shared alongRouteMiles() helper — no projection
+ * math here.
  *
- * Interpretation notes against the spec:
- * - min_spacing_mi applies BETWEEN INTERMEDIATES only. Applied against
- *   Start/End it would forbid the spec's own mission example (Ventura at
- *   65 mi sits 30 mi from the 95-mi end node).
- * - The §2.1 step-3 "< 3 mi" tolerance is the anchor guard: gazetteer
- *   candidates projecting within 3 route-miles of Start/End are dropped
- *   so the start/end city can't reappear as a corridor node.
- * - placeIds is always [] here — place→node bucketing is §2.3 and comes
- *   with the finalize wiring, not this filter.
+ * Notes:
+ * - `corridorMi` (3mi, city inclusion) is DISTINCT from `bufferMi` (15mi), the
+ *   shared on-corridor tolerance bucket.ts / bake.ts / stretches.ts / seeds.ts
+ *   still use for place-bucketing and tile-labelling — those are untouched.
+ * - `anchorGuardMi` still drops candidates within a few route-miles of
+ *   Start/End so the start/end city can't reappear as a corridor node.
+ * - placeIds is always [] here — place→node bucketing is separate (bucket.ts).
  */
-import { alongRouteMiles } from "@/lib/routing/point-to-polyline";
+import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 import type { LngLat } from "@/lib/routing/route-between";
 import type { CorridorCity } from "@/lib/trips/types";
 
@@ -44,11 +52,25 @@ export type GazetteerCity = {
 
 /** Tunables per spec §2.1.3 — all soft defaults, to be tuned on real routes. */
 export type CorridorParams = {
+  /** SHARED "on-corridor" tolerance, used by `bucket.ts` (place→node),
+   *  `bake.ts` (tile mile-labelling), `stretches.ts`, and `seeds.ts` — NOT the
+   *  corridor-city inclusion gate (that is `corridorMi`). Left at 15 so those
+   *  consumers are untouched by the 2026-08-26 corridor-city redesign. */
   bufferMi: number;
+  /** Corridor-CITY inclusion radius. A gazetteer city is a corridor node iff
+   *  its straight-line offset from the day's polyline is ≤ this. This IS the
+   *  inclusion rule (redesign 2026-08-26): no prominence ranking, no spacing
+   *  suppression. Distinct from `bufferMi` so the tighter city rule does not
+   *  bleed into place-bucketing / tile-labelling. */
+  corridorMi: number;
   popFloor: number;
-  minSpacingMi: number;
   maxNodes: number;
-  maxGapMi: number;
+  /** Two gazetteer rows essentially co-located (within this many miles, both
+   *  along-route and straight-line) collapse to the more prominent one — a
+   *  minimal same-point de-dup (e.g. two rows at one highway exit). This is
+   *  NOT the removed 50mi suppression; it only merges near-identical points,
+   *  never distinct nearby cities. */
+  dedupMi: number;
   /** Candidates projecting within this many route-miles of the Start/End
    *  anchors are dropped — de-dupe tolerance (spec §2.1 step 3) plus
    *  metro-neighborhood suppression (a node too close to the start city
@@ -65,10 +87,17 @@ export type CorridorParams = {
 
 export const DEFAULT_CORRIDOR_PARAMS: CorridorParams = {
   bufferMi: 15,
+  corridorMi: 3,
   popFloor: 10_000,
-  minSpacingMi: 50,
-  maxNodes: 4,
-  maxGapMi: 150,
+  // Pathology backstop, NOT a design limiter — raised from 4 in the 2026-08-26
+  // redesign. Strict 3mi inclusion legitimately surfaces many real cities on a
+  // dense day (measured 29 on a San Jose→Reno day), and a low cap would
+  // silently truncate the exact cities this redesign exists to surface (Davis
+  // was ~18th along that route). 40 sits well above the densest measured real
+  // corridor; when it bites, truncation is by ALONG-ROUTE order (never
+  // prominence), so it cannot reintroduce the suppression bias.
+  maxNodes: 40,
+  dedupMi: 0.5,
   anchorGuardMi: 10,
   maxAttachMi: 25,
 };
@@ -149,90 +178,69 @@ export function deriveCorridorCities(input: {
       continue;
     }
     const r = alongRouteMiles([city.lng, city.lat], line);
-    if (!r || r.offsetMi > p.bufferMi) continue;
+    if (!r || r.offsetMi > p.corridorMi) continue;
     if (r.miles < p.anchorGuardMi || r.miles > endMi - p.anchorGuardMi) continue;
     candidates.push({ city, mi: r.miles });
   }
 
-  // Steps 3–5: population floor (soft) + spacing + top-N. Greedy by
-  // PROMINENCE — administrative tier first (a county seat outranks a
-  // bigger raw-population neighborhood; tuned choice, spec §2.1.2),
-  // population within a tier, then deterministic tiebreaks. Spacing is
-  // enforced between intermediates only. Used by the top-N pass, the
-  // spacing cluster winner, and the adaptive gap-fill below.
+  // STRICT PROXIMITY inclusion (redesign 2026-08-26 — ADR
+  // 2026-08-26-corridor-city-strict-proximity). A city is a corridor node iff
+  // it cleared the `corridorMi` (3mi) gate above and meets the population
+  // floor — full stop. NO prominence ranking and NO minSpacing suppression:
+  // the old "greedy-by-prominence + 50mi spacing" model let one dominant city
+  // suppress its whole neighbourhood (San Francisco hid Concord/Fairfield/
+  // Vacaville; Sacramento hid Davis), dropping cities that were genuinely on
+  // the driven route. That model is removed entirely. Order by along-route
+  // mile; a day with zero qualifying cities is a valid, empty spine (no
+  // reach-further fallback, by design).
+  //
+  // `byProminence` survives ONLY as a tiebreak: for co-located duplicates in
+  // the de-dup below, and to make truncation deterministic. It never decides
+  // inclusion.
   const byProminence = (a: Candidate, b: Candidate) =>
     b.city.tier - a.city.tier ||
     b.city.pop - a.city.pop ||
     a.mi - b.mi ||
     a.city.name.localeCompare(b.city.name);
 
-  const selected: Candidate[] = [];
-  const preferred = candidates
+  const ordered = candidates
     .filter((c) => c.city.pop >= p.popFloor)
-    .sort(byProminence);
-  for (const c of preferred) {
-    if (selected.length >= p.maxNodes) break;
-    if (selected.every((s) => Math.abs(s.mi - c.mi) >= p.minSpacingMi)) {
-      selected.push(c);
+    .sort((a, b) => a.mi - b.mi || byProminence(a, b));
+
+  // Minimal same-point de-dup: two rows essentially co-located (within
+  // `dedupMi` both along-route AND straight-line) collapse to the more
+  // prominent one. This is NOT the removed 50mi suppression — it only merges
+  // near-identical points (two gazetteer rows at one highway exit), never
+  // distinct nearby cities.
+  const deduped: Candidate[] = [];
+  for (const c of ordered) {
+    const dupIdx = deduped.findIndex(
+      (d) =>
+        Math.abs(d.mi - c.mi) < p.dedupMi &&
+        haversineMi([d.city.lng, d.city.lat], [c.city.lng, c.city.lat]) <
+          p.dedupMi,
+    );
+    if (dupIdx >= 0) {
+      if (byProminence(c, deduped[dupIdx]) < 0) deduped[dupIdx] = c;
+      continue;
     }
+    deduped.push(c);
   }
 
-  // Step 6: adaptive fallback. Any along-route gap > maxGapMi gets the
-  // most prominent unselected candidate inside it, floor relaxed.
-  // Precedence (spec §2.1.2): the gap guarantee WINS over maxNodes.
-  // Best-effort: a gap with no candidates at all stays open.
-  //
-  // One-fill-per-gap rule (spec §2.1.2, 2026-07-06): spacing-valid fills
-  // always shrink a gap meaningfully and may recurse (successive spaced
-  // fills legitimately cure a long gap). An UNSPACED fallback fill is a
-  // one-shot: any still-oversized sub-gap it leaves is accepted open —
-  // without this, the fallback walks candidate clusters node by node
-  // (five Anchorage suburbs in 43 mi) while never curing the real gap.
-  const inGap = (c: Candidate, a: number, b: number) => c.mi > a && c.mi < b;
-  const acceptedOpen = new Set<string>();
-  const gapKey = (a: number, b: number) => `${a}:${b}`;
-  for (;;) {
-    const anchors = [0, ...selected.map((s) => s.mi), endMi].sort((x, y) => x - y);
-    let fill: Candidate | undefined;
-    let fillWasUnspaced = false;
-    let gapA = 0;
-    let gapB = 0;
-    for (let i = 1; i < anchors.length && !fill; i++) {
-      const [a, b] = [anchors[i - 1], anchors[i]];
-      if (b - a <= p.maxGapMi) continue;
-      if (acceptedOpen.has(gapKey(a, b))) continue;
-      const unselected = candidates.filter(
-        (c) => !selected.includes(c) && inGap(c, a, b),
-      );
-      // Prefer a spacing-valid position within the gap; fall back to any
-      // interior candidate (the gap guarantee outranks spacing too).
-      const spaced = unselected.filter(
-        (c) => c.mi >= a + p.minSpacingMi && c.mi <= b - p.minSpacingMi,
-      );
-      fill = (spaced.length ? spaced : unselected).sort(byProminence)[0];
-      if (fill) {
-        fillWasUnspaced = spaced.length === 0;
-        gapA = a;
-        gapB = b;
-      }
-    }
-    if (!fill) break;
-    selected.push(fill);
-    if (fillWasUnspaced) {
-      if (fill.mi - gapA > p.maxGapMi) acceptedOpen.add(gapKey(gapA, fill.mi));
-      if (gapB - fill.mi > p.maxGapMi) acceptedOpen.add(gapKey(fill.mi, gapB));
-    }
-  }
-
-  selected.sort((a, b) => a.mi - b.mi);
+  // maxNodes is a pathology backstop only (see the constant). It never bites a
+  // real corridor; when it would, it truncates by ALONG-ROUTE order (the array
+  // is already mile-sorted) — never by prominence — so it cannot reintroduce
+  // the suppression bias.
+  const selected = deduped.slice(0, p.maxNodes);
 
   // Force-include user-authored seeds (spec § node-stack). A seed bypasses
-  // popFloor / spacing / maxNodes — a user pin outranks every tuning gate —
-  // and keeps its durable id. Seeds within anchorGuardMi of Start/End are
-  // dropped as redundant with the endpoint node. A gazetteer pick within
-  // minSpacingMi of a seed is dropped (the seed wins), holding the
-  // "nodes ≥ minSpacing apart" invariant with user intent dominant. When no
-  // seeds are supplied this reduces to the prior gazetteer-only spine.
+  // popFloor / maxNodes — a user pin outranks every tuning gate — and keeps its
+  // durable id. Seeds within anchorGuardMi of Start/End are dropped as
+  // redundant with the endpoint node. A gazetteer pick essentially co-located
+  // with a seed (within `dedupMi`) is dropped (the seed wins) — the same
+  // tight same-point de-dup used above, NOT the removed 50mi suppression, so a
+  // seed never hides a distinct nearby city. When no seeds are supplied this
+  // reduces to the plain gazetteer spine.
   const seedNodes: CorridorCity[] = (input.seeds ?? [])
     .filter(
       (s) =>
@@ -252,7 +260,7 @@ export function deriveCorridorCities(input: {
     .filter(
       (c) =>
         !seedNodes.some(
-          (sn) => Math.abs(sn.milesFromStart - c.mi) < p.minSpacingMi,
+          (sn) => Math.abs(sn.milesFromStart - c.mi) < p.dedupMi,
         ),
     )
     .map((c) => ({

@@ -81,10 +81,28 @@ open:
   `dayCorridorAnchors`, aligned with bake) instead of the coarse whole-route
   `facts.corridorCities`. This is a correctness fix (Oceanside/Arvin-class cities
   were structurally invisible to backfill), but it means MORE anchors per day ×
-  up to 2 picks each = a denser trip — an accepted tradeoff. If density becomes a
-  problem the levers are `MAX_BACKFILLS_PER_CITY`, the corridor
-  `maxNodes`/`minSpacingMi` params, or a per-day ceiling. Not tuned; watch after
-  the next few real generations.
+  up to 2 picks each = a denser trip — an accepted tradeoff.
+
+- **⚠ CORRIDOR DENSITY CASCADE — the top open follow-up (2026-08-26, strict
+  3mi rule).** The corridor-city redesign
+  (`docs/decisions/2026-08-26-corridor-city-strict-proximity.md`) drops the
+  prominence/50mi-spacing selection for a flat "offset ≤ 3mi" rule. On dense
+  suburban corridors this legitimately surfaces MANY cities per day — **measured
+  21 on Palo Alto→Colusa, 29 on San Jose→Reno** (real geometry, this session).
+  Because the backfill audit shares this derivation (#295), a dense day now
+  yields ~21–29 backfill anchors × up to 2 picks each = a large per-day pick
+  multiplication AND a long rendered spine. This is the direct, accepted
+  consequence of the design — but it very likely needs a follow-up:
+  - **Display layer:** feature the most significant N corridor cities and demote
+    the rest under "Explore", OR
+  - **Anchor layer:** cap the audit's use of the spine separately from the
+    rendered list, OR
+  - **Tuning:** `corridorMi`, `popFloor`, or `maxNodes` (currently 40, a
+    pathology backstop — real days measured up to 29).
+  This is a **product/UX + generation-density decision**, deliberately NOT made
+  in the redesign. Watch the first real generations. Also note the strict rule
+  **excludes Sacramento (3.09mi) while including its suburbs** — a boundary
+  artifact to weigh in the same follow-up.
 
 ## TEST-only sign-in bypass — SHIPPED, one open thread (2026-08-25)
 
