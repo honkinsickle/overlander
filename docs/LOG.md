@@ -51,6 +51,20 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   routes, which multiplies backfill anchors (#295 shares the derivation). Filed
   in BACKLOG + the ADR as the key product/density follow-up. Did NOT generate a
   trip end-to-end (Adam will).
+- **Preceded by a chain of read-only investigations this session, folded into
+  #296 rather than shipped as separate PRs:** the SF false-positive, the
+  Concord/Fairfield/Vacaville false-negative, and the Sacramento/Davis
+  generalization. The redesign's "fixes both symptoms" framing and the two named
+  regression tests (`derive.test.ts`) are the committed record of these; the
+  ADR's "subsumes the SF water-detection idea" line records that a water-aware
+  approach was considered and dropped in favour of the 3mi gate. (I did NOT
+  re-state the specific live detour/offset measurements from those
+  investigations here — they were reproducible probes, not committed to any
+  repo file, so per the verifiable-only rule they stay out of the diary.)
+- **Note:** the TEST `trips` table was reset to 0 rows by a parallel workspace
+  mid-session (also recorded in the #296 STATE masthead), so verification
+  re-routed the same endpoints — pure geometry + bundled gazetteer, equivalent
+  to reading the now-deleted rows.
 
 ## 2026-08-26 (fix) — audit/bake corridor-anchor granularity mismatch
 
