@@ -147,9 +147,12 @@ in three tiers `[read source]`:
   `atlas_oddities` rows that render blank — a preference, not a gate. Does NOT
   run for day-END anchors (already covered; the end node hosts the overnight).
   Recorded on `AuditReport.anchorBackfills` (with `kind: "start" | "corridor"`)
-  and in `summary`. **Capped at `MAX_BACKFILLS_PER_DAY` across both kinds** so
-  machine picks cannot outnumber the model's own; when the cap bites it keeps
-  the earliest anchors. Mid-corridor anchors are selected off the day's
+  and in `summary`. **Capped at `MAX_BACKFILLS_PER_CITY` PER ANCHOR across both
+  kinds** — each city the day passes (start, mid-corridor, end) gets its own
+  budget of 2, so an early anchor cannot starve a later one. (This was a per-DAY
+  cap until 2026-08-25; that scope silently defeated D-B's per-city density —
+  the day-start anchor ate the whole day budget — and was fixed as a correctness
+  bug.) Mid-corridor anchors are selected off the day's
   **polyline**, not `onCorridor` — the latter degrades to a wide straight-line
   radius on dwell days and mis-attributes towns. A candidate that reduces to the
   anchor city's own name is rejected (`isCityTautology`), and backfilled ids are

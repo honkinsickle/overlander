@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-25 (fix) — guarantee cap was per-DAY, should be per-CITY (scope bug)
+
+- **Investigation → fix in one arc.** Traced why 4 of 8 anchors on trip
+  `ab146c1d` (San Diego → Reno, `guaranteedCategories = [camping, scenic, food,
+  oddity]`) got no guarantee pick. Root cause: `MAX_BACKFILLS_PER_DAY` capped
+  `pickBackfillStops` phase 1 at 2 picks **per day, total**. The loop is
+  anchor-major and broke on the shared cap, so the day-START anchor (San Diego)
+  consumed both slots (scenic + camping) and Oceanside / Riverside / Silver
+  Lakes were never reached — despite real candidates at each (confirmed via the
+  real `pickGuaranteedStop`: Top Gun House, Trujillo Adobe, El Mirage OHV).
+- **This was NOT the category-monopoly tradeoff PR #292's ADR flagged.** It was
+  a scope bug: D-B is specified as per-CITY density, the cap was implemented at
+  day scope. Correctness bug, not tuning.
+- **Fix:** renamed `MAX_BACKFILLS_PER_DAY` → `MAX_BACKFILLS_PER_CITY` and
+  rescoped both phases — each anchor tracks its own `cityPicks` budget; removed
+  the day-level `picks.length >= max` breaks from phase 1 AND phase 2 (the
+  opener break starved later anchors too). Cross-anchor dedupe (`taken`) kept.
+- **Verified on real data** (read-only, preComputeFacts + real pickBackfillStops
+  on the actual pool): day-1 now yields 8 guarantee picks across 4 cities (2
+  each) — San Diego, **Oceanside, Riverside, Silver Lakes** all covered, vs 2
+  total (San Diego only) pre-fix. Caveat: ran with `onCorridor` open + all
+  categories missing to isolate per-city distribution; the real audit also
+  subtracts LLM-covered categories, so exact picks vary — the structural result
+  (each city its own budget) is the point.
+- **Tests:** 39 anchor-backfill (2 new locking per-city scope: "each city gets
+  its OWN budget of 2 — an early anchor does not starve a later one" + a
+  single-city per-city-cap test) + 182 itinerary all pass. Rewrote the two
+  day-scope tests that encoded the bug. Gate exits 0 on both workspaces.
+- **Flagged consequences** (ADR + BACKLOG): category-monopoly still applies
+  WITHIN a city's 2 slots; and removing the per-day ceiling means a multi-city
+  day can now surface more machine picks than before (the old "list of towns"
+  concern is now bounded per-city, a deliberate consequence of the spec).
+- **Did NOT** regenerate a trip end-to-end (Adam will, manually).
+
 ## 2026-08-25 (build) — interest-category chip UI (blocker F resolved)
 
 - **Task: build the wizard chip UI for the interest-category guarantee** that

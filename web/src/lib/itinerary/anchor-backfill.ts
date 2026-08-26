@@ -269,24 +269,27 @@ export function hasStopNearAnchor(
 }
 
 /**
- * Cap on machine-picked stops per day, START anchor and mid-corridor cities
- * together.
+ * Cap on machine-picked stops PER CITY (per anchor) — every anchor in a day
+ * (start, mid-corridor, end) gets its OWN budget, independent of what other
+ * anchors in the same day consumed.
  *
- * REASONED CALL, and the alternative was explicitly rejected. Covering EVERY
- * bare corridor city was the obvious generalization and is the wrong one: the
- * model contributes a small handful of real key stops per day (the prompt asks
- * for 2–4), so letting machine picks reach or exceed that count flips the
- * day's character — a "key stop" that appears at every town is no longer a key
- * stop, it is a list of towns. The cap keeps backfills a patch over the worst
- * gaps rather than a second, blander itinerary layered on the real one.
+ * ⚠ THIS WAS A PER-DAY CAP AND THAT WAS A BUG. The D-B guarantee is specified
+ * as per-city density — a selected interest featured at EACH city the day
+ * passes that lacks it. A day-scoped cap silently defeated that: the loop is
+ * anchor-major and traveller-ordered, so the day-START anchor routinely
+ * consumed the whole day budget (e.g. two categories at San Diego) and every
+ * mid-corridor city that day got zero, despite real candidates existing
+ * `[measured 2026-08-25 on trip ab146c1d — Oceanside/Riverside/Silver Lakes]`.
+ * The number (2) was right; the SCOPE was wrong. Rescoping to per-city is a
+ * correctness fix against the spec, not a tuning change.
  *
- * Two, not one: one slot is routinely consumed by the start anchor (the case
- * #275 shipped for), so a cap of one would mean mid-corridor cities are only
- * ever covered on days the model already opened well — precisely backwards.
- * Two is deliberately conservative; a bare node is an acceptable outcome and
- * always was.
+ * Two, not one: a city can legitimately be missing more than one selected
+ * interest, and the start anchor is a city like any other. Two is deliberately
+ * conservative — a bare node is an acceptable outcome and always was, and a
+ * city is still never turned into an exhaustive list (the category-monopoly
+ * limit, below, still applies WITHIN a city's two slots).
  */
-export const MAX_BACKFILLS_PER_DAY = 2;
+export const MAX_BACKFILLS_PER_CITY = 2;
 
 /** One backfilled pick and the anchor that motivated it. */
 export type BackfillPick = {
@@ -352,25 +355,27 @@ export function pickBackfillStops(input: {
   max?: number;
 }): BackfillPick[] {
   const { anchors, pool, onCorridor } = input;
-  const max = input.max ?? MAX_BACKFILLS_PER_DAY;
+  const maxPerCity = input.max ?? MAX_BACKFILLS_PER_CITY;
   const includeOpeners = input.includeOpeners ?? true;
   const keptCoords = input.keptCoords ?? [];
   const taken = new Set(input.keptRefs);
   const picks: BackfillPick[] = [];
   const servedByGuarantee = new Set<BackfillAnchor>();
 
-  // ── Phase 1 — GUARANTEE wins the cap first (Option A, decision C). ─────────
-  // Per-city (decision D-B): each anchor carries its OWN missing set, so the
-  // same category can be guaranteed at more than one city on a day, up to the
-  // shared per-day cap. Each outstanding category at an anchor gets one pick
-  // attempt; a satisfied category threads its POI into `taken` so a later
-  // anchor can't re-feature the same place.
+  // ── Phase 1 — GUARANTEE wins first (Option A, decision C). ────────────────
+  // Per-city (decision D-B): each anchor carries its OWN missing set and its
+  // OWN budget of `maxPerCity`, so the same category can be guaranteed at more
+  // than one city on a day and an early anchor CANNOT starve a later one — the
+  // day-scoped cap that used to do exactly that was a bug (see
+  // `MAX_BACKFILLS_PER_CITY`). Each outstanding category at an anchor gets one
+  // pick attempt, up to the anchor's budget; a satisfied category threads its
+  // POI into `taken` so a later anchor can't re-feature the same place.
   for (const anchor of anchors) {
-    if (picks.length >= max) break;
     const missing = anchor.missingCategories;
     if (!missing || missing.size === 0) continue;
+    let cityPicks = 0;
     for (const category of missing) {
-      if (picks.length >= max) break;
+      if (cityPicks >= maxPerCity) break;
       const poi = pickGuaranteedStop({
         anchor: anchor.coords,
         anchorLabel: anchor.label,
@@ -389,16 +394,19 @@ export function pickBackfillStops(input: {
       });
       taken.add(poi.id);
       servedByGuarantee.add(anchor);
+      cityPicks++;
     }
   }
 
-  // ── Phase 2 — corridor OPENERS fill any slots the guarantee left. ─────────
+  // ── Phase 2 — corridor OPENERS fill cities the guarantee left bare. ───────
   // Preserves the pre-guarantee behaviour exactly: an anchor is eligible when
   // the day keeps nothing near it (bare vs the ORIGINAL `keptCoords`) and it
   // wasn't already served by a guarantee pick; cross-anchor dedupe via `taken`.
+  // Per-city, like phase 1 — no day-level break, so an early anchor never
+  // starves a later one. An opener adds at most one pick to an otherwise
+  // untouched city, so it can never exceed the per-city budget.
   if (includeOpeners) {
     for (const anchor of anchors) {
-      if (picks.length >= max) break;
       if (servedByGuarantee.has(anchor)) continue;
       if (!anchorIsBare(keptCoords, anchor.coords)) continue;
       const poi = pickAnchorStop({

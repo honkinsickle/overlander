@@ -17,7 +17,7 @@ import {
   pickBackfillStops,
   anchorIsBare,
   corridorStopNote,
-  MAX_BACKFILLS_PER_DAY,
+  MAX_BACKFILLS_PER_CITY,
   isCityTautology,
 } from "./anchor-backfill";
 import type { PoolPOI } from "./facts";
@@ -209,8 +209,10 @@ test("fills a mid-corridor city, not just the start", () => {
   assert.equal(picks[0].anchorLabel, "Oceanside, CA");
 });
 
-test("CAPS machine picks per day so key stops stay a signal", () => {
-  // Four bare anchors, each with its own qualifying candidate.
+test("gives every bare city its OWN opener — the cap is per-city, not per-day", () => {
+  // Four bare anchors, each with its own qualifying candidate. A day-scoped
+  // cap would fill only the first two and starve the rest; per-city, each
+  // city gets its own budget, so all four are covered.
   const anchors = [
     anchorAt(ANCHOR, "Start", "start"),
     anchorAt(offset(40), "City A", "corridor"),
@@ -224,10 +226,13 @@ test("CAPS machine picks per day so key stops stay a signal", () => {
     poi({ id: "mp:c", coords: offset(120) }),
   ];
   const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW });
-  assert.equal(picks.length, MAX_BACKFILLS_PER_DAY);
+  assert.equal(picks.length, 4);
+  assert.deepEqual(picks.map((p) => p.poi.id), ["mp:s", "mp:a", "mp:b", "mp:c"]);
 });
 
-test("when the cap bites it keeps the EARLIEST anchors — an empty morning beats an empty afternoon", () => {
+test("openers preserve traveller order and no city is dropped for a later one", () => {
+  // With per-city scope there is no cross-anchor cap to force a drop, so every
+  // bare city is filled, start-first (the ordering the notes read in).
   const anchors = [
     anchorAt(ANCHOR, "Start", "start"),
     anchorAt(offset(40), "Early", "corridor"),
@@ -239,7 +244,7 @@ test("when the cap bites it keeps the EARLIEST anchors — an empty morning beat
     poi({ id: "mp:late", coords: offset(80) }),
   ];
   const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW });
-  assert.deepEqual(picks.map((p) => p.poi.id), ["mp:s", "mp:early"]);
+  assert.deepEqual(picks.map((p) => p.poi.id), ["mp:s", "mp:early", "mp:late"]);
 });
 
 test("never features the same POI twice across anchors on one day", () => {
@@ -444,7 +449,49 @@ test("per-city: the same category is guaranteed at EACH city passed (D-B density
   assert.ok(picks.every((p) => p.guaranteed && p.category === "scenic"));
 });
 
-test("guarantee and opener share ONE cap — guarantee takes a slot, opener fills the rest", () => {
+test("each city gets its OWN budget of 2 — an early anchor does not starve a later one", () => {
+  // Two cities far apart, EACH missing two distinct, available categories.
+  // Under a day-scoped cap the first city's two picks exhaust the budget and
+  // the second city gets nothing; per-city, each city gets its own two.
+  const FARER: [number, number] = [-116.99, 37.363]; // ~0.5mi from FAR — same city
+  const anchors = [
+    guaranteedAnchor(ANCHOR, "City A", "corridor", ["scenic", "camping"]),
+    guaranteedAnchor(FAR, "City B", "corridor", ["scenic", "camping"]),
+  ];
+  const pool = [
+    poi({ id: "mp:a-scenic", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:a-camp", category: "camping", coords: offset(2) }),
+    poi({ id: "mp:b-scenic", category: "scenic", coords: FAR }),
+    poi({ id: "mp:b-camp", category: "camping", coords: FARER }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [] });
+  assert.equal(picks.length, 4, "both cities each get their own two guarantee picks");
+  assert.deepEqual(
+    picks.map((p) => p.poi.id).sort(),
+    ["mp:a-camp", "mp:a-scenic", "mp:b-camp", "mp:b-scenic"],
+  );
+  assert.ok(picks.every((p) => p.guaranteed), "all four are guarantee picks");
+});
+
+test("a single city is still capped at its per-city budget — extra missing categories drop", () => {
+  // One city missing THREE available categories; only MAX_BACKFILLS_PER_CITY
+  // are taken, in selection order (the category-monopoly-adjacent limit now
+  // lives at the per-city scope, not per-day).
+  const anchors = [
+    guaranteedAnchor(ANCHOR, "City", "corridor", ["scenic", "camping", "oddity"]),
+  ];
+  const pool = [
+    poi({ id: "mp:scenic", category: "scenic", coords: offset(1) }),
+    poi({ id: "mp:camp", category: "camping", coords: offset(2) }),
+    poi({ id: "mp:oddity", category: "oddity", coords: offset(3) }),
+  ];
+  const picks = pickBackfillStops({ anchors, pool, keptRefs: NONE, onCorridor: ALLOW, keptCoords: [] });
+  assert.equal(picks.length, MAX_BACKFILLS_PER_CITY);
+  // Selection order preserved: the first two missing categories win the budget.
+  assert.deepEqual(picks.map((p) => p.category), ["scenic", "camping"]);
+});
+
+test("guarantee and opener share the per-city budget — guarantee takes a slot, opener fills the rest", () => {
   const anchors = [
     guaranteedAnchor(ANCHOR, "Start", "start", ["scenic"]),
     guaranteedAnchor(FAR, "City", "corridor", []), // bare, no guarantee
