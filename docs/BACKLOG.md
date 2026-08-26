@@ -407,10 +407,14 @@ all nullable. **`description` was NOT added — it already existed** since the
 Phase 1 migration and is owned by `recompute_master_place()` via
 `field_precedence`, so the ADR's five fields became four columns.
 
-`photo_url` backfilled on **7,360** rows (nps 4,690 · ridb 2,449 · blm 88 ·
-state_parks 133, the last all Washington). **`rating` / `review_count` /
-`price_tier` are 0 corpus-wide** — no ingested source carries any of them,
-established by enumerating the full key space per source, not a regex census.
+`photo_url` backfilled on **7,443** rows (nps 4,880 · ridb 2,342 · blm 88 ·
+state_parks 133, the last all Washington) `[re-measured TEST 2026-08-26]`.
+NPS count rose from 4,690 → 4,880 after campground + park photo extraction
+was added to the ingester + backfill (PR nps-api-photo-integration, 305
+source_records updated, 192 master_place rows gained a photo_url). **`rating`
+/ `review_count` / `price_tier` are 0 corpus-wide** — no ingested source
+carries any of them, established by enumerating the full key space per
+source, not a regex census.
 They ship empty on purpose: the point is that the card layer stops branching
 on provenance. ⚠ **They are not a destination for Google data** —
 `rating`/`userRatingCount` are explicitly non-cacheable.

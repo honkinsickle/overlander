@@ -60,10 +60,11 @@ export function stripBakedCorridors(trip: Trip): Trip {
  * the reference serve news up its own, the fork route reuses its
  * per-request client.
  *
- * Corpus is essentials-only (no ratings/photos); tiles render
- * name/category/description with a placeholder image and no stars until
- * the P3 client hydrate grafts live fields. Fails soft — any per-day RPC
- * error leaves that day untouched.
+ * Corpus tiles carry NPS/RIDB photos when available (via the corridor
+ * RPC's nps_photo_url lateral join); no ratings. Tiles without a corpus
+ * photo render a category-colored block until the client hydrate grafts
+ * a live Google photo. Fails soft — any per-day RPC error leaves that
+ * day untouched.
  */
 export async function foldFederatedCorridorSupply(
   trip: Trip,

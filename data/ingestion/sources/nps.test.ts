@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { npsPhotoFromImages, normalizePlace, coerceCampgroundAmenities } from "./nps.ts";
+import { npsPhotoFromImages, normalizePlace, normalizeCampground, coerceCampgroundAmenities } from "./nps.ts";
 
 const IMG = {
   url: "https://www.nps.gov/common/uploads/cropped_image/D207.jpg",
@@ -54,6 +54,22 @@ describe("normalizePlace", () => {
 
   it("photo is null when the place has no image (structurally photoless)", () => {
     const out = normalizePlace({ id: "1", title: "T" });
+    expect(out.photo).toBeNull();
+  });
+});
+
+describe("normalizeCampground", () => {
+  it("puts the photo object on normalized_payload.photo", () => {
+    const out = normalizeCampground({ id: "1", name: "Sheep Pass", images: [IMG] });
+    expect(out.photo).toEqual({
+      url: IMG.url,
+      altText: IMG.altText,
+      credit: IMG.credit,
+    });
+  });
+
+  it("photo is null when the campground has no image", () => {
+    const out = normalizeCampground({ id: "1", name: "Sheep Pass" });
     expect(out.photo).toBeNull();
   });
 });
