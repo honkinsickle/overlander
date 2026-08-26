@@ -24,6 +24,7 @@ import type { EngineFacts, GenerationInput, PoolPOI } from "./facts";
 import { computeFuelGaps, type ComputedFuelGap } from "./fuel-gaps";
 import { PlaceResolver, type ResolvedName } from "./resolve";
 import { overnightTileRef } from "./bake";
+import { dayCorridorAnchors } from "@/lib/corridor/day-corridor";
 import {
   pickBackfillStops,
   anchorStopNote,
@@ -560,32 +561,27 @@ export async function auditItinerary(
       ];
       const keptCoords: [number, number][] = keptStopCats.map((kc) => kc.coords);
 
-      // Which corridor cities does THIS day pass through?
-      //
-      // `facts.corridorCities` is the WHOLE-ROUTE spine — the audit has no
-      // per-day spine, because that is derived later in `bakeGeneratedDays`.
-      // Rather than duplicate that derivation, reuse the day's own corridor
-      // guard: a city the guard accepts is on this day's line. Then drop the
-      // ones that ARE the day's endpoints — the start is handled as its own
-      // anchor below, and the end node hosts the overnight, so a curated stop
-      // there is closer to duplication than coverage (the same end-anchor
-      // reasoning #275 recorded).
-      const endpointCoords: [number, number][] = [dayStartCoord];
-      if (dayEndCoord) endpointCoords.push(dayEndCoord);
-      //
-      // ⚠ Uses the day's POLYLINE directly, NOT `onCorridor`. On a dwell /
-      // out-and-back day `onCorridor` degrades to a wide straight-line radius
-      // from the base town (`DWELL_GUARD_MI`), which is right for verifying an
-      // excursion but far too loose to mean "a town this day drives through" —
-      // a live run attributed Carson City to a Mammoth→Mammoth dwell day that
-      // way `[measured 2026-08-25]`. A day with no forward polyline passes
-      // through nothing, so it contributes no mid-corridor anchors at all.
-      const midCorridorCities = (dayPolyline ?? []).length === 0
-        ? []
-        : facts.corridorCities
-        .filter((c) => pointToPolylineMi(c.coords, dayPolyline!) <= GUARD_MI)
-        .filter((c) => !endpointCoords.some((e) => haversineMi(c.coords, e) <= ANCHOR_NEAR_MI))
-        .sort((a, b) => a.milesFromStart - b.milesFromStart);
+      // The day's backfill anchors: the start, then each mid-corridor city the
+      // day passes, in travel order. Derived PER-DAY via the shared
+      // `dayCorridorAnchors` helper — the SAME logic (and the same
+      // `deriveCorridorCities` call over the same day segment) that `bake.ts`
+      // uses to render the day spine. This replaced the old whole-route
+      // `facts.corridorCities`: that coarse spine dropped cities like Oceanside
+      // (~38mi from San Diego) and Arvin (~16mi from Bakersfield), so they were
+      // visible render nodes the backfill never even considered
+      // `[measured 2026-08-26 on trip b2078e6d]`. The endpoint rule lives inside
+      // the helper (drop cities within `ANCHOR_NEAR_MI` of either endpoint — the
+      // start is its own anchor, the end hosts the overnight; this still
+      // correctly excludes Arvin). A day with no forward polyline yields the
+      // start anchor alone.
+      const anchorCities = dayCorridorAnchors({
+        line: dayPolyline,
+        startCoord: dayStartCoord,
+        endCoord: dayEndCoord,
+        startPlace: day.startPlace,
+        endPlace: day.endPlace,
+        nearMi: ANCHOR_NEAR_MI,
+      });
 
       // Per-anchor missing guaranteed categories (D-B, per-city): a category is
       // "covered" at an anchor when a kept stop OF THAT CATEGORY sits within
@@ -602,28 +598,21 @@ export async function auditItinerary(
         return new Set(guaranteedPool.filter((c) => !covered.has(c)));
       };
 
-      // Traveller order: the start first, then each town as it is reached.
-      // Ordering no longer decides who gets dropped — the cap is per-city, so
-      // each anchor has its own budget — but it keeps the notes reading in
-      // travel order and is retained for the within-city category order. NOT
-      // pre-filtered by bareness — `pickBackfillStops` runs the opener bare
-      // check itself (phase 2), because a guarantee can need an anchor the
-      // opener would skip (an anchor with a kept food stop is not bare, but can
-      // still be missing a guaranteed `scenic`).
-      const anchors: BackfillAnchor[] = [
-        {
-          coords: dayStartCoord,
-          label: day.startPlace,
-          kind: "start" as const,
-          missingCategories: missingAt(dayStartCoord),
-        },
-        ...midCorridorCities.map((c) => ({
-          coords: c.coords,
-          label: c.name,
-          kind: "corridor" as const,
-          missingCategories: missingAt(c.coords),
-        })),
-      ];
+      // Attach each anchor's outstanding guaranteed categories. Travel order is
+      // preserved by `dayCorridorAnchors` (start first); ordering no longer
+      // decides who gets dropped — the cap is per-city, so each anchor has its
+      // own budget — but it keeps the notes reading in travel order and drives
+      // the within-city category order. NOT pre-filtered by bareness —
+      // `pickBackfillStops` runs the opener bare check itself (phase 2), because
+      // a guarantee can need an anchor the opener would skip (an anchor with a
+      // kept food stop is not bare, but can still be missing a guaranteed
+      // `scenic`).
+      const anchors: BackfillAnchor[] = anchorCities.map((a) => ({
+        coords: a.coords,
+        label: a.label,
+        kind: a.kind,
+        missingCategories: missingAt(a.coords),
+      }));
 
       const picks = pickBackfillStops({
         anchors,
@@ -690,33 +679,20 @@ export async function auditItinerary(
           .map((r) => r.coords),
       ];
 
-      // Anchors — same construction as the backfill block just above, in
-      // traveller order. Do NOT filter by anchorIsBare: fuel dedupe is
-      // category-specific (a kept restaurant near the anchor does not
-      // satisfy a fuel guarantee); pickFuelAtAnchor does the fuel-family
+      // Anchors — the SAME per-day set the interest-backfill block uses, via the
+      // shared `dayCorridorAnchors` helper, so the two backfill paths can't
+      // diverge on which cities are eligible. Do NOT filter by anchorIsBare:
+      // fuel dedupe is category-specific (a kept restaurant near the anchor does
+      // not satisfy a fuel guarantee); pickFuelAtAnchor does the fuel-family
       // dedupe internally.
-      const fuelEndpointCoords: [number, number][] = [dayStartCoord];
-      if (dayEndCoord) fuelEndpointCoords.push(dayEndCoord);
-      const fuelMidCorridorCities =
-        (dayPolyline ?? []).length === 0
-          ? []
-          : facts.corridorCities
-              .filter((c) => pointToPolylineMi(c.coords, dayPolyline!) <= GUARD_MI)
-              .filter(
-                (c) =>
-                  !fuelEndpointCoords.some(
-                    (e) => haversineMi(c.coords, e) <= ANCHOR_NEAR_MI,
-                  ),
-              )
-              .sort((a, b) => a.milesFromStart - b.milesFromStart);
-      const fuelAnchors: BackfillAnchor[] = [
-        { coords: dayStartCoord, label: day.startPlace, kind: "start" as const },
-        ...fuelMidCorridorCities.map((c) => ({
-          coords: c.coords,
-          label: c.name,
-          kind: "corridor" as const,
-        })),
-      ];
+      const fuelAnchors: BackfillAnchor[] = dayCorridorAnchors({
+        line: dayPolyline,
+        startCoord: dayStartCoord,
+        endCoord: dayEndCoord,
+        startPlace: day.startPlace,
+        endPlace: day.endPlace,
+        nearMi: ANCHOR_NEAR_MI,
+      });
 
       for (const anchor of fuelAnchors) {
         const pick = await pickFuelAtAnchor({

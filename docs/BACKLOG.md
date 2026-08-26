@@ -76,6 +76,15 @@ open:
 - **Rank order (blocker E)** is the spec's recommended default (on-category →
   richness → proximity), not an explicit Adam pick — a one-line change if a
   different order is wanted.
+- **Backfill density after the anchor-granularity fix (2026-08-26).** The audit
+  now derives backfill anchors from the finer PER-DAY corridor spine (shared
+  `dayCorridorAnchors`, aligned with bake) instead of the coarse whole-route
+  `facts.corridorCities`. This is a correctness fix (Oceanside/Arvin-class cities
+  were structurally invisible to backfill), but it means MORE anchors per day ×
+  up to 2 picks each = a denser trip — an accepted tradeoff. If density becomes a
+  problem the levers are `MAX_BACKFILLS_PER_CITY`, the corridor
+  `maxNodes`/`minSpacingMi` params, or a per-day ceiling. Not tuned; watch after
+  the next few real generations.
 
 ## TEST-only sign-in bypass — SHIPPED, one open thread (2026-08-25)
 

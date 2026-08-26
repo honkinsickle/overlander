@@ -12,6 +12,41 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-26 (fix) — audit/bake corridor-anchor granularity mismatch
+
+- **Investigation → fix.** After the per-city cap fix (#294) merged, a fresh
+  trip `b2078e6d` (San Diego → Fort Bragg, all 6 categories) still showed two
+  mid-corridor cities with zero backfill: Oceanside and Arvin.
+- **Root cause:** the audit drew backfill anchors from `facts.corridorCities`,
+  derived by `deriveCorridorCities` over the WHOLE route (coarse —
+  `maxNodes`/`minSpacingMi` thin a long route hard). The itinerary RENDERS a
+  finer per-day spine that `bake.ts` derives per-day over each day's shorter
+  segment. Cities on the day spine but dropped from the route spine (Oceanside
+  ~38mi from SD; Arvin ~16mi from Bakersfield) were visible nodes the backfill
+  never considered — `pickBackfillStops` never called for them. Not the cap, not
+  a pool gap (Oceanside's real pick is "Top Gun House"). Confirmed by re-running
+  `preComputeFacts`: `facts.corridorCities` had 9 cities, neither of them.
+- **Fix (Adam's chosen direction — align the audit's derivation with bake's, not
+  feed bake's output in):** new shared helper `deriveDayCorridor` /
+  `dayCorridorAnchors` in `web/src/lib/corridor/day-corridor.ts`. Both `bake.ts`
+  and `audit.ts` now call it — the SAME `deriveCorridorCities` over the same day
+  segment, so the two spines can't drift apart again. Used in BOTH audit backfill
+  blocks (interest-guarantee AND fuel — the fuel block had the same coarse
+  derivation; flagged, fixed for consistency).
+- **Endpoint rule preserved** (Arvin's second disqualifier). Verified on real
+  day-1 data: the per-day spine now yields San Diego(start), Oceanside, LA,
+  Arvin, Bakersfield(end); backfill anchors = San Diego, **Oceanside**, LA;
+  **Arvin present in the raw spine but excluded because it's 15.7mi from the
+  Bakersfield endpoint (< 25mi)** — excluded for the right reason, not absence.
+  Oceanside now gets a pick.
+- **Tests:** new `day-corridor.test.ts` (3, synthetic-gazetteer, equator harness)
+  — a city dropped from the whole-route spine is still a per-day anchor; the
+  Arvin-class endpoint exclusion still fires; empty/short polyline → start only.
+  119 corridor + 182 itinerary tests pass; gate exits 0 on both workspaces.
+- **Accepted tradeoff flagged (ADR + BACKLOG):** finer spine ⇒ more anchors/day
+  × 2 picks each ⇒ denser trips. Levers noted if density becomes a problem.
+- Did NOT regenerate a trip end-to-end — Adam will.
+
 ## 2026-08-25 (fix) — guarantee cap was per-DAY, should be per-CITY (scope bug)
 
 - **Investigation → fix in one arc.** Traced why 4 of 8 anchors on trip
