@@ -1,3 +1,5 @@
+# STATE — branch `fix/audit-anchor-granularity` · 2026-08-26 (audit/bake corridor-anchor alignment) (**newest truth: the backfill audit drew its anchors from the COARSE whole-route `facts.corridorCities`, while the itinerary RENDERS a finer per-day spine (bake) — so cities on the day spine but dropped from the route spine (Oceanside ~38mi from San Diego; Arvin ~16mi from Bakersfield) were visible nodes the backfill never considered. FIXED by aligning the audit's anchor derivation with bake's via a shared helper.** Branch `fix/audit-anchor-granularity` off `origin/main` (`ddd5494`, #294 — the per-city cap fix, already merged). Root cause found on trip `b2078e6d` (San Diego → Fort Bragg, all 6 categories): `facts.corridorCities` = 9 whole-route cities, excluding Oceanside/Arvin; `pickBackfillStops` was never called for them despite real candidates (Oceanside → "Top Gun House"). Fix: new shared `deriveDayCorridor` + `dayCorridorAnchors` in `web/src/lib/corridor/day-corridor.ts`; BOTH `bake.ts` and `audit.ts` now call the SAME `deriveCorridorCities` over the same day segment, so the render spine and the audit anchor set can't drift apart again. Applied to BOTH audit backfill blocks (interest-guarantee AND fuel — the fuel block had the same coarse derivation; flagged, fixed for consistency). The endpoint rule (drop cities within `ANCHOR_NEAR_MI` of a day endpoint) lives inside the helper and is preserved. **Verified read-only on TEST real day-1 data:** the per-day spine now yields San Diego(start), Oceanside, LA, Arvin, Bakersfield(end); backfill anchors = San Diego, Oceanside, LA; **Arvin present in the raw spine but correctly excluded (15.7mi < 25mi from the Bakersfield end) — for the endpoint reason, not absence**; Oceanside now gets a pick. **Tests:** new `day-corridor.test.ts` (3, synthetic gazetteer) locks "per-day-only city is still an anchor" + the Arvin-class endpoint exclusion; 119 corridor + 182 itinerary pass; gate exits 0 on both workspaces. **Accepted tradeoff flagged (ADR + BACKLOG):** finer spine ⇒ more anchors/day × 2 picks each ⇒ denser trips; levers noted. Did NOT regenerate a trip end-to-end — Adam will. `origin/main` tip **`ddd5494` (#294)**; this PR open, not merged. The masthead below (guarantee-cap-per-city-fix) is the fix this builds on.)
+
 # STATE — branch `chips-check` · 2026-08-25 (guarantee-cap-per-city-fix) (**newest truth: the interest-category guarantee cap was enforced per-DAY when the D-B spec calls for per-CITY — a correctness bug — and is now FIXED. `MAX_BACKFILLS_PER_DAY` → `MAX_BACKFILLS_PER_CITY`; every anchor a day passes (start, mid-corridor, end) gets its own budget of 2, no day-level break in either phase of `pickBackfillStops`.** Diagnosed on trip `ab146c1d` (San Diego → Reno, `guaranteedCategories = [camping, scenic, food, oddity]`): the day-START anchor (San Diego) consumed the whole per-day budget of 2 (scenic + camping), so Oceanside / Riverside / Silver Lakes got ZERO guarantee picks despite real candidates at each (confirmed via the real `pickGuaranteedStop`). This was NOT the category-monopoly tradeoff PR #292's ADR flagged — it was a scope bug (day vs city). Fix in `web/src/lib/itinerary/anchor-backfill.ts`: renamed+rescoped the constant, phase 1 now tracks a per-anchor `cityPicks` budget, and the day-level `picks.length >= max` breaks were removed from BOTH phase 1 and phase 2 (the opener break starved later anchors too); cross-anchor dedupe (`taken`) retained. **Verified read-only on TEST real data** (preComputeFacts + real `pickBackfillStops` on the actual pool): day-1 now yields 8 guarantee picks across 4 cities (2 each) — San Diego, Oceanside, Riverside, Silver Lakes all covered — vs 2 total (San Diego only) pre-fix. **Tests:** 39 anchor-backfill (2 new locking per-city scope; 2 day-scope tests that encoded the bug rewritten) + 182 itinerary all pass; local gate exits 0 on both workspaces. **Flagged:** category-monopoly still applies WITHIN a city's 2 slots, and removing the per-day ceiling lets a multi-city day surface more machine picks than before (the old "list of towns" concern is now bounded per-city — a deliberate consequence of the D-B density spec). ADR (`2026-08-25-interest-category-guarantee-granularity.md`), BACKLOG, and `architecture/generation-pipeline.md` updated. Did NOT regenerate a trip end-to-end — Adam will. `origin/main` tip **`88f3d83` (#292)**; this stacks on the chip-UI work on branch `chips-check`, PR open, not merged. The masthead immediately below (interest-category-chip-UI) is the UI that surfaces this mechanism.)
 
 # STATE — branch `chips-check` · 2026-08-25 (interest-category-chip-UI) (**newest truth: the interest-category GUARANTEE is now REACHABLE from the wizard — blocker F is resolved. The "Interest categories" wizard section renders a multi-select chip row for the 6 backend-serviceable categories (`scenic, food, camping, attraction, oddity, urban`) alongside the existing `fuel` checkbox; #292's mechanism was wired end-to-end but dark until this.** Branch `chips-check` off `origin/main` (`88f3d83`, #292 — already merged, so this builds ON the guarantee, not beside it). Ships: (1) `web/src/lib/plan/guarantee-categories.ts` — `GUARANTEE_CHIP_CATEGORIES` (6 `{key,label}` entries, wizard display order), the UI face of the backend gate `GUARANTEE_CATEGORIES` in `anchor-backfill.ts`; (2) `guarantee-categories.test.ts` — 3 TDD-first tests **drift-locking the chip set to the backend gate** (a category added/removed backend-side fails the test); (3) wizard "Interest categories" `<Section>` now renders a `SelectableChip` row (per-category `var(--cat-{key}-title)` accent, controlled multi-select toggling `guaranteedCategories`) above the fuel checkbox — `fuel` stays a checkbox for its distinct live-resolve semantics + cost caption. **FLAGGED DEVIATION from the task's "8 categories besides fuel":** the driving task's premise was that "overnight" isn't in the 9-category taxonomy — but it IS. `guaranteedCategories` is typed `SlideCategoryKey[]`, and there **`overnight` is the data-taxonomy name for the display category `hotel`** (isomorphic via `palette.ts`). So `overnight`/`hotel` is ONE category, excluded from the backend gate (B.2 — duplicates the per-day overnight slot), and `interest` is also excluded (junk drawer). A chip for either would silently no-op, so neither is offered — the honest, backend-serviceable set is **6, not 8** (matches every prior doc's "6 pool-side categories"). `camping` DOES act (it's in the gate), correcting the task's worry that it might not. **Live-verified on TEST** via headless-Chrome CDP (minted seed-owner session, dev 3210): 6 chips render + are on-screen and **reachable** (`elementFromPoint`-inside, not occluded); real pixel-clicks toggle `guaranteedCategories` (multi-select + independent deselect confirmed). **Local gate PASSES** on both workspaces (web typecheck + `next build` + data typecheck all exit 0); 14 plan tests (incl. 3 new) + 37 anchor-backfill tests pass. `origin/main` tip **`88f3d83` (#292)**; this PR open, not merged. The masthead immediately below (interest-category-guarantee) is the backend this UI now surfaces.)
@@ -97,6 +99,43 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-26 (fix) — audit/bake corridor-anchor granularity mismatch
+
+Newest truth. Branch `fix/audit-anchor-granularity` off `origin/main`
+(`ddd5494`, #294). Shared-helper refactor + 3 new tests; local gate exits 0 on
+both workspaces. Verified read-only on TEST real data.
+
+**Bug:** the backfill audit selected anchors from `facts.corridorCities`
+(derived by `deriveCorridorCities` over the WHOLE route — coarse). The itinerary
+renders a finer per-day spine (`bake.ts`, `deriveCorridorCities` per day). Cities
+on the day spine but dropped from the route spine — Oceanside, Arvin — were
+visible nodes the backfill never considered. Distinct from the per-city cap bug;
+a granularity mismatch between two independent corridor derivations.
+
+**Fix:** new `web/src/lib/corridor/day-corridor.ts` — `deriveDayCorridor`
+(wraps `deriveCorridorCities` + bundled gazetteer, gazetteer injectable for
+tests) and `dayCorridorAnchors` (start + per-day corridor cities minus those
+within `nearMi` of an endpoint, in travel order). `bake.ts` and `audit.ts` BOTH
+call it now — one derivation, no drift. Applied to both audit backfill blocks
+(interest-guarantee + fuel). `facts.corridorCities` is no longer used for
+anchors (still present on the type).
+
+**Verified (read-only, real day-1):** routed San Diego → Bakersfield, ran the
+shared helper. Per-day spine: San Diego(start), Oceanside, LA, Arvin,
+Bakersfield(end). Backfill anchors: San Diego, **Oceanside**, LA. **Arvin is in
+the raw spine but excluded — 15.7mi from the Bakersfield end (< 25mi) — the
+endpoint rule, not absence.** `pickGuaranteedStop` at Oceanside → "Top Gun
+House". So Oceanside now gets backfill; Arvin correctly stays out.
+
+**Tests:** `day-corridor.test.ts` (synthetic gazetteer, equator harness): a city
+dropped from the whole-route spine is still a per-day anchor; the Arvin-class
+endpoint exclusion still fires (present in raw spine, filtered); short/absent
+polyline → start anchor only. 119 corridor + 182 itinerary pass.
+
+**Flagged tradeoff:** finer spine ⇒ more anchors/day × 2 picks each ⇒ denser
+trips (accepted; compounds with the per-city change). Levers: `MAX_BACKFILLS_
+PER_CITY`, corridor `maxNodes`/`minSpacingMi`, or a per-day ceiling.
 
 ## 2026-08-25 (fix) — guarantee cap was per-DAY, rescoped to per-CITY
 

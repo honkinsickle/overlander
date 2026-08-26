@@ -195,3 +195,48 @@ fires only when `guaranteedCategories ∩ GUARANTEE_CATEGORIES` is non-empty.
   categories can silently fall through (accepted, D-B).
 - No new external cost — pool-only, no network calls.
 - The chip UI and the fuel/overnight gate remain open threads (see above).
+
+## Follow-up 2026-08-26 — anchor GRANULARITY fix (audit ↔ bake spine alignment)
+
+**Status:** BUILT 2026-08-26. Distinct from the per-day→per-city cap fix above.
+
+**Bug.** Even with the per-city cap, some rendered mid-corridor cities got zero
+backfill. Root cause (measured on trip `b2078e6d`, San Diego→Fort Bragg, all 6
+categories): the audit drew its backfill anchors from `facts.corridorCities`,
+which `preComputeFacts` derives over the WHOLE route — coarse, because
+`deriveCorridorCities`' `maxNodes`/`minSpacingMi` cap thins a long route hard.
+The itinerary, meanwhile, RENDERS a finer spine that `bake.ts` derives PER-DAY
+over each day's shorter segment. Cities on the day spine but dropped from the
+route spine — **Oceanside** (~38mi from San Diego) and **Arvin** (~16mi from
+Bakersfield) — were visible render nodes the backfill never considered;
+`pickBackfillStops` was never called for them, regardless of real candidates
+(Oceanside's real `pickGuaranteedStop` pick is "Top Gun House"). Not a cap
+issue, not a pool gap — an anchor-set granularity mismatch.
+
+**Decision (Adam).** Align the audit's anchor derivation with bake's, rather
+than feeding bake's output into the audit as a separate pass. Implemented as a
+SHARED helper `dayCorridorAnchors` / `deriveDayCorridor`
+(`web/src/lib/corridor/day-corridor.ts`) that both `bake.ts` and `audit.ts` now
+call — the same `deriveCorridorCities` invocation over the same day segment, so
+the two spines cannot drift apart again. Both the interest-guarantee block AND
+the fuel block in the audit use it (the fuel block had the same coarse
+derivation).
+
+**Endpoint rule preserved.** Cities within `ANCHOR_NEAR_MI` of either day
+endpoint are still dropped inside the helper. Verified on real data: Arvin is
+present in the raw per-day spine but correctly excluded from the anchor set
+because it is 15.7mi from the Bakersfield endpoint (< 25mi) — excluded for the
+right reason, not by absence. Oceanside is now an anchor.
+
+**Consequence (accepted tradeoff).** A finer per-day spine means MORE anchors
+per day, and each anchor carries its own per-city budget of 2 — so a multi-city
+day can now surface materially more machine backfill picks (a denser trip). This
+is the known, accepted cost of aligning the two spines; it compounds with the
+per-day→per-city change above. If density becomes a problem, the levers are
+`MAX_BACKFILLS_PER_CITY`, the corridor `maxNodes`/`minSpacingMi` params, or a
+per-day ceiling — a tuning decision, flagged.
+
+**Locked by** `web/src/lib/corridor/day-corridor.test.ts`: a city dropped from
+the whole-route spine is still a valid per-day anchor; the endpoint rule still
+excludes an Arvin-class city (present in the raw spine, filtered for endpoint
+proximity), not by absence.

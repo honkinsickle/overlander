@@ -18,13 +18,12 @@
 
 import { geocode } from "@/lib/routing/geocode";
 import { routeBetween } from "@/lib/routing/route-between";
-import { deriveCorridorCities, DEFAULT_CORRIDOR_PARAMS } from "@/lib/corridor/derive";
+import { DEFAULT_CORRIDOR_PARAMS } from "@/lib/corridor/derive";
+import { deriveDayCorridor } from "@/lib/corridor/day-corridor";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
-import gazetteer from "@/lib/corridor/data/gazetteer";
 import { stripNodeIdentical } from "@/lib/corridor/node-identity";
-import type { GazetteerCity } from "@/lib/corridor/derive";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import type { GenerationInput } from "./facts";
@@ -254,13 +253,14 @@ export async function bakeGeneratedDays(
       // so the persisted payload never carries a place as both.
       let cardTiles = tiles;
       if (line && line.length >= 2 && start && end) {
-        const spine = deriveCorridorCities({
+        // Same per-day derivation the backfill audit uses (shared helper), so
+        // the rendered spine and the audit's anchor set can't drift apart.
+        const spine = deriveDayCorridor(
           line,
-          start: { name: day.startPlace, coords: start },
-          end: { name: day.endPlace, coords: end },
-          gazetteer: gazetteer as GazetteerCity[],
-        });
-        if (spine) {
+          { name: day.startPlace, coords: start },
+          { name: day.endPlace, coords: end },
+        );
+        if (spine.length) {
           cardTiles = stripNodeIdentical(tiles, spine);
           corridorCities = bucketPlacesIntoCorridor({
             cities: spine,

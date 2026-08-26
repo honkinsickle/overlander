@@ -152,11 +152,18 @@ in three tiers `[read source]`:
   budget of 2, so an early anchor cannot starve a later one. (This was a per-DAY
   cap until 2026-08-25; that scope silently defeated D-B's per-city density —
   the day-start anchor ate the whole day budget — and was fixed as a correctness
-  bug.) Mid-corridor anchors are selected off the day's
-  **polyline**, not `onCorridor` — the latter degrades to a wide straight-line
-  radius on dwell days and mis-attributes towns. A candidate that reduces to the
-  anchor city's own name is rejected (`isCityTautology`), and backfilled ids are
-  deduped **trip-wide**. Rationale + the measured defects:
+  bug.) Mid-corridor anchors are the day's OWN corridor spine, derived per-day
+  via the shared `dayCorridorAnchors` (`lib/corridor/day-corridor.ts`) — the
+  SAME `deriveCorridorCities` call over the same day segment that `bake.ts` uses
+  to render the spine. (Until 2026-08-26 the audit instead drew anchors from the
+  WHOLE-ROUTE `facts.corridorCities`, which is far coarser; cities on the
+  rendered day spine but dropped from the route spine — Oceanside, Arvin — were
+  visible nodes the backfill never considered. Sharing one derivation keeps the
+  two spines aligned.) Cities within `ANCHOR_NEAR_MI` of either day endpoint are
+  dropped (the start is its own anchor, the end hosts the overnight — this is
+  what correctly excludes an Arvin ~16mi from the day's end). A candidate that
+  reduces to the anchor city's own name is rejected (`isCityTautology`), and
+  backfilled ids are deduped **trip-wide**. Rationale + the measured defects:
   `docs/decisions/2026-08-25-start-of-day-keystop-backfill.md` and
   `docs/decisions/2026-08-25-corridor-city-keystop-backfill.md`.
 - **Tier 2b (guarantee) — interest-category guarantee** (`pickGuaranteedStop`,
