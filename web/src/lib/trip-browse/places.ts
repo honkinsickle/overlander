@@ -40,6 +40,9 @@ export type BrowsePlace = {
    *  often have no photo, in which case the slide renders a category-
    *  themed gradient. Editorial fixture entries always include one. */
   photoUrl?: string;
+  /** CC-licensed photo credit (e.g. "John Doe / CC BY-SA 4.0"). Null for
+   *  public-domain or NPS photos where no attribution is required. */
+  photoCredit?: string;
   photoAlt: string;
   title: string;
   pills: { label: string; status?: boolean }[];
