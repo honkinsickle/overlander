@@ -121,7 +121,7 @@ const GUARANTEED_CATEGORIES_ENABLED =
  *  →fuel, and unmapped passthrough types like `tourist_attraction`) are NOT in
  *  `GUARANTEE_CATEGORIES`, so a live-resolved scenic/attraction viewpoint does
  *  not count as coverage — biasing slightly toward an extra (density) pick,
- *  which is D-B's intent and is bounded by the per-day cap + dedupe. */
+ *  which is D-B's intent and is bounded by the per-city cap + dedupe. */
 const RESOLVED_TO_GUARANTEE: Readonly<Record<string, string>> = {
   restaurant: "food",
 };
@@ -514,8 +514,10 @@ export async function auditItinerary(
     }
 
     // ── Start-of-day backfill (#274) + interest-category guarantee (D-B) ──
-    // Two coverage kinds share ONE per-day cap (`MAX_BACKFILLS_PER_DAY`),
-    // guarantee-first (spec §5.4 Option A). The OPENER half (#274/#275/#276):
+    // Two coverage kinds share ONE PER-CITY cap (`MAX_BACKFILLS_PER_CITY`) at
+    // each anchor — every city the day passes gets its own budget, so an early
+    // anchor no longer starves a later one (the per-day scope was a bug).
+    // Guarantee-first (spec §5.4 Option A). The OPENER half (#274/#275/#276):
     // if the model kept nothing near a bare anchor, pick a pool opener there.
     // The GUARANTEE half (decision D-B, per-city): for each anchor the day
     // passes, if a user-selected interest category isn't already covered NEAR
@@ -600,8 +602,10 @@ export async function auditItinerary(
         return new Set(guaranteedPool.filter((c) => !covered.has(c)));
       };
 
-      // Traveller order: the start first, then each town as it is reached, so
-      // that when the per-day cap bites it drops the LATEST gaps. NOT
+      // Traveller order: the start first, then each town as it is reached.
+      // Ordering no longer decides who gets dropped — the cap is per-city, so
+      // each anchor has its own budget — but it keeps the notes reading in
+      // travel order and is retained for the within-city category order. NOT
       // pre-filtered by bareness — `pickBackfillStops` runs the opener bare
       // check itself (phase 2), because a guarantee can need an anchor the
       // opener would skip (an anchor with a kept food stop is not bare, but can

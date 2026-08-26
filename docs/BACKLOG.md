@@ -62,11 +62,17 @@ open:
   excluded from `GUARANTEE_CATEGORIES` per spec §11 step 6 — `fuel` is inert in
   the pool-only path (handled by live-resolve path A), `overnight` would
   duplicate the dedicated per-day slot. Revisit if/when B.1/B.2 resolve.
-- **Cross-category cap saturation.** Under the 2-slot cap, per-city + Option A
-  lets one earlier-selected category consume both slots at the first two cities
-  before a second category gets a turn (observed live: `[scenic, food]` →
-  2 scenic, 0 food). Inherent to the design; a future refinement could
-  round-robin categories before repeating one.
+- ~~**Cross-category cap saturation.**~~ **PARTLY RESOLVED 2026-08-25 (later).**
+  The dominant symptom was actually a **scope bug**: the cap was enforced
+  per-DAY, not per-city, so the day-START anchor consumed the whole day budget
+  and every mid-corridor city got zero (measured on trip `ab146c1d` —
+  Oceanside/Riverside/Silver Lakes starved despite real candidates). Fixed by
+  rescoping `MAX_BACKFILLS_PER_DAY` → `MAX_BACKFILLS_PER_CITY` (each anchor gets
+  its own budget of 2; no day-level break). The genuine **category-monopoly**
+  case still exists but now only WITHIN a single city's 2 slots: one selected
+  category can take both of a city's slots before another gets a turn. A future
+  refinement could round-robin categories within a city. Details:
+  `docs/decisions/2026-08-25-interest-category-guarantee-granularity.md`.
 - **Rank order (blocker E)** is the spec's recommended default (on-category →
   richness → proximity), not an explicit Adam pick — a one-line change if a
   different order is wanted.
