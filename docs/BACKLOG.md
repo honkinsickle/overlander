@@ -407,10 +407,14 @@ all nullable. **`description` was NOT added — it already existed** since the
 Phase 1 migration and is owned by `recompute_master_place()` via
 `field_precedence`, so the ADR's five fields became four columns.
 
-`photo_url` backfilled on **7,360** rows (nps 4,690 · ridb 2,449 · blm 88 ·
-state_parks 133, the last all Washington). **`rating` / `review_count` /
-`price_tier` are 0 corpus-wide** — no ingested source carries any of them,
-established by enumerating the full key space per source, not a regex census.
+`photo_url` backfilled on **7,443** rows (nps 4,880 · ridb 2,342 · blm 88 ·
+state_parks 133, the last all Washington) `[re-measured TEST 2026-08-26]`.
+NPS count rose from 4,690 → 4,880 after campground + park photo extraction
+was added to the ingester + backfill (PR nps-api-photo-integration, 305
+source_records updated, 192 master_place rows gained a photo_url). **`rating`
+/ `review_count` / `price_tier` are 0 corpus-wide** — no ingested source
+carries any of them, established by enumerating the full key space per
+source, not a regex census.
 They ship empty on purpose: the point is that the card layer stops branching
 on provenance. ⚠ **They are not a destination for Google data** —
 `rating`/`userRatingCount` are explicitly non-cacheable.
@@ -453,6 +457,29 @@ fields to `master_place` — 138 BLM-linked and 95 state_parks-linked places
 carry a real source description while `master_place.description` is NULL.
 Seeding those rows is a product decision; the state-parks spec §10a excluded
 `description` deliberately.
+
+## Non-NPS POI photo sourcing — open (2026-08-26)
+
+NPS/RIDB photos now cover ~7,443 master_place rows on TEST (PR #298). The
+remaining ~153k corpus POIs (OSM, Google text-search, BLM, state parks, Atlas
+Obscura, etc.) have no corpus-native photo — cards render a category-colored
+block with an icon badge. Google hydration grafts a live photo for POIs with a
+`placeId`, but the majority of corpus POIs (especially OSM-sourced) have none.
+
+**Candidate sources researched (decision pending):**
+- **Wikimedia Commons / Wikidata** (primary candidate) — many OSM nodes carry a
+  `wikidata` tag linking to a Wikidata entity, which in turn links to Commons
+  images. Free, cacheable, CC-licensed. Coverage is uneven (strong for named
+  landmarks, weak for trailheads/campgrounds).
+- **Mapillary** (fallback) — street-level imagery keyed by coordinates. Coverage
+  along highways is good; off-highway and backcountry is sparse. API returns the
+  nearest photo within a radius, so the result is "a photo near this place," not
+  "a photo of this place" — a quality distinction.
+
+**Not started:** no integration built, no coverage numbers measured, no
+architecture decision on how photos from these sources would flow through the
+existing `normalized_payload.photo` → corridor RPC → card pipeline. Separate
+from the NPS photo work (which uses a first-party, authoritative API).
 
 ## `fed_exact` is category-blind AND name-blind within 10m (2026-08-17)
 

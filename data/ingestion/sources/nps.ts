@@ -96,6 +96,17 @@ const CampgroundSchema = z
     fees: z.array(z.unknown()).optional(),
     operatingHours: z.array(z.unknown()).optional(),
     accessibility: z.record(z.unknown()).optional(),
+    images: z
+      .array(
+        z
+          .object({
+            url: z.string().nullable().optional(),
+            altText: z.string().nullable().optional(),
+            credit: z.string().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -147,6 +158,17 @@ const ParkSchema = z
     operatingHours: z.array(z.unknown()).optional(),
     entranceFees: z.array(z.unknown()).optional(),
     addresses: z.array(z.unknown()).optional(),
+    images: z
+      .array(
+        z
+          .object({
+            url: z.string().nullable().optional(),
+            altText: z.string().nullable().optional(),
+            credit: z.string().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -239,6 +261,7 @@ async function fetchPark(parkCode: string): Promise<Park | null> {
   const apiKey = requireApiKey();
   const url = new URL(`${NPS_BASE}/parks`);
   url.searchParams.set("parkCode", parkCode);
+  url.searchParams.set("fields", "images");
   url.searchParams.set("limit", "1");
   url.searchParams.set("api_key", apiKey);
 
@@ -317,7 +340,7 @@ export function normalizePlace(p: Place): Record<string, unknown> {
   };
 }
 
-function normalizeCampground(c: Campground): Record<string, unknown> {
+export function normalizeCampground(c: Campground): Record<string, unknown> {
   const contact = compact({
     website: c.url ?? c.reservationUrl,
   });
@@ -336,6 +359,7 @@ function normalizeCampground(c: Campground): Record<string, unknown> {
     amenities: c.amenities ? coerceCampgroundAmenities(c.amenities) : null,
     access: c.accessibility ? compact({ raw: c.accessibility }) : null,
     hours: c.operatingHours ? { raw: c.operatingHours } : null,
+    photo: npsPhotoFromImages(c.images),
   };
 }
 
@@ -622,6 +646,7 @@ async function persistParkBoundary(
         access: null,
         amenities: null,
         hours: park?.operatingHours && park.operatingHours.length ? { raw: park.operatingHours } : null,
+        photo: npsPhotoFromImages(park?.images),
         // The key Phase-1 deliverable for parks: GeoJSON polygon for
         // recompute_master_place() to promote later.
         geometry_polygon: geometry,

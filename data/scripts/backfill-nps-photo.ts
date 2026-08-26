@@ -39,13 +39,19 @@ function targetRef(): string {
 
 type Row = {
   id: string;
-  raw_payload: { place?: { images?: unknown[] } } | null;
+  raw_payload: {
+    place?: { images?: unknown[] };
+    campground?: { images?: unknown[] };
+    park?: { images?: unknown[] };
+  } | null;
   normalized_payload: Record<string, unknown> | null;
 };
 
-/** The photo the row SHOULD carry, from its own raw_payload. */
+/** The photo the row SHOULD carry, from its own raw_payload.
+ *  Covers all three NPS record types: places, campgrounds, parks. */
 function desiredPhoto(row: Row): ReturnType<typeof npsPhotoFromImages> {
-  const images = row.raw_payload?.place?.images;
+  const rp = row.raw_payload;
+  const images = rp?.place?.images ?? rp?.campground?.images ?? rp?.park?.images;
   // npsPhotoFromImages tolerates the loose shape; cast at this one seam.
   return npsPhotoFromImages(images as Parameters<typeof npsPhotoFromImages>[0]);
 }

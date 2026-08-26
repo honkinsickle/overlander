@@ -12,6 +12,31 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-26 — NPS campground + park photo extraction
+
+- **Finding:** NPS photo pipeline was already 90% built — places (`nps:place:*`)
+  had photos extracted, stored, and flowing through the corridor RPC to card
+  rendering. But campgrounds (`nps:campground:*`) and parks (`nps:park:*`) were
+  excluded: their schemas didn't parse `images`, their normalizers didn't set
+  `photo`, and the backfill script only looked at `raw_payload.place.images`.
+- **Fix:** Added `images` to `CampgroundSchema` + `ParkSchema`, `photo` to
+  `normalizeCampground()` + `persistParkBoundary()`, `fields=images` to
+  `fetchPark()`. Widened backfill script to cover all three record types.
+- **Backfill (TEST):** 305 source_records updated (campgrounds + parks gained
+  `normalized_payload.photo`), 192 master_place rows gained `photo_url`. Total
+  corpus photo coverage: 7,443 master_place rows (was 7,360). Idempotent on
+  re-run (0 changed).
+- **Verified:** corridor RPC returns `nps_photo_url` for campgrounds (Jumbo Rocks,
+  Hidden Valley, Sheep Pass in Joshua Tree corridor). Non-NPS POIs unaffected.
+- **NPS API terms:** content is public domain per nps.gov/aboutus/disclaimer.htm.
+  Some photos carry third-party credits; the existing `NpsPhoto.credit` field
+  handles this. The codebase already cached NPS photos — this extends, not
+  introduces, the pattern.
+- **Stale comment fixed:** `bake-corridors.ts` said "no ratings/photos" when
+  corpus photos ARE supported via the corridor RPC lateral join.
+- **PROD requires:** merge → `backfill:nps-photo -- --confirm` →
+  `backfill:mp-enrichment -- --confirm`.
+
 ## 2026-08-26 (redesign) — corridor-city selection: strict 3mi proximity
 
 - **Design change (Adam's decision, delivered as an attachment):** replace the
