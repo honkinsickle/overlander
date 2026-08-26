@@ -49,14 +49,6 @@ function derive(
   });
 }
 
-function gaps(nodes: { milesFromStart: number }[]): number[] {
-  const out: number[] = [];
-  for (let i = 1; i < nodes.length; i++) {
-    out.push(nodes[i].milesFromStart - nodes[i - 1].milesFromStart);
-  }
-  return out;
-}
-
 test("basic corridor: start + one intermediate + end, ordered, correct miles", () => {
   // ~96.7 mi day with Ventura-like city at 0.94° (~64.9 mi), just off-route.
   const r = derive(1.4, [city("Ventura", "CA", 0.94, 96769, 0.01)]);
@@ -74,140 +66,123 @@ test("basic corridor: start + one intermediate + end, ordered, correct miles", (
   assert.ok(Math.abs(r[2].milesFromStart - 1.4 * MI_PER_DEG) < 0.5, "end mile");
 });
 
-test("buffer gate: city beyond buffer_mi excluded, city inside included", () => {
+// Straight-line offset = latDeg * MI_PER_DEG on the equator.
+const off = (mi: number) => mi / MI_PER_DEG;
+
+test("corridorMi gate: a city within 3mi is in, beyond 3mi is out — regardless of size", () => {
   const r = derive(1.4, [
-    city("Far Off", "CA", 0.7, 500000, 0.3), // ~20.7 mi off-route -> out
-    city("Near", "CA", 0.7, 50000, 0.1), // ~6.9 mi off-route -> in
+    city("On Route", "CA", 0.7, 50000, off(1.4)), // 1.4mi -> in
+    city("Off Route", "CA", 0.7, 500000, off(4.1)), // 4.1mi -> out even though huge
   ]);
   assert.ok(r);
   const names = r.map((n) => n.name);
-  assert.ok(names.includes("Near, CA"), "in-buffer city present");
-  assert.ok(!names.includes("Far Off, CA"), "out-of-buffer city absent");
+  assert.ok(names.includes("On Route, CA"), "1.4mi city present");
+  assert.ok(!names.includes("Off Route, CA"), "4.1mi city absent despite big population");
 });
 
-test("population floor holds on a short day with no gap violation", () => {
-  // 96.7 mi day, only a sub-floor town available, no 150-mi gap -> no intermediates.
-  const r = derive(1.4, [city("Tinyville", "CA", 0.7, 4000)]);
+test("population floor: a sub-floor town on-route is excluded (no fallback pulls it in)", () => {
+  const r = derive(1.4, [city("Tinyville", "CA", 0.7, 4000, off(0.5))]);
   assert.ok(r);
   assert.equal(r.length, 2, "start + end only");
 });
 
-test("spacing: of two clustered cities, the higher-population one wins", () => {
-  // 13.8 mi apart (< 50 mi spacing) -> keep pop 80k, drop pop 50k.
+test("NO SUPPRESSION: two on-route cities close together BOTH appear", () => {
+  // ~13.8mi apart — well inside the removed 50mi spacing. The old model kept
+  // only the bigger; now both survive, because inclusion is proximity, not
+  // prominence.
   const r = derive(1.4, [
-    city("Smaller", "CA", 0.5, 50000),
-    city("Bigger", "CA", 0.7, 80000),
+    city("Smaller", "CA", 0.5, 50000, off(1.0)),
+    city("Bigger", "CA", 0.7, 80000, off(1.0)),
   ]);
   assert.ok(r);
   const names = r.map((n) => n.name);
+  assert.ok(names.includes("Smaller, CA"), "smaller NOT suppressed");
   assert.ok(names.includes("Bigger, CA"));
-  assert.ok(!names.includes("Smaller, CA"));
 });
 
-test("admin-seat tier beats higher population within a spacing cluster", () => {
-  // The Ventura case: county seat (tier 3, 97k) vs bigger generic
-  // neighbor (tier 2, 200k), 13.8 mi apart — the seat wins the cluster.
+test("prominence never decides inclusion: a huge on-route city does not hide a small neighbour", () => {
   const r = derive(1.4, [
-    city("Big Generic", "CA", 0.7, 200000, 0, 2),
-    city("County Seat", "CA", 0.5, 97000, 0, 3),
+    city("Metropolis", "CA", 0.5, 2000000, off(0.5), 4),
+    city("Little Town", "CA", 0.7, 12000, off(0.5), 2),
   ]);
   assert.ok(r);
   const names = r.map((n) => n.name);
-  assert.ok(names.includes("County Seat, CA"), "seat selected");
-  assert.ok(!names.includes("Big Generic, CA"), "generic dropped");
+  assert.ok(names.includes("Metropolis, CA"));
+  assert.ok(names.includes("Little Town, CA"), "small neighbour survives the giant");
 });
 
-test("gap-fill prefers the higher-tier candidate", () => {
-  // ~166 mi day, both candidates sub-floor and mid-gap; one fill
-  // resolves the gap. Tier 3 seat (pop 6.8k) must beat tier 2 (pop 20k).
+test("zero corridor cities is a valid spine — no reach-further fallback", () => {
+  // The only candidate sits 4mi off-route: excluded, and nothing is forced in.
+  const r = derive(1.4, [city("Off", "CA", 0.7, 90000, off(4.0))]);
+  assert.ok(r);
+  assert.equal(r.length, 2, "start + end only");
+  assert.equal(r.filter((n) => n.kind === "corridor").length, 0);
+});
+
+test("maxNodes backstop truncates by ALONG-ROUTE order, not prominence", () => {
+  // Tiny cap override. Three on-route cities; the cap keeps the FIRST TWO by
+  // mile even though the last is by far the most populous — no prominence bias.
+  const r = derive(
+    2.0,
+    [
+      city("First", "CA", 0.4, 20000, off(0.5)),
+      city("Second", "CA", 0.8, 20000, off(0.5)),
+      city("Third Biggest", "CA", 1.2, 900000, off(0.5)),
+    ],
+    { maxNodes: 2 },
+  );
+  assert.ok(r);
+  const mids = r.filter((n) => n.kind === "corridor").map((n) => n.name);
+  assert.deepEqual(mids, ["First, CA", "Second, CA"], "earliest two by mile");
+});
+
+test("same-point de-dup collapses co-located rows to the more prominent one", () => {
+  // Two rows essentially at one spot (<0.5mi apart): keep the bigger.
+  const r = derive(1.4, [
+    city("Exit CDP", "CA", 0.7, 12000, off(0.3)),
+    city("Exit City", "CA", 0.7005, 90000, off(0.3)),
+  ]);
+  assert.ok(r);
+  const mids = r.filter((n) => n.kind === "corridor").map((n) => n.name);
+  assert.deepEqual(mids, ["Exit City, CA"], "one node, the more prominent");
+});
+
+// ── Named regression cases (real trips, equator-mapped positions) ──────────
+
+test("regression Concord/Fairfield/Vacaville: dense on-route cluster all survive; the across-the-bay city is excluded", () => {
+  // Trip e67d8c1f (Palo Alto→Colusa), real miles/offsets mapped to the equator.
+  // All three are <2mi off-route; San Francisco is 11.6mi off (across the Bay)
+  // and must be excluded by the 3mi gate — and must NOT suppress the cluster
+  // (the original bug).
   const r = derive(2.4, [
-    city("Generic Town", "AK", 1.15, 9000, 0, 2), // sub-floor
-    city("Borough Seat", "AK", 1.25, 6800, 0, 3),
+    city("San Francisco", "CA", 38 / MI_PER_DEG, 827526, off(11.6), 3),
+    city("Concord", "CA", 53 / MI_PER_DEG, 128667, off(1.6), 2),
+    city("Fairfield", "CA", 78 / MI_PER_DEG, 112970, off(1.4), 3),
+    city("Vacaville", "CA", 86 / MI_PER_DEG, 96803, off(0.4), 2),
   ]);
   assert.ok(r);
   const names = r.map((n) => n.name);
-  assert.ok(names.includes("Borough Seat, AK"), "higher tier fills the gap");
-  assert.ok(!names.includes("Generic Town, AK"), "lower tier not chained in");
+  assert.ok(names.includes("Concord, CA"), "Concord present");
+  assert.ok(names.includes("Fairfield, CA"), "Fairfield present");
+  assert.ok(names.includes("Vacaville, CA"), "Vacaville present");
+  assert.ok(!names.includes("San Francisco, CA"), "SF excluded by the 3mi gate");
 });
 
-test("one-fill-per-gap: an uncured unspaced fill does not chain", () => {
-  // Mid-cluster seat geometry that tier ranking ALONE doesn't prevent:
-  // the seat wins the spaced fill, then the unspaced fallback grabs ONE
-  // neighbor — the rule stops the walk upstream through the rest of the
-  // cluster (the gap it can't cure is accepted open).
-  const r = derive(5.8, [
-    city("Outer Suburb", "AK", 4.4, 8000, 0, 2), // ~304 mi
-    city("Near Suburb", "AK", 4.5, 8500, 0, 2), // ~311 mi
-    city("Mid Seat", "AK", 4.55, 6800, 0, 3), // ~314 mi
-    city("Upper Suburb", "AK", 4.6, 9000, 0, 2), // ~318 mi
+test("regression Davis/Sacramento: Davis is kept; Sacramento is excluded at the 3mi boundary", () => {
+  // Trip 898afd34 (San Jose→Reno). Davis 0.4mi off (in); Sacramento measured
+  // 3.1mi off (just over 3mi -> out) though it's the far-more-prominent state
+  // capital — prominence must not save it, nor let it suppress Davis.
+  const r = derive(2.4, [
+    city("Davis", "CA", 106 / MI_PER_DEG, 67666, off(0.4), 2),
+    city("Sacramento", "CA", 117 / MI_PER_DEG, 524943, off(3.1), 4),
   ]);
   assert.ok(r);
   const names = r.map((n) => n.name);
-  assert.ok(names.includes("Mid Seat, AK"), "seat selected");
-  assert.ok(!names.includes("Outer Suburb, AK"), "upstream walk stopped");
-  const intermediates = r.filter((n) => n.kind === "corridor");
+  assert.ok(names.includes("Davis, CA"), "on-route Davis kept");
   assert.ok(
-    intermediates.length <= 2,
-    `chain capped: got ${intermediates.length} intermediates`,
+    !names.includes("Sacramento, CA"),
+    "Sacramento excluded: 3.1mi > 3mi gate",
   );
-});
-
-test("top-N: caps at max_nodes intermediates when gaps stay legal", () => {
-  // ~311 mi day, 5 qualifying cities every 0.8° (~55 mi). Lowest-pop one
-  // (at 4.0°) must be dropped by the cap; resulting max gap ~90 mi < 150.
-  const r = derive(4.5, [
-    city("Alpha", "CA", 0.8, 90000),
-    city("Bravo", "CA", 1.6, 80000),
-    city("Charlie", "CA", 2.4, 70000),
-    city("Delta", "CA", 3.2, 60000),
-    city("Echo", "CA", 4.0, 50000),
-  ]);
-  assert.ok(r);
-  const intermediates = r.filter((n) => n.kind === "corridor");
-  assert.equal(intermediates.length, DEFAULT_CORRIDOR_PARAMS.maxNodes);
-  assert.ok(!r.map((n) => n.name).includes("Echo, CA"), "lowest-pop dropped");
-});
-
-test("adaptive fallback: floor relaxes on an empty 400-mi stretch", () => {
-  // ~400 mi day, only a pop-800 town at the midpoint. Gap 400 > 150 ->
-  // floor relaxes and the town anchors the corridor.
-  const r = derive(5.8, [city("Dusty", "NV", 2.9, 800)]);
-  assert.ok(r);
-  const names = r.map((n) => n.name);
-  assert.ok(names.includes("Dusty, NV"), "sub-floor town selected");
-});
-
-test("gap guarantee wins over max_nodes on a very long day", () => {
-  // ~898 mi day. Four big cities cluster in the first half; small
-  // qualifying cities dot the second half. Honoring max_gap_mi=150 must
-  // exceed the 4-node cap.
-  const r = derive(13, [
-    city("Big1", "CA", 1.5, 95000),
-    city("Big2", "CA", 3.0, 90000),
-    city("Big3", "CA", 4.5, 85000),
-    city("Big4", "CA", 6.0, 80000),
-    city("Small1", "NV", 7.5, 20000),
-    city("Small2", "NV", 9.0, 25000),
-    city("Small3", "NV", 10.5, 30000),
-    city("Small4", "NV", 12.0, 35000),
-  ]);
-  assert.ok(r);
-  const intermediates = r.filter((n) => n.kind === "corridor");
-  assert.ok(
-    intermediates.length > DEFAULT_CORRIDOR_PARAMS.maxNodes,
-    `cap yields: got ${intermediates.length} intermediates`,
-  );
-  for (const g of gaps(r)) {
-    assert.ok(
-      g <= DEFAULT_CORRIDOR_PARAMS.maxGapMi + 1,
-      `no gap over max_gap_mi, saw ${g.toFixed(1)}`,
-    );
-  }
-  // Ordering invariant: milesFromStart monotonically non-decreasing.
-  const miles = r.map((n) => n.milesFromStart);
-  for (let i = 1; i < miles.length; i++) {
-    assert.ok(miles[i] >= miles[i - 1], "monotonic milesFromStart");
-  }
 });
 
 test("anchor guard: candidate within 3 mi of start is not a duplicate node", () => {

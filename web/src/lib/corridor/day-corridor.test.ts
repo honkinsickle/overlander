@@ -26,9 +26,9 @@ function city(name: string, lngDeg: number, pop: number): GazetteerCity {
   return { name, admin: "CA", lat: 0, lng: lngDeg, pop, tier: 2 };
 }
 
-// Four prominent, well-spaced cities that fill the whole-route node cap, plus a
-// small "Midtown" near the start that loses the whole-route competition but is
-// the sole intermediate on the first short day segment (the Oceanside case).
+// Cities strung along a 0°→10° route. "Midtown" sits on the first short day
+// segment (mile ~41); "Big Six" sits far up the route (mile ~415), near the
+// WHOLE route but nowhere near day 1's polyline.
 const BIG = [city("Big Two", 2, 200_000), city("Big Four", 4, 200_000), city("Big Six", 6, 200_000), city("Big Eight", 8, 200_000)];
 const MIDTOWN = city("Midtown", 0.6, 20_000); // ~41mi from a 0° start
 const GAZ = [MIDTOWN, ...BIG];
@@ -36,8 +36,11 @@ const GAZ = [MIDTOWN, ...BIG];
 const near = (a: [number, number], b: [number, number]) =>
   Math.hypot((a[0] - b[0]) * MI_PER_DEG, (a[1] - b[1]) * MI_PER_DEG);
 
-test("a city DROPPED from the whole-route spine is still a per-day backfill anchor", () => {
-  // Whole route 0°→10°: the 4 big cities fill the node cap; Midtown is dropped.
+test("dayCorridorAnchors scopes to the DAY's polyline, not the whole route", () => {
+  // The whole-route spine has every on-route city (strict proximity, no
+  // suppression). Day 1 (0°→2°) must include only cities near ITS segment —
+  // Midtown — and NOT a city far up the route (Big Six), which is what wiring
+  // the audit to the per-day derivation (#295) buys.
   const whole = deriveCorridorCities({
     line: makeLine(10),
     start: { name: "Start, CA", coords: [0, 0] },
@@ -45,9 +48,9 @@ test("a city DROPPED from the whole-route spine is still a per-day backfill anch
     gazetteer: GAZ,
   });
   assert.ok(whole, "expected a whole-route spine");
-  assert.ok(!whole!.some((c) => c.name.startsWith("Midtown")), "Midtown is NOT on the coarse whole-route spine");
+  assert.ok(whole!.some((c) => c.name.startsWith("Midtown")), "whole route includes Midtown");
+  assert.ok(whole!.some((c) => c.name.startsWith("Big Six")), "whole route includes Big Six");
 
-  // First day segment 0°→2°: Midtown IS surfaced, as a backfill anchor.
   const anchors = dayCorridorAnchors(
     { line: makeLine(2), startCoord: [0, 0], endCoord: [2, 0], startPlace: "Start, CA", endPlace: "Big Two, CA", nearMi: 25 },
     GAZ,
@@ -56,7 +59,11 @@ test("a city DROPPED from the whole-route spine is still a per-day backfill anch
   assert.equal(anchors[0].label, "Start, CA");
   assert.ok(
     anchors.some((a) => a.kind === "corridor" && a.label.startsWith("Midtown")),
-    "Midtown IS a per-day corridor anchor even though the whole-route spine dropped it",
+    "day-1 anchors include the on-segment Midtown",
+  );
+  assert.ok(
+    !anchors.some((a) => a.label.startsWith("Big Six")),
+    "day-1 anchors exclude the far-up-route city",
   );
 });
 

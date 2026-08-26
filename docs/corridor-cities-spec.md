@@ -1,5 +1,16 @@
 # Corridor-Cities on `Day` — Data-Model Spec
 
+> ⚠ **SELECTION MODEL SUPERSEDED 2026-08-26.** The §2.1.2 selection filter this
+> spec describes (15mi buffer → tier-first prominence greedy → 50mi
+> `min_spacing_mi` → `max_gap_mi` gap-fill → 4-node cap) has been **replaced** by
+> a strict proximity rule: a city is a corridor node iff its offset from the
+> route is ≤ 3mi (`corridorMi`), with no prominence ranking and no spacing
+> suppression. The old model dropped genuinely on-route cities (SF hid
+> Concord/Fairfield/Vacaville; Sacramento hid Davis). The DATA MODEL below (the
+> `Day.corridorCities` field, ordering, ids, place bucketing) is unchanged; only
+> the intermediate-selection algorithm changed. See
+> [`docs/decisions/2026-08-26-corridor-city-strict-proximity.md`](decisions/2026-08-26-corridor-city-strict-proximity.md).
+
 **Scope:** web client data model (`web/src/lib/trips`) — one additive `Day` field + a finalize-time derivation step. No schema DDL (rides in `trips.payload` jsonb).
 **Status:** Draft. §5-B (gazetteer source + prominence filter) resolved 2026-07-06; follow-ups (storage = flat file, gap-vs-cap precedence, recompute trigger, base extract, Canadian labels) all resolved 2026-07-06. §3.1 revised 2026-07-06: computed at finalize only; edit-time recompute deferred (gated on server-side rerouting-on-edit). §3.2 records that townless far-north gaps are correct and close the extract question. BUILT: derivation + gazetteer (`web/src/lib/corridor/*`), finalize hook (`lib/plan/actions.ts`), reference-trip resolver (`lib/trips/resolve-corridor-cities.ts`), v4 view wired to real data, place→node bucketing (§2.3, `web/src/lib/corridor/bucket.ts`, tuned `max_attach_mi=25`), tier-first prominence + one-fill-per-gap (§2.1.2, resolved 2026-07-06 — both former tuning items closed). Remaining: production slideup integration.
 **Owner:** Adam (ACW Creative)
