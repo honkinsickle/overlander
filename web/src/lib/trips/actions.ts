@@ -277,3 +277,33 @@ export async function setOfflinePhaseHashAction(
   revalidatePath(`/trips/${tripId}`);
   return { ok: true };
 }
+
+/** Re-fetch corpus tiles for every day from the current corridor RPC
+ *  without an LLM call. Picks up new photos, descriptions, and POIs
+ *  added to the corpus since the trip was generated. Non-corpus content
+ *  (waypoints, live-resolved stops, LLM notes, overnights) is untouched. */
+export async function refreshCorpusTilesAction(
+  tripId: string,
+): Promise<ActionResult<{ tilesBeforeStrip: number; tilesAfterFold: number }>> {
+  const frozen = checkNotFrozen(tripId);
+  if (frozen) return frozen;
+  const result = await repo.refreshCorpusTiles(tripId);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error:
+        result.reason === "conflict"
+          ? TRIP_CHANGED_ERROR
+          : "Couldn't refresh trip data. Try again.",
+    };
+  }
+  revalidatePath(`/trip/${tripId}`);
+  revalidatePath(`/trips/${tripId}`);
+  return {
+    ok: true,
+    data: {
+      tilesBeforeStrip: result.tilesBeforeStrip,
+      tilesAfterFold: result.tilesAfterFold,
+    },
+  };
+}
