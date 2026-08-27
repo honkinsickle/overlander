@@ -291,6 +291,37 @@ export function buildSpineItems(input: {
 }
 
 /**
+ * Drop pass-through corridor cities with nothing clustered under them (no
+ * featured anchor card, no pool tiles for "Explore more") from the spine —
+ * a city surfacing purely because it's geometrically near the route (the
+ * strict-proximity corridor selection, PR #296) with nothing to actually
+ * show renders as a bare name + mile tick otherwise. Start/end nodes always
+ * render regardless of content: they anchor the day (the trip's actual
+ * origin/overnight), not just a pass-through with an empty pool.
+ *
+ * `cityTiles`/`cityFeatured` are keyed by CorridorCity object identity
+ * (the same city instances `items` was built from), matching how the caller
+ * already computes them once for both the CityNode content check here and
+ * the actual render. `last` is recomputed against the FILTERED list — the
+ * true final visible entry drops its connector, not whatever was last in
+ * the unfiltered `items` (which may now be hidden). Pure — `items` is not
+ * mutated, so callers that need the full unfiltered list still have it.
+ */
+export function filterVisibleSpineItems(
+  items: SpineItem[],
+  cityTiles: Map<CorridorCity, CorridorPlace[]>,
+  cityFeatured: Map<CorridorCity, CorridorPlace[]>,
+): SpineItem[] {
+  return items
+    .filter((item) => {
+      if (item.type !== "city") return true;
+      if (item.city.kind !== "corridor") return true;
+      return (cityTiles.get(item.city)?.length ?? 0) > 0 || (cityFeatured.get(item.city)?.length ?? 0) > 0;
+    })
+    .map((item, idx, arr) => ({ ...item, last: idx === arr.length - 1 }));
+}
+
+/**
  * The ONE place the read spine decides where a curated pick sits — by projecting
  * its coords onto the day's route, never by trusting the stored `milesFromStart`
  * (which `bakeGeneratedDays` measures against a zigzag line that threads the day's
@@ -498,6 +529,22 @@ export function DayDetailCorridor({
     placeMile,
   });
 
+  // A pass-through corridor city with nothing clustered under it (no featured
+  // anchor card, no pool tiles for "Explore more") renders as a bare name +
+  // mile tick with no content — the density-cascade symptom from strict-
+  // proximity corridor selection (PR #296, 21-29 cities/day on dense routes).
+  // Drop it from the RENDERED spine only; `cities`/`items` (the data) are
+  // untouched, so mile-marker continuity and any logic reading the full
+  // corridor city list (fuel gaps, day-splitting, plan-diff labels) still see
+  // every city.
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>();
+  const cityFeatured = new Map<CorridorCity, CorridorPlace[]>();
+  for (const c of cities) {
+    cityTiles.set(c, sortClusterByRank(c.placeIds, rankKey).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]);
+    cityFeatured.set(c, featuredFor(c));
+  }
+  const visibleItems = filterVisibleSpineItems(items, cityTiles, cityFeatured);
+
   return (
     <FocusContext.Provider value={focusedId ?? null}>
     <div
@@ -658,7 +705,7 @@ export function DayDetailCorridor({
       {/* ── Corridor spine — city nodes with key stops interleaved at their
            along-route mile (ordered Start → key stops → End). ── */}
       <div className="flex flex-col" style={{ paddingTop: positionedPicks.length > 0 ? 12 : 16 }}>
-        {items.map((item, idx) =>
+        {visibleItems.map((item, idx) =>
           item.type === "city" ? (
             <CityNode
               // Unique among siblings: a same-city day (rest day, or a
@@ -669,8 +716,8 @@ export function DayDetailCorridor({
               // through-cities with the same slug.
               key={`${item.city.id}-${item.city.kind}-${idx}`}
               city={item.city}
-              tiles={sortClusterByRank(item.city.placeIds, rankKey).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]}
-              featured={featuredFor(item.city)}
+              tiles={cityTiles.get(item.city) ?? []}
+              featured={cityFeatured.get(item.city) ?? []}
               curatedMode={curatedMode}
               last={item.last}
               onRemovePlace={onRemovePlace}
