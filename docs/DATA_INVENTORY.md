@@ -52,23 +52,22 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > WA 327 / OR 156 / NV 2 — those are radius undercounts, **not** state
 > totals; use the ISO-area figures above.
 >
-> **Photo coverage (Artboard C LIVE, #211):** `photo_url` is now on the view
-> (nps/ridb lateral, NPS preferred) + the Typesense sync + hydrate. **3,526 of
-> 16,516** view rows carry a non-null `photo_url` (~21%; unchanged by the
-> fire_pit deactivation — osm bbq nodes carry no photo); `places_prod` docs
-> carry it (retrievable — *not* a declared schema field, see BACKLOG). Source
-> photos: 1,622 `ridb` + 4,451 `nps` = 6,073 source_records carry
-> `normalized_payload.photo.url`.
+> **Photo coverage `[re-measured PROD 2026-08-26]`:**
+> `master_place.photo_url` populated on **4,439** of 22,421 rows (~20%).
+> Source split: nps 2,734 · ridb 888 · wikipedia 747 · state_parks 70.
+> The corridor RPC (`pois_along_corridor`) photo lateral now includes
+> `nps`, `ridb`, and `wikipedia` (precedence nps > ridb > wikipedia).
+> `photo_credit` column added for CC attribution on Wikipedia photos.
 >
-> **⚠ NPS photo coverage expanded (PR #298, TEST-only as of 2026-08-26):**
-> the NPS ingester now extracts photos from ALL three record types —
-> `nps:place:*` (already had photos), `nps:campground:*`, and `nps:park:*`.
-> On TEST, 305 additional source_records gained `normalized_payload.photo`
-> (5,181 total NPS with photos), and 192 master_place rows gained
-> `photo_url` (7,443 total across all sources). **PROD numbers above are
-> stale — they will rise once PR #298 merges and the PROD backfill runs**
-> (`backfill:nps-photo -- --confirm` then `backfill:mp-enrichment --
-> --confirm`).
+> **Wikipedia source_records:** 783 created on PROD (541 high confidence,
+> 242 medium). 9,061 non-NPS no-photo candidates processed, 8.6% hit rate.
+> Concentrated on oddities, parks, named landmarks — campgrounds/trailheads
+> structurally have no Wikipedia presence.
+>
+> **NPS photo coverage:** 4,649 of 4,837 NPS source_records carry
+> `normalized_payload.photo.url` (places + campgrounds + parks, all three
+> record types). 198 campground/park records gained photos via the PR #298
+> backfill.
 
 - **master_place:** 13,629 total · 13,629 searchable · 0 non-searchable.
 - **Searchable latitude range:** −88.6 → 70.2 (13,629 rows). The corridor proper

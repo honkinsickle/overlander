@@ -400,10 +400,11 @@ geocoding run. The survey deliberately stops at sizing.
 Step 1 of `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`.
 Full measured report: `docs/measurements/2026-08-21-master-place-enrichment-columns.md`.
 
-**Shipped — TEST ONLY. PROD has neither migration.** `master_place` now
-carries `rating numeric(2,1)`, `review_count integer`, `price_tier smallint`
-(1–4, matching the web `priceTier?: 1|2|3|4` convention) and `photo_url text`,
-all nullable. **`description` was NOT added — it already existed** since the
+**Shipped — ~~TEST ONLY. PROD has neither migration.~~ APPLIED TO PROD
+2026-08-26** (11 pending migrations including enrichment columns).
+`master_place` now carries `rating numeric(2,1)`, `review_count integer`,
+`price_tier smallint` (1–4, matching the web `priceTier?: 1|2|3|4` convention)
+and `photo_url text`, all nullable. **`description` was NOT added — it already existed** since the
 Phase 1 migration and is owned by `recompute_master_place()` via
 `field_precedence`, so the ADR's five fields became four columns.
 

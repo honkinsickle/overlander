@@ -12,6 +12,29 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-26 (PROD) — full photo pipeline deployed to PROD
+
+- **Migrations applied to PROD:** all 11 pending (20260821000000 through
+  20260826160100), including the enrichment columns (`master_place.photo_url`,
+  `rating`, `review_count`, `price_tier`), the corridor RPC Wikipedia + photo_credit
+  extension, and the backfill function update. CHECK constraints on
+  `20260821060000` completed without issue (NOTICEs from DROP IF EXISTS guards,
+  normal).
+- **NPS campground/park backfill (PROD):** 198 source_records updated (campgrounds
+  + parks gained `normalized_payload.photo`). 4,649 NPS source_records carry photos.
+- **master_place.photo_url (PROD, pass 1):** 3,757 rows populated (nps 2,734 +
+  ridb 888 + state_parks 135). Column was previously empty (just added by
+  the enrichment migration).
+- **Wikipedia backfill (PROD):** 783 source_records created (541 high confidence,
+  242 medium). 9,061 candidates processed, 2 errors. 8.6% hit rate.
+- **master_place.photo_url (PROD, pass 2):** 747 more rows from Wikipedia →
+  4,439 total (nps 2,734 + ridb 888 + wikipedia 747 + state_parks 70).
+- **Corpus tile refresh action** (`refreshCorpusTiles` / "Refresh trip data" in the
+  day kebab menu) is deployed and functional on PROD. No LLM cost. Existing trips
+  can be refreshed to pick up the new photos.
+- **Idempotency confirmed** on all three backfills (0 changed on re-run).
+- **PROD migration waterline now `20260826160100`.**
+
 ## 2026-08-26 — NPS campground + park photo extraction
 
 - **Finding:** NPS photo pipeline was already 90% built — places (`nps:place:*`)
