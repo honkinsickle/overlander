@@ -396,3 +396,98 @@ test("filterVisibleSpineItems does not mutate its input array", () => {
   filterVisibleSpineItems(items, new Map([[start, []], [bare, []]]), new Map());
   assert.equal(items.length, originalLength);
 });
+
+// ── fuel/charging-only pools ─────────────────────────────────────────────
+// A wall of near-duplicate gas/EV-charging listings is functionally the same
+// noise problem as a genuinely empty pool: a city header surfacing on the
+// spine with nothing worth browsing. `category: "fuel"` is the resolved
+// BrowseCardCategory bucket gas_station/ev_charging/truck_stop all roll up
+// to (trip-browse/federated.ts SLIDE_TO_PRIMARY_CATEGORY.fuel) — checking it
+// directly, not a duplicated source-value list.
+
+function fuelPick(id: string, mile: number): CorridorPlace {
+  return { id, title: id, category: "fuel", photoAlt: id, curated: true, milesFromStart: mile };
+}
+
+test("a corridor city whose entire pool is fuel/charging is dropped, same as empty", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const chargingOnly = cityWithPool("hillsborough", "Hillsborough", 20, "corridor", ["ev1", "ev2", "ev3"]);
+  const end = cityWithPool("e", "B", 60, "end", []);
+  const cities = [start, chargingOnly, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [chargingOnly, [fuelPick("ev1", 20), fuelPick("ev2", 20), fuelPick("ev3", 20)]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  assert.deepEqual(ids, ["s", "e"]); // Hillsborough dropped despite a non-empty pool
+});
+
+test("a corridor city mixing fuel/charging with at least one real POI still renders, fuel tiles included", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const mixed = cityWithPool("mixed-town", "Mixed Town", 30, "corridor", ["ev1", "diner"]);
+  const end = cityWithPool("e", "B", 60, "end", []);
+  const cities = [start, mixed, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const mixedTiles = [
+    fuelPick("ev1", 30),
+    { ...fuelPick("diner", 30), category: "food" as const },
+  ];
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [mixed, mixedTiles],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  assert.deepEqual(ids, ["s", "mixed-town", "e"]); // still renders
+
+  // The pool count logic (Explore N more / rendered tiles) reads straight off
+  // cityTiles, which this filter never mutates — the fuel tile is still there
+  // to browse, not silently dropped from the city that DOES render.
+  assert.deepEqual(cityTiles.get(mixed), mixedTiles);
+  assert.equal(cityTiles.get(mixed)?.length, 2);
+  assert.equal(cityTiles.get(mixed)?.some((p) => p.category === "fuel"), true);
+});
+
+test("a corridor city with a fuel-only pool but a non-fuel featured card still renders", () => {
+  // featuredFor() only ever returns non-empty for start/end nodes today, but
+  // the check covers a corridor node too, defensively — same posture as the
+  // empty-pool PR #300 check it extends.
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const corridorWithFeatured = cityWithPool("odd-case", "Odd Case", 25, "corridor", ["ev1"]);
+  const end = cityWithPool("e", "B", 50, "end", []);
+  const cities = [start, corridorWithFeatured, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [corridorWithFeatured, [fuelPick("ev1", 25)]],
+    [end, []],
+  ]);
+  const cityFeatured = new Map<CorridorCity, CorridorPlace[]>([
+    [corridorWithFeatured, [{ ...fuelPick("scenic-anchor", 25), category: "scenic" as const }]],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  assert.deepEqual(ids, ["s", "odd-case", "e"]);
+});

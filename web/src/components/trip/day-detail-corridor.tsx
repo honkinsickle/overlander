@@ -290,14 +290,36 @@ export function buildSpineItems(input: {
   return entries.map((e, i) => e.make(i === entries.length - 1));
 }
 
+/** The one BrowseCardCategory value fuel/charging infrastructure resolves to
+ *  (`SLIDE_TO_PRIMARY_CATEGORY.fuel` in trip-browse/federated.ts — the
+ *  canonical map: gas_station, ev_charging, truck_stop all roll up here
+ *  before a tile ever reaches CorridorPlace.category). Checking `=== FUEL_CATEGORY`
+ *  reads the already-resolved bucket rather than duplicating that source-value
+ *  list — a second list here would drift from the canonical one. */
+const FUEL_CATEGORY: BrowseCardCategory = "fuel";
+
+/** True if at least one place isn't fuel/charging infrastructure. Vacuously
+ *  false for an empty list — an empty pool has no non-fuel content either,
+ *  which is exactly what makes the empty-pool case (PR #300) a special case
+ *  of this same rule rather than a separate check. */
+function hasNonFuelContent(places: CorridorPlace[]): boolean {
+  return places.some((p) => p.category !== FUEL_CATEGORY);
+}
+
 /**
- * Drop pass-through corridor cities with nothing clustered under them (no
- * featured anchor card, no pool tiles for "Explore more") from the spine —
- * a city surfacing purely because it's geometrically near the route (the
- * strict-proximity corridor selection, PR #296) with nothing to actually
- * show renders as a bare name + mile tick otherwise. Start/end nodes always
- * render regardless of content: they anchor the day (the trip's actual
- * origin/overnight), not just a pass-through with an empty pool.
+ * Drop pass-through corridor cities with nothing WORTH BROWSING clustered
+ * under them from the spine — either a literally empty pool (no featured
+ * anchor card, no pool tiles at all: PR #300), or a pool that is entirely
+ * gas-station/EV-charging infrastructure (a wall of near-duplicate fuel
+ * listings, functionally the same noise: a city surfacing purely because
+ * it's geometrically near the route, the strict-proximity corridor
+ * selection, PR #296, with nothing but fuel stops to show). A city with a
+ * MIX of fuel and at least one non-fuel place still renders normally, with
+ * every tile — fuel included — still listed in its pool; this only gates
+ * whether the city HEADER is worth showing, never strips fuel tiles out of
+ * a pool that does render. Start/end nodes always render regardless of
+ * content: they anchor the day (the trip's actual origin/overnight), not
+ * just a pass-through with nothing but fuel.
  *
  * `cityTiles`/`cityFeatured` are keyed by CorridorCity object identity
  * (the same city instances `items` was built from), matching how the caller
@@ -316,7 +338,9 @@ export function filterVisibleSpineItems(
     .filter((item) => {
       if (item.type !== "city") return true;
       if (item.city.kind !== "corridor") return true;
-      return (cityTiles.get(item.city)?.length ?? 0) > 0 || (cityFeatured.get(item.city)?.length ?? 0) > 0;
+      const tiles = cityTiles.get(item.city) ?? [];
+      const featured = cityFeatured.get(item.city) ?? [];
+      return hasNonFuelContent(tiles) || hasNonFuelContent(featured);
     })
     .map((item, idx, arr) => ({ ...item, last: idx === arr.length - 1 }));
 }
