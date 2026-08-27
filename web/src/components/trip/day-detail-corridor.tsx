@@ -93,6 +93,12 @@ export type CorridorPlace = {
    *  logistics.entry (browsePlaceToWaypoint → priceTierToEntry). See
    *  docs/architecture/place-pipeline-trace.md §3. */
   priceTier?: 1 | 2 | 3 | 4;
+  /** Real description text from the source (BrowsePlace.description /
+   *  Waypoint.description) — carried through by placePool() so the spine
+   *  visibility filter can tell an enriched pick from an unreviewed
+   *  placeholder. Absent/empty/whitespace-only all mean "no description" —
+   *  never fabricated; the card simply renders without one. */
+  description?: string;
 };
 
 /** Status line for a curated pick. A featured overnight (notes-to-spine) reads
@@ -298,28 +304,44 @@ export function buildSpineItems(input: {
  *  list — a second list here would drift from the canonical one. */
 const FUEL_CATEGORY: BrowseCardCategory = "fuel";
 
-/** True if at least one place isn't fuel/charging infrastructure. Vacuously
- *  false for an empty list — an empty pool has no non-fuel content either,
- *  which is exactly what makes the empty-pool case (PR #300) a special case
- *  of this same rule rather than a separate check. */
-function hasNonFuelContent(places: CorridorPlace[]): boolean {
-  return places.some((p) => p.category !== FUEL_CATEGORY);
+/** Absent, empty, or whitespace-only all count as "no description" — never
+ *  fabricated, so a placeholder pick with nothing written yet reads the
+ *  same as one with the field truly absent. */
+function hasDescription(p: CorridorPlace): boolean {
+  return typeof p.description === "string" && p.description.trim().length > 0;
+}
+
+/** A place counts as real, browsable content only if it's BOTH non-fuel AND
+ *  has a real description — an unenriched placeholder (real place, no
+ *  description written yet) is deliberately treated the same as noise: "not
+ *  ready to show" regardless of whether the place itself is legitimate.
+ *
+ * True if at least one place clears that bar. Vacuously false for an empty
+ * list — an empty pool has no real content either, which is exactly what
+ * makes the empty-pool case (PR #300) and the fuel-only case (PR #301)
+ * special cases of this same single rule rather than three separate checks
+ * to keep in sync. A fuel-only pool never clears the bar regardless of
+ * description (the category clause always fails first); an all-non-fuel but
+ * all-undescribed pool (Foster City: charging stations + one undescribed
+ * real POI) never clears it either (the description clause fails). */
+function hasRealContent(places: CorridorPlace[]): boolean {
+  return places.some((p) => p.category !== FUEL_CATEGORY && hasDescription(p));
 }
 
 /**
  * Drop pass-through corridor cities with nothing WORTH BROWSING clustered
- * under them from the spine — either a literally empty pool (no featured
- * anchor card, no pool tiles at all: PR #300), or a pool that is entirely
- * gas-station/EV-charging infrastructure (a wall of near-duplicate fuel
- * listings, functionally the same noise: a city surfacing purely because
- * it's geometrically near the route, the strict-proximity corridor
- * selection, PR #296, with nothing but fuel stops to show). A city with a
- * MIX of fuel and at least one non-fuel place still renders normally, with
- * every tile — fuel included — still listed in its pool; this only gates
- * whether the city HEADER is worth showing, never strips fuel tiles out of
- * a pool that does render. Start/end nodes always render regardless of
- * content: they anchor the day (the trip's actual origin/overnight), not
- * just a pass-through with nothing but fuel.
+ * under them from the spine — a literally empty pool (no featured anchor
+ * card, no pool tiles at all: PR #300), a pool that is entirely
+ * gas-station/EV-charging infrastructure (PR #301), OR a pool where every
+ * non-fuel tile is an unenriched placeholder with no description written
+ * yet (a real place, but "not ready to show" — the Foster City case: a wall
+ * of charging stations plus one undescribed real POI still has nothing
+ * worth reading). A city with a MIX of fuel and at least one non-fuel,
+ * DESCRIBED place still renders normally, with every tile — fuel included —
+ * still listed in its pool; this only gates whether the city HEADER is
+ * worth showing, never strips tiles out of a pool that does render.
+ * Start/end nodes always render regardless of content: they anchor the day
+ * (the trip's actual origin/overnight), not just a pass-through.
  *
  * `cityTiles`/`cityFeatured` are keyed by CorridorCity object identity
  * (the same city instances `items` was built from), matching how the caller
@@ -340,7 +362,7 @@ export function filterVisibleSpineItems(
       if (item.city.kind !== "corridor") return true;
       const tiles = cityTiles.get(item.city) ?? [];
       const featured = cityFeatured.get(item.city) ?? [];
-      return hasNonFuelContent(tiles) || hasNonFuelContent(featured);
+      return hasRealContent(tiles) || hasRealContent(featured);
     })
     .map((item, idx, arr) => ({ ...item, last: idx === arr.length - 1 }));
 }

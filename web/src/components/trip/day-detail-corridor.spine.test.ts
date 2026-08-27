@@ -264,6 +264,14 @@ function cityWithPool(id: string, name: string, mile: number, kind: CorridorCity
   return { id, name, kind, coords: [0, 0], milesFromStart: mile, placeIds };
 }
 
+/** A non-fuel place with a real description — the bar `hasRealContent`
+ *  requires (category !== "fuel" AND a non-empty description). Distinct
+ *  from the shared `pick()` (used by the ordering tests above, which don't
+ *  care about description) so those stay untouched by this bar. */
+function realPick(id: string, mile: number): CorridorPlace {
+  return { ...pick(id, mile), description: "A real, described place." };
+}
+
 test("a corridor city with no pool and no featured card is dropped", () => {
   const start = cityWithPool("s", "Placerville", 0, "start", []);
   const bare = cityWithPool("hayward", "Hayward", 20, "corridor", []);
@@ -280,7 +288,7 @@ test("a corridor city with no pool and no featured card is dropped", () => {
   const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
     [start, []],
     [bare, []],
-    [withPool, [pick("p1", 60)]],
+    [withPool, [realPick("p1", 60)]],
     [end, []],
   ]);
   const cityFeatured = new Map<CorridorCity, CorridorPlace[]>();
@@ -309,7 +317,7 @@ test("a corridor city with no pool but a featured anchor card is kept", () => {
     [end, []],
   ]);
   const cityFeatured = new Map<CorridorCity, CorridorPlace[]>([
-    [anchorLike, [pick("anchor-pick", 30)]],
+    [anchorLike, [realPick("anchor-pick", 30)]],
   ]);
   const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
   const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
@@ -371,7 +379,7 @@ test("last is recomputed against the FILTERED list, not the original", () => {
 
   const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
     [start, []],
-    [withPool, [pick("p1", 20)]],
+    [withPool, [realPick("p1", 20)]],
     [bareEnd, []],
   ]);
   const visible = filterVisibleSpineItems(items, cityTiles, new Map());
@@ -445,7 +453,7 @@ test("a corridor city mixing fuel/charging with at least one real POI still rend
   });
   const mixedTiles = [
     fuelPick("ev1", 30),
-    { ...fuelPick("diner", 30), category: "food" as const },
+    { ...fuelPick("diner", 30), category: "food" as const, description: "Local diner, open since 1962." },
   ];
   const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
     [start, []],
@@ -485,9 +493,147 @@ test("a corridor city with a fuel-only pool but a non-fuel featured card still r
     [end, []],
   ]);
   const cityFeatured = new Map<CorridorCity, CorridorPlace[]>([
-    [corridorWithFeatured, [{ ...fuelPick("scenic-anchor", 25), category: "scenic" as const }]],
+    [corridorWithFeatured, [{ ...fuelPick("scenic-anchor", 25), category: "scenic" as const, description: "Overlook with a view of the valley." }]],
   ]);
   const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
   const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
   assert.deepEqual(ids, ["s", "odd-case", "e"]);
+});
+
+// ── description-presence bar ─────────────────────────────────────────────
+// A place counts as real, browsable content only when it's BOTH non-fuel
+// AND has a real description — an unenriched placeholder (real place, no
+// description written yet) is "not ready to show," same as noise. Foster
+// City's actual pattern: a wall of charging stations plus one undescribed
+// real POI ("Chantellope Field") — the city must still hide.
+
+function undescribedPick(id: string, mile: number, category: CorridorPlace["category"] = "scenic"): CorridorPlace {
+  return { ...pick(id, mile), category, description: undefined };
+}
+
+test("a city with a real, described non-fuel POI is shown", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const town = cityWithPool("town", "Town", 20, "corridor", ["p1"]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, town, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [town, [realPick("p1", 20)]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "town", "e"]);
+});
+
+test("a city with a real category but NO description is hidden", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const town = cityWithPool("town", "Town", 20, "corridor", ["p1"]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, town, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [town, [undescribedPick("p1", 20)]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+test("whitespace-only and empty-string descriptions count as no description", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const town = cityWithPool("town", "Town", 20, "corridor", ["p1", "p2"]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, town, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [town, [
+      { ...pick("p1", 20), description: "" },
+      { ...pick("p2", 20), description: "   \n\t  " },
+    ]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+test("a fuel-only pool is hidden even when a fuel tile happens to carry a description", () => {
+  // Category disqualifies first — a described gas station is still fuel,
+  // never "real content." Existing #301 behavior, unchanged by this bar.
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const town = cityWithPool("town", "Town", 20, "corridor", ["p1"]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, town, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [town, [{ ...fuelPick("p1", 20), description: "Full-service Shell station." }]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+test("Foster City pattern: fuel/charging wall + one undescribed real POI is hidden", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const fosterCity = cityWithPool("foster-city", "Foster City, CA", 13, "corridor", [
+    "tesla1", "electrify1", "evgo1", "chargepoint1", "chantellope",
+  ]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, fosterCity, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [fosterCity, [
+      fuelPick("tesla1", 13),
+      fuelPick("electrify1", 13),
+      fuelPick("evgo1", 13),
+      fuelPick("chargepoint1", 13),
+      undescribedPick("chantellope", 13, "interest"), // "Chantellope Field" — real place, no description yet
+    ]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+test("fuel/charging wall + one real, DESCRIBED POI is shown — genuinely mixed cities are unaffected", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const fosterCity = cityWithPool("foster-city", "Foster City, CA", 13, "corridor", [
+    "tesla1", "electrify1", "chantellope",
+  ]);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, fosterCity, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [fosterCity, [
+      fuelPick("tesla1", 13),
+      fuelPick("electrify1", 13),
+      { ...realPick("chantellope", 13), category: "interest" as const, description: "Community park with a small pond and walking loop." },
+    ]],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "foster-city", "e"]);
+});
+
+test("an undescribed featured card and no other content hides the city", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const corridorWithFeatured = cityWithPool("odd-case", "Odd Case", 25, "corridor", ["ev1"]);
+  const end = cityWithPool("e", "B", 50, "end", []);
+  const cities = [start, corridorWithFeatured, end];
+  const items = buildSpineItems({ cities, keyStops: [], mileMarkers: noMarkers, byId: emptyById, placeMile: byStoredMile });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [corridorWithFeatured, [fuelPick("ev1", 25)]],
+    [end, []],
+  ]);
+  const cityFeatured = new Map<CorridorCity, CorridorPlace[]>([
+    [corridorWithFeatured, [undescribedPick("scenic-anchor", 25)]],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
 });
