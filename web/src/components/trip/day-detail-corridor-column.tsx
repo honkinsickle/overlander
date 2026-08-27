@@ -1221,6 +1221,7 @@ export function placePool(day: Day): CorridorPlace[] {
       coords: p.coords,
       keyStopNote: p.keyStopNote,
       isOvernight: p.isOvernight,
+      description: p.description,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
@@ -1239,6 +1240,7 @@ export function placePool(day: Day): CorridorPlace[] {
     rating: p.rating,
     reviewCount: p.reviewCount,
     coords: p.coords,
+    description: p.description,
   }));
   const fromWaypoints: CorridorPlace[] = day.waypoints.map((wp) => ({
     id: wp.id,
@@ -1250,6 +1252,7 @@ export function placePool(day: Day): CorridorPlace[] {
     reviewCount: wp.community?.reviewCount,
     coords: wp.coords,
     removable: true,
+    description: wp.description,
   }));
   return [...fromSuggestions, ...fromDaySuggestions, ...fromWaypoints];
 }
