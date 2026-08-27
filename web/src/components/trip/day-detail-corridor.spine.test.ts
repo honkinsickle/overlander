@@ -6,8 +6,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSpineItems, spinePosition } from "./day-detail-corridor";
-import type { CorridorPlace, SpinePos } from "./day-detail-corridor";
+import { buildSpineItems, filterVisibleSpineItems, spinePosition } from "./day-detail-corridor";
+import type { CorridorPlace, SpineItem, SpinePos } from "./day-detail-corridor";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { PositionedPlace } from "@/lib/corridor/stretches";
 
@@ -252,4 +252,147 @@ test("a null label reaches the spine item, so the tick renders without a mile", 
   });
   const stop = items.find((i) => i.type === "keystop") as { mile: number | null };
   assert.equal(stop.mile, null);
+});
+
+// ── filterVisibleSpineItems ─────────────────────────────────────────────────
+// The density-cascade fix: strict-proximity corridor selection (PR #296) can
+// surface 20+ cities/day with nothing under them — bare name, no card, no
+// "Explore more". These tests use non-empty placeIds (unlike the city()
+// helper's default []) so tiles/featured maps can be built per case.
+
+function cityWithPool(id: string, name: string, mile: number, kind: CorridorCity["kind"], placeIds: string[]): CorridorCity {
+  return { id, name, kind, coords: [0, 0], milesFromStart: mile, placeIds };
+}
+
+test("a corridor city with no pool and no featured card is dropped", () => {
+  const start = cityWithPool("s", "Placerville", 0, "start", []);
+  const bare = cityWithPool("hayward", "Hayward", 20, "corridor", []);
+  const withPool = cityWithPool("concord", "Concord", 60, "corridor", ["p1"]);
+  const end = cityWithPool("e", "South Lake Tahoe", 100, "end", []);
+  const cities = [start, bare, withPool, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [bare, []],
+    [withPool, [pick("p1", 60)]],
+    [end, []],
+  ]);
+  const cityFeatured = new Map<CorridorCity, CorridorPlace[]>();
+  const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  // Hayward (empty corridor city) is gone; Concord (has a pool) stays;
+  // start/end stay regardless of their own empty pool.
+  assert.deepEqual(ids, ["s", "concord", "e"]);
+});
+
+test("a corridor city with no pool but a featured anchor card is kept", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const anchorLike = cityWithPool("mid", "Mid", 30, "corridor", []);
+  const end = cityWithPool("e", "B", 60, "end", []);
+  const cities = [start, anchorLike, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [anchorLike, []],
+    [end, []],
+  ]);
+  const cityFeatured = new Map<CorridorCity, CorridorPlace[]>([
+    [anchorLike, [pick("anchor-pick", 30)]],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  assert.deepEqual(ids, ["s", "mid", "e"]);
+});
+
+test("start and end cities always render even with an empty pool", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [end, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+test("non-city items (keystops, markers) are never filtered", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const end = cityWithPool("e", "B", 40, "end", []);
+  const cities = [start, end];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [pick("ks", 20)],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([[start, []], [end, []]]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  assert.equal(visible.some((i) => i.type === "keystop"), true);
+});
+
+test("last is recomputed against the FILTERED list, not the original", () => {
+  // If the trailing city gets dropped, the new true-last item must be
+  // flagged last so its connector line still drops correctly.
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const withPool = cityWithPool("mid", "Mid", 20, "corridor", ["p1"]);
+  const bareEnd = cityWithPool("bare-tail", "BareTail", 40, "corridor", []);
+  const cities = [start, withPool, bareEnd];
+  const items = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  // Sanity: in the UNFILTERED list, the bare tail city is last.
+  assert.equal(items[items.length - 1].type, "city");
+  assert.equal((items[items.length - 1] as { city: CorridorCity }).city.id, "bare-tail");
+
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>([
+    [start, []],
+    [withPool, [pick("p1", 20)]],
+    [bareEnd, []],
+  ]);
+  const visible = filterVisibleSpineItems(items, cityTiles, new Map());
+  const ids = visible.map((i) => (i.type === "city" ? i.city.id : "?"));
+  assert.deepEqual(ids, ["s", "mid"]); // bare-tail dropped
+  const lasts = visible.map((i) => i.last);
+  assert.deepEqual(lasts, [false, true]); // "mid" — the new true last — is flagged
+});
+
+test("filterVisibleSpineItems does not mutate its input array", () => {
+  const start = cityWithPool("s", "A", 0, "start", []);
+  const bare = cityWithPool("bare", "Bare", 20, "corridor", []);
+  const cities = [start, bare];
+  const items: SpineItem[] = buildSpineItems({
+    cities,
+    keyStops: [],
+    mileMarkers: noMarkers,
+    byId: emptyById,
+    placeMile: byStoredMile,
+  });
+  const originalLength = items.length;
+  filterVisibleSpineItems(items, new Map([[start, []], [bare, []]]), new Map());
+  assert.equal(items.length, originalLength);
 });
