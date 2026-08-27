@@ -17,7 +17,10 @@ import {
   type SplitPoint,
 } from "./split-day";
 import { buildRestDayStructure, rankNearbySuggestions } from "./rest-day";
-import { fetchCorpusForSegment } from "./bake-corridors";
+import {
+  fetchCorpusForSegment,
+  stripBakedCorridors,
+} from "./bake-corridors";
 import { rebuildRoutePolyline } from "./route-rebuild";
 import { resolveCorridorCities } from "./resolve-corridor-cities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -605,6 +608,78 @@ export async function pickOvernight(
   const rest = all.filter((o) => o.id !== overnightId);
   day.overnight = { selected: picked, alternatives: rest };
   return day.overnight;
+}
+
+export type RefreshCorpusResult =
+  | { ok: true; tilesBeforeStrip: number; tilesAfterFold: number }
+  | { ok: false; reason: "not-user-trip" | "not-found" | "conflict" | "write-failed" };
+
+/** Re-fetch corpus tiles for every day from the current corridor RPC
+ *  (picking up new photos, descriptions, etc.) without an LLM call.
+ *  Strips existing mp:-prefixed corpus tiles, re-folds from live RPC,
+ *  re-derives the corridor spine. Non-corpus content (waypoints,
+ *  google:-prefixed live-resolves, LLM notes, overnights) is untouched. */
+export async function refreshCorpusTiles(
+  tripId: string,
+  deps: { client?: SupabaseClient } = {},
+): Promise<RefreshCorpusResult> {
+  if (!isUserTripId(tripId)) return { ok: false, reason: "not-user-trip" };
+  const current = await getUserTrip(tripId, deps.client);
+  if (!current) return { ok: false, reason: "not-found" };
+
+  const tilesBeforeStrip = current.days.reduce(
+    (n, d) => n + (d.segmentSuggestions ?? []).length,
+    0,
+  );
+
+  const stripped = stripBakedCorridors(current);
+
+  const supabase = deps.client ?? (await createSupabaseServerClient());
+  const typedClient = supabase as Parameters<typeof fetchCorpusForSegment>[2];
+
+  const corpusByDay: BrowsePlace[][] = await Promise.all(
+    stripped.days.map(async (day, i) => {
+      const start = i === 0 ? stripped.startCoords : stripped.days[i - 1].coords;
+      const end = day.coords;
+      if (!start || !end) return [];
+      try {
+        return await fetchCorpusForSegment(start, end, typedClient);
+      } catch {
+        return [];
+      }
+    }),
+  );
+
+  const written = await updateUserTripPayload(
+    tripId,
+    (fresh) => {
+      const s = stripBakedCorridors(fresh);
+      const folded: Trip = {
+        ...s,
+        days: s.days.map((day, i) => {
+          const corpus = corpusByDay[i] ?? [];
+          if (corpus.length === 0) return day;
+          const seen = new Set((day.segmentSuggestions ?? []).map((p) => p.id));
+          const newTiles = corpus.filter((p) => !seen.has(p.id));
+          return {
+            ...day,
+            segmentSuggestions: [...(day.segmentSuggestions ?? []), ...newTiles],
+          };
+        }),
+      };
+      return resolveCorridorCities(folded);
+    },
+    { onConflict: "refuse", client: deps.client },
+  );
+
+  if (written === TRIP_CONFLICT) return { ok: false, reason: "conflict" };
+  if (!written) return { ok: false, reason: "write-failed" };
+
+  const tilesAfterFold = written.days.reduce(
+    (n, d) => n + (d.segmentSuggestions ?? []).length,
+    0,
+  );
+  return { ok: true, tilesBeforeStrip, tilesAfterFold };
 }
 
 /** Insert a fully-formed Trip into the store. Used by the planning

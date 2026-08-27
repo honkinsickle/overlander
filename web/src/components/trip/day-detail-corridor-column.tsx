@@ -40,12 +40,13 @@ import {
   removeCuratedPlaceAction,
   splitDayAction,
   insertRestDayAction,
+  refreshCorpusTilesAction,
 } from "@/lib/trips/actions";
 import { KebabMenu, type KebabMenuItem } from "@/components/primitives/kebab-menu";
 import { SplitPointPicker } from "@/components/trip/split-point-picker";
 import { splitEligibility } from "@/lib/trips/split-day";
 import { isRestDay } from "@/lib/trips/rest-day";
-import { Scissors, Tent } from "lucide-react";
+import { Scissors, Tent, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { CuratedMenu } from "@/components/trip/curated-kebab";
 import type { AddedPlace } from "@/lib/trips/added-place";
@@ -669,6 +670,13 @@ export function DayDetailCorridorColumn({
           label: "Add a rest day",
           icon: Tent,
           onSelect: () => runDayAction(() => insertRestDayAction(trip.id, d.id)),
+        },
+        {
+          id: "refresh",
+          label: "Refresh trip data",
+          icon: RefreshCw,
+          onSelect: () =>
+            runDayAction(() => refreshCorpusTilesAction(trip.id)),
         },
       ];
     },
