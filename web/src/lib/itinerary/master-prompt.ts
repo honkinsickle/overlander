@@ -79,11 +79,21 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
        especially near the START of the day, which is easy to leave empty. A
        traveler pulling out in the morning wants somewhere to stop in the first
        hour, not only after lunch.
+       THE DAY'S OWN START AND END CITY ARE ELIGIBLE TOO — don't treat them as
+       just the launching/landing point. If the city itself has a genuine,
+       specific highlight (a landmark, a market, a park, a neighborhood worth
+       naming), it belongs in keyStops the same as any stop passed along the
+       drive — do not skip it just because it's the anchor, and do not
+       substitute a nearby town crossed shortly after leaving for a real
+       highlight that sits IN the city itself. Name the specific place, never
+       the city by its own name ("Ferry Building Marketplace", not "San
+       Francisco").
        This is a preference, NOT a quota: do NOT invent, pad, or stretch to put
-       a stop at every city. If a stretch genuinely has nothing worth stopping
-       for, leave it — a thin real day beats a padded one, and you still stay
-       within the 2–4 entries. Coverage is the tie-breaker when several
-       candidates are equally good, not a rule that overrides quality.
+       a stop at every city, including the anchors. If a stretch — or an anchor
+       city — genuinely has nothing worth stopping for, leave it: a thin real
+       day beats a padded one, and you still stay within the 2–4 entries.
+       Coverage is the tie-breaker when several candidates are equally good,
+       not a rule that overrides quality.
      - overnight { name|null, desc|null, type, rationale } — the real place
        NAME (pooled or not), or desc for a typical/assumed spot; the
        rationale MUST say why it fits the rig +
@@ -159,10 +169,14 @@ export function buildFactsMessage(
     "every FIXED anchor on its date.",
     "",
     "`corridorCities` is the town spine of the route, ordered by",
-    "milesFromStart. Use it when placing each day's keyStops: work out which",
-    "cities fall within the day and spread the stops across that span rather",
-    "than clustering them near the end. Skipping a city is fine when nothing",
-    "there is worth the stop — do not pad to cover one.",
+    "milesFromStart, each carrying kind (\"start\"|\"corridor\"|\"end\"). Use it",
+    "when placing each day's keyStops: work out which cities fall within the",
+    "day and spread the stops across that span rather than clustering them",
+    "near the end. The day's own start/end city is eligible too — a genuine",
+    "highlight IN that city belongs in keyStops the same as one passed along",
+    "the way; don't skip it just because it's the anchor. Skipping any city,",
+    "anchor included, is fine when nothing there is worth the stop — do not",
+    "pad to cover one.",
     "",
     "```json",
     JSON.stringify(payload, null, 2),
