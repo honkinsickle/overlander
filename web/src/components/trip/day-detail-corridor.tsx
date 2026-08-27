@@ -99,6 +99,11 @@ export type CorridorPlace = {
    *  placeholder. Absent/empty/whitespace-only all mean "no description" —
    *  never fabricated; the card simply renders without one. */
   description?: string;
+  /** master_place.prominence_score, carried through by placePool() —
+   *  corpus-only signal (absent on waypoints), used to rank a city's spine
+   *  featured pick when no LLM curation names that city. See
+   *  BrowsePlace.prominenceScore for what it does and doesn't measure. */
+  prominenceScore?: number;
 };
 
 /** Status line for a curated pick. A featured overnight (notes-to-spine) reads
@@ -314,18 +319,49 @@ function hasDescription(p: CorridorPlace): boolean {
 /** A place counts as real, browsable content only if it's BOTH non-fuel AND
  *  has a real description — an unenriched placeholder (real place, no
  *  description written yet) is deliberately treated the same as noise: "not
- *  ready to show" regardless of whether the place itself is legitimate.
- *
- * True if at least one place clears that bar. Vacuously false for an empty
- * list — an empty pool has no real content either, which is exactly what
- * makes the empty-pool case (PR #300) and the fuel-only case (PR #301)
- * special cases of this same single rule rather than three separate checks
- * to keep in sync. A fuel-only pool never clears the bar regardless of
+ *  ready to show" regardless of whether the place itself is legitimate. */
+export function isRealContent(p: CorridorPlace): boolean {
+  return p.category !== FUEL_CATEGORY && hasDescription(p);
+}
+
+/** True if at least one place clears the `isRealContent` bar. Vacuously false
+ * for an empty list — an empty pool has no real content either, which is
+ * exactly what makes the empty-pool case (PR #300) and the fuel-only case
+ * (PR #301) special cases of this same single rule rather than three separate
+ * checks to keep in sync. A fuel-only pool never clears the bar regardless of
  * description (the category clause always fails first); an all-non-fuel but
  * all-undescribed pool (Foster City: charging stations + one undescribed
  * real POI) never clears it either (the description clause fails). */
 function hasRealContent(places: CorridorPlace[]): boolean {
-  return places.some((p) => p.category !== FUEL_CATEGORY && hasDescription(p));
+  return places.some(isRealContent);
+}
+
+/**
+ * Pick a city's spine featured pick when no LLM curation names that city —
+ * the highest-`prominenceScore` place in its pool that also clears
+ * `isRealContent` (never feature a fuel-only or undescribed tile just because
+ * it scores well). Curated tiles are excluded from consideration: they are
+ * ALREADY shown elsewhere (a coinciding anchor pick, a pinned pick, or a
+ * standalone KeyStopNode at their own spine position) — featuring one here
+ * too would duplicate it.
+ *
+ * TIEBREAK for equal (or absent) prominenceScore: prefer a tile with a photo
+ * (it will actually render as a card, not a placeholder — same reasoning as
+ * anchor-backfill.ts's `rank()`), then stable-order by id so the result is
+ * deterministic. `prominenceScore` is treated as an imperfect signal
+ * (source-corroboration + NPS/RIDB backing, not true "interest") — it is
+ * what's available today; not blocked on a future quality signal.
+ */
+export function pickProminenceFeature(tiles: CorridorPlace[]): CorridorPlace | undefined {
+  const candidates = tiles.filter((p) => !p.curated && isRealContent(p));
+  if (candidates.length === 0) return undefined;
+  return candidates.sort((a, b) => {
+    const scoreDiff = (b.prominenceScore ?? -Infinity) - (a.prominenceScore ?? -Infinity);
+    if (scoreDiff !== 0) return scoreDiff;
+    const photoDiff = (b.photoUrl ? 1 : 0) - (a.photoUrl ? 1 : 0);
+    if (photoDiff !== 0) return photoDiff;
+    return a.id.localeCompare(b.id);
+  })[0];
 }
 
 /**
@@ -525,15 +561,30 @@ export function DayDetailCorridor({
   const anchorPicks = unpinnedPicks.filter((p) =>
     coincidesWithAnchor(toAnchorLike(p), cities),
   );
-  // Featured cards for a node: only the start/end anchor nodes carry them, each
-  // matched to its own node (so a coords/id match with a differing name still
-  // attaches to the right anchor).
-  const featuredFor = (c: CorridorCity): CorridorPlace[] =>
-    c === startCity || c === endCity
-      ? anchorPicks.filter((p) =>
-          isSameAnchorPlace(toAnchorLike(p), cityAnchorLike(c)),
-        )
-      : [];
+  // Every city's own pool tiles, resolved up front so featuredFor (next) can
+  // fall back to a prominence pick from THIS city's pool when no LLM
+  // curation names it — needed before featuredFor so the fallback has
+  // something to rank.
+  const cityTiles = new Map<CorridorCity, CorridorPlace[]>();
+  for (const c of cities) {
+    cityTiles.set(c, sortClusterByRank(c.placeIds, rankKey).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]);
+  }
+  // Featured card for a node: an anchor node (start/end) first tries the
+  // LLM's own curation (a pick that coincides with that anchor's identity —
+  // never overridden by the fallback below). ANY city with no curated match —
+  // anchor or mid-corridor — falls back to that city's own highest-prominence
+  // real-content pick, so every rendered city gets an inline highlight, not
+  // just anchors the LLM happened to name itself.
+  const featuredFor = (c: CorridorCity): CorridorPlace[] => {
+    if (c === startCity || c === endCity) {
+      const curated = anchorPicks.filter((p) =>
+        isSameAnchorPlace(toAnchorLike(p), cityAnchorLike(c)),
+      );
+      if (curated.length > 0) return curated;
+    }
+    const pick = pickProminenceFeature(cityTiles.get(c) ?? []);
+    return pick ? [pick] : [];
+  };
   // The rest position on the spine by along-route mile.
   const spinePicks = unpinnedPicks.filter(
     (p) => !coincidesWithAnchor(toAnchorLike(p), cities),
@@ -583,10 +634,8 @@ export function DayDetailCorridor({
   // untouched, so mile-marker continuity and any logic reading the full
   // corridor city list (fuel gaps, day-splitting, plan-diff labels) still see
   // every city.
-  const cityTiles = new Map<CorridorCity, CorridorPlace[]>();
   const cityFeatured = new Map<CorridorCity, CorridorPlace[]>();
   for (const c of cities) {
-    cityTiles.set(c, sortClusterByRank(c.placeIds, rankKey).map((id) => byId.get(id)).filter(Boolean) as CorridorPlace[]);
     cityFeatured.set(c, featuredFor(c));
   }
   const visibleItems = filterVisibleSpineItems(items, cityTiles, cityFeatured);
@@ -911,9 +960,12 @@ function CityNode({
 }: {
   city: CorridorCity;
   tiles: CorridorPlace[];
-  /** Curated picks that ARE this city (the day's start/end anchor) — rendered
-   *  as detail cards directly under the node header, so the anchor's own place
-   *  is reachable here instead of duplicated as a separate positioned tile. */
+  /** This city's featured pick — either a curated place that IS this city (an
+   *  anchor match, rendered here instead of duplicated as a separate
+   *  positioned tile), or, when no curation names this city, the pool's own
+   *  highest-prominence real-content pick (see pickProminenceFeature). At
+   *  most one entry today, but kept as an array for the anchor-match path's
+   *  existing shape. */
   featured?: CorridorPlace[];
   /** When the day has curated picks: feature this node's picks and collapse
    *  the rest behind "Explore more" (default collapsed). Otherwise show all. */
@@ -927,7 +979,16 @@ function CityNode({
   const [expanded, setExpanded] = useState(false);
   // Curated picks are featured in the day-level "Today's Picks" block (reliable
   // regardless of bucketing); the spine just collapses the rest of the pool.
-  const rest = curatedMode ? tiles.filter((t) => !t.curated) : tiles;
+  // Exclude whatever's already shown as this city's featured pick (curated
+  // anchor match OR the new prominence fallback) so "Explore N more" never
+  // double-counts it — same tile, shown once. `!t.curated` still covers a
+  // curated tile that's featured ELSEWHERE (a different anchor, a pinned
+  // node, or its own standalone KeyStopNode); the featuredIds check covers
+  // the (non-curated) prominence-fallback case that check doesn't reach.
+  const featuredIds = new Set(featured.map((f) => f.id));
+  const rest = tiles.filter(
+    (t) => !featuredIds.has(t.id) && (!curatedMode || !t.curated),
+  );
   const showRest = !curatedMode || expanded;
   const isStart = city.kind === "start";
   // Real derivation output is fractional (projected along-route miles);

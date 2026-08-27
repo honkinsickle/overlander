@@ -211,6 +211,7 @@ export function mapMasterPlaceRow(
     cta: "Add to day",
     source: "master_place",
     mvumCorridor: row.mvum_corridor,
+    prominenceScore: row.prominence_score,
     attribution: row.attribution,
     overlanderTags: row.overlander_tags,
     // Typed on MasterPlaceRow (the RPC's own RETURNS TABLE carries both),

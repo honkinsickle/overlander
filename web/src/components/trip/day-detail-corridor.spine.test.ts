@@ -6,7 +6,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSpineItems, filterVisibleSpineItems, spinePosition } from "./day-detail-corridor";
+import { buildSpineItems, filterVisibleSpineItems, isRealContent, pickProminenceFeature, spinePosition } from "./day-detail-corridor";
 import type { CorridorPlace, SpineItem, SpinePos } from "./day-detail-corridor";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { PositionedPlace } from "@/lib/corridor/stretches";
@@ -636,4 +636,92 @@ test("an undescribed featured card and no other content hides the city", () => {
   ]);
   const visible = filterVisibleSpineItems(items, cityTiles, cityFeatured);
   assert.deepEqual(visible.map((i) => (i.type === "city" ? i.city.id : "?")), ["s", "e"]);
+});
+
+// ── pickProminenceFeature ────────────────────────────────────────────────
+// Every city that renders on the spine gets a featured pick — an anchor
+// falls back here when the LLM curated nothing for it, and every
+// mid-corridor city (never eligible for a curated anchor match at all)
+// uses this as its ONLY path to a featured card.
+
+function realPickWithScore(id: string, score: number | undefined, photoUrl?: string): CorridorPlace {
+  // Plain (non-curated) pool tile — pickProminenceFeature only ranks these;
+  // a curated tile is already shown elsewhere (anchor/pinned/KeyStopNode).
+  return { ...realPick(id, 0), curated: false, prominenceScore: score, photoUrl };
+}
+
+test("picks the highest-prominenceScore real-content tile", () => {
+  const tiles = [
+    realPickWithScore("low", 0.2),
+    realPickWithScore("high", 0.9),
+    realPickWithScore("mid", 0.5),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "high");
+});
+
+test("a fuel tile is never picked even with the top prominenceScore", () => {
+  const tiles = [
+    { ...fuelPick("fuel-top", 0), curated: false, prominenceScore: 0.99 },
+    realPickWithScore("real-lower", 0.1),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "real-lower");
+});
+
+test("an undescribed tile is never picked even with the top prominenceScore", () => {
+  const tiles: CorridorPlace[] = [
+    { ...undescribedPick("undescribed-top", 0, "scenic"), curated: false, prominenceScore: 0.99 },
+    realPickWithScore("real-lower", 0.1),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "real-lower");
+});
+
+test("a curated tile is never picked — it's already shown elsewhere (anchor/pinned/KeyStopNode)", () => {
+  const tiles = [
+    { ...realPickWithScore("curated-top", 0.99), curated: true },
+    realPickWithScore("real-lower", 0.1),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "real-lower");
+});
+
+test("tiebreak on equal prominenceScore: a tile with a photo wins", () => {
+  const tiles = [
+    realPickWithScore("no-photo", 0.5),
+    realPickWithScore("with-photo", 0.5, "https://example.com/photo.jpg"),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "with-photo");
+});
+
+test("tiebreak on equal prominenceScore AND equal photo presence: stable id order", () => {
+  const tiles = [
+    realPickWithScore("zzz", 0.5),
+    realPickWithScore("aaa", 0.5),
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "aaa");
+});
+
+test("absent prominenceScore sorts below any real score, not above (not treated as 0)", () => {
+  const tiles = [
+    realPickWithScore("no-score", undefined),
+    realPickWithScore("negative-ish-real-score", -5), // still a real, present score
+  ];
+  const pick = pickProminenceFeature(tiles);
+  assert.equal(pick?.id, "negative-ish-real-score");
+});
+
+test("empty pool, or a pool with nothing real, returns undefined (no fabricated pick)", () => {
+  assert.equal(pickProminenceFeature([]), undefined);
+  assert.equal(pickProminenceFeature([fuelPick("f", 0)]), undefined);
+  assert.equal(pickProminenceFeature([undescribedPick("u", 0)]), undefined);
+});
+
+test("isRealContent: the exported per-tile predicate matches hasRealContent's own bar", () => {
+  assert.equal(isRealContent(realPick("r", 0)), true);
+  assert.equal(isRealContent(fuelPick("f", 0)), false);
+  assert.equal(isRealContent(undescribedPick("u", 0)), false);
 });

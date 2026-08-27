@@ -1222,6 +1222,7 @@ export function placePool(day: Day): CorridorPlace[] {
       keyStopNote: p.keyStopNote,
       isOvernight: p.isOvernight,
       description: p.description,
+      prominenceScore: p.prominenceScore,
     }),
   );
   // Phase 0 (2026-07-09): the reference build populates `day.suggestions`
@@ -1241,6 +1242,7 @@ export function placePool(day: Day): CorridorPlace[] {
     reviewCount: p.reviewCount,
     coords: p.coords,
     description: p.description,
+    prominenceScore: p.prominenceScore,
   }));
   const fromWaypoints: CorridorPlace[] = day.waypoints.map((wp) => ({
     id: wp.id,

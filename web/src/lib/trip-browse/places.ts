@@ -63,6 +63,12 @@ export type BrowsePlace = {
   reviewCount?: number;
   /** Real price tier 1–4 ($–$$$$) from the source. Omitted when unknown. */
   priceTier?: 1 | 2 | 3 | 4;
+  /** master_place.prominence_score — source-corroboration + NPS/RIDB backing,
+   *  NOT a true "interest"/quality signal. Carried through so a city's spine
+   *  featured pick can be ranked by it (an imperfect but available proxy) —
+   *  see day-detail-corridor.tsx's pickProminenceFeature. Omitted when the
+   *  row isn't corpus-backed (e.g. a live-only result). */
+  prominenceScore?: number;
   /** Origin of this result: 'live' = external-API discovery fanout,
    *  'master_place' = federated corridor RPC. Set only when the
    *  USE_FEDERATED_POIS flag is on; absent in the legacy live-only path,
