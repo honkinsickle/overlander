@@ -6,6 +6,7 @@ import { Plus, X, ArrowUp, ArrowDown, Loader2, Minus, Check } from "lucide-react
 import type { Vehicle } from "@/lib/vehicles/types";
 import { DEFAULT_RIG, vehicleTitle } from "@/lib/vehicles/types";
 import { LocationAutocomplete } from "@/components/plan/location-autocomplete";
+import { CoordinateInput } from "@/components/plan/coordinate-input";
 import { DateRangeInput } from "@/components/plan/date-range-input";
 import { SelectableChip } from "@/components/plan/selectable-chip";
 import { GUARANTEE_CHIP_CATEGORIES } from "@/lib/plan/guarantee-categories";
@@ -136,8 +137,8 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
 
   const firstVehicle = vehicles[0];
   const [destinations, setDestinations] = useState<Dest[]>([
-    { id: 0, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
-    { id: 1, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
+    { id: 0, place: "", coords: null, region: null, manualCoords: false, datePin: "flexible", date: null, dwell: 0, note: null },
+    { id: 1, place: "", coords: null, region: null, manualCoords: false, datePin: "flexible", date: null, dwell: 0, note: null },
   ]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -272,21 +273,46 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
                     {i === 0 ? "START" : i === lastIdx ? "END" : `STOP ${i}`}
                   </span>
                   <div className="flex-1">
-                    <LocationAutocomplete
-                      name={`dest-${d.id}`}
-                      placeholder="City or destination (e.g. Dawson City)"
-                      defaultValue={d.place}
-                      invalid={unresolved}
-                      onSelect={(label, coords, region) =>
-                        setDest(d.id, { place: label, coords, region })
-                      }
-                      // Freeform typing invalidates the resolved pick — clear the
-                      // region with the coords so the two never disagree.
-                      onTextChange={(t) =>
-                        setDest(d.id, { place: t, coords: null, region: null })
-                      }
-                    />
+                    {d.manualCoords ? (
+                      <CoordinateInput
+                        defaultLat={d.coords?.[1]}
+                        defaultLng={d.coords?.[0]}
+                        invalid={unresolved}
+                        onResolve={(coords, label) =>
+                          setDest(d.id, { place: label, coords, region: null })
+                        }
+                      />
+                    ) : (
+                      <LocationAutocomplete
+                        name={`dest-${d.id}`}
+                        placeholder="City or destination (e.g. Dawson City)"
+                        defaultValue={d.place}
+                        invalid={unresolved}
+                        onSelect={(label, coords, region) =>
+                          setDest(d.id, { place: label, coords, region })
+                        }
+                        // Freeform typing invalidates the resolved pick — clear the
+                        // region with the coords so the two never disagree.
+                        onTextChange={(t) =>
+                          setDest(d.id, { place: t, coords: null, region: null })
+                        }
+                      />
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDest(d.id, {
+                        manualCoords: !d.manualCoords,
+                        place: "",
+                        coords: null,
+                        region: null,
+                      })
+                    }
+                    className="font-mono text-[10px] uppercase tracking-wider text-text-muted hover:text-amber shrink-0 px-1.5"
+                  >
+                    {d.manualCoords ? "search" : "coords"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => move(i, -1)}
@@ -395,7 +421,7 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
                   const id = nextId.current++;
                   return [
                     ...ds.slice(0, -1),
-                    { id, place: "", coords: null, region: null, datePin: "flexible", date: null, dwell: 0, note: null },
+                    { id, place: "", coords: null, region: null, manualCoords: false, datePin: "flexible", date: null, dwell: 0, note: null },
                     ds[ds.length - 1],
                   ];
                 })
