@@ -12,6 +12,48 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — manual GPS coordinate entry for expedition start/end
+
+- **Started from a read-only investigation, not a code change.** Before
+  touching anything, traced whether `/plan/expedition`'s start/end path had
+  any hard `place_id` dependency. It didn't: the wizard's city search is
+  Mapbox Geocoding v6 (not Google Places, which only appears once, in the
+  LLM-audit path for key-stop names — a disjoint mechanism), and `coords`
+  was already the preferred signal downstream everywhere it's consumed.
+- **The one real design call was made explicit up front, not discovered
+  mid-build.** Adding raw coordinate entry means the planning-region gate
+  has no `region_code` to check for that row. The decision (bypass, not
+  reverse-geocode) was stated as an assumption in the build prompt and
+  recorded as its own ADR rather than folded silently into the code —
+  `docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`.
+- **The exemption is scoped to a new explicit flag, not inferred from
+  `coords` + null `region`.** `manualCoords: boolean` on
+  `ExpeditionDestination`, read narrowly in `validateExpeditionForm`
+  (`!d.manualCoords && !isInPlanningRegion(...)`), so a future bug in the
+  autocomplete path that somehow drops the region code still fails closed
+  instead of silently riding this exemption.
+- **Verification ran the real pipeline twice, in two different ways, on
+  purpose.** A script (`verify-manual-coordinate-anchor.ts`) mirrors
+  `generateExpeditionTripAction` function-for-function — real Mapbox
+  routing (212.6 mi resolved from the manual point), real Claude
+  generation (3 days), a real signed-in TEST `public.trips`
+  insert/read-back/delete. Separately, a real headless-Chrome session
+  confirmed the actual rendered control — reachability
+  (`elementFromPoint`, not just a fired handler), the mode swap, the inline
+  range-validation error, and a clean revert on toggle-back. Neither
+  substitutes for the other: the script proves the pipeline handles
+  coordinate-only anchors; the browser check proves the UI wiring that
+  produces them actually works and is reachable.
+- **This Conductor workspace needed `npm install` and a Chrome
+  headless launch from scratch** — no dependencies and no preview-MCP
+  tooling were present at session start, unlike a warm dev environment.
+  Standard `npm install` + `Google Chrome.app --headless=new
+  --remote-debugging-port` + a CDP driver script over Node's global
+  `WebSocket` were sufficient; no new dependency was added to the repo.
+- **No surprises in the pipeline itself** — every real-pipeline check
+  passed on the first run, consistent with the investigation's prediction
+  that coordinates were already ground truth throughout.
+
 ## 2026-08-27 — Atlas Obscura oddities: PROD-promotion scoping (no go/no-go decision made)
 
 - **Task:** scope-only pass on how the AO corpus (now enriched on TEST via

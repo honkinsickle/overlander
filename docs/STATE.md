@@ -1,3 +1,22 @@
+# STATE — branch `gps-coordinate` · 2026-08-27 (**newest truth: manual GPS
+coordinate entry for `/plan/expedition` start/end/stops, built on a prior
+read-only investigation confirming no `place_id` dependency exists anywhere
+in that path.** Per-row toggle (`coordinate-input.tsx`) swaps
+`LocationAutocomplete` for a plain lat/lng text entry; `ExpeditionDestination`
+gained `manualCoords: boolean`, which narrowly exempts that one destination
+from the planning-region gate (`validateExpeditionForm`) — a deliberate,
+ADR-recorded testing-scope choice to bypass rather than reverse-geocode
+(`docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`).
+Verified against the REAL pipeline: `web/scripts/verify-manual-coordinate-anchor.ts`
+drives real Mapbox routing (212.6 mi resolved) + real Claude generation (3
+days) + a real signed-in `public.trips` insert/read-back/delete on TEST, all
+9 checks passing, mirroring `generateExpeditionTripAction`
+function-for-function. A real headless-Chrome DOM check separately confirmed
+the toggle renders on-screen and reachable (not occluded), switches the
+input, shows the inline range error on an out-of-range latitude, and reverts
+cleanly. **PR #308**, open against `main`, not merged — awaiting review.
+See `## 2026-08-27` below for the full session account.)
+
 # STATE — branch `corridor-prominence-featured-pick` · 2026-08-27 (day-detail spine: density-cascade cleanup + featured picks, #300–#305) (**newest truth: a six-PR arc on the read-spine (`day-detail-corridor.tsx` / `day-detail-corridor-column.tsx`), all MERGED, `origin/main` tip now `6d008c0` (#306 — an unrelated status-check session, not this arc's work).** Started from a real screenshot: strict-proximity corridor selection (#296) was surfacing 21–29 bare corridor-city headers/day with nothing under them. **#300** (`ca46f57`) added `filterVisibleSpineItems()` — a city with an empty pool and no featured card is dropped from the RENDERED spine only (`Day.corridorCities`/`buildSpineItems`'s data output is untouched, so fuel-gap/day-split/plan-diff logic is unaffected by construction). Start/end anchor nodes always render regardless of content. **#301** (`71b815c`) generalized the same single check (`hasRealContent`, formerly `hasNonFuelContent`) to also hide a city whose entire pool is gas/EV-charging infrastructure (`category === "fuel"`, the corpus's own resolved bucket — not a duplicated source-value list). **#303** (`a4da5af`) generalized it again: a place counts as real content only if it's BOTH non-fuel AND has a real (non-whitespace) description — closes a real wiring gap found while implementing it, `CorridorPlace` had no `description` field at all and `placePool()` dropped it even though the source types (`BrowsePlace`, `Waypoint`) carry one. **#305** (`84306e3`) extends `featuredFor()` so EVERY rendered city — not just an anchor the LLM happened to curate — gets an inline featured card: anchor+curated-match priority is preserved, everything else falls back to `pickProminenceFeature()`, the pool's own highest-`prominence_score` tile that also clears `hasRealContent` (tiebreak: photo presence, then stable id order). Found and fixed a second real wiring gap doing this: `master_place.prominence_score` is selected by the `pois_along_corridor` RPC and already used to `ORDER BY` its own results, but `mapMasterPlaceRow()` silently dropped it before it reached `BrowsePlace` — added `BrowsePlace.prominenceScore` + `CorridorPlace.prominenceScore`, wired through both corpus-backed `placePool()` branches (waypoints have no corpus prominence signal, left unset). **#302** (`aa12d8f`) is a detour that explains a "why does this look unfixed" mystery hit partway through: the corpus-tile "Refresh trip data" action (`refreshCorpusTiles`) had genuinely been BUILT already, but on a *different* Conductor workspace (`cayenne`, branch `nps-injest`, commit `84e5a147`) — never merged. That branch was NOT clean (7 commits; only 1 was the real unmerged work, the rest were either already-merged-elsewhere duplicates of #298/#299 or docs commits making PROD-deployment claims never independently verified in this session — deliberately left behind, see BACKLOG). Cherry-picked just the isolated commit onto a fresh `main`-based branch and landed it. **#304** (`22ed1df`) is the one prompt-engineering change in the arc: `master-prompt.ts` now explicitly invites the LLM to key-stop a genuine highlight located WITHIN a day's own start/end anchor city, not only along the route out of it — soft nudge (reuses the file's own existing "preference, not a quota" framing), verified with one real LLM generation (approved spend) that produced 4 in-city SF key stops on a trip where the anchor previously got zero. **Recurring finding across the arc, worth carrying forward:** several rounds mid-session that looked like "the fix isn't working" turned out to be a stale dev server on a DIFFERENT Conductor workspace/branch (`localhost:3210` was serving `cayenne`'s `nps-injest` tree, which never had any of #300–#305's code) — not a code regression. `lsof -p $(pgrep -f 'next dev') | grep cwd` is the fast diagnostic (already documented in `web/AGENTS.md`); this session re-confirmed it's the first thing to check before assuming a merged fix is broken. **Every PR in the arc was verified live against real TEST data** (not unit tests alone from #303 onward) — minted `seed-owner` sessions, headless-Chrome CDP screenshots at `localhost:3211`, and for #302/#305 specifically, real DB snapshot→mutate→render→restore cycles using real existing corpus tile ids (never fabricated data) to reproduce exact reported patterns before/after the fix. **`description`/`prominenceScore` are absent on any trip baked before 2026-08-27** — existing stored `segmentSuggestions` are snapshots; a pre-existing trip needs `refreshCorpusTiles()` (#302) or a regeneration before the new filter/feature logic has real values to rank on. Full test/build gate green at every PR (final count 646 web tests, `next build` + `web typecheck` exit 0 throughout). No PROD reads or writes anywhere in this arc; no schema/migration changes. `docs/architecture/place-render-model.md` §2's `CorridorPlace` field table updated to add the two new fields. No ADR written for this arc — flagging that as a gap, not a decision: the arc's shape (soft-vs-hard prompt nudges, prominence-as-imperfect-signal, the branch-archaeology recovery pattern) may be worth one; not made here.)
 
 # STATE — branch `nps-api-photo-integration` · 2026-08-26 (NPS campground + park photo extraction) (**newest truth: NPS photo extraction extended to CAMPGROUNDS and PARKS — the two NPS record types that were excluded from the existing photo pipeline. Places (`nps:place:*`) already had photos; campgrounds (`nps:campground:*`) and parks (`nps:park:*`) now do too.** Branch `nps-api-photo-integration` off `origin/main` (`f7faa19`, #297). The existing pipeline (source_record `normalized_payload.photo.url` → corridor RPC `nps_photo_url` lateral → `BrowsePlace.photoUrl` → card `backgroundImage`) was already fully wired for NPS places — this closes the campground/park gap without any architectural change. **Changes:** `CampgroundSchema` + `ParkSchema` gained `images` parsing; `normalizeCampground()` + `persistParkBoundary()` gained `photo: npsPhotoFromImages(...)`. `fetchPark()` now explicitly requests `fields=images`. Backfill script widened to cover `raw_payload.campground.images` and `raw_payload.park.images`. `normalizeCampground` exported for testing; 2 new tests. Stale "no photos" comment in `bake-corridors.ts` corrected. **Backfill applied to TEST:** 305 NPS source_records updated (campgrounds + parks), 192 master_place rows gained `photo_url`. Total NPS photo coverage: 5,181 source_records (was 4,876). Total corpus photo coverage: 7,443 master_place rows (was 7,360). **Verified on TEST:** corridor RPC returns `nps_photo_url` for campgrounds (Jumbo Rocks, Hidden Valley, Sheep Pass in Joshua Tree corridor confirmed). Non-NPS POIs unaffected. All gates pass: 60 NPS tests, 583 data tests, web typecheck + build exit 0. **NPS API terms confirmed**: content is public domain per nps.gov/aboutus/disclaimer.htm; some photos carry third-party credits (already handled via the `NpsPhoto.credit` field). ADR: `docs/decisions/2026-08-26-nps-campground-park-photo-extraction.md`. **PROD requires:** (1) merge this PR; (2) `backfill:nps-photo -- --confirm`; (3) `backfill:mp-enrichment -- --confirm`. **⚠ PROD backfill is currently BLOCKED: GitHub Actions has a major outage (database primary failover, started 2026-08-26 ~15:11 UTC) — CI checks are stuck at "Waiting for status to be reported" and the PR cannot merge until Actions recovers.** Once CI passes and the PR merges, the two backfill commands still need to run against PROD under the normal sign-off rule. Did NOT generate a trip — Adam will. **Flagged:** existing trips with baked tiles will NOT retroactively gain campground/park photos (stored `segmentSuggestions` are snapshots); only newly-generated trips or re-bakes will show them.)
@@ -105,6 +124,71 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-27 — manual GPS coordinate entry for expedition start/end
+
+Newest truth. Branch `gps-coordinate` off `origin/main`. Followed a prior
+read-only investigation (same session) into whether `/plan/expedition`'s
+start/end path had any hard `place_id`/Google-Places dependency — it found
+none: the wizard's city search is Mapbox Geocoding v6, not Google Places,
+and `coords` was already the preferred signal everywhere downstream
+(`preComputeFacts`, `routeBetween`, `itineraryToTrip`).
+
+**What was built:**
+- `web/src/lib/plan/parse-coordinates.ts` — pure `parseCoordinateEntry`/
+  `formatCustomPointLabel`, range-validated (-90/90 lat, -180/180 lng), 8
+  passing unit tests.
+- `web/src/components/plan/coordinate-input.tsx` — the lat/lng entry
+  control, thin wrapper over the pure parser.
+- `ExpeditionDestination.manualCoords: boolean` (`lib/plan/expedition.ts`) —
+  set only by the new control; narrowly exempts that one destination from
+  `validateExpeditionForm`'s planning-region check
+  (`!d.manualCoords && !isInPlanningRegion(d.region)`), rather than
+  loosening the check generally. `planning-region.test.ts` gained a test
+  for the exemption and kept the existing "hand-crafted POST" rejection
+  test intact (still rejects when `manualCoords` is false).
+- A per-destination-row toggle in `expedition-wizard.tsx` ("coords" /
+  "search") swapping `LocationAutocomplete` for `CoordinateInput`.
+
+**The one real design decision, recorded as an ADR
+(`docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`):**
+hand-entered coordinates bypass the planning-region gate entirely rather
+than reverse-geocoding to recover a `region_code` and gating them the same
+way as autocomplete picks. Deliberate testing-scope shortcut, not a claim
+the gate stopped mattering — an out-of-region hand-entered coordinate now
+reaches generation unaudited against every downstream six-state assumption.
+Tracked as a BACKLOG item to revisit if this input mode is ever promoted
+beyond dev-only testing.
+
+**Verification, both real (no mocks):**
+1. `web/scripts/verify-manual-coordinate-anchor.ts` — mirrors
+   `generateExpeditionTripAction` function-for-function (minus the corpus
+   write-back, out of scope). Real Mapbox routing resolved 212.6 mi from the
+   manual start coordinate; real Claude generation returned a 3-day
+   itinerary; a real signed-in insert into TEST `public.trips` succeeded,
+   the row read back matching, then was deleted. **9/9 checks passed.**
+   Needs `NEXT_PUBLIC_MAPBOX_TOKEN` and `ANTHROPIC_API_KEY` borrowed from
+   `.env.local` (same gap/shape as the existing Mapbox-token RUNBOOK
+   gotcha — neither is in `.env.development.local`).
+2. A real headless-Chrome session (CDP, dev server on :3210, a minted
+   `seed-owner` session cookie) drove the actual rendered wizard: the
+   "coords" toggle button is on-screen AND reachable
+   (`elementFromPoint` hits the button itself, not an overlay); clicking it
+   swaps in the two lat/lng inputs; a valid pair shows the existing
+   "resolved" badge; an out-of-range latitude (95) shows the inline
+   "Latitude must be between -90 and 90." error and clears the resolved
+   state; toggling back to search mode reverts cleanly to an empty
+   `LocationAutocomplete`.
+
+**Gate:** `npm run -w web typecheck` and `cd web && npx next build` both
+exit 0.
+
+**Docs touched this pass:** this file, `LOG.md`, `BACKLOG.md`, the new ADR,
+`docs/architecture/trip-creation-surfaces.md` (two in-place corrections —
+the destinations table row, and the "no freeform escape hatch" claim, which
+is no longer true), `CLAUDE.md` RUNBOOK (extended the Mapbox-token gotcha to
+cover `ANTHROPIC_API_KEY`). `docs/DATA_INVENTORY.md` untouched — no schema
+or data-source change.
 
 ## 2026-08-26 (redesign) — corridor-city selection: strict 3mi proximity
 

@@ -91,6 +91,12 @@ actually touched what they describe. The `/wrap` command runs this pass.
     `SUPABASE_URL`/key still come from the env file, so no PROD DB is touched — you
     are borrowing the token only. `insertRestDay` makes zero route calls, so
     `verify-rest-day.ts` needs no token.
+  - **`ANTHROPIC_API_KEY` has the exact same gap, for any verify script that
+    calls `generateAndAudit`** `[measured 2026-08-27]` — also absent from
+    `.env.development.local`, also present in `.env.local`. Same workaround,
+    same shape: borrow it alongside the Mapbox token, keep TEST Supabase from
+    `--env-file`. `web/scripts/verify-manual-coordinate-anchor.ts` is the
+    example — it exports both before running.
   - ⚠️ **SCOPE OF THE ABOVE — a real map DOES render under `next dev`
     `[verified 2026-08-04]`.** The "token absent" fact is scoped to **verify
     scripts**, which load a SINGLE file via `--env-file=.env.development.local`.

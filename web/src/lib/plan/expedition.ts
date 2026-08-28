@@ -23,18 +23,26 @@ import { isInPlanningRegion, PLANNING_REGION_NAMES } from "./planning-region";
 export type ExpeditionDestination = {
   /** Geocodable city/destination text. */
   place: string;
-  /** `[lng,lat]` bound when the user PICKED a suggestion — null when the
-   *  field holds unresolved freeform text. */
+  /** `[lng,lat]` bound when the user PICKED a suggestion or entered raw
+   *  coordinates — null when the field holds unresolved freeform text. */
   coords: [number, number] | null;
   /** Mapbox region code ("CA", "OR", …) from the picked suggestion, null for
-   *  unresolved freeform text. Set together with `coords` and by the same
-   *  event, so `coords != null` implies `region != null`.
+   *  unresolved freeform text OR a manually-entered coordinate (see
+   *  `manualCoords`). Historically `coords != null` implied `region != null`
+   *  — that invariant now has one deliberate exception: manual coordinate
+   *  entry sets `coords` with `region` staying null.
    *
    *  DROPPED AT THE PIPELINE BOUNDARY, deliberately: `expeditionToGenerationInput`
    *  builds each `Anchor` field by field and does not copy this, so the region
    *  never reaches `GenerationInput` or anything under `lib/itinerary/`. It
    *  exists to be checked before generation, not to be planned with. */
   region: string | null;
+  /** True when `coords` came from hand-entered lat/lng rather than a resolved
+   *  Mapbox suggestion. Exempts this destination from the planning-region
+   *  gate in `validateExpeditionForm` — a deliberate testing-scope choice,
+   *  not a general "coords implies in-region" claim. See
+   *  `docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`. */
+  manualCoords: boolean;
   /** FIXED = hard schedule anchor; flexible = the planner may place it. */
   datePin: "fixed" | "flexible";
   /** ISO date; used only when datePin === "fixed". */
@@ -166,7 +174,12 @@ export function validateExpeditionForm(form: ExpeditionForm): string | null {
   // Reached only for destinations that already have coords, and coords are
   // only ever set by picking a filtered suggestion — so in practice this
   // catches a hand-crafted POST, not a user.
-  const outOfRegion = form.destinations.find((d) => !isInPlanningRegion(d.region));
+  //
+  // EXCEPT manual coordinate entry (`manualCoords: true`), which deliberately
+  // skips this check — see docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md.
+  const outOfRegion = form.destinations.find(
+    (d) => !d.manualCoords && !isInPlanningRegion(d.region),
+  );
   if (outOfRegion)
     return `Trip planning currently covers ${PLANNING_REGION_NAMES}. "${outOfRegion.place.trim()}" is outside that region.`;
   if (form.destinations.some((d) => d.datePin === "fixed" && !d.date))

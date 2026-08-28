@@ -280,7 +280,7 @@ tree contains `main` → `region`s → a bare `button`, no form]`.
 
 | Field | Control | Type | Default | Required | Validation |
 |---|---|---|---|---|---|
-| `destinations[]` | `LocationAutocomplete` rows | 2–8 ordered | 2 empty rows | yes | ≥2; every row non-empty; **every row must carry `coords`** |
+| `destinations[]` | `LocationAutocomplete` rows, or `CoordinateInput` in coords mode (added 2026-08-27, per-row toggle) | 2–8 ordered | 2 empty rows | yes | ≥2; every row non-empty; **every row must carry `coords`**; region required UNLESS `manualCoords` |
 | `.datePin` | segmented toggle | `"fixed" \| "flexible"` | `flexible` | — | — |
 | `.date` | **native `<input type="date">`** | ISO date | `null` | only if `fixed` | "A FIXED destination needs a date." |
 | `.dwell` | `Stepper` | number 0–30 | `0` | no | clamped by control |
@@ -350,6 +350,19 @@ Availability was measured at **26/26 features across six live forward queries
 `[measured 2026-07-31]`** — six well-known US city names, which is a sample, not
 a rate over the whole `country=us,ca&types=place` space.
 
+**Correction, 2026-08-27 — the gate now has one deliberate exception.**
+`ExpeditionDestination` gained `manualCoords: boolean`, set by a new
+per-row "coords" toggle that swaps `LocationAutocomplete` for a plain
+lat/lng text-entry control (`coordinate-input.tsx`). When `manualCoords` is
+true, `validateExpeditionForm`'s region check is skipped for that
+destination — a hand-typed coordinate carries no Mapbox response to read a
+`region_code` from, and the decision was to exempt rather than
+reverse-geocode. Full reasoning:
+`docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`.
+**This means the "structurally cannot plan outside CA/NV/UT/AZ/WA/OR"
+framing above now has an escape hatch** — see the correction in "The
+destination autocomplete" section below.
+
 ### The destination autocomplete
 
 `LocationAutocomplete` is backed by the **Mapbox Geocoding v6 forward endpoint**,
@@ -366,10 +379,18 @@ Mapbox feature geometry.
 
 **Two consequences worth recording:**
 
-1. **The wizard structurally cannot plan a trip outside the US and Canada.**
-   `country=us,ca` bounds the suggestions, and validation *requires* every
-   destination to carry `coords`, which are obtainable only by picking a
-   suggestion. There is no freeform escape hatch `[read source]`.
+1. ~~**The wizard structurally cannot plan a trip outside the US and
+   Canada.** `country=us,ca` bounds the suggestions, and validation
+   *requires* every destination to carry `coords`, which are obtainable
+   only by picking a suggestion. There is no freeform escape hatch `[read
+   source]`.~~ **CORRECTED 2026-08-27 — no longer true.** Manual coordinate
+   entry (`coordinate-input.tsx`, toggled per row) accepts any lat/lng
+   worldwide with no `country=us,ca` bound and no autocomplete pick
+   required — `coords` can now come from that control instead of a Mapbox
+   suggestion. The planning-region gate is *also* bypassed for these rows
+   (`manualCoords: true` exemption, see §2a correction above), so this is
+   now a real, if narrow, escape hatch — deliberately, for a dev-only
+   testing wizard `[read source, 2026-08-27]`.
 2. `types=place` restricts results to populated places — no addresses,
    neighborhoods, POIs, or admin regions `[read source, per the in-file comment]`.
 

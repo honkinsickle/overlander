@@ -88,10 +88,11 @@ const base = (
   rig: DEFAULT_RIG,
 });
 
-const dest = (place: string, region: string | null) => ({
+const dest = (place: string, region: string | null, manualCoords = false) => ({
   place,
   coords: [-120, 40] as [number, number],
   region,
+  manualCoords,
   datePin: "flexible" as const,
   date: null,
   dwell: 0,
@@ -114,13 +115,24 @@ test("ONE out-of-region destination fails, and the message names it", () => {
   assert.match(err, /California/); // the region list is surfaced to the user
 });
 
-test("a destination with coords but NO region fails the backstop", () => {
-  // The shape a hand-crafted POST would have — the wizard cannot produce it,
-  // since coords are only ever set by picking a filtered suggestion.
+test("a destination with coords but NO region fails the backstop, unless manualCoords exempts it", () => {
+  // Without the exemption, this is the shape a hand-crafted POST would have —
+  // the autocomplete path cannot produce it, since coords are only ever set by
+  // picking a filtered suggestion.
   const err = validateExpeditionForm(
     base([dest("Portland, OR", "OR"), dest("Somewhere", null)]),
   );
   assert.ok(err, "expected a validation error");
+});
+
+test("manualCoords exempts a hand-entered destination from the region backstop", () => {
+  const err = validateExpeditionForm(
+    base([
+      dest("Portland, OR", "OR"),
+      dest("Custom Point (40.0000, -120.0000)", null, true),
+    ]),
+  );
+  assert.equal(err, null);
 });
 
 test("the coords check still runs BEFORE the region check", () => {

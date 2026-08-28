@@ -292,6 +292,16 @@ Remaining and still open:
   gate-verified only; a real wizard+LLM run has not exercised the audit→bake
   path end to end.
 
+## Manual coordinate entry — region-gate exemption is a testing shortcut (2026-08-27)
+
+`/plan/expedition`'s coordinate-entry mode
+(`docs/decisions/2026-08-27-manual-coordinate-entry-region-exemption.md`)
+exempts hand-entered lat/lng from the planning-region gate rather than
+reverse-geocoding to recover a `region_code`. If this input mode is ever
+promoted beyond dev-only testing, revisit: extend `reverseGeocodeCity`
+(`web/src/lib/routing/reverse-geocode.ts`) to also return `region_code` and
+gate manual coordinates the same way as autocomplete results.
+
 ## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
 
 ADR `2026-08-21-place-data-resolver-consolidation.md` decision 4: **one shared
