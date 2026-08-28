@@ -3328,3 +3328,24 @@ this docs pass — none applied.**
 
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
+
+## Surfaced 2026-08-27 (oddity promotion status check)
+
+- **`atlas_oddities` exists on TEST but never landed on PROD — root cause not
+  investigated.** PR #241 (2026-08-20) shipped the CSV-driven Atlas Obscura
+  ingester and ran it TEST-only. TEST recorded 2,870 active source_records
+  under `source_id = 'atlas_oddities'` in `docs/DATA_INVENTORY.md` §TEST as of
+  2026-08-21; PROD's most recent recorded breakdown (2026-08-11) contains no
+  `atlas_oddities` line at all. **Nothing on `main`, no branch, no PR, no
+  decision doc, and no `docs/measurements/` file characterizes why the
+  promotion to PROD never happened**, whether it's a policy hold (source
+  legitimacy, the 2026-08-20 no-scrape rule's scope), a mechanism gap (no
+  documented TEST→PROD promotion path for a source that lives only in
+  `source_record`), or simply unscheduled. **Adjacent open question:** if
+  promotion IS decided, the density-cascade concern flagged in the 2026-08-26
+  corridor-city-strict-proximity ADR (denser suburban days already produce more
+  backfill anchors × the per-city guarantee cap) applies to any new PROD-side
+  oddity content — a risk-to-live-trip-generation review is part of the
+  question, not incidental. Status check on 2026-08-27 confirmed the
+  investigation was never started (or was started elsewhere and lost). Adam
+  to decide whether to formally re-dispatch.

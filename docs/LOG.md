@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — status check: "why did oddities never reach PROD?" investigation
+
+- **Task:** confirm whether a previously-dispatched investigation into oddity
+  POIs on TEST but zero on PROD had produced findings anywhere (branch, PR,
+  committed docs, uncommitted local work, or another workspace's `.context/`).
+  Explicit no-op on the investigation itself — status check only.
+- **Finding: no such investigation exists in this workspace.** Current branch
+  `oddity-promotion-status-check` was created for this task and is 0 commits
+  ahead of `origin/main`. `.context/todos.md` is empty. No LOG.md entry, no
+  measurement doc under `docs/measurements/`, no decision under `docs/decisions/`,
+  no BACKLOG.md item on TEST→PROD atlas_oddities promotion. Two other local
+  branches (`normalize-oddities-adapter`, `odd-food`) exist but hold only the
+  original 2026-08-20 work already merged as PR #241 and the `odd-food` docs
+  commit — no promotion-oriented follow-up. No open PR mentions oddity promotion.
+- **Prior context that IS in the repo** (not this session's work, cited for
+  Adam's reference before deciding whether to formally re-dispatch):
+  - PR #241 (merged 2026-08-20, `f39e497`) shipped the CSV-driven Atlas Obscura
+    ingester as source `atlas_oddities` — **TEST-only ingest**. `docs/DATA_INVENTORY.md`
+    §TEST records atlas_oddities at 2,870 active / 2,870 total source_records as
+    of 2026-08-21; §PROD's 2026-08-11 breakdown does not list `atlas_oddities`
+    at all (0 rows) — consistent with a source that was only ever ingested to
+    TEST. The 2,747 figure in the task prompt is close to but distinct from the
+    2,870 in the docs; I did not query TEST to reconcile.
+  - `docs/decisions/2026-08-20-no-ao-fetch-rule.md` (on branch `odd-food`, not
+    on `main`) codifies the standing rule against fetching `atlasobscura.com`.
+    Scope of that rule: **the live site is off-limits (Cloudflare + licensing
+    risk); the CSV data already ingested via the one-time authorized channel is
+    NOT covered by the rule.** Task prompt frames "NOT Atlas Obscura — no
+    official API, under a standing no-scrape rule" — the standing rule applies
+    to future scrapes, not to the existing corpus, and the existing TEST corpus
+    is Atlas Obscura. Flagging so Adam can confirm whether the legitimacy
+    question in the task scope is about the existing atlas_oddities rows or
+    about a hypothetical different source.
+  - The existing atlas_oddities TEST corpus HAS shown up in real trip generation
+    on TEST — STATE.md's 2026-08-25 masthead names "Mick Jagger's Urinal", "Space
+    Farms Zoo", etc. among machine picks on trip `ab146c1d` under a `scenic`
+    guarantee. So the source is wired end-to-end on the code path; the missing
+    piece is data on PROD, not code.
+- **Decision by Adam pending:** re-dispatch the investigation formally (I did
+  not begin it, per instructions), or close the question. A BACKLOG entry
+  filed to keep the open question visible.
+- **This pass touched only `docs/LOG.md` and `docs/BACKLOG.md`** — no code, no
+  schema, no PROD reads, no TEST reads. Committed on branch
+  `oddity-promotion-status-check`, PR opened against `main` for Adam to review.
+
 ## 2026-08-26 — NPS campground + park photo extraction
 
 - **Finding:** NPS photo pipeline was already 90% built — places (`nps:place:*`)
