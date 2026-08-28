@@ -25,16 +25,33 @@ if (process.env.SUPABASE_URL !== TEST_URL) {
 }
 const db = getDb();
 
-// A short line running through downtown Portland — AO-dense. Buffer 16km
-// so we sweep a wide swath. Deliberately picks a route where AO content
-// is expected to be plentiful; a null result would flag a wiring failure.
-const ROUTE: { type: "LineString"; coordinates: [number, number][] } = {
-  type: "LineString",
-  coordinates: [
-    [-122.7000, 45.5150], // Downtown Portland
-    [-122.6300, 45.5350], // NE Portland
-  ],
-};
+// Short lines through AO-dense areas — one per state batch, to verify
+// that both PR #309 (OR/CA/LA) and this pass (WA/AZ/UT/NV) surface AO
+// content end-to-end via the RPC that trip generation reads. Buffer
+// 16km so we sweep a wide swath. A null result on ANY of these would
+// flag a wiring failure.
+const ROUTES: ReadonlyArray<{ label: string; route: { type: "LineString"; coordinates: [number, number][] } }> = [
+  {
+    label: "Portland OR (wave 1)",
+    route: { type: "LineString", coordinates: [[-122.7000, 45.5150], [-122.6300, 45.5350]] },
+  },
+  {
+    label: "Seattle WA (wave 2)",
+    route: { type: "LineString", coordinates: [[-122.3500, 47.6000], [-122.3000, 47.6300]] },
+  },
+  {
+    label: "Phoenix AZ (wave 2)",
+    route: { type: "LineString", coordinates: [[-112.1000, 33.4500], [-111.9500, 33.4700]] },
+  },
+  {
+    label: "Salt Lake City UT (wave 2)",
+    route: { type: "LineString", coordinates: [[-111.9000, 40.7500], [-111.8500, 40.7700]] },
+  },
+  {
+    label: "Las Vegas NV (wave 2)",
+    route: { type: "LineString", coordinates: [[-115.2000, 36.1500], [-115.1000, 36.1800]] },
+  },
+];
 
 type Row = {
   id: string;
@@ -47,54 +64,55 @@ type Row = {
   attribution: Record<string, string> | null;
 };
 
+async function verifyCorridor(label: string, route: { type: "LineString"; coordinates: [number, number][] }): Promise<boolean> {
+  console.log(`\n── ${label} ──`);
+  const r = await db.rpc("pois_along_corridor", {
+    p_route: route,
+    p_buffer_m: 16000,
+    p_categories: null,
+  });
+  if (r.error || r.data == null) {
+    console.error("QUERY FAILED (pois_along_corridor):", r);
+    return false;
+  }
+  const rows = r.data as Row[];
+  const withAoDesc = rows.filter((row) => row.attribution?.description === "atlas_oddities");
+  const withAoPhotoCredit = rows.filter((row) => row.photo_credit === "Atlas Obscura");
+  console.log(`  rows returned: ${rows.length}   AO description: ${withAoDesc.length}   AO photo: ${withAoPhotoCredit.length}`);
+  const sample = rows.filter(
+    (row) => row.attribution?.description === "atlas_oddities" && row.photo_credit === "Atlas Obscura",
+  );
+  for (const s of sample.slice(0, 2)) {
+    console.log(`    - ${s.canonical_name} (${s.primary_category})`);
+    console.log(`      ${(s.description ?? "").slice(0, 100).replace(/\n/g, " ")}…`);
+  }
+  return withAoDesc.length > 0 && withAoPhotoCredit.length > 0;
+}
+
 async function main() {
   console.log("=".repeat(72));
   console.log("AO manual content — LIVE VERIFY via pois_along_corridor");
   console.log("Target: TEST (", TEST_URL, ")");
   console.log("=".repeat(72));
 
-  const r = await db.rpc("pois_along_corridor", {
-    p_route: ROUTE,
-    p_buffer_m: 16000,
-    p_categories: null,
-  });
-  if (r.error || r.data == null) {
-    console.error("QUERY FAILED (pois_along_corridor):", r);
+  const results: { label: string; passed: boolean }[] = [];
+  for (const { label, route } of ROUTES) {
+    const passed = await verifyCorridor(label, route);
+    results.push({ label, passed });
+  }
+
+  console.log("\n" + "=".repeat(72));
+  console.log("SUMMARY");
+  console.log("=".repeat(72));
+  for (const r of results) {
+    console.log(`  ${r.passed ? "✓" : "✗"} ${r.label}`);
+  }
+  const allPassed = results.every((r) => r.passed);
+  if (!allPassed) {
+    console.error("\n✗ VERIFY FAILED — one or more corridors did not surface AO content.");
     process.exit(1);
   }
-
-  const rows = r.data as Row[];
-  console.log(`\nRPC returned ${rows.length} rows in the Portland-area corridor.`);
-
-  const withAoDesc = rows.filter((row) => row.attribution?.description === "atlas_oddities");
-  const withAnyPhoto = rows.filter((row) => row.nps_photo_url);
-  const withAoPhotoCredit = rows.filter((row) => row.photo_credit === "Atlas Obscura");
-  console.log(`  with attribution.description = 'atlas_oddities':       ${withAoDesc.length}`);
-  console.log(`  with a non-null nps_photo_url (any source):            ${withAnyPhoto.length}`);
-  console.log(`  with photo_credit = 'Atlas Obscura':                    ${withAoPhotoCredit.length}`);
-
-  console.log("\nSample AO-attributed description + AO photo (first 3):");
-  const sample = rows.filter(
-    (row) => row.attribution?.description === "atlas_oddities" && row.photo_credit === "Atlas Obscura",
-  );
-  console.log(`  rows meeting both conditions: ${sample.length}`);
-  for (const s of sample.slice(0, 3)) {
-    console.log(`    - ${s.canonical_name} (${s.primary_category})`);
-    console.log(`      description_source: ${s.description_source}`);
-    console.log(`      description[:120]:  ${(s.description ?? "").slice(0, 120)}${(s.description ?? "").length > 120 ? "…" : ""}`);
-    console.log(`      photo: ${s.nps_photo_url?.slice(0, 90)}…`);
-  }
-
-  if (withAoDesc.length === 0) {
-    console.error("\n✗ VERIFY FAILED — no rows in the corridor carry an AO-attributed description.");
-    process.exit(1);
-  }
-  if (withAoPhotoCredit.length === 0) {
-    console.error("\n✗ VERIFY FAILED — no rows in the corridor carry an AO-credited photo.");
-    process.exit(1);
-  }
-
-  console.log("\n✓ VERIFY PASSED — AO descriptions and photos surface via pois_along_corridor.");
+  console.log("\n✓ VERIFY PASSED — AO descriptions and photos surface via pois_along_corridor in all corridors.");
 }
 
 main().catch((e) => {

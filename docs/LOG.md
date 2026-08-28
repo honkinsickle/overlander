@@ -203,6 +203,87 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   question.
 
 
+## 2026-08-27 — Atlas Obscura manual content ingest wave 2 (WA + AZ + UT + NV → TEST)
+
+- **Task:** extend PR #309's AO content ingest to the four remaining
+  six-state manual datasets Adam supplied later the same day at
+  `/Users/adamwagner/atlas-obscura-{wa,az,ut,nv}/`. Closes the
+  §5 gap flagged in
+  `docs/proposals/2026-08-27-atlas-oddities-prod-promotion-scoping.md`
+  (AZ/WA/NV/UT enrichment coverage was zero after wave 1).
+- **Same shape as PR #309.** All four state CSVs follow CA's column
+  layout (`n, name, city, lat, lon, url, blurb, tags,
+  know_before_you_go, photo_file, photo_source_url, about`), each row
+  carries a write-up + a hero photo, per-README counts: WA 341, AZ
+  313, UT 170, NV 293.
+- **Same script, extended `CSV_SOURCES` array.** No new migrations —
+  the two from PR #309 (`20260827180000` field_precedence +
+  photo-RPC extension; `20260827180100` `pois_along_corridor` photo
+  lateral) already carry atlas_oddities in their precedence chains
+  and cover this pass unchanged.
+- **Two script hardenings this pass.**
+  - **Idempotence short-circuit** in `updateOneSourceRecord`:
+    returns `false` when the incoming description + photo already
+    match the source_record's stored values; only actually-changed
+    rows fire an UPDATE. Confirmed live — the 1,789 rows PR #309
+    landed came back as `unchanged` on this pass at
+    ~300k-rows/sec (no DB write). Without this, a full seven-CSV
+    re-run would have re-issued 1,789 no-op writes and 1,787
+    no-op recomputes.
+  - **`changedMpIds` set** feeds recompute + photo backfill only
+    for source_records that actually changed. 1,069 recomputes this
+    pass instead of the full 2,858 that would otherwise fire.
+- **Match rate: 2,858 / 2,913 CSV rows.** Broken down: CA 1,564, OR
+  230, LA 2 (post-dedup vs CA), WA 341, AZ 313, UT 170, NV 293 =
+  2,913 unique slugs; 55 unmatched (all just absent from TEST — none
+  ambiguous). Unmatched distribution: 6 CA + 1 OR (already-known from
+  PR #309), and ~48 across WA/AZ/UT/NV (largely UT-heavy in the
+  visible list — likely AO pages added post the PR #241 anchor-CSV
+  scoping).
+- **Result — source_record** (queried TEST 2026-08-27, this pass):
+  1,789 were `unchanged` (PR #309's set); **1,069 were freshly
+  written** (WA/AZ/UT/NV). After-count: 2,858 atlas_oddities rows
+  carry a `normalized_payload.description`; 2,858 carry a
+  `normalized_payload.photo` object. All new photos have
+  `photo.url` non-null — no CSV-photo-less rows this pass, unlike
+  wave 1's LA + 8-CA case.
+- **Result — master_place** (scoped to the 1,069 mp_ids whose
+  source_records actually changed this pass): 1,069 recomputes fired,
+  0 failures; `backfill_master_place_photo_url()` reported 1,054 rows
+  whose `photo_url` actually changed. After-count across ALL 2,858
+  distinct matched mp_ids: **2,804 carry an AO-attributed description
+  (up from 1,751); 2,846 carry a `photo_url` (up from 1,792)**.
+  Deltas from this pass alone: +1,053 mp AO-description and +1,054
+  mp photo_url.
+- **Live-verify PASSED via `pois_along_corridor` on FIVE corridors,
+  one per state batch** (Portland OR from wave 1; Seattle WA, Phoenix
+  AZ, Salt Lake City UT, Las Vegas NV from this pass). Every corridor
+  returned rows with both `attribution.description = 'atlas_oddities'`
+  AND `photo_credit = 'Atlas Obscura'` — Tovrea Castle in Phoenix,
+  Summum Pyramid in SLC, The Last Remaining Sigma Derby Machine in
+  Vegas, Hiram M. Chittenden Locks in Seattle, all with real AO
+  editorial prose. `data/scripts/atlas-oddities-manual-verify.ts`
+  extended to the multi-corridor shape.
+- **This pass touched only `docs/`, extended
+  `data/scripts/atlas-oddities-manual-content-ingest.ts` (added four
+  CSV entries + idempotence + changed-mp tracking), and extended
+  `data/scripts/atlas-oddities-manual-verify.ts` (multi-corridor).**
+  Zero PROD reads. Zero PROD writes.
+- **Downstream note for the PROD-promotion scoping (PR #310).** The
+  §5 "sequencing" question in the scoping doc now takes a different
+  shape: TEST content coverage is uniform across all six states,
+  not asymmetric. If Adam picks Option A (promote now), PROD's first
+  AO tiles would render with description + photo across the whole
+  six-state scope — no in-region content gap. Option C (enriched-
+  subset-only) is now essentially the same as Option A because
+  enrichment coverage on TEST is effectively total (2,858 of
+  2,870 total atlas_oddities carry a description; the 12-row
+  residual is the wave-1 CA-photo-less + LA-only tail from PR #309
+  and 4 mismatched-state slugs). Option B (wait for six-state) is
+  moot — the six-state manual dataset has now arrived. Scoping doc
+  not edited in this PR; the update belongs there if Adam wants it
+  and doesn't affect any actual PROD action.
+
 ## 2026-08-27 — day-detail spine: density-cascade cleanup + prominence-ranked featured picks (#300–#305)
 
 - **Started from a screenshot, not a hunch:** strict-proximity corridor selection (#296) was surfacing 21–29 bare corridor-city headers/day with nothing under them (no card, no photo, no "Explore more"). #300 (`ca46f57`) added `filterVisibleSpineItems()` to drop a city from the RENDERED spine (not the data — `Day.corridorCities` is untouched) when its pool is genuinely empty and it has no featured card. Start/end anchors always render regardless.

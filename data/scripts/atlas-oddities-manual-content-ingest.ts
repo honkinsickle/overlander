@@ -33,12 +33,19 @@ if (process.env.SUPABASE_URL !== TEST_URL) {
 const DRY_RUN = process.argv.includes("--dry-run");
 const db = getDb();
 
-// Priority order: CA first (largest + has photos), then OR (independent set),
-// then LA (fills any residual — mostly no-op since LA is a near-subset of CA).
+// Priority order: CA first (largest + has photos), then OR (independent
+// set), then LA (fills any residual — mostly no-op since LA is a near-
+// subset of CA), then WA/AZ/UT/NV (added 2026-08-27, each an independent
+// per-state file). Idempotent — if a source_record already carries the
+// same description + photo, updateOneSourceRecord short-circuits.
 const CSV_SOURCES: ReadonlyArray<{ label: string; path: string; hasPhoto: boolean }> = [
   { label: "CA", path: "/Users/adamwagner/atlas-obscura-ca/data/california.csv", hasPhoto: true },
   { label: "OR", path: "/Users/adamwagner/atlas-obscura-or/data/oregon.csv", hasPhoto: true },
   { label: "LA", path: "/Users/adamwagner/atlas-obscura-ca/data/los-angeles.csv", hasPhoto: false },
+  { label: "WA", path: "/Users/adamwagner/atlas-obscura-wa/data/washington.csv", hasPhoto: true },
+  { label: "AZ", path: "/Users/adamwagner/atlas-obscura-az/data/arizona.csv", hasPhoto: true },
+  { label: "UT", path: "/Users/adamwagner/atlas-obscura-ut/data/utah.csv", hasPhoto: true },
+  { label: "NV", path: "/Users/adamwagner/atlas-obscura-nv/data/nevada.csv", hasPhoto: true },
 ];
 
 type Row = Record<string, string>;
@@ -243,16 +250,29 @@ async function countMpAoPhoto(mpIds: string[]): Promise<number> {
   return withPhoto;
 }
 
+/** Returns true if the source_record was actually updated, false if the
+ *  incoming description + photo match what's already stored (short-circuit
+ *  so the ingest is cheap to re-run over the full seven-CSV set). */
 async function updateOneSourceRecord(
   sr: SrRow,
   desc: string,
   photoUrl: string | null,
-): Promise<void> {
-  const next: Record<string, unknown> = { ...sr.normalized_payload, description: desc };
-  next.photo = photoUrl
+): Promise<boolean> {
+  const existingNp = sr.normalized_payload as Record<string, unknown>;
+  const existingPhoto = existingNp.photo as { url?: string; credit?: string } | null | undefined;
+  const nextPhoto = photoUrl
     ? { url: photoUrl, credit: "Atlas Obscura" }
-    : (sr.normalized_payload as Record<string, unknown>).photo ?? null;
+    : existingPhoto ?? null;
 
+  const descUnchanged = existingNp.description === desc;
+  const photoUnchanged =
+    (existingPhoto == null && nextPhoto == null) ||
+    (existingPhoto != null && nextPhoto != null &&
+      existingPhoto.url === (nextPhoto as { url?: string }).url &&
+      existingPhoto.credit === (nextPhoto as { credit?: string }).credit);
+  if (descUnchanged && photoUnchanged) return false;
+
+  const next: Record<string, unknown> = { ...existingNp, description: desc, photo: nextPhoto };
   const resp = await db
     .from("source_record")
     .update({ normalized_payload: next })
@@ -261,6 +281,7 @@ async function updateOneSourceRecord(
     console.error(`UPDATE failed for ${sr.external_id}:`, resp.error);
     throw new Error(`update failed`);
   }
+  return true;
 }
 
 async function recomputeOne(mpId: string): Promise<void> {
@@ -345,35 +366,44 @@ async function main() {
   // ── Write ────────────────────────────────────────────────────────
   console.log(`\n── UPDATING ${matched.length} source_records ──`);
   let updated = 0;
+  let unchanged = 0;
   let failed = 0;
+  const changedMpIds = new Set<string>();
   const startWrite = Date.now();
   for (const row of matched) {
     const sr = srByEid.get(row.externalId)!;
     try {
-      await updateOneSourceRecord(sr, row.about, row.photoUrl);
-      updated++;
-      if (updated % 100 === 0) {
-        const rate = updated / ((Date.now() - startWrite) / 1000);
-        console.log(`  updated ${updated}/${matched.length} (~${rate.toFixed(1)}/s)`);
+      const didUpdate = await updateOneSourceRecord(sr, row.about, row.photoUrl);
+      if (didUpdate) {
+        updated++;
+        if (sr.master_place_id) changedMpIds.add(sr.master_place_id);
+      } else {
+        unchanged++;
+      }
+      const done = updated + unchanged;
+      if (done % 200 === 0) {
+        const rate = done / ((Date.now() - startWrite) / 1000);
+        console.log(`  processed ${done}/${matched.length} (updated=${updated} unchanged=${unchanged}, ~${rate.toFixed(1)}/s)`);
       }
     } catch {
       failed++;
     }
   }
-  console.log(`  updated: ${updated}   failed: ${failed}`);
+  console.log(`  updated: ${updated}   unchanged: ${unchanged}   failed: ${failed}`);
 
   // ── Recompute master_place ───────────────────────────────────────
-  console.log(`\n── RECOMPUTE ${mpIds.length} master_place rows ──`);
+  const mpIdsToRecompute = Array.from(changedMpIds);
+  console.log(`\n── RECOMPUTE ${mpIdsToRecompute.length} master_place rows (only those whose source_records actually changed) ──`);
   let recomputed = 0;
   let recomputeFailed = 0;
   const startRecompute = Date.now();
-  for (const mpId of mpIds) {
+  for (const mpId of mpIdsToRecompute) {
     try {
       await recomputeOne(mpId);
       recomputed++;
       if (recomputed % 100 === 0) {
         const rate = recomputed / ((Date.now() - startRecompute) / 1000);
-        console.log(`  recomputed ${recomputed}/${mpIds.length} (~${rate.toFixed(1)}/s)`);
+        console.log(`  recomputed ${recomputed}/${mpIdsToRecompute.length} (~${rate.toFixed(1)}/s)`);
       }
     } catch {
       recomputeFailed++;
@@ -382,8 +412,8 @@ async function main() {
   console.log(`  recomputed: ${recomputed}   failed: ${recomputeFailed}`);
 
   // ── Backfill photo_url ───────────────────────────────────────────
-  console.log(`\n── BACKFILL PHOTO_URL for ${mpIds.length} master_place rows ──`);
-  const photoUpdated = await backfillPhotoUrls(mpIds);
+  console.log(`\n── BACKFILL PHOTO_URL for ${mpIdsToRecompute.length} master_place rows ──`);
+  const photoUpdated = await backfillPhotoUrls(mpIdsToRecompute);
   console.log(`  master_place rows whose photo_url actually changed: ${photoUpdated}`);
 
   // ── After-counts ─────────────────────────────────────────────────
