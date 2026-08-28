@@ -15,6 +15,34 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Re-verified 2026-08-27 (later) `[queried PROD, read-only]` —
+> atlas_oddities landed on PROD in a single session (migrations +
+> anchor CSV ingest + materialize + manual content ingest + markdown
+> converter). Full LOG narrative: `docs/LOG.md` §2026-08-27 (Atlas
+> Obscura oddities LIVE ON PROD).** Post-promotion PROD state, atlas_oddities
+> only (the other-source counts in the 2026-08-11 box below are
+> unchanged by this pass):
+>
+> | metric | value |
+> |---|--:|
+> | `source_record` for `source_id = 'atlas_oddities'` | **2,866** |
+> | — with `normalized_payload.description` non-null | **2,854** |
+> | — with `normalized_payload.photo.url` non-null | **2,844** |
+> | — linked to a `master_place` | **2,806** |
+> | — in `manual_review` (unlinked, pending triage) | **60** |
+> | distinct AO-linked `master_place` ids | **2,806** |
+> | — with `attribution.description = 'atlas_oddities'` | **2,794** |
+> | — with `photo_url` non-null | **2,784** |
+>
+> **Migrations applied:** `20260827180000_atlas_oddities_description_photo_precedence`
+> (adds `field_precedence` row + extends `backfill_master_place_photo_url` chain)
+> and `20260827180100_pois_along_corridor_atlas_oddities_photo` (extends
+> `pois_along_corridor` photo lateral to include atlas_oddities).
+>
+> **Not touched this pass:** `master_place_search_export` view and Typesense
+> `places_prod` sync. AO tiles surface on corridor browse (RPC) but NOT on
+> `/search` results — flagged in BACKLOG for a follow-up Typesense sync.
+>
 > **⚠️ Re-verified 2026-08-11 `[queried PROD, read-only]` — the counts below
 > this box (from 2026-07-23) are SUPERSEDED for totals; the corpus roughly
 > doubled with the six-state OSM camping ingest, then the bbq/fire_pit

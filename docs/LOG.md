@@ -12,6 +12,141 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — Atlas Obscura oddities LIVE ON PROD (markdown converter + full six-state promotion)
+
+- **Task:** two parts. Part 1 — build a markdown → plain-text converter
+  for AO descriptions (the one remaining product-shape concern from PR
+  #312's density-cascade measurement); apply to TEST. Part 2 — promote
+  the enriched six-state atlas_oddities corpus from TEST to PROD, per
+  the runbook in PR #310's scoping doc §1. Adam signed off on all three
+  product-shape questions raised by PR #312 in this same session's task
+  message.
+- **This closes the oddity-POI PROD-promotion thread open since PR
+  #306** (2026-08-27 status check).
+
+### Part 1 — Markdown converter
+
+- **Corpus sample** (`data/scripts/atlas-oddities-markdown-sample.ts`,
+  read-only, TEST): 2,858 AO descriptions on TEST. Pattern counts:
+  inline_link 1,424 · italic_underscore 527 · bold 14 · blockquote 2 ·
+  unordered_list 1 · horizontal_rule 1 · image 1. Not observed:
+  heading, ordered_list, asterisk-italic, code, autolink,
+  strikethrough, footnote, HTML tag, escaped.
+- **Rendering pattern confirmed:** the web client renders descriptions
+  as JSX text nodes (`{description}` in `day-detail-overview.tsx` etc.
+  — no `dangerouslySetInnerHTML`, no `ReactMarkdown`, no `remark`).
+  NPS/RIDB descriptions today ship raw HTML fragments (`<p>`, `<em>`,
+  `<br>`) that also render literally as text — the same class of issue
+  on a different corpus. Not fixed here (see §Consequences in the ADR).
+- **Decision: strip AO markdown to plain text.**
+  `data/ingestion/sources/atlas-oddities-markdown.ts` — pure function,
+  22 unit tests, no dep added, idempotent. Full ADR:
+  `docs/decisions/2026-08-27-ao-description-plain-text.md`.
+- **Applied on TEST** via
+  `data/scripts/atlas-oddities-apply-markdown-convert.ts`. First pass:
+  1,701 source_records updated, 1,699 master_places recomputed, 0
+  failed, 1 remaining row (a `****quoted text****` quadruple-asterisk
+  variant on the Lola Montez description). Added a `**{2,}` cleanup
+  rule + test, re-ran: 4 more rows updated (Lola Montez + 3 similar),
+  final AFTER: **zero descriptions carrying markdown syntax**.
+- **Live-verify PASSED on TEST** via multi-corridor `pois_along_corridor`
+  (`data/scripts/atlas-oddities-manual-verify.ts` re-run — same 5
+  corridors PR #311 used, all pass).
+
+### Part 2 — PROD promotion (this is a real PROD write)
+
+- **Explicit checkpoint recorded** in the PR body before touching PROD —
+  restated scope, row counts, and Adam's sign-off documented in the
+  task message.
+- **Runbook executed** per PR #310 §1:
+  1. Backed TEST `data/.env` to
+     `~/.config/overlander/env-backups/.env.test-preop-ao-prod-promote-20260827-203653`.
+  2. `supabase link --project-ref nqzeywzcowujzyegxbsr` (re-linked CLI
+     to PROD).
+  3. Copied PROD creds to `data/.env` from
+     `~/.config/overlander/env-backups/.env.production-backup`.
+  4. `npm run -w data db:push-verify` — applied migrations
+     **`20260827180000`** (field_precedence + backfill_master_place_photo_url
+     extension) and **`20260827180100`**
+     (pois_along_corridor photo lateral extension) to PROD. Both applied
+     cleanly; verifier confirmed 1 INSERT row for the field_precedence
+     row.
+  5. **Anchor CSV ingest**:
+     `ATLAS_CSV_DIR=/Users/adamwagner/conductor/archived-contexts/overlander/normalizeoddites`
+     `npm run -w data ingest:manual -- --source atlas_oddities`. The
+     six anchor CSVs live in an archived Conductor workspace, not on
+     `main`'s `.context/` — sourced them there; row totals matched the
+     PR #241 baseline exactly. Result on PROD: 2,866 source_records
+     inserted across 6 states (CA 1,568, AZ 313, WA 302, NV 295, OR
+     229, UT 159), 0 errors.
+  6. **Materialize** with `ER_APPLY_BATCH_SIZE=25 npm run -w data
+     materialize -- --only-categories oddity --skip-sync` — scoped to
+     `oddity` inferred_category so only the newly-ingested AO rows
+     reached ER. Result: 2,806 `new_master_place` outcomes, 60
+     `manual_review_queued`, 0 auto_link, 0 amenity_rollup, 0 errors.
+     Skipped Typesense sync (search index) — flagged as a follow-up;
+     the RPC-based browse tiles do not depend on it.
+  7. **Manual content ingest** on PROD via
+     `atlas-oddities-manual-content-ingest.ts --allow-prod` (updated
+     the script to accept the flag; earlier PROD-guard rejected any
+     non-TEST URL). Result: 2,854 SR updated with description + photo,
+     2,794 recomputed, 2,784 photo_url deltas, 0 failed.
+  8. **Markdown convert** on PROD via
+     `atlas-oddities-apply-markdown-convert.ts --allow-prod`. Result:
+     1,697 SR updated, 1,659 recomputed, 0 failed, 0 remaining
+     descriptions with markdown syntax.
+  9. Restored `data/.env` from
+     `~/.config/overlander/env-backups/.env.test-backup` and re-linked
+     CLI to TEST (`znldzjdatkogdktymtvi`).
+- **Final PROD state** (queried this session, read-only, post-restore):
+  - `atlas_oddities` **source_record: 2,866** total (up from 0).
+    - with `normalized_payload.description` non-null: **2,854**.
+    - with `normalized_payload.photo.url` non-null: **2,844**.
+    - linked to a `master_place`: **2,806**.
+    - unlinked (in manual_review queue): **60**.
+  - **Distinct AO-linked `master_place` ids on PROD: 2,806.**
+    - with `attribution.description = 'atlas_oddities'`: **2,794** —
+      the 12-row gap corresponds to mps that ER linked AO to alongside
+      a higher-priority source whose description wins precedence.
+    - with `photo_url` non-null: **2,784**.
+- **Live-verify PASSED on PROD** via
+  `data/scripts/atlas-oddities-prod-verify.ts` (read-only). Five
+  corridors — Portland OR, Seattle WA, Phoenix AZ, SLC UT, Las Vegas
+  NV — all return AO descriptions + AO photos on
+  `pois_along_corridor`; zero markdown leaks; representative names
+  surfaced include Mt. Baker Ridge Sunset Stones (Seattle), Hanny's
+  (Phoenix), Snelgrove Ice Cream Cone (SLC), Ethel M Botanical Cactus
+  Garden + Berlin Wall Urinal (Vegas).
+- **Frozen-baked-trip lesson holds — confirmed, not assumed.** Both
+  existing PROD reference trips inspected via the same verify script:
+  `la-to-portland` (10 days, 0 baked segmentSuggestion tiles — likely
+  a spec-shaped legacy trip) and `la-to-deadhorse` (66 days, **1,977**
+  baked segmentSuggestion tiles). **Zero AO-attributed tiles in either
+  baked snapshot** — new AO content did not retroactively appear.
+  Existing user trips (not enumerated here — would need a
+  `public.trips` scan Adam has not authorized) will behave the same:
+  next generation surfaces AO; existing snapshots stay frozen unless
+  `refreshCorpusTiles()` from PR #302 runs.
+- **Flagged, not done:** Typesense search-index sync. The corridor
+  browse tiles work without it (RPC reads from `master_place`, not
+  Typesense); search results — the `/search` surface — will remain
+  AO-free on PROD until a search-sync is scheduled. Filed in BACKLOG.
+- **Also flagged:** the 60 manual_review-queued AO rows on PROD. These
+  need review before they become linked; noted in BACKLOG for a later
+  triage session. Analogous to the 4-row TEST tail from PR #241's
+  original ingest.
+- **All gates green** (`npm run -w data typecheck`, `npm run -w web
+  typecheck`, `cd web && npx next build` — all exit 0).
+- **New files this PR:**
+  - `data/ingestion/sources/atlas-oddities-markdown.ts` (+ tests)
+  - `data/scripts/atlas-oddities-apply-markdown-convert.ts` (idempotent,
+    TEST + PROD via `--allow-prod`)
+  - `data/scripts/atlas-oddities-markdown-sample.ts` (read-only sampler)
+  - `data/scripts/atlas-oddities-prod-verify.ts` (read-only PROD verify)
+  - `docs/decisions/2026-08-27-ao-description-plain-text.md`
+  - Modified: `data/scripts/atlas-oddities-manual-content-ingest.ts`
+    (accepts `--allow-prod`).
+
 ## 2026-08-27 (later) — manual GPS coordinate entry: post-merge verification hit a wrong premise, then a real infra limit
 
 - **The verification ask's own premise was wrong, and finding that came

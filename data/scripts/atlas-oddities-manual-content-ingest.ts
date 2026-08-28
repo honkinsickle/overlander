@@ -25,9 +25,20 @@ import { readFileSync } from "node:fs";
 import { getDb } from "../ingestion/lib/db.ts";
 
 const TEST_URL = "https://znldzjdatkogdktymtvi.supabase.co";
-if (process.env.SUPABASE_URL !== TEST_URL) {
-  console.error(`Refusing to run — SUPABASE_URL is not TEST. Got: ${process.env.SUPABASE_URL}`);
-  process.exit(1);
+const PROD_URL = "https://nqzeywzcowujzyegxbsr.supabase.co";
+const ALLOW_PROD = process.argv.includes("--allow-prod");
+{
+  const url = process.env.SUPABASE_URL ?? "";
+  if (url === PROD_URL) {
+    if (!ALLOW_PROD) {
+      console.error("Refusing to run — SUPABASE_URL points at PROD but --allow-prod not supplied.");
+      process.exit(1);
+    }
+    console.log("⚠  Running against PROD (SUPABASE_URL = PROD ref). --allow-prod supplied.");
+  } else if (url !== TEST_URL) {
+    console.error(`Refusing to run — SUPABASE_URL is neither TEST nor PROD. Got: ${url}`);
+    process.exit(1);
+  }
 }
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -310,7 +321,7 @@ async function backfillPhotoUrls(mpIds: string[]): Promise<number> {
 async function main() {
   console.log("=".repeat(72));
   console.log("AO manual content ingest —", DRY_RUN ? "DRY RUN" : "LIVE");
-  console.log("Target: TEST (", TEST_URL, ")");
+  console.log(`Target: ${process.env.SUPABASE_URL}`);
   console.log("=".repeat(72));
 
   // ── Read + choose ────────────────────────────────────────────────
