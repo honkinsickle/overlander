@@ -12,6 +12,85 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-28 — Family Destinations Guide: test-only editorial source (TEST end-to-end)
+
+- **Task:** test run of "Option A" (full AO parity) using
+  `https://familydestinationsguide.com/foodie-road-trip-california/` —
+  build a new editorial source with the same pipeline shape AO had, land
+  on TEST end-to-end, don't touch PROD. Precursor conversation asked
+  about Visit California's food article; that dataset had 0 per-stop
+  photos and terse blurbs, so we swapped to a longer-form Family
+  Destinations Guide article with rich descriptions + 2 per-stop images.
+- **Deliverables in `.context/family-destinations-guide/`** (dataset
+  prep, not in the ingest itself):
+  - `foodie-road-trip-california.csv` — 14 rows: name, city, slug,
+    signature_dish, description, photo_url, article_url, article_author,
+    article_date. Extracted verbatim from the article body.
+  - `geocode.ts` — Mapbox two-phase geocoder (city geocode →
+    proximity-biased Search Box POI lookup → 2-row manual override for
+    "Hodad's Ocean Beach" and "Burger Hut Forest Ave"). Adds
+    `lng, lat, geocode_relevance, geocode_matched` columns.
+  - `foodie-road-trip-california-geocoded.csv` — the resulting enriched
+    CSV the ingester reads.
+- **Ingester:**
+  `data/ingestion/sources/family-destinations.ts`. Structured like
+  `atlas-oddities.ts`. `source_id = 'family_destinations'`,
+  `source_quality_score = 0.4`, `inferred_category = 'restaurant'`.
+  `external_id` includes the article slug so future articles can't
+  collide. Registered in `manual.ts` as `--source family_destinations`.
+- **Migrations, applied to TEST:**
+  - `20260828110000_family_destinations_description_photo_precedence.sql`
+    — `field_precedence` row `('description', 'family_destinations', 7)`
+    (below atlas_oddities' 6). Extends
+    `backfill_master_place_photo_url()` to include family_destinations
+    at position 7.
+  - `20260828110100_pois_along_corridor_family_destinations_photo.sql`
+    — extends the corridor RPC photo lateral chain to include
+    family_destinations at position 4 (nps > ridb > wikipedia >
+    atlas_oddities > family_destinations).
+  - `20260828110200_master_place_search_export_family_destinations_photo.sql`
+    — extends the search-export view photo lateral to match.
+- **Deviation from the plan I first sketched:** the initial `db:push-verify --test`
+  command hung on the interactive `[Y/n]` prompt because the shell
+  didn't pipe stdin. Killed the stuck process, re-ran with `echo y |` in
+  front, and it landed cleanly. Not a code issue — just a runbook note
+  for future migration applies on this workflow.
+- **Ingest, materialize, backfill:**
+  - `npm run -w data ingest:manual -- --source family_destinations`:
+    14 fetched / 14 inserted / 0 errors, ~2s.
+  - `ER_APPLY_BATCH_SIZE=25 npm run -w data materialize -- --only-categories
+    restaurant --skip-sync`: 20 new master_places, 1 manual_review, 0
+    errors. **The 20 count exceeds the 14 family_destinations rows** —
+    the materialize sweep also picked up ~6 previously-unresolved
+    restaurant records from other sources (google_resolved, google) that
+    had been sitting in the ER queue. This is a byproduct of scoping by
+    `inferred_category = 'restaurant'`, not a bug. 13 of my 14 rows
+    linked; Nepenthe went to manual_review (a common name — likely
+    collided with an existing entity).
+  - `backfill_master_place_photo_url()` on the 13 linked mp_ids:
+    reported 13 rows changed.
+- **Live-verify PASSED on TEST via corridor RPC** across 5 corridors
+  (San Diego, Central Coast, LA metro, Napa, Chico → Sacramento). Each
+  corridor returned family_destinations rows with clean descriptions
+  and non-null nps_photo_url (returning the family_destinations photo).
+- **Live-verify PASSED on TEST via Typesense `places_test`** across
+  10 name probes: 9 of 10 return a `restaurant` document with correct
+  description and photo_url. Nepenthe was the miss (still in
+  manual_review, not yet linked to a mp → not in the view → not indexed).
+- **This pass touched:** 1 new source module, 1 manual.ts edit, 3 TEST
+  migrations, 1 new decision doc
+  (`docs/decisions/2026-08-28-family-destinations-test-only-editorial-source.md`),
+  the CSV dataset in `.context/`. No PROD reads, no PROD writes.
+- **Flagged for follow-up (in BACKLOG):**
+  - Nepenthe (1 row) sits in manual_review; needs a triage decision
+    (auto-link to the existing entity, or `resolve_place_match_to_new_master_place`).
+  - Photo credits: currently set to `"familydestinationsguide.com"` (the
+    aggregator, not the original photographer). If we ever promote,
+    revisit — original credits are user-profile URLs.
+  - Not scoped for PROD promotion this session; test-only per Adam's
+    directive. If a PROD promotion is later decided, the runbook is
+    identical to the AO runbook (PR #314 §Part 2).
+
 ## 2026-08-28 — Atlas Obscura: PROD /search gap closed (Typesense sync + view extension)
 
 - **Task:** Part 3 of the multi-part AO promotion — investigate `/search`
