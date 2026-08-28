@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 (later) — manual GPS coordinate entry: post-merge verification hit a wrong premise, then a real infra limit
+
+- **The verification ask's own premise was wrong, and finding that came
+  first.** Asked to verify the merged feature "on TEST" via the deployed
+  `main`. Merging to `main` deploys Vercel Production
+  (`overlander-one.vercel.app`), which points at PROD Supabase, not TEST —
+  proved by injecting a real TEST-signed session JWT into the live URL and
+  watching it bounce to sign-in (a PROD-configured site can't validate a
+  TEST-signed token). No write was attempted against that URL — confirmed
+  the mismatch first, then stopped and asked before switching to local dev.
+- **The UI-level behavior (toggle, region-exemption, inline validation)
+  verified clean against the actual merged code**, with zero drift from
+  the pre-merge branch check — same real headless-Chrome technique, this
+  time against `origin/main`'s tip.
+- **A shared-environment race made the full submit-to-DB check genuinely
+  inconclusive, not just inconvenient.** The local dev server this session
+  used was also showing signs (circumstantial, not proven) of independent
+  activity from another browser on the same machine — a real trip appeared
+  in TEST `public.trips` with data this session never entered. Rather than
+  assume it was this session's own doing, checked `lsof` (one listener on
+  :3210) and this session's own browser tab's DOM state directly before
+  concluding — the tab was still on `/plan/expedition`, idle, meaning this
+  session's own click genuinely hadn't registered yet at that point.
+- **Found a real browser-automation gotcha along the way:** plain
+  `.click()` on the submit button silently did nothing in this app's React
+  tree under CDP; `dispatchEvent(new MouseEvent('click', {bubbles: true,
+  cancelable: true, view: window}))` worked. 150+ seconds of polling had
+  produced no signal because the click had never actually registered —
+  worth remembering before concluding a submit handler is broken.
+- **The actual blocker for finishing the full check was the shared
+  Anthropic key running out of credits mid-session**, not a code defect —
+  the error surfaced cleanly via the app's own error banner. No trip was
+  persisted from this session's own attempt (confirmed by re-querying TEST
+  immediately after), so no cleanup was needed. The equivalent pipeline
+  check (real Mapbox + real Claude + real TEST insert) had already passed
+  9/9 twice pre-merge, when the key still had credit.
+
 ## 2026-08-27 — manual GPS coordinate entry for expedition start/end
 
 - **Started from a read-only investigation, not a code change.** Before
