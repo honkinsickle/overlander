@@ -182,6 +182,21 @@ post-promotion live check on real PROD trips — Adam should plan for
 that regardless, i.e. treat the first hour after PROD ingest as a
 sit-and-watch window.
 
+**2026-08-27 UPDATE — Path A AND Path B both executed.** See
+`docs/measurements/2026-08-27-ao-density-cascade.md`. Verdict: **safe
+to promote, with product-shape caveats.** Corridor-city selection is
+gazetteer-based (verified from source, not assumed) — no city adds or
+drops. `filterVisibleSpineItems` is the only gate AO can affect. Across
+8 sample corridors: 1,079 AO-only rows would be added to PROD (of
+2,858 total enriched on TEST), 97 of them are 5+ miles from any
+current PROD content (the upper bound on potential city-visibility
+flips). AO becomes the majority of the real-content pool on 6 of 8
+measured routes (rural corridors); a supplement on the dense CA + UT
+routes. No data-integrity risk, no code-path issue — remaining
+questions are product-shape (isolated-AO rate acceptable? rural-route
+majority acceptable? markdown-in-descriptions needs a converter?),
+not technical-safety.
+
 ---
 
 ## 3. Baked-trip impact

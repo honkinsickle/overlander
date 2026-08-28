@@ -12,6 +12,85 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — Atlas Obscura → PROD density-cascade measurement (read-only, TEST + PROD)
+
+- **Task:** measure the density-cascade risk of promoting the enriched
+  atlas_oddities corpus to PROD, per PR #310 §2 (both Path A —
+  TEST-side shape — and Path B — PROD read-only baseline). Read-only,
+  no PROD writes, no PROD-shape mutations. Answers the "safe to
+  promote?" question at the pool-composition + city-visibility layer.
+- **Deliverable:**
+  `docs/measurements/2026-08-27-ao-density-cascade.md` + a new script
+  `data/scripts/measure-ao-density-cascade.ts`.
+- **Script safety posture:**
+  - Two independent Supabase clients — TEST from `data/.env`, PROD
+    from `~/.config/overlander/env-backups/.env.production-backup`.
+  - Each client's URL is hardcoded-checked at construction; the script
+    refuses to run if either mismatches. `data/.env` was never touched;
+    the Supabase CLI was never re-linked.
+  - Only two shapes of DB call: `.rpc('pois_along_corridor', ...)` (a
+    `SECURITY DEFINER` SELECT function) and
+    `.from('source_record').select('master_place_id')`. No INSERT /
+    UPDATE / DELETE / DDL / RPC-with-side-effects anywhere in the
+    script.
+- **Sample routes:** eight LineStrings sweeping the AO-density
+  distribution — SF Bay + LA metro + Central Valley (CA), Portland →
+  Eugene (OR), Phoenix → Tucson (AZ), Reno → Las Vegas (NV), Salt
+  Lake City → Moab (UT), Seattle → Portland OR (WA-into-OR). Buffer
+  16km matches the RPC default.
+- **Confirmed via code read:** corridor-city SELECTION is
+  gazetteer-based (`web/src/lib/corridor/derive.ts` —
+  `deriveCorridorCities` takes `GazetteerCity[]` and applies the ≤3mi
+  `corridorMi` rule; POI density is not a parameter). Adding AO
+  cannot add or drop cities from the spine — verified from source,
+  not assumed. Only pool composition and `filterVisibleSpineItems()`
+  visibility change.
+- **Method:** for each route, called
+  `pois_along_corridor(route, 16000, null)` against TEST **and** PROD
+  in parallel. For each TEST row, checked whether its master_place has
+  any non-atlas_oddities active source_record. Rows with none are
+  labelled "AO-only" — they would disappear from the RPC entirely
+  without AO (`source_count > 0` filter drops them). Approximated
+  `isRealContent` (non-fuel + has description) and measured the
+  great-circle distance from each AO-only real-content row to the
+  nearest PROD row on the same corridor. AO-only rows >5 mi from any
+  PROD row are flagged as **potential city-visibility flips**.
+- **Real numbers (this session, computed):** across all 8 sampled
+  routes: **1,079 AO-only rows**, all of which clear `isRealContent`.
+  **97 are 5+ miles from any current PROD content** — the upper
+  bound on potential corridor-city flips. Breakdown per route
+  in the measurement doc's table §Raw results.
+- **AO share of the proposed real-content pool** (per corridor,
+  computed): SF Bay 38%, UT 16% — AO is a supplement. LA metro 95%,
+  CV 96%, OR 86%, AZ 82%, NV 86%, WA 91% — **AO becomes the
+  majority** of the real-content pool on the rural routes.
+- **AO-backed count is zero on every route.** Every AO-attributed row
+  in the TEST returns comes from a master_place with no other active
+  source_record — a direct consequence of AO's priority-6 posture
+  (any other source with a description would win attribution). This
+  is the expected shape, not a bug.
+- **Verdict: safe to promote, with caveats.** No data-integrity risk,
+  no cross-source entanglement, no downstream code changes needed.
+  Density changes materially — AO becomes the majority of real
+  content on 6 of 8 measured corridors. What Adam is deciding is a
+  product question (is the isolated-AO rate acceptable? is the rural-
+  route majority acceptable? does markdown-in-descriptions need a
+  converter first?), not a technical-safety question.
+- **Limits of this measurement** (called out in the doc §Caveats):
+  - The 5-mile flip proxy is approximate. A per-gazetteer-city
+    analysis using the real `deriveCorridorCities` would give exact
+    flip counts; the 97 upper bound is defensible without it.
+  - SF Bay's TEST return hit the PostgREST 1000-row cap. AO-only and
+    flip counts on that route are unaffected (both derived from the
+    AO subset).
+  - PROD user-trip count in scope not measured (would need a
+    `public.trips` PROD read; not authorized this session).
+- **This pass touched only `docs/` and
+  `data/scripts/measure-ao-density-cascade.ts` (new, read-only).**
+  Zero PROD writes; PROD reads limited to `pois_along_corridor` calls
+  on eight sample routes. `data/.env` NOT modified; Supabase CLI
+  link NOT changed.
+
 ## 2026-08-27 — manual GPS coordinate entry for expedition start/end
 
 - **Started from a read-only investigation, not a code change.** Before

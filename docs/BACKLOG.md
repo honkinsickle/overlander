@@ -3379,6 +3379,24 @@ _(add items here as they surface; keep one line each, promote to STATE.md
     (c) any density-cascade risk to PROD trip generation from adding
     a few thousand newly-content-rich POIs to the pool. Not measured
     this pass — the ingest was TEST-only.
+  - **UPDATE 2026-08-27 (density measurement) — DENSITY-CASCADE RISK
+    MEASURED.** Full report:
+    `docs/measurements/2026-08-27-ao-density-cascade.md` + script
+    `data/scripts/measure-ao-density-cascade.ts`. Read-only, TEST +
+    PROD in parallel; `data/.env` untouched, no CLI relink. Across 8
+    sample corridors: 1,079 AO-only rows would be added to PROD; 97
+    are 5+ miles from any current PROD content (upper bound on
+    potential corridor-city flips). Corridor-city selection is
+    gazetteer-based (verified in source at
+    `web/src/lib/corridor/derive.ts`), so no cities are added or
+    dropped from the spine — only pool composition and
+    `filterVisibleSpineItems()` visibility changes. AO becomes the
+    majority of the real-content pool on 6 of 8 measured routes
+    (rural corridors). Verdict: **safe to promote, with product-shape
+    caveats** (no data-integrity risk, no code-path issue; product
+    call on isolated-AO rate, rural-route majority, and
+    markdown-in-descriptions rendering fidelity remains). Scoping
+    doc §2.4 updated with the finding.
   - **UPDATE 2026-08-27 (scoping) — PROD-promotion question SCOPED but
     NOT DECIDED.** Full scoping doc:
     `docs/proposals/2026-08-27-atlas-oddities-prod-promotion-scoping.md`.
