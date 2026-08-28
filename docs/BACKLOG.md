@@ -3349,3 +3349,28 @@ _(add items here as they surface; keep one line each, promote to STATE.md
   question, not incidental. Status check on 2026-08-27 confirmed the
   investigation was never started (or was started elsewhere and lost). Adam
   to decide whether to formally re-dispatch.
+
+## Surfaced 2026-08-27 (day-detail spine arc, #300–#305)
+
+- **A different Conductor workspace's docs commit claims PROD is in a state
+  never independently verified in this repo's history.** While recovering the
+  orphaned "Refresh trip data" work for #302, found commit `340d7c0` on the
+  `cayenne` workspace's `nps-injest` branch (not on `main`, not part of any
+  merged PR): "docs: PROD photo pipeline deployed — migrations, backfills,
+  refresh action live," asserting 11 migrations applied to PROD, an NPS
+  campground/park backfill (198 source_records), a Wikipedia backfill (783
+  source_records: 541 high, 242 medium confidence), and `master_place.photo_url`
+  at 4,439 rows. **None of this was ported into #302 or verified here** — the
+  PR deliberately left that commit behind precisely because its PROD claims
+  were unverified (see PR #302's description). Before trusting these figures
+  for anything PROD-facing, re-verify against actual PROD state; don't assume
+  the claim is stale-but-still-true or stale-and-false without checking.
+- **No ADR exists for the #300–#305 arc.** Candidate content if one gets
+  written: the `hasRealContent` single-check-generalizes-cleanly pattern
+  (empty → fuel-only → undescribed all fell out as special cases of one rule
+  rather than three filters to keep in sync); the soft-nudge-vs-hard-rule
+  reasoning behind #304's prompt change (risk of the LLM over-indexing on
+  anchor cities against a tight 2–4-stop/day budget); and `prominence_score`'s
+  explicit status as an imperfect signal (source-corroboration + NPS/RIDB
+  backing, not true "interest") used because it's what's available today, not
+  blocked on the "Yo Trippin Verified" quality-signal work.

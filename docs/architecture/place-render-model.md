@@ -206,6 +206,26 @@ shape, `CorridorPlace` — it does not branch per source downstream
 | **`placeId`** | ✔ | **NOT MAPPED** | **NOT MAPPED** |
 | `curated` / `curatedMovable` / `milesFromStart` / `keyStopNote` | ✔ (`curatedMovable: true`) | ✗ | ✗ |
 | `removable` | ✗ | ✗ | `true` |
+| **`description`** (added PR #303, 2026-08-27) | ✔ `p.description` | ✔ `p.description` | ✔ `wp.description` |
+| **`prominenceScore`** (added PR #305, 2026-08-27) | ✔ `p.prominenceScore` | ✔ `p.prominenceScore` | **NOT MAPPED** — `Waypoint` carries no corpus prominence signal |
+
+`description`/`prominenceScore` both feed the spine's per-city visibility filter
+(`hasRealContent` — PRs #300/#301/#303, `filterVisibleSpineItems` in
+`day-detail-corridor.tsx`) and, as of PR #305, the featured-pick selector
+(`pickProminenceFeature`) that ranks a city's own pool when no LLM curation
+names it. `BrowsePlace.prominenceScore` itself was a real wiring gap fixed by
+#305: `master_place.prominence_score` is selected by the `pois_along_corridor`
+RPC (and already used to `ORDER BY` its results) but `mapMasterPlaceRow()` had
+silently dropped it before it ever reached `BrowsePlace`. **Both fields are
+absent on any trip baked before 2026-08-27** — existing stored
+`segmentSuggestions` are snapshots, so a pre-existing trip needs
+`refreshCorpusTiles()` (#302) or a regeneration before the spine filter/feature
+logic has real values to work with; until then it degrades safely (an
+undescribed/unscored tile is simply never featured or never counted as real
+content, not treated as an error). `[read source: components/trip/
+day-detail-corridor-column.tsx placePool(); read source: lib/trip-browse/
+federated.ts mapMasterPlaceRow(); read source: supabase/migrations/
+20260826160000_pois_along_corridor_wikipedia_photo.sql]`
 
 **Consequence, and it is load-bearing:** `placeId` reaches the card **only** from
 `segmentSuggestions`. Tiles from `day.suggestions` and from `waypoints` can never
