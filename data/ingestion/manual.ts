@@ -114,9 +114,13 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/family-destinations.ts");
       return mod.default;
     }
+    case "editorial_food": {
+      const mod = await import("./sources/editorial-food.ts");
+      return mod.default;
+    }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations, editorial_food`,
       );
   }
 }
