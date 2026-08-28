@@ -3379,6 +3379,23 @@ _(add items here as they surface; keep one line each, promote to STATE.md
     (c) any density-cascade risk to PROD trip generation from adding
     a few thousand newly-content-rich POIs to the pool. Not measured
     this pass — the ingest was TEST-only.
+  - **UPDATE 2026-08-27 (wave 2) — AZ/WA/NV/UT gap now CLOSED.** The
+    four remaining state manual datasets arrived later the same day
+    and were ingested via the same script (idempotence added so
+    wave 1's 1,789 rows were `unchanged` short-circuits, only 1,069
+    new rows were written + recomputed). Post-wave-2 TEST state:
+    2,858 atlas_oddities source_records carry an AO description +
+    photo (up from 1,789), 2,804 master_place rows carry an
+    AO-attributed description (up from 1,751), 2,846 carry a
+    photo_url (up from 1,792). 55 total CSV slugs across all seven
+    files remain unmatched to TEST — none ambiguous, all just absent
+    from the PR #241 anchor-CSV set. Live-verified across five
+    corridors (Portland OR, Seattle WA, Phoenix AZ, SLC UT, Las Vegas
+    NV) — all pass. **The three items still open under this thread**
+    reduce to: (b) PROD ingest of atlas_oddities at all, and
+    (c) density-cascade risk to PROD generation from adding the
+    now-six-state-uniform corpus. (a) — the AZ/WA/NV/UT gap — is
+    resolved.
   - **UPDATE 2026-08-27 (scoping) — PROD-promotion question SCOPED but
     NOT DECIDED.** Full scoping doc:
     `docs/proposals/2026-08-27-atlas-oddities-prod-promotion-scoping.md`.
