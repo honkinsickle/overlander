@@ -3355,14 +3355,19 @@ _(add items here as they surface; keep one line each, promote to STATE.md
 
 ## Surfaced 2026-08-27 (AO PROD-promotion follow-ups)
 
-- **Typesense sync deferred.** PROD's search index (`places_prod` collection)
-  does NOT include the newly-landed atlas_oddities rows — `master_place_search_export`
-  view will project them, but no sync ran this session (the materialize step used
-  `--skip-sync` because the current session env didn't carry Typesense credentials).
-  Corridor browse tiles work regardless (RPC reads from `master_place`, not
-  Typesense), but the `/search` surface will remain AO-free on PROD until a sync
-  runs. Simple follow-up: `npm run -w data sync-typesense` with Typesense creds
-  loaded. Not a code change.
+- **~~Typesense sync deferred.~~ CLOSED 2026-08-28.** `search:sync` ran
+  against PROD twice this session. The first pass indexed all AO docs
+  (2,804 oddity documents on `places_prod`, up from 0) but flagged a
+  pre-existing view gap: `master_place_search_export`'s `photo_url`
+  lateral filtered on `('nps', 'ridb')` only, so AO (and Wikipedia)
+  photos never reached `/search` even after sync. Fixed by migration
+  `20260828100000_master_place_search_export_wikipedia_atlas_oddities_photo`
+  (extended `source_id in` list to
+  `('nps','ridb','wikipedia','atlas_oddities')` with the same precedence
+  order the corridor RPC uses), then re-synced. Post-sync verify: 8/8
+  known AO probes return the expected oddity doc with clean description
+  + non-null photo_url. Full LOG entry: `docs/LOG.md` §2026-08-28
+  (Atlas Obscura: PROD /search gap closed).
 - **60 AO source_records on PROD are in `manual_review` (unlinked).** These
   are candidate matches whose confidence sat below the auto-link floor and above
   the reject floor. Analogous to the ~149-row TEST tail from PR #241; the

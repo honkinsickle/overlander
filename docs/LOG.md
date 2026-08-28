@@ -12,6 +12,95 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-28 — Atlas Obscura: PROD /search gap closed (Typesense sync + view extension)
+
+- **Task:** Part 3 of the multi-part AO promotion — investigate `/search`
+  before assuming Typesense, then close whatever gap exists so AO surfaces
+  on `/search` post-PR-#314. Adam's premise (that `/search` might be running
+  on live Google Text Search) explicitly needed confirming from code, not
+  inferring.
+- **Investigation, cited from code:**
+  - `web/src/app/search/page.tsx` renders `<PlaceSearch>` (line 20).
+  - `web/src/components/trip/place-search.tsx` calls `search()` from
+    `@/lib/search`.
+  - `web/src/lib/search.ts` imports `SearchClient` from `typesense`. No
+    Google Text Search fallback on this surface. `/search` is Typesense-only.
+- **Sync mechanism confirmed:** `data/search/sync-typesense.ts`, corpus-wide
+  (reads from `master_place_search_export`, no per-source scoping),
+  idempotent (upsert by id), prunes docs not in the current view result.
+  Registered as `npm run -w data search:sync`. Shared cluster + separate
+  collection per env per `docs/decisions/2026-07-23-typesense-collection-per-env.md`.
+- **PROD baseline** (queried this session, read-only via admin key on the
+  places_prod collection): **16,516 documents** (matches `docs/DATA_INVENTORY.md`
+  §PROD's 2026-08-11 figure exactly), **0 oddity documents**, 30 distinct
+  primary_category values, none oddity. Eight direct AO-name queries
+  (Voodoo Doughnut, Ethel M Botanical Cactus Garden, Berlin Wall Urinal,
+  Willamette Stone, Tovrea Castle, Summum Pyramid, Boontling Language of
+  Boonville, Temporary Port Chicago) returned zero real AO hits — confirming
+  the gap.
+- **First sync pass, corpus-wide against PROD** (env swap: PROD Supabase +
+  shared Typesense host/key + `TYPESENSE_COLLECTION=places_prod` per the
+  2026-07-23 ADR): fetched 20,834 rows, indexed 20,834, 0 failed, 0
+  pruned. The sync auto-added two missing schema fields to `places_prod`
+  (`photo_url`, `description_source`) that had drifted since the schema
+  was last updated. Duration ~89s. Post-sync: 2,804 oddity docs indexed.
+  All 8 AO-name probes now returned the exact expected AO document; all
+  descriptions rendered clean (0 markdown leaks — PR #314's converter
+  output propagated correctly).
+- **Real gap surfaced by the first sync's verify:** every AO doc returned
+  `photo_url = null` in Typesense, even though PR #314 had populated
+  `master_place.photo_url` for 2,784 AO-linked mps on PROD. Root cause:
+  `master_place_search_export`'s `photo_url` lateral filters on
+  `source_id in ('nps', 'ridb')` (from migration 20260810180400) — the
+  same class of source-list-carried-forward gap the corridor RPC had for
+  Wikipedia and atlas_oddities before PRs #299 + #314 extended it. The
+  view was never updated in parallel. **This affected `/search` cards for
+  wikipedia-photoed AND atlas_oddities-photoed places uniformly** — Wikipedia's
+  gap was pre-existing (since 2026-08-26), AO's was new.
+- **Deviation from the task's literal "sync step" scope, flagged in the
+  PR:** authored migration
+  **`20260828100000_master_place_search_export_wikipedia_atlas_oddities_photo.sql`**
+  to extend the view's photo lateral's `source_id in` list to
+  `('nps', 'ridb', 'wikipedia', 'atlas_oddities')` with precedence order
+  `nps > ridb > wikipedia > atlas_oddities` — the same order PR #299 + PR
+  #314 wrote into the corridor RPC. Applied to TEST first,
+  `db:push-verify -- --test`; direct view query on TEST confirmed AO photo
+  URLs surface via the view. Applied to PROD via `db:push-verify`
+  (currently-linked project pattern per the runbook), 0 errors.
+- **Second sync pass, PROD** (post-migration): fetched 20,834, indexed
+  20,834, 0 failed, 0 pruned. Duration ~88s. Post-sync re-verify: **every
+  AO probe now returns `photo=y`** — 8/8 known AO names surface with the
+  expected oddity doc, its converted description, `description_source =
+  'source'`, and a non-null `photo_url` field.
+- **Also synced TEST** for parity (`places_test` collection now matches
+  the extended view on the TEST project).
+- **Env + CLI restored to TEST** at the end (`data/.env` from
+  `~/.config/overlander/env-backups/.env.test-backup`, CLI relinked to
+  `znldzjdatkogdktymtvi`).
+- **Numbers this session** (all queried, this-session-computed):
+  - `places_prod` baseline: 16,516 docs / 0 oddity docs / 30 categories.
+  - `places_prod` post-sync: **20,834 docs / 2,804 oddity docs**. Delta
+    +4,318 — of which ~2,806 are AO; the other ~1,500 are drift from
+    prior source updates that never got synced (photo_url backfills for
+    NPS/RIDB, Wikipedia photo landings, etc.). Both sync passes upserted
+    all 20,834 docs; the second re-imported after the schema change to
+    fill `photo_url` on the newly-widened source set.
+- **What this closes:** the search-index gap flagged in PR #314's LOG entry
+  ("Typesense sync deferred — the `/search` surface will remain AO-free
+  until a sync runs"), plus the same-shape pre-existing Wikipedia gap that
+  had been silent since 2026-08-26.
+- **Flagged, not done this pass:**
+  - The `master_place_search_export` view rewrite is
+    IMPLIED PROD deployment via this session's migration + sync (view now
+    surfaces Wikipedia + AO photos); Vercel's `NEXT_PUBLIC_TYPESENSE_COLLECTION`
+    envvar didn't change so no rebuild is required.
+  - Triage of the 60 manual_review AO rows from PR #314 — still open.
+  - NPS/RIDB literal-HTML-in-descriptions rendering — still open (same
+    class as AO markdown was, adjacent scope).
+- **This pass touched:** 1 SQL migration (applied TEST + PROD), 2 new
+  read-only scripts (`typesense-places-prod-baseline.ts`,
+  `typesense-places-prod-verify.ts`), docs. No web/UI change.
+
 ## 2026-08-27 — Atlas Obscura oddities LIVE ON PROD (markdown converter + full six-state promotion)
 
 - **Task:** two parts. Part 1 — build a markdown → plain-text converter
