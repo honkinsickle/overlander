@@ -43,6 +43,15 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > `places_prod` sync. AO tiles surface on corridor browse (RPC) but NOT on
 > `/search` results — flagged in BACKLOG for a follow-up Typesense sync.
 >
+> **⚠️ Update 2026-08-28:** the search-index gap is now closed. Migration
+> `20260828100000_master_place_search_export_wikipedia_atlas_oddities_photo`
+> extended the view's photo lateral to include wikipedia + atlas_oddities;
+> `search:sync` ran twice against PROD. Post-sync `places_prod` state
+> (queried this session): **20,834 documents / 2,804 oddity documents**
+> (baseline 16,516 / 0 oddity). All 8 AO-name probes surface with a clean
+> converted description AND a non-null `photo_url`. Full narrative:
+> `docs/LOG.md` §2026-08-28.
+>
 > **⚠️ Re-verified 2026-08-11 `[queried PROD, read-only]` — the counts below
 > this box (from 2026-07-23) are SUPERSEDED for totals; the corpus roughly
 > doubled with the six-state OSM camping ingest, then the bbq/fire_pit
