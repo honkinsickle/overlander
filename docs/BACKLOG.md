@@ -3353,6 +3353,30 @@ this docs pass — none applied.**
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
 
+## Surfaced 2026-08-28 (family_destinations test-run follow-ups)
+
+- **Nepenthe sits in `manual_review` on TEST after the 2026-08-28
+  family_destinations ingest.** 13 of 14 rows auto-linked; Nepenthe's ER
+  scored below auto-link but above reject — likely name-collides with an
+  existing entity. Runbook to resolve: `resolve_place_match_to_new_master_place`
+  RPC (as with AO's 60-row manual_review tail on PROD). Small; not blocking
+  the test run's outcome.
+- **Photo credit `"familydestinationsguide.com"` is aggregator-not-photographer.**
+  The article's own photo credits are Google Maps and Yelp contributor
+  profile URLs. If the source ever heads toward PROD, the credit string
+  needs a real-photographer resolution step. TEST-only content today,
+  flagged for that possible future.
+- **PROD promotion of `family_destinations` is NOT scoped.** Test-only
+  per Adam's 2026-08-28 directive. If ever promoted, the runbook mirrors
+  AO's from PR #314 §Part 2 — CLI relink, `data/.env` swap, apply the 3
+  migrations to PROD, run the ingester + materialize + `search:sync`. No
+  additional infrastructure needed.
+- **Ingester is single-article-per-CSV; future articles land under the
+  same source_id via `.context/family-destinations-guide/<slug>-geocoded.csv`.**
+  The ingester globs all `*-geocoded.csv` files in the directory, so
+  adding a second article is a matter of dropping in a new CSV. Not a
+  code change.
+
 ## Surfaced 2026-08-27 (AO PROD-promotion follow-ups)
 
 - **~~Typesense sync deferred.~~ CLOSED 2026-08-28.** `search:sync` ran
