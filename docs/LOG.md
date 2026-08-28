@@ -12,6 +12,100 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — Atlas Obscura manual content ingest (OR + CA + LA → TEST)
+
+- **Task:** ingest manually-supplied Atlas Obscura editorial content
+  (descriptions + hero photos) for the existing atlas_oddities corpus on
+  TEST. Sources: `/Users/adamwagner/atlas-obscura-{or,ca}/data/*.csv`.
+  Adam's directive was Flow C — content flows all the way to master_place
+  so it appears in trip generation, not just source_record.
+- **Provenance gate.** The OR/CA READMEs describe scraping via `r.jina.ai`
+  (an atlasobscura.com bot-detection bypass); the 2026-08-20 no-fetch ADR
+  (on `odd-food` branch, not on `main`) names exactly this technique. I
+  stopped and flagged before touching the CSV. Adam superseded the ADR
+  for this ingest ("test content, not live commercial") and directed me
+  NOT to modify/reference the ADR in this PR — it stays scoped to
+  live-site scraping on the `odd-food` branch. No decision doc touched
+  in this PR.
+- **Match strategy: exact join on `atlasobscura:<slug>` external_id**
+  (slug parsed from AO URL). Preferred over name matching — the existing
+  atlas_oddities ingester (PR #241) uses the same slug-based external_id,
+  so it's the natural join key. Not fuzzy.
+- **Sources resolved with priority CA > OR > LA.** CA has 1,564 rows +
+  photos; OR has 230 independent rows + photos; LA has 245 rows but no
+  photo columns — after dedup against CA (near-subset), LA contributed
+  exactly 2 slugs. Union: **1,796 unique slugs**.
+- **Match rate: 1,789 / 1,796 CSV slugs → existing TEST source_records.**
+  All 1,789 linked to a master_place (100% link rate — no unlinked
+  source_records in the matched set). 7 unmatched slugs skipped (all
+  simply absent from TEST, none ambiguous): the-dorn-pyramid,
+  mojave-phone-booth, rosicrucian-park, museum-of-western-film-history,
+  salton-sea-duck-blinds, top-gun-piano (CA), tin-pan-theater (OR).
+- **Landing schema.** `source_record.normalized_payload.description ←
+  about`, `source_record.normalized_payload.photo ← {url:
+  photo_source_url, credit: "Atlas Obscura"}`. Matches the existing
+  NPS/RIDB/Wikipedia shape. `blurb`, `know_before_you_go`, `tags`,
+  local `photo_file` JPEGs — not touched (scope was description + photo).
+- **Flow C mechanism (three DB pieces).**
+  - Migration **`20260827180000`** adds `field_precedence` row
+    `('description', 'atlas_oddities', 6)` (below the existing 5-source
+    chain, so AO only fills gaps) AND `CREATE OR REPLACE`s
+    `backfill_master_place_photo_url()` to add atlas_oddities at
+    precedence position 6 (below nps/ridb/wikipedia/blm/state_parks).
+  - Migration **`20260827180100`** extends `pois_along_corridor()`'s
+    photo lateral join to include atlas_oddities (position 3, below
+    nps/ridb/wikipedia — same shape as the 2026-08-26 wikipedia
+    extension). Without this, the browse-facing RPC would return
+    `nps_photo_url` from the old 3-source lateral and AO photos would
+    stay latent. Search-export view NOT extended — Wikipedia PR #299
+    didn't either, so this mirrors that.
+  - Ingest script
+    **`data/scripts/atlas-oddities-manual-content-ingest.ts`** updates
+    normalized_payload, calls `recompute_master_place(id)` per unique
+    linked mp_id, and calls `backfill_master_place_photo_url(ids[])` on
+    the same set. 1,789 SR updates + 1,787 recomputes + one chunked
+    photo backfill; 0 failures throughout. ~7 min end-to-end.
+- **Result — source_record** (queried TEST 2026-08-27): 1,789 carry an
+  AO `normalized_payload.description`; 1,779 carry an AO
+  `normalized_payload.photo.url` (baseline: 0 / 0). The 10 gap between
+  description and photo counts is the LA-only rows + the CA rows the
+  README flags as photo-less — description written, photo left null.
+- **Result — master_place** (queried TEST 2026-08-27, scoped to the
+  1,787 unique mp_ids the ingest touched): 1,751 now carry an
+  AO-attributed description; 36 kept a description from a higher-priority
+  source (nps/ridb/google/ioverlander/osm) — correct, by design of the
+  priority-6 posture. Photo_url populated on 1,777 (up from 32);
+  `backfill_master_place_photo_url()` reported 1,745 mp rows whose
+  photo_url actually changed. Across ALL 2,868 distinct atlas_oddities-
+  linked master_place rows (a superset of the 1,787 scope), 1,792 carry
+  a photo_url — the extra 15 outside my touched set are AO-linked mps
+  with a pre-existing higher-priority-source photo.
+- **Live-verify PASSED via `pois_along_corridor` on a Portland-area
+  corridor** (2-point line through downtown + NE, 16km buffer). RPC
+  returned 263 rows; 67 carry BOTH `attribution.description =
+  'atlas_oddities'` AND `photo_credit = 'Atlas Obscura'`, with real AO
+  editorial text (Voodoo Doughnut, Willamette Stone, Wilhelm's Portland
+  Memorial) in `description_source = 'source'`. This is the actual read
+  path trip generation uses for browse tiles (via `fetchFederatedPois`
+  → `mapMasterPlaceRow` in `web/src/lib/trip-browse/federated.ts`), so
+  the verify is end-to-end, not just DB shape. Test in
+  `data/scripts/atlas-oddities-manual-verify.ts`, idempotent.
+- **Closes** the "data quality/readiness" open thread from the
+  2026-08-27 status check (PR #306). The remaining thread from that
+  status check is **TEST → PROD promotion** — orthogonal to this ingest
+  and unchanged; PROD still has zero atlas_oddities rows. BACKLOG
+  updated to reflect the new state.
+- **Format gotcha to note for future AO reads.** The `about` field
+  contains raw markdown (inline `[link](url)` syntax, real newlines,
+  literal `[Portland](https://...)`-style links). Landed as-is in
+  `normalized_payload.description` and thence in `master_place.description`.
+  Downstream tile rendering treats descriptions as text; markdown links
+  will render literally, not as hyperlinks. Acceptable for TEST content
+  per Adam's directive; if AO content ever moves to a production-facing
+  surface, a markdown → plain-or-rendered conversion is a separate
+  question.
+
+
 ## 2026-08-27 — day-detail spine: density-cascade cleanup + prominence-ranked featured picks (#300–#305)
 
 - **Started from a screenshot, not a hunch:** strict-proximity corridor selection (#296) was surfacing 21–29 bare corridor-city headers/day with nothing under them (no card, no photo, no "Explore more"). #300 (`ca46f57`) added `filterVisibleSpineItems()` to drop a city from the RENDERED spine (not the data — `Day.corridorCities` is untouched) when its pool is genuinely empty and it has no featured card. Start/end anchors always render regardless.
@@ -69,6 +163,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **This pass touched only `docs/LOG.md` and `docs/BACKLOG.md`** — no code, no
   schema, no PROD reads, no TEST reads. Committed on branch
   `oddity-promotion-status-check`, PR opened against `main` for Adam to review.
+.
 
 ## 2026-08-26 — NPS campground + park photo extraction
 

@@ -3349,6 +3349,26 @@ _(add items here as they surface; keep one line each, promote to STATE.md
   question, not incidental. Status check on 2026-08-27 confirmed the
   investigation was never started (or was started elsewhere and lost). Adam
   to decide whether to formally re-dispatch.
+  - **UPDATE 2026-08-27 (later) — data quality/readiness thread CLOSED for
+    OR + CA + LA scope; TEST → PROD promotion thread still OPEN.** The
+    manual AO content ingest landed 1,789 AO editorial descriptions and
+    1,779 AO photo urls onto TEST atlas_oddities source_records (of
+    2,870 total; the roughly 1,081 not covered by this ingest are the AO
+    rows in the four other states — AZ, WA, NV, UT — which have no manual
+    dataset yet). Descriptions flow to `master_place.description` via a
+    new `field_precedence` row (priority 6); photos flow to
+    `master_place.photo_url` via an extended `backfill_master_place_photo_url`
+    RPC and to `pois_along_corridor`'s `nps_photo_url` via a matching
+    lateral-join extension. Live-verified end-to-end on TEST via a
+    Portland-corridor RPC call. So the "data quality/readiness" open
+    question for two of six AO-state datasets is now answered: the
+    content is real, the pipeline surfaces it, and trip generation on
+    TEST will render it. **What's still open under this thread:**
+    (a) AZ/WA/NV/UT manual datasets — same treatment when supplied,
+    (b) PROD ingest of atlas_oddities at all (still 0 rows), and
+    (c) any density-cascade risk to PROD trip generation from adding
+    a few thousand newly-content-rich POIs to the pool. Not measured
+    this pass — the ingest was TEST-only.
 
 ## Surfaced 2026-08-27 (day-detail spine arc, #300–#305)
 
