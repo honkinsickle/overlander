@@ -12,6 +12,61 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-27 — Atlas Obscura oddities: PROD-promotion scoping (no go/no-go decision made)
+
+- **Task:** scope-only pass on how the AO corpus (now enriched on TEST via
+  PR #309) would promote to PROD, which currently has zero atlas_oddities
+  rows. Explicit no-op on the promotion itself — plan and open questions
+  only, no PROD writes, no PROD reads this session (all analysis TEST-side
+  or from `docs/DATA_INVENTORY.md` snapshots).
+- **Deliverable:**
+  `docs/proposals/2026-08-27-atlas-oddities-prod-promotion-scoping.md`.
+- **Key findings (full detail in the proposal):**
+  - **No general TEST→PROD sync exists.** `data/entity-resolution/promote.ts`
+    is ER match application, not project sync. Every prior PROD ingest
+    (OSM six-state, NPS six-state, state parks) followed the same
+    supabase-CLI-relink + `data/.env`-swap runbook, ran the source's own
+    ingester against PROD, and reverted. AO's promotion is that same
+    runbook applied twice — once for the PR #241 anchor CSVs (Step A),
+    once for the PR #309 manual-content script (Step B) — plus PR #309's
+    two migrations landing on PROD in between.
+  - **Density-cascade risk characterized in SHAPE but NOT MEASURED.**
+    Corridor-city selection is geometric (3mi to polyline per PR #296)
+    and doesn't change with POI density. What DOES change: pool
+    composition inside each corridor city, and whether
+    `filterVisibleSpineItems()` (PR #300–#303) drops a city or not
+    with AO content added. Two viable read-only measurement paths
+    identified (TEST-corpus RPC diff; PROD read-only shape query),
+    neither run this pass — explicit deferral.
+  - **Enriched AO POIs by state on TEST (real, this-session-computed):**
+    CA 1,537 (86%), OR 227 (13%), state-NULL 23. AZ/WA/NV/UT all zero —
+    no manual dataset yet. Full breakdown incl. the 2,868 all-AO figure
+    in the proposal §2.2 and in
+    `data/scripts/atlas-oddities-prod-scoping-density.ts`.
+  - **Baked-trip impact:** existing PROD trips (`la-to-portland`, user
+    trips, the standing PROD instrument) will NOT retroactively surface
+    AO content — `segmentSuggestions` are frozen snapshots per PR #302's
+    lesson. Two paths flagged (do-nothing default; bulk-refresh via a
+    not-yet-built wrapper around `refreshCorpusTiles`). Adam's decision.
+  - **Rollback is clean.** `UPDATE source_record SET is_active = false
+    WHERE source_id = 'atlas_oddities'` + recompute affected mps + rerun
+    `backfill_master_place_photo_url` on those mps. No cross-source
+    entanglement. The two migrations can stay applied on PROD (additive)
+    or be `CREATE OR REPLACE`'d back to their prior forms if desired.
+  - **AZ/WA/NV/UT gap:** three sequencing options (§5) — promote OR/CA/LA
+    now, wait for six-state, or promote only-enriched-subset. Doc
+    recommends A, flags it's Adam's call.
+- **Doc's own recommendation: NO-GO this session at any timing.** Three
+  prerequisites listed: Adam decides §5 A/B/C; run the TEST-side RPC
+  measurement (Path A in §2.4); decide baked-trip strategy in §3.
+- **What I could NOT investigate safely without touching PROD** (explicit
+  list in the proposal): exact PROD OR/CA-region density today, PROD
+  user-trip count in scope, `master_place_search_export` row-count
+  reshape, and pending-migration ledger drift. All reachable with safe
+  read-only PROD queries whenever Adam authorizes.
+- **This pass touched only `docs/` and `data/scripts/atlas-oddities-prod-scoping-density.ts`
+  (new, read-only).** No schemas, no PROD reads, no PROD writes.
+
 ## 2026-08-27 — Atlas Obscura manual content ingest (OR + CA + LA → TEST)
 
 - **Task:** ingest manually-supplied Atlas Obscura editorial content
