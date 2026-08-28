@@ -3369,6 +3369,26 @@ _(add items here as they surface; keep one line each, promote to STATE.md
     (c) any density-cascade risk to PROD trip generation from adding
     a few thousand newly-content-rich POIs to the pool. Not measured
     this pass — the ingest was TEST-only.
+  - **UPDATE 2026-08-27 (scoping) — PROD-promotion question SCOPED but
+    NOT DECIDED.** Full scoping doc:
+    `docs/proposals/2026-08-27-atlas-oddities-prod-promotion-scoping.md`.
+    Covers: (§1) no general TEST→PROD sync tool exists — every prior
+    source ingest re-ran the source's own ingester against PROD, and
+    AO's promotion is a composed 2-step (PR #241 anchor CSVs + PR #309
+    manual-content enrichment) plus the two PR #309 migrations landing
+    on PROD too. (§2) density-cascade risk characterized in shape but
+    NOT MEASURED — two viable read-only measurement paths identified
+    (TEST-corpus RPC diff; PROD read-only shape query), neither
+    executed. (§3) baked-trip impact — decision point on do-nothing
+    vs bulk-refresh. (§4) rollback is clean subtractive on
+    `source_record.is_active` + recompute; no cross-source
+    entanglement. (§5) three sequencing options (OR/CA/LA now vs wait
+    for six-state vs enriched-subset-only) — recommendation is A but
+    Adam's call. Doc's own recommendation: **NO-GO this session at
+    any timing**, three measurements/decisions listed as
+    prerequisites. Depends on PR #309 landing before actual PROD
+    promotion; the scoping itself is independent of PR #309's merge
+    order.
 
 ## Surfaced 2026-08-27 (day-detail spine arc, #300–#305)
 
