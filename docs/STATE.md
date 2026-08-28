@@ -1,3 +1,28 @@
+# STATE — branch `docs-wrap-2026-08-28` · 2026-08-27 (later) (**newest
+truth: PR #308 (manual GPS coordinate entry) is MERGED** — squash-merged to
+`main` as `e7f4767` `[gh pr view 308]`. Post-merge verification (asked for,
+this session) found the task's own premise needed correcting first:
+merging to `main` deploys Vercel **Production** (`overlander-one.vercel.app`),
+which points at **PROD Supabase, not TEST** — proved by injecting a real
+TEST-signed session JWT into that live URL and watching it bounce to
+sign-in, corroborated by the sign-in page's real Google-only production
+flow. **No hosted deployment of `main` talks to TEST.** No write was
+attempted against Production. Switched to a local dev server on
+`origin/main`'s tip instead, per direction. **UI-level check PASSED clean,
+no drift from pre-merge:** the coordinate-entry toggle works on both START
+and END rows, an out-of-region point (NYC) is accepted per the ADR's
+exemption (submit stays enabled), and the out-of-range validation still
+shows its inline error. **The full submit-to-persisted-trip check was
+INCONCLUSIVE, for reasons external to this feature's code:** the shared
+local dev server shows circumstantial (not confirmed) signs of a second,
+independent browser session running concurrently, and this session's own
+submission failed at the LLM call because the shared `ANTHROPIC_API_KEY`
+had run out of credits — a real external resource constraint, not a code
+defect; no trip was persisted from this session's own test. The
+pipeline-level equivalent of this exact check already passed 9/9 twice
+pre-merge, when the key had credit. See `## 2026-08-27 (later)` below for
+the full account.)
+
 # STATE — branch `gps-coordinate` · 2026-08-27 (**newest truth: manual GPS
 coordinate entry for `/plan/expedition` start/end/stops, built on a prior
 read-only investigation confirming no `place_id` dependency exists anywhere
@@ -14,7 +39,10 @@ days) + a real signed-in `public.trips` insert/read-back/delete on TEST, all
 function-for-function. A real headless-Chrome DOM check separately confirmed
 the toggle renders on-screen and reachable (not occluded), switches the
 input, shows the inline range error on an out-of-range latitude, and reverts
-cleanly. **PR #308**, open against `main`, not merged — awaiting review.
+cleanly. ~~**PR #308**, open against `main`, not merged — awaiting
+review.~~ **CORRECTED 2026-08-27 (later) — MERGED** as `e7f4767`; see the
+masthead above and `## 2026-08-27 (later)` below for post-merge
+verification.
 See `## 2026-08-27` below for the full session account.)
 
 # STATE — branch `corridor-prominence-featured-pick` · 2026-08-27 (day-detail spine: density-cascade cleanup + featured picks, #300–#305) (**newest truth: a six-PR arc on the read-spine (`day-detail-corridor.tsx` / `day-detail-corridor-column.tsx`), all MERGED, `origin/main` tip now `6d008c0` (#306 — an unrelated status-check session, not this arc's work).** Started from a real screenshot: strict-proximity corridor selection (#296) was surfacing 21–29 bare corridor-city headers/day with nothing under them. **#300** (`ca46f57`) added `filterVisibleSpineItems()` — a city with an empty pool and no featured card is dropped from the RENDERED spine only (`Day.corridorCities`/`buildSpineItems`'s data output is untouched, so fuel-gap/day-split/plan-diff logic is unaffected by construction). Start/end anchor nodes always render regardless of content. **#301** (`71b815c`) generalized the same single check (`hasRealContent`, formerly `hasNonFuelContent`) to also hide a city whose entire pool is gas/EV-charging infrastructure (`category === "fuel"`, the corpus's own resolved bucket — not a duplicated source-value list). **#303** (`a4da5af`) generalized it again: a place counts as real content only if it's BOTH non-fuel AND has a real (non-whitespace) description — closes a real wiring gap found while implementing it, `CorridorPlace` had no `description` field at all and `placePool()` dropped it even though the source types (`BrowsePlace`, `Waypoint`) carry one. **#305** (`84306e3`) extends `featuredFor()` so EVERY rendered city — not just an anchor the LLM happened to curate — gets an inline featured card: anchor+curated-match priority is preserved, everything else falls back to `pickProminenceFeature()`, the pool's own highest-`prominence_score` tile that also clears `hasRealContent` (tiebreak: photo presence, then stable id order). Found and fixed a second real wiring gap doing this: `master_place.prominence_score` is selected by the `pois_along_corridor` RPC and already used to `ORDER BY` its own results, but `mapMasterPlaceRow()` silently dropped it before it reached `BrowsePlace` — added `BrowsePlace.prominenceScore` + `CorridorPlace.prominenceScore`, wired through both corpus-backed `placePool()` branches (waypoints have no corpus prominence signal, left unset). **#302** (`aa12d8f`) is a detour that explains a "why does this look unfixed" mystery hit partway through: the corpus-tile "Refresh trip data" action (`refreshCorpusTiles`) had genuinely been BUILT already, but on a *different* Conductor workspace (`cayenne`, branch `nps-injest`, commit `84e5a147`) — never merged. That branch was NOT clean (7 commits; only 1 was the real unmerged work, the rest were either already-merged-elsewhere duplicates of #298/#299 or docs commits making PROD-deployment claims never independently verified in this session — deliberately left behind, see BACKLOG). Cherry-picked just the isolated commit onto a fresh `main`-based branch and landed it. **#304** (`22ed1df`) is the one prompt-engineering change in the arc: `master-prompt.ts` now explicitly invites the LLM to key-stop a genuine highlight located WITHIN a day's own start/end anchor city, not only along the route out of it — soft nudge (reuses the file's own existing "preference, not a quota" framing), verified with one real LLM generation (approved spend) that produced 4 in-city SF key stops on a trip where the anchor previously got zero. **Recurring finding across the arc, worth carrying forward:** several rounds mid-session that looked like "the fix isn't working" turned out to be a stale dev server on a DIFFERENT Conductor workspace/branch (`localhost:3210` was serving `cayenne`'s `nps-injest` tree, which never had any of #300–#305's code) — not a code regression. `lsof -p $(pgrep -f 'next dev') | grep cwd` is the fast diagnostic (already documented in `web/AGENTS.md`); this session re-confirmed it's the first thing to check before assuming a merged fix is broken. **Every PR in the arc was verified live against real TEST data** (not unit tests alone from #303 onward) — minted `seed-owner` sessions, headless-Chrome CDP screenshots at `localhost:3211`, and for #302/#305 specifically, real DB snapshot→mutate→render→restore cycles using real existing corpus tile ids (never fabricated data) to reproduce exact reported patterns before/after the fix. **`description`/`prominenceScore` are absent on any trip baked before 2026-08-27** — existing stored `segmentSuggestions` are snapshots; a pre-existing trip needs `refreshCorpusTiles()` (#302) or a regeneration before the new filter/feature logic has real values to rank on. Full test/build gate green at every PR (final count 646 web tests, `next build` + `web typecheck` exit 0 throughout). No PROD reads or writes anywhere in this arc; no schema/migration changes. `docs/architecture/place-render-model.md` §2's `CorridorPlace` field table updated to add the two new fields. No ADR written for this arc — flagging that as a gap, not a decision: the arc's shape (soft-vs-hard prompt nudges, prominence-as-imperfect-signal, the branch-archaeology recovery pattern) may be worth one; not made here.)
@@ -124,6 +152,84 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-27 (later) — manual GPS coordinate entry: post-merge verification
+
+PR #308 MERGED — squash-merged to `main` as `e7f4767` `[gh pr view 308]`.
+This section is the post-merge verification pass, run against the merged
+code, that produced the masthead correction above.
+
+**Premise correction, found before any write was attempted:** the ask was
+to verify "on TEST" against the deployed `main`. Merging to `main` deploys
+Vercel **Production** (`overlander-one.vercel.app`) — confirmed against
+PROD Supabase, not TEST: a real TEST-signed session JWT (minted via
+`mint-dev-session.ts`) was injected into that live URL and bounced straight
+to `/auth/sign-in` `[measured 2026-08-28]` — a TEST-signed session is only
+rejected if the site validates against a different Supabase project. The
+sign-in page itself corroborates this independently: it shows the real
+"Continue with Google — GOOGLE · ONLY SIGN-IN METHOD FOR V1" production
+flow, not TEST's password-based seed accounts. **There is no hosted
+deployment of `main` that talks to TEST** — no `vercel.json`, no
+staging/test branch alias, nothing else in the repo pointing at a second
+hosted URL `[grep, 2026-08-28]`. No write was attempted against the
+Production URL. Switched to a local dev server on `origin/main`'s tip
+(`e7f4767`) against TEST instead, per direction.
+
+**UI-level verification — PASS, no drift from the pre-merge branch check:**
+checked out `origin/main` as detached HEAD, fresh `next dev` on :3210
+against TEST, minted a real `seed-owner` session, drove a real
+headless-Chrome browser to `/plan/expedition`. Toggled BOTH the START and
+END rows into coordinate mode (2/2 toggle buttons worked); filled START
+with an in-region point (Barstow, CA) and END with a coordinate
+**deliberately outside the six-state region** (New York City) — both
+resolved (`"resolved"` badge, no error), and the submit button stayed
+enabled (`submitDisabled: false`). **Confirms the ADR's exemption
+end-to-end on the actual merged UI: an out-of-region manually-entered
+destination does not block submission.** Re-verified the out-of-range
+check: latitude 95 correctly showed the inline "Latitude must be between
+-90 and 90." error and cleared the resolved state — identical to pre-merge
+behavior.
+
+**Full submit → generation → persisted-TEST-row check: INCONCLUSIVE, for
+reasons external to this feature's code — not glossed over:**
+- While debugging why a first click silently produced no state change, found
+  that plain `.click()` on the submit `<button>` did not reliably fire
+  React's `onClick` in this CDP-driven headless-browser harness, while
+  `el.dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true,view:window}))`
+  did `[observed, this session]`. Worth remembering for future
+  browser-verification sessions — not recorded elsewhere yet.
+- The shared local dev server (one process; `lsof -i :3210` confirmed only
+  one listener) showed what circumstantial evidence points to as a second,
+  independent browser session at the same time — **not directly confirmed,
+  flagged as inferred, not proven:** a `com.apple…WebKit.Networking`
+  process held a connection to `localhost:3210` that wasn't this session's
+  headless Chrome, and TEST `public.trips` gained a real trip —
+  `"Los Angeles, CA → Custom Point (36.0680, -118.5320)"`, id
+  `3646c30b-ab0e-4ee1-93a3-07035c95de4f`, created `2026-08-28T03:08:47Z` —
+  whose anchors, dates, rig, and `guaranteedCategories` this session never
+  entered `[queried TEST, 2026-08-28]`. That row was left untouched — it
+  wasn't this session's test debris to delete.
+- When this session's own submission (Barstow → NYC, confirmed intact in
+  the DOM right up to the click) finally reached the LLM call, the shared
+  `ANTHROPIC_API_KEY` had run out of credits: `"Your credit balance is too
+  low to access the Anthropic API"` `[observed error banner, this
+  session]` — a real external resource constraint, not a code defect.
+  `preComputeFacts`/real Mapbox routing had already succeeded by that point
+  (the failure was inside `generateAndAudit`). The action failed before the
+  insert step, so **no trip was persisted from this session's own test** —
+  confirmed by re-querying TEST `public.trips` immediately after.
+- The pipeline-level equivalent of this exact check (real Mapbox routing +
+  real Claude generation + real signed-in TEST insert/read-back/delete, via
+  the standalone `verify-manual-coordinate-anchor.ts` script) had already
+  passed 9/9 twice pre-merge, when the API key still had credit — see the
+  `## 2026-08-27` section below.
+
+**Cleanup:** dev server and headless Chrome stopped; no temp files left in
+`web/scripts/`; working tree clean (`git status`); no `public.trips` row
+was written or needed deleting by this session.
+
+**Open, not decided here:** whether to re-run the full submit check once
+the shared Anthropic key is topped up.
 
 ## 2026-08-27 — manual GPS coordinate entry for expedition start/end
 

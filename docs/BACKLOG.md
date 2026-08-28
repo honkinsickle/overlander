@@ -302,6 +302,20 @@ promoted beyond dev-only testing, revisit: extend `reverseGeocodeCity`
 (`web/src/lib/routing/reverse-geocode.ts`) to also return `region_code` and
 gate manual coordinates the same way as autocomplete results.
 
+## No hosted TEST-pointed deployment exists for verifying merged features (2026-08-28)
+
+Discovered while verifying #308 post-merge: merging to `main` deploys
+Vercel **Production** (`overlander-one.vercel.app`), which points at PROD
+Supabase — confirmed by a real TEST-signed session JWT being rejected
+there. The only TEST-connected hosted surfaces are ephemeral per-PR Preview
+deployments, which disappear once a PR merges. There is currently no
+persistent, TEST-pointed URL for checking "does this work on TEST" against
+current `main` without either running a local dev server or opening a
+throwaway PR. If browser-based post-merge verification against TEST
+becomes routine, consider a standing Preview-environment deployment
+tracking `main` (or a dedicated branch) with TEST Supabase +
+`ENABLE_PLANNER_WIZARD=true`, rather than re-deriving this each time.
+
 ## Shared client cache (ADR decision 4 / step 4) — READY TO BUILD (2026-08-23)
 
 ADR `2026-08-21-place-data-resolver-consolidation.md` decision 4: **one shared
