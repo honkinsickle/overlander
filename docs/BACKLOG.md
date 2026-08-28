@@ -3353,6 +3353,30 @@ this docs pass — none applied.**
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
 
+## Surfaced 2026-08-27 (AO PROD-promotion follow-ups)
+
+- **Typesense sync deferred.** PROD's search index (`places_prod` collection)
+  does NOT include the newly-landed atlas_oddities rows — `master_place_search_export`
+  view will project them, but no sync ran this session (the materialize step used
+  `--skip-sync` because the current session env didn't carry Typesense credentials).
+  Corridor browse tiles work regardless (RPC reads from `master_place`, not
+  Typesense), but the `/search` surface will remain AO-free on PROD until a sync
+  runs. Simple follow-up: `npm run -w data sync-typesense` with Typesense creds
+  loaded. Not a code change.
+- **60 AO source_records on PROD are in `manual_review` (unlinked).** These
+  are candidate matches whose confidence sat below the auto-link floor and above
+  the reject floor. Analogous to the ~149-row TEST tail from PR #241; the
+  triage runbook there was `atlas-oddities-triage.ts` +
+  `atlas-oddities-classify-ambiguous.ts` + `atlas-oddities-execute-bucket3.ts`.
+  Filed for a later session; not blocking.
+- **NPS/RIDB HTML tags render literally on browse tiles.** Same class of issue
+  the AO markdown converter fixed for atlas_oddities: NPS descriptions carry
+  raw `<p>`, `<em>`, `<br>` tags; RIDB carries `<h2>`, `<p>`. React JSX text
+  rendering shows them literally. Not fixed here (adjacent, larger scope —
+  needs either an HTML stripper analogue on NPS/RIDB or a proper renderer on
+  the card). Documented as a "same class, different corpus" flag in the
+  2026-08-27 AO-description ADR.
+
 ## Surfaced 2026-08-27 (oddity promotion status check)
 
 - **`atlas_oddities` exists on TEST but never landed on PROD — root cause not
@@ -3393,6 +3417,26 @@ _(add items here as they surface; keep one line each, promote to STATE.md
     (c) any density-cascade risk to PROD trip generation from adding
     a few thousand newly-content-rich POIs to the pool. Not measured
     this pass — the ingest was TEST-only.
+  - **UPDATE 2026-08-27 (LIVE ON PROD) — this thread is CLOSED.** The
+    full six-state atlas_oddities corpus is now live on PROD as of
+    2026-08-27, following the runbook in the PR #310 scoping doc and
+    the density-cascade all-clear from PR #312. Adam signed off in the
+    task message for this session on all three product-shape questions
+    (~9% isolated-AO rate, rural-route majority, markdown converter as
+    a prerequisite — the last item built and applied to both TEST and
+    PROD in the same session before the row promotion). Post-promotion
+    PROD state (queried this session, read-only): 2,866 atlas_oddities
+    source_records (up from 0), 2,854 with description, 2,844 with a
+    photo url, 2,806 linked to a master_place, 60 pending
+    manual_review. 2,806 distinct AO-linked master_place rows; 2,794
+    carry an AO-attributed description (12-row gap = mps linked to a
+    higher-priority source), 2,784 carry a photo_url. Zero markdown
+    leaks in the corridor RPC output. Both existing PROD reference
+    trips (la-to-portland, la-to-deadhorse) remain on their frozen
+    baked snapshots — no AO-attributed tiles retroactively appear;
+    the segmentSuggestions snapshot lesson from PR #302 holds. Full
+    session narrative: `docs/LOG.md` §2026-08-27 (Atlas Obscura
+    oddities LIVE ON PROD). New follow-ups filed below.
   - **UPDATE 2026-08-27 (wave 2) — AZ/WA/NV/UT gap now CLOSED.** The
     four remaining state manual datasets arrived later the same day
     and were ingested via the same script (idempotence added so
