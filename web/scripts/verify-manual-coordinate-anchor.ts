@@ -114,7 +114,6 @@ async function main() {
     vehicleId: "v1",
     vehicleTitle: "Truck",
     rig: {
-      vehicle: "Truck",
       build: [],
       fuelRangeMi: 400,
       capability: "mild",
