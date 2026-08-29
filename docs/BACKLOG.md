@@ -3353,43 +3353,6 @@ this docs pass — none applied.**
 _(add items here as they surface; keep one line each, promote to STATE.md
 §Queued when scheduled)_
 
-## Surfaced 2026-08-28 (later) — editorial_food multi-publisher follow-ups
-
-- **ER did NOT auto-link 3 editorial_food rows to their family_destinations
-  counterparts on TEST.** Duarte's Tavern (Pescadero), Gott's Roadside
-  (St. Helena), and Nepenthe (Big Sur) exist as family_destinations rows
-  from PR #316; editorial_food ingested the same physical places under
-  new external_ids and the ER materialize sweep gave them all
-  `new_master_place` rather than `auto_link` to the existing mps. Worth
-  investigating whether name-normalization drops these (curly quotes,
-  apostrophe variants) or whether the ER threshold is stricter than
-  expected. Not blocking; just means 3 duplicate mps on TEST.
-- **16 rows in `manual_review` on TEST** after the editorial_food
-  materialize (Peggy Sue's, Nepenthe, Alien Fresh Jerky named — 13
-  more). Same triage runbook as AO's manual_review tail on PROD.
-- **9 rows have no coordinates and were never ingested** — Mapbox POI
-  didn't return a match, and the geocoder didn't hand-override them.
-  Names: Clearman's/La Mirada, Marin Sun Farms/Point Reyes Station,
-  El Galleon/Catalina Island, Jocko's Steakhouse/Nipomo, Outpost Cafe/
-  Hesperia, Lola's Kitchen/Victorville, Corizón Cocina/Santa Barbara,
-  Squeeze Burger/Stockton, Moto Deli/Leucadia. Hand-look-up if we ever
-  want the full 80-row set on TEST.
-- **Photo credit set to publisher_slug, not photographer.** For all
-  editorial_food rows the credit is `beyondthejourney` /
-  `familyvacationsus` / `altaonline` / `provokelifestyle` /
-  `everafterinthewoods` — the aggregator, not the original
-  photographer. The everafter and altaonline articles cite Google
-  Maps user photos / Hearst CDN URLs without explicit photographer
-  attribution. If this source ever heads toward PROD, credits need a
-  real-photographer resolution step.
-- **PROD promotion of `editorial_food` is NOT scoped.** Test-only per
-  Adam's 2026-08-28 directive. Runbook mirrors AO's from PR #314
-  §Part 2 verbatim if ever authorized.
-- **LA Times and TasteAtlas URLs are still not ingested.** Both blocked
-  the WebFetch pass (HTTP 403). LA Times needs a fetch path that clears
-  their bot protection; TasteAtlas would additionally need a different
-  extraction shape (it's a dish taxonomy, not a restaurant list).
-
 ## Surfaced 2026-08-28 (family_destinations test-run follow-ups)
 
 - **Nepenthe sits in `manual_review` on TEST after the 2026-08-28
