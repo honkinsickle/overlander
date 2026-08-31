@@ -13,8 +13,14 @@
  *  UP when the real, taller content mounts). Once mounted, the measured height
  *  from ResizeObserver replaces the estimate. */
 const DAY_CHROME_PX = 520;
-/** Approx height of one CategoryListCard place row (card + gap). */
-const PLACE_ROW_PX = 96;
+/** Approx height of one CategoryListCard place row (card + 8px inter-row gap).
+ *  Sized to the description-present card (title 23 + gap 2 + verified 20 +
+ *  gap 2 + description 2×21 + gap 2 + status/Details 18 + top pad 4 = 113,
+ *  + 8 inter-row gap = 121; rounded to 127 for the small safety margin the
+ *  DAY_CHROME_PX docstring calls for — over-estimate is safe here because
+ *  ResizeObserver replaces the estimate on mount, while under-estimate would
+ *  jump the cold-scroll placeholder DOWN when the real content mounts). */
+const PLACE_ROW_PX = 127;
 
 /** Model-driven height estimate for a day never mounted yet. `poolCount` is
  *  `placePool(day).length`, known from the payload without mounting. */

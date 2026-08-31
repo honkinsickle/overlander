@@ -33,6 +33,16 @@ type Props = {
     "title" | "photoUrl" | "photoCredit" | "photoAlt" | "rating" | "reviewCount"
   >;
   category: BrowseCardCategory;
+  /** Editorial description (`master_place.description`) — renders as a
+   *  `Barlow Regular 13/21` `line-clamp-2` block above the status row. Absent,
+   *  empty, whitespace-only, or "strips to empty after HTML removal" all
+   *  render nothing (no empty slot). Coexists with `status`: when a place has
+   *  both a description and a `keyStopNote`, both lines render — description
+   *  first, then the green-dot status. See
+   *  `docs/measurements/2026-08-31-day-detail-description-bug.md` §7 Option B
+   *  and `docs/design/slideup-overlay-states-v2.md:128` (clamp overridden 3→2
+   *  by Adam). */
+  description?: string;
   /** Status line, e.g. "Open · 6a–10p". Omit to hide the row. */
   status?: string;
   /** "yoTrippin Verified" provenance line. Default false — callers opt in only
@@ -62,9 +72,28 @@ function formatCount(n: number): string {
   return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
 }
 
+/** Strip HTML tags + common entities from a description string. Some source
+ *  descriptions (BLM/USFS-style rows like `<p>Picnic Site. Day use hours…</p>`)
+ *  arrive with raw markup; React escapes text children, so unstripped content
+ *  renders literal `<p>` on-screen. */
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function CategoryListCard({
   place,
   category,
+  description,
   status,
   verified = false,
   onOpen,
@@ -75,6 +104,7 @@ export function CategoryListCard({
 }: Props) {
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
+  const cleanDescription = description ? stripHtml(description) : "";
 
   return (
     <div
@@ -184,6 +214,20 @@ export function CategoryListCard({
           rating={place.rating}
           reviewCount={place.reviewCount}
         />
+
+        {cleanDescription ? (
+          <p
+            className="line-clamp-2"
+            style={{
+              color: "var(--text-muted)",
+              fontFamily: "var(--ff-sans)",
+              fontSize: 13,
+              lineHeight: "21px",
+            }}
+          >
+            {cleanDescription}
+          </p>
+        ) : null}
 
         <div className="flex items-start justify-between" style={{ gap: 8 }}>
           {status ? (
