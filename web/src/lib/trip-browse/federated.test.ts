@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mapMasterPlaceRow,
   primaryCategoryToSlideKey,
+  isClosedDescription,
   SLIDE_TO_PRIMARY_CATEGORY,
 } from "./federated";
 
@@ -125,6 +126,37 @@ test("recreation_area is in the scenic bucket, not camping", () => {
   assert.ok(!SLIDE_TO_PRIMARY_CATEGORY.camping.includes("recreation_area"));
   assert.ok(SLIDE_TO_PRIMARY_CATEGORY.scenic.includes("recreation_area"));
   assert.equal(primaryCategoryToSlideKey("recreation_area"), "scenic");
+});
+
+// ── isClosedDescription ─────────────────────────────────────────────────
+
+test("isClosedDescription matches exact 'Closed'", () => {
+  assert.ok(isClosedDescription("Closed"));
+});
+
+test("isClosedDescription matches 'Closed Campground'", () => {
+  assert.ok(isClosedDescription("Closed Campground"));
+});
+
+test("isClosedDescription is case-insensitive", () => {
+  assert.ok(isClosedDescription("CLOSED DUE TO FIRE"));
+  assert.ok(isClosedDescription("closed from Dec 1st to end of May"));
+});
+
+test("isClosedDescription matches substring in longer text", () => {
+  assert.ok(isClosedDescription("This site is permanently closed."));
+});
+
+test("isClosedDescription returns false for null", () => {
+  assert.ok(!isClosedDescription(null));
+});
+
+test("isClosedDescription returns false for description without closed", () => {
+  assert.ok(!isClosedDescription("A beautiful campground near the river."));
+});
+
+test("isClosedDescription returns false for empty string", () => {
+  assert.ok(!isClosedDescription(""));
 });
 
 // NOTE on OSM + amenities: this function does not, and should not, know

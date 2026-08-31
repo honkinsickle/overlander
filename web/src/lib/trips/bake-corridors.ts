@@ -6,6 +6,7 @@ import {
   mapMasterPlaceRow,
   primaryCategoryToSlideKey,
   isSuppressedCategory,
+  isClosedDescription,
   type MasterPlaceRow,
 } from "@/lib/trip-browse/federated";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -131,6 +132,7 @@ export async function fetchCorpusForPolyline(
     if (error || !data) return [];
     return (data as MasterPlaceRow[])
       .filter((r) => !isSuppressedCategory(r.primary_category))
+      .filter((r) => !isClosedDescription(r.description))
       .map((r) =>
         mapMasterPlaceRow(r, primaryCategoryToSlideKey(r.primary_category)),
       );

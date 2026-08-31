@@ -78,6 +78,14 @@ export function isSuppressedCategory(primary: string): boolean {
   return SUPPRESSED_PRIMARY_CATEGORIES.has(primary);
 }
 
+/** A place whose description indicates it is closed — excluded from all
+ *  display surfaces (cards, search, map pins, trip generation) while leaving
+ *  the underlying database row untouched.  Case-insensitive substring match. */
+export function isClosedDescription(description: string | null): boolean {
+  if (!description) return false;
+  return description.toLowerCase().includes("closed");
+}
+
 /** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer primary_category
  *  back to the slide bucket it belongs to. Built once from the forward map so
  *  the two never drift. Used by the corpus-wide search hydrate path (arbitrary
@@ -273,9 +281,9 @@ export async function fetchFederatedPois(args: {
       ? await query.abortSignal(args.signal)
       : await query;
     if (error) throw error;
-    return ((data ?? []) as MasterPlaceRow[]).map((r) =>
-      mapMasterPlaceRow(r, args.slideKey),
-    );
+    return ((data ?? []) as MasterPlaceRow[])
+      .filter((r) => !isClosedDescription(r.description))
+      .map((r) => mapMasterPlaceRow(r, args.slideKey));
   } catch (err) {
     console.warn(
       `[federated-pois] ${args.slideKey} RPC failed, falling back to live:`,
