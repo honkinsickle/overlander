@@ -12,6 +12,118 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-29 — TasteAtlas six-state editorial source: PR #317 landing fix, TEST build, PROD promotion (both editorial_food and family_destinations)
+
+- **Found and fixed a stacked-PR merge-order bug from the prior session.**
+  PR #317 (`editorial_food` multi-publisher source) showed "MERGED" on
+  GitHub, but its diff never reached `main`: it was based on PR #316's
+  branch, and #316 was squash-merged to `main` *before* #317 landed on
+  that branch — so #317's commit was orphaned on a branch GitHub
+  considered already merged. Confirmed by direct diff: `data/ingestion/sources/editorial-food.ts`
+  didn't exist on `origin/main`. Opened PR #318
+  (`feat/editorial-food-multi-source` → `main`, re-targeting #317's exact
+  content, no new code) and resolved the resulting merge conflicts:
+  `data/ingestion/manual.ts` (kept the branch's `editorial_food` case
+  registration — `main` didn't have it, that's the point of the PR) and
+  `docs/STATE.md`/`BACKLOG.md`/`LOG.md` (took `main`'s current versions —
+  the branch's stale session-diary content was already superseded by
+  later sessions). Merged as `2dd8e66`.
+- **Built a new `tasteatlas` publisher under the existing `editorial_food`
+  source, covering all six states in the trip-planning region** (AZ, NV,
+  CA, UT, WA, OR). TasteAtlas's own site is a confirmed Cloudflare
+  hard-block (verified via `curl` — not a simple bot-header check, an
+  outright "Sorry, you have been blocked" WAF page), so content came from
+  Adam manually screenshotting each state's TasteAtlas restaurant page and
+  handing them over in batches (10–126 screenshots per state).
+- **Repeatable pipeline, same shape every state:** parallel subagents
+  extract structured data from the screenshots (name/city/signature-dish/
+  description) → dedupe by (name, city) → two-phase Mapbox geocode (city
+  forward-geocode for a proximity bias point, then Search Box POI search
+  filtered to the correct state) → every wrong-state/no-match/large-distance
+  result gets a real WebSearch check (closed? renamed? real address
+  elsewhere?) rather than being discarded automatically — this is how most
+  closures got caught in the first place → chain-restaurant judgment calls
+  (national/international out, single-state/regional-origin stays) → real
+  sourced descriptions via WebSearch (never invented; on-card truncated
+  text stays truncated) → photo hunt with every candidate URL `curl`-verified
+  (200 status + real image content-type) before being trusted — caught the
+  fetch tool hallucinating at least one non-existent CDN domain this way →
+  any row without a verified real photo gets dropped. Rules doc kept at
+  `.context/editorial-food/RULES.md` (gitignored, not in the repo — the
+  rules themselves are recorded here since the file isn't).
+- **Final counts after all filtering:** AZ 34, NV 15, CA 323, UT 36, WA 60,
+  OR 29 = **497 restaurants**. Excluded along the way: confirmed-closed
+  businesses (Yelp CLOSED tags / press), a few renamed/rebranded entities,
+  national/international chains (Raising Cane's, Panda Express, California
+  Pizza Kitchen, Le Pain Quotidien, Sprinkles Cupcakes, Yogurtland, Chin
+  Chin, Nobu, Blue Ribbon, Michael Mina, The Original Pancake House, Voodoo
+  Doughnut, Salt & Straw), and businesses with no fixed address (food
+  trucks). In-region single-state chains (Sammy's Woodfired Pizza, Strip
+  House, In-N-Out, Roscoe's, Pizzana, etc.) were kept.
+- **Two real ingest-blocking bugs caught before the real ingest ran** (dry-run
+  parsed cleanly, but the semantics were wrong): (1) the CSV files were
+  named `tasteatlas-<state>.csv`, missing the `-geocoded.csv` suffix the
+  ingester globs for — would have silently ingested zero rows, no error;
+  (2) `geocode_matched` is read by the ingester as the literal
+  `master_place.address` string, not a match-confidence flag — every row
+  had `"true"` in that column all session. Backfilled real addresses from
+  the already-cached Mapbox geocode results for 492/497 rows; reverse-geocoded
+  the remaining 5 hand-override rows from their stored coordinates. Also
+  found and fixed one within-state slug collision (`Lolita's Mexican Food`
+  — two real, distinct locations in San Diego and Chula Vista colliding on
+  the same `external_id`; disambiguated by appending city to the slug).
+- **TEST: ingest 497/497, 0 errors.** `materialize --only-categories
+  restaurant --skip-sync`: 478 `new_master_place` + 19 `manual_review`, 0
+  errors (478+19=497 exactly). `search:sync` against `places_test`: 33,287
+  indexed, 0 failed. Verified via direct Supabase/Typesense queries, not
+  just exit codes — the 19 manual-review matches are legitimate
+  entity-resolution catches (sub-50m from an existing `atlas_oddities` or
+  `family_destinations` master_place, high name similarity, below the 0.85
+  auto-link threshold), not a bug. Two flagged as probably-wrong matches
+  worth a second look, not resolved this session: `Tivoli Bar and Grill` →
+  `Mick Jagger's Urinal`, `Rockwell Ice Cream` → `The Tiny Gallery` (both
+  AO curiosity-object names at the same coordinates — plausibly a
+  different thing at the same address, not the restaurant).
+- **PROD promotion — `editorial_food`/`tasteatlas`, Adam's explicit
+  authorization, mirroring the AO promotion runbook (PR #314).** All 6
+  pending migrations applied together via `db:push-verify` (3
+  `family_destinations` + 3 `editorial_food` — ledger ordering required
+  applying them in one pass; the `family_destinations` ones are
+  schema-only and inert without a matching ingest, which was deliberately
+  NOT run in this step). Ingest: 497/497, 0 errors. Materialize: 481
+  `new_master_place` + 16 `manual_review`, 0 errors (481+16=497). Typesense
+  sync to `places_prod`: 21,315 indexed, 0 failed. Verified with 6 live
+  spot-check probes against PROD (not just script exit codes) before
+  declaring done.
+- **PROD promotion — `family_destinations`, its own separate authorization
+  (deliberately not bundled with the above).** The 14-row TEST dataset at
+  `.context/family-destinations-guide/` (built in PR #316's original
+  session) didn't exist in this workspace — `.context/` is gitignored and
+  per-Conductor-workspace. Reconstructed the exact CSV from TEST's
+  `source_record.raw_payload.row` for all 14 rows (safer than re-scraping:
+  uses the exact data already verified on TEST, not a fresh re-extraction
+  that could drift). Ingest: 14/14, 0 errors. Materialize: 11
+  `new_master_place` + 3 `manual_review`, 0 errors (11+3=14). Typesense
+  sync: 21,326 indexed, 0 failed. Verified with 3 live spot-check probes.
+- **Found during PROD verification, not resolved this session: a likely
+  duplicate.** `Hodad's` now exists as two separate `master_place` rows —
+  one from `family_destinations_guide`, one from `tasteatlas` — not caught
+  by entity resolution since the two promotions ran as independent
+  passes. Filed for whoever triages the manual-review queues.
+- **Every PROD write went through the same discipline:** back up the
+  current TEST `data/.env` to `~/.config/overlander/env-backups/`, re-link
+  the Supabase CLI to PROD, swap `data/.env` to PROD creds, do the write,
+  restore `data/.env` + re-link the CLI back to TEST. Confirmed restored
+  after every one of the three PROD operations (migrations, tasteatlas
+  promote, family_destinations promote) before moving on.
+- **Explicitly deferred, Adam's call:** promoting `family_destinations`
+  content had originally been left as "stays TEST-forever, or promote?" —
+  answered this session (promote, own pass). The photo-credit gap
+  (`familydestinationsguide.com`/`tasteatlas` aggregator-slug, not the
+  actual photographer) was raised again before the PROD write and
+  accepted as-is by explicit decision, same open question it was before
+  for any future source of this shape.
+
 ## 2026-08-28 — Family Destinations Guide: test-only editorial source (TEST end-to-end)
 
 - **Task:** test run of "Option A" (full AO parity) using
