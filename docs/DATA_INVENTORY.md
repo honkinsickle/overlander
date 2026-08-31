@@ -15,6 +15,25 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Re-verified 2026-08-31 `[queried PROD, read-only + USFS INFRA
+> ingestion + backfill + Typesense sync]` — USFS INFRA site corpus
+> ingested on PROD (3,168 rows, 0 errors), ER ran (2,629 new
+> master_places + 136 auto-linked + 448 manual_review), operational_status
+> backfill wrote 50 CLOSED + 1 TEMPORARILY CLOSED. Three new migrations
+> applied (`20260831100000/100100/100200`): `master_place.operational_status`
+> column, `pois_along_corridor` RPC + `master_place_search_export` view
+> extended to surface and exclude CLOSED/DECOMMISSIONED.** Full narrative:
+> `docs/LOG.md` §2026-08-31.
+>
+> | metric | before (2026-08-29) | **after (2026-08-31)** |
+> |---|--:|--:|
+> | `source_record` total | ~24,383 | **~27,551** |
+> | — `source_id = 'usfs'` | 20 | **3,188** (20 recarea + 3,168 site) |
+> | `master_place` total | 25,719 | **28,348** |
+> | — `operational_status IS NOT NULL` | 0 | **50** (49 CLOSED + 1 TEMPORARILY CLOSED) |
+> | `master_place_search_export` (view-visible) | ~21,326 | **21,965** |
+> | Typesense `places_prod` | ~21,326 | **21,965** |
+>
 > **⚠️ Re-verified 2026-08-29 `[queried PROD, read-only, live spot-check
 > probes not just script exit codes]` — two more editorial sources landed
 > on PROD this session, both under Adam's explicit per-source
@@ -152,7 +171,7 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
   | bc_rec_sites_poly | 824 |
   | bc_rec_sites_points_highvalue | 334 |
   | bc_rest_areas | 66 |
-  | usfs | 20 |
+  | usfs | ~~20~~ **3,188** (2026-08-31: +3,168 INFRA sites) |
   | yk_parks_campgrounds | 19 |
   | bc_parks | 8 |
   | curated_fuel | 3 |
@@ -791,8 +810,8 @@ tier = 1 cluster).
 
 | collection | docs | used by |
 |---|---:|---|
-| `places_prod` | ~~13,629~~ ~~16,661~~ **16,516** (2026-08-11) | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
-| `places_test` | ~~1,749~~ **14,911** (2026-08-11) | dev (`web/.env.local`) + `data/.env` |
+| `places_prod` | ~~13,629~~ ~~16,661~~ ~~16,516~~ **21,965** (2026-08-31: +USFS INFRA, −CLOSED exclusion) | PROD (Vercel `NEXT_PUBLIC_TYPESENSE_COLLECTION=places_prod`) |
+| `places_test` | ~~1,749~~ ~~14,911~~ **33,047** (2026-08-31) | dev (`web/.env.local`) + `data/.env` |
 
 (The old shared `places` collection — 1,749 docs — was **deleted 2026-07-23**
 once both environments were confirmed on their own collections. Nothing read it:

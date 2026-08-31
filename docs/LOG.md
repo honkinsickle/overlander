@@ -12,6 +12,19 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-31 — Closed-place display filter + operational_status normalization + USFS INFRA PROD ingestion
+
+- **PR #320 (merged to main as `d1a15ff`):** `isClosedDescription()` display-time filter. First iteration was a bare substring match on "closed" — 1,060 matches, 94% false-positive rate (places mentioning closures incidentally). Narrowed to phrase-anchored heuristic (strong phrases + first-sentence + "is closed" with exclusions for activity restrictions, conditionals, schedule notes). Result: 152 matches, ~97% precision.
+- **PR #321 (open, `filter-closed-places-display` branch):** operational_status normalization — the structured-field complement to the description heuristic. Investigated all sources for status fields. RIDB `FacilityStatus` confirmed absent from both the search AND individual-facility API endpoints (measured 0/4,793 rows; probed the detail endpoint live — 34 keys, no `FacilityStatus`). **USFS is the only source with structured status data** — `seasonal_operational_status` on 100% of INFRA site rows, `openstatus` on the 6 older recarea rows.
+- **Schema changes (3 migrations, applied TEST + PROD):** `master_place.operational_status` TEXT column, `field_precedence` row for `(operational_status, usfs, 1)`, `recompute_master_place()` extended via field_precedence pattern (Option A), `pois_along_corridor` RPC + `master_place_search_export` view both gain `operational_status` column and exclude `CLOSED`/`DECOMMISSIONED` at SQL level.
+- **USFS normalizer** (`data/ingestion/sources/usfs.ts`): emits `operational_status` from `props.seasonal_operational_status`. OPEN and NONE → null; everything else stored. The NONE handling was a PROD-discovered bug — 8 PROD recarea rows carry `openstatus="none"` (a "no status recorded" sentinel absent from TEST), initially written as `"NONE"` which `isClosedPlace()` treated as a degraded-status closure. Corrected to null on PROD, added to skip lists.
+- **USFS INFRA ingestion ran on PROD** (Adam's explicit sign-off): 3,239 INFRA features fetched, 3,168 rows inserted (71 skipped by category gate, 0 errors). ER produced 2,629 new master_places + 136 auto-linked + 448 manual_review. PROD `master_place` total went from 25,719 → 28,348. The 3,168 vs TEST's 6,324 difference is a corridor-geometry scope difference (PROD has a smaller/different polygon), not a pipeline issue.
+- **Backfill results:** TEST: 248 rows updated (242 CLOSED, 3 TEMPORARILY CLOSED, 2 OPEN WITH REDUCED SERVICES, 1 UNREACHABLE). PROD: 51 rows updated (50 CLOSED, 1 TEMPORARILY CLOSED). The PROD CLOSED count is lower because PROD's corridor is smaller.
+- **Typesense re-sync:** TEST 33,047 docs (240 pruned). PROD 21,965 docs (6 pruned, +639 net from new USFS places minus closed exclusions).
+- **Key architectural finding:** 228 of 246 TEST closed places are caught ONLY by the structured field — their descriptions contain no closure language, so the description heuristic would never have filtered them. This validates the structured-field approach.
+- **Display predicate `isClosedPlace()`:** structured status preferred (CLOSED/DECOMMISSIONED always filtered; REDUCED SERVICES/UNREACHABLE filtered only when no photo), heuristic fallback for sources without structured status.
+- **Docs:** `docs/specs/operational-status-normalization.md` (scoping spec, status updated to IMPLEMENTED), `docs/decisions/2026-08-31-operational-status-normalization.md` (ADR).
+
 ## 2026-08-29 — TasteAtlas six-state editorial source: PR #317 landing fix, TEST build, PROD promotion (both editorial_food and family_destinations)
 
 - **Found and fixed a stacked-PR merge-order bug from the prior session.**
