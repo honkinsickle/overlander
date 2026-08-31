@@ -18,8 +18,8 @@ test("estimateDayHeight: base with an empty pool", () => {
 });
 
 test("estimateDayHeight: grows one row-height per pool item", () => {
-  assert.equal(estimateDayHeight(1), 520 + 96);
-  assert.equal(estimateDayHeight(5), 520 + 96 * 5);
+  assert.equal(estimateDayHeight(1), 520 + 127);
+  assert.equal(estimateDayHeight(5), 520 + 127 * 5);
 });
 
 test("estimateDayHeight: never negative / clamps a nonsense count", () => {

@@ -416,6 +416,7 @@ export function DayDetailNodeBlocks({
               place={draggedPlace}
               verified={!!draggedPlace.placeId}
               category={draggedPlace.category}
+              description={draggedPlace.description}
               status={draggedPlace.keyStopNote}
               editMode
             />
@@ -721,6 +722,7 @@ function PoiRow({
             place={place}
             verified={!!place.placeId}
             category={place.category}
+            description={place.description}
             status={place.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
             onRemove={place.removable && onRemovePlace ? () => onRemovePlace(place.id) : undefined}
@@ -868,6 +870,7 @@ function AlongTheWay({
             place={p}
             verified={!!p.placeId}
             category={p.category}
+            description={p.description}
             status={p.keyStopNote}
             onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
             editMode={editMode}

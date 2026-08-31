@@ -768,6 +768,7 @@ export function DayDetailCorridor({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
+                  description={p.description}
                   status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   curatedMenu={buildCuratedMenu?.(p)}
@@ -922,6 +923,7 @@ function RestDayNearby({
                 place={p}
                 verified={!!p.placeId}
                 category={p.category}
+                description={p.description}
                 onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                 curatedMenu={buildCuratedMenu?.(p)}
                 editMode={editMode}
@@ -1051,6 +1053,7 @@ function CityNode({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
+                  description={p.description}
                   status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   onRemove={
@@ -1074,6 +1077,7 @@ function CityNode({
                   place={p}
                   verified={!!p.placeId}
                   category={p.category}
+                  description={p.description}
                   status={pickStatus(p)}
                   onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
                   onRemove={
@@ -1164,6 +1168,7 @@ function KeyStopNode({
             place={place}
             verified={!!place.placeId}
             category={place.category}
+            description={place.description}
             status={pickStatus(place)}
             onOpen={onOpenPlace ? () => onOpenPlace(place.id) : noop}
             curatedMenu={buildCuratedMenu?.(place)}
@@ -1226,6 +1231,7 @@ function MileTick({
               place={p}
               verified={!!p.placeId}
               category={p.category}
+              description={p.description}
               status={pickStatus(p)}
               onOpen={onOpenPlace ? () => onOpenPlace(p.id) : noop}
               curatedMenu={buildCuratedMenu?.(p)}
