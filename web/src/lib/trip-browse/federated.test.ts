@@ -129,34 +129,95 @@ test("recreation_area is in the scenic bucket, not camping", () => {
 });
 
 // ── isClosedDescription ─────────────────────────────────────────────────
+// Strong-signal phrases
 
-test("isClosedDescription matches exact 'Closed'", () => {
+test("isClosedDescription: 'permanently closed' anywhere", () => {
+  assert.ok(isClosedDescription("This site is permanently closed."));
+  assert.ok(isClosedDescription("<p>Site is Permanently Closed</p>"));
+});
+
+test("isClosedDescription: 'temporarily closed' anywhere", () => {
+  assert.ok(isClosedDescription("The visitor center is temporarily closed for repairs."));
+});
+
+test("isClosedDescription: 'closed indefinitely' anywhere", () => {
+  assert.ok(isClosedDescription("Long AO description... closed indefinitely due to fire."));
+});
+
+test("isClosedDescription: 'closed until further notice' anywhere", () => {
+  assert.ok(isClosedDescription("Overview Campground closed until further notice"));
+});
+
+// Description opens with "closed"
+
+test("isClosedDescription: starts with 'Closed'", () => {
   assert.ok(isClosedDescription("Closed"));
-});
-
-test("isClosedDescription matches 'Closed Campground'", () => {
-  assert.ok(isClosedDescription("Closed Campground"));
-});
-
-test("isClosedDescription is case-insensitive", () => {
+  assert.ok(isClosedDescription("Closed Campground."));
   assert.ok(isClosedDescription("CLOSED DUE TO FIRE"));
   assert.ok(isClosedDescription("closed from Dec 1st to end of May"));
 });
 
-test("isClosedDescription matches substring in longer text", () => {
-  assert.ok(isClosedDescription("This site is permanently closed."));
+test("isClosedDescription: 'Closed daily' at start is NOT a closure", () => {
+  assert.ok(!isClosedDescription("Closed daily from 12pm-1pm. This is the entry point."));
 });
 
-test("isClosedDescription returns false for null", () => {
+test("isClosedDescription: HTML-wrapped closure at start", () => {
+  assert.ok(isClosedDescription("<p>Closed Campground.</p>"));
+  assert.ok(isClosedDescription("<p><strong>CLOSED DUE TO FIRE</strong></p>"));
+});
+
+// "is closed" in opening text
+
+test("isClosedDescription: 'X is closed' in opening text", () => {
+  assert.ok(isClosedDescription("This campground is closed due to fire damage."));
+  assert.ok(isClosedDescription("The facility is closed at this time."));
+});
+
+test("isClosedDescription: 'is currently closed' in opening text", () => {
+  assert.ok(isClosedDescription("Campground is currently closed and unusable."));
+});
+
+// False-positive exclusions
+
+test("isClosedDescription: 'closed to [activity]' is NOT a closure", () => {
+  assert.ok(!isClosedDescription("The creek is closed to all fishing."));
+  assert.ok(!isClosedDescription("This area is closed to OHV use."));
+  assert.ok(!isClosedDescription("Yaki Point is closed to private vehicles."));
+});
+
+test("isClosedDescription: 'closed to the public' IS a genuine closure", () => {
+  assert.ok(isClosedDescription("The refuge is closed to public access."));
+  assert.ok(isClosedDescription("Trinity Site is closed to the public."));
+});
+
+test("isClosedDescription: 'when X is closed' (conditional) is NOT a closure", () => {
+  assert.ok(!isClosedDescription("You can visit even when the visitor center is closed."));
+  assert.ok(!isClosedDescription("When the pier is closed, landings are via skiff."));
+});
+
+test("isClosedDescription: 'closed on [day/holiday]' is NOT a closure", () => {
+  assert.ok(!isClosedDescription("The museum is closed on Thanksgiving and Christmas."));
+});
+
+// Basics
+
+test("isClosedDescription: null → false", () => {
   assert.ok(!isClosedDescription(null));
 });
 
-test("isClosedDescription returns false for description without closed", () => {
+test("isClosedDescription: no 'closed' in text → false", () => {
   assert.ok(!isClosedDescription("A beautiful campground near the river."));
 });
 
-test("isClosedDescription returns false for empty string", () => {
+test("isClosedDescription: empty string → false", () => {
   assert.ok(!isClosedDescription(""));
+});
+
+test("isClosedDescription: incidental mention in long text → false", () => {
+  assert.ok(!isClosedDescription(
+    "When the cemetery closed its gates in 1906, it had served the community for decades. " +
+    "Today it remains a beautiful historic site.",
+  ));
 });
 
 // NOTE on OSM + amenities: this function does not, and should not, know

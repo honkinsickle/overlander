@@ -80,10 +80,48 @@ export function isSuppressedCategory(primary: string): boolean {
 
 /** A place whose description indicates it is closed — excluded from all
  *  display surfaces (cards, search, map pins, trip generation) while leaving
- *  the underlying database row untouched.  Case-insensitive substring match. */
+ *  the underlying database row untouched.
+ *
+ *  Anchored on strong closure phrases rather than bare "closed", which would
+ *  catch 1,000+ descriptions that merely mention closures incidentally
+ *  (seasonal hours, historical context, road conditions). */
 export function isClosedDescription(description: string | null): boolean {
   if (!description) return false;
-  return description.toLowerCase().includes("closed");
+  const text = description
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\*+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!text) return false;
+
+  // Strong-signal phrases anywhere — almost always genuine closures
+  if (text.includes("permanently closed")) return true;
+  if (text.includes("temporarily closed")) return true;
+  if (text.includes("closed indefinitely")) return true;
+  if (text.includes("closed until further notice")) return true;
+
+  // Description opens with "closed" — genuine closure notice up front
+  if (text.startsWith("closed") && !text.startsWith("closed daily")) return true;
+
+  // "[place] is closed" in the opening text — genuine unless it's an
+  // activity restriction ("closed to fishing"), conditional ("when X is
+  // closed"), or a schedule note ("closed on Thanksgiving", "closed daily").
+  const head = text.substring(0, 250);
+  for (const phrase of ["is closed", "is currently closed", "has been closed"]) {
+    const idx = head.indexOf(phrase);
+    if (idx === -1) continue;
+    const after = head.substring(idx + phrase.length, idx + phrase.length + 40);
+    if (/^ to (?!the public|public access)/i.test(after)) continue;
+    if (/^ on /i.test(after)) continue;
+    if (/^ daily/i.test(after)) continue;
+    const before = head.substring(Math.max(0, idx - 25), idx);
+    if (/\bwhen\b/i.test(before)) continue;
+    return true;
+  }
+
+  return false;
 }
 
 /** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer primary_category
