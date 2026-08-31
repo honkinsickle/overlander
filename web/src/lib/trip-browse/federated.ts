@@ -78,13 +78,9 @@ export function isSuppressedCategory(primary: string): boolean {
   return SUPPRESSED_PRIMARY_CATEGORIES.has(primary);
 }
 
-/** A place whose description indicates it is closed — excluded from all
- *  display surfaces (cards, search, map pins, trip generation) while leaving
- *  the underlying database row untouched.
- *
- *  Anchored on strong closure phrases rather than bare "closed", which would
- *  catch 1,000+ descriptions that merely mention closures incidentally
- *  (seasonal hours, historical context, road conditions). */
+/** Description-text heuristic for detecting closed places — fallback for
+ *  sources without a structured operational_status field.  Prefer
+ *  {@link isClosedPlace} at call sites. */
 export function isClosedDescription(description: string | null): boolean {
   if (!description) return false;
   const text = description
@@ -96,18 +92,13 @@ export function isClosedDescription(description: string | null): boolean {
     .toLowerCase();
   if (!text) return false;
 
-  // Strong-signal phrases anywhere — almost always genuine closures
   if (text.includes("permanently closed")) return true;
   if (text.includes("temporarily closed")) return true;
   if (text.includes("closed indefinitely")) return true;
   if (text.includes("closed until further notice")) return true;
 
-  // Description opens with "closed" — genuine closure notice up front
   if (text.startsWith("closed") && !text.startsWith("closed daily")) return true;
 
-  // "[place] is closed" in the opening text — genuine unless it's an
-  // activity restriction ("closed to fishing"), conditional ("when X is
-  // closed"), or a schedule note ("closed on Thanksgiving", "closed daily").
   const head = text.substring(0, 250);
   for (const phrase of ["is closed", "is currently closed", "has been closed"]) {
     const idx = head.indexOf(phrase);
@@ -122,6 +113,26 @@ export function isClosedDescription(description: string | null): boolean {
   }
 
   return false;
+}
+
+/** Combined display filter: structured operational_status when available,
+ *  description heuristic as fallback.
+ *
+ *  CLOSED / DECOMMISSIONED → always filtered.
+ *  REDUCED SERVICES / UNREACHABLE → filtered only when no photo.
+ *  NULL (open or unknown) → fall through to description heuristic. */
+export function isClosedPlace(row: {
+  operational_status?: string | null;
+  description: string | null;
+  nps_photo_url?: string | null;
+}): boolean {
+  const status = row.operational_status?.toUpperCase().trim();
+  if (status) {
+    if (status === "CLOSED" || status === "DECOMMISSIONED") return true;
+    if (!row.nps_photo_url) return true;
+    return false;
+  }
+  return isClosedDescription(row.description);
 }
 
 /** Inverse of SLIDE_TO_PRIMARY_CATEGORY: maps a data-layer primary_category
@@ -185,6 +196,9 @@ export type MasterPlaceRow = {
   /** Description provenance from the RPC's CASE derivation (same logic as
    *  master_place_search_export). 'source' | 'llm' | 'template' | null. */
   description_source?: "source" | "template" | "llm" | null;
+  /** Structured open/closed status from source data. NULL = open or no
+   *  structured signal. Non-null: CLOSED, TEMPORARILY CLOSED, etc. */
+  operational_status?: string | null;
 };
 
 function prettyCategory(c: string): string {
@@ -320,7 +334,7 @@ export async function fetchFederatedPois(args: {
       : await query;
     if (error) throw error;
     return ((data ?? []) as MasterPlaceRow[])
-      .filter((r) => !isClosedDescription(r.description))
+      .filter((r) => !isClosedPlace(r))
       .map((r) => mapMasterPlaceRow(r, args.slideKey));
   } catch (err) {
     console.warn(
