@@ -49,7 +49,7 @@ async function run() {
       if (raw == null) { totalSkipped++; continue; }
 
       const status = String(raw).toUpperCase().trim();
-      if (status === "OPEN" || status === "") { totalSkipped++; continue; }
+      if (status === "OPEN" || status === "" || status === "NONE") { totalSkipped++; continue; }
 
       statusCounts[status] = (statusCounts[status] ?? 0) + 1;
 

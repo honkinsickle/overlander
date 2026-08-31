@@ -346,7 +346,7 @@ function normalize(
       const raw = (props as Record<string, unknown>).seasonal_operational_status;
       if (raw == null) return null;
       const s = String(raw).toUpperCase().trim();
-      return s === "OPEN" || s === "" ? null : s;
+      return s === "OPEN" || s === "" || s === "NONE" ? null : s;
     })(),
     provenance: {
       infra_layer: "EDW_RecInfraRecreationSites_02:0",
