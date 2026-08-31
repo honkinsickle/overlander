@@ -15,6 +15,36 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Re-verified 2026-08-29 `[queried PROD, read-only, live spot-check
+> probes not just script exit codes]` — two more editorial sources landed
+> on PROD this session, both under Adam's explicit per-source
+> authorization. Full narrative: `docs/LOG.md` §2026-08-29.** The
+> `atlas_oddities` counts in the box below are unchanged by this pass.
+>
+> | metric | `editorial_food` (publisher `tasteatlas`, all 6 states) | `family_destinations` |
+> |---|--:|--:|
+> | `source_record` ingested | **497** (0 errors) | **14** (0 errors) |
+> | ER: `new_master_place` | **481** | **11** |
+> | ER: `manual_review` (pending) | **16** | **3** |
+> | ER: errors | 0 | 0 |
+> | Typesense `places_prod` post-sync total | **21,315** | **21,326** |
+> | Typesense sync failures | 0 | 0 |
+>
+> **Migrations applied** (all 6 pending, in one `db:push-verify` pass —
+> ledger ordering required it): `20260828110000/100/200` (family_destinations
+> field_precedence + corridor + search-export photo laterals) and
+> `20260828120000/100/200` (editorial_food, same shape). The
+> family_destinations trio is schema-only and was inert on PROD until
+> this session's ingest ran.
+>
+> **Known issue, not fixed this session:** `Hodad's` exists as two
+> separate `master_place` rows — one attributed to `family_destinations`,
+> one to `editorial_food`/`tasteatlas` — missed by entity resolution
+> because the two promotions ran as independent passes. Also unresolved:
+> 16 + 3 = 19 PROD `place_match` rows sitting `pending`, and (TEST-side)
+> 19 + 1 = 20 more — see `docs/LOG.md` §2026-08-29 for the two matches
+> flagged as probably-wrong (Tivoli Bar and Grill, Rockwell Ice Cream).
+>
 > **⚠️ Re-verified 2026-08-27 (later) `[queried PROD, read-only]` —
 > atlas_oddities landed on PROD in a single session (migrations +
 > anchor CSV ingest + materialize + manual content ingest + markdown
@@ -135,6 +165,20 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Re-measured 2026-08-29 `[queried TEST, read-only]` — adds a new
+> `tasteatlas` publisher to `editorial_food`; does NOT re-measure the
+> corpus-wide totals in the box below (those stand until someone
+> re-measures them).** `docs/LOG.md` §2026-08-29 has the full build
+> narrative (six states, screenshot-sourced, geocode/description/photo
+> pipeline). `source_record` where `source_id = 'editorial_food'`:
+> **568 total** — 497 `publisher_slug = 'tasteatlas'` (this session) + 71
+> from the five publishers PR #317 originally landed
+> (beyondthejourney/familyvacationsus/altaonline/provokelifestyle/everafterinthewoods).
+> `family_destinations` unchanged at 14 (already counted in the box
+> below). ER on the tasteatlas rows: 478 `new_master_place` + 19
+> `manual_review`, 0 errors. Typesense `places_test` post-sync: 33,287
+> documents.
+>
 > **⚠️ Re-measured 2026-08-21 `[queried TEST, read-only]` — SUPERSEDES every
 > box below for totals.** Six-state state-boundary rebuild (real TIGER/Line
 > point-in-polygon, replacing the old bbox classifier corpus-wide), the
