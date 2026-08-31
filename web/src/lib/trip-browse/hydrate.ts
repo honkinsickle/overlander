@@ -3,6 +3,7 @@ import {
   mapMasterPlaceRow,
   primaryCategoryToSlideKey,
   isSuppressedCategory,
+  isClosedDescription,
   type MasterPlaceRow,
 } from "@/lib/trip-browse/federated";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -137,6 +138,7 @@ export async function hydratePlacesByIds(
     // Suppress standalone amenities (dump_station, water, toilet, …): they are
     // infrastructure, not destinations, so they never render as their own card.
     if (isSuppressedCategory(base.primary_category)) continue;
+    if (isClosedDescription(base.description)) continue;
     const row: MasterPlaceRow = {
       id: base.id,
       canonical_name: base.canonical_name,
