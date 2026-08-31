@@ -1,5 +1,41 @@
 # Backlog — open work
 
+## TasteAtlas / family_destinations manual-review + duplicate triage (2026-08-29)
+
+Both editorial sources promoted to PROD this session left `place_match`
+rows sitting `pending` for a human to confirm-link or reject. Not
+resolved this session; full counts and the pipeline that produced them:
+`docs/LOG.md` §2026-08-29, `docs/DATA_INVENTORY.md` PROD/TEST boxes for
+2026-08-29.
+
+- **`editorial_food`/`tasteatlas` manual review:** 19 on TEST, 16 on PROD
+  (different overlap sets — different corpora). The overwhelming majority
+  are legitimate near-duplicate detections against existing
+  `atlas_oddities`/`family_destinations` `master_place` rows (sub-50m
+  apart, high name similarity, below the 0.85 auto-link threshold) — safe
+  to confirm-link on review.
+- **Two specific matches flagged as probably WRONG, not just
+  low-confidence** (worth checking before the bulk-confirm pass, in case
+  the reviewer's instinct is to rubber-stamp the whole queue): `Tivoli Bar
+  and Grill` matched to `Mick Jagger's Urinal`, and `Rockwell Ice Cream`
+  matched to `The Tiny Gallery`. Both AO-side names read like a quirky
+  curiosity object cataloged at the same address, not the restaurant
+  itself — low name similarity (0.59, 0.61) is the tell.
+- **`family_destinations` manual review:** 1 on TEST (Nepenthe, already
+  flagged in PR #316), 3 on PROD (not yet identified individually).
+- **`Hodad's` duplicate `master_place` rows on PROD** — one from
+  `family_destinations_guide`, one from `tasteatlas`/`editorial_food`.
+  Same real restaurant (Ocean Beach, San Diego), missed by entity
+  resolution because the two PROD promotions ran as independent passes
+  rather than against each other's freshly-written rows. Needs a manual
+  merge or an ER re-run that considers both.
+- **Photo-credit gap, still open:** both sources' PROD photos are
+  credited by aggregator/publisher slug (`tasteatlas`,
+  `familydestinationsguide.com`, etc.), not the actual photographer.
+  Raised again before this session's PROD promotion and accepted as-is by
+  explicit decision — same open question as before for the next source of
+  this shape.
+
 ## `preComputeFacts` → `resolvePlaces()` migration — deferred (2026-08-25)
 
 The trip-generation pool-fetch (`fetchCorpusForSegment` /
