@@ -4,6 +4,7 @@ import {
   mapMasterPlaceRow,
   primaryCategoryToSlideKey,
   isClosedDescription,
+  isClosedPlace,
   SLIDE_TO_PRIMARY_CATEGORY,
 } from "./federated";
 
@@ -218,6 +219,42 @@ test("isClosedDescription: incidental mention in long text → false", () => {
     "When the cemetery closed its gates in 1906, it had served the community for decades. " +
     "Today it remains a beautiful historic site.",
   ));
+});
+
+// ── isClosedPlace (combined predicate) ──────────────────────────────────
+
+test("isClosedPlace: CLOSED status → always filtered", () => {
+  assert.ok(isClosedPlace({ operational_status: "CLOSED", description: null }));
+  assert.ok(isClosedPlace({ operational_status: "CLOSED", description: null, nps_photo_url: "https://x/y.jpg" }));
+});
+
+test("isClosedPlace: DECOMMISSIONED status → always filtered", () => {
+  assert.ok(isClosedPlace({ operational_status: "DECOMMISSIONED", description: null }));
+});
+
+test("isClosedPlace: REDUCED SERVICES without photo → filtered", () => {
+  assert.ok(isClosedPlace({ operational_status: "OPEN WITH REDUCED SERVICES", description: null }));
+});
+
+test("isClosedPlace: REDUCED SERVICES with photo → kept", () => {
+  assert.ok(!isClosedPlace({ operational_status: "OPEN WITH REDUCED SERVICES", description: null, nps_photo_url: "https://x/y.jpg" }));
+});
+
+test("isClosedPlace: UNREACHABLE without photo → filtered", () => {
+  assert.ok(isClosedPlace({ operational_status: "UNREACHABLE", description: null }));
+});
+
+test("isClosedPlace: UNREACHABLE with photo → kept", () => {
+  assert.ok(!isClosedPlace({ operational_status: "UNREACHABLE", description: null, nps_photo_url: "https://x/y.jpg" }));
+});
+
+test("isClosedPlace: null status → falls back to description heuristic", () => {
+  assert.ok(isClosedPlace({ operational_status: null, description: "Permanently closed" }));
+  assert.ok(!isClosedPlace({ operational_status: null, description: "A lovely campground." }));
+});
+
+test("isClosedPlace: null status + null description → not closed", () => {
+  assert.ok(!isClosedPlace({ operational_status: null, description: null }));
 });
 
 // NOTE on OSM + amenities: this function does not, and should not, know

@@ -342,6 +342,12 @@ function normalize(
           marker_activity_group: recOpp.markeractivitygroup,
         }
       : null,
+    operational_status: (() => {
+      const raw = (props as Record<string, unknown>).seasonal_operational_status;
+      if (raw == null) return null;
+      const s = String(raw).toUpperCase().trim();
+      return s === "OPEN" || s === "" ? null : s;
+    })(),
     provenance: {
       infra_layer: "EDW_RecInfraRecreationSites_02:0",
       infra_cn: siteCn,

@@ -1,7 +1,7 @@
 # Spec — Operational Status Normalization
 
-**Status:** SCOPING ONLY. Investigation complete, plan proposed. Not built,
-not committed to any branch beyond this document. For Adam's review.
+**Status:** IMPLEMENTED. All 6 steps built. Migrations not yet applied.
+Backfill not yet run. ADR: `docs/decisions/2026-08-31-operational-status-normalization.md`.
 
 **Context:** PR #320 added `isClosedDescription()` — a description-text
 heuristic that filters closed places from display surfaces. It works (~97%
