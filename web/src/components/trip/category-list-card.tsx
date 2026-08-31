@@ -72,6 +72,19 @@ function formatCount(n: number): string {
   return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
 }
 
+/** Detect the `mapMasterPlaceRow` synthesized-description fallback so it can
+ *  be suppressed on the card. Shape produced upstream:
+ *  `${canonical_name} — ${prettyCategory(primary_category)}.`
+ *  where `prettyCategory` returns Title-Case words separated by spaces
+ *  (e.g. "Oddity", "Grocery", "Ev Charging", "Roadside Attraction"). */
+function looksLikeMapperFallback(desc: string, title: string): boolean {
+  if (!desc || !title) return false;
+  const prefix = `${title} — `;
+  if (!desc.startsWith(prefix)) return false;
+  const rest = desc.slice(prefix.length);
+  return /^[A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*){0,3}\.$/.test(rest);
+}
+
 /** Strip HTML tags + common entities from a description string. Some source
  *  descriptions (BLM/USFS-style rows like `<p>Picnic Site. Day use hours…</p>`)
  *  arrive with raw markup; React escapes text children, so unstripped content
@@ -105,6 +118,15 @@ export function CategoryListCard({
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
   const cleanDescription = description ? stripHtml(description) : "";
+  // Suppress the `mapMasterPlaceRow` synthesized fallback (federated.ts:253-255),
+  // which writes `${canonical_name} — ${prettyCategory(primary_category)}.` when
+  // the raw description is null. That fallback is helpful for the slide-up
+  // overlay + Top Places (which need any description string to render) but on
+  // the compact card it duplicates the title and adds a category label the
+  // icon+color already communicate — pure noise.
+  const effectiveDescription = looksLikeMapperFallback(cleanDescription, place.title)
+    ? ""
+    : cleanDescription;
 
   return (
     <div
@@ -215,7 +237,7 @@ export function CategoryListCard({
           reviewCount={place.reviewCount}
         />
 
-        {cleanDescription ? (
+        {effectiveDescription ? (
           <p
             className="line-clamp-2"
             style={{
@@ -225,7 +247,7 @@ export function CategoryListCard({
               lineHeight: "21px",
             }}
           >
-            {cleanDescription}
+            {effectiveDescription}
           </p>
         ) : null}
 
