@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Navigation, X } from "lucide-react";
 import type { Waypoint } from "@/lib/trips/types";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 
 const TRANSITION_MS = 280;
 
@@ -234,7 +235,7 @@ function TrappersDetailPanel({
   const community = wp?.community;
   const amenities = wp?.amenities ?? [];
   const sources = wp?.dataSources ?? [];
-  const description = wp?.description ?? place.description;
+  const description = stripDescriptionHtml(wp?.description ?? place.description);
   const photoUrl = wp?.photoUrl ?? place.photoUrl;
   const dayNumberLabel = place.dayNumber ?? wp?.subtitle?.match(/Day\s+(\d+)/)?.[1];
   const routeOffset = wp?.routeOffsetMi;
@@ -704,6 +705,7 @@ function TrappersDetailPanel({
                   fontSize: 13,
                   lineHeight: "21px",
                   color: "#A89C90",
+                  whiteSpace: "pre-line",
                 }}
               >
                 {description}

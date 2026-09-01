@@ -2,6 +2,7 @@
 
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 import {
   CategoryIconV2,
   type CategoryIconV2Name,
@@ -498,7 +499,7 @@ function PlaceCard({
                 lineHeight: "17px",
               }}
             >
-              {place.description}
+              {stripDescriptionHtml(place.description)}
             </p>
             {(onAdd || addPlaceholder) && (
               <button
