@@ -244,6 +244,32 @@ leftovers, harmless today, wrong if anything ever trusts the key's presence.
 RIDB or NPS. Small, but it is the one place this backfill makes an existing
 wrong value actively misleading rather than merely stale.
 
+## Slide-up overlay raw-hex conform + DESIGN.md `interest` token drift (2026-08-31)
+
+Surfaced while fixing the slide-up's category badge + title colour; both
+deliberately left alone as out of scope for that change.
+
+- **`map-detail-overlay.tsx` is still heavily raw-hex** and violates
+  DESIGN.md §6 outside the title row that was fixed. The four sites that are
+  the *same* bug class as the one fixed — a literal `--cat-scenic-title`
+  value standing in for a category token — are the tag pills (`:329-331`,
+  `#A6C9F9` + `rgba(166,201,249,0.12)` + `rgba(166,201,249,0.32)`), the
+  reliability block (`:528`), the route box (`:692-693`), and a stat
+  `valueColor` (`:810`). Whether these should become `--cat-{category}-*`
+  (category-driven, like the title now is) or a fixed neutral token is a
+  design call, not a mechanical substitution — that is why it was not
+  bundled. The file's remaining ~35 raw hex values are greys/greens with no
+  obvious existing token and need a token-coverage pass first.
+- **2 of 45 category role tokens drift from DESIGN.md §1.2**, both on
+  `interest`: `--cat-interest-title` is `#C9BFA6` in globals.css vs
+  `#BAB0AF` in the table, and `--cat-interest-badge-border` is `#C9BFA6` vs
+  `#888888`. Per DESIGN.md §7 globals.css is the editable master and the
+  doc is regenerated from it, so **the table is the stale side** — but
+  confirm against the Paper "Category Type" artboard before editing, since
+  the artboard is named as §1.2's source of truth and may agree with either.
+  The other 43 tokens match exactly.
+
+
 ## TasteAtlas / family_destinations manual-review + duplicate triage (2026-08-29)
 
 Both editorial sources promoted to PROD this session left `place_match`
