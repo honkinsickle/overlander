@@ -35,21 +35,47 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   `rgb(243,134,102)` + burger icon; scenic `Juan Matias Sanchez Adobe` →
   `rgb(166,201,249)` + peak icon; camping `Mt. Lowe Trail Camp` →
   `rgb(110,206,206)` + tent icon. For food and scenic, title colour, badge
-  fill AND icon markup were byte-identical to the same place's day-detail
-  card. Badge measured on-screen and `elementFromPoint`-reachable, per the
-  CLAUDE.md wiring-vs-reachability rule.
+  fill and icon markup all matched the same place's day-detail card exactly
+  — with the caveat that the icon comparison is over the **first 300
+  characters** of the svg's `innerHTML`, which is the whole string for the
+  scenic icon but a truncated prefix for food. Badge measured on-screen and
+  `elementFromPoint`-reachable, per the CLAUDE.md wiring-vs-reachability
+  rule. **The camping card-side comparison is vacuous** — the card-badge
+  finder returned `null` for that card variant, so only the overlay side of
+  the camping row is evidence; the overlay's inline style reads
+  `var(--cat-camping-title)` and its icon is the tent, which is what makes
+  camping a real third data point rather than a repeat of scenic.
+- **The task named `Philippe The Original` as the food example; I used
+  `Marukai Market` instead** and should have said so at the time. Philippe
+  was not present anywhere in day 1 of `la-to-portland` at the moment I
+  measured (`innerText.includes('Philippe')` false with 428 place slots
+  mounted); I did not search the other 10 days. Marukai Market is a
+  genuine `food`-category tile on that day and serves the same purpose,
+  but the substitution was silent, which it should not have been.
 - **Deliberate negative run** (`git stash` the component, re-probe, restore):
   pre-fix the food place rendered `rgb(166,201,249)` with `firstElementChild`
   = the `<h2>` itself (398×26, no svg). The instrument goes red on the broken
   code, so the green result is not vacuous.
-- **`camping` and `hotel` are colour-indistinguishable** — all five role
-  tokens are byte-identical between them in globals.css. A colour-only
-  instrument cannot name those two apart; only the icon can. Worth knowing
-  before anyone writes a category assertion off computed colour again.
+- **`camping` and `hotel` are colour-indistinguishable *on the roles these
+  surfaces use*.** Precisely: `title`, `cta-bg` and `cta-border` are
+  byte-identical between the two in globals.css (`#6ECECE` / `#304C4B` /
+  `#6ECECE`); they differ only on `badge-bg` (`#0F2E1F` vs `#304C4B`) and
+  `badge-border` (`#4D9A6E` vs `#6ECECE`), which neither the card nor the
+  overlay reads. So a colour-only instrument aimed at these two surfaces
+  cannot name them apart — only the icon can. **Corrects this entry's own
+  first draft**, which claimed all five roles were identical: that was an
+  extrapolation from the three roles the instrument actually resolved, not
+  a measurement. Same class as the "scope the query to the element under
+  test" lesson in CLAUDE.md, one rung up: I generalised past what I read.
 - **The `?? "interest"` fallback is defensive, not currently reachable:** all
-  six in-repo `trip:openDetail` dispatchers pass a `waypoint` (real, or
-  synthesized via `browsePlaceToWaypoint`), even though `DetailPlace.waypoint`
-  is optional. Exercised it by dispatching a waypoint-less place by hand —
+  **seven** in-repo `trip:openDetail` dispatch sites that pass a place —
+  `waypoint-card:54`, `find-nearby-panel:765`, `category-browse-panel:516`,
+  `browse-day-section:198`, `map-column:585`, and `day-detail-corridor-column`
+  at `:695` and `:759` — pass a `waypoint` (real, or synthesized via
+  `browsePlaceToWaypoint`), even though `DetailPlace.waypoint` is optional.
+  (An eighth site, `day-detail-corridor-column:1139`, dispatches
+  `{ place: null }` to close the overlay and passes no place.) First draft of
+  this entry said "six" — an uncounted number, not a wrong measurement. Exercised it by dispatching a waypoint-less place by hand —
   renders the interest diamond + `var(--cat-interest-title)`, no JS error.
 - **Found, not fixed (flagged for follow-up):** the rest of
   `map-detail-overlay.tsx` is still heavily raw-hex, including four more
