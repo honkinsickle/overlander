@@ -12,6 +12,44 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later) — PROD deployment of the recompute_master_place() fix: migrations applied, repair recompute BLOCKED on an uncovered side effect
+
+- **All five migrations (`20260901000100`–`000500`) applied to PROD.** Three-gate
+  pre-flight first: refs aligned on both sides, exactly the five intended
+  migrations pending with zero orphan ledger versions, and live state confirmed
+  as the regressed function. Applied via bare `npm run -w data db:push-verify`
+  with `data/.env` swapped to PROD and the CLI linked to PROD, per the
+  documented production path.
+- **Post-apply drift check: PROD and TEST are byte-identical** across all five
+  objects — `recompute_master_place`, `compute_prominence`,
+  `is_generated_source`, `pois_along_corridor`, `master_place_search_export` —
+  plus matching `field_precedence` rows at priority 20/21. No
+  environment-specific drift.
+- **The reroute is a genuine no-op on PROD.** `master_place_generated_content`
+  has **0 rows**. Stated plainly and skipped rather than forced, as the task
+  directed.
+- **All four verifications pass on PROD**, including the clear-and-restore test
+  on a real single-source row (chosen outside the six-state footprint so its
+  transient state was never user-visible in search). Test suite 32 files / 626
+  passed / 3 skipped.
+- **Zero data change.** All 17 baseline metrics identical pre/post apply; only
+  the 2 verification subjects were recomputed, both restored.
+- **BLOCKED, and this is the important part: applying migrations does not
+  recompute anything.** The authorized blanking of 2,725 stale descriptions has
+  NOT happened, and the 2,732-row regression batch is still unrepaired. Both
+  need a recompute of the union population (5,457 rows; sets measured disjoint).
+  Measured what that recompute would clear *inside that population*:
+  description **2,725** (authorized) but ALSO **contact 2,000, access 438,
+  amenities 210, hours 38** — not covered by the authorization, and absent on
+  TEST, where every non-description field cleared 0. The task said to seek
+  confirmation on anything not covered; this is that.
+- **The clearing is latent, not avoided.** Any normal ER/materialize run that
+  touches these rows will now clear those fields incrementally and unobserved.
+  The real choice is a measured batch under supervision versus a silent drip.
+- Housekeeping: dropped the leftover `public._verify_tmp` table an earlier
+  session created on TEST. PROD credentials and CLI link restored to TEST,
+  confirmed behaviourally rather than by reading the ref file.
+
 ## 2026-09-01 (later) — recompute_master_place() restored, description backfill rerouted through source_record, and a deviation of mine caught by its own verification
 
 - **Both threads closed on TEST.** Migrations `20260901000100`–`20260901000500`.

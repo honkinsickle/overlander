@@ -15,6 +15,29 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Schema changed 2026-09-01 `[migrations applied to PROD; NO data changed]`.**
+> The five `recompute_master_place()` restore + generated-description migrations
+> (`20260901000100`–`000500`) are now applied to PROD, and PROD's function/view
+> definitions are **byte-identical to TEST's** (verified by diffing
+> `pg_get_functiondef`/`pg_get_viewdef` for all five objects).
+> New on PROD: `is_generated_source(text)`, and `field_precedence` description
+> rows for `generated_llm` (priority 20) and `generated_template` (21).
+> **`master_place_generated_content` exists on PROD but holds 0 rows**, and there
+> are **0** `generated_llm`/`generated_template` source_records — the description
+> reroute is a no-op here, unlike TEST.
+> **Zero data change:** all seventeen measured corpus metrics are identical
+> pre- and post-apply — `master_place` 28,348 (all `is_searchable`), rows with a
+> real description 13,955, `description = ''` 96, `mvum_corridor` true/false/null
+> 52 / 2,810 / 25,486, `contained_in` edges 6,217, `source_record` 37,845 total /
+> 29,555 active, `operational_status` set 50,
+> `master_place_search_export` 21,965, avg prominence (searchable) 2.915338,
+> `sum(source_count)` 30,379. Only 2 rows were recomputed (verification
+> subjects, both restored).
+> **Pending, not done:** the repair recompute — see `docs/BACKLOG.md` top entry.
+> Until it runs, the 2,732-row regression batch keeps its NULL `mvum_corridor`
+> and missing containment edges, and the 2,725 stale descriptions remain.
+> Report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
+
 > **⚠️ Re-verified 2026-08-31 `[queried PROD, read-only + USFS INFRA
 > ingestion + backfill + Typesense sync]` — USFS INFRA site corpus
 > ingested on PROD (3,168 rows, 0 errors), ER ran (2,629 new

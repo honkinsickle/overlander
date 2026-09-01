@@ -1,5 +1,43 @@
 # Backlog — open work
 
+## DECISION NEEDED — PROD repair recompute clears more than descriptions (2026-09-01)
+
+The `recompute_master_place()` fix is **applied on PROD** and PROD's definitions
+are byte-identical to TEST's. But applying a migration does not recompute
+anything, so **no existing damage is repaired and no description has been
+blanked**. Both need a deliberate recompute.
+
+Populations are disjoint (overlap measured 0): 2,732 rows damaged by the
+regression + 2,725 stale-description rows = **5,457**.
+
+Measured, inside that union, what a recompute would clear (non-null count as
+control):
+
+| field | non-null in population | would clear | authorized? |
+|---|---:|---:|---|
+| `description` | 5,367 | 2,725 | **yes** |
+| `contact` | 2,050 | 2,000 | **no** |
+| `access` | 463 | 438 | **no** |
+| `amenities` | 210 | 210 | **no** |
+| `hours` | 38 | 38 | **no** |
+
+TEST gave no warning — every non-description clearable field measured 0 there.
+This is a PROD-only population difference.
+
+**Three options:**
+
+1. **Full union (5,457).** Repairs `mvum_corridor` (floor of 449 rows that
+   should be `true`) and ≥58 containment edges; clears all five fields above.
+2. **Regression batch only (2,732).** Repairs `mvum_corridor` and containment,
+   and clears **0** descriptions — measured, because no stale-description row
+   sits inside that batch. Leaves the 2,725 stale descriptions untouched. This
+   cleanly separates "repair the damage" from "accept the content loss".
+3. **Do nothing.** Not neutral: the clearing is now **latent**, so any normal
+   ER/materialize run will clear those fields incrementally and unobserved.
+
+Full report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
+
+
 ## `operational_status` is a DIRECT WRITE, not resolvable through field_precedence (2026-09-01)
 
 `20260831100000_operational_status.sql` added `operational_status` to
@@ -86,7 +124,15 @@ so generated rows report `'llm'`/`'template'` instead of `'source'`.
 search:sync` runs. Not run in this pass.
 
 
-## ~~`recompute_master_place()` regressed to its 2026-05-27 original~~ — **RESOLVED ON TEST 2026-09-01**, PROD still open
+## ~~`recompute_master_place()` regressed to its 2026-05-27 original~~ — **RESOLVED ON TEST AND PROD 2026-09-01**
+
+> **PROD RESOLVED 2026-09-01.** All five migrations applied; PROD's
+> `recompute_master_place`, `compute_prominence`, `is_generated_source`,
+> `pois_along_corridor` and `master_place_search_export` are byte-identical to
+> TEST's. The earlier `[UNVERIFIED]` PROD status is also closed — the regression
+> was confirmed live on PROD by measurement before the fix, and the function is
+> now correct. **Existing damage is NOT yet repaired** — that needs a recompute,
+> which is the open decision at the top of this file.
 
 > **RESOLVED ON TEST** by migrations `20260901000200` + `20260901000500`. All
 > five behaviours restored across all seven sites, verified against the live
