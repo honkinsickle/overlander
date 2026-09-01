@@ -106,11 +106,28 @@ export const BUILD_OPTIONS = [
 /** Reference-doc §02 travel-style Preferences. */
 export const PREFERENCE_OPTIONS = [
   "solitude",
-  "scenic",
   "photography",
   "simple-camp",
   "local-food",
 ] as const;
+
+/**
+ * Drop preferences a saved rig carries that the wizard no longer offers.
+ *
+ * `scenic` was retired here (spec `docs/specs/interest-category-chips.md` §7 —
+ * it duplicates the Interest Categories chips). Retiring an option is not
+ * self-cleaning: `ChipGroup` renders only `options`, so a retired value stays
+ * in `rig.preferences` state, is written back on save, and — because
+ * `buildFactsMessage` serialises the whole `rig` object into the LLM payload —
+ * keeps reaching the model. The user can neither see nor untick it.
+ *
+ * Filtering to the current option set on load makes the removal actually take
+ * effect, and covers any future retirement rather than just this one.
+ */
+export function normalizePreferences(preferences: readonly string[]): string[] {
+  const allowed = PREFERENCE_OPTIONS as readonly string[];
+  return preferences.filter((p) => allowed.includes(p));
+}
 
 /** Map the wizard form → the pipeline's GenerationInput. Pure; no I/O. */
 export function expeditionToGenerationInput(

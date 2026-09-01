@@ -14,6 +14,7 @@ import {
   AVOID_OPTIONS,
   BUILD_OPTIONS,
   PREFERENCE_OPTIONS,
+  normalizePreferences,
   validateExpeditionForm,
   type ExpeditionDestination,
   type ExpeditionForm,
@@ -150,7 +151,13 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
   const [returnRouting, setReturnRouting] =
     useState<ExpeditionForm["returnRouting"]>("shortest");
   const [vehicleId, setVehicleId] = useState(firstVehicle?.id ?? "");
-  const [rig, setRig] = useState(firstVehicle?.rig ?? DEFAULT_RIG);
+  // Seeded through normalizePreferences so a rig saved before an option was
+  // retired can't keep an invisible, un-untickable preference (it would still
+  // ride into the LLM payload via `rig`).
+  const [rig, setRig] = useState(() => {
+    const seeded = firstVehicle?.rig ?? DEFAULT_RIG;
+    return { ...seeded, preferences: normalizePreferences(seeded.preferences) };
+  });
   // Interest-Category-Chips. Holds the user-selected guarantee categories as
   // `SlideCategoryKey` strings — `fuel` from the checkbox (live-resolve path)
   // plus any of the 6 pool-side chips (`GUARANTEE_CHIP_CATEGORIES`). Forwarded
@@ -174,7 +181,10 @@ export function ExpeditionWizard({ vehicles }: { vehicles: Vehicle[] }) {
   const onVehicle = (id: string) => {
     setVehicleId(id);
     const v = vehicles.find((x) => x.id === id);
-    if (v) setRig(v.rig ?? DEFAULT_RIG);
+    if (v) {
+      const seeded = v.rig ?? DEFAULT_RIG;
+      setRig({ ...seeded, preferences: normalizePreferences(seeded.preferences) });
+    }
   };
 
   // Dates come from the shared range picker and reach the pipeline as
