@@ -21,7 +21,7 @@ const seed = (): Record<string, Vehicle> => ({
       capability: "moderate",
       groupSize: "1–2 travelers",
       skill: "intermediate",
-      preferences: ["solitude", "scenic", "photography", "simple-camp", "local-food"],
+      preferences: ["solitude", "photography", "simple-camp", "local-food"],
     },
   },
   "veh-tacoma-trd": {
@@ -36,7 +36,7 @@ const seed = (): Record<string, Vehicle> => ({
       capability: "moderate",
       groupSize: "1–2 travelers",
       skill: "intermediate",
-      preferences: ["scenic", "local-food"],
+      preferences: ["local-food"],
     },
   },
   "veh-rivian-r1t": {
@@ -51,7 +51,7 @@ const seed = (): Record<string, Vehicle> => ({
       capability: "mild",
       groupSize: "2 travelers",
       skill: "intermediate",
-      preferences: ["scenic", "photography"],
+      preferences: ["photography"],
     },
   },
 });
