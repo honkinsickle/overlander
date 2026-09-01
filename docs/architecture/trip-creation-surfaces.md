@@ -484,18 +484,36 @@ different questions:
 | `budget`, `bufferDays`, `avoid`, `returnRouting` | `params.*` | **prompt only** |
 | `rig.*` (7 fields) | `rig` | **prompt only** |
 | `objective` | `objective` | **prompt only**, explicitly labelled tone context |
+| `guaranteedCategories[]` | `guaranteedCategories` (top-level) | **both** — mechanically enforced by the audit's anchor-backfill, AND prompt since 2026-09-01 |
 
 `buildFactsMessage` `JSON.stringify`s `params` and `rig` wholesale into the user
-turn, so every field does reach the model `[read source: master-prompt.ts]`.
+turn, so every field *inside those two objects* reaches the model
+`[read source: master-prompt.ts]`.
 
-**The distinction that matters:** apart from anchor coords and
-`maxDailyDriveMi`, **no form field is enforced by code.** `budget`, `avoid`,
+> **CORRECTED 2026-09-01.** That sentence used to end "so every field does reach
+> the model", which was **false for `guaranteedCategories`**. It is a *top-level*
+> field on `GenerationInput`, not inside `params` or `rig`, and
+> `buildFactsMessage` builds an **explicit payload object** — so it was invisible
+> to the model entirely. Fixed in PR #287 blocker H: it is now named in that
+> payload, filtered to `GUARANTEE_CATEGORIES`. See
+> `docs/decisions/2026-09-01-guaranteed-categories-prompt-posture.md`.
+>
+> The row above also corrects the enforcement claim below: `guaranteedCategories`
+> **is** enforced by code (the anchor-backfill inserts real places for categories
+> a day misses), which has been true since the 2026-08-25 backfill shipped —
+> before this session.
+
+**The distinction that matters:** apart from anchor coords,
+`maxDailyDriveMi`, and `guaranteedCategories` (see the correction above),
+**no form field is enforced by code.** `budget`, `avoid`,
 `returnRouting`, `bufferDays`, and the entire rig profile are advisory text in a
 prompt. `objective` is explicitly fenced — the prompt instructs the model to use
 it "as tone/priority context, NOT as a fact source" `[read source]`.
 
 So the honest answer to "which fields are collected and discarded" is: **none is
-discarded, but only two are binding.** A user who sets `avoid: ["ferries"]` has
+discarded, but only three are binding** — anchor coords, `maxDailyDriveMi`, and
+`guaranteedCategories` (the third added by the 2026-08-25 backfill; this line
+said "only two" until 2026-09-01). A user who sets `avoid: ["ferries"]` has
 expressed a preference the model may honour; nothing verifies that it did.
 `[UNVERIFIED: whether the audit checks any `params` constraint other than
 mileage — the audit's rule set was not traced this session.]`

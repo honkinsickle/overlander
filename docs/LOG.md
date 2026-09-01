@@ -55,6 +55,35 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   mechanism is confirmed; the rate is not.
 - Gates: web typecheck 0, data typecheck 0, data test 0, next build 0, itinerary
   suite 195 passed (6 new).
+- **Self-audit caught a false statement of mine.** I reported that `interpret.ts`
+  and `edit.ts` "don't carry `GenerationInput`, so the guarantee isn't theirs to
+  send." Wrong on the premise — **both take `GenerationInput` and both build
+  model-facing prompt text from it** (`buildInterpretContext(input, days)` emits
+  the trip window, anchors and day list). Neither includes the guarantee (0
+  occurrences each). Whether they should is genuinely open and is now filed,
+  with the arguments both ways, rather than asserted. The verification command
+  itself was the tell: it printed a pre-written conclusion that the output then
+  contradicted.
+- **Second self-audit finding: I never checked the upstream half of the chain
+  before publishing.** I claimed the guarantee "now reaches the model" having
+  only exercised `buildFactsMessage` in isolation. Verified afterwards and it
+  holds — wizard chip state → `ExpeditionForm.guaranteedCategories` →
+  `expeditionToGenerationInput` → `GenerationInput` — so the change is not
+  inert. Right answer, published ahead of the evidence.
+- **Doc pass (`/wrap`):** `docs/architecture/trip-creation-surfaces.md` carried
+  two stale claims, one of them falsified by this session and one older.
+  Its consumption table asserted `buildFactsMessage` stringifies `params` and
+  `rig` "so every field does reach the model" — **false for
+  `guaranteedCategories`**, which is top-level, not inside either object, and so
+  reached the model not at all. And it claimed "apart from anchor coords and
+  `maxDailyDriveMi`, no form field is enforced by code" — also false since the
+  2026-08-25 backfill, which enforces `guaranteedCategories` mechanically. Both
+  corrected, with a row added for the field.
+- Also corrected in the same pass: `expedition.ts`'s doc comment on the field
+  ("only `fuel` is wired downstream / others are D-blocked") was stale before
+  this branch and made more wrong by it.
+- `DATA_INVENTORY.md` deliberately untouched — no TEST or PROD data was read or
+  written this session; the change is application code only.
 
 ## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
 
