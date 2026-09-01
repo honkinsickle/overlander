@@ -56,6 +56,22 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - Timing note: the 50-row probe measured ~0.58 s/row cold; the warm rate varied
   between ~0.2 and ~1 s/row, so the initial "~26 minutes" estimate was
   coincidentally close but was never a stable rate.
+- **Doc pass (`/wrap`):** walked the CLAUDE.md doc set. `STATE.md`, `LOG.md`,
+  `BACKLOG.md`, `DATA_INVENTORY.md` and the ADR were already current from this
+  session's commits. One genuine staleness found and fixed:
+  `docs/architecture/resolve-places-design.md` §D2 documents the exact
+  `pois_along_corridor` filter set that migration `20260901000300` changed — its
+  table said "excludes template-only descriptions" with no mention of the second,
+  attribution-keyed predicate, and it did not record that the original predicate
+  silently stops excluding once the column is populated. Also noted there that
+  `description_source` is now attribution-first and that Typesense is unsynced,
+  so the bbox and corridor doors can disagree until `search:sync` runs.
+- **Checked and deliberately not changed:** `place-pipeline-trace.md` §2 (its
+  subject is `capacity`/EV-socket/`land_manager`, untouched by this session);
+  `place-render-model.md`'s `field_precedence` passage (about photo routing —
+  its incidental mention of a PROD precedence gap is unaffected, though BACKLOG
+  now carries a second such gap); `generation-pipeline.md` (its "read path"
+  references are about geocode fallbacks, not description resolution).
 
 ## 2026-09-01 (later 2) — regression-batch recompute on PROD: AUTHORIZED, ATTEMPTED, HALTED at the safety gate
 
