@@ -123,8 +123,35 @@ takes `SlideCategoryKey[]`, exactly as the endpoints do now.
 | path | door | filters |
 |---|---|---|
 | search-area | service-role read of `master_place` + `master_place_search_export` | `is_searchable`, `≠ land_status`, `isSuppressedCategory()` client-side |
-| trip-browse | `pois_along_corridor` SECURITY DEFINER RPC | searchable, non-land_status, **`source_count > 0`**, **excludes template-only descriptions**, **excludes `needs_review`** |
+| trip-browse | `pois_along_corridor` SECURITY DEFINER RPC | searchable, non-land_status, **`source_count > 0`**, **excludes template-sourced descriptions** (two predicates — see below), **excludes `needs_review`**, **excludes `operational_status` CLOSED/DECOMMISSIONED** |
 | places/details | none — pure Google | — |
+
+> **UPDATED 2026-09-01 — the template exclusion now has TWO predicates, and the
+> original one has a failure mode worth knowing.** Generated descriptions are no
+> longer copied into `master_place.description`; they arrive through
+> `source_record` under two synthetic sources, `generated_llm` and
+> `generated_template`, at `field_precedence` priority 20/21 — below every real
+> source (migration `20260901000100`, ADR
+> `docs/decisions/2026-09-01-generated-descriptions-as-lowest-precedence-source.md`).
+>
+> The original predicate was `not (mp.description is null and has_template)`. It
+> encodes "template-only" by testing that the **column is empty**, so it silently
+> stops excluding the moment anything populates that column — which is exactly
+> what happens once template text resolves onto it. Migration `20260901000300`
+> therefore adds a second predicate keyed on provenance rather than emptiness:
+> `coalesce(mp.attribution->>'description','') <> 'generated_template'`. Both are
+> kept — the original still covers rows not yet routed through a source.
+>
+> Same migration makes `description_source` **attribution-first**, so a generated
+> row reports `'llm'`/`'template'` instead of the `'source'` it would otherwise
+> claim once its text sits in the column. `master_place_search_export` gets the
+> same derivation (`20260901000400`).
+>
+> **Consistency caveat for this table's premise:** `description_source` is read
+> from Typesense for bbox scope and from the RPC for corridor scope. Typesense
+> has **not** been re-synced since `20260901000400`, so on TEST the index still
+> serves the pre-change derivation for affected rows. Until `search:sync` runs,
+> the two doors can disagree on `description_source` — see `docs/BACKLOG.md`.
 
 ~~**The RPC excludes template-only-description rows and `needs_review` rows
 (`20260821050000`); the search-hydrate path does not.** So the same place can be
