@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 2) — regression-batch recompute on PROD: AUTHORIZED, ATTEMPTED, HALTED at the safety gate
+
+- **The recompute did NOT run. PROD is unchanged** — SELECT-only this session.
+- **Batch re-derived, not hardcoded, and it is unambiguous.** Three independent
+  identifiers reconcile exactly: `last_resolved_at >= 2026-08-31` gives **2,732**;
+  the tight 22:18:00–22:18:30 UTC burst gives **2,730**; rows recomputed after
+  the burst give **2** — and those 2 are precisely PR #331's own verification
+  subjects (`Muddy River Picnic Site`, `LAUGHING WATER TH 98-UPPER`). 2,730 + 2 =
+  2,732. The set has not shifted. USFS INFRA linkage (2,647) and the mvum-NULL
+  signature (1,561 dispersed_camping, all NULL) both still hold inside it.
+- **The safety gate FAILED, and it failed on something never previously
+  measured.** PR #331's option 2 said the batch "clears 0 descriptions" — that
+  is true and re-confirmed (2,642 non-null in batch, **0** would clear). But the
+  *other* clearable fields had only ever been measured across the 5,457-row
+  union, never for this batch alone. Measured for the batch:
+  **`contact` 66 non-null → 16 would clear; `access` 41 non-null → 16 would
+  clear.** Every other clearable field has zero non-null rows in the batch.
+- **It is the same 16 rows for both fields.** All `campground`, all in the USFS
+  INFRA batch, all `created_at` 2026-05-29, each with 3 source_records
+  (google/ridb/usfs) of which **1** is active, and no `contact`/`access` key in
+  `attribution` — the clear-bug signature. RIDB supplied them; RIDB's record was
+  deactivated in the six-state trim; the regressed function stranded the values.
+  The content is real, not placeholder: campground phone numbers with
+  reservation lines, and ADA flags.
+- **Halted per instruction** ("if ANY come back non-zero, stop and report rather
+  than proceeding"). Did not narrow the boundary myself either — the task
+  explicitly said not to guess at it.
+- **The narrowed option is unusually cheap and is now written up:** recomputing
+  2,732 − 16 = **2,716** clears nothing at all, and costs nothing on the mvum
+  repair, because all 16 are `campground` and Step 6.5 assigns
+  `mvum_corridor = NULL` to every non-`dispersed_camping` category regardless.
+  The only forfeit is containment edges for those 16 rows (count not measured).
+- Lesson worth keeping: **option 2 in PR #331 was under-specified and I wrote
+  it.** "Clears 0 descriptions" was measured; "clears nothing" was inferred and
+  never stated but easily read in. Measuring a sub-population's headline field
+  does not license a claim about its other fields.
+
 ## 2026-09-01 (later) — PROD deployment of the recompute_master_place() fix: migrations applied, repair recompute BLOCKED on an uncovered side effect
 
 - **All five migrations (`20260901000100`–`000500`) applied to PROD.** Three-gate

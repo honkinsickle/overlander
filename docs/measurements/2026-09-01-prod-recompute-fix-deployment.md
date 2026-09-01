@@ -178,5 +178,26 @@ Doing nothing selects the second option by default.
    stale descriptions in place. This option was not requested; noting it because
    it separates "repair the damage" from "accept the content loss", which the
    task's framing had treated as one action.
+
+   > **⚠️ CORRECTION 2026-09-01 (later).** This option was authorized and then
+   > measured properly at execution time, and it is **not** clean. The "clears 0"
+   > claim above was only ever measured for `description`; the other clearable
+   > fields were never measured *for this batch* (they were measured for the
+   > 5,457-row union). Measured directly on the 2,732 batch:
+   >
+   > | field | non-null in batch (control) | would clear |
+   > |---|---:|---:|
+   > | `description` | 2,642 | **0** ✅ |
+   > | `contact` | 66 | **16** ❌ |
+   > | `access` | 41 | **16** ❌ |
+   > | `amenities`, `hours`, `services`, `capacity`, `seasonality`, `cell_signal` | 0 | — |
+   >
+   > It is the **same 16 rows** for both fields. All 16 are `campground`, all in
+   > the USFS INFRA batch, all created 2026-05-29, each with 3 source_records
+   > (google, ridb, usfs) of which only 1 is active, and `attribution` carries no
+   > `contact`/`access` key — the clear-bug signature. The values are real
+   > content: campground phone numbers (some with reservation lines) and ADA
+   > flags. The recompute was **not run**; see
+   > `docs/BACKLOG.md` for the narrowed option.
 3. **Typesense** has not been re-synced on PROD. Not needed yet — nothing has
    changed that the index reflects.

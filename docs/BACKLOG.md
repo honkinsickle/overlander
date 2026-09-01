@@ -30,10 +30,42 @@ This is a PROD-only population difference.
    should be `true`) and ≥58 containment edges; clears all five fields above.
 2. **Regression batch only (2,732).** Repairs `mvum_corridor` and containment,
    and clears **0** descriptions — measured, because no stale-description row
-   sits inside that batch. Leaves the 2,725 stale descriptions untouched. This
-   cleanly separates "repair the damage" from "accept the content loss".
+   sits inside that batch. Leaves the 2,725 stale descriptions untouched.
+   **AUTHORIZED, ATTEMPTED, AND HALTED 2026-09-01:** measuring the *other*
+   clearable fields for this batch (which had never been done — the earlier
+   figures were for the 5,457 union) found it would clear **16 `contact` and 16
+   `access`** values, the same 16 rows. Not authorized, so the recompute was not
+   run. Details below.
+2b. **Regression batch minus the 16 (2,716).** Clears nothing at all. The 16 are
+   all `primary_category = 'campground'`, and Step 6.5 assigns
+   `mvum_corridor = NULL` for every non-`dispersed_camping` category anyway, so
+   excluding them costs **nothing** on the mvum repair. The only cost is that
+   containment edges for those 16 rows stay unrepaired (count not measured).
+   **This looks like the clean option, but it changes the boundary, which needs
+   Adam's call.**
 3. **Do nothing.** Not neutral: the clearing is now **latent**, so any normal
    ER/materialize run will clear those fields incrementally and unobserved.
+
+
+### The 16 blocking rows (measured 2026-09-01)
+
+| field | non-null in the 2,732 batch (control) | would clear |
+|---|---:|---:|
+| `description` | 2,642 | **0** |
+| `contact` | 66 | **16** |
+| `access` | 41 | **16** |
+| all other clearable fields | 0 rows non-null in batch | — |
+
+Same 16 rows for both fields. All `campground`, all in the USFS INFRA batch,
+all `master_place.created_at` 2026-05-29, each with 3 source_records
+(google, ridb, usfs) of which **1** is active, and no `contact`/`access` key in
+`attribution` — the clear-bug signature: RIDB supplied these values, RIDB's
+record was later deactivated, and the regressed function stranded them.
+
+The content is real, not placeholder: e.g. `{"phone": "406-752-7924   FOR
+RESERVATIONS CALL:  1-877-444-6777"}` and `{"ada": "N"}`. Clearing them is
+*correct* per the clear-bug fix's intent — no active source asserts them — but
+it is genuine content loss on 16 PROD campgrounds.
 
 Full report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
 
