@@ -575,6 +575,25 @@ rolled back 2026-07-23 via `npm run -w data slice:rollback --execute` against th
 STEP-0 snapshot, and `places_test` re-synced. The numbers above are the restored
 baseline.)
 
+### `master_place_photo_candidate` — NEW 2026-09-01, TEST-only, STAGING (not wired)
+
+Created by migration `20260901000600_master_place_photo_candidate.sql` for the
+CA-campground photo-backfill pilot. Staged, license-clear photo candidates with
+full provenance (`source`, `image_url`, `license`/`license_class`, `attribution`,
+`source_page_url`, plus match signals). RLS enabled, zero policies (service-role
+only). **Deliberately NOT read by `recompute_master_place` /
+`pois_along_corridor` / `master_place_search_export` / `field_precedence`** —
+candidates are held for review, never auto-surfaced on cards. Promotion into a
+live read path is a separate, explicitly authorized step.
+
+Pilot run `ca-campground-2026-09-01` (stratified sample, 40 target places per
+contributing-source tag = 160 of 2,053 zero-coverage CA campgrounds): **277 rows
+stored across 75 distinct places** — **6 `accepted`, 271 `manual_review`**.
+Source: 276 wikimedia_commons, 1 nps. License class: 177 attribution
+(CC-BY / CC-BY-SA), 100 public-domain (CC0 / PD / NPS). See
+`docs/decisions/2026-09-01-photo-backfill-pilot-staging-table.md` and
+`docs/LOG.md`. All figures measured in-session; NOT re-run corpus-wide.
+
 ## `reference_trips` — RLS + rows per DB
 
 App data (canonical seed trips), not corpus. **RLS:** exactly one policy,

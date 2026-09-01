@@ -12,6 +12,47 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 4) — Photo scoping investigation + CA-campground photo-backfill pilot (TEST)
+
+- **Scoping first (no changes):** day-detail STOPS cards
+  (`category-list-card.tsx`) show a photo only when `photoUrl` is truthy —
+  baked from a photo-eligible source_record (`{nps,ridb,wikipedia,
+  atlas_oddities,family_destinations,editorial_food}` with
+  `normalized_payload.photo.url`) or live-hydrated via a Google `placeId`. Of
+  35,474 searchable POIs, **30.0% have any photo, 70.0% render a color block**
+  (measured); `campground` = 22%. It's a data-availability gap, not wiring.
+  Trip `10d68385…` (TEST) day-3: Dripping Springs Campground has a baked ridb
+  photo; Toulon Trail / Bee Canyon have none from any source. **Flagged: the
+  screenshot's "Tucalota has a photo" premise is contradicted by the data** —
+  Tucalota has no baked photoUrl, no placeId, no source photo, so it renders a
+  color block like the other two (deterministic from payload+code; not browser-
+  verified).
+- **Pilot (implementation, TEST only):** new staging table
+  `master_place_photo_candidate` (migration `20260901000600`, applied via
+  `db:push-verify --test`) + `data/photo-backfill/` (Wikimedia Commons + NPS
+  matchers) + `data/scripts/photo-backfill-pilot.ts`. Deliberately **not wired**
+  into any read path — the stop point.
+- **Schema decision:** separate table, NOT a `source_record` upsert — the
+  existing `backfill-wikipedia-photo.ts` writes a `wikipedia` source_record
+  which the corridor RPC auto-reads (would surface immediately). ADR:
+  `docs/decisions/2026-09-01-photo-backfill-pilot-staging-table.md`.
+- **Target set (computed):** 2,053 CA `campground` rows with zero coverage
+  (2,632 total − 579 baked-photo − 5 google). Source tags: osm 1,123,
+  usfs 421, state_parks 412, ridb 97.
+- **Pilot result (160-place stratified sample, 40/source-tag):** 6 accepted,
+  69 manual-only, 3 no-candidate, 82 rejected (place-level). **277 rows stored**
+  (6 accepted / 271 manual_review) across 75 places; all license-clear
+  (CC-BY/BY-SA/CC0/PD). state_parks yielded best, usfs worst (remote → few
+  Commons photos).
+- **Two apparatus bugs caught mid-build** (both the "verify the instrument"
+  lesson): (1) a zod schema rejected `extmetadata` values that are numbers
+  (`CommonsMetadataExtension: 1.2`), silently returning 0 candidates for every
+  place until fixed; (2) numeric OSM campground names ("1".."15") passed
+  `substringMatch` against any image containing that digit — a false accept —
+  fixed with a weak-name guard.
+- **Not merged; PR opened for review.** Follow-ups (review candidates, decide
+  wiring, tune thresholds/cap manual rows, run full 2,053) in BACKLOG.
+
 ## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
 
 - **2,716 rows recomputed on PROD, 0 failed** (~30 min wall clock, chunked 50 at

@@ -1,0 +1,85 @@
+# 2026-09-01 — Photo-backfill pilot: staging table, license-clear sources, not-yet-wired
+
+## Context
+
+The photo-scoping investigation (same day) found that day-detail STOPS cards
+(`category-list-card.tsx` / `day-detail-corridor-column.tsx`) render a real
+photo only when `photoUrl` is baked from a photo-eligible source_record
+(`{nps, ridb, wikipedia, atlas_oddities, family_destinations, editorial_food}`
+carrying `normalized_payload.photo.url`) or live-hydrated via a Google
+`placeId`. Measured coverage: ~30% of the 35,474 searchable POIs have any
+photo; `campground` sat at ~22%. The gap is data availability, not wiring.
+
+This ADR covers the follow-on pilot: search **license-clear** sources for
+photos of **CA `campground`** master_place rows that have zero coverage today,
+and stage the results for review. Pilot-scale, reversible, TEST only.
+
+## Decisions
+
+**1. Store candidates in a new table (`master_place_photo_candidate`), not on
+`master_place` and not as a `source_record`.**
+
+- `master_place` columns are precedence-resolved source-of-truth written only
+  via `recompute_master_place()`. An unreviewed candidate is neither, so it
+  must not live there.
+- The existing photo backfill (`backfill-wikipedia-photo.ts`) upserts a
+  `wikipedia` source_record with `normalized_payload.photo`. The corridor RPC's
+  photo lateral join reads that source, so that path **auto-wires** the photo
+  onto cards on the next read. The pilot's requirement is the opposite: stage,
+  don't surface. A dedicated table the read path does not touch makes the
+  "staged, not live" boundary structural rather than a naming convention —
+  the same reasoning that put generated descriptions in
+  `master_place_generated_content` rather than a column.
+- The table captures full provenance per candidate: `image_url`, `source`,
+  `license` + `license_class` + `license_url`, `attribution`,
+  `source_page_url`, plus match signals (`match_status`, `match_confidence`,
+  `name_score`, `distance_m`, `match_reason`) and a `raw` jsonb for audit.
+  `match_status ∈ {accepted, manual_review}` (rejected/not-found are counted,
+  not stored). RLS enabled, zero policies (service-role only), same posture as
+  `source_record` / `master_place` / `master_place_generated_content`.
+
+**2. DELIBERATE STOP POINT — nothing is wired into rendering.** The corridor
+RPC, `master_place_search_export`, and `category-list-card.tsx` do not read
+`master_place_photo_candidate`. Promoting a reviewed candidate to a live read
+path (either promote accepted rows into a `source_record`, or teach the RPC to
+read this table) is a separate, explicitly authorized step, taken only after
+pilot quality is reviewed.
+
+**3. License-clear sources only.**
+- Implemented: **Wikimedia Commons** (File-namespace geosearch + name text
+  search; CC-BY / CC-BY-SA / CC0 / public-domain via `extmetadata`) and the
+  **NPS API** campgrounds endpoint (public-domain agency media; images credited
+  to a non-NPS third party are routed to manual_review, not accepted).
+- Excluded by design (see Consequences for the flag): USFS / BLM / CA State
+  Parks own-site media, Google Images/Places, Yelp, TripAdvisor, Instagram, and
+  any NC/ND-licensed image.
+
+**4. Conservative matching; ambiguity → manual_review, never a guess.** A
+candidate is `accepted` only with BOTH a strong name-token match AND a tight
+geographic proximity (and a clear license). Geographically-plausible-but-weak-
+name, name-match-with-no-verifiable-coordinate (text search), and moderate
+signals all route to `manual_review`. Thresholds (documented in
+`data/photo-backfill/matcher.ts`) are pilot-chosen and strict; tune after
+review.
+
+**5. Scope held to the named `campground` primary_category and `state = 'CA'`.**
+`dispersed_camping` (a separate primary_category) and campground rows with a
+null `state` are excluded — flagged below rather than silently folded in.
+
+## Consequences
+
+- Reversible: `drop table master_place_photo_candidate;` removes the pilot with
+  no effect on any read path.
+- **Flagged deviations from the task's named scope** (implemented as named where
+  feasible; concerns recorded, not silently dropped):
+  - USFS / BLM / CA State Parks "own-site media" have **no queryable
+    license-clear photo endpoint** — their ArcGIS feature services carry
+    geometry/attributes, not photo URLs; harvesting would require per-page
+    scraping of agency websites, out of pilot scope. RIDB (recreation.gov) media
+    IS an API but RIDB is already a wired photo source and its key returned 401
+    at session start.
+  - `dispersed_camping` and null-`state` campgrounds are outside the named CA
+    `campground` scope; the enumeration reports them so the boundary is visible.
+- A follow-up decision is required before any of these photos appear to users:
+  review manual_review + accepted rows, choose a promotion mechanism, and
+  authorize it (TEST first, then PROD). Tracked in BACKLOG.
