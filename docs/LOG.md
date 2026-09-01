@@ -12,6 +12,131 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-31 (later) — Day-detail description slot (#323), HTML strip across all description surfaces (#324), google-resolved tile category fix (#325)
+
+- **PR #323 shipped (`2f61aa1`):** added a description slot to the
+  `CategoryListCard` primitive and wired it at every day-detail call site —
+  6 in `day-detail-corridor.tsx`, 3 in `day-detail-node-blocks.tsx`
+  (drag overlay + main tile + Along-the-way pool). Line-clamp is `line-clamp-2`
+  per Adam's design call, overriding the `slideup-overlay-states-v2.md:128`
+  spec's `line-clamp-3`. Card height math done up front from CSS values
+  (not estimated): title 23 + gap 2 + verified 20 + gap 2 + description
+  2×21 + gap 2 + status/Details 18 + top pad 4 = 113 with description,
+  ~82 without — per-card +33px growth. `PLACE_ROW_PX` pre-mount estimate
+  in `continuous-scroll.ts` bumped 96→127 to match, so a cold-scroll
+  never-yet-mounted day slot doesn't jump DOWN when real content mounts;
+  the corresponding test's hardcoded 96 updated to 127.
+- **Visual verification against TEST via CDP** (`/trips/la-to-portland`
+  day 1) surfaced a real UX bug that produced a follow-up commit on the
+  same PR: every non-curated tile was showing the `mapMasterPlaceRow`
+  synthesized `${title} — ${prettyCategory(primary_category)}.` fallback
+  string as description ("The Last Bookstore — Oddity.", "Marukai Market —
+  Grocery.", "Nijiya Market — Grocery.") — a duplicated-title noise
+  pattern that reads as pure garbage on an Atlas Obscura-heavy day. Fixed
+  in the primitive via `looksLikeMapperFallback(desc, title)` — pattern
+  match on `starts with `${title} — ` + 1-4 Title-Case words + ends with
+  `.`. Real editorial descriptions unaffected. Kept the fix in the
+  primitive rather than the mapper (`federated.ts:253-255`) because the
+  fallback IS load-bearing for surfaces that need any description string
+  to render (`MapDetailOverlay`, Top Places) — removing at the mapper
+  would need graceful-degrade at those sites too.
+- **PR #324 shipped (`f40bee9`):** extracted `stripHtml` to a shared
+  module at `web/src/lib/trip-browse/description-text.ts`, upgraded to
+  preserve paragraph structure — block-level break tags become `\n`,
+  runs of `\n` collapse to at most `\n\n`, and `whiteSpace: "pre-line"`
+  added at multi-line render sites so `<p>...</p><p>...</p><p>...</p>`
+  sources render as three visual paragraphs. Wired at every non-
+  CategoryListCard surface that reads a `master_place`-derived
+  description: `map-detail-overlay.tsx`, `day-detail-overview.tsx:501`
+  (Top Places), `map-column.tsx:1450` (WaypointDetail),
+  `waypoint-card.tsx:127`, `suggestion-card-v2.tsx:101`. `CategoryListCard`
+  refactored to import from the shared module. Audit intentionally
+  skipped `day-detail-overview.tsx:294` `guide.description`,
+  `day-briefing-card.tsx:91` `day.description`, and the
+  `category-planning-slide.tsx` demo — all verified not master_place-
+  derived. Verified on TEST at `la-to-portland` day 1: Juan Matias Sanchez
+  Adobe's overlay now renders three distinct paragraphs with proper
+  vertical spacing where the source has a `<p>...</p><p>...</p><p>...</p>`
+  sequence.
+- **Squash-merge order gotcha this session:** #323 was squash-merged with
+  only the first two commits included. The third commit (the shared-
+  module extraction that became #324) had been pushed after the squash
+  was assembled and didn't ride along. Cherry-picked it cleanly off
+  `main` — the removal-of-local-copy + import-from-shared conflict
+  resolved automatically because main had the local copy exactly where
+  the cherry-pick expected. `day-card-description-bug` branch is
+  effectively dead-ended (its commits landed via squash + cherry-pick),
+  safe to delete once #324 has settled.
+- **PR #325 shipped (`ef62586`):** two-line fix in
+  `web/src/lib/itinerary/bake.ts` — `resolvedToTile()` never set
+  `category` on the returned `BrowsePlace`, so every LLM-curated Google-
+  resolved tile shipped with `category: undefined` and rendered the
+  generic "interest" diamond icon on day-detail cards. Threaded
+  `rp.category` (already computed by `inferCategory(primaryType)` in
+  `resolve.ts:154`) through `primaryCategoryToSlideKey`. Exported
+  `resolvedToTile` for testability with 7 assertions in a new
+  `bake.resolved-tile.test.ts` covering the Boulder Basin repro
+  (`campground → camping`), representatives per category
+  (`restaurant → food`, `gas_station → fuel`, `rv_park → camping`,
+  `viewpoint → scenic`), and both fallback paths (null → interest,
+  unmapped → interest). Measured 352/352 google-resolved tiles across
+  TEST's 13 baked trips carried the gap before the fix. Zero regression
+  risk — the fix can only replace `undefined` with a valid slide key or
+  fall to the same "interest" default.
+- **All three fixes are bake-time, not read-time.** Existing baked
+  trips — including every reference trip and every UUID trip in
+  `public.trips` on TEST — still carry pre-fix `segmentSuggestions[]`
+  (Google-resolved tile `category: undefined`, mapper fallback strings
+  in descriptions where `master_place.description` was null, raw HTML in
+  RIDB/USFS-sourced descriptions). Any new bake picks up all three; the
+  existing `refreshCorpusTiles()` action from PR #302 is the retroactive
+  path for a user-owned trip.
+- **Measurement doc pushed unmerged: `docs/generated-content-bake-gap-
+  scope`** — `docs/measurements/2026-08-31-generated-content-bake-gap.md`.
+  On TEST: 125,289 `is_searchable` master_place rows total, of which
+  105,601 (84.29%) have empty `description`. Of those 105,601: 13,942
+  have a `master_place_generated_content` fallback the day-detail bake
+  path never reads (the wiring gap A); 91,659 have no fallback anywhere
+  (B). A skews 87% OSM-attributed and concentrates in campground/park/
+  trailhead/dispersed_camping/ev_charging. B is dominated by peak +
+  spring + infrastructure (gas_station, ev_charging, fire_pit, water,
+  toilet, dump_station, shower) — the user-facing subset is roughly
+  4,700 rows. In the 13 baked trips currently on TEST, 779 wiring-gap
+  rows appear in ≥1 trip; only 4 no-fallback rows appear. No PR opened
+  per Adam's directive — measurement-only, to inform prioritization.
+- **Boulder Basin / Serrano Campground investigations** were both
+  reproducers for the same underlying pattern (documented in the
+  `2026-08-31-day-detail-description-bug.md` §§6-7 that landed with
+  #323): LLM-curated Google-resolved tiles have blank `MapDetailOverlay`
+  descriptions because `resolvedToTile()` sets `description: ""` for
+  structural reasons (Google's resolve field mask doesn't include
+  editorial text). PR #325 fixed the category half of this same
+  `resolvedToTile` gap; description is the harder half — Google has
+  nothing to give, and merging the duplicate Google-resolved tile with
+  its `master_place` equivalent (the "right" fix, entity-resolution
+  work) was explicitly parked per Adam's direction. Three real fix
+  options for the description half remain listed in the description-bug
+  doc §7 for later decision. This is why the Boulder Basin thread ended
+  up producing PR #325 (category, narrow) but no description fix (harder,
+  not one-line, not chosen).
+- **Comprehensive investigation on trip `c70c6a03` day 3** at the tail of
+  the session confirmed the important negative: there is NO tile on that
+  day where `master_place.description` is populated in the DB but
+  `MapDetailOverlay` fails to render it. PR #324's overlay strip + gate
+  is correct. Every observed blank or noisy description on the day
+  traces to one of two known structural gaps — the Google-resolved
+  `description: ""` case (single tile: the LLM-curated "Serrano
+  Campground") or the wiring gap the measurement doc covers (many tiles
+  showing the mapper fallback string). No code fix in that pass.
+- **Category-taxonomy adjacent finding, not resolved:** `facility` as a
+  `primary_category` correctly maps to the `interest` slide bucket per
+  `federated.ts:17-63`. That means any real campground/park/etc.
+  ingested with `primary_category = "facility"` (e.g. "South Fork
+  Campground", "California Science Center", most picnic sites on Day 3)
+  renders with the diamond icon regardless of what it actually is. Not a
+  slide-key bug; a data-vocabulary question. Deliberately left alone per
+  the PR #325 prompt.
+
 ## 2026-08-31 — Closed-place display filter + operational_status normalization + USFS INFRA PROD ingestion
 
 - **PR #320 (merged to main as `d1a15ff`):** `isClosedDescription()` display-time filter. First iteration was a bare substring match on "closed" — 1,060 matches, 94% false-positive rate (places mentioning closures incidentally). Narrowed to phrase-anchored heuristic (strong phrases + first-sentence + "is closed" with exclusions for activity restrictions, conditionals, schedule notes). Result: 152 matches, ~97% precision.
