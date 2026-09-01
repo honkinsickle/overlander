@@ -7,6 +7,7 @@ import {
   CategoryIconV2,
   type CategoryIconV2Name,
 } from "@/components/icons/category-icons-v2";
+import { PhotoUnavailable } from "@/components/trip/photo-unavailable";
 
 /**
  * Day Detail Overview — visual port of Paper "Day Detail Overview" (`EP3-0`).
@@ -51,6 +52,10 @@ type Props = {
   /** Route-pair shown over the hero, e.g. "Los Angeles, CA → Portland, OR". */
   routeLabel: string;
   heroImageUrl?: string;
+  /** True when neither the trip destination nor the origin has a resolvable
+   *  hero photo — drives the Photo Unavailable fallback. When a source exists
+   *  but hasn't hydrated, the hero stays a neutral box (no fallback flash). */
+  heroNoSource?: boolean;
   heroAlt?: string;
   guidesSubtitle?: string;
   /** Empty (or omitted) → the Guides section is not rendered. */
@@ -77,6 +82,7 @@ type Props = {
 export function DayDetailOverview({
   routeLabel,
   heroImageUrl,
+  heroNoSource = false,
   heroAlt = "",
   guidesSubtitle,
   guides = [],
@@ -99,7 +105,7 @@ export function DayDetailOverview({
     >
       {/* ── Overview (hero) ─────────────────────────────────── */}
       <section id="overview" className="shrink-0 w-[var(--rail-card-w)]">
-        <Hero routeLabel={routeLabel} imageUrl={heroImageUrl} alt={heroAlt} />
+        <Hero routeLabel={routeLabel} imageUrl={heroImageUrl} noSource={heroNoSource} alt={heroAlt} />
       </section>
 
       {/* ── Guides ── rendered only when there are guides to show. ─── */}
@@ -166,10 +172,12 @@ export function DayDetailOverview({
 function Hero({
   routeLabel,
   imageUrl,
+  noSource = false,
   alt,
 }: {
   routeLabel: string;
   imageUrl?: string;
+  noSource?: boolean;
   alt: string;
 }) {
   return (
@@ -187,6 +195,12 @@ function Hero({
         backgroundPosition: "center",
       }}
     >
+      {/* No hero image → Photo Unavailable fallback (behind the scrim + label).
+          The overview hero has no hydration path, so absent imageUrl is always
+          a genuine no-source case. */}
+      {!imageUrl && noSource && (
+        <PhotoUnavailable iconSize={40} captionSize="var(--text-sm)" />
+      )}
       {/* Bottom scrim so the label reads over the photo. FLAG: raw black alpha
        *  (scrim, matches LocationBrowseCard convention). */}
       <div

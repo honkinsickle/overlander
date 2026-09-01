@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState } from "react";
 import { CategoryListCard } from "@/components/trip/category-list-card";
+import { PhotoUnavailable } from "@/components/trip/photo-unavailable";
 import { DayDetailNodeBlocks } from "@/components/trip/day-detail-node-blocks";
 import type { BrowseCardCategory } from "@/lib/trip-browse/palette";
 import {
@@ -124,6 +125,11 @@ type Props = {
   routeLabel: string;
   heroImageUrl?: string;
   heroAlt?: string;
+  /** True when this day has NO possible hero source (no persisted heroImage and
+   *  no destination placeId to hydrate) — distinct from "source exists but
+   *  hasn't hydrated yet". Drives the Photo Unavailable fallback so it shows
+   *  only for genuine data gaps, not a transient pre-hydration frame. */
+  heroNoSource?: boolean;
   cities: CorridorCity[];
   places: CorridorPlace[];
   /** Distance ticks (no city header) shown in the gutter between city nodes,
@@ -492,6 +498,7 @@ export function DayDetailCorridor({
   routeLabel,
   heroImageUrl,
   heroAlt = "",
+  heroNoSource = false,
   cities,
   places,
   mileMarkers = [],
@@ -695,6 +702,7 @@ export function DayDetailCorridor({
         <div
           role="img"
           aria-label={heroAlt || routeLabel}
+          className="relative overflow-clip"
           style={{
             width: "100%",
             height: 148,
@@ -705,7 +713,14 @@ export function DayDetailCorridor({
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
-        />
+        >
+          {/* No photo AND no possible source → Photo Unavailable fallback.
+              When a source exists but hasn't hydrated, leave the neutral box
+              (it fills on the next render). */}
+          {!heroImageUrl && heroNoSource && (
+            <PhotoUnavailable iconSize={36} captionSize="var(--text-xs)" />
+          )}
+        </div>
       </div>
 
       {/* ── Day-level reasoned fill (LLM briefing/weather/overnight/
