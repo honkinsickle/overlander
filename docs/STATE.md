@@ -1,3 +1,5 @@
+# STATE — branch `little-rock` · 2026-08-31 (later) (generated-content → `master_place.description` copy-in, TEST) (**newest truth: the day-detail bake path's generated-content wiring gap is closed for the LLM half of Population A on TEST — 6,548 `master_place` rows now carry the description that was already sitting unread in `master_place_generated_content`.** Measured this session, not carried over: Population A is **13,942** (matching the morning's scoping doc exactly — no corpus drift), split **6,548 llm / 7,394 template / 0 needs_review**. **Only the llm half was written.** Reason, measured live against `pois_along_corridor` before/after a single-row copy-in and restore: a template-only row goes from **not returned** to **returned**, because the RPC carries `and not (mp.description is null and has_template)` — the deliberate exclusion of template-only rows from trip-stop candidacy per ADR `2026-08-21-template-eligibility-provenance-review-decisions.md` §2. Copying template text in silently reverses that ADR and admits ~7.4k thin one-liners into trip generation; **held for explicit sign-off, one flag away (`--method all`).** The llm half has no such effect — those rows were already corridor-eligible and already `verified` tier; only the description now renders. **`attribution` is deliberately NOT written**: measured across all 19,803 searchable rows whose description was not NULL (19,688 of them non-empty), `attribution.description` is *always* a `source_id` and *never* absent (ridb 5,344 / nps 4,979 / usfs 4,204 / atlas_oddities 2,767 / osm 1,963 / editorial_food 533 / family_destinations 13 / 0 missing), it is rebuilt wholesale by `recompute_master_place()` from `source_record` only, and a written value would be dropped on the next recompute — verified directly. **Load-bearing regression found (pre-existing, not caused here):** `20260831100000_operational_status.sql` is a `create or replace` built from the PRE-fix `recompute_master_place` body and **drops the `set description = null` clear branch** that `20260819180000_recompute_master_place_clear_bug_fix.sql` added — applied to **TEST and PROD** on 2026-08-31 (PR #321). A sentinel write survived a real recompute, confirming the clear is not live. That regression is the only reason the copy-in is durable; **restoring the clear-bug fix would silently wipe this backfill.** Filed in BACKLOG. **Formatting parity verified over all 6,548 strings, not a spot-check:** `stripDescriptionHtml()` changes 0 of them; 0 tags, 0 entities, 0 double-spaces, 0 untrimmed. **Re-verified through the real bake path** (`pois_along_corridor`, the RPC `fetchCorpusForPolyline`→`mapMasterPlaceRow` calls), not off the base table: Fawnskin Market, Pineknot Campground, Yellow Post #27, Keller Peak Yellow Post #1, Bates Canyon Campground all now return real text with `description_source: source`. **Zero web-side code changes** — `mapMasterPlaceRow` already reads `row.description`; confirmed by reading the chain AND by the live RPC returning the text. Knock-on named, not hidden: `description_source` flips `'llm'`→`'source'` for these rows in both the RPC and `master_place_search_export`; the `verified` tier is unchanged (both map to "verified"), but the DB-level provenance signal no longer distinguishes them — `master_place_generated_content` remains the accurate record. **PROD not touched.** Script: `data/scripts/backfill-description-from-generated-content.ts` (dry-run default, `--confirm`, `--undo` from a timestamped snapshot, `--prod` asserts the PROD ref). Full report: `docs/measurements/2026-08-31-generated-content-copyin-backfill.md`. The masthead immediately below is preserved verbatim per this file's convention.)
+
 # STATE — branch `filter-closed-places-display` · 2026-08-31 (closed-place filter + operational_status normalization + USFS INFRA PROD ingestion) (**newest truth: closed places are now filtered from all display surfaces via a two-layer approach — structured `operational_status` from USFS (the only source with the field) plus a description-text heuristic fallback for all other sources. USFS INFRA site corpus is now on PROD (3,168 rows, 2,629 new master_places). 50 CLOSED USFS places filtered on PROD, 152 heuristic-detected closures filtered across all sources.** PR #320 (description heuristic) merged to `main` as `d1a15ff`. PR #321 (operational_status normalization + USFS INFRA ingestion) open, not merged — 5 commits on `filter-closed-places-display` branch, merge conflict with `origin/main` resolved. 3 migrations applied to both TEST and PROD. USFS INFRA ingestion ran on PROD (3,168 rows inserted, 0 errors). Backfill ran on both environments. Typesense re-synced on both. RIDB `FacilityStatus` confirmed absent from the API (both endpoints, measured). `openstatus="none"` bug found and fixed during PROD backfill. PROD `master_place` total: 28,348 (was 25,719). PROD Typesense `places_prod`: 21,965 docs. ADR: `docs/decisions/2026-08-31-operational-status-normalization.md`. Spec: `docs/specs/operational-status-normalization.md`.)
 
 # STATE — branch `editorial-food-session-handoff` · 2026-08-29 (TasteAtlas six-state promotion — BOTH editorial_food/tasteatlas and family_destinations now LIVE on PROD) (**newest truth: PR #317's landing bug is fixed, a new `tasteatlas` publisher covering all six trip-planning states is built and promoted, and `family_destinations` — previously test-only — is promoted alongside it.** First, a corrective: PR #317 (`editorial_food` multi-publisher) showed "MERGED" on GitHub but never reached `main` — it was based on PR #316's branch, and #316 squash-merged to `main` *before* #317 landed on that branch, orphaning its commit. Diagnosed via direct diff (`editorial-food.ts` absent from `origin/main`), fixed by opening PR #318 (`feat/editorial-food-multi-source` → `main`, #317's exact content, no new code) and resolving conflicts in `manual.ts` (kept the `editorial_food` case) and the doc set (took `main`'s current versions over the branch's stale ones). Merged as `2dd8e66`. **Then: built `tasteatlas` as a new publisher under `editorial_food`, all six states (AZ/NV/CA/UT/WA/OR).** TasteAtlas's site is a confirmed Cloudflare hard-block (verified via curl, not a soft bot-check), so Adam manually screenshotted each state's page; a repeatable pipeline (parallel-agent extraction → dedupe → two-phase Mapbox geocode → real WebSearch verification on every wrong-state/no-match/large-distance result, not just discarded → chain-restaurant judgment calls → sourced descriptions, never invented → every photo URL `curl`-verified 200+real-image before trust → no-photo rows dropped) produced **497 restaurants** (AZ 34, NV 15, CA 323, UT 36, WA 60, OR 29) after excluding confirmed closures, renamed entities, national chains, and fixed-address-less vendors. Two real ingest-blocking bugs caught pre-ingest (CSV filenames missing the `-geocoded.csv` suffix the ingester globs for; `geocode_matched` is read as the literal address string, not a confidence flag — had held `"true"` all session, backfilled from cached geocode data) plus one slug collision (`Lolita's Mexican Food`, two real SD/Chula Vista locations). **TEST: ingest 497/497 0-errors; materialize 478 new_master_place + 19 manual_review (=497); search:sync 33,287 indexed 0-failed.** Live-verified via direct DB/Typesense queries, not just exit codes — the 19 manual-review matches are legitimate sub-threshold near-duplicate detections against existing `atlas_oddities`/`family_destinations` entries (correct behavior), though 2 look like probable false matches worth a second look (`Tivoli Bar and Grill`→`Mick Jagger's Urinal`, `Rockwell Ice Cream`→`The Tiny Gallery`). **PROD promotion, Adam's explicit per-source authorization (two separate checkpoints, not bundled):** all 6 pending migrations applied together (ledger ordering forced it; `family_destinations`'s 3 are schema-only/inert without a matching ingest). `tasteatlas`: ingest 497/497, materialize 481 new + 16 review (=497), sync 21,315 indexed — verified live. `family_destinations`: its TEST CSV didn't exist in this workspace (`.context/` is gitignored/per-workspace), so the 14 rows were reconstructed exactly from TEST's `source_record.raw_payload` rather than re-scraped; ingest 14/14, materialize 11 new + 3 review (=14), sync 21,326 indexed — verified live. Every PROD write followed the same env-swap-and-restore discipline, confirmed restored to TEST after each. **Found, not resolved this session: `Hodad's` now exists as two separate `master_place` rows** (one per source), missed by entity resolution since the two promotions ran independently. Photo-credit gap (aggregator-slug, not photographer) was raised again before the PROD write and accepted as-is by explicit decision. Full narrative: `docs/LOG.md` §2026-08-29. The masthead immediately below (2026-08-28, Family Destinations Guide TEST build) is preserved verbatim per this file's convention — note its "PROD promotion NOT scoped this session" line is now superseded by this one.)
@@ -162,6 +164,95 @@ later entry corrects an earlier one and the earlier one stays.
   pull_request, required_status_checks). Every change goes through a PR.
 - CI gates every merge: `typecheck`, `test`, and `build`
   (`cd web && npx next build`) must pass before merge.
+
+## 2026-08-31 (later) — generated-content copy-in: llm half backfilled on TEST, template half held
+
+Closes "Fix 1 (copy-in)" from `docs/measurements/2026-08-31-generated-content-bake-gap.md`
+for the LLM half of Population A. Full report:
+`docs/measurements/2026-08-31-generated-content-copyin-backfill.md`.
+
+**What ran.** `data/scripts/backfill-description-from-generated-content.ts --confirm`
+against TEST, default `--method llm`. **6,548 rows updated, 0 failed,
+6,548/6,548 verified** to hold exactly the generated text. Snapshot at
+`~/.config/overlander/generated-content-copyin-snapshots/copyin-znldzjdatkogdktymtvi-2026-09-01T03-41-03-057Z.json`;
+`--undo` restores from it.
+
+**Population, measured this session:** 17,725 `master_place_generated_content`
+rows with `field_name='description'` → **13,942** in Population A
+(`is_searchable`, empty description), **6,548 llm / 7,394 template /
+0 needs_review**, plus 3,783 "dual" rows (description already present, skipped
+— gap-fill only) and 0 non-searchable. A = 13,942 matches the morning's
+scoping figure exactly.
+
+**Why only the llm half.** `pois_along_corridor` carries
+`and not (mp.description is null and coalesce(desc_gc.has_template, false))` —
+the deliberate exclusion of template-only rows from trip-stop candidacy
+(ADR `2026-08-21-template-eligibility-provenance-review-decisions.md` §2).
+Measured live with a write-then-restore on two single rows:
+
+| Row | method | before | after |
+|---|---|---|---|
+| `0007a5cb…` Ochoco State Scenic Viewpoint | template | **not returned** by the RPC | **returned**, `description_source: source` |
+| `000b3d43…` Swelter Shelter Trailhead | llm | returned, `description: null` | returned, description populated |
+
+So the template half is a behavioural change (≈7.4k thin
+`"{name} is a {category} in {parent}, {state}."` rows become trip-stop
+candidates), not just a description landing. **Held for an explicit call —
+`--method all --confirm` is the whole delta.** The tiles flagged for
+re-verification are llm rows anyway: Fawnskin Market, Pineknot Campground, and
+24 of 25 "Yellow Post" rows.
+
+**`attribution` deliberately not written.** Convention measured across all
+19,803 searchable rows whose `description` was not NULL pre-backfill (19,688
+of them non-empty): `attribution.description` is
+always a `source_id` (ridb 5,344 / nps 4,979 / usfs 4,204 / atlas_oddities
+2,767 / osm 1,963 / editorial_food 533 / family_destinations 13) and **never
+absent** — 0 rows have a description without the key. It is written by
+`recompute_master_place()` from `source_record` + `field_precedence` and the
+map is **replaced wholesale** each recompute, so (a) there is no existing
+value meaning "generated, not sourced" and (b) anything written would be
+dropped on the next recompute. Confirmed directly: post-recompute,
+`attribution` came back with no `description` key. Provenance stays in
+`master_place_generated_content`. Aside: 113 A rows carry a *stale*
+`attribution.description` (111 ridb, 2 nps) with an empty description.
+
+**Regression found — pre-existing, load-bearing, filed in BACKLOG.**
+`20260831100000_operational_status.sql` is a `create or replace` of
+`recompute_master_place()` written from the **pre-fix** body and it **drops
+the `elsif v_field = any(v_clearable_fields)` clear branch** that
+`20260819180000_recompute_master_place_clear_bug_fix.sql` added. Applied to
+**TEST and PROD** on 2026-08-31 (PR #321). Measured with a sentinel: the
+direct write **survived** a real `recompute_master_place()` call. That
+regression is the only reason a direct `master_place.description` write is
+durable today — **restoring the clear-bug fix silently wipes this backfill**,
+and it also means every other precedence-resolved nullable column is once again
+stranding stale values when its last source goes away.
+
+**Formatting parity — whole population, not a sample.**
+`stripDescriptionHtml()` run over all 6,548 written strings changes **0 of
+6,548**. Post-strip: 0 with `<`, 0 with entities, 0 double-spaces, 0
+untrimmed, 182 with a paragraph newline, length min/median/max 33/147/825.
+
+**Re-verified through the bake path, not the base table.** Queried
+`pois_along_corridor` (what `fetchCorpusForPolyline` → `mapMasterPlaceRow`
+calls) for Fawnskin Market, Pineknot Campground, Yellow Post #27, Keller Peak
+Yellow Post #1, Bates Canyon Campground — all five return real text with
+`description_source: source`. Each previously rendered the mapper fallback
+`"{Title} — {Category}."`.
+
+**No bake-path code change needed — confirmed, not assumed.** The RPC already
+selects `mp.description` and `mapMasterPlaceRow` already reads `row.description`
+(`web/src/lib/trip-browse/federated.ts:252`). Verified by reading the chain and
+by the live RPC returning the text. Zero web-side files changed in this PR.
+
+**Named knock-on:** `description_source` flips `'llm'` → `'source'` for these
+rows in both `pois_along_corridor` and `master_place_search_export`. The
+`verified` tier is unchanged (`mapMasterPlaceRow` maps both to `"verified"`),
+but the DB-level provenance signal no longer distinguishes them. Typesense has
+NOT been re-synced — `places_test` still carries the pre-backfill
+`description`/`description_source` for these rows until `search:sync` runs.
+
+**Not done:** template half, PROD, Population B, entity-resolution duplicates.
 
 ## 2026-08-27 (later) — manual GPS coordinate entry: post-merge verification
 

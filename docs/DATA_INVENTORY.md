@@ -184,6 +184,32 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Mutated 2026-08-31 (later) `[queried + written, TEST only]` —
+> `master_place.description` gained 6,548 rows.** The generated-content
+> copy-in backfill wrote `master_place_generated_content.generated_text`
+> (`generation_method = 'llm'` only) into `master_place.description` for
+> Population A's LLM half. Scoped counts measured this session:
+> `master_place_generated_content` where `field_name = 'description'` =
+> **17,725** (llm 7,433 / template 10,292; `needs_review = true` on **1**,
+> which is outside Population A). Population A (`is_searchable`, empty
+> description, has a generated row) = **13,942**: **6,548 llm** (written)
+> + **7,394 template** (HELD — see `docs/BACKLOG.md`). Another 3,783 are
+> "dual" rows that already had a description and were skipped. Searchable
+> rows with a **non-empty** description now measure **26,236** (pre-backfill
+> that set was 19,688 = the 19,803 not-NULL rows minus 115 empty strings).
+> `attribution` was NOT written — measured convention is that
+> `attribution.description` is always a `source_id` and is present on
+> 19,803/19,803 pre-backfill not-NULL-description rows, so these 6,548 now hold a description
+> with **no `description` key in `attribution`**, which is new for this
+> corpus. `description_source` on those rows flips `'llm'` → `'source'`
+> in both `pois_along_corridor` and `master_place_search_export`.
+> **Typesense `places_test` was NOT re-synced** — it still carries the
+> pre-backfill `description`/`description_source` for these rows. Undo
+> snapshot:
+> `~/.config/overlander/generated-content-copyin-snapshots/copyin-znldzjdatkogdktymtvi-2026-09-01T03-41-03-057Z.json`.
+> Full report: `docs/measurements/2026-08-31-generated-content-copyin-backfill.md`.
+> Corpus-wide totals in the boxes below are NOT re-measured here.
+>
 > **⚠️ Re-measured 2026-08-29 `[queried TEST, read-only]` — adds a new
 > `tasteatlas` publisher to `editorial_food`; does NOT re-measure the
 > corpus-wide totals in the box below (those stand until someone

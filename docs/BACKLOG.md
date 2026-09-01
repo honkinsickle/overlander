@@ -1,5 +1,64 @@
 # Backlog — open work
 
+## `recompute_master_place()` clear-bug fix was REGRESSED by the operational_status migration — live on TEST **and PROD** (2026-08-31)
+
+`20260819180000_recompute_master_place_clear_bug_fix.sql` added an explicit
+`set <field> = null` for each of the 10 clearable precedence-resolved columns
+(`description`, `amenities`, `hours`, `contact`, `access`, `services`,
+`capacity`, `seasonality`, `cell_signal`, `geometry_polygon`) when
+`resolve_field()` returns no candidate, so a stale value isn't stranded when a
+field's last active source goes away.
+
+`20260831100000_operational_status.sql` (PR #321, applied to **both TEST and
+PROD** on 2026-08-31) is a `create or replace` of the same function written
+from the **pre-fix** body plus `operational_status`. It has no
+`elsif v_field = any(v_clearable_fields)` branch and no `v_clearable_fields`
+declaration at all. The clear-bug is therefore back on both environments.
+
+**Measured 2026-08-31**, not inferred from the files: a sentinel written
+directly into `master_place.description` on a row with no source-resolved
+description **survived** a real `recompute_master_place()` RPC call.
+
+Two consequences, opposite in sign:
+
+- The original bug is back — deactivations/renormalizations again leave stale
+  values stranded in those 10 columns.
+- **The generated-content copy-in backfill
+  (`docs/measurements/2026-08-31-generated-content-copyin-backfill.md`) depends
+  on this regression to be durable.** Restoring the clear branch silently wipes
+  those 6,548 TEST rows (and any future PROD equivalent) on the next recompute
+  of each row. Restoring the fix and keeping the copy-in are mutually exclusive
+  as currently built — a real fix would need the copy-in to move to the
+  source_record/`field_precedence` path (the shape
+  `backfill-osm-templated-descriptions.ts` uses) or the clear branch to exempt
+  rows with a `master_place_generated_content` row.
+
+Not fixed here. Sizing the correct interaction between the two is its own pass.
+
+## generated-content copy-in — the 7,394 `template` rows of Population A are HELD (2026-08-31)
+
+`data/scripts/backfill-description-from-generated-content.ts` ran on TEST with
+its default `--method llm` (6,548 rows). The `template` half was deliberately
+not run.
+
+`pois_along_corridor` carries
+`and not (mp.description is null and coalesce(desc_gc.has_template, false))` —
+template-only rows are excluded from trip-stop candidacy on purpose (ADR
+`2026-08-21-template-eligibility-provenance-review-decisions.md` §2). Copying
+template text into `mp.description` makes that predicate false and admits the
+rows. **Measured live** on `0007a5cb…` (Ochoco State Scenic Viewpoint): not
+returned by the RPC before the copy-in, returned after.
+
+So running the template half is a product decision — "are
+`{name} is a {category} in {parent}, {state}.` one-liners good enough to hand a
+trip-planner?" — that ADR §2 answered *no* to. If the answer has changed, the
+whole delta is `--method all --confirm`; the ADR should be superseded in the
+same pass rather than silently reversed.
+
+Also parked: **113 Population-A rows carry a stale `attribution.description`**
+(111 `ridb`, 2 `nps`) while holding an empty description — clear-bug-era
+leftovers, harmless today, wrong if anything ever trusts the key's presence.
+
 ## TasteAtlas / family_destinations manual-review + duplicate triage (2026-08-29)
 
 Both editorial sources promoted to PROD this session left `place_match`

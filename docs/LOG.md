@@ -12,6 +12,65 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-31 (later) — generated-content copy-in: llm half backfilled on TEST, template half held, a regression found underneath it
+
+- **Ran "Fix 1 (copy-in)" for Population A's LLM half on TEST.** New script
+  `data/scripts/backfill-description-from-generated-content.ts` (dry-run default,
+  `--confirm`, `--undo` from a timestamped snapshot, `--prod` asserts the PROD ref).
+  **6,548 rows updated, 0 failed, 6,548/6,548 verified.** Report:
+  `docs/measurements/2026-08-31-generated-content-copyin-backfill.md`.
+- **Population re-measured, not carried over:** 17,725 generated_content
+  description rows → **13,942** in Population A, split **6,548 llm / 7,394
+  template / 0 needs_review**, plus 3,783 "dual" rows skipped (gap-fill only).
+  A = 13,942 matches this morning's scoping doc exactly — no drift.
+- **The scoping split the task didn't anticipate: template rows are excluded from
+  trip-stop candidacy on purpose.** `pois_along_corridor` carries
+  `and not (mp.description is null and has_template)` per ADR 2026-08-21 §2.
+  Copying template text in makes that predicate false. Verified by writing one
+  template row's text, re-querying the RPC, and restoring: **not returned →
+  returned**. The llm control row was returned both before and after (only its
+  description went from null to populated). So the template half is a product
+  decision reversing a merged ADR, not a plumbing fix — **held, `--method all`
+  is the whole delta.** The tiles flagged for re-verification are llm rows
+  anyway (Fawnskin Market, Pineknot Campground, 24 of 25 Yellow Post rows).
+- **`attribution` deliberately left alone, after measuring the convention.**
+  Across all 19,803 searchable rows whose description was not NULL (19,688 of them non-empty), `attribution.description`
+  is always a `source_id` and never absent (ridb 5,344 / nps 4,979 / usfs 4,204 /
+  atlas_oddities 2,767 / osm 1,963 / editorial_food 533 / family_destinations 13
+  / **0 missing**). `recompute_master_place()` rebuilds the map wholesale from
+  `source_record`, so there is no existing "generated, not sourced" value and any
+  invented one would be dropped on the next recompute — confirmed directly.
+- **Found underneath all of this: the clear-bug fix has been REGRESSED on TEST
+  and PROD.** `20260831100000_operational_status.sql` (PR #321, yesterday) is a
+  `create or replace` of `recompute_master_place()` built from the **pre-fix**
+  body — it drops the `elsif v_field = any(v_clearable_fields)` branch that
+  `20260819180000` added. Measured with a sentinel: a direct
+  `master_place.description` write **survived** a real recompute. **That
+  regression is the only reason the copy-in approach is durable at all.**
+  Restoring the clear-bug fix would silently wipe this backfill. The two are
+  mutually exclusive as currently built. Filed in BACKLOG with the shape of a
+  real reconciliation.
+- **Formatting parity checked over the whole population, not a sample:**
+  `stripDescriptionHtml()` changes **0 of 6,548** written strings. 0 tags, 0
+  entities, 0 double-spaces, 0 untrimmed; 182 carry a paragraph newline.
+- **Re-verified through the bake path, not the base table** — queried
+  `pois_along_corridor` (what `fetchCorpusForPolyline` → `mapMasterPlaceRow`
+  calls) for five previously-noisy tiles; all five now return real text with
+  `description_source: source`. Confirms the task's item-7 assumption: **zero
+  web-side code changes needed**, verified both by reading the chain and by the
+  live RPC.
+- **Named, not hidden:** `description_source` flips `'llm'` → `'source'` for these
+  rows in the RPC and in `master_place_search_export`. The `verified` tier is
+  unchanged (both map to "verified"), but the DB-level provenance signal no longer
+  distinguishes them. Typesense was **not** re-synced, so `places_test` still holds
+  the pre-backfill values for these rows.
+- **Apparatus note:** PostgREST `.in()` filters ride in the URL — 500 UUIDs
+  overflowed the 16KB header limit (`UND_ERR_HEADERS_OVERFLOW`) and the error
+  arrives as a bare `fetch failed`, not a PostgREST error. Chunk at 150.
+- **PROD not touched.** Population B and the entity-resolution duplicates
+  (Serrano resolves to 12 `master_place` rows, Fawnskin to 3) were out of scope
+  and stay open.
+
 ## 2026-08-31 — Closed-place display filter + operational_status normalization + USFS INFRA PROD ingestion
 
 - **PR #320 (merged to main as `d1a15ff`):** `isClosedDescription()` display-time filter. First iteration was a bare substring match on "closed" — 1,060 matches, 94% false-positive rate (places mentioning closures incidentally). Narrowed to phrase-anchored heuristic (strong phrases + first-sentence + "is closed" with exclusions for activity restrictions, conditionals, schedule notes). Result: 152 matches, ~97% precision.
