@@ -1,5 +1,141 @@
 # Backlog — open work
 
+## `usfs` has no `field_precedence` row for `access` or `contact` (2026-09-01)
+
+Found while gating the PROD regression-batch recompute. For the 16 rows that
+had to be excluded from that recompute, the `access` value would have been
+cleared **even though an active `usfs` source_record carries an access
+payload for all 16** — because `field_precedence` has no `('access','usfs',…)`
+row, so `resolve_field()` structurally cannot see it.
+
+Measured on PROD:
+
+| field | precedence sources (in priority order) | `usfs` present? |
+|---|---|---|
+| `access` | ioverlander 1, ridb 2, nps 3, osm 4, google 5, state_parks 6 | **no** |
+| `contact` | google 1, parks_canada 2, nps 2, ridb 3, osm 4, ioverlander 5, bc_parks 6, alberta_parks 7 | **no** |
+
+For those 16 rows the access-bearing sources are `usfs` (**active**, 16) and
+`ridb` (**inactive**, 16); the contact-bearing source is `ridb` (**inactive**,
+16) only.
+
+So the two halves of that exclusion have different causes:
+
+- **`access` — a precedence gap, not data loss.** The data is present and
+  active; it is simply unreachable. Adding a `('access','usfs',N)` row would
+  let `recompute_master_place()` resolve it instead of clearing it.
+- **`contact` — genuine stranding.** No active source carries contact for these
+  rows; RIDB did, and RIDB's record was deactivated in the six-state trim.
+
+Worth checking whether `usfs` should also be in precedence for other fields it
+normalizes — not surveyed. Note `usfs` IS present for `description`
+(priority 2) and `operational_status`, so its absence here looks like an
+oversight in the USFS integration rather than a deliberate exclusion, but that
+is an inference, not something confirmed against the original PR.
+
+## Containment edges for the 16 excluded rows (2026-09-01)
+
+The 2,716-row PROD recompute deliberately excluded 16 rows to avoid clearing
+their `contact`/`access` values. Those 16 therefore keep whatever containment
+(`contained_in`) state they had, unrepaired. The number of missing edges among
+them was not measured. Resolving the precedence gap above would let all 16 be
+recomputed safely, closing this at the same time.
+
+
+## ~~DECISION NEEDED — PROD repair recompute~~ — **RESOLVED 2026-09-01: 2,716 recomputed, regression damage repaired**
+
+> **DONE.** Adam chose the narrowed scope. 2,716 rows recomputed on PROD, 0
+> failed, **0 unintended clearing** on all nine clearable fields. `mvum_corridor`
+> true 52 → 501 (+449, matching the predicted floor exactly); containment edges
+> 6,217 → 6,287 (+70). The 16 excluded rows verified untouched by direct query.
+> Scope proven: 2,716 touched, 0 outside the target, 0 missed.
+> **Still open:** the legacy stale-description population below, and the 16
+> rows' containment gap (see the `field_precedence` entry at the top of this
+> file — fixing that closes both).
+> Report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
+
+### Original entry (retained)
+
+## Historical — PROD repair recompute options (2026-09-01)
+
+The `recompute_master_place()` fix is **applied on PROD** and PROD's definitions
+are byte-identical to TEST's. But applying a migration does not recompute
+anything, so **no existing damage is repaired and no description has been
+blanked**. Both need a deliberate recompute.
+
+Populations are disjoint (overlap measured 0): 2,732 rows damaged by the
+regression + 2,725 stale-description rows = **5,457**.
+
+Measured, inside that union, what a recompute would clear (non-null count as
+control):
+
+| field | non-null in population | would clear | authorized? |
+|---|---:|---:|---|
+| `description` | 5,367 | 2,725 | **yes** |
+| `contact` | 2,050 | 2,000 | **no** |
+| `access` | 463 | 438 | **no** |
+| `amenities` | 210 | 210 | **no** |
+| `hours` | 38 | 38 | **no** |
+
+TEST gave no warning — every non-description clearable field measured 0 there.
+This is a PROD-only population difference.
+
+**Three options:**
+
+1. **Full union (5,457).** Repairs `mvum_corridor` (floor of 449 rows that
+   should be `true`) and ≥58 containment edges; clears all five fields above.
+2. **Regression batch only (2,732).** Repairs `mvum_corridor` and containment,
+   and clears **0** descriptions — measured, because no stale-description row
+   sits inside that batch. Leaves the 2,725 stale descriptions untouched.
+   **AUTHORIZED, ATTEMPTED, AND HALTED 2026-09-01:** measuring the *other*
+   clearable fields for this batch (which had never been done — the earlier
+   figures were for the 5,457 union) found it would clear **16 `contact` and 16
+   `access`** values, the same 16 rows. Not authorized, so the recompute was not
+   run. Details below.
+2b. **Regression batch minus the 16 (2,716).** Clears nothing at all. The 16 are
+   all `primary_category = 'campground'`, and Step 6.5 assigns
+   `mvum_corridor = NULL` for every non-`dispersed_camping` category anyway, so
+   excluding them costs **nothing** on the mvum repair. The only cost is that
+   containment edges for those 16 rows stay unrepaired (count not measured).
+   **This looks like the clean option, but it changes the boundary, which needs
+   Adam's call.**
+3. **Do nothing.** Not neutral: the clearing is now **latent**, so any normal
+   ER/materialize run will clear those fields incrementally and unobserved.
+
+
+### The 16 blocking rows (measured 2026-09-01)
+
+| field | non-null in the 2,732 batch (control) | would clear |
+|---|---:|---:|
+| `description` | 2,642 | **0** |
+| `contact` | 66 | **16** |
+| `access` | 41 | **16** |
+| all other clearable fields | 0 rows non-null in batch | — |
+
+Same 16 rows for both fields (measured: contact 16, access 16, same-row 16,
+distinct 16). All `campground`, all in the USFS INFRA batch, all
+`master_place.created_at` 2026-05-29 (16/16), all with exactly **1** active
+source_record (16/16), and no `contact`/`access` key in `attribution`.
+
+Source composition, measured across all 16 rather than sampled: **13** carry
+three source_records (`google,ridb,usfs`), **3** carry two (`ridb,usfs`). An
+earlier draft said "each with 3" — that was a 3-row sample generalised, and it
+was wrong.
+
+**Cause measured, not inferred:** the only source with a `contact` payload for
+these rows is **`ridb`, inactive in all 16** — so RIDB supplied the values,
+RIDB was deactivated in the six-state trim, and the regressed function stranded
+them. Clear-bug signature, confirmed end to end.
+
+The content is real rather than placeholder — e.g. `{"phone": "406-752-7924
+FOR RESERVATIONS CALL:  1-877-444-6777"}`, `{"ada": "N"}` — though that
+judgement rests on a 3-of-16 sample. Clearing them is *correct* per the
+clear-bug fix's intent (no active source asserts them) but it is genuine
+content loss on 16 PROD campgrounds.
+
+Full report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
+
+
 ## `operational_status` is a DIRECT WRITE, not resolvable through field_precedence (2026-09-01)
 
 `20260831100000_operational_status.sql` added `operational_status` to
@@ -86,7 +222,15 @@ so generated rows report `'llm'`/`'template'` instead of `'source'`.
 search:sync` runs. Not run in this pass.
 
 
-## ~~`recompute_master_place()` regressed to its 2026-05-27 original~~ — **RESOLVED ON TEST 2026-09-01**, PROD still open
+## ~~`recompute_master_place()` regressed to its 2026-05-27 original~~ — **RESOLVED ON TEST AND PROD 2026-09-01**
+
+> **PROD RESOLVED 2026-09-01.** All five migrations applied; PROD's
+> `recompute_master_place`, `compute_prominence`, `is_generated_source`,
+> `pois_along_corridor` and `master_place_search_export` are byte-identical to
+> TEST's. The earlier `[UNVERIFIED]` PROD status is also closed — the regression
+> was confirmed live on PROD by measurement before the fix, and the function is
+> now correct. **Existing damage is NOT yet repaired** — that needs a recompute,
+> which is the open decision at the top of this file.
 
 > **RESOLVED ON TEST** by migrations `20260901000200` + `20260901000500`. All
 > five behaviours restored across all seven sites, verified against the live

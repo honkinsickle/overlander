@@ -12,6 +12,134 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
+
+- **2,716 rows recomputed on PROD, 0 failed** (~30 min wall clock, chunked 50 at
+  a time). Scope: the 2,732 regression batch **minus the 16** whose
+  `contact`/`access` would have cleared.
+- **Every gate held before the write.** Batch re-derived and unchanged
+  (2,730 burst + 2 post-burst verification rows = 2,732). Exclusion set still
+  exactly 16, and this time the full signature was confirmed **across all 16
+  rather than generalised from a sample** — the mistake the previous two
+  sessions each had to walk back. Safety gate on the narrowed set: **0 clearing
+  on all nine clearable fields**, with live controls.
+- **The repair landed exactly as predicted.** Corpus `mvum_corridor` true
+  **52 → 501 = +449** — independently reproducing the floor the earlier
+  read-only investigation predicted. `false` went 2,810 → 3,922 (+1,112), and
+  **449 + 1,112 = 1,561**, reconciling precisely to the dispersed_camping rows
+  in the set that went from all-NULL to all-evaluated.
+- **Containment:** +70 edges for the set (1 → 71) and +70 corpus-wide
+  (6,217 → 6,287) — identical deltas, so every new edge belongs to a target row.
+- **Zero unintended change**, measured before/after rather than assumed:
+  description 2,626 → 2,626, contact 50 → 50, access 25 → 25, amenities 0 → 0,
+  hours 0 → 0, is_searchable 2,716 → 2,716, land_status 0 → 0. Corpus rows with
+  a real description 13,955 → 13,955.
+- **The 16 excluded rows are provably untouched** — queried directly, 0 changes
+  on every captured field including `last_resolved_at`, which is the decisive
+  signal that none was recomputed. Not inferred from the exclusion logic.
+- **Scope proven:** rows touched this session 2,716, outside the target set
+  **0**, target rows missed **0**.
+- **New finding: the `access` half of the exclusion was never data loss.** An
+  *active* `usfs` source_record carries an access payload for all 16, but
+  `field_precedence` has no `('access','usfs',…)` row, so `resolve_field()`
+  structurally cannot see it. `contact` is different — genuinely stranded, only
+  inactive `ridb` carries it. Adding the precedence row would let all 16 be
+  recomputed safely and close their containment gap in the same pass. Filed.
+- **Method notes worth keeping:** the target/exclusion id sets were captured to
+  disk *before* the write and every statement drew from those files, so the
+  operation was immune to `last_resolved_at` shifting under it; the
+  before/after measurement query was ID-pinned for the same reason. Every
+  read-only file was linted for write/DDL keywords before running — including
+  scratch — closing the process lapse flagged last session. The one write file
+  was asserted structurally instead, and labelled as such rather than passed off
+  as lint-clean.
+- Timing note: the 50-row probe measured ~0.58 s/row cold; the warm rate varied
+  between ~0.2 and ~1 s/row, so the initial "~26 minutes" estimate was
+  coincidentally close but was never a stable rate.
+
+## 2026-09-01 (later 2) — regression-batch recompute on PROD: AUTHORIZED, ATTEMPTED, HALTED at the safety gate
+
+- **The recompute did NOT run. PROD is unchanged** — SELECT-only this session.
+- **Batch re-derived, not hardcoded, and it is unambiguous.** Three independent
+  identifiers reconcile exactly: `last_resolved_at >= 2026-08-31` gives **2,732**;
+  the tight 22:18:00–22:18:30 UTC burst gives **2,730**; rows recomputed after
+  the burst give **2** — and those 2 are precisely PR #331's own verification
+  subjects (`Muddy River Picnic Site`, `LAUGHING WATER TH 98-UPPER`). 2,730 + 2 =
+  2,732. The set has not shifted. USFS INFRA linkage (2,647) and the mvum-NULL
+  signature (1,561 dispersed_camping, all NULL) both still hold inside it.
+- **The safety gate FAILED, and it failed on something never previously
+  measured.** PR #331's option 2 said the batch "clears 0 descriptions" — that
+  is true and re-confirmed (2,642 non-null in batch, **0** would clear). But the
+  *other* clearable fields had only ever been measured across the 5,457-row
+  union, never for this batch alone. Measured for the batch:
+  **`contact` 66 non-null → 16 would clear; `access` 41 non-null → 16 would
+  clear.** Every other clearable field has zero non-null rows in the batch.
+- **It is the same 16 rows for both fields** (contact 16, access 16, same-row
+  16, distinct 16). All `campground`, all USFS INFRA, all `created_at`
+  2026-05-29 (16/16), all with exactly 1 active source_record (16/16).
+- **Self-audit correction:** I first wrote "each with 3 source_records
+  (google/ridb/usfs)" from a **3-row sample**. Measured across all 16: 13 have
+  three (`google,ridb,usfs`), **3 have two** (`ridb,usfs`). Wrong for 3 rows.
+- **The cause moved from inference to measurement:** the only contact-bearing
+  source for these rows is `ridb`, **inactive in all 16**. RIDB supplied the
+  values, was deactivated in the six-state trim, and the regressed function
+  stranded them. The "content is real" judgement still rests on a 3-of-16
+  sample.
+- **"PROD is unchanged" is now measured, not asserted:** max `last_resolved_at`
+  is still 2026-09-01 07:54:18 — the #331 verification row — and `master_place`
+  28,348 / batch 2,732 / `contained_in` 6,217 / `mvum_true` 52 are all identical
+  to #331's post-apply state.
+- **Halted per instruction** ("if ANY come back non-zero, stop and report rather
+  than proceeding"). Did not narrow the boundary myself either — the task
+  explicitly said not to guess at it.
+- **The narrowed option is unusually cheap and is now written up:** recomputing
+  2,732 − 16 = **2,716** clears nothing at all, and costs nothing on the mvum
+  repair, because all 16 are `campground` and Step 6.5 assigns
+  `mvum_corridor = NULL` to every non-`dispersed_camping` category regardless.
+  The only forfeit is containment edges for those 16 rows (count not measured).
+- Lesson worth keeping: **option 2 in PR #331 was under-specified and I wrote
+  it.** "Clears 0 descriptions" was measured; "clears nothing" was inferred and
+  never stated but easily read in. Measuring a sub-population's headline field
+  does not license a claim about its other fields.
+
+## 2026-09-01 (later) — PROD deployment of the recompute_master_place() fix: migrations applied, repair recompute BLOCKED on an uncovered side effect
+
+- **All five migrations (`20260901000100`–`000500`) applied to PROD.** Three-gate
+  pre-flight first: refs aligned on both sides, exactly the five intended
+  migrations pending with zero orphan ledger versions, and live state confirmed
+  as the regressed function. Applied via bare `npm run -w data db:push-verify`
+  with `data/.env` swapped to PROD and the CLI linked to PROD, per the
+  documented production path.
+- **Post-apply drift check: PROD and TEST are byte-identical** across all five
+  objects — `recompute_master_place`, `compute_prominence`,
+  `is_generated_source`, `pois_along_corridor`, `master_place_search_export` —
+  plus matching `field_precedence` rows at priority 20/21. No
+  environment-specific drift.
+- **The reroute is a genuine no-op on PROD.** `master_place_generated_content`
+  has **0 rows**. Stated plainly and skipped rather than forced, as the task
+  directed.
+- **All four verifications pass on PROD**, including the clear-and-restore test
+  on a real single-source row (chosen outside the six-state footprint so its
+  transient state was never user-visible in search). Test suite 32 files / 626
+  passed / 3 skipped.
+- **Zero data change.** All 17 baseline metrics identical pre/post apply; only
+  the 2 verification subjects were recomputed, both restored.
+- **BLOCKED, and this is the important part: applying migrations does not
+  recompute anything.** The authorized blanking of 2,725 stale descriptions has
+  NOT happened, and the 2,732-row regression batch is still unrepaired. Both
+  need a recompute of the union population (5,457 rows; sets measured disjoint).
+  Measured what that recompute would clear *inside that population*:
+  description **2,725** (authorized) but ALSO **contact 2,000, access 438,
+  amenities 210, hours 38** — not covered by the authorization, and absent on
+  TEST, where every non-description field cleared 0. The task said to seek
+  confirmation on anything not covered; this is that.
+- **The clearing is latent, not avoided.** Any normal ER/materialize run that
+  touches these rows will now clear those fields incrementally and unobserved.
+  The real choice is a measured batch under supervision versus a silent drip.
+- Housekeeping: dropped the leftover `public._verify_tmp` table an earlier
+  session created on TEST. PROD credentials and CLI link restored to TEST,
+  confirmed behaviourally rather than by reading the ref file.
+
 ## 2026-09-01 (later) — recompute_master_place() restored, description backfill rerouted through source_record, and a deviation of mine caught by its own verification
 
 - **Both threads closed on TEST.** Migrations `20260901000100`–`20260901000500`.

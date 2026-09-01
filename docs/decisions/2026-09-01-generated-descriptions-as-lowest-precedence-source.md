@@ -89,8 +89,9 @@ fallback for rows not yet rerouted.
 
 ## Consequences
 
-- New migrations `20260901000100`–`20260901000500`. TEST only; PROD needs
-  separate sign-off.
+- New migrations `20260901000100`–`20260901000500`. ~~TEST only; PROD needs
+  separate sign-off.~~ **Applied to PROD 2026-09-01 under explicit sign-off —
+  see §PROD status below.**
 - New script `data/scripts/reroute-generated-descriptions-to-source-record.ts`.
   `backfill-description-from-generated-content.ts` is marked **SUPERSEDED**;
   its writes were reverted via `--undo` before the reroute.
@@ -126,3 +127,15 @@ Recorded so a later reader can unpick it cleanly:
   which was not run. Drop it if you'd rather it shipped with its own sync.
 - `is_generated_source()` is a new database object where three inline predicates
   would have worked. Single-sourcing the list, not a necessity.
+
+## PROD status (added 2026-09-01, after deployment)
+
+The five migrations are applied to PROD and its definitions are byte-identical
+to TEST's. **But this decision is currently inert on PROD**:
+`master_place_generated_content` holds 0 rows there, so there is no generated
+text to route and no `generated_llm`/`generated_template` source_record exists.
+
+The mechanism is in place and correct; it starts mattering on PROD only once
+description generation is run there. Until then the two synthetic sources, the
+precedence rows and the attribution-first `description_source` derivation are
+all present and simply unexercised.
