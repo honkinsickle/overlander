@@ -94,3 +94,24 @@ geosearch-vs-text provenance in `source`, and stable `.order("id")` pagination
 instability). Accepted images were visually inspected. Thresholds remain
 pilot-chosen; residual gaps (Commons sign/map filter, distant-loose accepts,
 manual_review volume) are in BACKLOG.
+
+**Update 2026-09-01 (Google-verified auto-adjudication).** Manual eyeballing was
+replaced by an automated vision comparison. Migration `20260901000700` adds
+`google_verdict` / `google_confidence` / `google_reasoning` / `google_ref_source`
+/ `google_checked_at`, and widens `match_status` to allow `rejected`. For every
+stored candidate a LIVE Google reference photo (Places API New: text search →
+photo media) is compared against the stored candidate photo by Claude
+(`claude-opus-5`, structured verdict). Classification: `match` → `accepted`,
+`no_match`/`ambiguous` → `rejected` (conservative default). "Couldn't verify"
+cases are held apart, not rejected: `no_google_result` (Google has no matching
+place/photo) and `unverified` (API/vision error after retries, or no coordinate)
+both **leave `match_status` unchanged**.
+
+**Compliance boundary (non-negotiable, per "Google Places — live-fetch-at-render
+is compliant; warehousing is not"):** the Google reference image is fetched into
+process memory, sent to the vision API for the single comparison, and discarded.
+**No Google image bytes, photo URL, or place/photo identifier is written to any
+table or file** — only the model's verdict/confidence/reasoning and a generic
+`google_ref_source` label. `data/photo-backfill/google-reference.ts` performs no
+writes; the driver's DB patch contains only verdict columns. This remains
+un-wired into rendering; promotion is still a separate authorized step.

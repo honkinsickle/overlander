@@ -5,17 +5,24 @@
 Pilot ran on TEST: CA `campground` rows with zero photo coverage, license-clear
 sources (Wikimedia Commons + NPS), staged into `master_place_photo_candidate`
 (NOT wired into rendering). **The six self-audit issues were fixed and the pilot
-re-run deterministically** (`pilot_run='ca-campground-2026-09-01-fixed'`,
-253 rows / 69 places / 4 accepted / 249 manual). Remaining follow-ups:
+re-run deterministically, then a Google-verified auto-adjudication pass**
+replaced manual review (`pilot_run='ca-campground-2026-09-01-fixed'`, 253 rows).
+Final: **10 accepted, 235 rejected, 8 manual_review** (the couldn't-verify rows).
+Remaining follow-ups:
 
-1. **Review the staged candidates.** 4 `accepted` (all visually inspected:
-   Nelder Grove + Half Moon Bay good; **Tolkan = a sign photo**, **Benbow =
-   distant dusk landscape at 923 m** — weak heroes) and 249 `manual_review` rows.
+1. **Only 10 `accepted` survived Google verification** — these are the review
+   set now (the vision pass rejected 235, incl. most geo-proximate Commons
+   photos that weren't actually of the place). Spot-check the 10 before any
+   wiring; note some are entrance-sign photos (both Tolkan rows) rather than
+   scenic heroes.
 2. **Decide the wiring mechanism** (the deliberate stop point): either promote
    `accepted` rows into a `wikipedia`/new source_record so the corridor RPC
    photo lateral join reads them, or teach the RPC/export to read this table.
    TEST first, then PROD, explicitly authorized. Until then cards show the
    category-color block for these places.
+2a. **Re-run the 8 couldn't-verify rows** (`google_verdict in
+   ('no_google_result','unverified')`) — 3 were transient API/vision errors, 5
+   had no Google match. They kept their prior `manual_review` status.
 3. **Residual matcher gaps (not fixed — flagged):**
    - The map/diagram/sign filter is **NPS-only** (task-scoped). Commons has the
      same issue: `Tolkan Campground` accepted a photo of the entrance *sign*.

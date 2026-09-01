@@ -25,6 +25,7 @@
     "backfill:ridb-directions": "tsx --env-file=.env scripts/backfill-ridb-directions.ts",
     "backfill:mp-enrichment": "tsx --env-file=.env scripts/backfill-master-place-enrichment.ts",
     "backfill:photo-pilot": "tsx --env-file=.env scripts/photo-backfill-pilot.ts",
+    "backfill:photo-verify": "tsx --env-file=.env scripts/photo-verify-google.ts",
     "mvum:load": "tsx --env-file=.env scripts/load-mvum-roads.ts",
     "db:push-verify": "tsx --env-file=.env scripts/verify-migration.ts --push",
     "test:seed": "tsx --env-file=.env --env-file=.env.test scripts/seed-test-fixtures.ts",

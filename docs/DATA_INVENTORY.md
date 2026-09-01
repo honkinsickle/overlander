@@ -602,6 +602,22 @@ Prior flawed run (`ca-campground-2026-09-01`, non-deterministic sample) stored
 277 rows / 6 accepted / 271 manual before deletion; its counts are NOT directly
 comparable — a different set of 160 places was sampled (unordered pagination).
 
+**Google-verified auto-adjudication (2026-09-01).** Migration `20260901000700`
+added `google_verdict` / `google_confidence` / `google_reasoning` /
+`google_ref_source` / `google_checked_at` and widened `match_status` to allow
+`rejected`. All 253 rows were re-adjudicated by comparing each stored candidate
+photo against a **live** Google reference photo (Places API New → vision model
+`claude-opus-5`). Final state (measured in-session): **match_status** accepted
+**10**, rejected **235**, manual_review **8**; **google_verdict** match 10,
+no_match 193, ambiguous 42, no_google_result 5, unverified 3. `no_match` and
+`ambiguous` → `rejected`; the 8 couldn't-verify rows (5 no_google_result +
+3 error) were **left at their prior status**, not rejected. **Compliance
+verified:** a scan of every text column of every row found **zero** Google
+URLs / photo ids / image data — only verdict text + the generic
+`google_ref_source='google_places_text_search'` label are stored; `image_url`
+remains 100% Commons/NPS/RIDB. Google reference images were held in memory for
+the comparison only and never persisted.
+
 ## `reference_trips` — RLS + rows per DB
 
 App data (canonical seed trips), not corpus. **RLS:** exactly one policy,

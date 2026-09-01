@@ -12,6 +12,38 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 6) — Photo pilot: Google-verified auto-adjudication (TEST)
+
+- **Replaced manual eyeballing with an automated vision comparison.** For all
+  253 stored candidates, fetched a LIVE Google reference photo (Places API New:
+  text search → photo media) and compared it against the stored candidate photo
+  with `claude-opus-5` (structured verdict). PR #335 updated (not merged).
+- **Result:** match_status → **10 accepted, 235 rejected, 8 manual_review**;
+  google_verdict → match 10, no_match 193, ambiguous 42, no_google_result 5,
+  unverified 3. `no_match`/`ambiguous` → rejected (conservative default). The 8
+  couldn't-verify rows (5 no-Google-result + 3 API/vision error) were **left at
+  their prior status**, not rejected, per instruction (flagged via
+  google_verdict).
+- **The vision pass is far stricter than name+geo, and correctly so.** It
+  rejected geo-proximate-but-wrong Commons photos the earlier matcher had
+  accepted or manual-reviewed: a beach for "Van Damme Group Camp", a lichen
+  macro for "Warren Group Camp", a snake close-up for "Tamarisk Grove", the
+  **Benbow Inn hotel** for "Benbow Lake Campground", an **urban office tower**
+  for the OSM place literally named "1". Genuine matches survived: both Tolkan
+  entrance-sign photos, and Mount Shasta from Bunny Flat. Only **4 of the
+  earlier 6 "accepted" survived** Google verification.
+- **Schema:** migration `20260901000700` adds google_verdict/confidence/
+  reasoning/ref_source/checked_at and widens match_status to allow `rejected`.
+- **COMPLIANCE (live-fetch, not warehouse):** Google reference images were held
+  in memory for the single comparison and discarded. A scan of every text
+  column of every row found **zero** Google URLs / photo ids / image data —
+  only the verdict + a generic `google_ref_source` label are stored; `image_url`
+  stays 100% Commons/NPS/RIDB. `google-reference.ts` performs no writes; the
+  driver patch carries only verdict columns.
+- **Still not wired into rendering.** ANTHROPIC_API_KEY was borrowed from
+  web/.env.local into the process env; TEST Supabase + Google key came from
+  data/.env — no PROD touched. 3 rows hit transient errors (left unverified).
+
 ## 2026-09-01 (later 5) — Photo-backfill pilot: six self-audit fixes + deterministic re-run (TEST)
 
 - **Fixed all six issues from the self-audit** (matcher/nps/driver), re-ran the
