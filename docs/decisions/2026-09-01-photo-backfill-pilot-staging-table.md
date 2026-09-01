@@ -136,3 +136,21 @@ or partner credit → `manual_review` (do not auto-accept). No schema change
 (reused `no_candidate` + nullable `image_url`). On this run all 163 targets
 returned zero live media → `no_candidate`; the rights split was built and
 calibrated but did not fire. Still un-wired.
+
+**Update 2026-09-01 (WIRED TO PROD — the deliberate stop point, released).**
+With explicit sign-off, the Google-verified accepted set was promoted to PROD via
+**approach (a)** — exactly the `backfill-wikipedia-photo.ts` path this ADR named
+as the auto-wiring one: each photo becomes a `wikipedia` `source_record`
+(`normalized_payload.photo`, external_id `wikipedia:photo-pilot:<file>`,
+`source_quality_score` 0.6), which the corridor RPC's photo lateral join reads
+directly — **no RPC change, no `recompute_master_place`, no write to
+`master_place`.** The staging-table boundary this ADR built was thus honoured:
+the table itself is still never read by the render path; promotion is a separate,
+explicit copy into a source the RPC already reads. TEST→PROD matching is by
+**stable source identity** (`ridb`/`osm`/`state_parks` external_id), never raw
+uuid — which caught that TEST RIDB ids are integers while PROD's are UUIDs (2
+places unresolvable, skipped rather than guessed) and that 2 places already had a
+photo (skipped, not overridden). Net: **3 of 7 places wired** (Bunny Flat, Fort
+Miller, Sugarloaf). Two are weak heroes flagged for optional prune in
+`docs/BACKLOG.md`; the accept-then-wire pipeline is the reusable outcome. The
+migrations (`000600/000700/000800`) are now applied to PROD as well as TEST.
