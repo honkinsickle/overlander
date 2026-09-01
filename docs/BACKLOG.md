@@ -1,5 +1,67 @@
 # Backlog — open work
 
+## Photo-backfill pilot — review + decide wiring (2026-09-01)
+
+Pilot ran on TEST: CA `campground` rows with zero photo coverage, license-clear
+sources (Wikimedia Commons + NPS), staged into `master_place_photo_candidate`
+(NOT wired into rendering). **The six self-audit issues were fixed and the pilot
+re-run deterministically, then a Google-verified auto-adjudication pass**
+replaced manual review (`pilot_run='ca-campground-2026-09-01-fixed'`, 253 rows).
+Final: **10 accepted, 235 rejected, 8 manual_review** (the couldn't-verify rows).
+Remaining follow-ups:
+
+1. **Only 10 `accepted` survived Google verification** — these are the review
+   set now (the vision pass rejected 235, incl. most geo-proximate Commons
+   photos that weren't actually of the place). Spot-check the 10 before any
+   wiring; note some are entrance-sign photos (both Tolkan rows) rather than
+   scenic heroes.
+2. **Decide the wiring mechanism** (the deliberate stop point): either promote
+   `accepted` rows into a `wikipedia`/new source_record so the corridor RPC
+   photo lateral join reads them, or teach the RPC/export to read this table.
+   TEST first, then PROD, explicitly authorized. Until then cards show the
+   category-color block for these places.
+2a. **Re-run the 8 couldn't-verify rows** (`google_verdict in
+   ('no_google_result','unverified')`) — 3 were transient API/vision errors, 5
+   had no Google match. They kept their prior `manual_review` status.
+2b. **NPS-direct pass done (2026-09-01):** only 1 NPS-sourced CA campground lacks
+   a baked photo ("Prisoners Harbor Campground"), and its NPS unit id
+   (`4ED5E354-…`) no longer resolves in the current NPS API → stored
+   `no_candidate` (`pilot_run='nps-direct-2026-09-01'`). **Ingestion-staleness
+   signal:** this is a corpus row pointing at a removed/renamed NPS unit — worth
+   a broader audit of whether other `nps` source_records reference units the NPS
+   API no longer lists (would affect any NPS-keyed refresh, not just photos).
+2c. **RIDB-direct pass done (2026-09-01):** 163 RIDB-sourced CA campgrounds lack a
+   baked photo; **all 163 returned zero media from the live RIDB API** →
+   `no_candidate` (`pilot_run='ridb-direct-2026-09-01'`). Their missing photos are
+   a genuine upstream absence on recreation.gov, not an ingestion miss. The
+   rights-aware accept/manual_review classifier (Credits-based) is built and
+   calibrated but has no target images to act on — it will matter if a future
+   source pass finds RIDB media with individual/partner credits. **Net across all
+   direct-source passes (NPS + RIDB): 0 photos recovered** — the remaining CA
+   campground photo gap is not fillable from the places' own federal sources;
+   Commons/agency-web/other remain the only avenues (see items 1–6 above).
+3. **Residual matcher gaps (not fixed — flagged):**
+   - The map/diagram/sign filter is **NPS-only** (task-scoped). Commons has the
+     same issue: `Tolkan Campground` accepted a photo of the entrance *sign*.
+     Consider extending `NON_PHOTO_RE` to Commons title/description.
+   - Distant-but-loose accepts (`Benbow`, 923 m, title 0.33 via substring) — a
+     tighter distance ceiling or higher title-token floor for substring-only
+     accepts would help.
+   - `manual_review` is still noisy (multiple candidates/place); a top-N-per-place
+     cap would reduce review load.
+4. **Coverage is source-skewed** (fixed-run sample, place-level accept+manual of
+   40 per mutually-exclusive tag): state_parks 21, ridb 17, usfs 13, osm 18.
+   USFS campgrounds are remote with few Commons photos — expect low yield.
+5. **Run the full target set** (2,053 places) by dropping `--per-source`, once
+   thresholds are settled. Pilot processed 160.
+6. **Deferred license-clear sources** (flagged, not implemented): USFS / BLM /
+   CA State Parks own-site media have no queryable license-clear photo endpoint
+   (ArcGIS feature services carry no photo URLs). `dispersed_camping` (separate
+   primary_category) and null-`state` campgrounds are outside the named scope.
+7. **Reproducibility:** all `enumerateTargets` paged queries now `.order("id")`;
+   the prior target-count wobble was unordered-pagination skip/dup, not view
+   instability (target-with-coords is a stable 2,000).
+
 ## Do the NL-edit / interpret flows need the guarantee too? (2026-09-01, unexamined)
 
 PR #287 blocker H put `guaranteedCategories` into the **generation** prompt
@@ -48,7 +110,6 @@ probably a shared mapper rather than a second ad-hoc table.
 
 **Not measured:** how often model-chosen key stops are live-resolved vs pool
 hits. The mechanism is confirmed; the real-world rate is unknown.
-
 
 ## `usfs` has no `field_precedence` row for `access` or `contact` (2026-09-01)
 

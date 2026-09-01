@@ -575,6 +575,69 @@ rolled back 2026-07-23 via `npm run -w data slice:rollback --execute` against th
 STEP-0 snapshot, and `places_test` re-synced. The numbers above are the restored
 baseline.)
 
+### `master_place_photo_candidate` — NEW 2026-09-01, TEST-only, STAGING (not wired)
+
+Created by migration `20260901000600_master_place_photo_candidate.sql` for the
+CA-campground photo-backfill pilot. Staged, license-clear photo candidates with
+full provenance (`source`, `image_url`, `license`/`license_class`, `attribution`,
+`source_page_url`, plus match signals). RLS enabled, zero policies (service-role
+only). **Deliberately NOT read by `recompute_master_place` /
+`pois_along_corridor` / `master_place_search_export` / `field_precedence`** —
+candidates are held for review, never auto-surfaced on cards. Promotion into a
+live read path is a separate, explicitly authorized step.
+
+Current run `ca-campground-2026-09-01-fixed` (after the six-issue self-audit
+fixes; the prior flawed `ca-campground-2026-09-01` rows were deleted first).
+Stratified deterministic sample (ordered by id, 40 target places per
+mutually-exclusive source tag = 160 of 2,053 zero-coverage CA campgrounds):
+**253 rows stored across 69 distinct places** — **4 `accepted`, 249
+`manual_review`**. Source: 207 wikimedia_commons_geo, 46 wikimedia_commons_text,
+0 nps (NPS produced no photo that passed the tightened bar in this sample).
+License class: 189 attribution (CC-BY / CC-BY-SA), 64 public-domain (CC0 / PD /
+PD-* templates). All 4 accepted images were visually inspected. See
+`docs/decisions/2026-09-01-photo-backfill-pilot-staging-table.md` and
+`docs/LOG.md`. All figures measured in-session; NOT re-run corpus-wide.
+
+Prior flawed run (`ca-campground-2026-09-01`, non-deterministic sample) stored
+277 rows / 6 accepted / 271 manual before deletion; its counts are NOT directly
+comparable — a different set of 160 places was sampled (unordered pagination).
+
+**Google-verified auto-adjudication (2026-09-01).** Migration `20260901000700`
+added `google_verdict` / `google_confidence` / `google_reasoning` /
+`google_ref_source` / `google_checked_at` and widened `match_status` to allow
+`rejected`. All 253 rows were re-adjudicated by comparing each stored candidate
+photo against a **live** Google reference photo (Places API New → vision model
+`claude-opus-5`). Final state (measured in-session): **match_status** accepted
+**10**, rejected **235**, manual_review **8**; **google_verdict** match 10,
+no_match 193, ambiguous 42, no_google_result 5, unverified 3. `no_match` and
+`ambiguous` → `rejected`; the 8 couldn't-verify rows (5 no_google_result +
+3 error) were **left at their prior status**, not rejected. **Compliance
+verified:** a scan of every text column of every row found **zero** Google
+URLs / photo ids / image data — only verdict text + the generic
+`google_ref_source='google_places_text_search'` label are stored; `image_url`
+remains 100% Commons/NPS/RIDB. Google reference images were held in memory for
+the comparison only and never persisted.
+
+**NPS-direct pass (2026-09-01).** Migration `20260901000800` adds `no_candidate`
+to the `match_status` CHECK and makes `image_url` NULLABLE (a no_candidate row
+has no image). Targets NPS-sourced CA campgrounds with no baked photo, matched to
+their NPS unit by the structured `nps:campground:<id>` from `external_id`. Target
+set measured = **1** ("Prisoners Harbor Campground"); its NPS id no longer
+resolves in the current NPS API (unit removed upstream), so it stored as
+`pilot_run='nps-direct-2026-09-01'`, `source='nps'`, `match_status='no_candidate'`,
+`image_url=NULL`. Zero accepted this pass.
+
+**RIDB-direct pass (2026-09-01).** Same pattern for `source='ridb'` CA
+campgrounds with no baked photo, matched by `ridb:facility:<FacilityID>` from
+`external_id`, querying the live RIDB media endpoint. Target set measured =
+**163** (of 724 CA campgrounds with a RIDB source_record). **All 163 →
+`no_candidate`** (`pilot_run='ridb-direct-2026-09-01'`, `source='ridb'`,
+`image_url=NULL`): every facility resolved but returned zero media — RIDB's live
+API has no photos for these campgrounds. 0 accepted, 0 manual_review, 0 stale-id.
+A rights classifier (federal-credit → accept; individual/empty credit →
+manual_review) was built but never fired (no images). Reused the `no_candidate` +
+nullable `image_url` schema from `20260901000800` — no new migration.
+
 ## `reference_trips` — RLS + rows per DB
 
 App data (canonical seed trips), not corpus. **RLS:** exactly one policy,

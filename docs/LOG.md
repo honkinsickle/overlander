@@ -12,6 +12,182 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 9) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
+
+- **Target set measured: 163 rows** (RIDB-sourced CA campgrounds with no baked
+  photo) — far larger than the NPS case (1). Of 2,632 CA campgrounds, 724 have a
+  RIDB source_record; 163 lack a photo. PR #335 updated (not merged).
+- **Matched by STRUCTURED id, 163/163, 0 fallback.** The ingester stores the
+  facility id in `source_record.external_id` as `ridb:facility:<FacilityID>`
+  (ridb.ts:403). Queried the live RIDB media endpoint
+  `GET /facilities/{id}/media` (header `apikey`, verified against the ingester).
+- **Result: all 163 → `no_candidate`, every one "resolved but has no media."**
+  0 accepted · 0 manual_review · 0 stale-id (404) · 0 all-non-photo · 0 errors.
+  RIDB's LIVE API has **no media** for any of these facilities — the missing
+  photos are a genuine upstream absence, not an ingestion miss or a rights
+  problem. (Apparatus validated: unrelated facilities e.g. Camp 4, Blue Lake
+  return `MediaType=Image` media, so "0 media" is real, not a bad endpoint.)
+- **RIGHTS handling built (task 4/5) but never fired** — honestly, because zero
+  images were returned. RIDB media carries a `Credits` field and aggregates
+  agency + individual/partner contributors, so it is NOT uniformly public
+  domain. The classifier: explicit federal-agency credit ("Yosemite National
+  Park", "USDA FS", BLM, USACE, …) → `accepted` (public domain); empty or
+  individual/partner credit ("Ranger Bowers", "Hilary Coleman") → `manual_review`
+  (rights unclear, do not auto-accept). Calibrated against real Credits values
+  seen on facilities-with-media, but no target facility had an image to classify.
+- **`pickPhoto`/`NON_PHOTO_RE` reused + extended for RIDB:** added a MediaType
+  filter (keep only `MediaType='Image'`, drop PDFs/videos/maps) before pickPhoto.
+  Didn't fire on target data (no media), but wired for the general case.
+- **RIDB key note:** session-start preflight reported RIDB 401, but the key works
+  fine with the `apikey` header (HTTP 200) — the preflight probe uses a different
+  path. Not a blocker.
+- **No new migration** — reused `no_candidate` + nullable `image_url` from
+  `20260901000800`. Driver `scripts/photo-ridb-direct.ts`
+  (npm: `backfill:photo-ridb`), idempotent per pilot_run. Not wired into
+  rendering. TEST Supabase + RIDB_API_KEY from data/.env; no PROD touched.
+
+## 2026-09-01 (later 8) — Photo pilot: NPS-direct pull for NPS-sourced CA campgrounds (TEST)
+
+- **Target set measured: exactly 1 row.** Of 2,632 CA campgrounds, 52 have an
+  NPS source_record; only **one** ("Prisoners Harbor Campground", Channel
+  Islands) lacks a baked photo. Confirms the standing finding that NPS
+  campgrounds almost all already carry a baked photo. PR #335 updated (not
+  merged).
+- **Matched by STRUCTURED id, not fuzzy.** The NPS ingester stores the campground
+  id in `source_record.external_id` as `nps:campground:<id>` (nps.ts:565). Match
+  rate: **1/1 structured id, 0 name/geo fallback.** Reported which id and why.
+- **Outcome: no_candidate.** The structured id `4ED5E354-…` no longer resolves
+  in the current NPS API (absent from CA `stateCode`, `parkCode=chis`, and name
+  search) — the unit was removed/renamed upstream since ingestion. Per the rule
+  "fall back to name/geo only when NO structured id exists", I did **not** fuzzy-
+  match a stale-but-present id (fuzzy-matching an island campground would likely
+  hit a mainland unit). Recorded as `match_status='no_candidate'` with the reason,
+  not silently skipped.
+- **`pickPhoto`/`NON_PHOTO_RE` reused as-is, not extended** — honestly, because
+  zero NPS images were retrieved this run (the one unit is gone), so there was no
+  new non-photo type to observe. The filter path is wired and ran in the earlier
+  dry runs.
+- **Schema:** migration `20260901000800` adds `no_candidate` to the match_status
+  CHECK and makes `image_url` NULLABLE (a no_candidate row has no image). Applied
+  to TEST. NPS accepts (had there been any) would be `match_status='accepted'`,
+  `source='nps'`, license "Public domain (U.S. Government work, NPS)", credit →
+  attribution — direct-accept, no Google cross-check, no manual_review, per the
+  first-party-authoritative instruction.
+- **Not wired into rendering.** Driver `scripts/photo-nps-direct.ts`
+  (npm: `backfill:photo-nps`), idempotent (delete-then-insert scoped to
+  `pilot_run='nps-direct-2026-09-01'`). TEST Supabase + NPS_API_KEY from
+  data/.env; no PROD touched.
+- **Follow-up flagged:** "Prisoners Harbor Campground" is a corpus row whose NPS
+  unit no longer exists upstream — an ingestion-staleness signal worth a broader
+  check (are other nps source_records pointing at removed units?). In BACKLOG.
+
+## 2026-09-01 (later 7) — Photo pilot: Google-verified auto-adjudication (TEST)
+
+- **Replaced manual eyeballing with an automated vision comparison.** For all
+  253 stored candidates, fetched a LIVE Google reference photo (Places API New:
+  text search → photo media) and compared it against the stored candidate photo
+  with `claude-opus-5` (structured verdict). PR #335 updated (not merged).
+- **Result:** match_status → **10 accepted, 235 rejected, 8 manual_review**;
+  google_verdict → match 10, no_match 193, ambiguous 42, no_google_result 5,
+  unverified 3. `no_match`/`ambiguous` → rejected (conservative default). The 8
+  couldn't-verify rows (5 no-Google-result + 3 API/vision error) were **left at
+  their prior status**, not rejected, per instruction (flagged via
+  google_verdict).
+- **The vision pass is far stricter than name+geo, and correctly so.** It
+  rejected geo-proximate-but-wrong Commons photos the earlier matcher had
+  accepted or manual-reviewed: a beach for "Van Damme Group Camp", a lichen
+  macro for "Warren Group Camp", a snake close-up for "Tamarisk Grove", the
+  **Benbow Inn hotel** for "Benbow Lake Campground", an **urban office tower**
+  for the OSM place literally named "1". Genuine matches survived: both Tolkan
+  entrance-sign photos, and Mount Shasta from Bunny Flat. Only **4 of the
+  earlier 6 "accepted" survived** Google verification.
+- **Schema:** migration `20260901000700` adds google_verdict/confidence/
+  reasoning/ref_source/checked_at and widens match_status to allow `rejected`.
+- **COMPLIANCE (live-fetch, not warehouse):** Google reference images were held
+  in memory for the single comparison and discarded. A scan of every text
+  column of every row found **zero** Google URLs / photo ids / image data —
+  only the verdict + a generic `google_ref_source` label are stored; `image_url`
+  stays 100% Commons/NPS/RIDB. `google-reference.ts` performs no writes; the
+  driver patch carries only verdict columns.
+- **Still not wired into rendering.** ANTHROPIC_API_KEY was borrowed from
+  web/.env.local into the process env; TEST Supabase + Google key came from
+  data/.env — no PROD touched. 3 rows hit transient errors (left unverified).
+
+## 2026-09-01 (later 6) — Photo-backfill pilot: six self-audit fixes + deterministic re-run (TEST)
+
+- **Fixed all six issues from the self-audit** (matcher/nps/driver), re-ran the
+  CA-campground pilot clean. PR #335 updated (not merged).
+- **#6 root-caused decisively.** The prior "1,967 vs 1,985 target-with-coords"
+  wobble was **unordered LIMIT/OFFSET pagination**, not `master_place_search_export`
+  instability: with `.order("id")` the count is **2,000 every run (×3)**; unordered
+  it gave 1,968 / 1,999 / 1,999 — while the export's own campground row count was a
+  constant **6,108** in all runs. Added `.order("id")` to every paged query in
+  `enumerateTargets`.
+- **#5 verified.** `Round Valley → His_and_Hers.jpg` (0.14 title, description-only
+  substring) now correctly routes to `manual_review`; description-substring can no
+  longer drive an auto-accept (title-anchored only).
+- **#3** license allowlist now recognizes PD-* templates (PD-USGov/PD-US/PD-self/
+  CC-PD-Mark/"No restrictions"); **#4** NPS image selection skips maps/diagrams/
+  signs; **#2** an NPS unit's mere 5km proximity no longer counts as "had a
+  candidate" (must pass adjudication + have a real photo); **#1** `source` column
+  now records `wikimedia_commons_geo` vs `_text`.
+- **Deterministic re-run** (`pilot_run=ca-campground-2026-09-01-fixed`, prior
+  flawed rows deleted first): **253 rows / 69 places — 4 accepted, 249 manual,
+  0 no-candidate, 91 rejected** (place-level 4/65/0/91). NPS contributed 0 rows.
+  **NOT comparable to the flawed run's 277/6/271** — different 160-place sample
+  (the old one was non-deterministic).
+- **Actually eyeballed the 4 accepted photos this time.** Nelder Grove (giant
+  sequoia — good) and Half Moon Bay (coastal bluff — good) are solid; **Tolkan
+  Campground is a photo of the entrance SIGN** and **Benbow is a distant dusk
+  hillside at 923 m** — both correct-place but weak heroes. None matched a *wrong*
+  place. Lesson stands: geo+title gating prevents wrong-place matches but does not
+  guarantee a good depiction.
+- **Residual (flagged, not silently fixed):** the map/diagram/sign filter is
+  NPS-only per the task's #4 scope; the same issue exists for Commons (Tolkan sign
+  is the live example). Noted in BACKLOG for a follow-up rather than scope-creeping
+  it here.
+
+## 2026-09-01 (later 5) — Photo scoping investigation + CA-campground photo-backfill pilot (TEST)
+
+- **Scoping first (no changes):** day-detail STOPS cards
+  (`category-list-card.tsx`) show a photo only when `photoUrl` is truthy —
+  baked from a photo-eligible source_record (`{nps,ridb,wikipedia,
+  atlas_oddities,family_destinations,editorial_food}` with
+  `normalized_payload.photo.url`) or live-hydrated via a Google `placeId`. Of
+  35,474 searchable POIs, **30.0% have any photo, 70.0% render a color block**
+  (measured); `campground` = 22%. It's a data-availability gap, not wiring.
+  Trip `10d68385…` (TEST) day-3: Dripping Springs Campground has a baked ridb
+  photo; Toulon Trail / Bee Canyon have none from any source. **Flagged: the
+  screenshot's "Tucalota has a photo" premise is contradicted by the data** —
+  Tucalota has no baked photoUrl, no placeId, no source photo, so it renders a
+  color block like the other two (deterministic from payload+code; not browser-
+  verified).
+- **Pilot (implementation, TEST only):** new staging table
+  `master_place_photo_candidate` (migration `20260901000600`, applied via
+  `db:push-verify --test`) + `data/photo-backfill/` (Wikimedia Commons + NPS
+  matchers) + `data/scripts/photo-backfill-pilot.ts`. Deliberately **not wired**
+  into any read path — the stop point.
+- **Schema decision:** separate table, NOT a `source_record` upsert — the
+  existing `backfill-wikipedia-photo.ts` writes a `wikipedia` source_record
+  which the corridor RPC auto-reads (would surface immediately). ADR:
+  `docs/decisions/2026-09-01-photo-backfill-pilot-staging-table.md`.
+- **Target set (computed):** 2,053 CA `campground` rows with zero coverage
+  (2,632 total − 579 baked-photo − 5 google). Source tags: osm 1,123,
+  usfs 421, state_parks 412, ridb 97.
+- **Pilot result (160-place stratified sample, 40/source-tag):** 6 accepted,
+  69 manual-only, 3 no-candidate, 82 rejected (place-level). **277 rows stored**
+  (6 accepted / 271 manual_review) across 75 places; all license-clear
+  (CC-BY/BY-SA/CC0/PD). state_parks yielded best, usfs worst (remote → few
+  Commons photos).
+- **Two apparatus bugs caught mid-build** (both the "verify the instrument"
+  lesson): (1) a zod schema rejected `extmetadata` values that are numbers
+  (`CommonsMetadataExtension: 1.2`), silently returning 0 candidates for every
+  place until fixed; (2) numeric OSM campground names ("1".."15") passed
+  `substringMatch` against any image containing that digit — a false accept —
+  fixed with a weak-name guard.
+- **Not merged; PR opened for review.** Follow-ups (review candidates, decide
+  wiring, tune thresholds/cap manual rows, run full 2,053) in BACKLOG.
+
 ## 2026-09-01 (later 4) — PR #287 blocker H closed: the guarantee now reaches the model
 
 - **The finding, first: `guaranteedCategories` never reached the AI at all.** It
