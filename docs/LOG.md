@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 8) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
+
+- **Target set measured: 163 rows** (RIDB-sourced CA campgrounds with no baked
+  photo) — far larger than the NPS case (1). Of 2,632 CA campgrounds, 724 have a
+  RIDB source_record; 163 lack a photo. PR #335 updated (not merged).
+- **Matched by STRUCTURED id, 163/163, 0 fallback.** The ingester stores the
+  facility id in `source_record.external_id` as `ridb:facility:<FacilityID>`
+  (ridb.ts:403). Queried the live RIDB media endpoint
+  `GET /facilities/{id}/media` (header `apikey`, verified against the ingester).
+- **Result: all 163 → `no_candidate`, every one "resolved but has no media."**
+  0 accepted · 0 manual_review · 0 stale-id (404) · 0 all-non-photo · 0 errors.
+  RIDB's LIVE API has **no media** for any of these facilities — the missing
+  photos are a genuine upstream absence, not an ingestion miss or a rights
+  problem. (Apparatus validated: unrelated facilities e.g. Camp 4, Blue Lake
+  return `MediaType=Image` media, so "0 media" is real, not a bad endpoint.)
+- **RIGHTS handling built (task 4/5) but never fired** — honestly, because zero
+  images were returned. RIDB media carries a `Credits` field and aggregates
+  agency + individual/partner contributors, so it is NOT uniformly public
+  domain. The classifier: explicit federal-agency credit ("Yosemite National
+  Park", "USDA FS", BLM, USACE, …) → `accepted` (public domain); empty or
+  individual/partner credit ("Ranger Bowers", "Hilary Coleman") → `manual_review`
+  (rights unclear, do not auto-accept). Calibrated against real Credits values
+  seen on facilities-with-media, but no target facility had an image to classify.
+- **`pickPhoto`/`NON_PHOTO_RE` reused + extended for RIDB:** added a MediaType
+  filter (keep only `MediaType='Image'`, drop PDFs/videos/maps) before pickPhoto.
+  Didn't fire on target data (no media), but wired for the general case.
+- **RIDB key note:** session-start preflight reported RIDB 401, but the key works
+  fine with the `apikey` header (HTTP 200) — the preflight probe uses a different
+  path. Not a blocker.
+- **No new migration** — reused `no_candidate` + nullable `image_url` from
+  `20260901000800`. Driver `scripts/photo-ridb-direct.ts`
+  (npm: `backfill:photo-ridb`), idempotent per pilot_run. Not wired into
+  rendering. TEST Supabase + RIDB_API_KEY from data/.env; no PROD touched.
+
 ## 2026-09-01 (later 7) — Photo pilot: NPS-direct pull for NPS-sourced CA campgrounds (TEST)
 
 - **Target set measured: exactly 1 row.** Of 2,632 CA campgrounds, 52 have an

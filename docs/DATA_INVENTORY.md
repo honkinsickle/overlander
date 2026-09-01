@@ -627,6 +627,17 @@ resolves in the current NPS API (unit removed upstream), so it stored as
 `pilot_run='nps-direct-2026-09-01'`, `source='nps'`, `match_status='no_candidate'`,
 `image_url=NULL`. Zero accepted this pass.
 
+**RIDB-direct pass (2026-09-01).** Same pattern for `source='ridb'` CA
+campgrounds with no baked photo, matched by `ridb:facility:<FacilityID>` from
+`external_id`, querying the live RIDB media endpoint. Target set measured =
+**163** (of 724 CA campgrounds with a RIDB source_record). **All 163 →
+`no_candidate`** (`pilot_run='ridb-direct-2026-09-01'`, `source='ridb'`,
+`image_url=NULL`): every facility resolved but returned zero media — RIDB's live
+API has no photos for these campgrounds. 0 accepted, 0 manual_review, 0 stale-id.
+A rights classifier (federal-credit → accept; individual/empty credit →
+manual_review) was built but never fired (no images). Reused the `no_candidate` +
+nullable `image_url` schema from `20260901000800` — no new migration.
+
 ## `reference_trips` — RLS + rows per DB
 
 App data (canonical seed trips), not corpus. **RLS:** exactly one policy,

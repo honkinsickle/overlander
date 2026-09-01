@@ -30,6 +30,16 @@ Remaining follow-ups:
    signal:** this is a corpus row pointing at a removed/renamed NPS unit — worth
    a broader audit of whether other `nps` source_records reference units the NPS
    API no longer lists (would affect any NPS-keyed refresh, not just photos).
+2c. **RIDB-direct pass done (2026-09-01):** 163 RIDB-sourced CA campgrounds lack a
+   baked photo; **all 163 returned zero media from the live RIDB API** →
+   `no_candidate` (`pilot_run='ridb-direct-2026-09-01'`). Their missing photos are
+   a genuine upstream absence on recreation.gov, not an ingestion miss. The
+   rights-aware accept/manual_review classifier (Credits-based) is built and
+   calibrated but has no target images to act on — it will matter if a future
+   source pass finds RIDB media with individual/partner credits. **Net across all
+   direct-source passes (NPS + RIDB): 0 photos recovered** — the remaining CA
+   campground photo gap is not fillable from the places' own federal sources;
+   Commons/agency-web/other remain the only avenues (see items 1–6 above).
 3. **Residual matcher gaps (not fixed — flagged):**
    - The map/diagram/sign filter is **NPS-only** (task-scoped). Commons has the
      same issue: `Tolkan Campground` accepted a photo of the entrance *sign*.

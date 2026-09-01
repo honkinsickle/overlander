@@ -125,3 +125,14 @@ NULLABLE so a "no usable image" outcome (all images non-photo, or the unit no
 longer resolves upstream) is recorded rather than silently skipped. Accepts carry
 `license='Public domain (U.S. Government work, NPS)'` with the NPS credit as
 attribution. Still un-wired.
+
+**Update 2026-09-01 (RIDB-direct, rights-aware).** Same structured-id pattern for
+`source='ridb'` (matched by `ridb:facility:<FacilityID>`, live media endpoint).
+Unlike NPS's own site, recreation.gov/RIDB aggregates media across agencies AND
+individual/partner contributors, so it is NOT treated as uniformly public domain:
+per-image rights are read from the media `Credits` field — an explicit
+federal-agency credit → `accepted` (public domain), while an empty, individual,
+or partner credit → `manual_review` (do not auto-accept). No schema change
+(reused `no_candidate` + nullable `image_url`). On this run all 163 targets
+returned zero live media → `no_candidate`; the rights split was built and
+calibrated but did not fire. Still un-wired.
