@@ -23,6 +23,7 @@ import { deriveDayCorridor } from "@/lib/corridor/day-corridor";
 import { bucketPlacesIntoCorridor } from "@/lib/corridor/bucket";
 import { alongRouteMiles, haversineMi } from "@/lib/routing/point-to-polyline";
 import { fetchCorpusForSegment } from "@/lib/trips/bake-corridors";
+import { primaryCategoryToSlideKey } from "@/lib/trip-browse/federated";
 import { stripNodeIdentical } from "@/lib/corridor/node-identity";
 import type { CorridorCity } from "@/lib/trips/types";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
@@ -144,12 +145,22 @@ export function markOvernightTile(
   );
 }
 
-/** A resolved tier-2 place as a browsable tile (real place_id → hydratable). */
-function resolvedToTile(rp: ResolvedPlace): BrowsePlace {
+/** A resolved tier-2 place as a browsable tile (real place_id → hydratable).
+ *
+ *  `category` maps Google's inferred corpus category (`rp.category`, set by
+ *  `inferCategory(primaryType)` in resolve.ts) through the same slide-bucket
+ *  taxonomy the corpus mapper uses (`primaryCategoryToSlideKey`). Without
+ *  this, every google-resolved tile shipped with `category: undefined` and
+ *  fell back to the generic "interest" diamond icon on day-detail cards
+ *  (measured 2026-08-31: 352/352 google-resolved tiles across all TEST
+ *  baked trips had `category: undefined`). Unknown/null Google types still
+ *  land on "interest", so this can only match-or-improve, never regress. */
+export function resolvedToTile(rp: ResolvedPlace): BrowsePlace {
   return {
     id: `google:${rp.placeId}`,
     coords: rp.coords,
     title: rp.displayName,
+    category: primaryCategoryToSlideKey(rp.category ?? "unknown"),
     photoAlt: rp.displayName,
     pills: [{ label: "live-resolved" }],
     stats: [],
