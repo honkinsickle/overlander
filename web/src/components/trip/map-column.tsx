@@ -16,6 +16,7 @@ import {
 import { useWaypointDetail } from "@/lib/trips/use-waypoint-detail";
 import { CATEGORY_ACCENT } from "@/components/demo/category-planning-slide";
 import type { Day, Waypoint } from "@/lib/trips/types";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 import { decodePolyline } from "@/lib/routing/point-to-polyline";
 import { UserLocationLayer } from "./user-location-layer";
 import { DirectionsButton } from "./directions-button";
@@ -1446,8 +1447,8 @@ function WaypointDetail({
       subtitle={waypoint.subtitle}
       onClose={onClose}
     >
-      <p className="text-sm leading-5 text-text-muted">
-        {waypoint.description}
+      <p className="text-sm leading-5 text-text-muted whitespace-pre-line">
+        {stripDescriptionHtml(waypoint.description)}
       </p>
       {waypoint.tip && <DetailTip>{waypoint.tip}</DetailTip>}
       <DetailStats items={waypoint.stats} />

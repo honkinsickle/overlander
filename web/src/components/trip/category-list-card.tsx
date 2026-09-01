@@ -3,6 +3,7 @@
 import { GripVertical } from "lucide-react";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 import { CuratedKebab, type CuratedMenu } from "@/components/trip/curated-kebab";
 import {
   CategoryIconV2,
@@ -85,23 +86,6 @@ function looksLikeMapperFallback(desc: string, title: string): boolean {
   return /^[A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*){0,3}\.$/.test(rest);
 }
 
-/** Strip HTML tags + common entities from a description string. Some source
- *  descriptions (BLM/USFS-style rows like `<p>Picnic Site. Day use hours…</p>`)
- *  arrive with raw markup; React escapes text children, so unstripped content
- *  renders literal `<p>` on-screen. */
-function stripHtml(s: string): string {
-  return s
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&[a-z]+;/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function CategoryListCard({
   place,
@@ -117,7 +101,7 @@ export function CategoryListCard({
 }: Props) {
   const badgeBg = `var(--cat-${category}-badge-bg)`;
   const badgeBorder = `var(--cat-${category}-badge-border)`;
-  const cleanDescription = description ? stripHtml(description) : "";
+  const cleanDescription = stripDescriptionHtml(description);
   // Suppress the `mapMasterPlaceRow` synthesized fallback (federated.ts:253-255),
   // which writes `${canonical_name} — ${prettyCategory(primary_category)}.` when
   // the raw description is null. That fallback is helpful for the slide-up

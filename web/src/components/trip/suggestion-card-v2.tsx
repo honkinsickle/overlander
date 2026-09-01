@@ -1,6 +1,7 @@
 "use client";
 
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 
 /**
  * Suggestion Card v2 — Phase D #1 "Browse the day".
@@ -98,7 +99,7 @@ export function SuggestionCardV2({
           onOpen={onOpen}
         />
         <p className="font-sans text-sm leading-5 text-[#C8CDD1] line-clamp-3">
-          {place.description}
+          {stripDescriptionHtml(place.description)}
         </p>
         <CtaRow label={addLabel} onAdd={onAdd} onMore={onMore} />
       </div>

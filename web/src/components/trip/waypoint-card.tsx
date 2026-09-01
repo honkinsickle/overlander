@@ -6,6 +6,7 @@ import {
   categoryIcon,
 } from "@/components/primitives/detail-card";
 import type { Waypoint } from "@/lib/trips/types";
+import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 
 /**
  * Waypoint row — matches Paper "Waypoint Card — Component (code-aligned)" (ALI-0),
@@ -123,8 +124,8 @@ export function WaypointCard({
         >
           {waypoint.title}
         </h3>
-        <p className="font-sans text-[16px] leading-[21px] text-text-primary">
-          {waypoint.description}
+        <p className="font-sans text-[16px] leading-[21px] text-text-primary whitespace-pre-line">
+          {stripDescriptionHtml(waypoint.description)}
         </p>
 
         {/* Callout row — tip + right-aligned caret button. 48px tall. */}
