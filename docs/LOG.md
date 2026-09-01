@@ -12,6 +12,50 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 4) — PR #287 blocker H closed: the guarantee now reaches the model
+
+- **The finding, first: `guaranteedCategories` never reached the AI at all.** It
+  rode on `GenerationInput` and was read only by the post-generation audit.
+  `buildFactsMessage` builds an **explicit payload object** and stringifies
+  *that* — not `facts` or `input` wholesale — so a field not named in that object
+  is invisible to the model no matter what the input carries. `generate.ts` is
+  the only generation prompt path (`SYSTEM_PROMPT` + `buildFactsMessage`), and
+  both surfaces had **zero** mentions of the guarantee. Every category coverage a
+  generated trip showed was the anchor-backfill inserting places, never the model
+  choosing them.
+- **Followed the spec's own recommendation rather than inventing a format.**
+  §4.2 already said where it belongs (alongside `corridorCities`, explicitly not
+  inside `rig`) and which posture (the corridor-cities pattern — a preference to
+  weave, never a quota). Blocker H only ever asked which posture to confirm. The
+  new `SYSTEM_PROMPT` block mirrors the existing spread copy and ends on the same
+  line. §4.3 settled the shape question: the per-day resolved form is deliberately
+  NOT sent — the audit computes it post-generation — so the trip-level array is
+  what's meaningful at prompt-construction time.
+- **Deliberate deviation: the payload is filtered through
+  `GUARANTEE_CATEGORIES`.** A naive "add the field" would have sent `fuel` and
+  `overnight`, telling the model to weave into `keyStops[]` exactly the two
+  things the ADR 2026-08-25 exclusions keep out because they are inserted
+  elsewhere. Filtering to the audit's own set means prompt and mechanism can
+  never disagree about what was promised.
+- **Verified by inspecting the real payload, not by generating a trip.** Invoked
+  `buildFactsMessage` and parsed the JSON block it emits: pool-side categories
+  present; `fuel`/`overnight` filtered to just the pool-side one; empty selection
+  omits the key; absent field omits the key. A full LLM generation would have
+  proved less — the question is what the payload contains, and that is directly
+  observable.
+- **Flagged, not fixed.** The audit credits coverage only via a pool hit or
+  `RESOLVED_TO_GUARANTEE`, which has one entry (`restaurant → food`). A
+  model-chosen scenic/oddity/attraction/camping/urban stop that is live-resolved
+  contributes no category → audit still sees it missing → backfill adds a second
+  of the same category near that anchor. Pre-existing, but this change nudges the
+  model toward exactly those categories, so it is likelier to surface. Widening
+  the map changes coverage decisions on every trip; `resolve-places.ts` already
+  has a sibling mapper, so the fix is probably a shared one. Filed.
+- **Not measured:** how often model picks are live-resolved vs pool hits. The
+  mechanism is confirmed; the rate is not.
+- Gates: web typecheck 0, data typecheck 0, data test 0, next build 0, itinerary
+  suite 195 passed (6 new).
+
 ## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
 
 - **2,716 rows recomputed on PROD, 0 failed** (~30 min wall clock, chunked 50 at

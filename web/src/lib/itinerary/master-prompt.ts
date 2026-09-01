@@ -11,6 +11,7 @@
  */
 
 import type { EngineFacts, GenerationInput } from "./facts";
+import { GUARANTEE_CATEGORIES } from "./anchor-backfill";
 
 export const SYSTEM_PROMPT = `You are an experienced overland and expedition planner. You design real-world-feasible routes, daily itineraries, and logistics plans for vehicle-based travel.
 
@@ -94,6 +95,15 @@ C. days[] — ONE entry per calendar day of the trip (including layover and
        day beats a padded one, and you still stay within the 2–4 entries.
        Coverage is the tie-breaker when several candidates are equally good,
        not a rule that overrides quality.
+       WHEN guaranteedCategories IS PRESENT IN ENGINE FACTS, the traveler has
+       said those kinds of stop are what they most want out of this trip.
+       Favor them when choosing between otherwise comparable candidates for
+       keyStops[], across the trip as a whole — NOT as a per-day checklist.
+       Same posture as the spread above: a preference, NOT a quota. Do NOT
+       invent, pad, or force a listed category into a day that has nothing
+       genuine to offer it, and never let one displace a clearly better stop.
+       If a listed category never earns a place, leaving it out is the right
+       answer.
      - overnight { name|null, desc|null, type, rationale } — the real place
        NAME (pooled or not), or desc for a typical/assumed spot; the
        rationale MUST say why it fits the rig +
@@ -128,6 +138,23 @@ export function buildFactsMessage(
 ): string {
   const { params, rig } = input;
 
+  // Interest-Category-Chips, PR #287 blocker H.
+  // Decision: docs/decisions/2026-09-01-guaranteed-categories-prompt-posture.md
+  // (posture follows spec §4.2 — that spec is still unmerged, see the ADR).
+  // A trip-level fact, placed alongside
+  // corridorCities rather than inside `rig`, because it constrains the shape of
+  // the output the same way the city spine does.
+  //
+  // Filtered to GUARANTEE_CATEGORIES — the exact set the post-generation audit
+  // enforces — so the prompt and the mechanism can never disagree about what
+  // was promised. `fuel` and `overnight` are deliberately absent from that set
+  // (ADR 2026-08-25): fuel is inserted by fuel-live-resolve and overnight owns
+  // a dedicated slot, so naming either here would invite the model to produce a
+  // second one. Omitted entirely when empty — absent means "no guarantees".
+  const guaranteedCategories = (input.guaranteedCategories ?? []).filter((c) =>
+    GUARANTEE_CATEGORIES.has(c),
+  );
+
   const payload = {
     params,
     rig,
@@ -139,6 +166,7 @@ export function buildFactsMessage(
       kind: c.kind,
       milesFromStart: Math.round(c.milesFromStart),
     })),
+    ...(guaranteedCategories.length > 0 ? { guaranteedCategories } : {}),
     // Pool is presented NAME-ONLY on purpose: the model references places by
     // name (the audit matches names back to the pool), so it never sees an
     // id format to imitate/fabricate.
