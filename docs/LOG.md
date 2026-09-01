@@ -12,7 +12,7 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-09-01 (later 8) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
+## 2026-09-01 (later 9) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
 
 - **Target set measured: 163 rows** (RIDB-sourced CA campgrounds with no baked
   photo) — far larger than the NPS case (1). Of 2,632 CA campgrounds, 724 have a
@@ -46,7 +46,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   (npm: `backfill:photo-ridb`), idempotent per pilot_run. Not wired into
   rendering. TEST Supabase + RIDB_API_KEY from data/.env; no PROD touched.
 
-## 2026-09-01 (later 7) — Photo pilot: NPS-direct pull for NPS-sourced CA campgrounds (TEST)
+## 2026-09-01 (later 8) — Photo pilot: NPS-direct pull for NPS-sourced CA campgrounds (TEST)
 
 - **Target set measured: exactly 1 row.** Of 2,632 CA campgrounds, 52 have an
   NPS source_record; only **one** ("Prisoners Harbor Campground", Channel
@@ -81,7 +81,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   unit no longer exists upstream — an ingestion-staleness signal worth a broader
   check (are other nps source_records pointing at removed units?). In BACKLOG.
 
-## 2026-09-01 (later 6) — Photo pilot: Google-verified auto-adjudication (TEST)
+## 2026-09-01 (later 7) — Photo pilot: Google-verified auto-adjudication (TEST)
 
 - **Replaced manual eyeballing with an automated vision comparison.** For all
   253 stored candidates, fetched a LIVE Google reference photo (Places API New:
@@ -113,7 +113,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   web/.env.local into the process env; TEST Supabase + Google key came from
   data/.env — no PROD touched. 3 rows hit transient errors (left unverified).
 
-## 2026-09-01 (later 5) — Photo-backfill pilot: six self-audit fixes + deterministic re-run (TEST)
+## 2026-09-01 (later 6) — Photo-backfill pilot: six self-audit fixes + deterministic re-run (TEST)
 
 - **Fixed all six issues from the self-audit** (matcher/nps/driver), re-ran the
   CA-campground pilot clean. PR #335 updated (not merged).
@@ -147,7 +147,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   is the live example). Noted in BACKLOG for a follow-up rather than scope-creeping
   it here.
 
-## 2026-09-01 (later 4) — Photo scoping investigation + CA-campground photo-backfill pilot (TEST)
+## 2026-09-01 (later 5) — Photo scoping investigation + CA-campground photo-backfill pilot (TEST)
 
 - **Scoping first (no changes):** day-detail STOPS cards
   (`category-list-card.tsx`) show a photo only when `photoUrl` is truthy —
@@ -187,6 +187,79 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   fixed with a weak-name guard.
 - **Not merged; PR opened for review.** Follow-ups (review candidates, decide
   wiring, tune thresholds/cap manual rows, run full 2,053) in BACKLOG.
+
+## 2026-09-01 (later 4) — PR #287 blocker H closed: the guarantee now reaches the model
+
+- **The finding, first: `guaranteedCategories` never reached the AI at all.** It
+  rode on `GenerationInput` and was read only by the post-generation audit.
+  `buildFactsMessage` builds an **explicit payload object** and stringifies
+  *that* — not `facts` or `input` wholesale — so a field not named in that object
+  is invisible to the model no matter what the input carries. `generate.ts` is
+  the only generation prompt path (`SYSTEM_PROMPT` + `buildFactsMessage`), and
+  both surfaces had **zero** mentions of the guarantee. Every category coverage a
+  generated trip showed was the anchor-backfill inserting places, never the model
+  choosing them.
+- **Followed the spec's own recommendation rather than inventing a format.**
+  §4.2 already said where it belongs (alongside `corridorCities`, explicitly not
+  inside `rig`) and which posture (the corridor-cities pattern — a preference to
+  weave, never a quota). Blocker H only ever asked which posture to confirm. The
+  new `SYSTEM_PROMPT` block mirrors the existing spread copy and ends on the same
+  line. §4.3 settled the shape question: the per-day resolved form is deliberately
+  NOT sent — the audit computes it post-generation — so the trip-level array is
+  what's meaningful at prompt-construction time.
+- **Deliberate deviation: the payload is filtered through
+  `GUARANTEE_CATEGORIES`.** A naive "add the field" would have sent `fuel` and
+  `overnight`, telling the model to weave into `keyStops[]` exactly the two
+  things the ADR 2026-08-25 exclusions keep out because they are inserted
+  elsewhere. Filtering to the audit's own set means prompt and mechanism can
+  never disagree about what was promised.
+- **Verified by inspecting the real payload, not by generating a trip.** Invoked
+  `buildFactsMessage` and parsed the JSON block it emits: pool-side categories
+  present; `fuel`/`overnight` filtered to just the pool-side one; empty selection
+  omits the key; absent field omits the key. A full LLM generation would have
+  proved less — the question is what the payload contains, and that is directly
+  observable.
+- **Flagged, not fixed.** The audit credits coverage only via a pool hit or
+  `RESOLVED_TO_GUARANTEE`, which has one entry (`restaurant → food`). A
+  model-chosen scenic/oddity/attraction/camping/urban stop that is live-resolved
+  contributes no category → audit still sees it missing → backfill adds a second
+  of the same category near that anchor. Pre-existing, but this change nudges the
+  model toward exactly those categories, so it is likelier to surface. Widening
+  the map changes coverage decisions on every trip; `resolve-places.ts` already
+  has a sibling mapper, so the fix is probably a shared one. Filed.
+- **Not measured:** how often model picks are live-resolved vs pool hits. The
+  mechanism is confirmed; the rate is not.
+- Gates: web typecheck 0, data typecheck 0, data test 0, next build 0, itinerary
+  suite 195 passed (6 new).
+- **Self-audit caught a false statement of mine.** I reported that `interpret.ts`
+  and `edit.ts` "don't carry `GenerationInput`, so the guarantee isn't theirs to
+  send." Wrong on the premise — **both take `GenerationInput` and both build
+  model-facing prompt text from it** (`buildInterpretContext(input, days)` emits
+  the trip window, anchors and day list). Neither includes the guarantee (0
+  occurrences each). Whether they should is genuinely open and is now filed,
+  with the arguments both ways, rather than asserted. The verification command
+  itself was the tell: it printed a pre-written conclusion that the output then
+  contradicted.
+- **Second self-audit finding: I never checked the upstream half of the chain
+  before publishing.** I claimed the guarantee "now reaches the model" having
+  only exercised `buildFactsMessage` in isolation. Verified afterwards and it
+  holds — wizard chip state → `ExpeditionForm.guaranteedCategories` →
+  `expeditionToGenerationInput` → `GenerationInput` — so the change is not
+  inert. Right answer, published ahead of the evidence.
+- **Doc pass (`/wrap`):** `docs/architecture/trip-creation-surfaces.md` carried
+  two stale claims, one of them falsified by this session and one older.
+  Its consumption table asserted `buildFactsMessage` stringifies `params` and
+  `rig` "so every field does reach the model" — **false for
+  `guaranteedCategories`**, which is top-level, not inside either object, and so
+  reached the model not at all. And it claimed "apart from anchor coords and
+  `maxDailyDriveMi`, no form field is enforced by code" — also false since the
+  2026-08-25 backfill, which enforces `guaranteedCategories` mechanically. Both
+  corrected, with a row added for the field.
+- Also corrected in the same pass: `expedition.ts`'s doc comment on the field
+  ("only `fuel` is wired downstream / others are D-blocked") was stale before
+  this branch and made more wrong by it.
+- `DATA_INVENTORY.md` deliberately untouched — no TEST or PROD data was read or
+  written this session; the change is application code only.
 
 ## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
 
@@ -232,6 +305,22 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - Timing note: the 50-row probe measured ~0.58 s/row cold; the warm rate varied
   between ~0.2 and ~1 s/row, so the initial "~26 minutes" estimate was
   coincidentally close but was never a stable rate.
+- **Doc pass (`/wrap`):** walked the CLAUDE.md doc set. `STATE.md`, `LOG.md`,
+  `BACKLOG.md`, `DATA_INVENTORY.md` and the ADR were already current from this
+  session's commits. One genuine staleness found and fixed:
+  `docs/architecture/resolve-places-design.md` §D2 documents the exact
+  `pois_along_corridor` filter set that migration `20260901000300` changed — its
+  table said "excludes template-only descriptions" with no mention of the second,
+  attribution-keyed predicate, and it did not record that the original predicate
+  silently stops excluding once the column is populated. Also noted there that
+  `description_source` is now attribution-first and that Typesense is unsynced,
+  so the bbox and corridor doors can disagree until `search:sync` runs.
+- **Checked and deliberately not changed:** `place-pipeline-trace.md` §2 (its
+  subject is `capacity`/EV-socket/`land_manager`, untouched by this session);
+  `place-render-model.md`'s `field_precedence` passage (about photo routing —
+  its incidental mention of a PROD precedence gap is unaffected, though BACKLOG
+  now carries a second such gap); `generation-pipeline.md` (its "read path"
+  references are about geocode fallbacks, not description resolution).
 
 ## 2026-09-01 (later 2) — regression-batch recompute on PROD: AUTHORIZED, ATTEMPTED, HALTED at the safety gate
 

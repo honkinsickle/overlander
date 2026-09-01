@@ -29,8 +29,9 @@ export type RigProfile = {
   capability: "mild" | "moderate" | "avoid-hardcore";
   groupSize: string;
   skill: string;
-  /** Travel-STYLE preferences (solitude / scenic / photography / simple-camp /
-   *  local-food) — distinct from the stop-category interests taxonomy. */
+  /** Travel-STYLE preferences (solitude / photography / simple-camp /
+   *  local-food) — distinct from the stop-category interests taxonomy.
+   *  `scenic` was retired (see `normalizePreferences` in lib/plan/expedition). */
   preferences: string[];
 };
 

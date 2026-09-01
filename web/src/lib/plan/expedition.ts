@@ -77,9 +77,14 @@ export type ExpeditionForm = {
   /** Interest-Category-Chips (`docs/specs/interest-category-chips.md`, §11
    *  step 3, PR #287). Categories the user asks the trip to guarantee, using
    *  the `SlideCategoryKey` vocabulary end-to-end (Decision A: `overnight`,
-   *  not `hotel`). Empty/absent = no guarantees. Currently only the `"fuel"`
-   *  value is wired downstream (fuel-live-resolve.ts). Other categories are
-   *  D-blocked pending the audit-loop-granularity call (spec §11 steps 5–7). */
+   *  not `hotel`). Empty/absent = no guarantees.
+   *
+   *  Wired end-to-end as of 2026-09-01: `fuel` via fuel-live-resolve.ts; the
+   *  pool-side categories via the audit's anchor-backfill (granularity decided
+   *  D-B per-city, ADR 2026-08-25); and, filtered to GUARANTEE_CATEGORIES, into
+   *  the generation prompt itself (ADR 2026-09-01, PR #287 blocker H). The
+   *  earlier "only fuel is wired / others are D-blocked" note here was stale on
+   *  both counts. */
   guaranteedCategories?: SlideCategoryKey[];
 };
 
@@ -106,11 +111,28 @@ export const BUILD_OPTIONS = [
 /** Reference-doc §02 travel-style Preferences. */
 export const PREFERENCE_OPTIONS = [
   "solitude",
-  "scenic",
   "photography",
   "simple-camp",
   "local-food",
 ] as const;
+
+/**
+ * Drop preferences a saved rig carries that the wizard no longer offers.
+ *
+ * `scenic` was retired here (spec `docs/specs/interest-category-chips.md` §7 —
+ * it duplicates the Interest Categories chips). Retiring an option is not
+ * self-cleaning: `ChipGroup` renders only `options`, so a retired value stays
+ * in `rig.preferences` state, is written back on save, and — because
+ * `buildFactsMessage` serialises the whole `rig` object into the LLM payload —
+ * keeps reaching the model. The user can neither see nor untick it.
+ *
+ * Filtering to the current option set on load makes the removal actually take
+ * effect, and covers any future retirement rather than just this one.
+ */
+export function normalizePreferences(preferences: readonly string[]): string[] {
+  const allowed = PREFERENCE_OPTIONS as readonly string[];
+  return preferences.filter((p) => allowed.includes(p));
+}
 
 /** Map the wizard form → the pipeline's GenerationInput. Pure; no I/O. */
 export function expeditionToGenerationInput(

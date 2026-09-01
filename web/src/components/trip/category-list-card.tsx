@@ -5,6 +5,7 @@ import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
 import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 import { CuratedKebab, type CuratedMenu } from "@/components/trip/curated-kebab";
+import { PhotoUnavailable } from "@/components/trip/photo-unavailable";
 import {
   CategoryIconV2,
   type CategoryIconV2Name,
@@ -139,59 +140,67 @@ export function CategoryListCard({
         </button>
       )}
       {curatedMenu && <CuratedKebab menu={curatedMenu} placeTitle={place.title} />}
-      {/* Hero — photo (category-color fallback) + icon badge. */}
+      {/* Hero — real photo (+ category icon badge), else the Photo Unavailable
+       *  fallback. Photoless cards get the shared blurred placeholder treatment;
+       *  the category-color block + badge render ONLY when there's a photo. */}
       <div
         role="img"
         aria-label={place.photoAlt}
-        className="relative shrink-0"
+        className="relative shrink-0 overflow-clip"
         style={{
           width: 130,
           height: 80,
-          backgroundColor: badgeBg,
+          backgroundColor: place.photoUrl ? badgeBg : undefined,
           backgroundImage: place.photoUrl ? `url(${place.photoUrl})` : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       >
-        {/* Top scrim so the badge reads over bright photos (oklab gradient in
-         *  the board, approximated in sRGB). */}
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background: "linear-gradient(to bottom, #00000066, transparent 60%)",
-          }}
-        />
-        <span
-          className="absolute flex items-center justify-center"
-          style={{
-            left: 5,
-            top: 4,
-            width: 36,
-            height: 36,
-            borderRadius: 6,
-            backgroundColor: badgeBg,
-            border: `0.5px solid ${badgeBorder}`,
-            boxShadow: "0 2px 3px #00000066",
-          }}
-        >
-          <CategoryIconV2 category={category as CategoryIconV2Name} size={22} />
-        </span>
-        {place.photoCredit && (
-          <span
-            className="absolute truncate"
-            style={{
-              bottom: 2,
-              right: 3,
-              maxWidth: 120,
-              fontSize: 8,
-              lineHeight: "10px",
-              color: "rgba(255,255,255,0.7)",
-              textShadow: "0 1px 2px rgba(0,0,0,0.8)",
-            }}
-          >
-            {place.photoCredit}
-          </span>
+        {place.photoUrl ? (
+          <>
+            {/* Top scrim so the badge reads over bright photos (oklab gradient in
+             *  the board, approximated in sRGB). */}
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background: "linear-gradient(to bottom, #00000066, transparent 60%)",
+              }}
+            />
+            <span
+              className="absolute flex items-center justify-center"
+              style={{
+                left: 5,
+                top: 4,
+                width: 36,
+                height: 36,
+                borderRadius: 6,
+                backgroundColor: badgeBg,
+                border: `0.5px solid ${badgeBorder}`,
+                boxShadow: "0 2px 3px #00000066",
+              }}
+            >
+              <CategoryIconV2 category={category as CategoryIconV2Name} size={22} />
+            </span>
+            {place.photoCredit && (
+              <span
+                className="absolute truncate"
+                style={{
+                  bottom: 2,
+                  right: 3,
+                  maxWidth: 120,
+                  fontSize: 8,
+                  lineHeight: "10px",
+                  color: "rgba(255,255,255,0.7)",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+                }}
+              >
+                {place.photoCredit}
+              </span>
+            )}
+          </>
+        ) : (
+          <PhotoUnavailable />
         )}
       </div>
 
