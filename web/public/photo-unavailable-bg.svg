@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Generic photoless-card placeholder background. Self-authored abstract outdoor
+  scene (muted sky / ridgeline / foreground), soft by construction and further
+  blurred + scrimmed at render. Deliberately synthetic (not a sourced photo) so
+  it is unambiguously safe to ship to users — no third-party image licensing.
+  Not category-specific; the same asset backs every photoless card.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d5163"/>
+      <stop offset="0.55" stop-color="#4a5f57"/>
+      <stop offset="1" stop-color="#3b4a3c"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+  </defs>
+  <rect width="160" height="100" fill="url(#sky)"/>
+  <g filter="url(#soft)" opacity="0.85">
+    <ellipse cx="120" cy="30" rx="16" ry="16" fill="#5a6d78"/>
+    <path d="M0 72 L34 44 L60 66 L92 38 L128 70 L160 52 L160 100 L0 100 Z" fill="#33422f"/>
+    <path d="M0 84 L40 66 L78 82 L120 62 L160 80 L160 100 L0 100 Z" fill="#2a3626"/>
+  </g>
+</svg>
