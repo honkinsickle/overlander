@@ -902,6 +902,7 @@ Every section is read off `place.waypoint` with a fallback to the flat payload
 
 ```tsx
 const wp = place.waypoint;
+const category = wp?.category ?? "interest";  // added 2026-08-31, PR #327
 const tags = wp?.tags ?? [];          const reliability = wp?.reliability;
 const sim = wp?.simulator;            const factual = wp?.factualNote;
 const logistics = wp?.logistics;      const community = wp?.community;
@@ -917,7 +918,8 @@ const directionsCoord = place.waypoint?.coords ?? place.coords;
 | Rendered | Source field | Gate |
 |---|---|---|
 | Hero image, 458×150 | `wp.photoUrl ?? place.photoUrl` | else a fallback block (`:255-262`) |
-| Title | `place.title` (`:294`) | always |
+| **Category badge, 36×36** — `--cat-{category}-cta-bg` fill, `--cat-{category}-cta-border` hairline, `CategoryIconV2` at 22px | `wp.category ?? "interest"` (`:294-306`) | always |
+| Title | `place.title` (`:315`), coloured `var(--cat-{category}-title)` | always |
 | Tag pills | `wp.tags` | `tags.length > 0` (`:297`) |
 | Reliability score box | `wp.reliability` (`.score`, `.label`, `.sourceCount`) | `reliability` present (`:374`) |
 | **ROUTE line** — "Day N · X.X mi on route" | `place.dayNumber` + `wp.routeOffsetMi` (`:444`) | **both** non-null (`:421`) |
