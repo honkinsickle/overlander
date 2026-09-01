@@ -15,11 +15,28 @@ Remaining follow-ups:
    photos that weren't actually of the place). Spot-check the 10 before any
    wiring; note some are entrance-sign photos (both Tolkan rows) rather than
    scenic heroes.
-2. **Decide the wiring mechanism** (the deliberate stop point): either promote
-   `accepted` rows into a `wikipedia`/new source_record so the corridor RPC
-   photo lateral join reads them, or teach the RPC/export to read this table.
-   TEST first, then PROD, explicitly authorized. Until then cards show the
-   category-color block for these places.
+2. **~~Decide the wiring mechanism~~ — DONE + SHIPPED TO PROD 2026-09-01
+   (explicit sign-off; LOG later 10).** Chose **approach (a)**: promote each
+   accepted photo into a `wikipedia` `source_record` (`normalized_payload.photo`,
+   external_id `wikipedia:photo-pilot:<file>`) — the corridor RPC lateral join
+   already reads it, so **no RPC change, no recompute, no touch to
+   `master_place`/precedence/baked/Google-hydration**. Of the 10 accepted rows /
+   7 places, **3 wired live on PROD**: Bunny Flat (Mount Shasta), Fort Miller
+   (1936 HABS crop), Sugarloaf (LaserSETIRFO). The other 4 places were **not**
+   wired: 2 unresolved (Aikens Creek / Tolkan — TEST `ridb:facility:<int>` ids
+   absent on PROD, which uses RIDB UUIDs; not in PROD searchable export), 2
+   already had a `wikipedia` photo (Albion, Half Moon Bay). Verified via
+   `pois_along_corridor` on PROD.
+   - **⚠️ OPTIONAL PRUNE — 2 of the 3 wired are weak heroes.**
+     `google_verdict='match'` meant *geo-plausible*, not *good photo*. **Fort
+     Miller** shows a 1936 archival building survey; **Sugarloaf** shows a
+     laser-SETI instrument. To drop either: `DELETE FROM source_record WHERE
+     source_id='wikipedia' AND external_id LIKE 'wikipedia:photo-pilot:%'` scoped
+     to the file (`LaserSETIRFO` / `Historic_American_Buildings`). Bunny Flat's
+     Mount Shasta view is a genuine keep.
+   - **TEST/PROD RIDB-id divergence is a real finding** worth its own look: TEST
+     RIDB external_ids are integer facility numbers, PROD's are UUIDs — any
+     future TEST→PROD identity match on RIDB places will miss the same way.
 2a. **Re-run the 8 couldn't-verify rows** (`google_verdict in
    ('no_google_result','unverified')`) — 3 were transient API/vision errors, 5
    had no Google match. They kept their prior `manual_review` status.
