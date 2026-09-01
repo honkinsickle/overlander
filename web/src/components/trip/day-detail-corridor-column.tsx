@@ -848,45 +848,56 @@ export function DayDetailCorridorColumn({
         : t;
     });
 
-  // Day hero: prefer the persisted (Wikipedia) image; if absent (remote parks
-  // have no wiki image), REUSE the tile hydration already fetched for this day —
-  // the destination place's Google photo sits in `hydrated`, so one fetch feeds
-  // both tiles and the hero. Degrades to blank when the destination has no
-  // placeId or hasn't hydrated yet (no flash/crash — fills on the next render).
-  const heroFor = (d: Day): string | undefined => {
-    const heroCities = d.corridorCities ?? fallbackCorridor(d);
-    const heroEndCity = heroCities[heroCities.length - 1];
-    const destTile = heroEndCity
-      ? placePool(d).find((t) =>
-          isSameAnchorPlace(
-            { id: t.id, name: t.title, coords: t.coords },
-            { id: heroEndCity.id, name: heroEndCity.name, coords: heroEndCity.coords },
-          ),
-        )
-      : undefined;
-    return (
-      d.heroImage ??
-      (destTile?.placeId ? hydrated[destTile.placeId]?.photoUrl : undefined)
+  // Resolve a hero photo for one corridor endpoint city (destination OR origin):
+  // the anchor-matched tile's baked photoUrl (Commons/agency — resolves
+  // immediately) first, then its hydrated Google photo (placeId → `hydrated`).
+  type HeroCity = { id: string; name: string; coords: [number, number] };
+  const cityHeroPhoto = (d: Day, city: HeroCity | undefined): string | undefined => {
+    if (!city) return undefined;
+    const tile = placePool(d).find((t) =>
+      isSameAnchorPlace(
+        { id: t.id, name: t.title, coords: t.coords },
+        { id: city.id, name: city.name, coords: city.coords },
+      ),
     );
+    if (!tile) return undefined;
+    return tile.photoUrl ?? (tile.placeId ? hydrated[tile.placeId]?.photoUrl : undefined);
+  };
+  const cityHasHeroSource = (d: Day, city: HeroCity | undefined): boolean => {
+    if (!city) return false;
+    const tile = placePool(d).find((t) =>
+      isSameAnchorPlace(
+        { id: t.id, name: t.title, coords: t.coords },
+        { id: city.id, name: city.name, coords: city.coords },
+      ),
+    );
+    return !!tile && (!!tile.photoUrl || !!tile.placeId);
   };
 
-  // Whether a hero source is even POSSIBLE for this day: a persisted heroImage,
-  // or a destination tile with a placeId that can hydrate a Google photo. False
-  // → genuine data gap (drives the Photo Unavailable fallback). True but
-  // heroFor() still undefined → not-yet-hydrated; the hero stays a neutral box
-  // and fills on the next render (no fallback flash).
+  // Day hero resolution order: persisted heroImage → DESTINATION photo →
+  // STARTING-place (origin) photo → (caller renders Photo Unavailable). Falling
+  // back to the origin means a day whose destination has no photo (e.g. a remote
+  // park) can still show its start city's photo (e.g. San Diego) rather than the
+  // unavailable state. No flash: baked photos resolve immediately; a placeId-only
+  // source stays a neutral box until it hydrates (heroHasSourceFor stays true).
+  const heroFor = (d: Day): string | undefined => {
+    const heroCities = d.corridorCities ?? fallbackCorridor(d);
+    const dest = heroCities[heroCities.length - 1];
+    const origin = heroCities[0];
+    return d.heroImage ?? cityHeroPhoto(d, dest) ?? cityHeroPhoto(d, origin);
+  };
+
+  // A hero source is possible when a persisted image exists, or EITHER the
+  // destination or the starting place has a tile with a photo or a hydratable
+  // placeId. Only when neither endpoint has any source is it a genuine data gap
+  // (→ Photo Unavailable fallback).
   const heroHasSourceFor = (d: Day): boolean => {
     if (d.heroImage) return true;
     const heroCities = d.corridorCities ?? fallbackCorridor(d);
-    const heroEndCity = heroCities[heroCities.length - 1];
-    if (!heroEndCity) return false;
-    const destTile = placePool(d).find((t) =>
-      isSameAnchorPlace(
-        { id: t.id, name: t.title, coords: t.coords },
-        { id: heroEndCity.id, name: heroEndCity.name, coords: heroEndCity.coords },
-      ),
+    return (
+      cityHasHeroSource(d, heroCities[heroCities.length - 1]) ||
+      cityHasHeroSource(d, heroCities[0])
     );
-    return !!destTile?.placeId;
   };
 
   // View-mode cities for ONE mounted day. Mirrors `effectiveCities` (the
@@ -964,10 +975,27 @@ export function DayDetailCorridorColumn({
     </div>
   );
 
+  // Trip-overview hero resolution: persisted trip heroImage (the destination
+  // hero) → last day's destination photo → first day's origin (trip start)
+  // photo → Photo Unavailable. Mirrors the per-day dest→origin fallback.
+  const firstDay = trip.days[0];
+  const lastDay = trip.days[trip.days.length - 1];
+  const firstCities = firstDay ? (firstDay.corridorCities ?? fallbackCorridor(firstDay)) : [];
+  const lastCities = lastDay ? (lastDay.corridorCities ?? fallbackCorridor(lastDay)) : [];
+  const overviewHeroUrl =
+    trip.heroImage ??
+    (lastDay ? cityHeroPhoto(lastDay, lastCities[lastCities.length - 1]) : undefined) ??
+    (firstDay ? cityHeroPhoto(firstDay, firstCities[0]) : undefined);
+  const overviewHasSource =
+    !!trip.heroImage ||
+    (!!lastDay && cityHasHeroSource(lastDay, lastCities[lastCities.length - 1])) ||
+    (!!firstDay && cityHasHeroSource(firstDay, firstCities[0]));
+
   const overviewEl = (
     <DayDetailOverview
       routeLabel={`${trip.startLocation} → ${trip.endLocation}`}
-      heroImageUrl={trip.heroImage}
+      heroImageUrl={overviewHeroUrl}
+      heroNoSource={!overviewHasSource}
       heroAlt={trip.title}
       guidesSubtitle={`Created by the yoTrippin Staff: ${trip.startLocation} → ${trip.endLocation}`}
       guides={OVERVIEW_GUIDES}

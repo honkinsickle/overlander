@@ -68,3 +68,27 @@ hydration path can never supply a photo — genuinely no source, not a wiring bu
   WebGL for Mapbox): **day-1 now shows the fallback; day-3 (has `heroImage`) still
   shows its real photo** — no regression to the photo path. Systemic, not
   isolated: multiple days/trips with no hero source were blank; all now fall back.
+
+## Update — try the starting place's photo before "Photo Unavailable"
+
+Resolution order in `heroFor()` is now: `day.heroImage` → **destination** photo →
+**origin** photo → Photo Unavailable. Two changes:
+- **Origin = `corridorCities[0]`** (the day's start city; for day-1 the trip
+  origin) — confirmed against payload (each day's `corridorCities` runs start→end).
+- **Tile photo resolution broadened** to the anchor-matched tile's baked
+  `photoUrl` then its hydrated Google photo (was hydrated-only) — necessary
+  because start/dest usually resolve a Commons/agency baked photo, not a Google
+  one (day-1's San Diego start matches a tile with a baked `photoUrl` the
+  hydrated-only path ignored). Additive: destination is still tried before origin,
+  so a day with a destination photo keeps it (no regression). `heroHasSourceFor()`
+  now returns true if EITHER endpoint has a tile with a photo or a hydratable
+  placeId. The trip-overview hero mirrors this (`trip.heroImage` → last day's
+  destination → first day's origin → fallback; computed in the column, passed via
+  `heroNoSource`).
+- Verified on the same URL (authed CDP): day-1 now shows the San Diego start-place
+  photo (was "Photo Unavailable"); day-3 still shows its `heroImage`. Flag: the
+  anchor-match is coords-based, so a city can match a nearby POI tile — day-1's
+  "San Diego" resolves to a San Diego POI/food photo, not a skyline (same as the
+  destination path). Genuine both-endpoints-sourceless days still fall back
+  (gating checks both); no such day existed in this 3-day trip to screenshot —
+  verified by logic + an offline resolution probe instead.
