@@ -4,32 +4,39 @@
 
 Pilot ran on TEST: CA `campground` rows with zero photo coverage, license-clear
 sources (Wikimedia Commons + NPS), staged into `master_place_photo_candidate`
-(NOT wired into rendering). Follow-ups before anything reaches users:
+(NOT wired into rendering). **The six self-audit issues were fixed and the pilot
+re-run deterministically** (`pilot_run='ca-campground-2026-09-01-fixed'`,
+253 rows / 69 places / 4 accepted / 249 manual). Remaining follow-ups:
 
-1. **Review the staged candidates** (`pilot_run = 'ca-campground-2026-09-01'`):
-   6 `accepted` (spot-check `Round Valley → His_and_Hers.jpg` — accepted on a
-   description substring at 49m with token score 0.14; the weakest of the six)
-   and 271 `manual_review` rows across 75 places.
+1. **Review the staged candidates.** 4 `accepted` (all visually inspected:
+   Nelder Grove + Half Moon Bay good; **Tolkan = a sign photo**, **Benbow =
+   distant dusk landscape at 923 m** — weak heroes) and 249 `manual_review` rows.
 2. **Decide the wiring mechanism** (the deliberate stop point): either promote
    `accepted` rows into a `wikipedia`/new source_record so the corridor RPC
    photo lateral join reads them, or teach the RPC/export to read this table.
-   TEST first, then PROD, explicitly authorized. Until then, cards show the
+   TEST first, then PROD, explicitly authorized. Until then cards show the
    category-color block for these places.
-3. **Matcher tuning** (thresholds are pilot-chosen, strict — see
-   `data/photo-backfill/matcher.ts`): the `manual_review` bucket is noisy
-   (~4 candidates/place; geosearch returns up to 8 geo-plausible-but-weak-name
-   files). Consider capping stored `manual_review` per place (top-N by
-   confidence) and/or a name-required floor. The weak-name guard already
-   suppresses false accepts for numeric OSM names ("1".."15").
-4. **Coverage is source-skewed** (pilot sample, place-level accept+manual of 40):
-   state_parks 26/40, osm 22/40, ridb 18/40, usfs 9/40. USFS campgrounds are
-   remote with few Commons photos — expect low yield there.
-5. **Run the full target set** (2,053 places) by dropping `--per-source`, and/or
-   widen radius beyond 2,000m, once thresholds are settled. Pilot processed 160.
+3. **Residual matcher gaps (not fixed — flagged):**
+   - The map/diagram/sign filter is **NPS-only** (task-scoped). Commons has the
+     same issue: `Tolkan Campground` accepted a photo of the entrance *sign*.
+     Consider extending `NON_PHOTO_RE` to Commons title/description.
+   - Distant-but-loose accepts (`Benbow`, 923 m, title 0.33 via substring) — a
+     tighter distance ceiling or higher title-token floor for substring-only
+     accepts would help.
+   - `manual_review` is still noisy (multiple candidates/place); a top-N-per-place
+     cap would reduce review load.
+4. **Coverage is source-skewed** (fixed-run sample, place-level accept+manual of
+   40 per mutually-exclusive tag): state_parks 21, ridb 17, usfs 13, osm 18.
+   USFS campgrounds are remote with few Commons photos — expect low yield.
+5. **Run the full target set** (2,053 places) by dropping `--per-source`, once
+   thresholds are settled. Pilot processed 160.
 6. **Deferred license-clear sources** (flagged, not implemented): USFS / BLM /
    CA State Parks own-site media have no queryable license-clear photo endpoint
    (ArcGIS feature services carry no photo URLs). `dispersed_camping` (separate
    primary_category) and null-`state` campgrounds are outside the named scope.
+7. **Reproducibility:** all `enumerateTargets` paged queries now `.order("id")`;
+   the prior target-count wobble was unordered-pagination skip/dup, not view
+   instability (target-with-coords is a stable 2,000).
 
 ## `usfs` has no `field_precedence` row for `access` or `contact` (2026-09-01)
 

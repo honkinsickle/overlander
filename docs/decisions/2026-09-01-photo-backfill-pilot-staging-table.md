@@ -83,3 +83,14 @@ null `state` are excluded — flagged below rather than silently folded in.
 - A follow-up decision is required before any of these photos appear to users:
   review manual_review + accepted rows, choose a promotion mechanism, and
   authorize it (TEST first, then PROD). Tracked in BACKLOG.
+
+**Update 2026-09-01 (post-self-audit).** Six issues found in a self-audit were
+fixed and the pilot re-run deterministically (`pilot_run` label `-fixed`; prior
+rows deleted): title-anchored auto-accept (description-substring demoted to
+manual_review), PD-* license recognition, NPS map/diagram/sign filtering, NPS
+proximity no longer counting as a candidate without passing the bar,
+geosearch-vs-text provenance in `source`, and stable `.order("id")` pagination
+(the earlier target-count wobble was unordered-pagination skip/dup, not view
+instability). Accepted images were visually inspected. Thresholds remain
+pilot-chosen; residual gaps (Commons sign/map filter, distant-loose accepts,
+manual_review volume) are in BACKLOG.

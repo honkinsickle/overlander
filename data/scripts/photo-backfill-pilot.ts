@@ -78,17 +78,23 @@ async function pageAll<T>(
 
 /** Enumerate CA campgrounds with zero photo coverage today, tagged by source. */
 async function enumerateTargets(db: SupabaseClient): Promise<{ targets: Target[]; noCoord: number; totals: Record<string, number> }> {
+  // Stable sort by id: without an explicit order, PostgREST LIMIT/OFFSET
+  // pagination has no guaranteed row order, so the "first 40 per source tag"
+  // sample below is non-reproducible (and pages can skip/duplicate rows if the
+  // table changes between requests). Ordering by id pins both.
   const camps = await pageAll<{ id: string }>((f, t) =>
-    db.from("master_place").select("id").eq("primary_category", "campground").eq("state", "CA").range(f, t),
+    db.from("master_place").select("id").eq("primary_category", "campground").eq("state", "CA").order("id").range(f, t),
   );
   const campIds = new Set(camps.map((c) => c.id));
 
-  const photoSR = await pageAll<{ master_place_id: string }>((f, t) =>
-    db.from("source_record").select("master_place_id").in("source_id", PHOTO_SOURCES).not("normalized_payload->photo->>url", "is", null).range(f, t),
+  // All paged queries order by a unique column (id) so LIMIT/OFFSET pages can't
+  // skip or duplicate rows — otherwise the coverage Sets below drift run-to-run.
+  const photoSR = await pageAll<{ id: string; master_place_id: string }>((f, t) =>
+    db.from("source_record").select("id,master_place_id").in("source_id", PHOTO_SOURCES).not("normalized_payload->photo->>url", "is", null).order("id").range(f, t),
   );
   const hasPhoto = new Set(photoSR.map((s) => s.master_place_id).filter((id) => campIds.has(id)));
-  const gSR = await pageAll<{ master_place_id: string }>((f, t) =>
-    db.from("source_record").select("master_place_id").in("source_id", GOOGLE_SOURCES).range(f, t),
+  const gSR = await pageAll<{ id: string; master_place_id: string }>((f, t) =>
+    db.from("source_record").select("id,master_place_id").in("source_id", GOOGLE_SOURCES).order("id").range(f, t),
   );
   const hasGoogle = new Set(gSR.map((s) => s.master_place_id).filter((id) => campIds.has(id)));
 
@@ -98,7 +104,7 @@ async function enumerateTargets(db: SupabaseClient): Promise<{ targets: Target[]
   // coords + names from the search export (has lng/lat); some target rows are
   // excluded from the export (needs_review / operational_status) → no coord.
   const exp = await pageAll<{ id: string; lng: number | null; lat: number | null; canonical_name: string | null }>((f, t) =>
-    db.from("master_place_search_export").select("id,lng,lat,canonical_name").eq("primary_category", "campground").range(f, t),
+    db.from("master_place_search_export").select("id,lng,lat,canonical_name").eq("primary_category", "campground").order("id").range(f, t),
   );
   const expById = new Map(exp.map((e) => [e.id, e]));
 
@@ -157,7 +163,7 @@ type CandidateRow = {
 function commonsToRow(t: Target, c: CommonsCandidate, adj: Adjudication, pilotRun: string): CandidateRow {
   return {
     master_place_id: t.id,
-    source: c.via === "text" ? "wikimedia_commons" : "wikimedia_commons",
+    source: c.via === "text" ? "wikimedia_commons_text" : "wikimedia_commons_geo",
     image_url: c.imageUrl,
     thumb_url: c.thumbUrl,
     source_page_url: c.sourcePageUrl,
@@ -249,22 +255,25 @@ async function main(): Promise<void> {
         ];
         const adjudicated = commons.map((c) => ({ c, adj: adjudicateCommons(t.name, c) }));
 
-        // NPS
+        // NPS — a candidate ONLY if the nearest unit has a real photo (not a
+        // map/diagram) AND passes the name+geo adjudication bar. Mere proximity
+        // of an NPS unit does not count (fix: proximity was inflating "had a
+        // candidate"). `npsMatch.image` is null when the unit has only graphics.
         const npsRows: CandidateRow[] = [];
         const npsMatch = matchNps(t.name, t.lng, t.lat, npsCgs);
-        if (npsMatch) {
-          const img = npsMatch.campground.images[0];
-          const adj = adjudicateNps(npsMatch.nameScore, npsMatch.sub, npsMatch.distanceM, img.credit ?? null);
+        const npsImg = npsMatch?.image ?? null;
+        if (npsMatch && npsImg) {
+          const adj = adjudicateNps(npsMatch.nameScore, npsMatch.sub, npsMatch.distanceM, npsImg.credit ?? null);
           if (adj.status !== "reject") {
             npsRows.push({
-              master_place_id: t.id, source: "nps", image_url: img.url, thumb_url: null,
-              source_page_url: npsMatch.campground.pageUrl, license: adj.licenseClass === "public_domain" ? "Public domain (NPS)" : (img.credit ?? null),
+              master_place_id: t.id, source: "nps", image_url: npsImg.url, thumb_url: null,
+              source_page_url: npsMatch.campground.pageUrl, license: adj.licenseClass === "public_domain" ? "Public domain (NPS)" : (npsImg.credit ?? null),
               license_url: null, license_class: adj.licenseClass,
-              attribution: adj.licenseClass === "public_domain" ? null : (img.credit ?? null),
-              title: img.title ?? img.altText ?? null, match_status: adj.status, match_confidence: adj.confidence,
+              attribution: adj.licenseClass === "public_domain" ? null : (npsImg.credit ?? null),
+              title: npsImg.title ?? npsImg.altText ?? null, match_status: adj.status, match_confidence: adj.confidence,
               name_score: adj.nameScore, distance_m: adj.distanceM, match_reason: adj.reason,
               place_name: t.name, primary_category: "campground", pilot_run: pilotRun,
-              raw: { npsId: npsMatch.campground.id, credit: img.credit, caption: img.caption },
+              raw: { npsId: npsMatch.campground.id, credit: npsImg.credit, caption: npsImg.caption },
             });
           }
         }
@@ -289,9 +298,11 @@ async function main(): Promise<void> {
           stat.manual++;
           tally(t.sourceTag, "manual");
         } else {
-          // Distinguish "nothing any source returned" (not-found) from
+          // Distinguish "nothing usable any source returned" (not-found) from
           // "candidates existed but none survived license+match" (rejected).
-          const anyCandidate = commons.length > 0 || npsMatch != null;
+          // NPS counts only when it produced a real (photo + passed-bar)
+          // candidate — proximity alone no longer inflates this.
+          const anyCandidate = commons.length > 0 || npsRows.length > 0;
           if (anyCandidate) stat.rejected++;
           else stat.noCandidate++;
           tally(t.sourceTag, "none");

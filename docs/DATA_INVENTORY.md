@@ -586,13 +586,21 @@ only). **Deliberately NOT read by `recompute_master_place` /
 candidates are held for review, never auto-surfaced on cards. Promotion into a
 live read path is a separate, explicitly authorized step.
 
-Pilot run `ca-campground-2026-09-01` (stratified sample, 40 target places per
-contributing-source tag = 160 of 2,053 zero-coverage CA campgrounds): **277 rows
-stored across 75 distinct places** — **6 `accepted`, 271 `manual_review`**.
-Source: 276 wikimedia_commons, 1 nps. License class: 177 attribution
-(CC-BY / CC-BY-SA), 100 public-domain (CC0 / PD / NPS). See
+Current run `ca-campground-2026-09-01-fixed` (after the six-issue self-audit
+fixes; the prior flawed `ca-campground-2026-09-01` rows were deleted first).
+Stratified deterministic sample (ordered by id, 40 target places per
+mutually-exclusive source tag = 160 of 2,053 zero-coverage CA campgrounds):
+**253 rows stored across 69 distinct places** — **4 `accepted`, 249
+`manual_review`**. Source: 207 wikimedia_commons_geo, 46 wikimedia_commons_text,
+0 nps (NPS produced no photo that passed the tightened bar in this sample).
+License class: 189 attribution (CC-BY / CC-BY-SA), 64 public-domain (CC0 / PD /
+PD-* templates). All 4 accepted images were visually inspected. See
 `docs/decisions/2026-09-01-photo-backfill-pilot-staging-table.md` and
 `docs/LOG.md`. All figures measured in-session; NOT re-run corpus-wide.
+
+Prior flawed run (`ca-campground-2026-09-01`, non-deterministic sample) stored
+277 rows / 6 accepted / 271 manual before deletion; its counts are NOT directly
+comparable — a different set of 160 places was sampled (unordered pagination).
 
 ## `reference_trips` — RLS + rows per DB
 

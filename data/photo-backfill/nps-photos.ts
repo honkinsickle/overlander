@@ -93,14 +93,34 @@ export async function fetchCaCampgrounds(
   return out;
 }
 
+// NPS `images[]` mixes real photos with maps, diagrams, logos, and signs.
+// Filename/title/caption tokens are the only reliable signal available, so
+// drop candidates that look like non-photographic graphics.
+const NON_PHOTO_RE =
+  /\b(map|maps|diagram|schematic|chart|graphic|logo|brochure|floorplan|sign|signage|infographic|illustration)\b|[-_](map|diagram|logo|sign)[-_.]/i;
+
+/** First image in an NPS campground's set that looks like an actual photo. */
+export function pickPhoto(
+  images: Array<z.infer<typeof NpsImage>>,
+): z.infer<typeof NpsImage> | null {
+  for (const img of images) {
+    const hay = `${img.url} ${img.title ?? ""} ${img.altText ?? ""} ${img.caption ?? ""}`;
+    if (NON_PHOTO_RE.test(hay)) continue;
+    return img;
+  }
+  return null;
+}
+
 export type NpsMatch = {
   campground: NpsCampground;
   distanceM: number;
   nameScore: number;
   sub: boolean;
+  /** A photo (non-map) image from the matched campground, or null if it has none. */
+  image: z.infer<typeof NpsImage> | null;
 };
 
-/** Best NPS campground for a place by name+geo, or null if none within 5km. */
+/** Nearest NPS campground within 5km for a place, with a photo image picked. */
 export function matchNps(
   placeName: string,
   lng: number,
@@ -114,7 +134,7 @@ export function matchNps(
     const nameScore = tokenOverlap(placeName, cg.name);
     const sub = !weakPlaceName(placeName) && substringMatch(placeName, cg.name);
     if (!best || distanceM < best.distanceM) {
-      best = { campground: cg, distanceM, nameScore, sub };
+      best = { campground: cg, distanceM, nameScore, sub, image: pickPhoto(cg.images) };
     }
   }
   return best;

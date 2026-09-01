@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 5) — Photo-backfill pilot: six self-audit fixes + deterministic re-run (TEST)
+
+- **Fixed all six issues from the self-audit** (matcher/nps/driver), re-ran the
+  CA-campground pilot clean. PR #335 updated (not merged).
+- **#6 root-caused decisively.** The prior "1,967 vs 1,985 target-with-coords"
+  wobble was **unordered LIMIT/OFFSET pagination**, not `master_place_search_export`
+  instability: with `.order("id")` the count is **2,000 every run (×3)**; unordered
+  it gave 1,968 / 1,999 / 1,999 — while the export's own campground row count was a
+  constant **6,108** in all runs. Added `.order("id")` to every paged query in
+  `enumerateTargets`.
+- **#5 verified.** `Round Valley → His_and_Hers.jpg` (0.14 title, description-only
+  substring) now correctly routes to `manual_review`; description-substring can no
+  longer drive an auto-accept (title-anchored only).
+- **#3** license allowlist now recognizes PD-* templates (PD-USGov/PD-US/PD-self/
+  CC-PD-Mark/"No restrictions"); **#4** NPS image selection skips maps/diagrams/
+  signs; **#2** an NPS unit's mere 5km proximity no longer counts as "had a
+  candidate" (must pass adjudication + have a real photo); **#1** `source` column
+  now records `wikimedia_commons_geo` vs `_text`.
+- **Deterministic re-run** (`pilot_run=ca-campground-2026-09-01-fixed`, prior
+  flawed rows deleted first): **253 rows / 69 places — 4 accepted, 249 manual,
+  0 no-candidate, 91 rejected** (place-level 4/65/0/91). NPS contributed 0 rows.
+  **NOT comparable to the flawed run's 277/6/271** — different 160-place sample
+  (the old one was non-deterministic).
+- **Actually eyeballed the 4 accepted photos this time.** Nelder Grove (giant
+  sequoia — good) and Half Moon Bay (coastal bluff — good) are solid; **Tolkan
+  Campground is a photo of the entrance SIGN** and **Benbow is a distant dusk
+  hillside at 923 m** — both correct-place but weak heroes. None matched a *wrong*
+  place. Lesson stands: geo+title gating prevents wrong-place matches but does not
+  guarantee a good depiction.
+- **Residual (flagged, not silently fixed):** the map/diagram/sign filter is
+  NPS-only per the task's #4 scope; the same issue exists for Commons (Tolkan sign
+  is the live example). Noted in BACKLOG for a follow-up rather than scope-creeping
+  it here.
+
 ## 2026-09-01 (later 4) — Photo scoping investigation + CA-campground photo-backfill pilot (TEST)
 
 - **Scoping first (no changes):** day-detail STOPS cards

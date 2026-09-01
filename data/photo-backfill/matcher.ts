@@ -72,7 +72,21 @@ export function classifyLicense(license: string | null): LicenseClass {
   // NonCommercial / NoDerivatives are not license-clear for our use.
   if (/\bnc\b|noncommercial|non-commercial/.test(l)) return "reject";
   if (/\bnd\b|noderiv|no-deriv/.test(l)) return "reject";
-  if (l.includes("public domain") || l.includes("cc0") || l.includes("cc-zero"))
+  // Public domain: literal phrasing, CC0, the Public Domain Mark / Flickr-
+  // Commons "No restrictions", and the family of Commons PD-* template
+  // shortnames (PD-USGov, PD-US, PD-self, PD-old, PD-Art, PD-1996, CC-PD-Mark,
+  // …). `\bpd(?:[-\s]|$)` matches "pd", "pd-usgov", "pd us"; the leading word
+  // boundary avoids matching "pd" inside another word.
+  if (
+    l.includes("public domain") ||
+    l.includes("public-domain") ||
+    l.includes("cc0") ||
+    l.includes("cc-zero") ||
+    l.includes("no restrictions") ||
+    l.includes("pdmark") ||
+    l.includes("pd-mark") ||
+    /\bpd(?:[-\s]|$)/.test(l)
+  )
     return "public_domain";
   // CC-BY and CC-BY-SA (any version) — attribution required but usable.
   if (/cc[\s-]?by([\s-]?sa)?/.test(l)) return "attribution";
@@ -92,64 +106,64 @@ export function adjudicateCommons(
   const licenseClass = classifyLicense(candidate.license);
   const candText = candidateNameText(candidate);
   const descText = candidate.imageDescription ?? "";
-  const nameScore = Math.max(
-    tokenOverlap(placeName, candText),
-    tokenOverlap(placeName, descText),
-  );
   const weak = weakPlaceName(placeName);
-  const sub =
-    !weak &&
-    (substringMatch(placeName, candText) ||
-      (descText.length > 0 && substringMatch(placeName, descText)));
+
+  // Title-anchored vs description-anchored signals kept SEPARATE. A hit in the
+  // candidate's filename ("Onion Valley - panoramio.jpg") is strong evidence the
+  // image is of the place; a mention buried in a free-text description is weak
+  // and coincidence-prone (e.g. "Round Valley" appearing in a paragraph about a
+  // rock formation). Only the TITLE signal may drive an auto-accept; the
+  // description signal can, at most, route to manual_review.
+  const nameScoreTitle = tokenOverlap(placeName, candText);
+  const nameScoreDesc = descText.length > 0 ? tokenOverlap(placeName, descText) : 0;
+  const nameScore = Math.max(nameScoreTitle, nameScoreDesc); // reported/confidence
+  const titleSub = !weak && substringMatch(placeName, candText);
+  const descSub = !weak && descText.length > 0 && substringMatch(placeName, descText);
   const distanceM = candidate.distanceM;
 
-  const strongName = sub || nameScore >= 0.6;
+  const acceptName = titleSub || nameScoreTitle >= 0.6; // TITLE only
   const closeGeo = distanceM != null && distanceM <= 500;
   const nearGeo = distanceM != null && distanceM <= 1500;
 
   // geographic + name confidence blend (rough, for ranking/adjudication display)
-  const geoComp =
-    distanceM == null ? 0 : Math.max(0, 1 - distanceM / 2000);
-  const nameComp = Math.min(1, nameScore / 0.7 + (sub ? 0.3 : 0));
+  const geoComp = distanceM == null ? 0 : Math.max(0, 1 - distanceM / 2000);
+  const nameComp = Math.min(1, nameScore / 0.7 + (titleSub ? 0.3 : 0));
   const confidence =
     distanceM == null
       ? Math.min(1, 0.4 * nameComp) // text-only: capped, geo unverifiable
       : Math.min(1, 0.5 * nameComp + 0.5 * geoComp);
 
-  if (licenseClass === "reject") {
-    return {
-      status: "reject",
-      licenseClass,
-      nameScore,
-      distanceM,
-      confidence,
-      reason: `license not clear (${candidate.license ?? "none"})`,
-    };
-  }
+  const mk = (status: MatchStatus, reason: string): Adjudication => ({
+    status,
+    licenseClass,
+    nameScore,
+    distanceM,
+    confidence,
+    reason,
+  });
+
+  if (licenseClass === "reject")
+    return mk("reject", `license not clear (${candidate.license ?? "none"})`);
 
   // Geo-anchored candidates (from geosearch).
   if (distanceM != null) {
-    if (closeGeo && strongName) {
-      return mk("accepted", `close (${Math.round(distanceM)}m) + name match (score=${nameScore.toFixed(2)}${sub ? ", substring" : ""})`);
+    if (closeGeo && acceptName) {
+      return mk("accepted", `close (${Math.round(distanceM)}m) + title name match (title=${nameScoreTitle.toFixed(2)}${titleSub ? ", substring" : ""})`);
     }
-    if (nearGeo && (sub || nameScore >= 0.7)) {
-      return mk("accepted", `near (${Math.round(distanceM)}m) + strong name (score=${nameScore.toFixed(2)}${sub ? ", substring" : ""})`);
+    if (nearGeo && (titleSub || nameScoreTitle >= 0.7)) {
+      return mk("accepted", `near (${Math.round(distanceM)}m) + strong title name (title=${nameScoreTitle.toFixed(2)}${titleSub ? ", substring" : ""})`);
     }
-    if ((nearGeo && nameScore >= 0.3) || closeGeo || distanceM <= 300) {
-      return mk("manual_review", `geographically plausible (${Math.round(distanceM)}m) but name weak/partial (score=${nameScore.toFixed(2)})`);
+    if ((nearGeo && (nameScore >= 0.3 || descSub)) || closeGeo || distanceM <= 300) {
+      return mk("manual_review", `geographically plausible (${Math.round(distanceM)}m); name partial/description-only (title=${nameScoreTitle.toFixed(2)}, desc=${nameScoreDesc.toFixed(2)}${descSub ? ", desc-substring" : ""})`);
     }
-    return mk("reject", `no meaningful name+geo signal (${Math.round(distanceM)}m, score=${nameScore.toFixed(2)})`);
+    return mk("reject", `no meaningful name+geo signal (${Math.round(distanceM)}m, title=${nameScoreTitle.toFixed(2)})`);
   }
 
   // Text-search candidates: no coordinate → geo unverifiable → never auto-accept.
-  if (sub || nameScore >= 0.6) {
-    return mk("manual_review", `name match (score=${nameScore.toFixed(2)}${sub ? ", substring" : ""}) but location unverified (text search, no coordinate)`);
+  if (acceptName || descSub || nameScoreDesc >= 0.5) {
+    return mk("manual_review", `name match (title=${nameScoreTitle.toFixed(2)}${titleSub ? " substring" : ""}${descSub ? ", desc-substring" : ""}) but location unverified (text search, no coordinate)`);
   }
-  return mk("reject", `weak name and no coordinate (score=${nameScore.toFixed(2)})`);
-
-  function mk(status: MatchStatus, reason: string): Adjudication {
-    return { status, licenseClass, nameScore, distanceM, confidence, reason };
-  }
+  return mk("reject", `weak name and no coordinate (title=${nameScoreTitle.toFixed(2)})`);
 }
 
 /**
