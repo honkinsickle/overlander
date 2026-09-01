@@ -127,6 +127,23 @@ downstream enforces coverage. See
 `docs/decisions/2026-08-24-keystop-corridor-spread.md` for the measured
 before/after and what did NOT improve.
 
+**`guaranteedCategories` is now IN the prompt too** (added 2026-09-01, PR #287
+blocker H). Until then it was **not** — and the reason is worth stating,
+because it is the same trap `corridorCities` illustrates from the other side:
+`buildFactsMessage` builds an **explicit payload object** and stringifies
+*that*, so a field on `GenerationInput` is invisible to the model unless it is
+named in that object. `guaranteedCategories` never was. Every category coverage
+a generated trip showed came from the audit's anchor-backfill inserting places,
+never from the model choosing them.
+
+It now sits alongside `corridorCities` (a trip-level fact, not inside `rig`),
+**filtered through `GUARANTEE_CATEGORIES`** — the same set the audit enforces —
+so `fuel` and `overnight` are excluded, and omitted entirely when empty. The
+`SYSTEM_PROMPT` copy mirrors the corridor-spread posture and ends on the same
+line: a preference, NOT a quota. See
+`docs/decisions/2026-09-01-guaranteed-categories-prompt-posture.md`, which also
+records a duplication path this makes more likely and does not fix.
+
 **The audit** (`auditItinerary`, `web/src/lib/itinerary/audit.ts`) runs after,
 in three tiers `[read source]`:
 

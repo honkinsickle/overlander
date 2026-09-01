@@ -77,9 +77,14 @@ export type ExpeditionForm = {
   /** Interest-Category-Chips (`docs/specs/interest-category-chips.md`, §11
    *  step 3, PR #287). Categories the user asks the trip to guarantee, using
    *  the `SlideCategoryKey` vocabulary end-to-end (Decision A: `overnight`,
-   *  not `hotel`). Empty/absent = no guarantees. Currently only the `"fuel"`
-   *  value is wired downstream (fuel-live-resolve.ts). Other categories are
-   *  D-blocked pending the audit-loop-granularity call (spec §11 steps 5–7). */
+   *  not `hotel`). Empty/absent = no guarantees.
+   *
+   *  Wired end-to-end as of 2026-09-01: `fuel` via fuel-live-resolve.ts; the
+   *  pool-side categories via the audit's anchor-backfill (granularity decided
+   *  D-B per-city, ADR 2026-08-25); and, filtered to GUARANTEE_CATEGORIES, into
+   *  the generation prompt itself (ADR 2026-09-01, PR #287 blocker H). The
+   *  earlier "only fuel is wired / others are D-blocked" note here was stale on
+   *  both counts. */
   guaranteedCategories?: SlideCategoryKey[];
 };
 

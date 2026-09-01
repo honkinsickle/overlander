@@ -1,5 +1,55 @@
 # Backlog — open work
 
+## Do the NL-edit / interpret flows need the guarantee too? (2026-09-01, unexamined)
+
+PR #287 blocker H put `guaranteedCategories` into the **generation** prompt
+(`buildFactsMessage`). It is absent from the other two model-facing flows, and
+whether that is correct was never examined.
+
+Measured: `interpret.ts` and `edit.ts` both take `GenerationInput` and both build
+model-facing prompt text from it — `buildInterpretContext(input, days)` emits the
+trip window, anchors and day list. Neither mentions `guaranteedCategories`
+(**0** occurrences in each).
+
+Arguments both ways, neither tested:
+
+- **Maybe it belongs:** if a user says "add a stop to day 3", the model choosing
+  that stop arguably should know which categories the traveller guaranteed.
+- **Maybe it doesn't:** `buildInterpretContext` is deliberately minimal — it
+  exists to interpret an edit *request* against the trip skeleton, not to pick
+  places. The audit's backfill still runs afterwards either way.
+
+Not in scope for the H fix, which was about generation. Flagged because an
+earlier draft of that PR's report asserted these flows "don't carry
+`GenerationInput`" — that was wrong, and the question it papered over is real.
+
+
+## `RESOLVED_TO_GUARANTEE` has one mapping, so live-resolved key stops don't count toward guarantee coverage (2026-09-01)
+
+The audit credits a kept stop toward guaranteed-category coverage only if it can
+determine its category. It has exactly two routes: the stop is a **pool hit**
+(carries a real `SlideCategoryKey`), or it was **live-resolved** and its Google
+type is in `RESOLVED_TO_GUARANTEE` (`audit.ts`) — which contains a single entry,
+`restaurant → food`.
+
+So a model-chosen `scenic` / `oddity` / `attraction` / `camping` / `urban` stop
+that is live-resolved rather than pooled contributes **no** category. The audit
+still sees that category as missing and the anchor-backfill inserts a second
+place of the same category near the same anchor.
+
+**The gap pre-dates the prompt change, but that change makes it likelier to
+surface** — the model is now actively nudged toward exactly those categories
+(`docs/decisions/2026-09-01-guaranteed-categories-prompt-posture.md`).
+
+Not fixed in that pass: widening the map changes the audit's coverage decisions
+on *every* trip, a much larger blast radius. And `resolve-places.ts` already
+carries a sibling primary-category → slide-key mapping, so the right fix is
+probably a shared mapper rather than a second ad-hoc table.
+
+**Not measured:** how often model-chosen key stops are live-resolved vs pool
+hits. The mechanism is confirmed; the real-world rate is unknown.
+
+
 ## `usfs` has no `field_precedence` row for `access` or `contact` (2026-09-01)
 
 Found while gating the PROD regression-batch recompute. For the 16 rows that
