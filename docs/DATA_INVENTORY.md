@@ -184,6 +184,74 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Mutated 2026-09-01 `[queried + written, TEST only]` — SUPERSEDES the
+> 2026-08-31 box directly below, which has been REVERTED.** PR #327's direct
+> writes into `master_place.description` were undone (6,548 rows restored; the
+> corpus returned to 115 empty-string descriptions and 19,688 searchable rows
+> with a description — its exact pre-backfill state). The same text is now
+> delivered through `source_record`. **Two new `source_id` values exist on
+> TEST: `generated_llm` and `generated_template`**, at `field_precedence`
+> (description) priority **20** and **21** — below every real source.
+> **13,942 `source_record` rows added** (6,548 llm + 7,394 template), all
+> pre-linked to their `master_place_id` and invisible to entity resolution.
+> `source_record` total **171,184 → 185,126**, active **79,739 → 93,681**.
+> **13,829 master_place rows now carry a generated description** with
+> `attribution.description` = `generated_llm` / `generated_template`
+> (6,541 llm + 7,288 template); searchable rows with a non-empty description
+> **19,688 → 33,517**. **113 rows deliberately did NOT take generated text** —
+> a real RIDB/NPS record resolves `description` to an empty JSON string and
+> correctly outranks precedence 20/21.
+> **Behaviour-neutral by measurement, not assumption:** average prominence over
+> searchable rows is **0.8606 before and after**, and
+> `master_place_search_export` holds **33,047 rows before and after**, because
+> `compute_prominence()` and `recompute_master_place()`'s `source_count` now
+> exclude generated sources via `is_generated_source()`.
+> Two corpus columns moved as a side effect of `recompute_master_place()` being
+> restored and then run over 13,942 rows: `sum(source_count)` **75,189 →
+> 75,172** (stale values corrected; 0 mismatches remain among the rerouted set,
+> 30 corpus-wide, all outside it) and `contained_in` edges in
+> `place_relationships` **110,519 → 106,335** (Step 7 rewriting stale edges —
+> see `docs/BACKLOG.md` for the corpus-wide recompute this argues for).
+> `operational_status` set on **246** rows, unchanged from baseline (one row was
+> lost mid-session to a wrong deviation and restored — see the report).
+> **`places_test` was NOT re-synced**, so it still carries the pre-reroute
+> `description` / `description_source`. Full report:
+> `docs/measurements/2026-09-01-recompute-restore-and-description-reroute.md`.
+> ADR: `docs/decisions/2026-09-01-generated-descriptions-as-lowest-precedence-source.md`.
+> Corpus-wide totals in the boxes below are NOT re-measured here.
+>
+> **⚠️ REVERTED 2026-09-01 — superseded by the box above.** ~~Mutated 2026-08-31 (later) `[queried + written, TEST only]` —
+> `master_place.description` gained 6,548 rows.** The generated-content
+> copy-in backfill wrote `master_place_generated_content.generated_text`
+> (`generation_method = 'llm'` only) into `master_place.description` for
+> Population A's LLM half. Scoped counts measured this session:
+> `master_place_generated_content` where `field_name = 'description'` =
+> **17,725** (llm 7,433 / template 10,292; `needs_review = true` on **1**,
+> which is outside Population A). Population A (`is_searchable`, empty
+> description, has a generated row) = **13,942**: **6,548 llm** (written)
+> + **7,394 template** (HELD — see `docs/BACKLOG.md`). Another 3,783 are
+> "dual" rows that already had a description and were skipped. Searchable
+> rows with a **non-empty** description now measure **26,236** (queried after
+> the run). Pre-backfill that set was **19,688**, and **115** of the 19,803
+> not-NULL rows were empty strings — both figures *derived from this session's
+> own measurements* (26,236 − 6,548 written = 19,688; 19,803 − 19,688 = 115),
+> not read off the earlier scoping doc.
+> `attribution` was NOT written — measured convention is that
+> `attribution.description` is always a `source_id` and is present on
+> 19,803/19,803 pre-backfill not-NULL-description rows. Of the 6,548 written
+> rows, **6,541 now hold a description with no `description` key in
+> `attribution`** — a state that did not previously exist in this corpus — and
+> **7** (5 `ridb`, 2 `nps`) carry a *stale* key from the clear-bug era, so they
+> now present LLM-generated text under a RIDB/NPS attribution.
+> `description_source` on these rows flips `'llm'` → `'source'`
+> in both `pois_along_corridor` and `master_place_search_export`.
+> **Typesense `places_test` was NOT re-synced** — it still carries the
+> pre-backfill `description`/`description_source` for these rows. Undo
+> snapshot:
+> `~/.config/overlander/generated-content-copyin-snapshots/copyin-znldzjdatkogdktymtvi-2026-09-01T03-41-03-057Z.json`.
+> Full report: `docs/measurements/2026-08-31-generated-content-copyin-backfill.md`.
+> Corpus-wide totals in the boxes below are NOT re-measured here.~~
+>
 > **⚠️ Re-measured 2026-08-29 `[queried TEST, read-only]` — adds a new
 > `tasteatlas` publisher to `editorial_food`; does NOT re-measure the
 > corpus-wide totals in the box below (those stand until someone
