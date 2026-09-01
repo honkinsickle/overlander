@@ -1,4 +1,23 @@
 /**
+ * ⚠️ SUPERSEDED 2026-09-01 — DO NOT RUN. Use
+ * `reroute-generated-descriptions-to-source-record.ts` instead.
+ *
+ * This script writes straight into `master_place.description`, which violates
+ * the documented invariant that `recompute_master_place()` is the sole writer
+ * of `master_place`. Its writes only survived because
+ * 20260831100000_operational_status.sql had accidentally removed the
+ * clear-branch; restoring that branch (20260901000200) would have wiped every
+ * row this script wrote. The replacement delivers the same text through
+ * `source_record` + `field_precedence`, so recompute owns the column, a real
+ * source correctly outranks generated text, and no exemption is needed
+ * anywhere. See docs/decisions/2026-09-01-generated-descriptions-as-lowest-
+ * precedence-source.md.
+ *
+ * Kept, not deleted, because its `--undo` restores the snapshot it wrote (that
+ * undo has already been run on TEST) and because its header documents the
+ * measurements that led here.
+ *
+ * ── original header ──────────────────────────────────────────────────────
  * One-time backfill: copy `master_place_generated_content.generated_text`
  * (field_name = 'description') directly into `master_place.description` for
  * rows that have no description of their own.

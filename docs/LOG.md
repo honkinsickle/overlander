@@ -12,6 +12,64 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later) — recompute_master_place() restored, description backfill rerouted through source_record, and a deviation of mine caught by its own verification
+
+- **Both threads closed on TEST.** Migrations `20260901000100`–`20260901000500`.
+  ADR: `docs/decisions/2026-09-01-generated-descriptions-as-lowest-precedence-source.md`.
+  Report: `docs/measurements/2026-09-01-recompute-restore-and-description-reroute.md`.
+- **All five regressions restored across all seven sites.** The function was
+  **generated programmatically** from `20260819180000` rather than retyped, then
+  diffed against it so the only deltas are the intended ones, then all seven
+  sites re-verified against the **live** `pg_get_functiondef` after apply
+  (10/10). `operational_status` from `20260831100000` kept verbatim.
+- **The reroute makes the exemption unnecessary rather than solving it.** Two
+  synthetic sources (`generated_llm` @20, `generated_template` @21, below
+  `padus` @10). 13,942 source_records upserted, 13,942 recomputes, 0 failed.
+  **Rows a clear-branch restore would still wipe: 0** (was 6,541). The
+  description survives because `resolve_field()` re-derives it, not because
+  anything exempts it.
+- **113 rows correctly did NOT take generated text** — a real RIDB/NPS record
+  resolves `description` to an empty JSON string and outranks precedence 20/21.
+  That is the right answer and better than PR #327, which overwrote 7 of them.
+- **I made a wrong deviation and my own verification caught it.**
+  `20260901000200` added `operational_status` to `v_clearable_fields` on the
+  reasoning that it is a nullable precedence-resolved column like the other
+  nine. Measured right after apply: **0 source_records carry
+  `operational_status` in `normalized_payload`** (6,324 active usfs rows carry
+  the RAW `props.seasonal_operational_status`; the column's values are all
+  direct writes from `backfill-operational-status.ts`). So `resolve_field`
+  could never re-derive it and every recompute erased it. **One row lost
+  (246→245), restored by re-running the PR #321 backfill (back to 246).**
+  Reverted in `20260901000500`. The lesson: "implement it anyway and flag the
+  concern" still requires verifying the deviation against real data — the
+  reasoning was clean and the data said no. It is also structurally the SAME
+  defect this branch exists to fix, in a different column.
+- **PR #321's operational_status is not actually wired end-to-end for existing
+  data.** Its migration claims the field_precedence pattern, but the normalizer
+  emits `operational_status` for NEW ingests only; nothing backfilled
+  `normalized_payload`. Filed.
+- **Neutrality measured, not assumed:** avg prominence over searchable rows
+  0.8606 before and after; export-view rows 33,047 before and after — because
+  `compute_prominence()` and `source_count` now exclude generated sources.
+  Without that, every affected place would have gained +2.0 prominence
+  (`count(distinct source_id) * 2.0`) and silently reordered the corridor.
+- **ADR 2026-08-21 §2 checked at corridor scale**, not one row: 815 rows
+  returned over LA→Sacramento→Redding at 16 km, **0** template-sourced, 204
+  llm-sourced. `description_source` now reports llm/template truthfully instead
+  of `'source'`. One row reports `'template'` via the legacy branch — it is
+  RIDB-attributed with an empty-string description, pre-existing, same
+  empty-string root cause, not introduced here.
+- **`contained_in` dropped 110,519 → 106,335** because Step 7 corrected stale
+  edges on the rows it touched. Sampled (arbitrary `limit`, not randomized):
+  0 of 3,000 rerouted-child edges unsupported by a live `st_covers`, vs **518
+  of 3,000** untouched ones. Containment had not run since the regression; a
+  corpus-wide recompute is worth scheduling.
+- **Apparatus note:** the Management API SQL endpoint 502s on long queries — the
+  first collateral check (an `st_covers` join over 106k edges) died at the
+  gateway. Split into set-based aggregates and bounded samples.
+- **PROD untouched, and the prompt's premise that the regression is "confirmed
+  live on PROD" is still not confirmed by me.** I have never queried PROD.
+
 ## 2026-09-01 — recompute_master_place() regression audit: it's five behaviours, not one; the requested fix is blocked on a design call
 
 - **Task was "restore the clear branch + add an exception for the PR #327

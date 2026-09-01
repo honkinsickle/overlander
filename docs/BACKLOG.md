@@ -1,6 +1,102 @@
 # Backlog — open work
 
-## `recompute_master_place()` was REGRESSED to its 2026-05-27 original by the operational_status migration — FIVE behaviours lost, not one (2026-08-31, scope corrected 2026-09-01)
+## `operational_status` is a DIRECT WRITE, not resolvable through field_precedence (2026-09-01)
+
+`20260831100000_operational_status.sql` added `operational_status` to
+`recompute_master_place()`'s resolved-fields loop and describes itself as
+implementing "the field_precedence pattern (Option A)". For **existing data
+that path is not wired**. Measured on TEST 2026-09-01:
+
+```
+select count(*) from source_record
+ where is_active and normalized_payload ? 'operational_status';        -->     0
+select count(*) from source_record
+ where is_active and source_id='usfs'
+   and raw_payload->'props' ? 'seasonal_operational_status';           --> 6,324
+```
+
+Every value in `master_place.operational_status` was put there by
+`data/scripts/backfill-operational-status.ts`, which reads the RAW field and
+UPDATEs `master_place` directly. The USFS normalizer emits the normalized field
+for **new** ingests only; nothing backfilled it.
+
+Two consequences:
+
+- `resolve_field(id,'operational_status')` returns nothing for every existing
+  row, so the field in the resolve loop is currently inert on that data.
+- **`operational_status` must NOT be added to `v_clearable_fields` until this is
+  fixed.** `20260901000200` did add it, on clean reasoning, and every recompute
+  then erased the column — one row was lost before the branch's own verification
+  caught it, and `20260901000500` reverted it. The comment in that migration is
+  the guard against a third attempt.
+
+Fix: backfill `normalized_payload.operational_status` on the usfs records that
+already carry the raw field, re-run recompute, then re-add the field to
+`v_clearable_fields`. This is the same class of defect as PR #327's description
+writes — a value living in `master_place` that the column's owning function
+cannot reproduce.
+
+## Corpus-wide containment recompute (2026-09-01)
+
+Step 7 (`place_relationships` / `contained_in`) was absent from
+`recompute_master_place()` from 2026-08-31 until the restore, and edges are only
+rewritten when a place is recomputed. Rerouting descriptions recomputed 13,942
+places, which dropped the edge count 110,519 → 106,335 — stale edges being
+corrected, not data loss.
+
+**Sampled** (arbitrary `limit`, NOT randomized — these are samples, not
+population rates):
+
+| Sample | Edges checked | Not supported by a live `st_covers` |
+|---|---:|---:|
+| child was rerouted (Step 7 rewrote it) | 3,000 | **0** |
+| child was not rerouted | 3,000 | **518** |
+
+Every edge Step 7 rewrote is backed by live geometry; a substantial share of the
+untouched ones are not. A full recompute over the corpus would converge them.
+Not done here — 161k rows, and it belongs in its own reviewed pass.
+
+## `resolve_field()` treats `''` as a value (2026-09-01, carried forward)
+
+Still open and now with a second symptom. A source whose
+`normalized_payload.description` is an empty JSON string returns
+`{"value": "", ...}`, which passes Step 3's `is not null and != 'null'::jsonb`
+guard, so `''` is written to the column. 115 rows hold `description = ''`;
+measured at population level, 115/115 have a source resolving to `""`.
+
+New symptom from the reroute: **113 of the 13,942 rerouted places could not take
+their generated description**, because a real RIDB/NPS record resolves `""` and
+correctly outranks precedence 20/21. They are left with an empty description
+when perfectly good generated text exists.
+
+Second new symptom: `pois_along_corridor`'s template exclusion tests
+`mp.description is null`, which is false for `''`, so a template-only row with
+an empty-string description slips through it. Measured: 1 such row
+(`Shasta-Trinity National Forest - Centimudi Boat Ramp`, RIDB-attributed) in an
+815-row LA→Redding corridor. Pre-existing, not introduced by the reroute.
+
+Fixing `resolve_field` to treat `''` as no-value would resolve all three, but it
+changes resolution for **every** text field corpus-wide — its own scoped pass.
+
+## Typesense re-sync for corrected `description_source` (2026-09-01)
+
+`master_place_search_export` now derives `description_source` attribution-first,
+so generated rows report `'llm'`/`'template'` instead of `'source'`.
+`places_test` still carries the pre-reroute values until `npm run -w data
+search:sync` runs. Not run in this pass.
+
+
+## ~~`recompute_master_place()` regressed to its 2026-05-27 original~~ — **RESOLVED ON TEST 2026-09-01**, PROD still open
+
+> **RESOLVED ON TEST** by migrations `20260901000200` + `20260901000500`. All
+> five behaviours restored across all seven sites, verified against the live
+> `pg_get_functiondef` (10/10). `operational_status` resolution kept.
+> **PROD REMAINS UNFIXED and — still — UNVERIFIED**: no PROD query has ever been
+> made from this thread. Deploying there is a separate, explicitly authorized
+> step. Report: `docs/measurements/2026-09-01-recompute-restore-and-description-reroute.md`.
+> History below retained.
+
+### Original entry
 
 > **Scope correction 2026-09-01.** The version of this entry written on
 > 2026-08-31 described this as a single clear-branch regression. That was
@@ -105,7 +201,19 @@ Two consequences, opposite in sign:
 
 Not fixed here. Sizing the correct interaction between the two is its own pass.
 
-## generated-content copy-in — the 7,394 `template` rows of Population A are HELD (2026-08-31)
+## ~~generated-content copy-in — template rows HELD~~ — **RESOLVED 2026-09-01 (the question dissolved)**
+
+> The hold existed because copying template text into `master_place.description`
+> made `pois_along_corridor`'s exclusion predicate (`mp.description is null and
+> has_template`) stop firing, silently reversing ADR 2026-08-21 §2. Rerouting
+> through `source_record` under a distinct `generated_template` source id let the
+> exclusion be re-expressed as `attribution.description <> 'generated_template'`,
+> which survives the description being present. **All 7,394 template rows now
+> carry their text AND remain excluded from trip-stop candidacy** — measured at
+> corridor scale: 815 rows returned, 0 template-sourced. Both halves of
+> Population A are done; nothing is held. History below retained.
+
+### Original entry
 
 `data/scripts/backfill-description-from-generated-content.ts` ran on TEST with
 its default `--method llm` (6,548 rows). The `template` half was deliberately
