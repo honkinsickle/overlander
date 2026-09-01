@@ -870,6 +870,25 @@ export function DayDetailCorridorColumn({
     );
   };
 
+  // Whether a hero source is even POSSIBLE for this day: a persisted heroImage,
+  // or a destination tile with a placeId that can hydrate a Google photo. False
+  // → genuine data gap (drives the Photo Unavailable fallback). True but
+  // heroFor() still undefined → not-yet-hydrated; the hero stays a neutral box
+  // and fills on the next render (no fallback flash).
+  const heroHasSourceFor = (d: Day): boolean => {
+    if (d.heroImage) return true;
+    const heroCities = d.corridorCities ?? fallbackCorridor(d);
+    const heroEndCity = heroCities[heroCities.length - 1];
+    if (!heroEndCity) return false;
+    const destTile = placePool(d).find((t) =>
+      isSameAnchorPlace(
+        { id: t.id, name: t.title, coords: t.coords },
+        { id: heroEndCity.id, name: heroEndCity.name, coords: heroEndCity.coords },
+      ),
+    );
+    return !!destTile?.placeId;
+  };
+
   // View-mode cities for ONE mounted day. Mirrors `effectiveCities` (the
   // single-day path) exactly, on that day's spine: un-bake places whose SERVER
   // override was locally removed (an unpin — base still carries it baked, so
@@ -923,6 +942,7 @@ export function DayDetailCorridorColumn({
         dayNumber={d.dayNumber}
         routeLabel={d.label}
         heroImageUrl={heroFor(d)}
+        heroNoSource={!heroHasSourceFor(d)}
         heroAlt={d.label}
         cities={viewCities(d)}
         places={hydratePlaces(d)}
@@ -1032,6 +1052,7 @@ export function DayDetailCorridorColumn({
               dayNumber={day.dayNumber}
               routeLabel={day.label}
               heroImageUrl={heroFor(day)}
+              heroNoSource={!heroHasSourceFor(day)}
               heroAlt={day.label}
               cities={effectiveCities ?? fallbackCorridor(day)}
               places={hydratePlaces(day)}

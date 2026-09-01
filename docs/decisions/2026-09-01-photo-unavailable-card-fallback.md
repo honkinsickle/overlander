@@ -40,3 +40,31 @@ is chosen.
   `/demo/category-list-card` page (all 9 variants are photoless) — headless
   screenshot confirmed the treatment renders on every card; `next build` +
   `typecheck` both green.
+
+## Update — extended to the day / overview hero (same session)
+
+A second blank surface was found: the **day-overview hero** (`day-detail-corridor.tsx`,
+fed by `heroFor()` in `day-detail-corridor-column.tsx`) and the **trip-overview
+hero** (`day-detail-overview.tsx` `Hero`). Both set `backgroundImage` only when a
+URL is present and had **no fallback**, so a day/trip with no hero photo rendered
+a bare `--bg-card` box (Adam's "empty black box" on day-1 of trip
+`9e42a89d…`). This is the same data-gap class as the STOPS card: day-1 has no
+`day.heroImage` and **0 of its segmentSuggestions carry a placeId**, so the
+hydration path can never supply a photo — genuinely no source, not a wiring bug.
+
+**Decisions:**
+- Extracted the fallback into a shared `components/trip/photo-unavailable.tsx`
+  (reused by CategoryListCard, the day hero, and the overview hero) with
+  `iconSize`/`captionSize` props so the larger heroes scale the glyph/caption up
+  — **one treatment + one SVG asset, no duplicate**.
+- The **day hero** gates the fallback on a new `heroNoSource` signal
+  (`heroHasSourceFor()`: no `heroImage` AND no destination `placeId`). When a
+  source *exists but hasn't hydrated*, the hero stays a neutral box and fills on
+  the next render — so a day that will get a Google photo does **not** flash
+  "Photo Unavailable" first (task-4: don't show "unavailable" where a real photo
+  should appear). The **overview hero** has no hydration path, so absent
+  `imageUrl` is always a genuine no-source case.
+- Verified on the exact reported URL (authed seed-owner session via CDP, software
+  WebGL for Mapbox): **day-1 now shows the fallback; day-3 (has `heroImage`) still
+  shows its real photo** — no regression to the photo path. Systemic, not
+  isolated: multiple days/trips with no hero source were blank; all now fall back.
