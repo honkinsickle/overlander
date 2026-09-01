@@ -192,12 +192,29 @@ Doing nothing selects the second option by default.
    > | `access` | 41 | **16** ❌ |
    > | `amenities`, `hours`, `services`, `capacity`, `seasonality`, `cell_signal` | 0 | — |
    >
-   > It is the **same 16 rows** for both fields. All 16 are `campground`, all in
-   > the USFS INFRA batch, all created 2026-05-29, each with 3 source_records
-   > (google, ridb, usfs) of which only 1 is active, and `attribution` carries no
-   > `contact`/`access` key — the clear-bug signature. The values are real
-   > content: campground phone numbers (some with reservation lines) and ADA
-   > flags. The recompute was **not run**; see
-   > `docs/BACKLOG.md` for the narrowed option.
+   > It is the **same 16 rows** for both fields — measured, not sampled:
+   > `contact` 16, `access` 16, both-on-the-same-row 16, distinct rows affected
+   > 16. All 16 are `campground`, all in the USFS INFRA batch, all
+   > `master_place.created_at` on 2026-05-29 (16/16), and all with exactly **1**
+   > active source_record (16/16).
+   >
+   > **Corrected after a self-audit:** an earlier draft said "each with 3
+   > source_records (google, ridb, usfs)" — that was generalised from a 3-row
+   > sample and is wrong. Measured across all 16: **13** have three
+   > (`google,ridb,usfs`), **3** have two (`ridb,usfs`).
+   >
+   > **The cause is now measured rather than inferred.** The only source
+   > carrying a `contact` payload for these rows is **`ridb`, and it is inactive
+   > in all 16 of them** (`[{"src":"ridb","active":false,"n":16}]`). RIDB
+   > supplied the values, RIDB's record was deactivated in the six-state trim,
+   > and the regressed function stranded them — the clear-bug signature,
+   > confirmed end-to-end.
+   >
+   > The values are real content rather than placeholder — campground phone
+   > numbers with reservation lines, and ADA flags — though that specific
+   > judgement rests on a **3-of-16 sample**, not all 16.
+   >
+   > The recompute was **not run**; see `docs/BACKLOG.md` for the narrowed
+   > option.
 3. **Typesense** has not been re-synced on PROD. Not needed yet — nothing has
    changed that the index reflects.

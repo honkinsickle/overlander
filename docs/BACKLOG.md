@@ -56,16 +56,26 @@ This is a PROD-only population difference.
 | `access` | 41 | **16** |
 | all other clearable fields | 0 rows non-null in batch | — |
 
-Same 16 rows for both fields. All `campground`, all in the USFS INFRA batch,
-all `master_place.created_at` 2026-05-29, each with 3 source_records
-(google, ridb, usfs) of which **1** is active, and no `contact`/`access` key in
-`attribution` — the clear-bug signature: RIDB supplied these values, RIDB's
-record was later deactivated, and the regressed function stranded them.
+Same 16 rows for both fields (measured: contact 16, access 16, same-row 16,
+distinct 16). All `campground`, all in the USFS INFRA batch, all
+`master_place.created_at` 2026-05-29 (16/16), all with exactly **1** active
+source_record (16/16), and no `contact`/`access` key in `attribution`.
 
-The content is real, not placeholder: e.g. `{"phone": "406-752-7924   FOR
-RESERVATIONS CALL:  1-877-444-6777"}` and `{"ada": "N"}`. Clearing them is
-*correct* per the clear-bug fix's intent — no active source asserts them — but
-it is genuine content loss on 16 PROD campgrounds.
+Source composition, measured across all 16 rather than sampled: **13** carry
+three source_records (`google,ridb,usfs`), **3** carry two (`ridb,usfs`). An
+earlier draft said "each with 3" — that was a 3-row sample generalised, and it
+was wrong.
+
+**Cause measured, not inferred:** the only source with a `contact` payload for
+these rows is **`ridb`, inactive in all 16** — so RIDB supplied the values,
+RIDB was deactivated in the six-state trim, and the regressed function stranded
+them. Clear-bug signature, confirmed end to end.
+
+The content is real rather than placeholder — e.g. `{"phone": "406-752-7924
+FOR RESERVATIONS CALL:  1-877-444-6777"}`, `{"ada": "N"}` — though that
+judgement rests on a 3-of-16 sample. Clearing them is *correct* per the
+clear-bug fix's intent (no active source asserts them) but it is genuine
+content loss on 16 PROD campgrounds.
 
 Full report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
 

@@ -29,13 +29,21 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   union, never for this batch alone. Measured for the batch:
   **`contact` 66 non-null → 16 would clear; `access` 41 non-null → 16 would
   clear.** Every other clearable field has zero non-null rows in the batch.
-- **It is the same 16 rows for both fields.** All `campground`, all in the USFS
-  INFRA batch, all `created_at` 2026-05-29, each with 3 source_records
-  (google/ridb/usfs) of which **1** is active, and no `contact`/`access` key in
-  `attribution` — the clear-bug signature. RIDB supplied them; RIDB's record was
-  deactivated in the six-state trim; the regressed function stranded the values.
-  The content is real, not placeholder: campground phone numbers with
-  reservation lines, and ADA flags.
+- **It is the same 16 rows for both fields** (contact 16, access 16, same-row
+  16, distinct 16). All `campground`, all USFS INFRA, all `created_at`
+  2026-05-29 (16/16), all with exactly 1 active source_record (16/16).
+- **Self-audit correction:** I first wrote "each with 3 source_records
+  (google/ridb/usfs)" from a **3-row sample**. Measured across all 16: 13 have
+  three (`google,ridb,usfs`), **3 have two** (`ridb,usfs`). Wrong for 3 rows.
+- **The cause moved from inference to measurement:** the only contact-bearing
+  source for these rows is `ridb`, **inactive in all 16**. RIDB supplied the
+  values, was deactivated in the six-state trim, and the regressed function
+  stranded them. The "content is real" judgement still rests on a 3-of-16
+  sample.
+- **"PROD is unchanged" is now measured, not asserted:** max `last_resolved_at`
+  is still 2026-09-01 07:54:18 — the #331 verification row — and `master_place`
+  28,348 / batch 2,732 / `contained_in` 6,217 / `mvum_true` 52 are all identical
+  to #331's post-apply state.
 - **Halted per instruction** ("if ANY come back non-zero, stop and report rather
   than proceeding"). Did not narrow the boundary myself either — the task
   explicitly said not to guess at it.
