@@ -12,6 +12,41 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 7) — Photo pilot: NPS-direct pull for NPS-sourced CA campgrounds (TEST)
+
+- **Target set measured: exactly 1 row.** Of 2,632 CA campgrounds, 52 have an
+  NPS source_record; only **one** ("Prisoners Harbor Campground", Channel
+  Islands) lacks a baked photo. Confirms the standing finding that NPS
+  campgrounds almost all already carry a baked photo. PR #335 updated (not
+  merged).
+- **Matched by STRUCTURED id, not fuzzy.** The NPS ingester stores the campground
+  id in `source_record.external_id` as `nps:campground:<id>` (nps.ts:565). Match
+  rate: **1/1 structured id, 0 name/geo fallback.** Reported which id and why.
+- **Outcome: no_candidate.** The structured id `4ED5E354-…` no longer resolves
+  in the current NPS API (absent from CA `stateCode`, `parkCode=chis`, and name
+  search) — the unit was removed/renamed upstream since ingestion. Per the rule
+  "fall back to name/geo only when NO structured id exists", I did **not** fuzzy-
+  match a stale-but-present id (fuzzy-matching an island campground would likely
+  hit a mainland unit). Recorded as `match_status='no_candidate'` with the reason,
+  not silently skipped.
+- **`pickPhoto`/`NON_PHOTO_RE` reused as-is, not extended** — honestly, because
+  zero NPS images were retrieved this run (the one unit is gone), so there was no
+  new non-photo type to observe. The filter path is wired and ran in the earlier
+  dry runs.
+- **Schema:** migration `20260901000800` adds `no_candidate` to the match_status
+  CHECK and makes `image_url` NULLABLE (a no_candidate row has no image). Applied
+  to TEST. NPS accepts (had there been any) would be `match_status='accepted'`,
+  `source='nps'`, license "Public domain (U.S. Government work, NPS)", credit →
+  attribution — direct-accept, no Google cross-check, no manual_review, per the
+  first-party-authoritative instruction.
+- **Not wired into rendering.** Driver `scripts/photo-nps-direct.ts`
+  (npm: `backfill:photo-nps`), idempotent (delete-then-insert scoped to
+  `pilot_run='nps-direct-2026-09-01'`). TEST Supabase + NPS_API_KEY from
+  data/.env; no PROD touched.
+- **Follow-up flagged:** "Prisoners Harbor Campground" is a corpus row whose NPS
+  unit no longer exists upstream — an ingestion-staleness signal worth a broader
+  check (are other nps source_records pointing at removed units?). In BACKLOG.
+
 ## 2026-09-01 (later 6) — Photo pilot: Google-verified auto-adjudication (TEST)
 
 - **Replaced manual eyeballing with an automated vision comparison.** For all

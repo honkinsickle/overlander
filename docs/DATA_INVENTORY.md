@@ -618,6 +618,15 @@ URLs / photo ids / image data — only verdict text + the generic
 remains 100% Commons/NPS/RIDB. Google reference images were held in memory for
 the comparison only and never persisted.
 
+**NPS-direct pass (2026-09-01).** Migration `20260901000800` adds `no_candidate`
+to the `match_status` CHECK and makes `image_url` NULLABLE (a no_candidate row
+has no image). Targets NPS-sourced CA campgrounds with no baked photo, matched to
+their NPS unit by the structured `nps:campground:<id>` from `external_id`. Target
+set measured = **1** ("Prisoners Harbor Campground"); its NPS id no longer
+resolves in the current NPS API (unit removed upstream), so it stored as
+`pilot_run='nps-direct-2026-09-01'`, `source='nps'`, `match_status='no_candidate'`,
+`image_url=NULL`. Zero accepted this pass.
+
 ## `reference_trips` — RLS + rows per DB
 
 App data (canonical seed trips), not corpus. **RLS:** exactly one policy,

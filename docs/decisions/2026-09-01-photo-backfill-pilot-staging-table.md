@@ -115,3 +115,13 @@ table or file** — only the model's verdict/confidence/reasoning and a generic
 `google_ref_source` label. `data/photo-backfill/google-reference.ts` performs no
 writes; the driver's DB patch contains only verdict columns. This remains
 un-wired into rendering; promotion is still a separate authorized step.
+
+**Update 2026-09-01 (NPS-direct, first-party accept).** For NPS-sourced rows,
+NPS is authoritative for its own units, so a correctly-matched NPS image is
+accepted directly — no Google cross-check, no manual_review. Match is by the
+structured `nps:campground:<id>` captured in `external_id` (not fuzzy). Migration
+`20260901000800` adds `match_status='no_candidate'` and makes `image_url`
+NULLABLE so a "no usable image" outcome (all images non-photo, or the unit no
+longer resolves upstream) is recorded rather than silently skipped. Accepts carry
+`license='Public domain (U.S. Government work, NPS)'` with the NPS credit as
+attribution. Still un-wired.

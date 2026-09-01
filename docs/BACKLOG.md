@@ -23,6 +23,13 @@ Remaining follow-ups:
 2a. **Re-run the 8 couldn't-verify rows** (`google_verdict in
    ('no_google_result','unverified')`) — 3 were transient API/vision errors, 5
    had no Google match. They kept their prior `manual_review` status.
+2b. **NPS-direct pass done (2026-09-01):** only 1 NPS-sourced CA campground lacks
+   a baked photo ("Prisoners Harbor Campground"), and its NPS unit id
+   (`4ED5E354-…`) no longer resolves in the current NPS API → stored
+   `no_candidate` (`pilot_run='nps-direct-2026-09-01'`). **Ingestion-staleness
+   signal:** this is a corpus row pointing at a removed/renamed NPS unit — worth
+   a broader audit of whether other `nps` source_records reference units the NPS
+   API no longer lists (would affect any NPS-keyed refresh, not just photos).
 3. **Residual matcher gaps (not fixed — flagged):**
    - The map/diagram/sign filter is **NPS-only** (task-scoped). Commons has the
      same issue: `Tolkan Campground` accepted a photo of the entrance *sign*.
