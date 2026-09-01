@@ -1,10 +1,11 @@
 "use client";
 
-import { GripVertical, Image as ImageIcon } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import type { BrowsePlace } from "@/lib/trip-browse/places";
 import { type BrowseCardCategory } from "@/lib/trip-browse/palette";
 import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 import { CuratedKebab, type CuratedMenu } from "@/components/trip/curated-kebab";
+import { PhotoUnavailable } from "@/components/trip/photo-unavailable";
 import {
   CategoryIconV2,
   type CategoryIconV2Name,
@@ -86,57 +87,6 @@ function looksLikeMapperFallback(desc: string, title: string): boolean {
   return /^[A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*){0,3}\.$/.test(rest);
 }
 
-
-/**
- * Photoless fallback — fills the 130×80 hero when a place has no `photoUrl`.
- * Blurred generic outdoor placeholder + a legibility scrim + a centered image
- * glyph (lucide `Image`) and "Photo Unavailable" caption. One shared asset for
- * every photoless card (not category-specific). Replaces the former
- * flat-category-color block. Rendered as absolute-inset layers inside the
- * hero's relative box. The rgba scrim/text-shadow are over-image legibility
- * washes (same use as the photo scrim below), not themeable colors.
- */
-function PhotoUnavailable() {
-  return (
-    <>
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{
-          backgroundColor: "var(--bg-base)",
-          backgroundImage: "url(/photo-unavailable-bg.svg)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          filter: "blur(5px)",
-          transform: "scale(1.15)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{ background: "linear-gradient(to bottom, #00000040, #0000006e)" }}
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 flex flex-col items-center justify-center"
-        style={{ gap: 3, color: "var(--text-primary)" }}
-      >
-        <ImageIcon size={24} strokeWidth={1.5} />
-        <span
-          style={{
-            fontFamily: "var(--ff-sans)",
-            fontSize: "var(--text-2xs)",
-            lineHeight: "12px",
-            letterSpacing: "0.02em",
-            textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-          }}
-        >
-          Photo Unavailable
-        </span>
-      </div>
-    </>
-  );
-}
 
 export function CategoryListCard({
   place,

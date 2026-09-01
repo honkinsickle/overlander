@@ -7,6 +7,7 @@ import {
   CategoryIconV2,
   type CategoryIconV2Name,
 } from "@/components/icons/category-icons-v2";
+import { PhotoUnavailable } from "@/components/trip/photo-unavailable";
 
 /**
  * Day Detail Overview — visual port of Paper "Day Detail Overview" (`EP3-0`).
@@ -187,6 +188,10 @@ function Hero({
         backgroundPosition: "center",
       }}
     >
+      {/* No hero image → Photo Unavailable fallback (behind the scrim + label).
+          The overview hero has no hydration path, so absent imageUrl is always
+          a genuine no-source case. */}
+      {!imageUrl && <PhotoUnavailable iconSize={40} captionSize="var(--text-sm)" />}
       {/* Bottom scrim so the label reads over the photo. FLAG: raw black alpha
        *  (scrim, matches LocationBrowseCard convention). */}
       <div
