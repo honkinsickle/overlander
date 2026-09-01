@@ -12,6 +12,60 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-08-31 (latest) — Slide-up category badge + title colour (map-detail-overlay)
+
+- **The bug, exactly:** `map-detail-overlay.tsx` rendered the place title as an
+  `<h2>` with a hardcoded `color: "#A6C9F9"` — the literal `--cat-scenic-title`
+  value — applied unconditionally, and rendered no category icon badge at all.
+  So a `food` place read scenic-blue with no burger icon while the very same
+  place, one column to the left in the day-detail list, read coral with one.
+  Two DESIGN.md violations in one line: §6's "no raw hex in components" and
+  §1.2's per-category `title` role.
+- **Fix** is the day-detail-overview.tsx "Badge + title" block, mirrored:
+  `const category = wp?.category ?? "interest"`, a 36×36 / radius-6 badge
+  filled `var(--cat-${category}-cta-bg)` with a `0.5px` `cta-border` hairline
+  wrapping `<CategoryIconV2 size={22}>`, and the `<h2>` recoloured to
+  `var(--cat-${category}-title)`. `Waypoint.category` is typed `Category`,
+  which is the same 9-value union as `CategoryIconV2Name`, so no cast is
+  needed — the reference block's `as CategoryIconV2Name` is redundant there.
+- **Verified on TEST via CDP** at `/trips/la-to-portland` day 1 (428 place
+  slots), driving the real `Details` button with a real mouse and reading
+  computed styles back against a colour→token map resolved from the live
+  `:root` (no hex of my own in the instrument). food `Marukai Market` →
+  `rgb(243,134,102)` + burger icon; scenic `Juan Matias Sanchez Adobe` →
+  `rgb(166,201,249)` + peak icon; camping `Mt. Lowe Trail Camp` →
+  `rgb(110,206,206)` + tent icon. For food and scenic, title colour, badge
+  fill AND icon markup were byte-identical to the same place's day-detail
+  card. Badge measured on-screen and `elementFromPoint`-reachable, per the
+  CLAUDE.md wiring-vs-reachability rule.
+- **Deliberate negative run** (`git stash` the component, re-probe, restore):
+  pre-fix the food place rendered `rgb(166,201,249)` with `firstElementChild`
+  = the `<h2>` itself (398×26, no svg). The instrument goes red on the broken
+  code, so the green result is not vacuous.
+- **`camping` and `hotel` are colour-indistinguishable** — all five role
+  tokens are byte-identical between them in globals.css. A colour-only
+  instrument cannot name those two apart; only the icon can. Worth knowing
+  before anyone writes a category assertion off computed colour again.
+- **The `?? "interest"` fallback is defensive, not currently reachable:** all
+  six in-repo `trip:openDetail` dispatchers pass a `waypoint` (real, or
+  synthesized via `browsePlaceToWaypoint`), even though `DetailPlace.waypoint`
+  is optional. Exercised it by dispatching a waypoint-less place by hand —
+  renders the interest diamond + `var(--cat-interest-title)`, no JS error.
+- **Found, not fixed (flagged for follow-up):** the rest of
+  `map-detail-overlay.tsx` is still heavily raw-hex, including four more
+  `#A6C9F9` / `rgba(166,201,249,…)` sites that should be category tokens
+  (tag pills `:329-331`, reliability `:528`, route box `:692-693`, stat
+  `:810`). Separately, **2 of the 45 category role tokens drift between
+  globals.css and DESIGN.md §1.2** — `--cat-interest-title` (`#C9BFA6` live
+  vs `#BAB0AF` documented) and `--cat-interest-badge-border` (`#C9BFA6` vs
+  `#888888`). globals.css is the master per DESIGN.md §7, so the table is
+  the stale side. Both parked in BACKLOG.md.
+- **Harness note:** headless Chrome needs `--use-angle=swiftshader
+  --enable-unsafe-swiftshader`. Without software WebGL the `MapColumn`
+  Mapbox init throws, the slideup hits its error boundary, and the page
+  reads "Couldn't load this trip" — which looks exactly like a data or auth
+  failure and is neither.
+
 ## 2026-08-31 (later) — Day-detail description slot (#323), HTML strip across all description surfaces (#324), google-resolved tile category fix (#325)
 
 - **PR #323 shipped (`2f61aa1`):** added a description slot to the

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Navigation, X } from "lucide-react";
 import type { Waypoint } from "@/lib/trips/types";
+import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
 import { stripDescriptionHtml } from "@/lib/trip-browse/description-text";
 
 const TRANSITION_MS = 280;
@@ -227,6 +228,9 @@ function TrappersDetailPanel({
   onToggleAdded: () => void;
 }) {
   const wp = place.waypoint;
+  // Browse-panel cards carry no waypoint, so no category — fall back to the
+  // neutral `interest` palette rather than rendering an unstyled title.
+  const category = wp?.category ?? "interest";
   const tags = wp?.tags ?? [];
   const reliability = wp?.reliability;
   const sim = wp?.simulator;
@@ -281,19 +285,36 @@ function TrappersDetailPanel({
       <div className="flex flex-col self-stretch items-stretch px-6 pt-5 pb-8">
         {/* Title row + pills + reliability + route */}
         <div className="flex flex-col gap-3 mb-4">
-          <h2
-            style={{
-              fontFamily: "var(--ff-display-condensed)",
-              fontSize: 26,
-              lineHeight: "26px",
-              fontWeight: 700,
-              fontStretch: "condensed",
-              letterSpacing: "0.01em",
-              color: "#A6C9F9",
-            }}
-          >
-            {place.title}
-          </h2>
+          {/* Badge + title — mirrors day-detail-overview.tsx's block so the
+           *  slide-up and the Key Stops list read the same category. */}
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <span
+              className="flex items-center justify-center shrink-0"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 6,
+                backgroundColor: `var(--cat-${category}-cta-bg)`,
+                border: `0.5px solid var(--cat-${category}-cta-border)`,
+                boxShadow: "0 2px 3px #00000066", // FLAG: raw shadow (matches day-detail-overview)
+              }}
+            >
+              <CategoryIconV2 category={category} size={22} />
+            </span>
+            <h2
+              style={{
+                fontFamily: "var(--ff-display-condensed)",
+                fontSize: 26,
+                lineHeight: "26px",
+                fontWeight: 700,
+                fontStretch: "condensed",
+                letterSpacing: "0.01em",
+                color: `var(--cat-${category}-title)`,
+              }}
+            >
+              {place.title}
+            </h2>
+          </div>
 
           {tags.length > 0 && (
             <div className="flex items-center flex-wrap gap-1.5">
