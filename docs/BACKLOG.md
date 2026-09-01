@@ -1,6 +1,62 @@
 # Backlog — open work
 
-## DECISION NEEDED — PROD repair recompute clears more than descriptions (2026-09-01)
+## `usfs` has no `field_precedence` row for `access` or `contact` (2026-09-01)
+
+Found while gating the PROD regression-batch recompute. For the 16 rows that
+had to be excluded from that recompute, the `access` value would have been
+cleared **even though an active `usfs` source_record carries an access
+payload for all 16** — because `field_precedence` has no `('access','usfs',…)`
+row, so `resolve_field()` structurally cannot see it.
+
+Measured on PROD:
+
+| field | precedence sources (in priority order) | `usfs` present? |
+|---|---|---|
+| `access` | ioverlander 1, ridb 2, nps 3, osm 4, google 5, state_parks 6 | **no** |
+| `contact` | google 1, parks_canada 2, nps 2, ridb 3, osm 4, ioverlander 5, bc_parks 6, alberta_parks 7 | **no** |
+
+For those 16 rows the access-bearing sources are `usfs` (**active**, 16) and
+`ridb` (**inactive**, 16); the contact-bearing source is `ridb` (**inactive**,
+16) only.
+
+So the two halves of that exclusion have different causes:
+
+- **`access` — a precedence gap, not data loss.** The data is present and
+  active; it is simply unreachable. Adding a `('access','usfs',N)` row would
+  let `recompute_master_place()` resolve it instead of clearing it.
+- **`contact` — genuine stranding.** No active source carries contact for these
+  rows; RIDB did, and RIDB's record was deactivated in the six-state trim.
+
+Worth checking whether `usfs` should also be in precedence for other fields it
+normalizes — not surveyed. Note `usfs` IS present for `description`
+(priority 2) and `operational_status`, so its absence here looks like an
+oversight in the USFS integration rather than a deliberate exclusion, but that
+is an inference, not something confirmed against the original PR.
+
+## Containment edges for the 16 excluded rows (2026-09-01)
+
+The 2,716-row PROD recompute deliberately excluded 16 rows to avoid clearing
+their `contact`/`access` values. Those 16 therefore keep whatever containment
+(`contained_in`) state they had, unrepaired. The number of missing edges among
+them was not measured. Resolving the precedence gap above would let all 16 be
+recomputed safely, closing this at the same time.
+
+
+## ~~DECISION NEEDED — PROD repair recompute~~ — **RESOLVED 2026-09-01: 2,716 recomputed, regression damage repaired**
+
+> **DONE.** Adam chose the narrowed scope. 2,716 rows recomputed on PROD, 0
+> failed, **0 unintended clearing** on all nine clearable fields. `mvum_corridor`
+> true 52 → 501 (+449, matching the predicted floor exactly); containment edges
+> 6,217 → 6,287 (+70). The 16 excluded rows verified untouched by direct query.
+> Scope proven: 2,716 touched, 0 outside the target, 0 missed.
+> **Still open:** the legacy stale-description population below, and the 16
+> rows' containment gap (see the `field_precedence` entry at the top of this
+> file — fixing that closes both).
+> Report: `docs/measurements/2026-09-01-prod-recompute-fix-deployment.md`.
+
+### Original entry (retained)
+
+## Historical — PROD repair recompute options (2026-09-01)
 
 The `recompute_master_place()` fix is **applied on PROD** and PROD's definitions
 are byte-identical to TEST's. But applying a migration does not recompute

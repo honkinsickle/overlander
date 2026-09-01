@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-01 · **Environment:** PROD (`nqzeywzcowujzyegxbsr`), write
 **Authorized by:** Adam, explicitly, including the known content-loss side effect
-**Outcome:** migrations applied and verified · reroute a no-op · **repair
-recompute NOT run — blocked on a side effect the authorization did not cover**
+**Outcome:** migrations applied and verified · reroute a no-op · repair
+recompute **RUN on the narrowed 2,716-row scope — see §10**
 
 Every figure below was measured in this session against the environment named.
 Nothing is carried over from the TEST run.
@@ -218,3 +218,95 @@ Doing nothing selects the second option by default.
    > option.
 3. **Typesense** has not been re-synced on PROD. Not needed yet — nothing has
    changed that the index reflects.
+
+
+## 10. The repair recompute — RUN 2026-09-01 (narrowed scope, 2,716 rows)
+
+Adam authorized the narrowed scope after §9's option 2 was corrected: the 2,732
+regression batch **minus the 16** whose `contact`/`access` would have cleared.
+
+### Gates before the write
+
+| Gate | Result |
+|---|---|
+| Batch unchanged | 2,730 (22:18 burst) + 2 (post-burst verification rows) = **2,732** |
+| Exclusion set unchanged | exactly **16**; target = **2,716** |
+| Signature of the 16, checked across **all 16** not sampled | all `campground` 16/16 · all `created_at` 2026-05-29 16/16 · all USFS INFRA 16/16 · all exactly 1 active source_record 16/16 · source sets 13× `google,ridb,usfs` + 3× `ridb,usfs` |
+| Clearing gate on the 2,716, **all nine** clearable fields | **0** would clear, with live controls (description 2,626 / contact 50 / access 25 non-null) |
+
+Target and exclusion id sets were captured to disk **before** the write, and
+every statement drew from those files — so the operation could not drift as
+`last_resolved_at` changed underneath it. The before/after measurement query is
+ID-pinned for the same reason.
+
+### Execution
+
+2,716 rows recomputed in chunks of 50, **0 failed**, ~30 minutes wall clock.
+
+### Results — before → after
+
+| target set (2,716) | before | after | |
+|---|---:|---:|---|
+| `dispersed_camping` rows | 1,561 | 1,561 | — |
+| … with `mvum_corridor` NULL | 1,561 | **0** | −1,561 |
+| rows with `mvum_corridor` NOT NULL | 0 | **1,561** | +1,561 |
+| `contained_in` edges (as child) | 1 | **71** | **+70** |
+| `contained_in` edges (as parent) | 0 | 0 | — |
+| `is_searchable` | 2,716 | 2,716 | — |
+| `land_status` | 0 | 0 | — |
+| description / contact / access / amenities / hours non-null | 2,626 / 50 / 25 / 0 / 0 | 2,626 / 50 / 25 / 0 / 0 | **all unchanged** |
+
+| corpus-wide | before | after | |
+|---|---:|---:|---|
+| `mvum_corridor` true | 52 | **501** | **+449** |
+| `mvum_corridor` false | 2,810 | **3,922** | +1,112 |
+| `contained_in` edges | 6,217 | **6,287** | **+70** |
+| `master_place` / `is_searchable` | 28,348 / 28,348 | 28,348 / 28,348 | — |
+| `land_status AND searchable` | 0 | 0 | — |
+| rows with a real description | 13,955 | **13,955** | — |
+
+**Two independent reconciliations:**
+
+- **449 + 1,112 = 1,561** — the corpus mvum deltas sum exactly to the
+  dispersed_camping rows in the set that went from all-NULL to all-evaluated.
+- The **+449** true reproduces, independently, the floor the earlier read-only
+  investigation predicted for this batch.
+- Target containment **+70** equals corpus containment **+70**, so every new
+  edge belongs to a target row and nothing else gained one.
+
+### The 16 excluded rows — verified untouched, not assumed
+
+Queried directly after the recompute and compared field-by-field against a
+snapshot taken before it: **0 changes across all 16 rows** on `contact`,
+`access`, `description`, `mvum_corridor`, `is_searchable` and
+`last_resolved_at`. The unchanged `last_resolved_at` is decisive — it means none
+of the 16 was recomputed at all, rather than recomputed to the same values.
+
+### Scope proven
+
+| | |
+|---|---:|
+| rows with `last_resolved_at` in this session's window | **2,716** |
+| … of those, inside the target set | **2,716** |
+| … of those, **outside** the target set | **0** |
+| target rows missed | **0** |
+
+Gates after: `data test` 32 files / 626 passed / 3 skipped · `data typecheck` 0
+· `web typecheck` 0.
+
+### New finding — the `access` half of the exclusion was never data loss
+
+`field_precedence` has **no `('access','usfs',…)` row**, and none for
+`('contact','usfs',…)` either. For the 16, the access-bearing sources are
+`usfs` (**active**, 16/16) and `ridb` (inactive, 16/16) — so an active record
+holds the data and `resolve_field()` structurally cannot see it. `contact` is
+different: only inactive `ridb` carries it, so that half is genuine stranding.
+
+Adding the `access`/`usfs` precedence row would let all 16 be recomputed safely
+and close their containment gap in the same pass. Filed in `docs/BACKLOG.md`;
+not done here — it is a data change beyond this authorization.
+
+### Still open on PROD
+
+The legacy stale-description population (separately queued) and the 16 rows'
+containment gap. Neither was touched.

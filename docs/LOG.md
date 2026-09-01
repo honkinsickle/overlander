@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 3) — PROD Aug-31 regression damage REPAIRED: 2,716 rows recomputed, zero unintended change
+
+- **2,716 rows recomputed on PROD, 0 failed** (~30 min wall clock, chunked 50 at
+  a time). Scope: the 2,732 regression batch **minus the 16** whose
+  `contact`/`access` would have cleared.
+- **Every gate held before the write.** Batch re-derived and unchanged
+  (2,730 burst + 2 post-burst verification rows = 2,732). Exclusion set still
+  exactly 16, and this time the full signature was confirmed **across all 16
+  rather than generalised from a sample** — the mistake the previous two
+  sessions each had to walk back. Safety gate on the narrowed set: **0 clearing
+  on all nine clearable fields**, with live controls.
+- **The repair landed exactly as predicted.** Corpus `mvum_corridor` true
+  **52 → 501 = +449** — independently reproducing the floor the earlier
+  read-only investigation predicted. `false` went 2,810 → 3,922 (+1,112), and
+  **449 + 1,112 = 1,561**, reconciling precisely to the dispersed_camping rows
+  in the set that went from all-NULL to all-evaluated.
+- **Containment:** +70 edges for the set (1 → 71) and +70 corpus-wide
+  (6,217 → 6,287) — identical deltas, so every new edge belongs to a target row.
+- **Zero unintended change**, measured before/after rather than assumed:
+  description 2,626 → 2,626, contact 50 → 50, access 25 → 25, amenities 0 → 0,
+  hours 0 → 0, is_searchable 2,716 → 2,716, land_status 0 → 0. Corpus rows with
+  a real description 13,955 → 13,955.
+- **The 16 excluded rows are provably untouched** — queried directly, 0 changes
+  on every captured field including `last_resolved_at`, which is the decisive
+  signal that none was recomputed. Not inferred from the exclusion logic.
+- **Scope proven:** rows touched this session 2,716, outside the target set
+  **0**, target rows missed **0**.
+- **New finding: the `access` half of the exclusion was never data loss.** An
+  *active* `usfs` source_record carries an access payload for all 16, but
+  `field_precedence` has no `('access','usfs',…)` row, so `resolve_field()`
+  structurally cannot see it. `contact` is different — genuinely stranded, only
+  inactive `ridb` carries it. Adding the precedence row would let all 16 be
+  recomputed safely and close their containment gap in the same pass. Filed.
+- **Method notes worth keeping:** the target/exclusion id sets were captured to
+  disk *before* the write and every statement drew from those files, so the
+  operation was immune to `last_resolved_at` shifting under it; the
+  before/after measurement query was ID-pinned for the same reason. Every
+  read-only file was linted for write/DDL keywords before running — including
+  scratch — closing the process lapse flagged last session. The one write file
+  was asserted structurally instead, and labelled as such rather than passed off
+  as lint-clean.
+- Timing note: the 50-row probe measured ~0.58 s/row cold; the warm rate varied
+  between ~0.2 and ~1 s/row, so the initial "~26 minutes" estimate was
+  coincidentally close but was never a stable rate.
+
 ## 2026-09-01 (later 2) — regression-batch recompute on PROD: AUTHORIZED, ATTEMPTED, HALTED at the safety gate
 
 - **The recompute did NOT run. PROD is unchanged** — SELECT-only this session.
