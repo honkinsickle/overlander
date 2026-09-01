@@ -8,6 +8,82 @@ Closes both open threads: the five regressions from `20260831100000`, and the
 invariant-violating direct writes from PR #327. Every number here was computed
 in this session. Samples are labelled as samples.
 
+## Corrections from a self-audit pass
+
+Run after the work was pushed. Nothing here changes the outcome; three claims
+needed tightening and one effect had never been measured at all.
+
+1. **"All seven sites verified against the live function (10/10)" was measured
+   against the SUPERSEDED function.** That check ran right after
+   `20260901000200` and was never re-run after `20260901000500` replaced it.
+   Re-run now against the current live definition, and made **structural**
+   rather than substring-based — the old check counted occurrences of
+   `'operational_status'` in the whole body, which my own comment prose
+   inflated. Parsing the declaration arrays out of the live source:
+   `v_jsonb_fields` = the 12 expected fields, `v_text_columns` = 4,
+   `v_clearable_fields` = **exactly the nine from `20260819180000`**, with
+   `operational_status` absent and the three NOT NULL columns absent. All seven
+   restored sites still present. **Verified against what is actually deployed.**
+2. **"avg prominence 0.8606 before and after" is a 4-decimal-place claim, not
+   an identity.** The baseline was captured rounded, so full-precision equality
+   cannot be asserted; the current full-precision value is
+   `0.860562379777953`. The claim still carries its weight: a generated source
+   leaking into `compute_prominence` would add `+2.0` to 13,942 of 125,289
+   searchable rows, moving the mean by ~**0.2225** — roughly three orders of
+   magnitude larger than the rounding window. Neutrality is demonstrated; exact
+   invariance is not.
+3. **An effect I never measured before publishing: what the restored
+   clear-branch did to the OTHER eight clearable fields.** Recomputing 13,942
+   rows could have NULLed stale `amenities` / `hours` / `contact` / `access` /
+   `services` / `capacity` / `seasonality` / `cell_signal`. I had no baseline
+   for those columns and did not check. Measured now, set-based, **with a
+   control** (the first version returned zero rows for everything, which is
+   indistinguishable from a broken query):
+
+   | field | rows with the field non-null (control) | stale — would be cleared |
+   |---|---:|---:|
+   | `contact` | 11,105 | **0** |
+   | `access` | 8,335 | **0** |
+   | `amenities` | 1,877 | **0** |
+   | `hours` | 1,723 | **0** |
+   | `capacity` | 80 | **0** |
+   | `services`, `seasonality`, `cell_signal` | 0 | — |
+
+   **No clearable JSONB field anywhere in the corpus is stale.** So the
+   clear-branch had nothing to clean on those fields, the 13,942 recomputes
+   changed none of them, and the regression's practical exposure was
+   `description` plus the four structural losses — not the other eight columns.
+4. **Entity-resolution safety, verified rather than reasoned about.** The 13,942
+   synthetic records: **0** with a null `master_place_id`, **0** appearing in
+   `place_match`. `matcher.ts` selects unlinked records as the ER queue, so
+   pre-linking them keeps them out of it entirely.
+
+### Scope: three things I changed that were not asked for
+
+The task named five steps; two of the migrations go beyond them. Ranked by how
+defensible I think they are:
+
+- **`pois_along_corridor` (`20260901000300`) — required.** The task demanded
+  ADR 2026-08-21 §2 keep holding. It could not, because the old predicate tests
+  `mp.description is null`. Changing the RPC was the only way to satisfy a
+  constraint the task itself set.
+- **`compute_prominence()` + `source_count` exclusion — required to avoid
+  causing harm.** Not requested, and `compute_prominence()` is a core scoring
+  function. But without them the reroute would have handed every affected place
+  `+2.0` prominence and silently reordered corridor results. I judged
+  "introduce a ranking change" worse than "touch one more function". Reversible
+  if you disagree — remove `is_generated_source()` from both.
+- **`master_place_search_export` (`20260901000400`) — genuinely optional.
+  This one is scope creep.** It fixes `description_source` reporting `'source'`
+  for generated text, which is a *pre-existing* lie (PR #327 caused it; the
+  reroute does not make it worse). Nothing required it. It also leaves the DB
+  and Typesense disagreeing until `search:sync` runs, which I did not run —
+  so this change is inert-but-inconsistent until someone does. Drop the
+  migration if you'd rather it landed with its own sync.
+- **`is_generated_source()` — a new database object** where three inline
+  predicates would have done. Justified as single-sourcing the list; noted as a
+  judgement call, not a necessity.
+
 ## 1. What each restored piece does
 
 `20260831100000_operational_status.sql`'s function body is the 2026-05-27

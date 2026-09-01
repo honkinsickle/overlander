@@ -20,8 +20,26 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **All five regressions restored across all seven sites.** The function was
   **generated programmatically** from `20260819180000` rather than retyped, then
   diffed against it so the only deltas are the intended ones, then all seven
-  sites re-verified against the **live** `pg_get_functiondef` after apply
-  (10/10). `operational_status` from `20260831100000` kept verbatim.
+  sites re-verified against the **live** `pg_get_functiondef` after apply.
+  `operational_status` from `20260831100000` kept verbatim.
+- **Self-audit correction: that live verification first ran against the
+  SUPERSEDED function** (right after `20260901000200`, never re-run after
+  `20260901000500` replaced it), and it was substring-based, so my own comment
+  prose inflated an `'operational_status'` occurrence count. Re-run
+  structurally against the deployed definition: `v_clearable_fields` is exactly
+  the nine from `20260819180000`. "Verified" now means verified against what is
+  actually running.
+- **Self-audit: an effect I never measured before publishing.** Recomputing
+  13,942 rows could have NULLed stale `amenities`/`hours`/`contact`/`access`/
+  `capacity` etc. via the restored clear-branch; I had no baseline and did not
+  check. Measured after the fact **with a control** (the first attempt returned
+  zero rows for everything — indistinguishable from a broken query): control
+  counts are real (contact 11,105, access 8,335, amenities 1,877, hours 1,723,
+  capacity 80) and **stale counts are 0 across every field**. Nothing was
+  cleared, and the clear-bug's practical exposure was `description` plus the
+  four structural losses, not the other eight columns.
+- **Self-audit: ER safety verified rather than reasoned about** — 0 of the
+  13,942 synthetic records are unlinked, 0 appear in `place_match`.
 - **The reroute makes the exemption unnecessary rather than solving it.** Two
   synthetic sources (`generated_llm` @20, `generated_template` @21, below
   `padus` @10). 13,942 source_records upserted, 13,942 recomputes, 0 failed.

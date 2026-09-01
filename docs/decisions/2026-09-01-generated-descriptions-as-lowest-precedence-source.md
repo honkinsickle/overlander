@@ -107,3 +107,22 @@ fallback for rows not yet rerouted.
   would then degrade to generated text instead of going blank. Not done.
 - Typesense must be re-synced for the corrected `description_source` to reach
   the index. Not run here.
+
+## Scope — what this decision covers that was not asked for
+
+Recorded so a later reader can unpick it cleanly:
+
+- Changing `pois_along_corridor` was **required**: the task demanded ADR §2 keep
+  holding, and the old predicate could not.
+- Changing `compute_prominence()` and `source_count` was **required to avoid
+  causing harm**, not requested. Without them the reroute would have added
+  `+2.0` prominence to every affected place and silently reordered corridor
+  results. `compute_prominence()` is a core scoring function; touching it was a
+  judgement call. Reversible by removing `is_generated_source()` from both.
+- Changing `master_place_search_export` (`20260901000400`) was **optional —
+  scope creep**. It corrects `description_source` reporting `'source'` for
+  generated text, a pre-existing inaccuracy that the reroute does not worsen.
+  It also leaves Postgres and Typesense disagreeing until `search:sync` runs,
+  which was not run. Drop it if you'd rather it shipped with its own sync.
+- `is_generated_source()` is a new database object where three inline predicates
+  would have worked. Single-sourcing the list, not a necessity.
