@@ -64,16 +64,33 @@ So the two halves of Population A behave differently:
 **Only the llm half was run.** The template half is held for explicit
 sign-off — see §Held below.
 
-The tiles named in the handoff for re-verification are almost entirely llm
-rows, so the llm-only run covers them: Fawnskin Market (llm), Pineknot
-Campground (llm), and 24 of the 25 "Yellow Post" rows (llm; `Santa Rosa
-Yellow Post 2` is the one template row).
+The tiles named in the handoff for re-verification are mostly llm rows, so the
+llm-only run covers most of them: Fawnskin Market (llm), Pineknot Campground
+(llm).
+
+**Correction — an earlier version of this doc said "24 of the 25 Yellow Post
+rows are llm". That was a capped sample reported as a population count**: the
+query carried `.limit(25)`, so 25 was the cap, not the count. Re-measured
+uncapped, `master_place` where `canonical_name ilike '%Yellow Post%'`:
+
+| | Count |
+|---|---:|
+| total rows | **80** |
+| `generation_method = 'llm'` (fixed by this run) | **46** |
+| `generation_method = 'template'` (held) | **11** |
+| no generated-content row at all (Population B) | **23** |
+
+So this run fixes 46 of the 80 Yellow Post rows, not "essentially all" of
+them. 11 more are one flag away; the remaining 23 have no description anywhere
+and are out of scope for either half.
 
 ## `attribution.description` — the existing convention
 
 Asked for before deciding anything. Measured across all 19,803 searchable
-`master_place` rows whose `description` was not NULL pre-backfill (that set
-includes 115 empty-string rows, so 19,688 held actual text):
+`master_place` rows whose `description` was not NULL pre-backfill. (Of those,
+19,688 held actual text and 115 were empty strings — **both derived from this
+session's own measurements**, not read off the earlier scoping doc: post-run
+non-empty 26,236 − rows written 6,548 = 19,688, and 19,803 − 19,688 = 115.)
 
 | Count | `attribution.description` |
 |---:|---|
@@ -108,7 +125,12 @@ row, which is untouched.
 
 Side note, measured: 113 of the 13,942 A rows carry a **stale**
 `attribution.description` (111 `ridb`, 2 `nps`) while holding an empty
-description — leftovers from the clear-bug era described below.
+description — leftovers from the clear-bug era described below. Of the 6,548
+rows this run actually wrote, **7** carry such a stale key (5 `ridb`, 2 `nps`);
+the other 6,541 have no `description` key at all. So the post-backfill corpus
+now contains 6,541 rows holding a description with **no** attribution entry —
+a state that did not previously exist (pre-backfill: 0 of 19,803) — plus 7
+whose attribution entry names a source that is *not* where the text came from.
 
 ## Durability: does a direct write survive `recompute_master_place()`?
 
@@ -123,19 +145,47 @@ recompute_master_place(...) -> 204
 after recompute:    "__copyin_durability_probe__"   <-- SURVIVES
 ```
 
-**It survives — but only because a regression is live.** Migration
-`20260819180000_recompute_master_place_clear_bug_fix.sql` added an explicit
-`set description = null` for the case where `resolve_field()` returns no
-candidate. The later `20260831100000_operational_status.sql` is a
+**The first run of this experiment had no positive control** — nothing in it
+proved the function body executed rather than silently no-opping, which is
+exactly the apparatus failure `CLAUDE.md` warns about. Re-run with
+`last_resolved_at` (written unconditionally in the function's Step 6) as the
+control:
+
+```
+0007a5cb… before: description=null  last_resolved_at=2026-08-20T23:12:55.242Z
+           rpc: 204
+           after: description="__audit_positive_control__"
+                  last_resolved_at=2026-09-01T03:52:37.393Z
+  last_resolved_at CHANGED (the body ran):        true
+  description survived (no clear branch fired):   true
+```
+
+**The body ran and the description still survived.** So on TEST the clear
+branch is genuinely absent, measured, not inferred.
+
+**Why:** `20260819180000_recompute_master_place_clear_bug_fix.sql` added an
+explicit `set description = null` for the case where `resolve_field()` returns
+no candidate. The later `20260831100000_operational_status.sql` is a
 `create or replace` written from the **pre-fix** function body plus
-`operational_status`, and it drops the `elsif v_field = any(v_clearable_fields)`
-clear branch entirely. That migration was applied to **both TEST and PROD**
-on 2026-08-31 (PR #321).
+`operational_status`, and it has no `elsif v_field = any(v_clearable_fields)`
+branch and no `v_clearable_fields` declaration at all.
+
+**Scope of the PROD claim — read this before repeating it.** The behavioural
+proof above is **TEST only**. That the same regression is live on PROD is an
+**inference**, from two things: the migration file's content, and
+`docs/STATE.md` §2026-08-31 recording that PR #321's three migrations were
+applied to both environments. **No PROD measurement was taken this session**,
+and this repo has a documented file-vs-DB drift history that makes reading a
+migration file a weaker signal than `pg_get_functiondef` against the live
+database. Confirming it on PROD needs either a live function-definition read
+or the same sentinel probe, both of which require Adam's sign-off. Until then
+the PROD half is **`[UNVERIFIED]`**.
 
 So: **if the clear-bug fix is ever restored, this entire backfill is silently
 wiped** on the next recompute of each row. Filed in `docs/BACKLOG.md`. This is
-a pre-existing regression, not caused by this work, but it is exactly the load-bearing
-assumption underneath the copy-in approach and it should not stay implicit.
+a pre-existing regression, not caused by this work, but it is exactly the
+load-bearing assumption underneath the copy-in approach and it should not stay
+implicit.
 
 ## Text formatting parity
 
@@ -214,7 +264,7 @@ Before the backfill each of these had `master_place.description` empty, so
 The chain is `bake-corridors.ts:fetchCorpusForPolyline()` →
 `supabase.rpc("pois_along_corridor")` → `mapMasterPlaceRow(r, …)` →
 `description: row.description ?? "{name} — {Category}."`
-(`web/src/lib/trip-browse/federated.ts:252`). The RPC already selects
+(`web/src/lib/trip-browse/federated.ts:253`). The RPC already selects
 `mp.description`, so a populated column flows straight through. Confirmed
 twice: by reading the chain, and by the live RPC probe above returning the
 text. **Zero web-side changes are in this PR.**
@@ -235,14 +285,42 @@ rows. `master_place_generated_content` remains the accurate record.
    `--method all --confirm` (or `--method template --confirm`). Held because
    it reverses ADR 2026-08-21 §2 and would admit thin one-liners into
    trip-stop candidacy — measured above, not speculated. Needs an explicit
-   call.
+   call. The "newly admitted" figure is **exactly 7,394**, not an upper
+   bound: re-checked against the RPC's *other* gates (`source_count > 0`,
+   `primary_category <> 'land_status'`) and all 7,394 pass them, so removing
+   the template exclusion admits every one.
 2. **PROD.** Not run. Requires separate sign-off. The script accepts `--prod`,
    which asserts the PROD ref before doing anything.
 3. **Population B** (no fallback row anywhere) — out of scope per the task.
+   The Yellow Post breakdown above shows 23 such rows in that one name family
+   alone.
 4. **Entity-resolution duplicates** (Serrano, Boulder Basin) — out of scope
-   per the task. Incidentally re-confirmed while locating the named tiles:
-   `Serrano` resolves to 12 `master_place` rows and `Fawnskin` to 3, several
-   of which are the same real place under different sources.
+   per the task, and **not independently confirmed here**. What was actually
+   measured is only a name-substring count: `canonical_name ilike '%Serrano%'`
+   returns 12 `master_place` rows and `'%Fawnskin%'` returns 3. Most of those
+   are plainly *different* places (Serrano Spring, Serrano Ridge Viewpoint,
+   Los Serranos Park), so that count is **not** evidence of duplication. The
+   duplicate claim for Serrano Campground / Boulder Basin comes from the
+   prior investigation, not from this session.
+
+## Scope note — what was built beyond the literal ask
+
+- `--method` — load-bearing; the llm/template split is the finding, and there
+  was no way to express "ran one half, held the other" without it.
+- `--undo` + timestamped snapshot — not requested, but `CLAUDE.md`
+  §"Source integration workflow" requires a measured snapshot before any
+  corpus-mutating run, so this is the repo's own discipline, not invention.
+- **`--prod` — unrequested configurability, and the weakest of the three.**
+  The task said TEST only and that PROD needs separate sign-off. The named
+  precedent (`backfill-osm-templated-descriptions.ts`) uses a hard TEST-only
+  guard and would require a code edit to ever target PROD. Adding the flag
+  makes the PROD path explicit and reviewable, but it also makes PROD one
+  argument away instead of one diff away. If the stricter posture is
+  preferred, deleting the flag and the `PROD_REF` constant is a four-line
+  change.
+- `p-limit(8)` concurrency — the cited precedent writes sequentially. Uses an
+  existing dependency; cuts the run from ~9 min to ~90 s. Minor added moving
+  part.
 
 ## Reversal
 

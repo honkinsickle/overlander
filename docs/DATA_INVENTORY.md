@@ -195,13 +195,19 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > description, has a generated row) = **13,942**: **6,548 llm** (written)
 > + **7,394 template** (HELD — see `docs/BACKLOG.md`). Another 3,783 are
 > "dual" rows that already had a description and were skipped. Searchable
-> rows with a **non-empty** description now measure **26,236** (pre-backfill
-> that set was 19,688 = the 19,803 not-NULL rows minus 115 empty strings).
+> rows with a **non-empty** description now measure **26,236** (queried after
+> the run). Pre-backfill that set was **19,688**, and **115** of the 19,803
+> not-NULL rows were empty strings — both figures *derived from this session's
+> own measurements* (26,236 − 6,548 written = 19,688; 19,803 − 19,688 = 115),
+> not read off the earlier scoping doc.
 > `attribution` was NOT written — measured convention is that
 > `attribution.description` is always a `source_id` and is present on
-> 19,803/19,803 pre-backfill not-NULL-description rows, so these 6,548 now hold a description
-> with **no `description` key in `attribution`**, which is new for this
-> corpus. `description_source` on those rows flips `'llm'` → `'source'`
+> 19,803/19,803 pre-backfill not-NULL-description rows. Of the 6,548 written
+> rows, **6,541 now hold a description with no `description` key in
+> `attribution`** — a state that did not previously exist in this corpus — and
+> **7** (5 `ridb`, 2 `nps`) carry a *stale* key from the clear-bug era, so they
+> now present LLM-generated text under a RIDB/NPS attribution.
+> `description_source` on these rows flips `'llm'` → `'source'`
 > in both `pois_along_corridor` and `master_place_search_export`.
 > **Typesense `places_test` was NOT re-synced** — it still carries the
 > pre-backfill `description`/`description_source` for these rows. Undo

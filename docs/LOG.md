@@ -31,8 +31,25 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   returned**. The llm control row was returned both before and after (only its
   description went from null to populated). So the template half is a product
   decision reversing a merged ADR, not a plumbing fix — **held, `--method all`
-  is the whole delta.** The tiles flagged for re-verification are llm rows
-  anyway (Fawnskin Market, Pineknot Campground, 24 of 25 Yellow Post rows).
+  is the whole delta.** Exactly 7,394 would be newly admitted (all of them also
+  pass the RPC's other gates, so it's an exact figure, not a bound).
+- **Correction, caught in a self-audit before Adam reviewed the PR: I wrote
+  "24 of the 25 Yellow Post rows are llm" in four places. That was a CAPPED
+  SAMPLE reported as a population count** — the probe query carried
+  `.limit(25)`, so 25 was my own cap, not the number of rows. Re-measured
+  uncapped: `canonical_name ilike '%Yellow Post%'` returns **80** rows — 46
+  llm, 11 template, 23 with no generated row at all. So the run fixes 46 of 80
+  there, not nearly all. Exactly the "sampled numbers dressed as totals"
+  failure `CLAUDE.md` names; the tell was that I chose the limit and then
+  quoted the result as a total.
+- **Second self-audit correction: the durability experiment had no positive
+  control.** It wrote a sentinel, called `recompute_master_place()`, and saw
+  the sentinel survive — but neither `description` nor `attribution` changes
+  when the function runs successfully on such a row, so the observation could
+  not distinguish "the clear branch is gone" from "the RPC did nothing". Re-run
+  using `last_resolved_at` (written unconditionally in Step 6) as the control:
+  it moved 2026-08-20T23:12:55Z → 2026-09-01T03:52:37Z while the sentinel
+  survived. Conclusion unchanged, now actually supported.
 - **`attribution` deliberately left alone, after measuring the convention.**
   Across all 19,803 searchable rows whose description was not NULL (19,688 of them non-empty), `attribution.description`
   is always a `source_id` and never absent (ridb 5,344 / nps 4,979 / usfs 4,204 /
@@ -40,13 +57,23 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   / **0 missing**). `recompute_master_place()` rebuilds the map wholesale from
   `source_record`, so there is no existing "generated, not sourced" value and any
   invented one would be dropped on the next recompute — confirmed directly.
-- **Found underneath all of this: the clear-bug fix has been REGRESSED on TEST
-  and PROD.** `20260831100000_operational_status.sql` (PR #321, yesterday) is a
+  Follow-up measurement: **7** of the 6,548 written rows carry a *stale*
+  `attribution.description` (5 ridb, 2 nps) from the clear-bug era; the other
+  6,541 have no key. So the corpus now holds 6,541 rows with a description and
+  no attribution entry, which is new, plus 7 whose entry names the wrong
+  source. An earlier draft said all 6,548 lacked the key — wrong for 7.
+- **Found underneath all of this: the clear-bug fix has been REGRESSED — on
+  TEST measured, on PROD `[UNVERIFIED]`.**
+  `20260831100000_operational_status.sql` (PR #321, yesterday) is a
   `create or replace` of `recompute_master_place()` built from the **pre-fix**
   body — it drops the `elsif v_field = any(v_clearable_fields)` branch that
-  `20260819180000` added. Measured with a sentinel: a direct
-  `master_place.description` write **survived** a real recompute. **That
-  regression is the only reason the copy-in approach is durable at all.**
+  `20260819180000` added. TEST is measured (sentinel + `last_resolved_at`
+  positive control, above). **PROD was never queried this session** — that
+  half rests on the migration file plus STATE's record that #321 went to both
+  environments, which in a repo with documented file-vs-DB drift is inference,
+  not measurement. I asserted "TEST and PROD" in bold in four places on that
+  basis; corrected. **That regression is the only reason the copy-in approach
+  is durable at all.**
   Restoring the clear-bug fix would silently wipe this backfill. The two are
   mutually exclusive as currently built. Filed in BACKLOG with the shape of a
   real reconciliation.

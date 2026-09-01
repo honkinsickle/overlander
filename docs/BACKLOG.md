@@ -1,6 +1,6 @@
 # Backlog — open work
 
-## `recompute_master_place()` clear-bug fix was REGRESSED by the operational_status migration — live on TEST **and PROD** (2026-08-31)
+## `recompute_master_place()` clear-bug fix was REGRESSED by the operational_status migration — measured on TEST, `[UNVERIFIED]` on PROD (2026-08-31)
 
 `20260819180000_recompute_master_place_clear_bug_fix.sql` added an explicit
 `set <field> = null` for each of the 10 clearable precedence-resolved columns
@@ -9,15 +9,28 @@
 `resolve_field()` returns no candidate, so a stale value isn't stranded when a
 field's last active source goes away.
 
-`20260831100000_operational_status.sql` (PR #321, applied to **both TEST and
-PROD** on 2026-08-31) is a `create or replace` of the same function written
-from the **pre-fix** body plus `operational_status`. It has no
-`elsif v_field = any(v_clearable_fields)` branch and no `v_clearable_fields`
-declaration at all. The clear-bug is therefore back on both environments.
+`20260831100000_operational_status.sql` (PR #321) is a `create or replace` of
+the same function written from the **pre-fix** body plus `operational_status`.
+It has no `elsif v_field = any(v_clearable_fields)` branch and no
+`v_clearable_fields` declaration at all.
 
-**Measured 2026-08-31**, not inferred from the files: a sentinel written
+**TEST — measured 2026-08-31, with a positive control.** A sentinel written
 directly into `master_place.description` on a row with no source-resolved
-description **survived** a real `recompute_master_place()` RPC call.
+description **survived** a real `recompute_master_place()` RPC call, *and*
+`last_resolved_at` moved (2026-08-20T23:12:55Z → 2026-09-01T03:52:37Z),
+proving the function body executed rather than silently no-opping. Recorded
+because the first pass of this check watched only `description` and
+`attribution` — neither of which changes on a successful run for such a row —
+so it could not have distinguished "clear branch gone" from "the RPC did
+nothing", and it looked convincing anyway.
+
+**PROD — `[UNVERIFIED]`.** No PROD query was made. That the same regression is
+live there rests on the migration file plus `docs/STATE.md` §2026-08-31
+recording that #321's migrations were applied to both environments — which, in
+a repo with a documented file-vs-DB drift history, is inference, not
+measurement. **First step on this item: confirm PROD**, via
+`pg_get_functiondef('public.recompute_master_place(uuid)')` or the same
+sentinel probe. Both need sign-off.
 
 Two consequences, opposite in sign:
 
@@ -47,7 +60,10 @@ template-only rows are excluded from trip-stop candidacy on purpose (ADR
 `2026-08-21-template-eligibility-provenance-review-decisions.md` §2). Copying
 template text into `mp.description` makes that predicate false and admits the
 rows. **Measured live** on `0007a5cb…` (Ochoco State Scenic Viewpoint): not
-returned by the RPC before the copy-in, returned after.
+returned by the RPC before the copy-in, returned after. The count is
+**exactly 7,394**, not an upper bound — all 7,394 also pass the RPC's other
+gates (`source_count > 0`, `primary_category <> 'land_status'`), so removing
+the template exclusion admits every one.
 
 So running the template half is a product decision — "are
 `{name} is a {category} in {parent}, {state}.` one-liners good enough to hand a
@@ -58,6 +74,10 @@ same pass rather than silently reversed.
 Also parked: **113 Population-A rows carry a stale `attribution.description`**
 (111 `ridb`, 2 `nps`) while holding an empty description — clear-bug-era
 leftovers, harmless today, wrong if anything ever trusts the key's presence.
+**7 of those 113 are inside the 6,548 rows this run wrote** (5 `ridb`, 2
+`nps`), so those 7 now hold LLM-generated text under an attribution naming
+RIDB or NPS. Small, but it is the one place this backfill makes an existing
+wrong value actively misleading rather than merely stale.
 
 ## TasteAtlas / family_destinations manual-review + duplicate triage (2026-08-29)
 
