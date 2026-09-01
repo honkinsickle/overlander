@@ -188,6 +188,8 @@ description-less compact cards.
 
 ## What this means for prioritization
 
+> **SUPERSEDED 2026-09-01 — the recommendation below is not what shipped.** The bake-path LEFT JOIN LATERAL was not built; generated descriptions are instead delivered through `source_record` + `field_precedence` under two lowest-precedence synthetic sources, per `docs/decisions/2026-09-01-generated-descriptions-as-lowest-precedence-source.md`. The diagnosis above still stands; only this section's proposed fix was overtaken.
+
 I was not asked for a recommendation, but the numbers cluster into a
 clear picture:
 
