@@ -2,20 +2,29 @@
 
 ## Slide-up overlay raw-hex conform + DESIGN.md `interest` token drift (2026-08-31)
 
-Surfaced while fixing the slide-up's category badge + title colour; both
-deliberately left alone as out of scope for that change.
+Surfaced while fixing the slide-up's category badge + title colour.
 
-- **`map-detail-overlay.tsx` is still heavily raw-hex** and violates
-  DESIGN.md §6 outside the title row that was fixed. The four sites that are
-  the *same* bug class as the one fixed — a literal `--cat-scenic-title`
-  value standing in for a category token — are the tag pills (`:329-331`,
-  `#A6C9F9` + `rgba(166,201,249,0.12)` + `rgba(166,201,249,0.32)`), the
-  reliability block (`:528`), the route box (`:692-693`), and a stat
-  `valueColor` (`:810`). Whether these should become `--cat-{category}-*`
-  (category-driven, like the title now is) or a fixed neutral token is a
-  design call, not a mechanical substitution — that is why it was not
-  bundled. The file's remaining ~35 raw hex values are greys/greens with no
-  obvious existing token and need a token-coverage pass first.
+- ~~**`map-detail-overlay.tsx` scenic-blue literals.**~~ **CLOSED** — Adam's
+  design call was "fixed neutral, not category-driven"; shipped in the
+  slide-up neutral-token PR. Every `#A6C9F9` and `rgba(166,201,249,…)` in
+  the file is gone. **Two site labels in this entry's original text were
+  wrong** and are corrected here for anyone reading back: there was no
+  scenic blue in the reliability block (it already used `var(--pin)` /
+  `var(--pin-border)`) and none in the route box. The four elements that
+  actually carried it were the **tag pills**, the **"IF YOU STOP HERE"
+  simulator section label**, the **"ADD TO DAY N" CTA**, and the
+  **Website value** in the logistics row. The count of four was right; two
+  of the names were not.
+  - **Still open, deliberately:** the file's other raw-hex values — warm
+    greys (`#A89C90`, `#8A8070`, `#817A6D`), greens (`#98AC64`,
+    `#6A8A6A`), panel/surface greys (`#1A1A1A`, `#1E1E1E`, `#232323`,
+    `#484848`) and the no-photo hero gradient
+    (`linear-gradient(180deg, #1A2B3F 0%, #24354F 100%)`, whose second
+    stop is the scenic `cta-bg` value). None map cleanly onto an existing
+    token; this needs a token-coverage pass, not a substitution pass.
+    `LogisticsCell`'s `labelColor`/`valueColor` defaults are the highest-
+    value item in that set — tokenising them would let the Website
+    override be dropped entirely rather than re-pointed.
 - **2 of 45 category role tokens drift from DESIGN.md §1.2**, both on
   `interest`: `--cat-interest-title` is `#C9BFA6` in globals.css vs
   `#BAB0AF` in the table, and `--cat-interest-badge-border` is `#C9BFA6` vs

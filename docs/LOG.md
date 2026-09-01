@@ -12,6 +12,61 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 — Slide-up non-category chrome goes neutral
+
+- **Closes the follow-up #328 parked.** Adam's design call: the four
+  remaining scenic-blue sites in `map-detail-overlay.tsx` should NOT go
+  category-driven like the title did — they take fixed neutral tokens.
+  Shipped. Every `#A6C9F9` and every `rgba(166,201,249,…)` in the file is
+  now gone; verified by grep, not by assumption.
+- **Two of the four site labels I wrote into BACKLOG.md after #328 were
+  wrong**, and the task inherited them. Located the sites fresh rather than
+  trusting the prior report — which is what caught it. **There is no scenic
+  blue in the reliability block** (it already used `var(--pin)` /
+  `var(--pin-border)`) and **none in the route box**. The four elements that
+  actually carried it: tag pills, the **"IF YOU STOP HERE"** simulator
+  section label, the **"ADD TO DAY N"** CTA, and the **Website** value in
+  the logistics row. Count of four was right; two names were not. BACKLOG
+  entry corrected in place.
+- **Token choices** (ADR: `docs/decisions/2026-09-01-slideup-non-category-chrome-is-neutral.md`):
+  pill text + section label `--type-300`; pill fill `--border-subtle`; pill
+  and CTA borders `--border-strong`; CTA fill `--bg-card`; Website value
+  `--text-muted`. `--type-300` over `--text-muted` for the two text roles
+  because `#888888` reads too dim at 11px/14px against `--bg-panel`.
+- **One value outside the task's grep spec was changed deliberately:** the
+  CTA's `backgroundColor: "#24354F"`. It contains no `A6C9F9`, so neither
+  the task's search terms nor my own found it as a "scenic-blue" site — but
+  it is the scenic `cta-bg` literal on the *same element* as a named border.
+  Neutralising only the border would have left a blue-filled button and
+  failed the task's own "must not read blue-tinted" check.
+- **Verified on TEST via CDP**, two ways. (a) Real places, real `Details`
+  clicks: scenic `Juan Matias Sanchez Adobe` — the important negative case,
+  since a scenic place is the one that previously looked "correct" — plus
+  `Marukai Market` (food) and `Mt. Lowe Trail Camp` (camping). Measured
+  `--type-300` / `--border-subtle` / `--border-strong` / `--bg-card` /
+  `--text-muted` exactly where expected, zero blue-tinted values by an
+  `b > r+12 && b > g+12` test. (b) **Invariance run** — same synthetic
+  place dispatched twice, only `category` differing, with the title as a
+  built-in positive control: title changed `rgb(166,201,249)` →
+  `rgb(243,134,102)` (so the variable demonstrably took effect) while all
+  four sites stayed byte-identical. Without that control the "identical"
+  result would have been vacuous.
+- **Real places didn't cover the tag pill.** Only one place I opened carried
+  tags (`federal_land` on the scenic one); the food and camping places had
+  none, so the pill's cross-category invariance rests on the synthetic run,
+  not on two real places. Stated because it is the weakest leg of the
+  evidence.
+- **Two consequences flagged, not decided by me:** the CTA now reads
+  *secondary* against the saturated `--button-primary` DIRECTIONS button
+  above it (a hierarchy change, not just a recolour), and "IF YOU STOP HERE"
+  is now the only section label in the file that isn't `--amber-dark` — the
+  shared `Section` component uses amber for byte-identical typography. Both
+  are argued in the ADR with the one-line change if Adam wants them the
+  other way.
+- **Also learned:** the blue Website value read like a hyperlink but
+  `LogisticsCell` renders it in a plain `<span>` — never clickable. The
+  neutral is more honest; `--link` exists if it should become real.
+
 ## 2026-08-31 (latest) — Slide-up category badge + title colour (map-detail-overlay)
 
 - **The bug, exactly:** `map-detail-overlay.tsx` rendered the place title as an

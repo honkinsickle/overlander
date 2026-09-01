@@ -326,9 +326,9 @@ function TrappersDetailPanel({
                     fontFamily: "var(--ff-sans)",
                     fontSize: 11,
                     lineHeight: 1,
-                    color: "#A6C9F9",
-                    backgroundColor: "rgba(166,201,249,0.12)",
-                    border: "1px solid rgba(166,201,249,0.32)",
+                    color: "var(--type-300)",
+                    backgroundColor: "var(--border-subtle)",
+                    border: "1px solid var(--border-strong)",
                   }}
                 >
                   {label}
@@ -525,7 +525,7 @@ function TrappersDetailPanel({
                 fontSize: 14,
                 lineHeight: "14px",
                 letterSpacing: "0.14em",
-                color: "#A6C9F9",
+                color: "var(--type-300)",
               }}
             >
               If you stop here
@@ -689,8 +689,8 @@ function TrappersDetailPanel({
                 onClick={onToggleAdded}
                 className="flex items-center justify-center h-10 rounded-sm px-6"
                 style={{
-                  backgroundColor: "#24354F",
-                  border: "1px solid #A6C9F9",
+                  backgroundColor: "var(--bg-card)",
+                  border: "1px solid var(--border-strong)",
                   cursor: "pointer",
                 }}
               >
@@ -807,7 +807,7 @@ function TrappersDetailPanel({
                         <LogisticsCell
                           label="Website"
                           value={logistics.website}
-                          valueColor="#A6C9F9"
+                          valueColor="var(--text-muted)"
                         />
                       )}
                     </div>
