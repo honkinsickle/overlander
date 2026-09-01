@@ -12,6 +12,65 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 — recompute_master_place() regression audit: it's five behaviours, not one; the requested fix is blocked on a design call
+
+- **Task was "restore the clear branch + add an exception for the PR #327
+  backfill rows". Neither half survived investigation intact.** Nothing was
+  applied. Full audit:
+  `docs/measurements/2026-09-01-recompute-master-place-regression-audit.md`.
+- **Got real SQL access to TEST for the first time** — `supabase link
+  --project-ref znldzjdatkogdktymtvi` + `supabase db query --linked` (Management
+  API). Prior sessions reasoned from migration files because every script goes
+  through PostgREST. This is the tool that should have been reached for on
+  2026-08-31; the whole under-scoped regression report came from not having it.
+  **Only SELECTs issued.** CLI now linked to TEST (gitignored), not PROD.
+- **`pg_get_functiondef` live from TEST matches `20260831100000` exactly** — no
+  out-of-ledger drift; the file is the deployed truth. Good news for the ledger,
+  bad news for the function.
+- **The regression is five behaviours across seven code sites, not one.**
+  `20260831100000_operational_status.sql`'s body is **byte-for-byte the
+  2026-05-27 original** plus exactly two `operational_status` lines — proven by
+  diffing the two migration files with comments stripped, which yields only
+  those two hunks. Someone copied the oldest definition, so one `create or
+  replace` reverted three months of fixes: both clear-branches (Steps 3 and 5),
+  both geometry tie-break determinism clauses (Steps 4 and 5, from the migration
+  literally named `resolve_field_determinism`), `is_searchable` derivation,
+  Step 6.5 `mvum_corridor` entirely, and Step 7 containment entirely.
+  `resolve_field()` itself is untouched.
+- **Blast radius on TEST: 2 rows.** Only 2 master_places have
+  `last_resolved_at >= 2026-08-31`, and both are this thread's own sentinel
+  probes — the function has barely run since. 0 `land_status` rows are wrongly
+  searchable. Landmine, not fire: the next `materialize` changes that.
+- **Step 2 of the task cannot be built as specified — stopped, per its own stop
+  clause.** It said to identify backfill rows "via `description_source =
+  'source'` … check how PR #327 marked them". `description_source` is a derived
+  `CASE` in a view and an RPC, **not a column**, so it is invisible inside
+  `recompute_master_place()`; and PR #327 marked those rows with **nothing**,
+  deliberately (attribution is rebuilt wholesale, so any marker there is
+  transient — measured and reported at the time). "Has a generated_content row"
+  isn't sufficient either: **3,790** dual rows have both a resolvable source
+  description and a generated row, and exempting on that predicate re-strands
+  exactly what `20260819180000` existed to clear.
+- **What IS clean, measured:** a naive clear-branch restore would wipe
+  **6,541** rows — all with a generated row, all `llm`, all with `description`
+  exactly equal to `generated_text`, and **0** rows without a generated row. No
+  collateral damage anywhere in the corpus. So text-equality is a *perfect*
+  discriminator today (0 false positives in the clear branch's domain) — but
+  it's content-keyed, so it fails toward data loss if the text is ever
+  regenerated. Three options written up with a recommendation; **Adam's call.**
+- **Separate latent bug found: `resolve_field()` treats `''` as a value.** A
+  source whose `normalized_payload.description` is an empty JSON string returns
+  `{"value": "", …}`, which passes Step 3's `is not null and != 'null'::jsonb`
+  guard, so `''` gets written to the column. That is where the corpus's
+  empty-string descriptions come from — **108** today, **115** before PR #327
+  overwrote 7 of them (arithmetic closes). Those same 7 are the gap between
+  PR #327's 6,548 written rows and the 6,541 wipe set, and they are the 7 with a
+  stale `attribution.description` — all one phenomenon. Their generated text is
+  unstable regardless of the clear branch, via the `if` path.
+- **Nothing applied, so none of the task's four required verifications were
+  run** — they all need the corrected function in place. Said so rather than
+  reporting them green.
+
 ## 2026-08-31 (later) — generated-content copy-in: llm half backfilled on TEST, template half held, a regression found underneath it
 
 - **Ran "Fix 1 (copy-in)" for Population A's LLM half on TEST.** New script

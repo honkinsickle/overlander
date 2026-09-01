@@ -1,18 +1,48 @@
 # Backlog — open work
 
-## `recompute_master_place()` clear-bug fix was REGRESSED by the operational_status migration — measured on TEST, `[UNVERIFIED]` on PROD (2026-08-31)
+## `recompute_master_place()` was REGRESSED to its 2026-05-27 original by the operational_status migration — FIVE behaviours lost, not one (2026-08-31, scope corrected 2026-09-01)
 
-`20260819180000_recompute_master_place_clear_bug_fix.sql` added an explicit
-`set <field> = null` for each of the 10 clearable precedence-resolved columns
-(`description`, `amenities`, `hours`, `contact`, `access`, `services`,
-`capacity`, `seasonality`, `cell_signal`, `geometry_polygon`) when
-`resolve_field()` returns no candidate, so a stale value isn't stranded when a
-field's last active source goes away.
+> **Scope correction 2026-09-01.** The version of this entry written on
+> 2026-08-31 described this as a single clear-branch regression. That was
+> derived from reading two migration files. With live SQL access to TEST
+> (`supabase db query --linked`) the real scope is **five distinct behaviours
+> across seven code sites**. Full audit, with the live-vs-file diff:
+> `docs/measurements/2026-09-01-recompute-master-place-regression-audit.md`.
 
-`20260831100000_operational_status.sql` (PR #321) is a `create or replace` of
-the same function written from the **pre-fix** body plus `operational_status`.
-It has no `elsif v_field = any(v_clearable_fields)` branch and no
-`v_clearable_fields` declaration at all.
+`20260831100000_operational_status.sql`'s function body is **byte-for-byte the
+2026-05-27 original** (`20260527130000_phase3a_recompute_functions.sql`) plus
+exactly two `operational_status` array lines — confirmed by diffing the two
+files with comments stripped. It was authored by copying the oldest definition,
+so one `create or replace` silently reverted three months of fixes.
+
+| Lost | Site | Added by |
+|---|---|---|
+| Clear-branch for the 9 nullable resolved fields | Step 3 | `20260819180000` |
+| Clear-branch for `geometry_polygon` | Step 5 | `20260819180000` |
+| Deterministic tie-break on geometry selection | Step 4 | `20260601010000` |
+| Deterministic tie-break on geometry_polygon selection | Step 5 | `20260601010000` |
+| `is_searchable = (primary_category is distinct from 'land_status')` | Step 6 | `20260602000000` |
+| `mvum_corridor` — Step 6.5 entirely | Step 6.5 | `20260603010000` |
+| Containment / `place_relationships` rewrite — Step 7 entirely | Step 7 | `20260601040000` |
+
+`operational_status` resolution — the migration's actual purpose — is correct
+and must be preserved by any fix.
+
+**Blast radius on TEST is currently 2 rows** (`last_resolved_at >= 2026-08-31`,
+both this audit's own sentinel probes), and **0** `land_status` rows are
+wrongly `is_searchable`. It is a landmine, not a fire — the next `materialize`
+run recomputes through the broken function. `resolve_field()` itself is intact.
+Helper objects survive (`mvum_roads` 308 rows, `place_relationships` 110,521
+`contained_in` edges), so a restore works as-is.
+
+**PROD `[UNVERIFIED]`** — not queried. STATE §2026-08-31 records #321 applied to
+both environments and a subsequent PROD USFS ingestion producing 2,629 new
+master_places; whether those recomputed through the regressed function is an
+inference.
+
+**Confirmed at source level 2026-09-01:** `pg_get_functiondef` pulled live from
+TEST matches `20260831100000` exactly — no out-of-ledger drift, the file is the
+deployed truth.
 
 **TEST — measured 2026-08-31, with a positive control.** A sentinel written
 directly into `master_place.description` on a row with no source-resolved
@@ -30,7 +60,31 @@ recording that #321's migrations were applied to both environments — which, in
 a repo with a documented file-vs-DB drift history, is inference, not
 measurement. **First step on this item: confirm PROD**, via
 `pg_get_functiondef('public.recompute_master_place(uuid)')` or the same
-sentinel probe. Both need sign-off.
+sentinel probe. Both need sign-off. (Now cheap to do: `supabase db query
+--linked` against the PROD ref is a pure `SELECT` — it needs authorization, not
+effort.)
+
+### Blocking decision before this can be fixed
+
+Restoring the clear branch naively wipes **6,541** rows — precisely PR #327's
+backfill, and **nothing else** (measured: 0 collateral). So the fix needs an
+exception, and the mechanism the fix task assumed (`description_source` +
+"how PR #327 marked them") **does not exist** — `description_source` is a
+derived `CASE` in a view/RPC, not a column, and PR #327 wrote no marker by
+design. Three options are written up with measurements and a recommendation in
+`docs/measurements/2026-09-01-recompute-master-place-regression-audit.md`
+§"Three ways to build the exception". **Needs Adam's call before any migration
+is written.**
+
+### Separate latent bug found in the same audit: `resolve_field()` treats `''` as a value
+
+`resolve_field` returns `{"value": "", "source": …}` when a source's
+`normalized_payload.description` is an empty JSON string. That is neither SQL
+`NULL` nor `'null'::jsonb`, so Step 3's guard passes and `''` is written into
+the column. **108 rows currently hold `description = ''`** (115 before PR #327
+overwrote 7 of them). Those 7 also mean PR #327's text on them is unstable
+independent of the clear branch — the `if` path overwrites it with `''` on the
+next recompute. Affects every text field, not just `description`.
 
 Two consequences, opposite in sign:
 
