@@ -18,6 +18,43 @@ Two outcomes, one of which was not in the task's scope:
 Every figure below was computed in this session against TEST. Where something
 is inferred rather than measured it says so.
 
+## Corrections from a second self-audit pass
+
+Re-checked before Adam read this. Three claims were asserted ahead of the
+measurement that would support them; one was genuinely overstated; one is a
+judgment call worth naming.
+
+1. **"`pg_get_functiondef` matches `20260831100000` exactly" — imprecise, now
+   diffed.** It cannot match exactly: Postgres normalises the wrapper
+   (`CREATE OR REPLACE FUNCTION`, keyword case, `volatile` omitted as the
+   default, `$$` → `$function$`). Diffed properly: **the function body is
+   identical**, and the only deltas are those wrapper normalisations. The
+   conclusion — no out-of-ledger drift — stands, now on evidence.
+2. **"Has a generated_content row is insufficient — 3,790 dual rows" —
+   overstated.** Measured: within the clear branch's actual domain, the
+   "has a generated row" predicate and the "exact text equality" predicate
+   exempt **the same 6,541 rows**. They are **identical today**. The 3,790
+   dual rows are *prospective* exposure — they only become wrongly-exempted if
+   their source later goes away and the clear branch starts firing on them.
+   That is a real difference between the two predicates, but it is a future
+   one, and the original phrasing implied a present mis-exemption that does
+   not exist.
+3. **"This is where the corpus's empty-string descriptions come from" — was an
+   inference from 7 rows, now measured at population level.** All **108** rows
+   with `description = ''` have a source whose `normalized_payload.description`
+   resolves to `""`; **0** have no resolvable source. 108/108, not extrapolated.
+4. **"Both recomputed rows are this audit's own sentinel probes" — asserted,
+   now measured.** The two ids are `000b3d43…` (Swelter Shelter Trailhead) and
+   `0007a5cb…` (Ochoco State Scenic Viewpoint) — exactly the two probe rows.
+5. **The decision to stop is a judgment call, not a clear mandate — see
+   §"Was stopping right?" below.**
+
+The "byte-for-byte the 2026-05-27 original" claim was re-checked **without**
+stripping comments and blank lines, and it holds — the un-stripped diff still
+yields only the two `operational_status` hunks. One wording fix: those are two
+*hunks*, not two lines (the second reformats a one-line array declaration into
+four).
+
 ## How this was measured
 
 Previous sessions had no SQL access to TEST and reasoned from migration files.
@@ -66,11 +103,21 @@ lines stripped, yields *only* those two hunks:
 >   ];
 ```
 
-So it was authored by copying the **oldest** definition and adding two lines —
-silently reverting three months of accumulated fixes in one `create or
-replace`. The live TEST body confirms this landed: `pg_get_functiondef` matches
-`20260831100000` exactly, so there is **no** out-of-ledger drift on TEST; the
-file is the deployed truth.
+(That diff was re-run **without** stripping comments or blank lines and yields
+the same two hunks — so "byte-for-byte the original" is literal, not a
+comments-normalised approximation.)
+
+So it was authored by copying the **oldest** definition and adding
+`operational_status` to two arrays — silently reverting three months of
+accumulated fixes in one `create or replace`.
+
+**The live TEST body confirms this landed.** Diffing `pg_get_functiondef`
+against the migration file: the **function body is identical**, and the only
+differences are Postgres's own wrapper normalisation (`CREATE OR REPLACE
+FUNCTION`, keyword case, `volatile` dropped as the default, `$$` rendered as
+`$function$`). So there is **no out-of-ledger drift on TEST** — the file is the
+deployed truth. (An earlier draft said the live definition "matches exactly",
+which it cannot; `pg_get_functiondef` always reformats the wrapper.)
 
 ### What was lost — 5 behaviours, 7 code sites
 
@@ -105,7 +152,9 @@ Helper objects all still exist, so a restored version would work as-is:
 | `mvum_corridor is true` | 12 |
 
 **The function has barely run since the regression landed** — the 2 recomputed
-rows are this audit's own sentinel probes from the PR #327 self-audit. So none
+rows are, confirmed by id, this thread's own sentinel probes: `000b3d43…`
+(Swelter Shelter Trailhead) and `0007a5cb…` (Ochoco State Scenic Viewpoint).
+(An earlier draft asserted this before querying the ids.) So none
 of losses 3–7 has done measurable damage on TEST *yet*. It is a landmine, not
 a fire: the next `materialize` run recomputes rows through the broken function,
 and every land-status row it touches would silently become searchable.
@@ -138,10 +187,15 @@ The task says to identify backfill-written descriptions "via
    rebuilds `attribution` wholesale from `source_record`, so any marker written
    there is dropped on the next recompute.
 
-Nor is "has a `master_place_generated_content` row" sufficient on its own —
-**3,790 rows** have both a source-resolvable description *and* a generated row
-("dual" rows). Exempting on that predicate would re-strand exactly the stale
-values `20260819180000` existed to clear.
+A fourth candidate — "has a `master_place_generated_content` row" — needs care,
+and an earlier draft of this doc overstated the case against it. **Measured:
+within the clear branch's domain it exempts exactly the same 6,541 rows as
+exact text-equality. The two predicates are identical today.** The difference
+is prospective: **3,790** rows have both a source-resolvable description *and*
+a generated row ("dual" rows), and if one of those loses its source, the clear
+branch starts firing on it — at which point "has a generated row" would
+re-strand the stale source value that `20260819180000` existed to clear, while
+text-equality would not. Real, but a future difference, not a present one.
 
 Per the task's instruction — *"If you find the description-backfill rows aren't
 cleanly distinguishable … stop and report that back rather than guessing at an
@@ -189,9 +243,12 @@ and writes `''` into the column.
 
 Consequences:
 
-- **This is where the corpus's empty-string descriptions come from.** 108 rows
-  currently hold `description = ''`; pre-backfill it was 115, and PR #327
-  overwrote exactly 7 of them — the arithmetic closes.
+- **This is where the corpus's empty-string descriptions come from — measured
+  at population level, not extrapolated from the 7.** All **108** rows
+  currently holding `description = ''` have a source that resolves to `""`;
+  **0** of them have no resolvable source. Pre-backfill it was 115, and PR #327
+  overwrote exactly 7 — 108 + 7 = 115 closes independently of how 115 was
+  originally derived.
 - **Those 7 rows lose their generated text on the next recompute regardless of
   the clear branch**, via the `if` path. So the backfill's true exposure to any
   recompute is all 6,548 rows, through two different code paths.
@@ -288,6 +345,54 @@ Whichever is chosen, the migration should restore all seven sites in one pass
 and re-verify `operational_status` end-to-end, since that is the one thing
 `20260831100000` got right and must not be lost in the correction.
 
+## Was stopping right? — the honest version
+
+I presented the stop as mandated. It is better described as a **judgment call
+that could reasonably have gone the other way**, and the reader should have
+that plainly.
+
+The stop clause reads: *"If you find the description-backfill rows aren't
+cleanly distinguishable from other 'source'-attributed rows (i.e. the exception
+in step 2 can't be built precisely as described), stop and report that back
+rather than guessing at an approximation."*
+
+- **The letter supports stopping.** The parenthetical binds the condition to
+  "as described", and the mechanism described — `description_source` plus
+  whatever PR #327 used to mark the rows — genuinely does not exist.
+- **The spirit arguably does not.** The stated worry is guessing at an
+  approximation. I did not have to guess: exact text-equality against
+  `generated_text` is a *precise* predicate, and it is measurably exact today
+  (6,541/6,541, zero collateral anywhere in the corpus). On that reading the
+  antecedent is false, and the right move was to build the fix on the exact
+  predicate, verify it, and flag the mechanism substitution loudly.
+
+I went with the letter. The tie-breakers were that the discovery of four
+*additional* regressions changes the shape of the whole migration, that
+`recompute_master_place()` is documented in this repo as "the sole writer of
+`master_place` — must not be lost", and that the exception's durability
+(content-keyed vs provenance-keyed) is a genuine design choice with
+data-integrity consequences. But those are reasons to *ask*, and asking cost a
+round trip that a reader who wanted the letter-of-the-spec fix would not have
+wanted to pay.
+
+**If the preferred reading is the second one, the work is straightforward from
+here** — Option 1 or 2 below, applied to TEST, with all four required
+verifications run. No further investigation is needed.
+
+### A smaller thing I chose not to do
+
+Losses 3–7 (tie-break determinism ×2, `is_searchable`, `mvum_corridor`,
+containment) have **no interaction whatsoever** with the description question.
+They are pure restorations of previously-reviewed, previously-shipped code, and
+they are broken right now. I could have shipped those alone and left the clear
+branch out.
+
+I didn't, because a `recompute_master_place()` that is *four-fifths* restored
+is its own trap — the next reader sees a recent migration named like a fix and
+assumes the function is whole. But that is a defensible call in the other
+direction too, and it is one flag away if you want the uncontroversial part
+landed now.
+
 ## Verification NOT performed, and why
 
 The task's verification list (sentinel survives; a non-exempt row still gets
@@ -302,8 +407,18 @@ here: the live function body contains no clear branch, so a direct
 
 ## State left behind
 
-- **No schema change, no migration file, no data change.** Only `SELECT`s.
-- The Supabase CLI is now **linked to TEST**. `supabase/.temp/` is gitignored.
+- **No schema change, no migration file, no data change.** Only `SELECT`s
+  (`resolve_field` is `STABLE`, so the measurement queries that call it write
+  nothing).
+- **The Supabase CLI is now linked to TEST — an unrequested state change worth
+  naming.** The task didn't ask me to link; I did it to get SQL access. The
+  workspace was previously *unlinked*. Consequence to be aware of: a bare
+  `npm run -w data db:push-verify` (no `--test`) targets the **currently
+  linked** project, so it would now hit TEST where before it would have failed
+  for lack of a link. That is the safer direction, and it is the steady state
+  `db:push-verify -- --test` expects — but it is a changed default on your
+  machine, not a no-op. `supabase/.temp/` is gitignored, so nothing about it is
+  in the diff. `supabase unlink` reverts it.
 - Two rows (`000b3d43…`, `0007a5cb…`) carry a `last_resolved_at` of 2026-09-01
   from the PR #327 self-audit's sentinel probes. Recompute is idempotent and
   both descriptions were restored; only the timestamp moved.

@@ -11,8 +11,9 @@
 
 `20260831100000_operational_status.sql`'s function body is **byte-for-byte the
 2026-05-27 original** (`20260527130000_phase3a_recompute_functions.sql`) plus
-exactly two `operational_status` array lines — confirmed by diffing the two
-files with comments stripped. It was authored by copying the oldest definition,
+exactly two hunks, both adding `operational_status` to an array — confirmed by
+diffing the two files **without** stripping comments or blanks. It was authored
+by copying the oldest definition,
 so one `create or replace` silently reverted three months of fixes.
 
 | Lost | Site | Added by |
@@ -41,8 +42,9 @@ master_places; whether those recomputed through the regressed function is an
 inference.
 
 **Confirmed at source level 2026-09-01:** `pg_get_functiondef` pulled live from
-TEST matches `20260831100000` exactly — no out-of-ledger drift, the file is the
-deployed truth.
+TEST and diffed against `20260831100000` — the function **body is identical**
+(only Postgres's wrapper normalisation differs), so there is no out-of-ledger
+drift and the file is the deployed truth.
 
 **TEST — measured 2026-08-31, with a positive control.** A sentinel written
 directly into `master_place.description` on a row with no source-resolved
@@ -81,8 +83,9 @@ is written.**
 `resolve_field` returns `{"value": "", "source": …}` when a source's
 `normalized_payload.description` is an empty JSON string. That is neither SQL
 `NULL` nor `'null'::jsonb`, so Step 3's guard passes and `''` is written into
-the column. **108 rows currently hold `description = ''`** (115 before PR #327
-overwrote 7 of them). Those 7 also mean PR #327's text on them is unstable
+the column. **108 rows currently hold `description = ''`**, and measured at population
+level **108/108** have a source resolving to `""` with **0** having none (115
+before PR #327 overwrote 7). Those 7 also mean PR #327's text on them is unstable
 independent of the clear branch — the `if` path overwrites it with `''` on the
 next recompute. Affects every text field, not just `description`.
 

@@ -24,14 +24,18 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   through PostgREST. This is the tool that should have been reached for on
   2026-08-31; the whole under-scoped regression report came from not having it.
   **Only SELECTs issued.** CLI now linked to TEST (gitignored), not PROD.
-- **`pg_get_functiondef` live from TEST matches `20260831100000` exactly** — no
-  out-of-ledger drift; the file is the deployed truth. Good news for the ledger,
-  bad news for the function.
+- **`pg_get_functiondef` live from TEST, diffed against `20260831100000`: the
+  function body is identical**, only Postgres's wrapper normalisation differs —
+  no out-of-ledger drift; the file is the deployed truth. Good news for the
+  ledger, bad news for the function. (First draft said "matches exactly", which
+  `pg_get_functiondef` never can — it always reformats the wrapper.)
 - **The regression is five behaviours across seven code sites, not one.**
   `20260831100000_operational_status.sql`'s body is **byte-for-byte the
-  2026-05-27 original** plus exactly two `operational_status` lines — proven by
-  diffing the two migration files with comments stripped, which yields only
-  those two hunks. Someone copied the oldest definition, so one `create or
+  2026-05-27 original** plus exactly two hunks, both adding
+  `operational_status` to an array — proven by diffing the two migration files
+  **without** stripping comments or blanks, which still yields only those two
+  hunks. ("Five behaviours across seven sites" counts executable sites, not the
+  `v_clearable_fields` declaration.) Someone copied the oldest definition, so one `create or
   replace` reverted three months of fixes: both clear-branches (Steps 3 and 5),
   both geometry tie-break determinism clauses (Steps 4 and 5, from the migration
   literally named `resolve_field_determinism`), `is_searchable` derivation,
@@ -48,9 +52,11 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   `recompute_master_place()`; and PR #327 marked those rows with **nothing**,
   deliberately (attribution is rebuilt wholesale, so any marker there is
   transient — measured and reported at the time). "Has a generated_content row"
-  isn't sufficient either: **3,790** dual rows have both a resolvable source
-  description and a generated row, and exempting on that predicate re-strands
-  exactly what `20260819180000` existed to clear.
+  differs only *prospectively*: measured, it exempts the **same 6,541 rows** as
+  exact text-equality today. The **3,790** dual rows (resolvable source
+  description AND a generated row) only become wrongly-exempted once their
+  source goes away and the clear branch starts firing on them. The first draft
+  of this entry implied a present mis-exemption; there isn't one.
 - **What IS clean, measured:** a naive clear-branch restore would wipe
   **6,541** rows — all with a generated row, all `llm`, all with `description`
   exactly equal to `generated_text`, and **0** rows without a generated row. No
@@ -58,6 +64,19 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   discriminator today (0 false positives in the clear branch's domain) — but
   it's content-keyed, so it fails toward data loss if the text is ever
   regenerated. Three options written up with a recommendation; **Adam's call.**
+- **Second-pass self-audit: stopping was a judgment call, not a mandate, and I
+  first reported it as the latter.** The stop clause's *letter* fires (the named
+  mechanism doesn't exist); its *spirit* — "rather than guessing at an
+  approximation" — arguably doesn't, because text-equality is exact, not an
+  approximation. Went with the letter because four extra regressions changed the
+  migration's shape and the exception's durability is a real design choice. If
+  the other reading is preferred, the fix is straightforward from here.
+- Also corrected in the second pass: "pg_get_functiondef matches exactly" (it
+  never can — wrapper is normalised; the *body* is identical, now diffed); the
+  empty-string origin claim (asserted from 7 rows, now measured 108/108); and
+  the 2 recomputed rows (asserted, now confirmed by id). Linking the Supabase
+  CLI to TEST was an unrequested state change — a bare `db:push-verify` now
+  targets TEST where it previously failed for lack of a link.
 - **Separate latent bug found: `resolve_field()` treats `''` as a value.** A
   source whose `normalized_payload.description` is an empty JSON string returns
   `{"value": "", …}`, which passes Step 3's `is not null and != 'null'::jsonb`
