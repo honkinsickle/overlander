@@ -259,6 +259,13 @@ Surfaced while fixing the slide-up's category badge + title colour.
   simulator section label**, the **"ADD TO DAY N" CTA**, and the
   **Website value** in the logistics row. The count of four was right; two
   of the names were not.
+  - **Amended:** three of the four stayed neutral, but the **"IF YOU STOP
+    HERE"** label went back to `var(--amber-dark)` in a follow-up, matching
+    the shared `Section` component — a section heading is a repeated
+    element with one canonical treatment, so the neutral rule didn't apply
+    to it. Still no scenic blue anywhere, so this item stays closed. See the
+    Amendment in
+    `docs/decisions/2026-09-01-slideup-non-category-chrome-is-neutral.md`.
   - **Still open, deliberately:** the file's other raw-hex values — warm
     greys (`#A89C90`, `#8A8070`, `#817A6D`), greens (`#98AC64`,
     `#6A8A6A`), panel/surface greys (`#1A1A1A`, `#1E1E1E`, `#232323`,

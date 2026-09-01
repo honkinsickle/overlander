@@ -37,7 +37,7 @@ the slide-up is neutral, from the Type ramp (§1.1) and the alpha overlays
 | Tag pill text | `#A6C9F9` | `var(--type-300)` |
 | Tag pill fill | `rgba(166,201,249,0.12)` | `var(--border-subtle)` |
 | Tag pill border | `rgba(166,201,249,0.32)` | `var(--border-strong)` |
-| "IF YOU STOP HERE" label | `#A6C9F9` | `var(--type-300)` |
+| "IF YOU STOP HERE" label | `#A6C9F9` | ~~`var(--type-300)`~~ → **`var(--amber-dark)`**, see Amendment |
 | "ADD TO DAY N" fill | `#24354F` | `var(--bg-card)` |
 | "ADD TO DAY N" border | `#A6C9F9` | `var(--border-strong)` |
 | Website value | `#A6C9F9` | `var(--text-muted)` |
@@ -64,15 +64,14 @@ a blue-filled button, so it was included.
   If Add-to-day should be co-primary, the fix is to point it at
   `--button-primary` / `--button-primary-border` rather than reintroduce a
   literal.
-- **"IF YOU STOP HERE" is now the only section label in the file that is not
-  amber.** The shared `Section` component renders its labels
-  `var(--amber-dark)`, and this label has byte-identical typography to it
-  (`--ff-display`, 14px, `letterSpacing: 0.14em`, uppercase) while being
-  hand-rolled inside the simulator card. Neutral follows this decision's
-  rule; `var(--amber-dark)` would follow the file's own convention. The
-  rule won because DESIGN.md §6 scopes amber to "text/data/active accent"
-  and this is a static heading. Worth revisiting if the simulator card is
-  ever folded into `Section`.
+- **~~"IF YOU STOP HERE" is now the only section label in the file that is
+  not amber.~~ SUPERSEDED — see the amendment below.** The shared `Section`
+  component renders its labels `var(--amber-dark)`, and this label has
+  byte-identical typography to it (`--ff-display`, 14px,
+  `letterSpacing: 0.14em`, uppercase) while being hand-rolled inside the
+  simulator card. Neutral followed this decision's rule; `var(--amber-dark)`
+  followed the file's own convention. The rule won here because DESIGN.md §6
+  scopes amber to "text/data/active accent" and this is a static heading.
 - **The Website value no longer signals affordance.** It was blue, which
   read as a link — but `LogisticsCell` renders it in a plain `<span>`, so it
   was never clickable. Neutral is now honest about that. If it should become
@@ -80,3 +79,46 @@ a blue-filled button, so it was included.
 - Category identity in the slide-up now rests entirely on two elements. That
   is less redundant than before, and a place whose category is wrong is
   correspondingly less obvious at a glance.
+
+---
+
+## Amendment — 2026-09-01, "IF YOU STOP HERE" reverts to amber
+
+**Status of this ADR: Accepted, with the section-label consequence reversed.**
+
+The consequence flagged above was decided the other way. The "IF YOU STOP
+HERE" label is `var(--amber-dark)` again, matching the shared `Section`
+component. Nothing else in this ADR changes — the tag pills, the
+"ADD TO DAY N" CTA and the Website value all stay neutral exactly as
+recorded above.
+
+**Why the rule lost here.** The neutral rule's subject is *chrome that was
+wrongly carrying a category colour*. A section heading is not that: it is
+structural, it is repeated across the panel, and the file already has one
+canonical treatment for it. DESIGN.md §6's "amber is a text/data/active
+accent" reading is what put it in scope originally, but §6's stronger and
+more specific rule is the drift-killer immediately below it — one shared
+spec per repeated element, no per-screen variants. A single hand-rolled
+heading rendering differently from the five `<Section>` headings around it
+is exactly the drift that rule exists to prevent.
+
+**Scope of the reversal.** Colour only. The label's typography was already
+byte-identical to `Section`'s — same `uppercase` class, `--ff-display`,
+`14`, `"14px"`, `"0.14em"` — so no size/weight/tracking hand-matching was
+needed, and none was done. Measured after the change: the label's full
+computed signature (colour, family, size, line-height, letter-spacing,
+weight, text-transform) is identical to every `<Section>` label rendered
+beside it.
+
+**Why it was not refactored to use `<Section>`.** It would have been the
+tidier fix, but it is not the low-risk one. The label lives inside the
+simulator card — a `flex flex-col gap-2` div with its own background and an
+`isAdded` opacity/grayscale transition — alongside several sibling children
+including the bottom `borderTop` divider row that carries the CTA. Wrapping
+those children in `Section`'s `<section className="flex flex-col gap-2
+self-stretch">` would collapse the card's own gap distribution onto a new
+nesting level and re-parent that divider row, for zero visual gain given
+the typography already matches. It would also conflate two different
+structural roles: `<Section>` is used for top-level panel sections
+separated by `<Divider>`, whereas this is a heading *inside* a card. Left
+as a targeted colour change.
