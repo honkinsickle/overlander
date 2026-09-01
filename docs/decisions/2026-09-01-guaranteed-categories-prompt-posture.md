@@ -18,6 +18,13 @@ that `generate.ts` is the only trip-generation prompt path — `SYSTEM_PROMPT`
 plus `buildFactsMessage`, nothing else. Both surfaces had zero mentions of the
 guarantee.
 
+`interpret.ts` and `edit.ts` are the other two model-facing flows. They are out
+of scope here — this decision covers generation — but note they **do** take
+`GenerationInput` and **do** build prompt text from it
+(`buildInterpretContext(input, days)` emits the trip window, anchors and days),
+and neither includes the guarantee (**0** occurrences in each). Whether they
+should is filed in `docs/BACKLOG.md`, unexamined.
+
 So whatever category coverage generated trips showed was the backfill inserting
 places, never the model choosing them.
 

@@ -1,5 +1,29 @@
 # Backlog — open work
 
+## Do the NL-edit / interpret flows need the guarantee too? (2026-09-01, unexamined)
+
+PR #287 blocker H put `guaranteedCategories` into the **generation** prompt
+(`buildFactsMessage`). It is absent from the other two model-facing flows, and
+whether that is correct was never examined.
+
+Measured: `interpret.ts` and `edit.ts` both take `GenerationInput` and both build
+model-facing prompt text from it — `buildInterpretContext(input, days)` emits the
+trip window, anchors and day list. Neither mentions `guaranteedCategories`
+(**0** occurrences in each).
+
+Arguments both ways, neither tested:
+
+- **Maybe it belongs:** if a user says "add a stop to day 3", the model choosing
+  that stop arguably should know which categories the traveller guaranteed.
+- **Maybe it doesn't:** `buildInterpretContext` is deliberately minimal — it
+  exists to interpret an edit *request* against the trip skeleton, not to pick
+  places. The audit's backfill still runs afterwards either way.
+
+Not in scope for the H fix, which was about generation. Flagged because an
+earlier draft of that PR's report asserted these flows "don't carry
+`GenerationInput`" — that was wrong, and the question it papered over is real.
+
+
 ## `RESOLVED_TO_GUARANTEE` has one mapping, so live-resolved key stops don't count toward guarantee coverage (2026-09-01)
 
 The audit credits a kept stop toward guaranteed-category coverage only if it can
