@@ -12,6 +12,245 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later) — recompute_master_place() restored, description backfill rerouted through source_record, and a deviation of mine caught by its own verification
+
+- **Both threads closed on TEST.** Migrations `20260901000100`–`20260901000500`.
+  ADR: `docs/decisions/2026-09-01-generated-descriptions-as-lowest-precedence-source.md`.
+  Report: `docs/measurements/2026-09-01-recompute-restore-and-description-reroute.md`.
+- **All five regressions restored across all seven sites.** The function was
+  **generated programmatically** from `20260819180000` rather than retyped, then
+  diffed against it so the only deltas are the intended ones, then all seven
+  sites re-verified against the **live** `pg_get_functiondef` after apply.
+  `operational_status` from `20260831100000` kept verbatim.
+- **Self-audit correction: that live verification first ran against the
+  SUPERSEDED function** (right after `20260901000200`, never re-run after
+  `20260901000500` replaced it), and it was substring-based, so my own comment
+  prose inflated an `'operational_status'` occurrence count. Re-run
+  structurally against the deployed definition: `v_clearable_fields` is exactly
+  the nine from `20260819180000`. "Verified" now means verified against what is
+  actually running.
+- **Self-audit: an effect I never measured before publishing.** Recomputing
+  13,942 rows could have NULLed stale `amenities`/`hours`/`contact`/`access`/
+  `capacity` etc. via the restored clear-branch; I had no baseline and did not
+  check. Measured after the fact **with a control** (the first attempt returned
+  zero rows for everything — indistinguishable from a broken query): control
+  counts are real (contact 11,105, access 8,335, amenities 1,877, hours 1,723,
+  capacity 80) and **stale counts are 0 across every field**. Nothing was
+  cleared, and the clear-bug's practical exposure was `description` plus the
+  four structural losses, not the other eight columns.
+- **Self-audit: ER safety verified rather than reasoned about** — 0 of the
+  13,942 synthetic records are unlinked, 0 appear in `place_match`.
+- **The reroute makes the exemption unnecessary rather than solving it.** Two
+  synthetic sources (`generated_llm` @20, `generated_template` @21, below
+  `padus` @10). 13,942 source_records upserted, 13,942 recomputes, 0 failed.
+  **Rows a clear-branch restore would still wipe: 0** (was 6,541). The
+  description survives because `resolve_field()` re-derives it, not because
+  anything exempts it.
+- **113 rows correctly did NOT take generated text** — a real RIDB/NPS record
+  resolves `description` to an empty JSON string and outranks precedence 20/21.
+  That is the right answer and better than PR #327, which overwrote 7 of them.
+- **I made a wrong deviation and my own verification caught it.**
+  `20260901000200` added `operational_status` to `v_clearable_fields` on the
+  reasoning that it is a nullable precedence-resolved column like the other
+  nine. Measured right after apply: **0 source_records carry
+  `operational_status` in `normalized_payload`** (6,324 active usfs rows carry
+  the RAW `props.seasonal_operational_status`; the column's values are all
+  direct writes from `backfill-operational-status.ts`). So `resolve_field`
+  could never re-derive it and every recompute erased it. **One row lost
+  (246→245), restored by re-running the PR #321 backfill (back to 246).**
+  Reverted in `20260901000500`. The lesson: "implement it anyway and flag the
+  concern" still requires verifying the deviation against real data — the
+  reasoning was clean and the data said no. It is also structurally the SAME
+  defect this branch exists to fix, in a different column.
+- **PR #321's operational_status is not actually wired end-to-end for existing
+  data.** Its migration claims the field_precedence pattern, but the normalizer
+  emits `operational_status` for NEW ingests only; nothing backfilled
+  `normalized_payload`. Filed.
+- **Neutrality measured, not assumed:** avg prominence over searchable rows
+  0.8606 before and after; export-view rows 33,047 before and after — because
+  `compute_prominence()` and `source_count` now exclude generated sources.
+  Without that, every affected place would have gained +2.0 prominence
+  (`count(distinct source_id) * 2.0`) and silently reordered the corridor.
+- **ADR 2026-08-21 §2 checked at corridor scale**, not one row: 815 rows
+  returned over LA→Sacramento→Redding at 16 km, **0** template-sourced, 204
+  llm-sourced. `description_source` now reports llm/template truthfully instead
+  of `'source'`. One row reports `'template'` via the legacy branch — it is
+  RIDB-attributed with an empty-string description, pre-existing, same
+  empty-string root cause, not introduced here.
+- **`contained_in` dropped 110,519 → 106,335** because Step 7 corrected stale
+  edges on the rows it touched. Sampled (arbitrary `limit`, not randomized):
+  0 of 3,000 rerouted-child edges unsupported by a live `st_covers`, vs **518
+  of 3,000** untouched ones. Containment had not run since the regression; a
+  corpus-wide recompute is worth scheduling.
+- **Apparatus note:** the Management API SQL endpoint 502s on long queries — the
+  first collateral check (an `st_covers` join over 106k edges) died at the
+  gateway. Split into set-based aggregates and bounded samples.
+- **PROD untouched, and the prompt's premise that the regression is "confirmed
+  live on PROD" is still not confirmed by me.** I have never queried PROD.
+
+## 2026-09-01 — recompute_master_place() regression audit: it's five behaviours, not one; the requested fix is blocked on a design call
+
+- **Task was "restore the clear branch + add an exception for the PR #327
+  backfill rows". Neither half survived investigation intact.** Nothing was
+  applied. Full audit:
+  `docs/measurements/2026-09-01-recompute-master-place-regression-audit.md`.
+- **Got real SQL access to TEST for the first time** — `supabase link
+  --project-ref znldzjdatkogdktymtvi` + `supabase db query --linked` (Management
+  API). Prior sessions reasoned from migration files because every script goes
+  through PostgREST. This is the tool that should have been reached for on
+  2026-08-31; the whole under-scoped regression report came from not having it.
+  **Only SELECTs issued.** CLI now linked to TEST (gitignored), not PROD.
+- **`pg_get_functiondef` live from TEST, diffed against `20260831100000`: the
+  function body is identical**, only Postgres's wrapper normalisation differs —
+  no out-of-ledger drift; the file is the deployed truth. Good news for the
+  ledger, bad news for the function. (First draft said "matches exactly", which
+  `pg_get_functiondef` never can — it always reformats the wrapper.)
+- **The regression is five behaviours across seven code sites, not one.**
+  `20260831100000_operational_status.sql`'s body is **byte-for-byte the
+  2026-05-27 original** plus exactly two hunks, both adding
+  `operational_status` to an array — proven by diffing the two migration files
+  **without** stripping comments or blanks, which still yields only those two
+  hunks. ("Five behaviours across seven sites" counts executable sites, not the
+  `v_clearable_fields` declaration.) Someone copied the oldest definition, so one `create or
+  replace` reverted three months of fixes: both clear-branches (Steps 3 and 5),
+  both geometry tie-break determinism clauses (Steps 4 and 5, from the migration
+  literally named `resolve_field_determinism`), `is_searchable` derivation,
+  Step 6.5 `mvum_corridor` entirely, and Step 7 containment entirely.
+  `resolve_field()` itself is untouched.
+- **Blast radius on TEST: 2 rows.** Only 2 master_places have
+  `last_resolved_at >= 2026-08-31`, and both are this thread's own sentinel
+  probes — the function has barely run since. 0 `land_status` rows are wrongly
+  searchable. Landmine, not fire: the next `materialize` changes that.
+- **Step 2 of the task cannot be built as specified — stopped, per its own stop
+  clause.** It said to identify backfill rows "via `description_source =
+  'source'` … check how PR #327 marked them". `description_source` is a derived
+  `CASE` in a view and an RPC, **not a column**, so it is invisible inside
+  `recompute_master_place()`; and PR #327 marked those rows with **nothing**,
+  deliberately (attribution is rebuilt wholesale, so any marker there is
+  transient — measured and reported at the time). "Has a generated_content row"
+  differs only *prospectively*: measured, it exempts the **same 6,541 rows** as
+  exact text-equality today. The **3,790** dual rows (resolvable source
+  description AND a generated row) only become wrongly-exempted once their
+  source goes away and the clear branch starts firing on them. The first draft
+  of this entry implied a present mis-exemption; there isn't one.
+- **What IS clean, measured:** a naive clear-branch restore would wipe
+  **6,541** rows — all with a generated row, all `llm`, all with `description`
+  exactly equal to `generated_text`, and **0** rows without a generated row. No
+  collateral damage anywhere in the corpus. So text-equality is a *perfect*
+  discriminator today (0 false positives in the clear branch's domain) — but
+  it's content-keyed, so it fails toward data loss if the text is ever
+  regenerated. Three options written up with a recommendation; **Adam's call.**
+- **Second-pass self-audit: stopping was a judgment call, not a mandate, and I
+  first reported it as the latter.** The stop clause's *letter* fires (the named
+  mechanism doesn't exist); its *spirit* — "rather than guessing at an
+  approximation" — arguably doesn't, because text-equality is exact, not an
+  approximation. Went with the letter because four extra regressions changed the
+  migration's shape and the exception's durability is a real design choice. If
+  the other reading is preferred, the fix is straightforward from here.
+- Also corrected in the second pass: "pg_get_functiondef matches exactly" (it
+  never can — wrapper is normalised; the *body* is identical, now diffed); the
+  empty-string origin claim (asserted from 7 rows, now measured 108/108); and
+  the 2 recomputed rows (asserted, now confirmed by id). Linking the Supabase
+  CLI to TEST was an unrequested state change — a bare `db:push-verify` now
+  targets TEST where it previously failed for lack of a link.
+- **Separate latent bug found: `resolve_field()` treats `''` as a value.** A
+  source whose `normalized_payload.description` is an empty JSON string returns
+  `{"value": "", …}`, which passes Step 3's `is not null and != 'null'::jsonb`
+  guard, so `''` gets written to the column. That is where the corpus's
+  empty-string descriptions come from — **108** today, **115** before PR #327
+  overwrote 7 of them (arithmetic closes). Those same 7 are the gap between
+  PR #327's 6,548 written rows and the 6,541 wipe set, and they are the 7 with a
+  stale `attribution.description` — all one phenomenon. Their generated text is
+  unstable regardless of the clear branch, via the `if` path.
+- **Nothing applied, so none of the task's four required verifications were
+  run** — they all need the corrected function in place. Said so rather than
+  reporting them green.
+
+## 2026-08-31 (later) — generated-content copy-in: llm half backfilled on TEST, template half held, a regression found underneath it
+
+- **Ran "Fix 1 (copy-in)" for Population A's LLM half on TEST.** New script
+  `data/scripts/backfill-description-from-generated-content.ts` (dry-run default,
+  `--confirm`, `--undo` from a timestamped snapshot, `--prod` asserts the PROD ref).
+  **6,548 rows updated, 0 failed, 6,548/6,548 verified.** Report:
+  `docs/measurements/2026-08-31-generated-content-copyin-backfill.md`.
+- **Population re-measured, not carried over:** 17,725 generated_content
+  description rows → **13,942** in Population A, split **6,548 llm / 7,394
+  template / 0 needs_review**, plus 3,783 "dual" rows skipped (gap-fill only).
+  A = 13,942 matches this morning's scoping doc exactly — no drift.
+- **The scoping split the task didn't anticipate: template rows are excluded from
+  trip-stop candidacy on purpose.** `pois_along_corridor` carries
+  `and not (mp.description is null and has_template)` per ADR 2026-08-21 §2.
+  Copying template text in makes that predicate false. Verified by writing one
+  template row's text, re-querying the RPC, and restoring: **not returned →
+  returned**. The llm control row was returned both before and after (only its
+  description went from null to populated). So the template half is a product
+  decision reversing a merged ADR, not a plumbing fix — **held, `--method all`
+  is the whole delta.** Exactly 7,394 would be newly admitted (all of them also
+  pass the RPC's other gates, so it's an exact figure, not a bound).
+- **Correction, caught in a self-audit before Adam reviewed the PR: I wrote
+  "24 of the 25 Yellow Post rows are llm" in four places. That was a CAPPED
+  SAMPLE reported as a population count** — the probe query carried
+  `.limit(25)`, so 25 was my own cap, not the number of rows. Re-measured
+  uncapped: `canonical_name ilike '%Yellow Post%'` returns **80** rows — 46
+  llm, 11 template, 23 with no generated row at all. So the run fixes 46 of 80
+  there, not nearly all. Exactly the "sampled numbers dressed as totals"
+  failure `CLAUDE.md` names; the tell was that I chose the limit and then
+  quoted the result as a total.
+- **Second self-audit correction: the durability experiment had no positive
+  control.** It wrote a sentinel, called `recompute_master_place()`, and saw
+  the sentinel survive — but neither `description` nor `attribution` changes
+  when the function runs successfully on such a row, so the observation could
+  not distinguish "the clear branch is gone" from "the RPC did nothing". Re-run
+  using `last_resolved_at` (written unconditionally in Step 6) as the control:
+  it moved 2026-08-20T23:12:55Z → 2026-09-01T03:52:37Z while the sentinel
+  survived. Conclusion unchanged, now actually supported.
+- **`attribution` deliberately left alone, after measuring the convention.**
+  Across all 19,803 searchable rows whose description was not NULL (19,688 of them non-empty), `attribution.description`
+  is always a `source_id` and never absent (ridb 5,344 / nps 4,979 / usfs 4,204 /
+  atlas_oddities 2,767 / osm 1,963 / editorial_food 533 / family_destinations 13
+  / **0 missing**). `recompute_master_place()` rebuilds the map wholesale from
+  `source_record`, so there is no existing "generated, not sourced" value and any
+  invented one would be dropped on the next recompute — confirmed directly.
+  Follow-up measurement: **7** of the 6,548 written rows carry a *stale*
+  `attribution.description` (5 ridb, 2 nps) from the clear-bug era; the other
+  6,541 have no key. So the corpus now holds 6,541 rows with a description and
+  no attribution entry, which is new, plus 7 whose entry names the wrong
+  source. An earlier draft said all 6,548 lacked the key — wrong for 7.
+- **Found underneath all of this: the clear-bug fix has been REGRESSED — on
+  TEST measured, on PROD `[UNVERIFIED]`.**
+  `20260831100000_operational_status.sql` (PR #321, yesterday) is a
+  `create or replace` of `recompute_master_place()` built from the **pre-fix**
+  body — it drops the `elsif v_field = any(v_clearable_fields)` branch that
+  `20260819180000` added. TEST is measured (sentinel + `last_resolved_at`
+  positive control, above). **PROD was never queried this session** — that
+  half rests on the migration file plus STATE's record that #321 went to both
+  environments, which in a repo with documented file-vs-DB drift is inference,
+  not measurement. I asserted "TEST and PROD" in bold in four places on that
+  basis; corrected. **That regression is the only reason the copy-in approach
+  is durable at all.**
+  Restoring the clear-bug fix would silently wipe this backfill. The two are
+  mutually exclusive as currently built. Filed in BACKLOG with the shape of a
+  real reconciliation.
+- **Formatting parity checked over the whole population, not a sample:**
+  `stripDescriptionHtml()` changes **0 of 6,548** written strings. 0 tags, 0
+  entities, 0 double-spaces, 0 untrimmed; 182 carry a paragraph newline.
+- **Re-verified through the bake path, not the base table** — queried
+  `pois_along_corridor` (what `fetchCorpusForPolyline` → `mapMasterPlaceRow`
+  calls) for five previously-noisy tiles; all five now return real text with
+  `description_source: source`. Confirms the task's item-7 assumption: **zero
+  web-side code changes needed**, verified both by reading the chain and by the
+  live RPC.
+- **Named, not hidden:** `description_source` flips `'llm'` → `'source'` for these
+  rows in the RPC and in `master_place_search_export`. The `verified` tier is
+  unchanged (both map to "verified"), but the DB-level provenance signal no longer
+  distinguishes them. Typesense was **not** re-synced, so `places_test` still holds
+  the pre-backfill values for these rows.
+- **Apparatus note:** PostgREST `.in()` filters ride in the URL — 500 UUIDs
+  overflowed the 16KB header limit (`UND_ERR_HEADERS_OVERFLOW`) and the error
+  arrives as a bare `fetch failed`, not a PostgREST error. Chunk at 150.
+- **PROD not touched.** Population B and the entity-resolution duplicates
+  (Serrano resolves to 12 `master_place` rows, Fawnskin to 3) were out of scope
+  and stay open.
 ## 2026-09-01 — Slide-up non-category chrome goes neutral
 
 - **Closes the follow-up #328 parked.** Adam's design call: the four
@@ -271,6 +510,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   renders with the diamond icon regardless of what it actually is. Not a
   slide-key bug; a data-vocabulary question. Deliberately left alone per
   the PR #325 prompt.
+
 
 ## 2026-08-31 — Closed-place display filter + operational_status normalization + USFS INFRA PROD ingestion
 
