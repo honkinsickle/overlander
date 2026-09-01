@@ -251,6 +251,61 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - **PROD not touched.** Population B and the entity-resolution duplicates
   (Serrano resolves to 12 `master_place` rows, Fawnskin to 3) were out of scope
   and stay open.
+## 2026-09-01 (later) — "IF YOU STOP HERE" back to amber; #329's conflicts resolved
+
+- **Reverses one consequence I flagged in the #329 ADR, by Adam's call.** The
+  "IF YOU STOP HERE" simulator heading goes from `var(--type-300)` back to
+  `var(--amber-dark)`, matching the shared `Section` component. **Everything
+  else #329 did stands** — tag pills, the "ADD TO DAY N" CTA and the Website
+  value are all still neutral, untouched.
+- **The task's premise had one thing wrong and it changed how I branched:
+  #329 was NOT merged.** On `origin/main` that label was still `#A6C9F9`;
+  the `var(--type-300)` the task referenced existed only on the open branch.
+  So this work is **stacked on `slideup-neutral-tokens`**, not cut from
+  `main` — cutting from `main` would have produced a change that conflicts
+  with #329 and reads as a competing edit of the same line.
+- **Also fixed en route: #329 had merge conflicts** (Adam flagged them
+  mid-task). Cause was benign — `STATE.md` and `LOG.md` are both
+  newest-at-top files and the little-rock/#327 thread prepended its own
+  entries while #329 sat open. **Docs-only; `web/` was untouched by the
+  merge.** Resolved keep-both with main's entries first, which also keeps
+  #329's STATE masthead directly above #328's so its "the masthead below
+  covers PR #328" cross-reference stays true. #329 is `MERGEABLE` again.
+  Side effect worth knowing: `LOG.md` now interleaves two parallel
+  workstreams, so its headings are **not** in strict date order across
+  streams. Each stream's internal order is intact — the most this file's own
+  "prior entries are never edited or reordered" rule allows.
+- **STEP 1 answer:** the label is a standalone hand-rolled `<span>`, not the
+  shared `Section` component — so the change was needed, not redundant. But
+  its typography was **already byte-identical** to `Section`'s label (same
+  `uppercase` class, `--ff-display`, `14`, `"14px"`, `"0.14em"`), so this is
+  colour-only; there was no size/weight/tracking to hand-match, and none was
+  added.
+- **Did not refactor it onto `<Section>`,** per the task's own escape hatch.
+  The label sits inside the simulator card (a `flex flex-col gap-2` div with
+  its own background and an `isAdded` opacity/grayscale transition) beside
+  several siblings including the bottom `borderTop` divider row carrying the
+  CTA. Wrapping those in `Section`'s `<section className="flex flex-col
+  gap-2 self-stretch">` would collapse the card's gap distribution onto a
+  new nesting level and re-parent that divider — real layout risk for zero
+  visual gain, since the typography already matched. It would also conflate
+  two roles: `<Section>` is for top-level panel sections separated by
+  `<Divider>`; this is a heading *inside* a card.
+- **Verified on TEST via CDP, scenic + food.** Compared the label's **full
+  computed signature** — colour, font-family, size, line-height,
+  letter-spacing, weight, text-transform — against every `<Section>` label
+  rendered in the same panel, not just the colour. Identical on both
+  categories, amber resolving `rgb(199,116,41)`. Title stayed category-driven
+  (`rgb(166,201,249)` scenic vs `rgb(243,134,102)` food), confirming nothing
+  category-driven leaked into the label. One frame captures
+  `IF YOU STOP HERE` / `DESCRIPTION` / `LOGISTICS` / `DATA SOURCES` together,
+  all matching.
+- **Coverage caveat:** the two places I opened rendered Description,
+  Logistics and Data Sources but not Community or Amenities — those sections
+  are data-gated and neither place had the data. So the comparison covers
+  three of the five `<Section>` call sites, not all five. All five read the
+  same component, so the untested two cannot differ, but I measured three.
+
 ## 2026-09-01 — Slide-up non-category chrome goes neutral
 
 - **Closes the follow-up #328 parked.** Adam's design call: the four

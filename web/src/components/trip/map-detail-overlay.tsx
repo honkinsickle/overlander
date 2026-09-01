@@ -525,7 +525,10 @@ function TrappersDetailPanel({
                 fontSize: 14,
                 lineHeight: "14px",
                 letterSpacing: "0.14em",
-                color: "var(--type-300)",
+                // Matches the shared `Section` label exactly — this card is a
+                // section heading, so it follows that convention rather than
+                // the neutral rule the rest of the panel's chrome uses.
+                color: "var(--amber-dark)",
               }}
             >
               If you stop here
