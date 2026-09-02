@@ -12,6 +12,26 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 13) — Manual triage applied for `state_parks_web` — all 283 records now resolved
+
+- **Triage applied** for 23 `state_parks_web` records that were pending
+  manual review after the ER pass. Adam signed off on all recommendations.
+  - **19 linked** — GIS name abbreviations (SB, SHP, CP) just under the
+    auto-link threshold. All clearly the same places.
+  - **2 relinked** — ER matched to wrong target, manually redirected:
+    Caspar Headlands SNR → `31827f6b` (was matched to the Beach, a
+    different adjacent park); Kings Beach SRA → `05f72675` (was matched
+    to "Kings Beach 18e18", an RIDB facility code).
+  - **2 rejected** — false matches, new master_places created: Leland
+    Stanford Mansion SHP (was "Downtown Bike Trails"), Ishxenta State
+    Park (was "Point Lobos Ridge NP").
+- **Final state: 283/283 linked, 0 unlinked.** Match methods: 181
+  spatial_containment, 79 deterministic/name_dominant, 23 manual_triage.
+  4 rejected place_match entries (2 relinked, 2 new mp). 79 total new
+  master_places across all phases.
+- All 23 affected master_places recomputed — enrichment (description,
+  hours, contact, operational_status) flowing through for all.
+
 ## 2026-09-01 (later 12) — Entity resolution for `state_parks_web` — spatial pre-link + standard ER
 
 - **Two-phase entity resolution** for 283 `state_parks_web` source_records.

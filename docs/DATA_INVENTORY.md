@@ -243,11 +243,12 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `dogs` (full policy text) | **276** |
 > | — with `fees` | **162** |
 > | — with `advisories` | **26** |
-> | `master_place_id` linked | **260** |
+> | `master_place_id` linked | **283** (all resolved) |
 > | — via spatial containment (point-in-polygon) | **181** |
-> | — via standard ER (name + proximity) | **79** |
-> | `place_match` pending manual review | **23** |
-> | new `master_place` rows created | **83** (of which 6 from other sources) |
+> | — via standard ER (deterministic + name_dominant) | **79** |
+> | — via manual triage (Adam-approved) | **23** |
+> | `place_match` rejected (wrong ER match) | **4** (2 relinked to correct target, 2 → new mp) |
+> | new `master_place` rows created | **79** total |
 >
 > **Migration applied:** `20260901001000_state_parks_web_field_precedence` —
 > 5 `field_precedence` rows: description (2), hours (3), contact (3),
@@ -258,14 +259,17 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > `master_place_search_export` photo lateral joins — photos are staged for
 > review, consistent with the photo-pilot pattern (PR #335).
 >
-> **Entity resolution completed in two phases.** (1) Spatial pre-link: 181
+> **Entity resolution completed in three phases.** (1) Spatial pre-link: 181
 > records matched by point-in-polygon against existing `state_parks` GIS park
 > boundary polygons (the standard 500m ER radius is too small for large parks
 > whose GIS polygon centroids are 1-11 km from website coordinates).
-> (2) Standard ER for the remaining 102: 4 auto-linked, 23 manual_review
-> (pending triage), 77 new master_places (parks/reserves without nearby GIS
-> records). `CATEGORY_COMPATIBILITY` in `matcher.ts` was extended with
-> `park`, `historic`, and `interest` entries — previously absent, which
+> (2) Standard ER for the remaining 102: 4 auto-linked, 23 manual_review,
+> 75 new master_places. (3) Manual triage of the 23 pending items: 19 linked
+> (GIS name abbreviations like SB/SHP just under the auto-link threshold),
+> 2 relinked to correct targets (Caspar Headlands SNR, Kings Beach SRA), 2
+> rejected as false matches and given new master_places (Leland Stanford
+> Mansion, Ishxenta). `CATEGORY_COMPATIBILITY` in `matcher.ts` was extended
+> with `park`, `historic`, and `interest` entries — previously absent, which
 > caused cat_compat=0 and blocked matching even on perfect-name-similarity
 > pairs.
 
