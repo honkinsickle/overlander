@@ -60,6 +60,21 @@ Three parts:
   instrument) are weak** — flagged for optional prune (see BACKLOG). Prune = delete
   the specific `wikipedia:photo-pilot:*` source_record.
 - Env **restored to TEST** (link + `data/.env`) after. Scripts + docs → PR #335.
+- **Correction/re-land (same session):** #335 **squash-merged** (merge `b50a54d`)
+  before the promotion commit was pushed, so that commit stranded on the branch
+  (same pattern as #338 earlier). It was re-landed via **PR #340** (merge
+  `066718d`, now on `main`) — the "Scripts + docs → PR #335" line above is
+  superseded: they reached `main` via #340, not #335.
+- **Skeptical re-verification (read-only PROD, via the prod-backup env file — no
+  `data/.env` swap, no relink):** persisted state matches the report — **7**
+  candidate rows (`ca-campground-2026-09-01-fixed`), **3** active
+  `wikipedia:photo-pilot:*` source_records, render path live via
+  `pois_along_corridor`. **One wording fix:** the report called Aikens Creek /
+  Tolkan "genuinely absent" on evidence that only proved *unresolvable by their
+  TEST identities* (RIDB int-vs-UUID mismatch + empty export-view name search);
+  a direct `master_place`-by-name check now returns **0 rows** for both, so the
+  absence claim is backed rather than asserted. Added
+  `data/scripts/photo-verify-prod-state.ts` (#340).
 
 ## 2026-09-01 (later 9) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
 
