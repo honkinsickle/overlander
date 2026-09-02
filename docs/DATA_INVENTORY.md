@@ -243,7 +243,11 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `dogs` (full policy text) | **276** |
 > | — with `fees` | **162** |
 > | — with `advisories` | **26** |
-> | `master_place_id` linked | **0** (ER not yet run) |
+> | `master_place_id` linked | **260** |
+> | — via spatial containment (point-in-polygon) | **181** |
+> | — via standard ER (name + proximity) | **79** |
+> | `place_match` pending manual review | **23** |
+> | new `master_place` rows created | **83** (of which 6 from other sources) |
 >
 > **Migration applied:** `20260901001000_state_parks_web_field_precedence` —
 > 5 `field_precedence` rows: description (2), hours (3), contact (3),
@@ -254,11 +258,16 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > `master_place_search_export` photo lateral joins — photos are staged for
 > review, consistent with the photo-pilot pattern (PR #335).
 >
-> **Entity resolution not yet run.** These 283 `source_record` rows are
-> unlinked. Running `materialize` will match them to existing `state_parks`
-> GIS master_places by name + proximity (high-confidence expected — same
-> official park names). Net-new master_places will be created for any units
-> the GIS source doesn't cover (e.g. points of interest, marine reserves).
+> **Entity resolution completed in two phases.** (1) Spatial pre-link: 181
+> records matched by point-in-polygon against existing `state_parks` GIS park
+> boundary polygons (the standard 500m ER radius is too small for large parks
+> whose GIS polygon centroids are 1-11 km from website coordinates).
+> (2) Standard ER for the remaining 102: 4 auto-linked, 23 manual_review
+> (pending triage), 77 new master_places (parks/reserves without nearby GIS
+> records). `CATEGORY_COMPATIBILITY` in `matcher.ts` was extended with
+> `park`, `historic`, and `interest` entries — previously absent, which
+> caused cat_compat=0 and blocked matching even on perfect-name-similarity
+> pairs.
 
 > **⚠️ Mutated 2026-09-01 `[queried + written, TEST only]` — SUPERSEDES the
 > 2026-08-31 box directly below, which has been REVERTED.** PR #327's direct

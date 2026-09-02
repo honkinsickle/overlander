@@ -12,6 +12,36 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 12) — Entity resolution for `state_parks_web` — spatial pre-link + standard ER
+
+- **Two-phase entity resolution** for 283 `state_parks_web` source_records.
+  Phase 1: spatial pre-link (point-in-polygon against existing `state_parks`
+  GIS park boundary polygons) linked **181** records — this was necessary
+  because the standard 500m ER radius is far too small for large parks whose
+  GIS polygon centroids are 1–11 km from website coordinates (measured:
+  Auburn SRA 10.9 km, Anza-Borrego 7.4 km, Mt. Tamalpais 3.6 km).
+  Phase 2: standard `materialize` for the remaining 102.
+- **Results:** 260 linked total (181 spatial + 79 standard ER), 23 pending
+  manual review, 77 new master_places created (parks without nearby GIS
+  records — historic parks, natural reserves, marine reserves, park
+  properties, points of interest).
+- **Category compatibility gap found and fixed:** `CATEGORY_COMPATIBILITY`
+  in `matcher.ts` had no entries for `park`, `historic`, or `interest` —
+  these categories defaulted to `cat_compat=0`, which killed even
+  perfect-name matches (name_sim=1.0 + dist_score=1.0 + cat_compat=0.0 =
+  combined 0.80, below the 0.85 auto-link threshold). Added compatibility
+  entries: `park ↔ recreation_area` (0.9), `park ↔ public_land` (0.8),
+  `historic ↔ recreation_area/public_land` (0.7), etc.
+- **Enrichment verified flowing through recompute:** sampled 5 linked
+  master_places — all carry `state_parks_web` description, hours, contact.
+  Andrew Molera SP correctly shows `operational_status: CLOSED`.
+- **23 manual_review items** queued for triage. Notable: "Leland Stanford
+  Mansion SHP" matched to "Downtown Bike Trails" (name_sim=0.574) — wrong,
+  should be triaged as new_master_place. Most others are legitimate
+  abbreviated-name matches (e.g. "Zmudowski State Beach" → "Zmudowski
+  State Beach" at 378m apart).
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-01 (later 11) — CA State Parks visitor-website source (`state_parks_web`) ingested on TEST
 
 - **New source `state_parks_web`** — visitor-facing content scraped from
