@@ -1,5 +1,40 @@
 # Backlog — open work
 
+## Google Places photos shown with no attribution — LIVE on PROD (2026-09-01)
+
+**Google Places Platform requires displaying a photo's `authorAttributions`
+whenever you display the photo.** The app fetches Google Place Photos but never
+captures or shows those attributions, so every live-hydrated Google photo renders
+uncredited. Surfaced by the "MacKerricher State Park" card (PROD user trip
+`63634fd5…`): a Google-resolved LLM key-stop tile with a `placeId` and no baked
+`photoUrl` live-hydrates a Google photo via
+`day-detail-corridor-column.tsx:308-351` → `/api/places/details` →
+`placeDetails()` → `/api/places/photo`. `placeDetails()` extracts only
+`photos[0].name`; `GooglePlace.photos` is typed `Array<{ name: string }>`, so
+`authorAttributions` are structurally dropped, and `PlaceRich` has no credit
+field (`photoCredit` is only populated from CC federated sources).
+
+Scope: this is the **live** MacKerricher exposure. It is **not** a corpus
+license-clear violation — no photo was ingested for MacKerricher (both PROD
+`master_place` rows are `state_parks`-only with no image field). Fix is a
+capture+display change: add `photos.authorAttributions` to `DETAILS_FIELD_MASK`
+and the discovery field mask, model it on `GooglePlace.photos`, thread a credit
+string through `PlaceRich` → tile → the card's existing `photoCredit` render.
+Flagged for Adam's decision (compliance urgency + UX). Full trace:
+`docs/measurements/2026-09-01-mackerricher-photo-attribution.md`.
+
+## WA State Parks images hotlinked into photo_url, no attribution — latent (2026-09-01)
+
+`master_place.photo_url` holds **~59–70** `parks.wa.gov` (Washington State Parks)
+image URLs, backfilled from `state_parks` raw `Imagelink` (measured PROD:
+`photo_url ILIKE '%parks.wa.gov%'` = 70; 59 active `state_parks` records carry a
+non-empty `Imagelink`, all WA). **No attribution/license metadata is captured**,
+and hotlinking a state agency's images may need permission/credit. **parks.ca.gov
+contributed 0.** Not currently rendered (the export-view / corridor-RPC photo
+laterals exclude `state_parks`/`blm`), so latent — decide alongside the parked
+`field_precedence` photo-wiring question and the state_parks/blm unmapped-photo
+thread (`20260821070000` header).
+
 ## Photo-backfill pilot — review + decide wiring (2026-09-01)
 
 Pilot ran on TEST: CA `campground` rows with zero photo coverage, license-clear
