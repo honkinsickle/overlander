@@ -12,6 +12,80 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 30) — Upstream matcher fixes: `viewpoint` compatibility + wide-radius identical-name rescue
+
+Fixes the two root causes behind the 43 self-created duplicates
+(`docs/investigations/2026-09-02-cross-source-duplicates.md`), so a quarterly
+refresh stops recreating them. **No cleanup of existing duplicate pairs — that
+is the next pass.** TEST-only validation; no writes to either database.
+
+- **⚠️ THE BIGGER BUG WAS NOT THE ONE REPORTED.** Auditing the full
+  `viewpoint` row as asked surfaced a more general defect:
+  `lookupCompatibility` is `CAT[a]?.[b] ?? CAT[b]?.[a] ?? 0`, so **any category
+  absent as a TOP-LEVEL key scored 0 against ITSELF**. `public_land` only ever
+  appears as a value key, so `lookupCompatibility("public_land","public_land")`
+  returned **0** — and since cat_compat=0 caps `combined_confidence` at 0.80
+  even at 0m with an identical name, those pairs could never auto-link.
+  Fixed with a universal rule: `if (a === b) return 1.0`. Consistent with the
+  table, where every explicit self-entry is already 1.0.
+- **`viewpoint ↔ recreation_area` = 0.8** — the reported gap. OR's "State Scenic
+  Viewpoint" units are a park designation that the GIS source categorises as
+  `recreation_area`; 10 of the 43 duplicates were this pair. 0.8 (not park's
+  0.9) clears the `name_dominant` gate without asserting near-equivalence.
+- **AUDITED AND DELIBERATELY LEFT AT 0**, with reasoning recorded in the table:
+  `viewpoint ↔ park` (103 pairs in-corpus) and `viewpoint ↔ park_feature` (33).
+  A park is generally the **parent** of a viewpoint, not the same place —
+  merging those would destroy exactly the parent/child distinction the
+  investigation says must be preserved. `trailhead` and `peak` have the
+  identical self-only shape and are left alone for the same reason.
+- **The 839 zero-compat candidate pairs in the corpus are mostly CORRECT.**
+  `park → ev_charging`, `→ gas_station`, `→ toilet`, `→ picnic_area`,
+  `→ fire_pit`. The `?? 0` default is protective, not a bug. Blanket-filling
+  zeros would have been actively harmful; only the two defects above were
+  changed.
+- **Wide-radius identical-name rescue** (`WIDE_RESCUE_RADIUS_M = 3000`,
+  `NAME_FLOOR = 0.95`, `CAT_FLOOR = 0.7`). Nothing within 500m returns
+  `new_master_place` immediately — the path that silently created 26 of the 43.
+  Rather than widen the global radius (more unrelated candidates scored for
+  every record, slower RPC), this runs **only when the normal search finds
+  nothing**, so it cannot alter any decision that already had candidates.
+- **These deliberately do NOT auto-link.** Past the 100m distance clip an
+  identical-name pair tops out at 0.60, and `scoreMatch`'s own comment explains
+  why: at range, name+category cannot distinguish "same complex named
+  differently by two agencies" from "adjacent-but-distinct feature". That
+  reasoning holds more strongly at 500m+. **The distance clip and the 0.7
+  `name_dominant` floor were left untouched — they are deliberate, documented
+  design, not bugs.** The fix converts silent duplicates into VISIBLE
+  manual_review items; a human decides.
+- **REGRESSION CHECK against the real patched code**, TEST six-state corpus,
+  1,874 candidate pairs:
+  | | |
+  |---|---|
+  | pairs whose cat_compat changed | 43 |
+  | **NEW auto-links** | **13** — every one `public_land → public_land`, **0m apart, name_similarity 1.000** |
+  | **LOST auto-links (regression)** | **0** |
+  | newly reaching manual_review | 3 |
+  There are no questionable new auto-links: all 13 are identical-name,
+  identical-category, zero-distance pairs that were failing only on the
+  self-pair bug.
+- **Rescue pass measured, not assumed:** 70 records have zero candidates at
+  500m; the rescue finds a near-identical-name candidate for **26** of them —
+  e.g. `Border Field State Park` → same name 644m, `Prairie City SVRA` → same
+  name 1022m, `San Onofre State Beach` → same name 2455m, `Portola Redwoods
+  State Park` → `Portola Redwoods SP` 1715m. The other 44 still become
+  `new_master_place`, unchanged.
+- **6 new unit tests** covering the self-pair rule, the explicit-self-entry
+  non-regression, the blended-score consequence, `viewpoint↔recreation_area`
+  symmetry, the deliberate `viewpoint↔park`/`park_feature` zeros, and that
+  unrelated categories still score 0. Suite: **651 passed** / 3 skipped (was
+  645).
+- **PROD confirmation is explicitly NOT in this pass.** The 43-case target list
+  lives on PROD; this is a code change validated on TEST. Whether these fixes
+  would have prevented each of the 43 needs a PROD-side pass, and the existing
+  43 still need cleanup.
+- Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 
 - **Closes the tooling gap the UT incident exposed.** AZ's

@@ -266,6 +266,50 @@ describe("scoreMatch — placeholder-name channel (2026-08-10 fix)", () => {
   });
 });
 
+describe("lookupCompatibility — self-pair and viewpoint gap (2026-09-02)", () => {
+  it("a category is fully compatible with itself even when absent as a top-level key", () => {
+    // Regression guard. `public_land` appears only as a VALUE key in
+    // CATEGORY_COMPATIBILITY, so before the self-pair rule it scored 0 against
+    // itself via the `?? 0` default. That capped combined_confidence at 0.80
+    // even at 0m with an identical name, making auto-link impossible.
+    expect(lookupCompatibility("public_land", "public_land")).toBe(1.0);
+    expect(lookupCompatibility("land_status", "land_status")).toBe(1.0);
+    expect(lookupCompatibility("park_feature", "park_feature")).toBe(1.0);
+  });
+
+  it("the self-pair rule does not disturb explicit self-entries", () => {
+    expect(lookupCompatibility("campground", "campground")).toBe(1.0);
+    expect(lookupCompatibility("dispersed_camping", "dispersed_camping")).toBe(1.0);
+    expect(lookupCompatibility("viewpoint", "viewpoint")).toBe(1.0);
+  });
+
+  it("an identical-name, identical-category pair at 0m can now reach auto_link", () => {
+    // 0.4*1 + 0.4*1 + 0.2*compat — needs compat > 0.25 to clear the 0.85 bar.
+    const blended = 0.4 * 1.0 + 0.4 * 1.0 + 0.2 * lookupCompatibility("public_land", "public_land");
+    expect(blended).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it("viewpoint is compatible with recreation_area, clearing the name_dominant gate", () => {
+    // OR's "State Scenic Viewpoint" units are recreation_area in the GIS source.
+    expect(lookupCompatibility("viewpoint", "recreation_area")).toBe(0.8);
+    expect(lookupCompatibility("recreation_area", "viewpoint")).toBe(0.8); // symmetric
+    expect(lookupCompatibility("viewpoint", "recreation_area")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("viewpoint stays INCOMPATIBLE with park and park_feature — parent/child, not duplicate", () => {
+    // Deliberate. A park is generally the parent of a viewpoint, and merging
+    // those would destroy the distinction the dedup investigation relies on.
+    expect(lookupCompatibility("viewpoint", "park")).toBe(0);
+    expect(lookupCompatibility("viewpoint", "park_feature")).toBe(0);
+  });
+
+  it("unrelated categories still score 0 — the default is protective, not a bug", () => {
+    expect(lookupCompatibility("park", "ev_charging")).toBe(0);
+    expect(lookupCompatibility("park", "gas_station")).toBe(0);
+    expect(lookupCompatibility("recreation_area", "toilet")).toBe(0);
+  });
+});
+
 describe("lookupCompatibility — dispersed_camping (Phase 2)", () => {
   it("matches itself at 1.0 (USFS dispersed ↔ OSM backcountry)", () => {
     expect(lookupCompatibility("dispersed_camping", "dispersed_camping")).toBe(1.0);
