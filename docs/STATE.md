@@ -1,3 +1,31 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 7) — **CA's PROD PROMOTION IS COMPLETE END-TO-END.** Branch held, awaiting Adam's PR call.
+
+(**newest truth: Typesense is synced and CA is fully live on PROD. Nothing about the CA promotion remains open.**
+
+**Sync:** fetched **22,022** · indexed **22,022** · failed **0** · pruned **12**. `places_prod` = **22,022 documents**, exactly equal to PROD's `master_place_search_export`. `places_test` untouched at **33,047** — only the named collection was written.
+
+**Full arc, all measured this session:**
+| step | result |
+|---|---|
+| Migrations | 20 applied, exit 0; field_precedence 99 → 118 rows, 17 → 23 sources |
+| Ingest | 284 fetched · **283 inserted** · 1 skipped (Onyx Ranch SVRA) · 0 errors |
+| Entity resolution | 181 spatial + 3 auto_link + 71 new master_places + 28 manual_review |
+| Triage | 25 LINK + 3 RELINK + 0 REJECT → **283/283 linked, 0 pending, 0 rejected** |
+| Rename | `state_parks_web` → `california_state_parks` on TEST + PROD, **0** resolved values changed |
+| Typesense | `places_prod` **21,965 → 22,022**, 12 pruned, 0 failed |
+
+**Two verification notes worth carrying forward.** (1) `--env-file` precedence was tested empirically, not assumed — inline env **wins**, which is the mechanism the whole inline-credential pattern depends on; had it gone the other way, `npm run -w data search:sync` would have pushed the wrong database into the wrong collection. (2) **A stale code comment produced a wrong prediction**: `sync-typesense.ts` claimed it does not prune, so I predicted the two CLOSED parks would linger; it *does* prune and removed them. Comment corrected. A comment is a claim about code, not evidence.
+
+**Enrichment on PROD:** 280 distinct CA-linked master_places — 279 description, 273 hours, 280 contact. Photos: 233 of 240 in-view carry one (154 parks.ca.gov, 79 wikimedia — the latter legitimately outranking at photo-lateral priority 2 vs 6).
+
+**Searchability confirmed with live Typesense queries**, not just DB presence: all three relink targets (Ishxenta SP, Topanga SP, Colusa-Sacramento River SRA) plus Watts Towers SHP, Zmudowski SB and Benicia Capitol SHP all return correctly.
+
+**Open, deliberately:** the two cross-source duplicate pairs (Gray Whale Cove SB vs the NPS `park_feature`; Watts Towers SHP vs the `atlas_oddities` Watts Towers) — separate dedup pass. **WA/OR/NV/AZ/UT hold PROD schema with zero PROD data**; each still needs its own promotion decision, WA first if wanted.
+
+**The branch carries 8 commits and is still UNPUSHED** — Adam's call whether to open the PR now that the arc is done. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 6) — CA PROD TRIAGE APPLIED, 283/283 linked. Only the Typesense sync remains.
 
 (**newest truth: CA's PROD triage is done. 25 LINK + 3 RELINK + 0 REJECT, 0 failed. `california_state_parks` on PROD is 283/283 linked, 0 pending, 0 rejected** — 181 spatial_containment · 72 deterministic · 2 name_dominant · 28 manual_triage. The queue reads 0 items. **One step left to close the whole CA promotion: the Typesense sync.**

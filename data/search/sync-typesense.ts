@@ -8,9 +8,16 @@
  * documents in batches.
  *
  * Idempotent: re-runnable. Documents upsert by id (= master_place.id), so
- * re-running with current data replaces existing docs. Stale docs
- * (master_places deleted upstream) are NOT cleaned up by this script —
- * follow-up concern.
+ * re-running with current data replaces existing docs.
+ *
+ * Stale docs ARE pruned — any document whose id is no longer returned by
+ * `master_place_search_export` is deleted, and the run reports
+ * `pruned` / `prune_errors`. (This comment previously said pruning was NOT
+ * implemented and was a "follow-up concern"; that became wrong when the prune
+ * pass landed. Corrected 2026-09-02 after a PROD sync pruned 12 docs — two of
+ * them CA parks that had just resolved to `operational_status = CLOSED`, which
+ * the view excludes. The stale comment had been used to predict, incorrectly,
+ * that those two would linger in the index.)
  *
  * Corridor-scale ready: paginates the Supabase read in 1000-row windows
  * and batches Typesense imports in 100-doc chunks.

@@ -12,6 +12,63 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 19) — Typesense synced. **CA's PROD promotion is COMPLETE end-to-end.**
+
+- **`places_prod` synced: fetched 22,022 · indexed 22,022 · failed 0 · pruned
+  12.** Final `places_prod` = **22,022 documents**, exactly equal to PROD's
+  `master_place_search_export` row count. `places_test` **unchanged at 33,047** —
+  only the named collection was touched.
+- **Credential handling per the confirmed preference:** inline exports, no CLI
+  link to PROD, no `data/.env` swap. Verified after: `data/.env` on TEST,
+  `TYPESENSE_COLLECTION=places_test`, CLI linked TEST.
+- **Verified `--env-file` precedence empirically instead of assuming it.** The
+  npm script is `tsx --env-file=.env …`, and `data/.env` carries TEST Supabase +
+  `places_test`. If the file had won over inline exports, the command would have
+  synced the wrong database into the wrong collection. A two-line Node probe
+  confirmed **inline env wins over `--env-file`**, so the requested
+  `npm run -w data search:sync` form was safe to use as-is. Worth keeping: this
+  is the mechanism the whole inline-credential pattern rests on.
+- **⚠️ A stale code comment produced a wrong prediction, now corrected.**
+  `sync-typesense.ts`'s header said stale docs are "NOT cleaned up by this
+  script — follow-up concern". Reading it, I predicted the two CLOSED parks
+  would linger in the index and pre-measured them as already present. **The
+  script does prune** — it deleted 12 stale docs, including both. Comment fixed
+  in this commit. The lesson is the familiar one pointed at documentation: a
+  comment is a claim about the code, not evidence — the pre/post measurement is
+  what settled it.
+- **Both CLOSED parks correctly absent** from the synced index: `McGrath SB` and
+  `Governor's Mansion SHP` were present before the sync and are gone after,
+  consistent with the view's CLOSED/DECOMMISSIONED exclusion.
+- **Searchability spot-checked with real Typesense queries** (not just DB
+  presence) against `places_prod` — all six returned the right place, including
+  all three triage relink targets:
+  `Ishxenta` → Ishxenta SP · `Topanga State Park` → Topanga SP ·
+  `Watts Towers of Simon Rodia` → …SHP · `Zmudowski` → Zmudowski SB ·
+  `Benicia Capitol` → …SHP · `Colusa-Sacramento` → the SRA **and** its
+  Campground as separate rows, confirming the relink picked the SRA.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+### CA PROD promotion — full arc, now closed
+| step | result |
+|---|---|
+| Migrations | 20 applied (`db:push-verify` exit 0); field_precedence 99 → 118 rows, 17 → 23 sources |
+| Ingest | 284 fetched · **283 inserted** · 1 skipped (Onyx Ranch SVRA, no coords) · 0 errors |
+| Entity resolution | 181 spatial_containment + 3 auto_link + 71 new master_places + 28 manual_review |
+| Triage | 25 LINK + 3 RELINK + 0 REJECT, 0 failed → **283/283 linked, 0 pending, 0 rejected** |
+| Rename | `state_parks_web` → `california_state_parks` across TEST + PROD, 0 resolved values changed |
+| Typesense | `places_prod` **21,965 → 22,022**, 12 pruned, 0 failed |
+
+Enrichment on PROD: 280 distinct CA-linked master_places — 279 description,
+273 hours, 280 contact. Photos: 233 of 240 in-view CA master_places carry one
+(154 parks.ca.gov, 79 wikimedia, the latter legitimately outranking at
+photo-lateral priority 2 vs 6).
+
+**Still open, deliberately:** the two cross-source duplicate pairs (Gray Whale
+Cove SB vs the NPS `park_feature`; Watts Towers SHP vs the `atlas_oddities`
+Watts Towers) — separate dedup pass. WA/OR/NV/AZ/UT hold PROD schema with zero
+PROD data; each needs its own promotion decision. WA is next if Adam wants it.
+
 ## 2026-09-02 (later 18) — CA PROD triage APPLIED — 283/283 linked, 0 pending, 0 rejected. Only Typesense remains.
 
 - **Adam signed off; applied on PROD. 25 LINK + 3 RELINK + 0 REJECT, 0 failed.**

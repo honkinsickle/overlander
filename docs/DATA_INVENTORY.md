@@ -634,11 +634,15 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > **750** — a corpus difference, not a defect. Note `master_place.photo_url`
 > (the column) reads far lower (82/252) and is NOT the surface that renders;
 > the lateral join in the view/RPC is.
-> **Typesense STILL NOT synced — the one remaining step to close CA's PROD
-> promotion.** `places_prod` **21,965** docs vs the export view's **22,022** — a
-> **+57** delta. `npm run -w data search:sync` with
-> `TYPESENSE_COLLECTION=places_prod` (the only env change needed; host and admin
-> key are shared).
+> **Typesense SYNCED 2026-09-02 — CA's PROD promotion is COMPLETE end-to-end.**
+> `search:sync` against `places_prod`: fetched **22,022**, indexed **22,022**,
+> failed **0**, pruned **12**. Final `places_prod` = **22,022 documents**,
+> exactly matching PROD's `master_place_search_export` row count.
+> `places_test` untouched at **33,047**. The 12 pruned include `McGrath SB`
+> and `Governor's Mansion SHP`, which resolved to `operational_status =
+> CLOSED` and are correctly excluded from both the view and the index.
+> Searchability confirmed with live Typesense queries (not just DB presence)
+> for all three triage relink targets plus three other CA parks.
 >
 > **Superseded PROD reading from earlier the same day (kept for the correction):**
 > Measured read-only against `nqzeywzcowujzyegxbsr`
