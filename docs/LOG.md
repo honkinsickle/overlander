@@ -12,6 +12,82 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 5) — AZ State Parks visitor-website ingest (`arizona_state_parks`, TEST) — PR #350
+
+- **New source `arizona_state_parks` ingested on TEST.** All 33 AZ parks
+  from `~/az-state-parks/data/arizona_parks.json` (scraped 2026-09-01),
+  zero skips. Ingester `data/ingestion/sources/arizona-state-parks.ts`
+  follows the OR/NV state-prefixed naming (no `_web` suffix), registered
+  in `data/ingestion/manual.ts`. Category tally: 24 recreation_area + 9
+  historic.
+- **Novel constraint: `0/33` visitor rows have coordinates**
+  (azstateparks.com doesn't expose lat/lon), but `source_record.geometry`
+  is NOT NULL. Solution: at ingest time, look up the matching existing
+  `state_parks:AZ:park:<GlobalID>` GIS record by normalized name and
+  borrow its centroid coordinates. New RPC
+  `arizona_state_parks_gis_index()` (migration `20260902003300`)
+  returns the 34 AZ GIS park units with EWKT geometry. Also stored the
+  matched GIS park's external_id + master_place_id in
+  `normalized_payload.provenance` so ER Phase 1 can direct-link
+  deterministically. Verified all 33 web rows found a GIS match.
+- **Two known name variants matched cleanly via `state`/`ranch` token
+  stripping**: `San Rafael State Natural Area` (web) ↔
+  `San Rafael Ranch Natural Area` (GIS);
+  `Sonoita Creek State Natural Area` (web) ↔
+  `Sonoita Creek Natural Area` (GIS). Investigation had flagged these as
+  the two risky pairs — no manual triage needed for them.
+- **ER: 31 auto-linked (Phase 1 direct link) + 2 → manual_review.**
+  Phase 1 (custom `data/scripts/az-state-parks-er.ts`) writes
+  `place_match` rows with `match_method = 'ingest_time_name_link'` for
+  each visitor row whose stored `intended_master_place_id` is set (31
+  of 33; the other 2 GIS parks had no master_place). Phase 2 ran
+  `matchAll` on the remaining 2 — both routed to `manual_review`:
+  Colorado River SHP → Yuma Quartermaster Depot SHP (likely correct,
+  same co-located site — accept?); Fool Hollow LRA → Fool Hollow West
+  Launch Boating Site (likely wrong, RIDB sub-facility inside the
+  park). Adam's triage call.
+- **Photo lateral: AZ takes slot 10.** NV took slot 9 on TEST via a
+  parallel PR whose migrations were pulled locally by
+  `supabase migration fetch` (then removed from my working tree — not
+  mine to commit at PR-open time). Migrations `20260902003500`/`003600`
+  preserve NV at 9 in the CASE / IN list of the `pois_along_corridor`
+  RPC and `master_place_search_export` view so NV's slot isn't nuked
+  when AZ's CREATE-OR-REPLACE runs. Verified against merged PR #349
+  post-rebase (see later-6 entry): NV's merged CASE/IN list matches
+  what AZ was written to preserve, so the layering is correct.
+- **Field precedence rows added** (migration `20260902003400`):
+  `description(2)`, `hours(3)`, `contact(3)`. No `amenities` (AZ has no
+  amenity field), no `operational_status` (the 3/33 alerts are
+  freeform prose, not a status enum). `fees`/`advisories`/`summary` in
+  `normalized_payload` only.
+- **License risk-acceptance recorded.** azstateparks.com/privacy is
+  explicit: photos/graphics/maps are NOT public domain; written consent
+  required. Adam accepted the URL-reference posture (no warehousing,
+  attribution `© Arizona State Parks and Trails`) same shape as NV. The
+  copyright string lands in `normalized_payload.copyright` on each
+  source_record; no UI surface for it in this pass. Kartchner Caverns®
+  and Kubla Khan® trademark-registered — flagged for future marketing
+  hero surfaces, no special handling now.
+- **Investigation-era stale claim corrected in the six-state spec.**
+  `docs/specs/state-parks-source-architecture.md` §2 depth table said
+  AZ was "Tier 1" (individual campsite amenities); TEST reality is
+  Tier 2 (34 park units + 14 aggregated campgrounds keyed on
+  `PARK_ABBR4`, **0 campsite records**). Added a callout below the
+  table so the "Tier 1" line doesn't get quietly re-asserted. The
+  ~1,346 campsite volume prediction in §12 refers to that unimplemented
+  layer.
+- **Rebase reconciliation (later 6, same day).** After PR #349 merged
+  to `main` (`1b1a912`), rebased AZ atop merged NV. Verified the AZ
+  photo-lateral migrations layer correctly on top of NV's now-merged
+  version: NV's CASE ends at `nevada_state_parks then 9, else 10`; AZ
+  extends to `nevada_state_parks then 9, arizona_state_parks then 10,
+  else 11`. NV slot 9 preserved. Union-merged doc conflicts
+  (LOG/STATE/DATA_INVENTORY entries kept from both sides, `manual.ts`
+  case statement kept both nv/az imports).
+- **Zero PROD work.** TEST only (`znldzjdatkogdktymtvi`). PROD
+  promotion is Adam's call.
+- **Gates:** `npm run -w data typecheck` clean before push.
+
 ## 2026-09-02 (later-4) — Old LV Mormon Fort one-shot workaround applied (PR #349 follow-up)
 
 - **Manual `UPDATE` applied to `master_place d331abb7-e554-4d67-9601-26d196b08183`:**

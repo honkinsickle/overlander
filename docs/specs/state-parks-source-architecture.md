@@ -68,6 +68,17 @@ The six states produce three shapes of data:
 | **Boundary + campground-level facilities** | CA, NV, WA | One record per park unit (boundary centroid) + one record per campground/facility point. Park-unit records link to their campground children via a shared `park_id` in `normalized_payload.provenance`. |
 | **Boundary + individual-campsite amenities** | AZ | One record per park unit + one record per individual campsite, with per-site fields (hookups, ADA, surface, etc.). Each campsite record carries a `data_vintage` field (see §4). |
 
+> **⚠️ AZ actual state ≠ this table `[measured 2026-09-02 on TEST]`.** AZ is
+> currently ingested as **Tier 2** (boundary + aggregated campgrounds), NOT
+> Tier 1. TEST holds **34 park units + 14 aggregated campgrounds** on
+> `source_id = 'state_parks'` for AZ — **0 individual campsite records** and
+> **0 facility records**. The `state_parks:AZ:campsite:*` prefix and per-site
+> amenities described above and in §5.2 are unimplemented; the ~1,346-record
+> volume prediction in §12 refers to that unimplemented layer. This is a
+> finding, not a decision to build campsite-level ingest now — recorded so
+> the "Tier 1" claim doesn't get quietly re-asserted. Aggregated-campground
+> handling (`PARK_ABBR4` key, §3) is what's actually running.
+
 This mirrors NPS, which ingests parks, campgrounds, and places as separate
 record types under one `source_id`, distinguished by `external_id` prefix
 (`nps:park:<code>`, `nps:campground:<id>`, `nps:place:<id>`).
