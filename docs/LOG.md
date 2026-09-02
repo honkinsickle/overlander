@@ -12,6 +12,63 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 12) — CA ER script written + six-state commit-completeness audit (TEST only, PROD untouched)
+
+- **`data/scripts/ca-state-parks-er.ts` written and validated.** Closes the gap
+  found in (later 11): CA's spatial pre-link was never committed. Modelled on
+  `or-state-parks-er.ts` (whose own header says it mirrors the CA pattern — so
+  this closes the loop). Naming follows the committed convention
+  `<xx>-state-parks-er.ts` (or/nv/az/ut). Stamps
+  `resolved_by = auto:state_parks_web_er`, which CA's existing rows lack.
+- **The obvious validation would have been vacuous, and saying so mattered.**
+  All 283 CA records on TEST are already linked, so `--dry-run` finds **0**
+  unlinked, exercises none of the polygon logic, and exits clean. That is a
+  check that cannot fail. Added a **`--verify`** mode instead: it re-derives
+  phase 1 over **all** 283 records ignoring current link state, then diffs the
+  proposals against the `spatial_containment` rows already in `place_match`.
+- **`--verify` found a real bug on the first run — 178 agree / 3 DISAGREE.**
+  Diagnosis: **CA park polygons overlap**, and each of the 3 points sits inside
+  exactly 2 units. Plain first-match-wins (the `or-state-parks-er.ts` behaviour)
+  picked the wrong one every time: State Indian Museum SHP → *Sutter's Fort
+  SHP*; Manchester SP → *Brush Creek/Lagoon Lake Wetlands and Coastal Dunes NP*;
+  Point Dume SB → *Point Dume NP*. In all 3 the correct unit was the
+  name-matching one.
+- **Fix: disambiguate overlapping containments by name**, reusing the repo's own
+  pairing (`natural.JaroWinklerDistance` over `normalizeName`, exactly as
+  `scoreMatch` does), tie-broken on `mpId` so the result is order-independent.
+  Re-run: **181 re-derived vs 181 recorded, 181 AGREE, 0 disagree, 0 missing,
+  0 extra** — phase 1 reproduces the recorded set exactly.
+- **The check is falsifiable, and that was demonstrated rather than assumed.**
+  It went red on a subtly-wrong implementation and green only after the real
+  fix — the negative control happened naturally, no need to break it on purpose.
+- **⚠️ `or-state-parks-er.ts` still has the first-match-wins behaviour.** OR's
+  107 `spatial_containment` links may contain the same class of mis-pick. NOT
+  changed here — OR's data is landed on TEST and out of this task's scope. Filed
+  as a flag; needs the same `--verify` diff before anyone trusts OR's 107.
+- **Six-state commit-completeness audit** via new
+  `data/scripts/six-state-er-audit.ts` (read-only, TEST-pinned). `resolved_by`
+  is the tell — a committed ER script stamps `auto:<source>_er`. Findings:
+  - **CA `state_parks_web`** — 204 links (181 spatial + 23 triage) stamped
+    `(null)`, 79 `auto`. No ER script (**now fixed**), **no triage script**.
+  - **WA `state_parks_web_wa`** — 127 links (117 spatial + 10 triage) stamped
+    `(null)`, 14 `auto`. **NEW GAP, same shape as CA and previously unflagged:
+    no ER script and no triage script.**
+  - **OR `oregon_state_parks`** — ER script ✓ (107 `auto:oregon_state_parks_er`),
+    but 13 links stamped `auto:oregon_state_parks_triage_2026-09-02` with **no
+    committed triage script**.
+  - **NV `nevada_state_parks`** — ER script ✓ (21 `auto:nevada_state_parks_er`),
+    3 links stamped `adam:nv-triage-2026-09-02`, **no committed triage script**.
+  - **AZ / UT — clean.** ER scripts ✓ (31 / 37 `auto:*_er`) and triage scripts
+    committed (`az-state-parks-triage-apply.mjs`, `ut-state-parks-triage-apply.ts`).
+  - All six ingesters are committed and registered in `data/ingestion/manual.ts`;
+    all 20 migrations are committed. The gaps are **ER + triage scripts only**.
+  - Minor: `az-state-parks-triage-apply.mjs` is `.mjs`, so it sits outside
+    `tsc --noEmit` and gets no type checking, unlike UT's `.ts` sibling.
+- **PROD untouched. TEST unmutated** — re-ran the audit after the `--verify`
+  passes and CA still reads 283/283, 4 rejected, 181 spatial_containment.
+  `--verify` and `--dry-run` write nothing.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-02 (later 11) — CA `state_parks_web` PROD promotion: preflight only, HALTED before any PROD write
 
 - **Task was to promote CA to PROD (text + photos). Nothing was written to

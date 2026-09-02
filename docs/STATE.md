@@ -1,3 +1,29 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later) — CA ER script written + six-state commit-completeness audit; PROD still untouched
+
+(**newest truth: `data/scripts/ca-state-parks-er.ts` now exists and reproduces CA's recorded phase-1 linkage exactly. Blocker 2 from the preflight below is half-cleared — the script gap is closed; the PROD-corpus-divergence half stands. PROD remains untouched; TEST unmutated.**
+
+**Validation was the hard part, and the naive version would have been vacuous.** All 283 CA records on TEST are already linked, so `--dry-run` finds 0 unlinked and exits clean without exercising any polygon logic. Added **`--verify`**, which re-derives phase 1 over all 283 records ignoring link state and diffs against the `spatial_containment` rows in `place_match`.
+
+**`--verify` caught a real bug first time: 178 agree / 3 disagree.** CA park polygons **overlap**; each of the 3 points sits inside 2 units, and first-match-wins (the `or-state-parks-er.ts` behaviour) picked wrong every time — State Indian Museum SHP → *Sutter's Fort SHP*, Manchester SP → *Brush Creek/Lagoon Lake NP*, Point Dume SB → *Point Dume NP*. Fixed by disambiguating overlapping containments on name via the repo's own `natural.JaroWinklerDistance` + `normalizeName` pairing, tie-broken on `mpId` for order-independence. Re-run: **181/181 AGREE, 0 disagree, 0 missing, 0 extra.** The check is falsifiable and was shown to be — red on the wrong implementation, green only after the fix.
+
+**⚠️ `or-state-parks-er.ts` still has first-match-wins.** OR's 107 spatial links may carry the same class of mis-pick. Deliberately NOT changed (out of scope, data already landed) — flagged for a `--verify`-style diff before OR's 107 are trusted.
+
+**Six-state commit-completeness audit** (`data/scripts/six-state-er-audit.ts`, read-only, TEST-pinned; `resolved_by` is the tell):
+| state | ER script | triage script |
+|---|---|---|
+| CA `state_parks_web` | ✗ → **now written** | ✗ **gap** |
+| WA `state_parks_web_wa` | ✗ **NEW GAP** | ✗ **gap** |
+| OR `oregon_state_parks` | ✓ | ✗ **gap** (13 links stamped `auto:oregon_state_parks_triage_2026-09-02`) |
+| NV `nevada_state_parks` | ✓ | ✗ **gap** (3 links stamped `adam:nv-triage-2026-09-02`) |
+| AZ `arizona_state_parks` | ✓ | ✓ (`.mjs` — outside `tsc` scope) |
+| UT `utah_state_parks` | ✓ | ✓ |
+
+All six ingesters are committed and registered in `manual.ts`; all 20 migrations committed. **The gaps are ER + triage scripts only.** WA is the significant new finding — same shape as CA, previously unflagged, and it matters because WA was slated as the next promotion.
+
+**Still open, unchanged:** the three preflight blockers below — migration scope (`db push` can't apply CA alone), PROD ER-corpus divergence (a fresh manual-review queue will need adjudication regardless of the script), and partial PROD creds. **No PROD promotion proceeds until Adam decides.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (CA `state_parks_web` PROD promotion — PREFLIGHT ONLY, HALTED, awaiting Adam's decision)
 
 (**newest truth: the CA PROD promotion was NOT executed. Zero writes reached PROD this session — no migrations, no ingest, no ER, no Typesense sync.** Everything below is read-only measurement via the new `data/scripts/ca-prod-promotion-preflight.ts`.
