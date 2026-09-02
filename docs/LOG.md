@@ -12,6 +12,113 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 28) — UT promoted to PROD. **ALL SIX STATES ARE LIVE.** Plus: an unintended PROD write, and two corrections to earlier numbers.
+
+> **Branch note:** this entry sits directly above OR's (later 23) because the UT
+> branch was cut from `main` while the NV (later 24–25) and AZ (later 26–27)
+> PRs were still open. Those entries live on their own branches and will
+> interleave on merge — the numbering is intentional, the gap is not a
+> missing entry.
+
+- **UT closed the six-state set.** Ingest **46 fetched / 46 inserted / 0 skipped
+  / 0 errors**. Phase 1 `ingest_time_name_link` **32** and phase-2 load **14** —
+  both exactly as preflight predicted (TEST was 37 / 9). Phase 2: 1 auto_link,
+  13 manual_review, 0 new_master_place. **Final: 46/46 linked, 0 pending,
+  0 rejected.**
+- **⚠️ AN UNINTENDED PROD WRITE HAPPENED. Reporting it plainly.** UT's
+  `ut-state-parks-triage-apply.ts` was still its ORIGINAL one-shot from its TEST
+  round — **no argv parsing, no dry-run guard**; it blanket-confirms every
+  pending `place_match` the moment it runs. I invoked it as
+  `--apply <decisions.json>` (the interface ca/wa/or/nv use) expecting a
+  preview, and it **silently ignored both flags and wrote immediately**.
+  - **Root cause is mine, and specific:** the six-state audit explicitly
+    recorded that AZ and UT already had their own triage scripts and were left
+    untouched — then I later assumed the uniform `--apply/--write` interface
+    covered all six. I built that interface for four states and then treated it
+    as if it were six.
+  - **The outcome was correct, verified after the fact rather than assumed.** An
+    audit of all 13 confirmed **13/13 landed on exactly the proposed targets** —
+    the same result the approved decisions file specified, since every item was
+    an approved LINK to its proposed target and blanket-confirm does precisely
+    that. No data is wrong.
+  - **What was lost was the safety property, not the data:** no preview, and no
+    way for a caller's wrong intent to fail safely. Had even one item been a
+    RELINK or REJECT, this would have silently applied the wrong thing.
+  - **Fixed:** `ut-state-parks-triage-apply.ts` rewritten onto the shared runner,
+    identical in shape to ca/wa/or/nv — dry-run by default, decisions from JSON,
+    `--write` required. Verified it now reports the empty queue instead of
+    writing. **AZ's `.mjs` remains the last non-uniform triage script**; it is
+    at least dry-run-by-default so it cannot silently write, but it sits outside
+    `tsc` and hardcodes its decisions. Recommend converting it.
+  - Cosmetic residue: those 13 rows carry `match_method =
+    name_dominant_low_conf` (the original matchAll proposal) rather than
+    `manual_triage`, because the old script only updated status/resolved_by.
+    `resolved_by = adam:ut-triage-2026-09-02` is correct.
+- **Typesense synced: fetched 22,106 · indexed 22,106 · failed 0 · pruned 0.**
+  `places_prod` = **22,106** = export view exactly.
+  - **The delta was 0, and the sync was still necessary — worth recording.** UT
+    created **zero** new master_places (all 46 linked to existing ones), so the
+    document COUNT could not change. But those master_places now carry UT
+    descriptions/hours/contact/photos, so their document CONTENT had to be
+    refreshed. Verified in the index afterwards: Kodachrome Basin, Antelope
+    Island, Goblin Valley and East Canyon all return UT visitor prose. **A zero
+    delta is not evidence that a sync can be skipped.**
+- **UT photos:** 46/46 in view, 46/46 with a photo — **18
+  `stateparks.utah.gov`, 15 `cdn.recreation.gov`, 13 `upload.wikimedia.org`**.
+  UT sits at photo-lateral priority 11, the lowest of the six, so it is
+  outranked by both Wikipedia (2) and RIDB (1) — the only state where RIDB
+  photos win a meaningful share. **Enrichment:** description 45/46, hours 45/46,
+  contact 28/46. `is_searchable = false`: **0**.
+- **Deltas:** `source_record` 38,525 → **38,571** (+46); `master_place`
+  **28,506 unchanged**; export view **22,106 unchanged**.
+
+### ⚠️ TWO CORRECTIONS to numbers reported earlier in this project
+Both surfaced by measuring all six states with ONE consistent method, which had
+not been done before.
+1. **NV's collision rate was reported as 6 of 28 (21%). Measured consistently it
+   is 11 of 28 (39%).** The earlier NV run filtered `oddity` only; the six-state
+   run counts `oddity` **and** `park_feature`. Method difference, not a data
+   change — but the 21% figure was narrower than its label implied.
+2. **CA was repeatedly described as having only "isolated cases". That is
+   wrong: CA has 24 collision pairs**, the most of any state in absolute terms.
+   Lowest *rate* (8%), highest *count* — I had been repeating an impression from
+   two spot-checks rather than a measurement.
+
+### SIX-STATE DEDUP COLLISION RATE ON PROD (one method, all six)
+Same-named `oddity`/`park_feature` twin within 3 km of a linked visitor record:
+| state | pairs | of | rate |
+|---|---|---|---|
+| NV | 11 | 28 | **39%** |
+| AZ | 9 | 33 | **27%** |
+| UT | 6 | 46 | 13% |
+| OR | 17 | 192 | 9% |
+| CA | **24** | 283 | 8% |
+| WA | 11 | 141 | 8% |
+| **total** | **78** | **723** | **11%** |
+
+**78 collision pairs across the six states.** Rate is highest in the small
+states (atlas_oddities covers famous parks, and small states are mostly famous
+parks); absolute count is highest in CA. Prioritisation should probably weigh
+the count, not the rate. Pre-existing cross-source dedup — not caused by these
+promotions, with one logged exception (AZ's Tubac Presidio, where the promotion
+created a pair).
+
+### ALL SIX STATES LIVE ON PROD
+| source | rows |
+|---|---|
+| `california_state_parks` | 283 |
+| `oregon_state_parks` | 192 |
+| `washington_state_parks` | 141 |
+| `utah_state_parks` | 46 |
+| `arizona_state_parks` | 33 |
+| `nevada_state_parks` | 28 |
+| **total** | **723** |
+
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 23) — OR triage applied + Typesense synced. **OR's PROD promotion is COMPLETE.** Three of six states live.
 
 - **A REAL BUG IN COMMITTED TOOLING, caught before it reached PROD.** The plan
