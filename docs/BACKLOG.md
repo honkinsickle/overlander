@@ -1,5 +1,48 @@
 # Backlog — open work
 
+## NV State Parks — `fees` scraper bug in upstream scrape (2026-09-02)
+
+The `/Users/adamwagner/nv-state-parks` scrape pipeline
+(`scripts/sp_extract.py`) writes the site nav-menu string ("Annual
+Permits Concessions Discounts, Special Fees & Refunds Group Use &
+Special Use Photography Permits Learn Back") into every row's `fees`
+column instead of the real per-park fee amounts. Real amounts DO exist
+on parks.nv.gov pages (e.g. beaver-dam has `$5.00 / $10 / $15.00 /
+$20.00 / $2.00 / $10.00` for day-use + camping tiers) — the extractor
+just picks up the menu selector instead of the fees section.
+
+**Ingester behaviour (PR NV):** the raw string is stored at
+`normalized_payload.provenance.fees_raw` on all 28 nevada_state_parks
+source_records as a marker, but is **never surfaced** and no
+`field_precedence` row is written for `fees`. This preserves the
+signal for a follow-up re-scrape without polluting user-facing surfaces.
+
+**Fix path:** patch `sp_extract.py` to target the correct fees region,
+re-scrape, re-ingest. When the fix lands, drop `provenance.fees_raw`,
+add a real `fees` field to `normalized_payload`, and decide whether to
+add a `field_precedence` row (CA/WA precedent = write as a raw string,
+priority not yet standardized).
+
+## NV State Parks — photo-license risk-acceptance (2026-09-02)
+
+`nevada_state_parks` photos are stored with `credit = "Nevada State
+Parks"` and `license = "Nevada State Parks"` — **NOT** the
+"— government publication" framing CA/WA/OR used. Reason: parks.nv.gov
+has no reuse-grant text on the site, and nv.gov's site-wide notice is
+"Copyright © 2026 State of Nevada — All Rights Reserved". US state
+works are **not** §105-exempt from copyright (that exemption is federal
+only), so the default is copyrighted-with-no-reuse-grant.
+
+**This is Adam's explicit risk acceptance, not a resolved license-clear
+determination.** All 28 photos are hotlinked from parks.nv.gov (not
+mirrored). If Nevada State Parks objects or if a formal review requires
+removal, the mitigation is: drop `credit`/`license` from the 28
+`nevada_state_parks` `normalized_payload.photo` blobs (or set
+`photo = null`), which removes them from the two lateral joins that
+render them (`pois_along_corridor`, `master_place_search_export`).
+Consider reaching out to `stparks@parks.nv.gov` / (775) 684-2770 for a
+written reuse grant, then update the license label if approved.
+
 ## Matcher gaps surfaced during `oregon_state_parks` triage (2026-09-02)
 
 Two gaps in `data/entity-resolution/matcher.ts` `CATEGORY_COMPATIBILITY`
