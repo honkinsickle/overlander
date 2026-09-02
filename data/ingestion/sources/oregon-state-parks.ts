@@ -67,7 +67,7 @@ const RowSchema = z.object({
 });
 type ParkRow = z.infer<typeof RowSchema>;
 
-// ───── CSV parser (RFC-4180, shared with state-parks-web.ts pattern) ────────
+// ───── CSV parser (RFC-4180, shared with california-state-parks.ts pattern) ────────
 
 function parseCsv(text: string): ParkRow[] {
   const rows: string[][] = [];

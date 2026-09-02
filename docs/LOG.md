@@ -12,6 +12,34 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 16) — ingester filenames renamed to match (closes the item flagged in later 15)
+
+- **Corrects the "flagged, not done" note in (later 15)** — that entry stands as
+  written, per this file's append-only rule; this is the follow-up that did it.
+  - `data/ingestion/sources/state-parks-web.ts` → `california-state-parks.ts`
+  - `data/ingestion/sources/state-parks-web-wa.ts` → `washington-state-parks.ts`
+  All six states now read `<state>-state-parks.ts`, alongside the shared GIS
+  `state-parks.ts`.
+- **Verified `manual.ts` really was the only importer instead of assuming it.**
+  A repo-ROOT sweep for `state-parks-web` (not a `data/`-rooted one) found
+  exactly two code references, both dynamic `await import()` calls in
+  `manual.ts`, plus one stale comment in `oregon-state-parks.ts` ("shared with
+  state-parks-web.ts pattern"). No `.test.ts` and no `smoke-*` script shadows
+  either module — that pairing is what broke the gate in PR 4b, so it was
+  checked explicitly rather than presumed.
+- **Proved the renamed modules resolve AT RUNTIME, not just under tsc.** These
+  are dynamic `await import()` specifiers; a dry-run ingest actually executes
+  the resolution. Both returned their historical numbers unchanged —
+  `california_state_parks` 284 fetched / 283 inserted / 1 skipped / 0 errors,
+  `washington_state_parks` 147 / 141 / 6 / 0. TEST, dry-run, nothing written.
+- **No data or schema change** — TEST and PROD untouched. CA's 28-item PROD
+  triage queue and the deferred Typesense sync are both unaffected and still
+  open.
+- Historical `docs/LOG.md` references to the old filenames (later 15's flag, and
+  the 2026-09-01 build entries) left verbatim.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 15) — source_id rename: `state_parks_web`→`california_state_parks`, `state_parks_web_wa`→`washington_state_parks` (TEST + PROD)
 
 - **Done before resolving CA's PROD triage queue, per the sequencing call** —

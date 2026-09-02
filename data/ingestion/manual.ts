@@ -119,11 +119,11 @@ async function loadSource(name: string): Promise<IngestFn> {
       return mod.default;
     }
     case "california_state_parks": {
-      const mod = await import("./sources/state-parks-web.ts");
+      const mod = await import("./sources/california-state-parks.ts");
       return mod.default;
     }
     case "washington_state_parks": {
-      const mod = await import("./sources/state-parks-web-wa.ts");
+      const mod = await import("./sources/washington-state-parks.ts");
       return mod.default;
     }
     case "oregon_state_parks": {

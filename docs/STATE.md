@@ -1,3 +1,17 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 5) — ingester filenames renamed; naming now fully consistent. CA's 28-item PROD triage queue still OPEN
+
+(**newest truth: the file-rename item flagged in the masthead below is DONE.** `data/ingestion/sources/state-parks-web.ts` → `california-state-parks.ts` and `state-parks-web-wa.ts` → `washington-state-parks.ts`, so all six states read `<state>-state-parks.ts` alongside the shared GIS `state-parks.ts`. Pure file move — no logic touched.
+
+**`manual.ts` was verified as the only importer, not assumed.** A repo-ROOT sweep found exactly two code references (both dynamic `await import()` in `manual.ts`) plus a stale comment in `oregon-state-parks.ts`. No `.test.ts` or `smoke-*` script shadows either module — the PR 4b failure mode, checked explicitly.
+
+**Runtime resolution proved, not just typecheck.** Dynamic `import()` specifiers can pass `tsc` and still fail at runtime, so both were exercised via dry-run ingest on TEST: `california_state_parks` 284/283/1/0 and `washington_state_parks` 147/141/6/0 — historical numbers unchanged, nothing written.
+
+**No data or schema change. TEST and PROD untouched.** Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web typecheck 0, next build 0.
+
+**STILL OPEN, unchanged:** CA's **28-item PROD triage queue** (keyed `california_state_parks:<page_id>`) and the **Typesense sync** (`places_prod` 21,965 vs export 22,024). The masthead below is preserved verbatim per this file's convention — including its now-superseded "deliberately NOT done" flag, which this entry closes.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 4) — source_ids RENAMED across TEST+PROD; CA's 28-item PROD triage queue still OPEN
 
 (**newest truth: `state_parks_web` → `california_state_parks` and `state_parks_web_wa` → `washington_state_parks`, applied to TEST (both) and PROD (CA only — WA has no PROD data). All six states now use `<state>_state_parks`. Nothing was lost or duplicated; CA's 28-item PROD triage queue survived intact and is still awaiting Adam.**
