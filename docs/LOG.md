@@ -12,6 +12,79 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 14) — CA PROD PROMOTION EXECUTED — migrations + ingest + ER landed; 28-item triage queue OPEN, Typesense deliberately NOT synced
+
+- **This is a real PROD write session.** Runbook followed exactly as the AO /
+  editorial_food promotions did: backed `data/.env` up to
+  `~/.config/overlander/env-backups/.env.test-preop-ca-prod-promote-20260902-094313`,
+  `supabase link --project-ref nqzeywzcowujzyegxbsr`, **field-level** swap of
+  only `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (all 14 keys preserved),
+  work, then restored `data/.env` and re-linked to TEST. Both restorations
+  verified.
+- **Deliberately did NOT swap `TYPESENSE_COLLECTION`.** The task defers the
+  sync, so pointing it at `places_prod` would have been a loaded gun with no
+  benefit. Only that one key differs between the two collections; host and
+  admin key are shared.
+- **The prompt had a gap and it was flagged, not silently patched: no ingest
+  step.** Step 3 asked for ER against PROD, but PROD had 0 `state_parks_web`
+  source_records, so ER would have been a no-op. Treated ingest as required
+  and in-scope (the deliverable names "CA source_records ... for PROD", and the
+  AO runbook orders ingest → materialize).
+- **Ledger read for the first time** (only possible once linked): PROD applied
+  through `20260901000800`, **exactly 20 pending**, no earlier gaps — confirming
+  the schema-probe inference from (later 11).
+- **Migrations: all 20 applied, `db:push-verify` exit 0.** field_precedence
+  INSERTs verified per-file: CA 5, WA 4, OR 3, NV 1, AZ 3; UT's uses
+  `ON CONFLICT` so it is not statically verifiable. PROD field_precedence
+  **99 → 118 rows, 17 → 23 sources**, all six state sources present. During the
+  migration step `master_place` and `source_record` were **UNCHANGED** —
+  schema-only, no side effects.
+- **⚠️ CORRECTION to (later 11), found by the post-apply check.** That entry
+  said the 20-row TEST↔PROD `field_precedence` gap "is exactly the six
+  state-park web sources (CA 5, WA 4, OR 3, NV 1, AZ 3, UT 4)". **Wrong twice:**
+  UT's `20260902040100` inserts **3** rows, not 4 — the six sources total
+  **19** — and the remaining row is **`osm | amenities` priority 8, which
+  exists on TEST only** and has nothing to do with state parks. PROD is now 118
+  and TEST is 119; that 1-row delta is pre-existing OSM drift, not a missing
+  migration. Flagged, not fixed — out of scope.
+- **Ingest: 284 fetched, 283 inserted, 1 skipped (Onyx Ranch SVRA — no
+  coordinates), 0 errors** — identical to TEST's history. Dry-run first.
+- **Entity resolution on PROD's own corpus — genuinely different from TEST, as
+  predicted.** Phase 1 spatial pre-link produced **181**, the same as TEST,
+  because PROD carries the identical CA GIS substrate (914 records → 392
+  polygons). Phase 2 over the remaining 102 diverged: **3 auto_link, 71
+  new_master_place, 28 manual_review** (TEST: 2 auto_link, 77 new_master_place,
+  23 manual_review). Final PROD: **255 confirmed** (181 spatial_containment +
+  72 deterministic + 2 name_dominant), **28 pending**, **0 rejected**, 0 errors.
+  `master_place` 28,348 → **28,419** (+71); `source_record` 37,848 → **38,131**
+  (+283). No attempt was made to force TEST's numbers.
+- **HALTED at triage — the 28-item queue is listed but UNAPPLIED**, per the same
+  standard every TEST round used. Captured with the committed
+  `ca-state-parks-triage-apply.ts` (`--list` is read-only). Shape matches TEST's
+  round: mostly GIS name-abbreviation pairs just under the 0.85 threshold
+  (`Santa Monica State Beach` → `Santa Monica SB`, 0.550) plus the two known
+  bad matches that were rejected on TEST — **Leland Stanford Mansion SHP**
+  (0.712) and **Ishxenta State Park → Point Lobos Ridge NP** (0.389, the lowest
+  in the queue).
+- **Enrichment verified on PROD:** of 252 distinct CA-linked master_places,
+  **251** carry `attribution.description = state_parks_web`, 245 hours, 252
+  contact.
+- **Photos: a real divergence from TEST, with a real cause — and an instrument
+  error caught on the way.** First measurement read `master_place.photo_url`
+  (the column) and reported 82/252, which looked like a failure. That is the
+  wrong surface: CA photos render through the **lateral join in the
+  view/RPC**, not the column. Measured correctly, **233 of the 240 CA-linked
+  master_places present in `master_place_search_export` have a photo — 154 from
+  parks.ca.gov, 79 from upload.wikimedia.org.** Wikipedia sits at photo-lateral
+  priority 2 and `state_parks_web` at 6, so those 79 are legitimately outranked.
+  TEST saw 273 CA photos only because TEST has **31** wikipedia source_records
+  against PROD's **750**. Corpus difference, not a defect. Same class as the
+  standing "scope the query to the element under test" lesson.
+- **Typesense NOT synced, by instruction.** `places_prod` = **21,965** docs;
+  PROD's `master_place_search_export` is now **22,024**. A sync today would move
+  +59, but triage will change the final set, so it waits.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-02 (later 13) — all six state-park script gaps closed; OR/NV/WA verify CLEAN, no data corrections needed
 
 - **Headline: no TEST data is wrong.** OR, NV and WA all re-derive their

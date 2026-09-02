@@ -582,14 +582,50 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > via the existing `photoCredit` pipeline — no web-layer changes needed.
 > Migrations: `20260901001100` (RPC), `20260901001200` (search export).
 >
-> **PROD STATUS 2026-09-02: NOT PROMOTED. `state_parks_web` does not exist on
-> PROD.** Measured read-only this session against `nqzeywzcowujzyegxbsr`
+> **PROD STATUS 2026-09-02 (later): PROMOTED — data landed, triage OPEN.**
+> All 20 state-park migrations applied via `db:push-verify` (CLI linked to PROD,
+> field-level `data/.env` swap, both restored after). PROD `field_precedence`
+> **99 → 118 rows, 17 → 23 sources**; `state_parks_web` has its **5** rows.
+> Ingest: **283 inserted / 284 fetched / 1 skipped** (Onyx Ranch SVRA, no
+> coordinates) / 0 errors — identical to TEST. Entity resolution on PROD's own
+> corpus: **181 spatial_containment + 72 deterministic + 2 name_dominant = 255
+> confirmed**, **28 pending manual review**, **0 rejected**, **71 new
+> master_places**, 0 errors. `master_place` 28,348 → **28,419** (+71);
+> `source_record` 37,848 → **38,131** (+283).
+> **The 28-item queue is UNAPPLIED and awaits Adam's sign-off.**
+> Enrichment verified on PROD: of 252 distinct CA-linked master_places,
+> **251 carry `attribution.description = state_parks_web`**, 245 hours, 252
+> contact.
+> **Photos differ from TEST for a real reason.** Through the export view's
+> lateral join, **233 of 240** CA-linked master_places present in
+> `master_place_search_export` have a photo — **154 from parks.ca.gov, 79 from
+> upload.wikimedia.org**. Wikipedia sits at photo-lateral priority 2 and
+> `state_parks_web` at 6, so Wikipedia legitimately wins those 79. TEST saw 273
+> CA photos because TEST has only **31** wikipedia source_records against PROD's
+> **750** — a corpus difference, not a defect. Note `master_place.photo_url`
+> (the column) reads far lower (82/252) and is NOT the surface that renders;
+> the lateral join in the view/RPC is.
+> **Typesense NOT synced** — `places_prod` still **21,965** docs while PROD's
+> `master_place_search_export` is now **22,024**. Deliberately deferred until
+> triage settles the final record set.
+>
+> **Superseded PROD reading from earlier the same day (kept for the correction):**
+> Measured read-only against `nqzeywzcowujzyegxbsr`
 > (`data/scripts/ca-prod-promotion-preflight.ts`): `source_record` rows for
 > `state_parks_web` = **0**; `field_precedence` rows for `state_parks_web` =
 > **0**. The TEST↔PROD `field_precedence` delta is **119 rows / 23 source_ids
 > (TEST) vs 99 / 17 (PROD)** — the 20-row gap is exactly the six state-park web
 > sources (CA 5, WA 4, OR 3, NV 1, AZ 3, UT 4), i.e. **none of CA/WA/OR/NV/AZ/UT
-> has landed on PROD.** PROD is otherwise current: `master_place` and
+> has landed on PROD.**
+> ⚠️ **CORRECTED 2026-09-02 after the apply — that gap sentence was wrong
+> twice.** UT's `20260902040100` inserts **3** rows, not 4, so the six sources
+> total **19**, not 20; and the remaining 1 row of the 20 is
+> **`osm | amenities` priority 8, present on TEST only** and unrelated to state
+> parks. Post-apply PROD reads 118 rows / 23 sources — complete for these six
+> sources — against TEST's 119. That 1-row difference is the pre-existing OSM
+> drift, not a missing migration. The ledger confirmed the file count
+> independently: exactly 20 pending, applied through `20260901000800`, no gaps.
+> PROD is otherwise current: `master_place` and
 > `master_place_search_export` have identical column sets on both DBs, and
 > `master_place_photo_candidate` exists on PROD — so PROD carries every
 > migration through `20260901000800`, and exactly the **20 state-park migration

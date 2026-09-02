@@ -1,3 +1,36 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 3) — CA PROMOTED TO PROD; 28-item triage queue OPEN awaiting Adam; Typesense NOT synced
+
+(**newest truth: CA `state_parks_web` is live on PROD. Migrations + ingest + entity resolution all landed. The 28-item manual-review queue is listed but UNAPPLIED, and Typesense is deliberately un-synced. Both are Adam's gates.**
+
+**Env discipline:** backed up → `supabase link` PROD → **field-level** swap of only `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (14/14 keys preserved) → work → `data/.env` restored to TEST and CLI re-linked to TEST, both verified. `TYPESENSE_COLLECTION` was deliberately left at `places_test` — the sync is deferred, so switching it would be a loaded gun.
+
+**The prompt had no ingest step; flagged and treated as in-scope.** PROD held 0 `state_parks_web` records, so ER would have been a no-op. The deliverable names "CA source_records ... for PROD", and the AO runbook orders ingest → materialize.
+
+**Migrations — all 20, exit 0.** Ledger (readable for the first time once linked) confirmed PROD was applied through `20260901000800` with exactly 20 pending, no gaps. field_precedence **99 → 118 rows, 17 → 23 sources**; all six state sources present; `state_parks_web` has its 5. `master_place`/`source_record` **unchanged** during the migration step — no side effects.
+
+**⚠️ Correction to the earlier reading below:** the 20-row gap was NOT "exactly the six state-park sources". UT inserts **3** rows not 4 (six sources = **19**), and the last row is **`osm | amenities` priority 8, TEST-only**. PROD 118 vs TEST 119 is that pre-existing OSM drift. Flagged, not fixed.
+
+**Ingest:** 284 fetched / **283 inserted** / 1 skipped (Onyx Ranch SVRA, no coords) / 0 errors — identical to TEST.
+
+**Entity resolution — different from TEST, as predicted, and not forced to match:**
+| phase | PROD | TEST |
+|---|---|---|
+| spatial_containment | **181** | 181 |
+| auto_link | 3 | 2 |
+| new_master_place | **71** | 77 |
+| manual_review | **28** | 23 |
+Final PROD: **255 confirmed** (181 spatial + 72 deterministic + 2 name_dominant), **28 pending**, **0 rejected**, 0 errors. `master_place` 28,348 → **28,419**; `source_record` 37,848 → **38,131**. Phase 1 matched TEST exactly because PROD carries the identical CA GIS substrate (914 → 392 polygons); phase 2 diverged because PROD's corpus is sparser.
+
+**Enrichment on PROD:** 251/252 CA-linked master_places carry `attribution.description = state_parks_web`; 245 hours; 252 contact.
+
+**Photos — divergence explained, after catching an instrument error.** Reading `master_place.photo_url` (the column) gave 82/252 and looked like failure; that is the wrong surface — CA photos render via the **view/RPC lateral join**. Correctly measured: **233 of 240** CA-linked master_places in `master_place_search_export` have a photo — **154 parks.ca.gov, 79 upload.wikimedia.org**. Wikipedia is priority 2 vs `state_parks_web`'s 6, so those 79 are legitimately outranked. TEST showed 273 only because TEST has **31** wikipedia records vs PROD's **750**. Corpus difference, not a defect.
+
+**Typesense NOT synced:** `places_prod` = **21,965** docs, PROD's export view now **22,024**. Syncing today would move +59, but triage will change the final set — so it waits until after sign-off.
+
+**TWO OPEN GATES, both Adam's:** (1) the 28-item triage queue — apply with `ca-state-parks-triage-apply.ts --apply <decisions.json> --write`; (2) the Typesense `search:sync` afterwards, which needs only `TYPESENSE_COLLECTION=places_prod`. WA/OR/NV/AZ/UT have schema on PROD but **zero data** — inert, and each still needs its own promotion decision. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 2) — six-state script gaps CLOSED; OR/NV/WA verify clean; PROD still untouched
 
 (**newest truth: every one of the six states now has a committed ER script and a committed triage script — the audit tool says `CLOSED`. No TEST data turned out to be wrong, so no corrections were proposed and no sign-off was needed. PROD untouched; TEST unmutated.**
