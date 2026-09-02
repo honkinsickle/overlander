@@ -12,6 +12,27 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 15) — WA State Parks visitor-website source (`state_parks_web_wa`) — full pipeline on TEST
+
+- **New source `state_parks_web_wa`** — per-state source_id (separate from
+  CA's `state_parks_web`), visitor content from parks.wa.gov for all 147
+  WA state parks (141 ingested; 6 trail parks skipped for missing
+  coordinates).
+- **Field set differs from CA:** 19 fields vs CA's 22. WA has `activities`
+  (recreation tags) and `features` (landscape tags) — CA-absent. WA has
+  `rules` (broader than CA's `dogs` — includes fires, horses, park-
+  specific rules). WA has no explicit `status` field — `operational_status`
+  left null (WA has no clean open/closed signal). `contact` field parsed
+  for email + phone (freeform block, richer than CA's phone-only).
+- **Entity resolution:** 117 spatial pre-link + 14 standard ER + 10 manual
+  triage (9 linked, 1 rejected — Turn Island Marine SP ≠ San Juan Islands
+  NWR) = **141/141 linked, 0 unlinked.**
+- **Photos wired directly** at priority 7 (after CA's state_parks_web at 6).
+  141 parks get photos from parks.wa.gov. Credit: "Washington State Parks".
+- **Migrations:** 20260901001300 (4 field_precedence rows), 20260901001400
+  (RPC photo lateral), 20260901001500 (search export photo lateral).
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-01 (later 14) — state_parks_web photos wired into rendering pipeline
 
 - **Two migrations** add `state_parks_web` to the photo lateral joins in
