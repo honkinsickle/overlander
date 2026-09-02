@@ -243,11 +243,12 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `operational_status` (RESTRICTED / CLOSED — non-Open values only) | **20** |
 > | — with `reservation_url` (external booking, normalized_payload only) | **57** |
 > | — with `overnight = true` (normalized_payload only) | **55** |
-> | `master_place_id` linked | **178** |
+> | `master_place_id` linked | **192** (all resolved after triage) |
 > | — via spatial containment (point-in-polygon vs state_parks GIS) | **107** |
 > | — via standard ER (deterministic + name_dominant + close_nameless etc.) | **71** |
-> | `place_match` pending manual review | **14** |
-> | new `master_place` rows created | **70** |
+> | — via Adam-approved manual triage | **13** (all name_sim ≥ 0.629 with a real match blocked by combined-confidence threshold; abbreviations, category variations, and OSM naming drift) |
+> | `place_match` rejected (wrong ER match) | **1** (`oregon_state_parks:197` HCRHT Bridge of the Gods ≠ HCRHT Cascade Locks — same category, different trailheads; new master_place created, same treatment as CA's Leland Stanford / Ishxenta rejects) |
+> | new `master_place` rows created | **71** (70 from initial ER + 1 from the triage reject) |
 >
 > **Migration applied:** `20260902000000_oregon_state_parks_field_precedence` —
 > 3 `field_precedence` rows: description (2), amenities (5),
@@ -268,7 +269,7 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > by default). Migrations: `20260902000100` (RPC), `20260902000200`
 > (search export).
 >
-> **Entity resolution completed in two phases** (mirrors the CA precedent).
+> **Entity resolution completed in three phases** (mirrors the CA precedent).
 > (1) Spatial pre-link: 107 records matched by point-in-polygon against
 > existing OR `state_parks` GIS park boundary polygons (`data/scripts/or-state-parks-er.ts`;
 > point-in-polygon in JS against polygons read from
@@ -277,10 +278,17 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > (2) Standard `matchAll` for the remaining 85: 1 auto-link, 14 manual
 > review, 70 new master_places (parks/trailheads/viewpoints/heritage
 > sites without nearby GIS records).
->
-> **14 pending manual_review items** queued for triage — mostly ambiguous
-> name pairings (e.g. "Detroit Lake SRA", "Wallowa Lake SP") that fell
-> just under the auto-link threshold. Triage deferred pending review.
+> (3) Adam-approved manual triage of the 14: **13 linked** (perfect/near-perfect
+> names blocked by combined-confidence threshold; abbreviations like
+> `HCRHT ↔ Historic Columbia River Highway State Trail`, OR-specific
+> naming drift like `Wayside ↔ State Park` on OSM, `Recreation Site ↔ State Park`
+> on OSM, and one park_feature category mismatch for Erratic Rock SNS
+> that ER's cat_compat scored 0.00) and **1 rejected** (`oregon_state_parks:197`
+> HCRHT Bridge of the Gods Trailhead — genuinely distinct from OSM's
+> "HCRHT Cascade Locks Trailhead" within the same town; new master_place
+> created via `apply_match_outcomes(new_master_place)`). All linked mps
+> recomputed. Verified 178/178 pre-existing confirmed place_match rows
+> untouched by the triage.
 >
 > **Category inference:** OR has no `type` column (unlike CA), so
 > categories are derived from name-suffix patterns in the ingester's

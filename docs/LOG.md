@@ -12,6 +12,60 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later) — OR State Parks manual-review triage applied (PR #346)
+
+- **All 14 pending manual_review items resolved:** 13 linked, 1 rejected +
+  new master_place. **192/192 source_records now linked** (was 178). No
+  new PR — folded into PR #346 before merge.
+- **The 13 linked** were all name_sim ≥ 0.629 with a legitimate same-place
+  candidate — held below the auto-link threshold by combined_confidence,
+  not by a real mismatch. Two shapes dominated: OSM naming drift
+  (`Wayside ↔ State Park`, `Recreation Site ↔ State Park`, `HCRHT` vs
+  full spelling of "Historic Columbia River Highway State Trail",
+  "Face Rock Viewpoint" vs "Face Rock State Scenic Viewpoint",
+  "Jackson F Kimball" vs "Jackson F. Kimball"), and combined-confidence
+  under 0.85 on `state_parks`-backed pairs where the polygon-centroid
+  distance was 150–1,300 m. Perfect-name matches with all-`state_parks`-GIS
+  backing didn't auto-link because the `name_dominant_low_conf` method
+  caps confidence at 0.60. Notes captured on each `place_match`.
+- **The 1 rejected — `oregon_state_parks:197`:** OR's "Historic Columbia
+  River Highway State Trail - Bridge of the Gods Trailhead" and OSM's
+  "HCRHT Cascade Locks Trailhead" are **genuinely different access
+  points** on the HCRHT within the town of Cascade Locks (Adam's local
+  knowledge, confirmed against the triage report's UNCLEAR flag). Same
+  treatment as CA's Leland Stanford Mansion / Ishxenta rejects: mark
+  the pending place_match `rejected`, invoke
+  `apply_match_outcomes(new_master_place)` to create a fresh mp
+  (`b9e7bc2f…`), link the source, recompute.
+- **Non-regression verified:** all **178** pre-existing confirmed
+  place_match rows still present at their original `(source_record_id,
+  master_place_id, match_method)` fingerprint after the apply — 0 lost,
+  0 mutated. The 107 spatial_containment and 71 auto-linked rows are
+  untouched.
+- **Auto-link spot-check (part of the triage report, done before this
+  apply) came back clean:** across all 71 non-spatial confirmed rows,
+  `name_similarity` and `category_compatibility` are min/max both 1.000
+  and 1.00 respectively. 70 are `deterministic` (all `new_master_place`
+  self-matches — structurally can't be false positives), and the 1
+  `name_dominant` is `Angel's Rest Trailhead ↔ Angel'S Rest Trailhead`
+  (correct match with a capitalization glitch in the existing mp).
+  **No false positive analogous to CA's Leland Stanford Mansion or
+  WA's Turn Island** was found. Sample scope: 20 lowest-name-sim + the
+  1 non-deterministic method, out of 71.
+- **Two matcher gaps filed for follow-up (not fixed here, in BACKLOG):**
+  (a) `CATEGORY_COMPATIBILITY` missing a `park_feature` entry — same
+  shape as the park/historic/interest gap fixed in commit 379c213 for
+  CA — this scored `cat_compat=0.00` for Erratic Rock SNS despite a
+  0.927 name match; (b) `recreation_area↔public_land` (0.70) and
+  `park↔recreation_area` (0.90) contributed to 5 of the 13 LINK items
+  needing manual review despite `name_sim=1.000`. Worth revisiting
+  before the next state-park sources (WA is already pending on the
+  `wa-state-parks` branch; NV/UT/AZ if any come later).
+- Final place_match distribution for `oregon_state_parks`: 192 confirmed
+  (107 spatial_containment + 71 deterministic + 10 name_dominant_low_conf
+  + 2 close_nameless + 2 blended_residual + 1 name_dominant) + 1
+  rejected. Zero pending.
+
 ## 2026-09-02 — OR State Parks (`oregon_state_parks`) ingested + entity-resolved on TEST
 
 - **New source `oregon_state_parks`** — visitor-facing content from
