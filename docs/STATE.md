@@ -1,3 +1,28 @@
+# STATE — branch `promote-nv-state-parks-prod` · 2026-09-02 (later 13) — **NV's PROD PROMOTION IS COMPLETE.** Four of six states live.
+
+(**newest truth: NV is fully live on PROD — Cave Rock confirmed as LINK, applied, Typesense synced. Nothing about the NV promotion remains open.**
+
+**Triage:** 1 LINK · 0 relink · 0 reject · 0 failed → **28/28 linked, 0 pending, 0 rejected** (21 spatial_containment · 6 deterministic · 1 manual_triage). Cave Rock verified to have landed on the **GIS unit** `Cave Rock Lake Tahoe-Nevada State Park` (`9d6a04cc`, `recreation_area`), not the atlas_oddities formation, with attribution flowing.
+
+**Typesense:** fetched **22,105** · indexed **22,105** · failed **0** · pruned **0**. `places_prod` = **22,105** = export view exactly; `places_test` untouched at 33,047.
+
+**Full arc:**
+| step | result |
+|---|---|
+| Migrations | none needed |
+| Ingest | 28 fetched · **28 inserted** · 0 skipped · 0 errors |
+| Entity resolution | 21 spatial (predicted exactly) + 6 new mps + 1 manual_review |
+| Triage | 1 LINK → **28/28 linked** |
+| Typesense | `places_prod` **22,099 → 22,105** |
+
+NV was the **first state whose polygon sets matched exactly** between TEST and PROD (27/27), and phase 1 landed 21 precisely as predicted.
+
+**⚠️ NEW, QUANTIFIED — state-park ↔ `atlas_oddities` duplication is systematic.** Measured on PROD: **6 of 28 NV records have a same-named `atlas_oddities` twin within 3 km**, several at **0 m** (Berlin-Ichthyosaur, Fort Churchill, Cathedral Gorge at 0m; Ward Charcoal Ovens 10m; Cave Rock 15m; Valley of Fire 1,885m) — **21% of NV**, against isolated single cases in CA and OR. Live search returns both rows. Pre-existing, not caused by these promotions, **not fixed here** — but now measured rather than anecdotal, and it belongs in the dedup backlog alongside CA's Gray Whale Cove / Watts Towers pairs.
+
+**FOUR OF SIX STATES LIVE ON PROD (CA, WA, OR, NV). AZ and UT remain** — both use `ingest_time_name_link` rather than spatial pre-link, so neither the polygon-set comparison nor the `--verify` mode that anchored all four preflights applies in the same form. They need a genuinely fresh read. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-nv-state-parks-prod` · 2026-09-02 (later 12) — NV ingested + entity-resolved on PROD; 1-item queue HALTED for sign-off
 
 (**newest truth: NV is on PROD. Ingest and ER done; the single manual-review item is UNAPPLIED and Typesense is un-synced. The auto-approval rule was deliberately NOT invoked.**

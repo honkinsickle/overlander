@@ -12,6 +12,61 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 25) — NV triage applied + Typesense synced. **NV's PROD promotion is COMPLETE.** Four of six states live.
+
+- **Cave Rock confirmed as LINK by Adam; applied.** 1 linked, 0 relinked,
+  0 rejected, 0 failed. Dry-run first. Final `nevada_state_parks` on PROD:
+  **28/28 linked, 0 pending, 0 rejected** — 21 spatial_containment ·
+  6 deterministic · 1 manual_triage (`adam:nv-triage-2026-09-02`).
+- **Verified the link landed on the GIS unit**, not the oddity: Cave Rock →
+  `Cave Rock Lake Tahoe-Nevada State Park` (`9d6a04cc`, `recreation_area`),
+  carrying `attribution.description = nevada_state_parks`.
+- **The decisions file's auto-generated note was hand-corrected before
+  applying.** The builder writes a generic "GIS name-abbreviation pair" note for
+  every LINK, which is accurate for CA/WA/OR but wrong for Cave Rock — that case
+  is "closer exact-name alternate rejected because it's an atlas_oddities
+  formation, not the park unit". The decisions JSON is the permanent audit
+  trail, so it now records the actual reasoning.
+- **Typesense synced:** fetched **22,105** · indexed **22,105** · failed **0** ·
+  pruned **0**. `places_prod` = **22,105**, exactly equal to the export view.
+  `places_test` untouched at **33,047**. Delta re-measured live first (+6).
+- **Searchability spot-checked live:** Cave Rock, Valley of Fire,
+  Berlin-Ichthyosaur, Spring Mountain Ranch, Cathedral Gorge all resolve; the
+  triage target `9d6a04cc` is indexed under its full park name.
+- **⚠️ NEW, QUANTIFIED: the state-park ↔ `atlas_oddities` duplication is
+  systematic, not incidental.** Measured on PROD — **6 of 28 NV records have a
+  same-named `atlas_oddities` twin within 3 km**, several at **0 m**:
+  Berlin-Ichthyosaur (0m), Fort Churchill (0m), Cathedral Gorge (0m),
+  Ward Charcoal Ovens (10m), Cave Rock (15m), Valley of Fire (1,885m). That is
+  **21% of NV**, against isolated single cases noted for CA (Gray Whale Cove,
+  Watts Towers) and OR (Erratic Rock). Live search returns both rows for these.
+  **Not fixed here** — it is a pre-existing cross-source dedup problem, not
+  caused by these promotions — but it is now measured rather than anecdotal and
+  belongs in the dedup backlog. NV's own Cave Rock triage decision was
+  effectively a manual instance of this same collision.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+### NV PROD promotion — full arc, closed
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's batch push |
+| Ingest | 28 fetched · **28 inserted** · 0 skipped · 0 errors |
+| Entity resolution | 21 spatial_containment (predicted exactly) + 6 new_master_place + 1 manual_review |
+| Triage | 1 LINK → **28/28 linked, 0 pending, 0 rejected** |
+| Typesense | `places_prod` **22,099 → 22,105**, 0 pruned, 0 failed |
+
+Photos: 27 of 27 in-view NV master_places carried one at ER time — 20
+`parks.nv.gov`, 7 `upload.wikimedia.org`. Enrichment: every NV-linked
+master_place carries `attribution.description = nevada_state_parks`.
+
+**Four of six states live on PROD (CA, WA, OR, NV). AZ and UT remain** — both use
+`ingest_time_name_link` rather than spatial pre-link, so neither the polygon-set
+comparison nor the `--verify` mode that anchored all four preflights applies to
+them in the same form. They need a genuinely fresh read.
+
 ## 2026-09-02 (later 24) — NV ingested + entity-resolved on PROD; 1-item queue HALTED for sign-off (auto-approval rule NOT met)
 
 - **Preflight was the cleanest of the four spatial states.** TEST 28/28 linked,
