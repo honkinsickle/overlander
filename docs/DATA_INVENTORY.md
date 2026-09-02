@@ -610,7 +610,18 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > confirmed**, **28 pending manual review**, **0 rejected**, **71 new
 > master_places**, 0 errors. `master_place` 28,348 → **28,419** (+71);
 > `source_record` 37,848 → **38,131** (+283).
-> **The 28-item queue is UNAPPLIED and awaits Adam's sign-off.**
+> **TRIAGE APPLIED 2026-09-02** — Adam signed off; 25 LINK + 3 RELINK + 0 REJECT,
+> 0 failed. Final PROD state: **283/283 linked, 0 pending, 0 rejected**
+> (181 spatial_containment · 72 deterministic · 2 name_dominant · 28
+> manual_triage). 3 relinks corrected the ER's proposal: Ishxenta State Park →
+> `Ishxenta SP`, Topanga State Park → `Topanga SP`, Colusa-Sacramento River SRA
+> → the SRA rather than its campground. Decisions committed at
+> `data/triage-decisions/ca-prod-2026-09-02.json`. Distinct CA-linked
+> master_places **280** (252 pre-triage); 279 carry
+> `attribution.description = california_state_parks`, 273 hours, 280 contact.
+> Export view moved **22,024 → 22,022** — McGrath SB and Governor's Mansion SHP
+> resolved to `operational_status = CLOSED`, which the view deliberately
+> excludes. Intended, not a defect.
 > Enrichment verified on PROD: of 252 distinct CA-linked master_places,
 > **251 carry `attribution.description = california_state_parks`**, 245 hours, 252
 > contact.
@@ -623,9 +634,11 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > **750** — a corpus difference, not a defect. Note `master_place.photo_url`
 > (the column) reads far lower (82/252) and is NOT the surface that renders;
 > the lateral join in the view/RPC is.
-> **Typesense NOT synced** — `places_prod` still **21,965** docs while PROD's
-> `master_place_search_export` is now **22,024**. Deliberately deferred until
-> triage settles the final record set.
+> **Typesense STILL NOT synced — the one remaining step to close CA's PROD
+> promotion.** `places_prod` **21,965** docs vs the export view's **22,022** — a
+> **+57** delta. `npm run -w data search:sync` with
+> `TYPESENSE_COLLECTION=places_prod` (the only env change needed; host and admin
+> key are shared).
 >
 > **Superseded PROD reading from earlier the same day (kept for the correction):**
 > Measured read-only against `nqzeywzcowujzyegxbsr`

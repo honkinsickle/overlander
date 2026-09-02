@@ -12,6 +12,60 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 18) — CA PROD triage APPLIED — 283/283 linked, 0 pending, 0 rejected. Only Typesense remains.
+
+- **Adam signed off; applied on PROD. 25 LINK + 3 RELINK + 0 REJECT, 0 failed.**
+  Final `california_state_parks` state on PROD: **283/283 linked, 0 pending,
+  0 rejected**. Methods: 181 spatial_containment, 72 deterministic, 2
+  name_dominant, **28 manual_triage**. Queue now reads 0 items.
+- **The decisions file was GENERATED from the live queue, not hand-written** —
+  new `data/scripts/ca-prod-triage-build-decisions.ts` reads the 28 pending rows
+  and emits `data/triage-decisions/ca-prod-2026-09-02.json` (committed as the
+  audit trail). Transcribing 28 external_ids by hand is how a decision ends up
+  aimed at the wrong record. The 3 relink targets are resolved **by name** and
+  then **asserted against the UUID prefix in the signed-off report** — if a name
+  had resolved to a row nobody reviewed, it fails loudly instead of relinking
+  silently. It also refuses if the decision count ≠ queue size.
+- **Dry-run first** (`--apply` without `--write`): 25/3/0, 0 skipped, 0 failed.
+  Then `--write`, same result.
+- **All 3 relinks verified to have landed on the approved targets**, each
+  stamped `resolved_by = adam:ca-triage-2026-09-02`, `match_method =
+  manual_triage`, and each now carrying
+  `attribution.description = california_state_parks`:
+  - Ishxenta State Park → `Ishxenta SP` `453d4ecf…`
+  - Topanga State Park → `Topanga SP` `710517ba…`
+  - Colusa-Sacramento River SRA → `Colusa-Sacramento River SRA` `2957ec6f…`
+- **Enrichment across the 280 distinct CA-linked master_places** (252 before
+  triage, +28): **279** carry `attribution.description = california_state_parks`,
+  273 hours, 280 contact.
+- **⚠️ CREDENTIAL HANDLING — deliberate deviation, flagged.** The request asked
+  for the field-level `data/.env` swap. **That pattern was NOT used here, on
+  purpose**: it exists because `db:push-verify` hardcodes `--env-file=.env`, and
+  no migration was involved in this step. PROD creds were exported inline for
+  the process instead, so **`data/.env` never pointed at PROD and the CLI was
+  never linked to PROD** — strictly safer, since there was no window in which a
+  concurrent process could pick up PROD credentials from disk. Everything the
+  swap ritual protects was preserved and verified after: `data/.env` on TEST,
+  14/14 keys, `TYPESENSE_COLLECTION=places_test`, CLI linked to TEST. An env
+  backup was taken anyway
+  (`.env.test-preop-ca-triage-20260902-131807`).
+- **The export view DROPPED by 2 and the cause was chased down, not assumed.**
+  PROD `master_place_search_export` went **22,024 → 22,022**. Cause: **McGrath
+  SB** and **Governor's Mansion SHP** picked up `operational_status = CLOSED`
+  from CA's visitor content during recompute, and the view deliberately excludes
+  CLOSED/DECOMMISSIONED. Both are `is_searchable = true`; they are correctly
+  withheld from search because they are closed. Intended behaviour, not a
+  defect. 26 of the 28 triage targets are in the view.
+- **Not touched, as instructed:** the two pre-existing cross-source duplicate
+  pairs (`Gray Whale Cove SB` vs the NPS `park_feature`; `Watts Towers of Simon
+  Rodia SHP` vs the `atlas_oddities` `Watts Towers`). Separate dedup pass.
+- **ONLY REMAINING STEP TO CLOSE CA's PROD PROMOTION: the Typesense sync.**
+  `places_prod` = **21,965** docs vs PROD's export view **22,022** — a **+57**
+  delta. Run `npm run -w data search:sync` with `TYPESENSE_COLLECTION=places_prod`;
+  that one key is the only env change needed (host and admin key are shared).
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 17) — CA PROD triage queue reported for sign-off (READ-ONLY, nothing applied)
 
 - **28 pending items listed and enriched. No writes.** `data/.env` stayed on

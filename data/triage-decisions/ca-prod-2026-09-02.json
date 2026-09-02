@@ -1,0 +1,145 @@
+[
+  {
+    "external_id": "california_state_parks:461",
+    "action": "relink",
+    "target_mp_id": "2957ec6f-efeb-48a3-a239-07528904d59a",
+    "notes": "Manual triage RELINK: ER proposed the Colusa-Sacramento River Campground (category=campground, sim 0.959). The source record is the SRA itself (inferred_category=recreation_area); Colusa-Sacramento River SRA (state_parks:CA:park:140, 1154m, sim 0.972) is the right home, not its campground sub-unit."
+  },
+  {
+    "external_id": "california_state_parks:22628",
+    "action": "link",
+    "notes": "Manual triage LINK: California Indian Heritage Center Park Property → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:550",
+    "action": "link",
+    "notes": "Manual triage LINK: Lighthouse Field State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:530",
+    "action": "link",
+    "notes": "Manual triage LINK: Thornton State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:445",
+    "action": "link",
+    "notes": "Manual triage LINK: Caspar Headlands State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:624",
+    "action": "link",
+    "notes": "Manual triage LINK: Santa Monica State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:22271",
+    "action": "link",
+    "notes": "Manual triage LINK: Rancho San Andrés Castro Adobe Park Property → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:607",
+    "action": "link",
+    "notes": "Manual triage LINK: McGrath State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:488",
+    "action": "link",
+    "notes": "Manual triage LINK: Woodland Opera House State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:498",
+    "action": "link",
+    "notes": "Manual triage LINK: Governor's Mansion State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:613",
+    "action": "link",
+    "notes": "Manual triage LINK: Watts Towers of Simon Rodia State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:424",
+    "action": "link",
+    "notes": "Manual triage LINK: Admiral William Standley State Recreation Area → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:660",
+    "action": "link",
+    "notes": "Manual triage LINK: South Carlsbad State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:588",
+    "action": "link",
+    "notes": "Manual triage LINK: California State Mining and Mineral Museum Park Property → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:22882",
+    "action": "link",
+    "notes": "Manual triage LINK: San Timoteo Canyon Park Property → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:24343",
+    "action": "link",
+    "notes": "Manual triage LINK: Locke Boarding House Museum Point of Interest → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:489",
+    "action": "link",
+    "notes": "Manual triage LINK: Leland Stanford Mansion State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:573",
+    "action": "link",
+    "notes": "Manual triage LINK: Salinas River State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:547",
+    "action": "link",
+    "notes": "Manual triage LINK: Twin Lakes State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:569",
+    "action": "relink",
+    "target_mp_id": "453d4ecf-3a3b-4128-8e76-1a6622cbbc5a",
+    "notes": "Manual triage RELINK: ER proposed Point Lobos Ridge NP (conf 0.389). The correctly-named unit Ishxenta SP (state_parks:CA:park:435) sits 2643m away and is the right target. TEST rejected this record to a new master_place; on PROD that would have duplicated the existing Ishxenta SP."
+  },
+  {
+    "external_id": "california_state_parks:528",
+    "action": "link",
+    "notes": "Manual triage LINK: Gray Whale Cove State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:629",
+    "action": "relink",
+    "target_mp_id": "710517ba-2296-4177-bdef-5d8a32b81e80",
+    "notes": "Manual triage RELINK: ER proposed Topanga CP (sim 0.883, 274m). Topanga SP (state_parks:CA:park:572, 1294m, sim 0.918) is the correct unit — CP and SP are different designations, a distinction the raw score cannot see."
+  },
+  {
+    "external_id": "california_state_parks:548",
+    "action": "link",
+    "notes": "Manual triage LINK: Santa Cruz Mission State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:446",
+    "action": "link",
+    "notes": "Manual triage LINK: Schooner Gulch State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:475",
+    "action": "link",
+    "notes": "Manual triage LINK: Benicia Capitol State Historic Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:22274",
+    "action": "link",
+    "notes": "Manual triage LINK: John B. Dewitt Redwoods State Natural Reserve → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:572",
+    "action": "link",
+    "notes": "Manual triage LINK: Zmudowski State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "california_state_parks:412",
+    "action": "link",
+    "notes": "Manual triage LINK: Pelican State Beach → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  }
+]
