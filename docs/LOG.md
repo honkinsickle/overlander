@@ -12,6 +12,76 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 20) — WA promoted to PROD: ingest + ER done, 8-item triage queue OPEN awaiting sign-off
+
+- **Branched off the merged `main` (`b3b4f28`, PR #354 squash-merged).** Verified
+  the squash carried the whole CA arc — prune-comment fix, rename migration,
+  triage audit trail, overlap fix, old ingester filenames gone.
+- **No migrations needed.** Preflight confirmed WA's 4 `field_precedence` rows
+  and photo-lateral slot 7 already landed on PROD in CA's 20-file batch push,
+  with zero WA data. That removed the hardest blocker CA faced.
+- **Ingest: 147 fetched, 141 inserted, 6 skipped (trail parks, no coords),
+  0 errors** — matching the dry-run and PR #345's history exactly.
+- **Entity resolution on PROD:** phase 1 **116** spatial_containment, phase 2
+  **0 auto_link / 17 new_master_place / 8 manual_review**, 0 errors. Final:
+  **133/141 linked, 8 pending, 0 rejected** (116 spatial + 17 deterministic).
+  116 links carry `auto:washington_state_parks_er` — the first time WA's links
+  have a real resolver stamp; the TEST-era 127 are still `(null)`.
+- **Phase 1 gave 116, not TEST's 117 — chased down, not waved at.** The polygon
+  COUNT is 204 on both, but the SETS differ by two members each way: TEST has
+  `Alta Lake` + `Jarrell Cove` polygons, PROD has `Turn Island` + `Conconully`.
+  Substrate is built only from GIS records already linked to a master_place, and
+  the two corpora link differently. 117 − 2 (TEST-only hits: jarrell-cove,
+  alta-lake) + 1 (PROD-only hit: turn-island) = **116**, exactly. Not a code
+  defect — `computeSpatialMatches` is deterministic given its inputs.
+  Note `Turn Island` is the record TEST *rejected* ("Turn Island ≠ San Juan
+  Islands NWR"); on PROD it spatially links to its own polygon.
+- **PROD deltas:** `master_place` 28,419 → **28,436** (+17, the new mps);
+  `source_record` 38,131 → **38,272** (+141); export view 22,022 → **22,038**
+  (+16). `california_state_parks` still **283** — CA untouched.
+- **The +16-vs-+17 gap reconciles exactly.** Three WA-linked master_places are
+  absent from the export view — `Peace Arch`, `Stuart Island Marine State Park`,
+  `Posey Island` — all with `is_searchable = true`, `operational_status = null`,
+  `source_count > 0`. The only remaining filter is
+  `st_intersects(mp.geometry, six_state_footprint())`, and all three sit at the
+  northwest edge: Peace Arch at **latitude 49.0014** (the 49th-parallel border),
+  Stuart and Posey in the San Juans past **−123°**. Of the three, only Stuart
+  Island is a NEW mp (source_count 1); the other two pre-existed and were
+  already outside the view. 17 new − 1 outside footprint = **+16**. Different
+  cause from CA's −2, which was `operational_status = CLOSED`.
+- **Photos — the preflight prediction held.** Measured through the export view's
+  lateral join (NOT the `photo_url` column, the correction CA's session had to
+  make): **PROD 129 of 129 in-view WA master_places carry a photo — 77
+  `parks.wa.gov`, 52 `upload.wikimedia.org`**, against TEST's 131
+  `parks.wa.gov` + 2 `cdn.recreation.gov`. Wikipedia sits at photo-lateral
+  priority 2 and WA at 7, and PROD has far more wikipedia source_records than
+  TEST, so those 52 are legitimately outranked. **Expected, not corrected.**
+- **Enrichment on PROD:** all **132** distinct WA-linked master_places carry
+  `attribution.description/hours/contact = washington_state_parks`.
+- **HALTED at triage — the 8-item queue is UNAPPLIED**, awaiting sign-off. Far
+  cleaner than CA's 28: every item is the same shape, a WA source name
+  `X State Park` against a GIS canonical name that drops the suffix (`Nolte`,
+  `Belfair`, `Kopachuck`, `Triton Cove`, `Bottle Beach`, `Matia Island`,
+  `Jackson House`, `Conconully`). **Recommendation: 8 LINK, 0 RELINK, 0 REJECT.**
+  Alternate-target search run on every item per the CA/AZ standard; no better
+  target found for any.
+  - `Conconully` deserves a note: two alternates score *higher* on name
+    (`Conconully Lake` and `Conconully Lake Campground`, both 0.936, vs the
+    proposed `Conconully` at 0.925) — a Jaro-Winkler prefix artifact. Distance
+    decides it: 66m for the proposed against 1,747–1,801m, and the proposal is
+    the `state_parks` GIS park unit. LINK stands.
+  - `Belfair` ties its own campground at 0.908; the proposed `recreation_area`
+    is the park, the alternate is its campground. LINK stands.
+- **Tooling: `ca-prod-triage-report.ts` → `state-parks-prod-triage-report.ts`,
+  parameterised on `--source`.** Generalised rather than copied — a forked copy
+  is exactly how the overlapping-polygon fix landed in one ER script and went
+  stale in three.
+- **Typesense NOT synced**, per sequencing — that comes after triage is applied.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 19) — Typesense synced. **CA's PROD promotion is COMPLETE end-to-end.**
 
 - **`places_prod` synced: fetched 22,022 · indexed 22,022 · failed 0 · pruned

@@ -1,5 +1,9 @@
 /**
- * READ-ONLY triage report for the `california_state_parks` manual_review queue.
+ * READ-ONLY triage report for a state-park source's manual_review queue.
+ *
+ * Parameterised over `--source` (was `ca-prod-triage-report.ts`, CA-hardcoded).
+ * Generalised for WA rather than copied: a forked copy is how the
+ * overlapping-polygon fix landed in one ER script and went stale in three.
  *
  * The committed `ca-state-parks-triage-apply.ts --list` emits external_id,
  * source name, proposed master_place and confidence. A triage decision needs
@@ -22,7 +26,7 @@
  * Target is whatever SUPABASE_URL points at — export PROD creds inline rather
  * than editing data/.env:
  *   export SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
- *   npx tsx scripts/ca-prod-triage-report.ts
+ *   npx tsx scripts/state-parks-prod-triage-report.ts --source washington_state_parks
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -30,7 +34,13 @@ import natural from "natural";
 import { findCandidates, normalizeName } from "../entity-resolution/matcher.ts";
 
 const jaroWinkler = natural.JaroWinklerDistance;
-const SOURCE_ID = "california_state_parks";
+function requireSourceArg(): string {
+  const i = process.argv.indexOf("--source");
+  const v = i === -1 ? undefined : process.argv[i + 1];
+  if (!v) throw new Error("usage: state-parks-prod-triage-report.ts --source <source_id>");
+  return v;
+}
+const SOURCE_ID = requireSourceArg();
 /** Wide enough to catch a better-named unit a few km away; ER's default is 500m. */
 const ALT_RADIUS_M = 8000;
 
