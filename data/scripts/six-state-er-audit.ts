@@ -13,22 +13,41 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
+const SCRIPTS = HERE;
 const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 
-const SOURCES = [
-  "state_parks_web",
-  "state_parks_web_wa",
-  "oregon_state_parks",
-  "nevada_state_parks",
-  "arizona_state_parks",
-  "utah_state_parks",
+/** `code` drives the committed-script filename convention `<code>-state-parks-*`. */
+const STATES = [
+  { sourceId: "state_parks_web", code: "ca" },
+  { sourceId: "state_parks_web_wa", code: "wa" },
+  { sourceId: "oregon_state_parks", code: "or" },
+  { sourceId: "nevada_state_parks", code: "nv" },
+  { sourceId: "arizona_state_parks", code: "az" },
+  { sourceId: "utah_state_parks", code: "ut" },
 ] as const;
+
+const SOURCES = STATES.map((s) => s.sourceId);
+
+/** Repo-side half of the audit: is the tooling actually committed? */
+function scriptStatus(code: string): { er: string; triage: string } {
+  const er = `${code}-state-parks-er.ts`;
+  const triageTs = `${code}-state-parks-triage-apply.ts`;
+  const triageMjs = `${code}-state-parks-triage-apply.mjs`;
+  return {
+    er: existsSync(join(SCRIPTS, er)) ? er : "MISSING",
+    triage: existsSync(join(SCRIPTS, triageTs))
+      ? triageTs
+      : existsSync(join(SCRIPTS, triageMjs))
+        ? `${triageMjs}  (.mjs — outside tsc scope)`
+        : "MISSING",
+  };
+}
 
 function parseEnvFile(path: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -113,6 +132,19 @@ async function main(): Promise<void> {
   const db = createClient(url, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   console.log(`Six-state ER audit — TEST (${TEST_HOST})`);
   for (const s of SOURCES) await auditSource(db, s);
+
+  console.log(`\n${"=".repeat(72)}\nCOMMIT-COMPLETENESS — is the tooling in the repo?\n${"=".repeat(72)}`);
+  let gaps = 0;
+  for (const st of STATES) {
+    const s = scriptStatus(st.code);
+    if (s.er === "MISSING" || s.triage === "MISSING") gaps += 1;
+    console.log(`\n${st.sourceId} (${st.code})`);
+    console.log(`   ER script     : ${s.er}`);
+    console.log(`   triage script : ${s.triage}`);
+  }
+  console.log(
+    `\n${gaps === 0 ? "CLOSED — every state has a committed ER script and triage script." : `OPEN — ${gaps} state(s) still missing tooling.`}\n`,
+  );
 }
 
 main().catch((e: unknown) => {

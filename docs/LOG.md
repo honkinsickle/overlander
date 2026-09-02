@@ -12,6 +12,64 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 13) — all six state-park script gaps closed; OR/NV/WA verify CLEAN, no data corrections needed
+
+- **Headline: no TEST data is wrong.** OR, NV and WA all re-derive their
+  recorded `spatial_containment` links exactly. No corrections proposed, so no
+  Adam sign-off was needed. PROD untouched throughout; TEST unmutated (re-ran
+  the audit after every verify — CA still 283/283 / 4 rejected / 181 spatial).
+- **`--verify` results, all four states, run this session on TEST:**
+  | state | polygons | records | recorded | re-derived | agree | disagree | missing | extra |
+  |---|---|---|---|---|---|---|---|---|
+  | CA | 392 | 283 | 181 | 181 | **181** | 0 | 0 | 0 |
+  | OR | 337 | 192 | 107 | 107 | **107** | 0 | 0 | 0 |
+  | NV | 27 | 28 | 21 | 21 | **21** | 0 | 0 | 0 |
+  | WA | 204 | 141 | 117 | 117 | **117** | 0 | 0 | 0 |
+- **Why OR/NV were clean despite carrying the bug — measured, not assumed.**
+  Counted records sitting inside MORE THAN ONE park polygon: **CA 4, WA 0,
+  OR 0, NV 0.** So OR/NV/WA were never *exposed* to first-match-wins; they
+  weren't lucky. CA is the only state where park polygons overlap a visitor
+  point (Wilder Ranch, Manchester, Point Dume, State Indian Museum — of which 3
+  actually picked wrong; Wilder Ranch's first match happened to be the right
+  one). **The fix still matters for the quarterly cadence** — new or redrawn
+  polygons can introduce overlap in any state.
+- **NV had the identical bug and was not named in the task.** Fixed anyway
+  rather than leaving a known-defective sibling next to a fixed one; flagged
+  here as beyond the literal ask.
+- **One runner, four configs.** `data/scripts/lib/state-parks-er.ts` now holds
+  the two-phase logic; `ca/wa/or/nv-state-parks-er.ts` are ~25-line configs
+  (sourceId, GIS prefix, `resolved_by` stamp, label). The four scripts
+  previously carried independently-duplicated containment code — precisely how
+  the CA fix could have landed in one and gone stale in three. Same rationale
+  `lib/eligibility.ts` was extracted for. OR/NV keep their original
+  `resolved_by` stamps so future runs stay consistent with the rows already
+  written.
+- **`lib/spatial-prelink.ts`** holds `pointInPolygon` / `chooseContaining`
+  (name-disambiguated, tie-broken on `mpId` for order-independence) plus the
+  shared `--verify` differ. **11 unit tests**, including the overlap case, an
+  order-independence case, and the Point Dume shape — the tests that would have
+  caught the original bug.
+- **Four missing triage scripts written** — `ca/wa/or/nv-state-parks-triage-apply.ts`
+  over shared `lib/state-parks-triage.ts`. **AZ was the better template** (
+  decision-driven, dry-run by default) over UT's blanket confirm-all; two
+  departures from AZ — `.ts` rather than `.mjs` (AZ's sits outside `tsc`), and
+  decisions come from a JSON file rather than being hardcoded, so the script
+  outlives its round. Actions: `link` / `relink` / `reject`. `reject` marks the
+  match rejected and leaves the record unlinked for the ER script's phase 2 to
+  re-home — `promote.ts` keeps ownership of master_place creation.
+  Historical decisions deliberately NOT re-applied; TEST already reflects them.
+- **The triage scripts needed unit tests, because every pending queue is
+  EMPTY** (CA/WA/OR/NV all 0 items). Running them against TEST exercises only
+  the "nothing to do" path, so the apply branches would have shipped completely
+  unexercised. **7 tests** against a recording fake client cover link / relink /
+  reject / dry-run / missing-target / unknown-external_id / notes. Notably
+  asserts that `reject` does NOT touch `source_record`.
+- **`six-state-er-audit.ts` extended** to check the repo as well as the DB, so
+  "is this closed?" is answerable by the tool rather than by eye. Final line:
+  **CLOSED — every state has a committed ER script and triage script.**
+- Gates: data typecheck 0, **data test 34 files / 644 passed / 3 skipped**,
+  web typecheck 0, next build 0.
+
 ## 2026-09-02 (later 12) — CA ER script written + six-state commit-completeness audit (TEST only, PROD untouched)
 
 - **`data/scripts/ca-state-parks-er.ts` written and validated.** Closes the gap

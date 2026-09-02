@@ -1,3 +1,29 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 2) — six-state script gaps CLOSED; OR/NV/WA verify clean; PROD still untouched
+
+(**newest truth: every one of the six states now has a committed ER script and a committed triage script — the audit tool says `CLOSED`. No TEST data turned out to be wrong, so no corrections were proposed and no sign-off was needed. PROD untouched; TEST unmutated.**
+
+**`--verify` across all four polygon states, measured this session on TEST:**
+| state | polygons | records | recorded | re-derived | agree | disagree | missing | extra |
+|---|---|---|---|---|---|---|---|---|
+| CA | 392 | 283 | 181 | 181 | **181** | 0 | 0 | 0 |
+| OR | 337 | 192 | 107 | 107 | **107** | 0 | 0 | 0 |
+| NV | 27 | 28 | 21 | 21 | **21** | 0 | 0 | 0 |
+| WA | 204 | 141 | 117 | 117 | **117** | 0 | 0 | 0 |
+
+**Why OR/NV came back clean despite carrying the bug — measured, not assumed.** Records sitting inside more than one park polygon: **CA 4, WA 0, OR 0, NV 0.** OR/NV/WA were never *exposed* to first-match-wins, not merely lucky. CA is the only state whose park polygons overlap a visitor point. The fix still matters for the quarterly cadence, since redrawn polygons can introduce overlap anywhere.
+
+**NV carried the identical bug and was not named in the task — fixed anyway**, rather than leaving a known-defective sibling beside a fixed one.
+
+**Structure now:** `lib/spatial-prelink.ts` (containment + name disambiguation + the shared `--verify` differ, **11 unit tests**), `lib/state-parks-er.ts` (one two-phase runner), `lib/state-parks-triage.ts` (link/relink/reject, decisions from JSON, **7 unit tests**). The per-state files are ~25-line configs. Previously all four states carried duplicated containment code — exactly how the CA fix could have landed in one and gone stale in three.
+
+**Triage scripts needed unit tests because every pending queue is empty** (CA/WA/OR/NV all 0 items), so running them against TEST exercises only the no-op path and the apply branches would have shipped unexercised.
+
+**AZ's `.mjs` triage script remains the one rough edge** — it sits outside `tsc --noEmit`. Left alone; converting it is unrelated to this pass.
+
+**Unchanged and still blocking PROD:** the three preflight blockers — migration scope (`db push` can't apply CA alone; 20 state-park migrations pending), PROD ER-corpus divergence (28,348 vs 161,431 master_places, so a fresh manual-review queue is unavoidable regardless of tooling), and partial PROD creds. **Adam's decision still required before any PROD promotion.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later) — CA ER script written + six-state commit-completeness audit; PROD still untouched
 
 (**newest truth: `data/scripts/ca-state-parks-er.ts` now exists and reproduces CA's recorded phase-1 linkage exactly. Blocker 2 from the preflight below is half-cleared — the script gap is closed; the PROD-corpus-divergence half stands. PROD remains untouched; TEST unmutated.**
