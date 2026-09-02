@@ -239,11 +239,22 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `photo` (parks.nv.gov gallery hero) | **28** |
 > | — with `advisories` (residual after statewide-banner strip) | **1** (Valley of Fire — winter maintenance closure) |
 > | — with `provenance.fees_raw` (marker for future re-scrape; nav-menu garbage, NOT surfaced) | **28** |
-> | `master_place_id` linked | **25 / 28** (3 pending manual triage) |
+> | `master_place_id` linked | **28 / 28** (all resolved after triage) |
 > | — via spatial containment (point-in-polygon vs NV `state_parks` GIS polygons) | **21** |
 > | — via standard ER (`deterministic` new-master-place) | **4** |
-> | `place_match` pending | **3** — `nevada_state_parks:lake-tahoe-nevada-state-park-2` (Cave Rock), `:old-las-vegas-mormon-fort`, `:spring-mountain-ranch`. Two `name_dominant_low_conf` + one `blended_residual`. Awaiting Adam's triage (same treatment as CA/OR pending items). |
+> | — via Adam-approved manual triage | **3** (all LINK verdicts — Cave Rock into the Lake Tahoe NV `state_parks:NV:park:Cave Rock…` polygon; Old LV Mormon Fort and Spring Mountain Ranch into existing PADUS-anchored master_places. All 3 blocked by `name_dominant_low_conf` 0.60 cap and/or category-compatibility gaps — same shape as OR's 13 LINKs) |
+> | `place_match` pending | **0** |
+> | `place_match` rejected | **0** |
 > | new `master_place` rows created | **4** |
+>
+> **⚠️ Search-activation follow-up (not fixed here):** the Old LV Mormon
+> Fort master_place (`d331abb7…`) remains `is_searchable = false` and
+> `primary_category = land_status` after triage, despite receiving a
+> 2.7 KB description and source_count reaching 2. `recompute_master_place`
+> doesn't appear to re-evaluate these fields when a non-`land_status`
+> source_record is added to a PADUS-anchored mp. Result: parks.nv.gov
+> content for Old LV Mormon Fort won't reach corridor search or Typesense
+> sync until this is addressed. Not blocking this PR; filed in BACKLOG.md.
 >
 > **Fields intentionally NOT ingested:**
 > - `hours`, `contact` — columns present in the source JSON but 0/28

@@ -1,5 +1,39 @@
 # Backlog — open work
 
+## `recompute_master_place` doesn't re-activate PADUS-anchored mps when non-`land_status` sources are added (2026-09-02)
+
+Surfaced during the NV state parks manual-review triage (PR #349). After
+linking `nevada_state_parks:old-las-vegas-mormon-fort` into the existing
+PADUS-anchored master_place `d331abb7-e554-4d67-9601-26d196b08183`:
+
+- `description` correctly flowed through: 0 → 2736 chars ✓
+- `source_count` correctly incremented: 1 → 2 ✓
+- **`is_searchable` stayed `false`** ✗
+- **`primary_category` stayed `land_status`** ✗
+
+Because both `pois_along_corridor` and `master_place_search_export`
+filter on `is_searchable = true` AND `primary_category <> 'land_status'`,
+this master_place is invisible to the two consumer surfaces even though
+its description and hero photo are now attached. The parks.nv.gov
+content for Old Las Vegas Mormon Fort is stranded.
+
+**Suspected cause:** `recompute_master_place` doesn't re-evaluate
+`is_searchable` / `primary_category` when a source_record of a different
+category is added to a PADUS-anchored mp whose category was already
+`land_status`.
+
+**Scope:** narrow (1 mp on TEST today), but the shape recurs any time a
+visitor-content source is layered onto a PADUS-anchored historic /
+land-status park. Likely candidates across the six-state corpus:
+similar city / county historic-park entries where PADUS is the only
+prior source. Worth checking before the six-state search cutover.
+
+**Not fixed in PR #349** (out of scope — triage-only). The workaround
+(if PR reviewer wants Old LV Mormon Fort searchable now) is a one-shot
+`UPDATE master_place SET is_searchable = true, primary_category =
+'historic' WHERE id = 'd331abb7-…'` — but the underlying recompute
+behaviour should be the real fix.
+
 ## NV State Parks — `fees` scraper bug in upstream scrape (2026-09-02)
 
 The `/Users/adamwagner/nv-state-parks` scrape pipeline

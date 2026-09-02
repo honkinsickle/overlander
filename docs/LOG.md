@@ -12,6 +12,53 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later-3) — NV State Parks manual-review triage applied (PR #349)
+
+- **All 3 pending manual_review items resolved: all 3 LINKed** — Cave
+  Rock, Old Las Vegas Mormon Fort, Spring Mountain Ranch. Pattern
+  identical to OR's 13 LINKs from PR #346: all real matches blocked
+  purely by matcher-scoring quirks (`name_dominant_low_conf` 0.60
+  combined-confidence cap + category-compatibility gaps —
+  `park↔recreation_area` 0.9, `historic↔land_status` 0.3,
+  `park↔public_land` 0.8, all previously filed in BACKLOG). No PR — folded
+  into PR #349 before merge. resolver `adam:nv-triage-2026-09-02`.
+- **Final `nevada_state_parks` state: 28/28 confirmed, 0 pending, 0
+  rejected.** 4 new master_places (unchanged from before triage — the
+  triage merged into existing PADUS/state_parks mps rather than
+  spawning new ones).
+- **Investigation-report correction (from the 2026-09-02 (later-2)
+  entry).** The NV investigation §7 predicted Old LV Mormon Fort,
+  Spring Mountain Ranch, and Nevada's Newest State Park would each
+  spawn solo master_places (visitor-only, no GIS row). This was
+  scoped-wrong — it checked only `state_parks:NV:%` GIS coverage, not
+  PADUS. PADUS has rows for both **Old LV Mormon Fort**
+  (`padus:7b229f2e…`) and **Spring Mountain Ranch** (`padus:9fb3e57d…`),
+  so triage merged them into existing mps rather than spawning new
+  solos. The 4 actual new mps came from the ER Phase 2
+  `deterministic new_master_place` outcomes (Nevada's Newest State Park
+  + 3 others — likely including Ice Age Fossils and Sand Harbor).
+  Population estimate right on count (4 new mps), wrong on which rows.
+- **Post-apply description flow-through verified on all 3 targets:**
+  - Cave Rock mp: description 70 → **4252** chars (was `generated_template`, now real `nevada_state_parks` content). primary_category unchanged (`recreation_area`). source_count 1 → 2. is_searchable already TRUE.
+  - Old LV Mormon Fort mp: description 0 → **2736** chars. primary_category **unchanged** at `land_status` and **is_searchable stayed FALSE** despite the new content — see follow-up note below.
+  - Spring Mountain Ranch mp: description 0 → **4713** chars. primary_category unchanged (`public_land`). source_count 0 → **1** (not 2 — PADUS records don't count toward source_count for search-activation purposes; adding nevada_state_parks brought it from 0 to 1 alone). is_searchable already TRUE.
+- **⚠️ Search-activation follow-up (not a triage issue, but surfaced
+  by it):** **Old LV Mormon Fort remains `is_searchable = false` even
+  after linking**, despite the 2.7 KB description flowing through and
+  source_count reaching 2. Likely because `recompute_master_place`
+  doesn't re-evaluate `is_searchable` or `primary_category` when a
+  non-`land_status` source_record is added to a PADUS-anchored mp
+  whose primary_category was already `land_status`. Result: this
+  master_place will not appear in `master_place_search_export` or
+  `pois_along_corridor` (both filter on `is_searchable = true` /
+  `primary_category <> 'land_status'`), which means the parks.nv.gov
+  description and hero photo for Old LV Mormon Fort will **not be
+  reachable through the corridor search or Typesense sync until this
+  is addressed**. Filing as a BACKLOG item — not blocking this PR,
+  but worth solving before the six-state search cutover. Same shape
+  may affect other PADUS-backed historic parks across states that get
+  visitor-content sources layered on later.
+
 ## 2026-09-02 (later-2) — NV State Parks (`nevada_state_parks`) ingested + entity-resolved on TEST
 
 - **New source `nevada_state_parks`** — visitor-facing content from
