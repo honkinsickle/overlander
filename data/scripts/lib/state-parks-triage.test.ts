@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyDecisions, type TriageConfig } from "./state-parks-triage.ts";
 
-const CFG: TriageConfig = { sourceId: "state_parks_web", resolver: "test:resolver", label: "t" };
+const CFG: TriageConfig = { sourceId: "california_state_parks", resolver: "test:resolver", label: "t" };
 
 interface Call {
   table: string;
@@ -81,7 +81,7 @@ function fakeClient(opts: {
 }
 
 const PENDING_FIXTURE = {
-  sourceRecords: [{ id: "sr-1", external_id: "state_parks_web:123", name: "Example SP" }],
+  sourceRecords: [{ id: "sr-1", external_id: "california_state_parks:123", name: "Example SP" }],
   placeMatches: [
     { id: "pm-1", source_record_id: "sr-1", master_place_id: "mp-proposed", combined_confidence: 0.72 },
   ],
@@ -90,7 +90,7 @@ const PENDING_FIXTURE = {
 describe("applyDecisions", () => {
   it("dry-run writes nothing but still counts the decision", async () => {
     const { sb, calls, rpcs } = fakeClient(PENDING_FIXTURE);
-    const r = await applyDecisions(sb, CFG, [{ external_id: "state_parks_web:123", action: "link" }], false);
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "link" }], false);
     expect(r).toMatchObject({ linked: 1, relinked: 0, rejected: 0, failed: 0 });
     expect(calls.filter((c) => c.op === "update")).toHaveLength(0);
     expect(rpcs).toHaveLength(0);
@@ -98,7 +98,7 @@ describe("applyDecisions", () => {
 
   it("link confirms against the matcher's proposed mp and recomputes it", async () => {
     const { sb, calls, rpcs } = fakeClient(PENDING_FIXTURE);
-    const r = await applyDecisions(sb, CFG, [{ external_id: "state_parks_web:123", action: "link" }], true);
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "link" }], true);
     expect(r).toMatchObject({ linked: 1, failed: 0 });
 
     const pmUpdate = calls.find((c) => c.table === "place_match" && c.op === "update");
@@ -120,7 +120,7 @@ describe("applyDecisions", () => {
     const r = await applyDecisions(
       sb,
       CFG,
-      [{ external_id: "state_parks_web:123", action: "relink", target_mp_id: "mp-correct" }],
+      [{ external_id: "california_state_parks:123", action: "relink", target_mp_id: "mp-correct" }],
       true,
     );
     expect(r).toMatchObject({ relinked: 1, failed: 0 });
@@ -135,14 +135,14 @@ describe("applyDecisions", () => {
 
   it("relink without target_mp_id fails instead of silently linking to the wrong mp", async () => {
     const { sb, calls } = fakeClient(PENDING_FIXTURE);
-    const r = await applyDecisions(sb, CFG, [{ external_id: "state_parks_web:123", action: "relink" }], true);
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "relink" }], true);
     expect(r).toMatchObject({ failed: 1, relinked: 0 });
     expect(calls.filter((c) => c.op === "update")).toHaveLength(0);
   });
 
   it("reject marks the match rejected and leaves the source_record UNLINKED", async () => {
     const { sb, calls, rpcs } = fakeClient(PENDING_FIXTURE);
-    const r = await applyDecisions(sb, CFG, [{ external_id: "state_parks_web:123", action: "reject" }], true);
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "reject" }], true);
     expect(r).toMatchObject({ rejected: 1, failed: 0 });
 
     const pmUpdate = calls.find((c) => c.table === "place_match" && c.op === "update");
@@ -155,7 +155,7 @@ describe("applyDecisions", () => {
 
   it("skips a decision whose external_id is not in the pending queue", async () => {
     const { sb, calls } = fakeClient(PENDING_FIXTURE);
-    const r = await applyDecisions(sb, CFG, [{ external_id: "state_parks_web:nope", action: "link" }], true);
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:nope", action: "link" }], true);
     expect(r).toMatchObject({ skipped: 1, linked: 0 });
     expect(calls.filter((c) => c.op === "update")).toHaveLength(0);
   });
@@ -165,7 +165,7 @@ describe("applyDecisions", () => {
     await applyDecisions(
       sb,
       CFG,
-      [{ external_id: "state_parks_web:123", action: "link", notes: "same unit, abbreviated GIS name" }],
+      [{ external_id: "california_state_parks:123", action: "link", notes: "same unit, abbreviated GIS name" }],
       true,
     );
     const pmUpdate = calls.find((c) => c.table === "place_match" && c.op === "update");

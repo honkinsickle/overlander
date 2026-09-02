@@ -24,8 +24,8 @@ const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 
 /** `code` drives the committed-script filename convention `<code>-state-parks-*`. */
 const STATES = [
-  { sourceId: "state_parks_web", code: "ca" },
-  { sourceId: "state_parks_web_wa", code: "wa" },
+  { sourceId: "california_state_parks", code: "ca" },
+  { sourceId: "washington_state_parks", code: "wa" },
   { sourceId: "oregon_state_parks", code: "or" },
   { sourceId: "nevada_state_parks", code: "nv" },
   { sourceId: "arizona_state_parks", code: "az" },

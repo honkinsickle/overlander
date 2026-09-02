@@ -144,7 +144,7 @@ matcher pass; not fixed in PR #346 (out of scope):
 
 1. **`park_feature` has no `CATEGORY_COMPATIBILITY` entry.** Same shape
    as the `park` / `historic` / `interest` gap that commit 379c213 fixed
-   for the CA state_parks_web landing. Scored `cat_compat=0.00` for the
+   for the CA california_state_parks landing. Scored `cat_compat=0.00` for the
    `oregon_state_parks:96` Erratic Rock SNS pair despite `name_sim=0.927`
    (target: NPS-backed "Erratic Rock State Natural Site (Bellevue Erratic)").
    The triage linked it manually, but the auto-link path should catch
@@ -1406,7 +1406,7 @@ candidates. PROD pending breakdown: name_dominant_low_conf 59, close_nameless
 merge. Migrations are already applied to both TEST and PROD.
 
 **Still blocked (separate investigation):** description field_precedence —
-visitor-website investigation underway. Source_id `state_parks_web` not
+visitor-website investigation underway. Source_id `california_state_parks` not
 finalized.
 
 ## PAD-US polygon-source ER — investigated across all six states, no over-merge (2026-08-14, resolved history)

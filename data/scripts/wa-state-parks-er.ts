@@ -1,5 +1,5 @@
 /**
- * Two-phase entity resolution for `state_parks_web_wa` (WA).
+ * Two-phase entity resolution for `washington_state_parks` (WA).
  *
  * WA had no committed ER script at all — its 127 phase-1/triage links carry
  * `resolved_by = null`, the same signature CA's missing script left behind.
@@ -15,9 +15,9 @@ import { runStateParksEr } from "./lib/state-parks-er.ts";
 import { logger } from "../ingestion/lib/logger.ts";
 
 runStateParksEr({
-  sourceId: "state_parks_web_wa",
+  sourceId: "washington_state_parks",
   gisPrefix: "state_parks:WA:%",
-  resolvedBy: "auto:state_parks_web_wa_er",
+  resolvedBy: "auto:washington_state_parks_er",
   label: "wa-er",
 }).catch((e: unknown) => {
   logger.error({ err: e }, "wa-er: fatal");

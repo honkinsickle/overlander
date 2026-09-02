@@ -12,6 +12,71 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 15) — source_id rename: `state_parks_web`→`california_state_parks`, `state_parks_web_wa`→`washington_state_parks` (TEST + PROD)
+
+- **Done before resolving CA's PROD triage queue, per the sequencing call** —
+  rename first, triage under the new name. Queue confirmed intact afterwards.
+- **The rename plan listed 6 surfaces; the audit found 3 more.** New
+  `data/scripts/source-id-rename-audit.ts` swept both databases:
+  1. **`external_id` embeds the old source name** — ALL 283 (TEST CA), 283
+     (PROD CA) and 141 (TEST WA) rows. The ingesters build external_id from
+     `SOURCE_ID`, so renaming source_id alone would make the next ingest write
+     `california_state_parks:<page_id>`, collide with nothing, and **INSERT 283
+     duplicates** instead of upserting — breaking the "idempotent on
+     (source_id, external_id)" invariant. Renamed too, ingesters updated.
+  2. **`master_place.attribution`** carried the old value on 280 (TEST CA),
+     140 (TEST WA), 252 (PROD CA) rows. Refreshed via `recompute_master_place()`
+     — never written directly — by new
+     `data/scripts/source-id-rename-recompute.ts`.
+  3. **`place_match.resolved_by = 'auto:state_parks_web_er'`** on 181 PROD rows.
+     Renamed for consistency with OR/NV's stamp format.
+- **Proved it was a PURE identifier rename before touching anything.**
+  `resolve_field()` orders by `fp.priority asc, sr.source_quality_score desc,
+  sr.source_id asc` — **source_id is the third key**, and
+  `california_state_parks` sorts far earlier than `state_parks_web`, so a tie
+  could have flipped which source owns a field. New
+  `data/scripts/source-id-rename-tiebreak-sim.ts` reproduced that ORDER BY over
+  every affected master_place: **0 field-resolutions where anything ties these
+  sources on priority AND quality → the source_id key is never reached → 0
+  flips**, on both databases. **The model was validated before being trusted**:
+  its "winner before" matched `master_place.attribution` exactly — TEST
+  1138/1138 (CA) + 560/560 (WA), PROD 1023/1023.
+- **TEST first, then PROD**, migrations `20260902050000` / `050100` / `050200`.
+  Both `db:push-verify` runs exit 0. The v1 verifier reports UPDATEs as
+  "unknown, not verified" — expected, so verification was done independently.
+- **Nothing lost or duplicated.** Old source_ids now return **0** on both
+  databases; new ones return TEST CA 283 / TEST WA 141 / PROD CA 283 — moved,
+  not copied. TEST CA still 283/283 linked, 0 pending, 4 rejected; TEST WA
+  141/141, 1 rejected; PROD CA 255 confirmed / 28 pending / 0 rejected. All
+  match_method tallies unchanged.
+- **PROD's 28-item triage queue survived intact** — same 28 items, same
+  proposed master_place UUIDs, same confidences, now keyed
+  `california_state_parks:<page_id>`. Nothing orphaned or duplicated.
+- **Tooling still works under the new names.** ER `--verify`: TEST CA 181/181,
+  TEST WA 117/117, PROD CA 181/181, all 0 disagree. Triage `--list` resolves on
+  every state. Export view + `pois_along_corridor` re-verified by new
+  `data/scripts/source-id-rename-verify.ts` — PROD photo coverage **identical to
+  pre-rename** (233 of 240, 154 parks.ca.gov + 79 wikimedia).
+  - **The first corridor probe was worthless and was replaced.** A
+    continent-wide route hit the RPC's 1000-row cap long before reaching CA
+    parks and returned 0 `parks.ca.gov` photos — which it would have done
+    whether the lateral worked or not. Re-scoped to a Big Sur corridor: 8 CA
+    photos on TEST, 5 on PROD (Monterey SB, Carmel River SB). Same
+    "scope the query to the element under test" trap as before.
+- **Flagged, not done — the two INGESTER FILENAMES still say the old name:**
+  `data/ingestion/sources/state-parks-web.ts` and `state-parks-web-wa.ts`. Every
+  other state uses `<state>-state-parks.ts`. Renaming them is a pure file move
+  (only `manual.ts` imports them) but was left out per the instruction not to
+  rename files unasked. **Recommend doing it** — the filenames now contradict
+  the source_ids they define. ER/triage script filenames (`ca-`/`wa-…`) already
+  match the convention and need no change.
+- **Typesense untouched and still un-synced** — no synced field carries a
+  source_id (`description_source` = 0 for these sources on both DBs), so the
+  rename needs no re-index. `places_prod` remains stale from the CA promotion
+  for the separate reason already logged.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 14) — CA PROD PROMOTION EXECUTED — migrations + ingest + ER landed; 28-item triage queue OPEN, Typesense deliberately NOT synced
 
 - **This is a real PROD write session.** Runbook followed exactly as the AO /

@@ -39,7 +39,7 @@ import {
 } from "./spatial-prelink.ts";
 
 export interface StateParksErConfig {
-  /** Visitor-content source_id, e.g. `state_parks_web`. */
+  /** Visitor-content source_id, e.g. `california_state_parks`. */
   sourceId: string;
   /** LIKE pattern for that state's slice of the GIS source, e.g. `state_parks:CA:%`. */
   gisPrefix: string;

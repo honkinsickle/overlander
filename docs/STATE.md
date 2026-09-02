@@ -1,3 +1,24 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 4) — source_ids RENAMED across TEST+PROD; CA's 28-item PROD triage queue still OPEN
+
+(**newest truth: `state_parks_web` → `california_state_parks` and `state_parks_web_wa` → `washington_state_parks`, applied to TEST (both) and PROD (CA only — WA has no PROD data). All six states now use `<state>_state_parks`. Nothing was lost or duplicated; CA's 28-item PROD triage queue survived intact and is still awaiting Adam.**
+
+**Migrations:** `20260902050000` (source_record + field_precedence + place_match stamps), `20260902050100` (`pois_along_corridor`), `20260902050200` (`master_place_search_export`). TEST first, verified, then PROD. Both `db:push-verify` exit 0. Env handled the same way as the promotion: backup → link → field-level swap (14/14 keys preserved, `TYPESENSE_COLLECTION` untouched) → restore + relink, all verified.
+
+**Proved a pure identifier rename BEFORE touching anything.** `resolve_field()` orders by `fp.priority asc, sr.source_quality_score desc, sr.source_id asc` — **source_id is the third key**, and `california_state_parks` sorts far earlier than `state_parks_web`, so a tie could have silently flipped field ownership. `data/scripts/source-id-rename-tiebreak-sim.ts` found **0 field-resolutions where anything ties these sources on priority AND quality**, hence 0 flips — and the model was validated against `master_place.attribution` first (TEST 1138/1138 + 560/560, PROD 1023/1023) so it reproduces the present before predicting the future.
+
+**Three surfaces the plan didn't list, all handled:**
+1. **`external_id`** embedded the old name on every row (283/283/141). Ingesters build it from `SOURCE_ID`, so renaming source_id alone would have made the next ingest **insert 283 duplicates** rather than upsert. Renamed; ingesters updated.
+2. **`master_place.attribution`** (280 / 140 / 252 rows) refreshed via `recompute_master_place()`, never written directly.
+3. **`place_match.resolved_by`** — 181 PROD rows re-stamped `auto:california_state_parks_er`.
+
+**Verification:** old source_ids return **0** on both databases; new ones return TEST CA 283 / TEST WA 141 / PROD CA 283 — moved, not copied. TEST CA 283/283 linked · 0 pending · 4 rejected; TEST WA 141/141 · 1 rejected; PROD CA 255 confirmed · 28 pending · 0 rejected. ER `--verify` 181/181 (TEST CA), 117/117 (TEST WA), 181/181 (PROD CA). PROD photo coverage identical to pre-rename (233 of 240 — 154 parks.ca.gov, 79 wikimedia). Corridor RPC returns CA heroes on both.
+
+**⚠️ Flagged, deliberately NOT done — the two ingester FILENAMES still carry the old name:** `data/ingestion/sources/state-parks-web.ts` and `state-parks-web-wa.ts`, versus `oregon-state-parks.ts` etc. everywhere else. Pure file move (only `manual.ts` imports them). **Recommend renaming** — the filenames now contradict the source_ids they define.
+
+**STILL OPEN, unchanged:** CA's **28-item PROD triage queue** (now keyed `california_state_parks:<page_id>`), and the **Typesense sync** (`places_prod` 21,965 vs export 22,024). The rename itself needs no re-index — no synced field carries a source_id. WA/OR/NV/AZ/UT still have PROD schema but zero PROD data. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 3) — CA PROMOTED TO PROD; 28-item triage queue OPEN awaiting Adam; Typesense NOT synced
 
 (**newest truth: CA `state_parks_web` is live on PROD. Migrations + ingest + entity resolution all landed. The 28-item manual-review queue is listed but UNAPPLIED, and Typesense is deliberately un-synced. Both are Adam's gates.**

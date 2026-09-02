@@ -1,5 +1,5 @@
 /**
- * Manual-review triage for `state_parks_web`.
+ * Manual-review triage for `california_state_parks`.
  *
  * Written 2026-09-02 to close a commit-completeness gap: this state's original
  * triage round was applied by hand, leaving `resolved_by` stamps that
@@ -25,7 +25,7 @@ const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_
 runStateParksTriage(
   sb,
   {
-    sourceId: "state_parks_web",
+    sourceId: "california_state_parks",
     resolver: `adam:ca-triage-${new Date().toISOString().slice(0, 10)}`,
     label: "ca-triage",
   },

@@ -1,5 +1,5 @@
 /**
- * Two-phase entity resolution for `state_parks_web` (CA).
+ * Two-phase entity resolution for `california_state_parks` (CA).
  *
  * Reconstructs the step that produced CA's TEST linkage on 2026-09-01 but was
  * never committed — commit `379c213` changed only `matcher.ts` and docs, so
@@ -20,9 +20,9 @@ import { runStateParksEr } from "./lib/state-parks-er.ts";
 import { logger } from "../ingestion/lib/logger.ts";
 
 runStateParksEr({
-  sourceId: "state_parks_web",
+  sourceId: "california_state_parks",
   gisPrefix: "state_parks:CA:%",
-  resolvedBy: "auto:state_parks_web_er",
+  resolvedBy: "auto:california_state_parks_er",
   label: "ca-er",
 }).catch((e: unknown) => {
   logger.error({ err: e }, "ca-er: fatal");

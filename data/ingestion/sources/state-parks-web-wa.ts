@@ -9,17 +9,17 @@
  * Source CSV: `/Users/adamwagner/wa-state-parks/data/washington-state-parks.csv`
  * (147 rows — all WA state parks, scraped 2026-09-01).
  *
- * Separate source_id from CA's `state_parks_web` — per-state source_ids
+ * Separate source_id from CA's `california_state_parks` — per-state source_ids
  * going forward (diverges from the single-source `state_parks` GIS
  * pattern, which shares one source_id across all 6 states).
  *
- * external_id format: `state_parks_web_wa:<slug>` — the URL slug from
+ * external_id format: `washington_state_parks:<slug>` — the URL slug from
  * parks.wa.gov/find-parks/state-parks/<slug>, unique per park and
  * stable across scrapes. Same slug the photo filenames use.
  *
  * Run via:
- *   npm run -w data ingest:manual -- --source state_parks_web_wa --dry-run
- *   npm run -w data ingest:manual -- --source state_parks_web_wa
+ *   npm run -w data ingest:manual -- --source washington_state_parks --dry-run
+ *   npm run -w data ingest:manual -- --source washington_state_parks
  *
  * Env override:
  *   STATE_PARKS_WEB_WA_CSV — path to the CSV file. Defaults to
@@ -33,7 +33,7 @@ import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
 
-const SOURCE_ID = "state_parks_web_wa";
+const SOURCE_ID = "washington_state_parks";
 const SOURCE_QUALITY_SCORE = 0.6;
 
 const DEFAULT_CSV_PATH =
@@ -98,14 +98,14 @@ function parseCsv(text: string): ParkRow[] {
     const cols = rows[r];
     if (cols.length === 1 && cols[0] === "") continue;
     if (cols.length < 17) {
-      logger.warn({ row: r, cols: cols.length }, "state_parks_web_wa: skipping malformed row");
+      logger.warn({ row: r, cols: cols.length }, "washington_state_parks: skipping malformed row");
       continue;
     }
     const obj: Record<string, string> = {};
     for (let c = 0; c < header.length; c++) obj[header[c]] = cols[c] ?? "";
     const parsed = RowSchema.safeParse(obj);
     if (!parsed.success) {
-      logger.warn({ row: r, err: parsed.error.flatten() }, "state_parks_web_wa: row failed schema");
+      logger.warn({ row: r, err: parsed.error.flatten() }, "washington_state_parks: row failed schema");
       continue;
     }
     out.push(parsed.data);
@@ -219,14 +219,14 @@ async function persistRow(
   if (!hasCoords) {
     logger.warn(
       { name: row.name, slug, lat: row.lat, lon: row.lon },
-      "state_parks_web_wa: no valid coordinates — skipping",
+      "washington_state_parks: no valid coordinates — skipping",
     );
     return "skipped";
   }
 
-  const externalId = `state_parks_web_wa:${slug}`;
+  const externalId = `washington_state_parks:${slug}`;
   if (dryRun) {
-    logger.debug({ externalId, name: row.name }, "state_parks_web_wa: dry-run");
+    logger.debug({ externalId, name: row.name }, "washington_state_parks: dry-run");
     return "inserted";
   }
 
@@ -243,7 +243,7 @@ async function persistRow(
     });
     return "inserted";
   } catch (err) {
-    logger.error({ err, externalId, name: row.name }, "state_parks_web_wa: upsert failed");
+    logger.error({ err, externalId, name: row.name }, "washington_state_parks: upsert failed");
     return "error";
   }
 }
@@ -254,18 +254,18 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
   const startedAt = Date.now();
   const dryRun = opts.dryRun ?? false;
   const csvPath = process.env.STATE_PARKS_WEB_WA_CSV ?? DEFAULT_CSV_PATH;
-  logger.info({ csvPath, dryRun }, "state_parks_web_wa: ingest starting");
+  logger.info({ csvPath, dryRun }, "washington_state_parks: ingest starting");
 
   const text = await readFile(csvPath, "utf8");
   const rows = parseCsv(text);
-  logger.info({ rows: rows.length }, "state_parks_web_wa: CSV loaded");
+  logger.info({ rows: rows.length }, "washington_state_parks: CSV loaded");
 
   const stats = { fetched: rows.length, inserted: 0, updated: 0, skipped: 0, errors: 0 };
 
   for (const row of rows) {
     const slug = extractSlug(row.url);
     if (!slug) {
-      logger.warn({ name: row.name, url: row.url }, "state_parks_web_wa: no slug in URL — skipping");
+      logger.warn({ name: row.name, url: row.url }, "washington_state_parks: no slug in URL — skipping");
       stats.skipped += 1;
       continue;
     }
@@ -285,7 +285,7 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
     errors: stats.errors,
     duration_ms: Date.now() - startedAt,
   };
-  logger.info(result, "state_parks_web_wa: ingest complete");
+  logger.info(result, "washington_state_parks: ingest complete");
   return result;
 };
 

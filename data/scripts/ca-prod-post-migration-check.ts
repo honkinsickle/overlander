@@ -28,8 +28,8 @@ const BASELINE = {
 } as const;
 
 const SIX_STATE_SOURCES = [
-  "state_parks_web",
-  "state_parks_web_wa",
+  "california_state_parks",
+  "washington_state_parks",
   "oregon_state_parks",
   "nevada_state_parks",
   "arizona_state_parks",

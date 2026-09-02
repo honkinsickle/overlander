@@ -9,7 +9,7 @@
  * Source CSV: `/Users/adamwagner/ca-state-parks/data/california-state-parks.csv`
  * (284 rows — all CA state park units, scraped 2026-09-01).
  *
- * external_id format: `state_parks_web:<page_id>` — the `page_id`
+ * external_id format: `california_state_parks:<page_id>` — the `page_id`
  * query param from the parks.ca.gov URL, unique per unit and stable
  * across scrapes. Same id the photo filenames use (photos/<page_id>.jpg).
  *
@@ -18,8 +18,8 @@
  * card rendering yet, pending review.
  *
  * Run via:
- *   npm run -w data ingest:manual -- --source state_parks_web --dry-run
- *   npm run -w data ingest:manual -- --source state_parks_web
+ *   npm run -w data ingest:manual -- --source california_state_parks --dry-run
+ *   npm run -w data ingest:manual -- --source california_state_parks
  *
  * Env override:
  *   STATE_PARKS_WEB_CSV — path to the CSV file. Defaults to
@@ -33,7 +33,7 @@ import { logger } from "../lib/logger.ts";
 import { compact } from "../lib/normalize.ts";
 import type { IngestFn, IngestOptions, IngestResult } from "./_types.ts";
 
-const SOURCE_ID = "state_parks_web";
+const SOURCE_ID = "california_state_parks";
 const SOURCE_QUALITY_SCORE = 0.6;
 
 const DEFAULT_CSV_PATH =
@@ -101,14 +101,14 @@ function parseCsv(text: string): ParkRow[] {
     const cols = rows[r];
     if (cols.length === 1 && cols[0] === "") continue;
     if (cols.length < 20) {
-      logger.warn({ row: r, cols: cols.length }, "state_parks_web: skipping malformed row");
+      logger.warn({ row: r, cols: cols.length }, "california_state_parks: skipping malformed row");
       continue;
     }
     const obj: Record<string, string> = {};
     for (let c = 0; c < header.length; c++) obj[header[c]] = cols[c] ?? "";
     const parsed = RowSchema.safeParse(obj);
     if (!parsed.success) {
-      logger.warn({ row: r, err: parsed.error.flatten() }, "state_parks_web: row failed schema");
+      logger.warn({ row: r, err: parsed.error.flatten() }, "california_state_parks: row failed schema");
       continue;
     }
     out.push(parsed.data);
@@ -241,14 +241,14 @@ async function persistRow(
   if (!hasCoords) {
     logger.warn(
       { name: row.name, pageId, lat: row.lat, lon: row.lon },
-      "state_parks_web: no valid coordinates — skipping",
+      "california_state_parks: no valid coordinates — skipping",
     );
     return "skipped";
   }
 
-  const externalId = `state_parks_web:${pageId}`;
+  const externalId = `california_state_parks:${pageId}`;
   if (dryRun) {
-    logger.debug({ externalId, name: row.name }, "state_parks_web: dry-run");
+    logger.debug({ externalId, name: row.name }, "california_state_parks: dry-run");
     return "inserted";
   }
 
@@ -265,7 +265,7 @@ async function persistRow(
     });
     return "inserted";
   } catch (err) {
-    logger.error({ err, externalId, name: row.name }, "state_parks_web: upsert failed");
+    logger.error({ err, externalId, name: row.name }, "california_state_parks: upsert failed");
     return "error";
   }
 }
@@ -276,18 +276,18 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
   const startedAt = Date.now();
   const dryRun = opts.dryRun ?? false;
   const csvPath = process.env.STATE_PARKS_WEB_CSV ?? DEFAULT_CSV_PATH;
-  logger.info({ csvPath, dryRun }, "state_parks_web: ingest starting");
+  logger.info({ csvPath, dryRun }, "california_state_parks: ingest starting");
 
   const text = await readFile(csvPath, "utf8");
   const rows = parseCsv(text);
-  logger.info({ rows: rows.length }, "state_parks_web: CSV loaded");
+  logger.info({ rows: rows.length }, "california_state_parks: CSV loaded");
 
   const stats = { fetched: rows.length, inserted: 0, updated: 0, skipped: 0, errors: 0 };
 
   for (const row of rows) {
     const pageId = extractPageId(row.url);
     if (!pageId) {
-      logger.warn({ name: row.name, url: row.url }, "state_parks_web: no page_id in URL — skipping");
+      logger.warn({ name: row.name, url: row.url }, "california_state_parks: no page_id in URL — skipping");
       stats.skipped += 1;
       continue;
     }
@@ -307,7 +307,7 @@ export const ingest: IngestFn = async (opts: IngestOptions): Promise<IngestResul
     errors: stats.errors,
     duration_ms: Date.now() - startedAt,
   };
-  logger.info(result, "state_parks_web: ingest complete");
+  logger.info(result, "california_state_parks: ingest complete");
   return result;
 };
 

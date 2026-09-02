@@ -9,8 +9,8 @@
  * Source CSV: `/Users/adamwagner/or-state-parks/data/oregon-state-parks.csv`
  * (192 rows — all OR state parks, scraped 2026-09-01).
  *
- * Per-state source_id, separate from CA's `state_parks_web` and WA's
- * `state_parks_web_wa` — the state_parks_web_* family diverges from
+ * Per-state source_id, separate from CA's `california_state_parks` and WA's
+ * `washington_state_parks` — the california/washington_state_parks family diverges from
  * the shared `state_parks` GIS pattern that uses one source_id across
  * all six states.
  *

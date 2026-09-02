@@ -1,5 +1,5 @@
 /**
- * READ-ONLY preflight for the `state_parks_web` (CA) TEST → PROD promotion.
+ * READ-ONLY preflight for the `california_state_parks` (CA) TEST → PROD promotion.
  *
  * Writes nothing, to either database. Does not touch the Supabase CLI link.
  * Reads env inline via the same seam `promotion-trace-test-and-prod.ts` uses:
@@ -8,7 +8,7 @@
  * Refuses to run if a resolved URL doesn't match its expected project ref.
  *
  * Reports, for both databases:
- *   1. `state_parks_web` linkage state — source_record count, place_match status
+ *   1. `california_state_parks` linkage state — source_record count, place_match status
  *      distribution, match_method tally, linked/pending/rejected.
  *   2. field_precedence coverage — which source_ids have rows. The TEST↔PROD
  *      delta here is the migration gap.
@@ -30,13 +30,13 @@ const REPO = join(HERE, "..", "..");
 
 const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 const PROD_HOST = "nqzeywzcowujzyegxbsr.supabase.co";
-const SOURCE_ID = "state_parks_web";
+const SOURCE_ID = "california_state_parks";
 
 /** Every source_id this repo has ingested, per docs/DATA_INVENTORY.md + migrations. */
 const KNOWN_SOURCES = [
   "nps", "ridb", "osm", "wikipedia", "google", "usfs", "blm", "state_parks",
   "atlas_oddities", "family_destinations", "family_destinations_guide",
-  "tasteatlas", "editorial_food", "state_parks_web", "state_parks_web_wa",
+  "tasteatlas", "editorial_food", "california_state_parks", "washington_state_parks",
   "oregon_state_parks", "nevada_state_parks", "arizona_state_parks",
   "utah_state_parks",
 ] as const;
