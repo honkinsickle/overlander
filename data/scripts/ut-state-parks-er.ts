@@ -127,7 +127,6 @@ function extractBaseName(name: string): string {
 async function applyLink(
   row: UnlinkedRow,
   mpId: string,
-  mpName: string,
   notes: string,
 ): Promise<void> {
   if (DRY_RUN) return;
@@ -219,7 +218,7 @@ async function main() {
         { web: r.name, target_mp: targetMpName, mpId: targetMpId },
         "ut-er: phase 1 linking",
       );
-      await applyLink(r, targetMpId, targetMpName, notes);
+      await applyLink(r, targetMpId, notes);
       phase1Linked++;
     } catch (err) {
       logger.error({ err, row: r }, "ut-er: direct link apply failed");
