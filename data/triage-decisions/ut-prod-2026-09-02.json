@@ -1,0 +1,67 @@
+[
+  {
+    "external_id": "utah_state_parks:huntington",
+    "action": "link",
+    "notes": "Manual triage LINK: Huntington State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:east-canyon",
+    "action": "link",
+    "notes": "Manual triage LINK: East Canyon State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:piute",
+    "action": "link",
+    "notes": "Manual triage LINK: Piute State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:territorial-statehouse",
+    "action": "link",
+    "notes": "Manual triage LINK: Territorial Statehouse State Park Museum → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:camp-floyd",
+    "action": "link",
+    "notes": "Manual triage LINK: Camp Floyd State Park Museum → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:kodachrome-basin",
+    "action": "link",
+    "notes": "Manual triage LINK: Kodachrome Basin State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:millsite",
+    "action": "link",
+    "notes": "Manual triage LINK: Millsite State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:great-salt-lake",
+    "action": "link",
+    "notes": "Manual triage LINK: Great Salt Lake State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:frontier-homestead",
+    "action": "link",
+    "notes": "Manual triage LINK: Frontier Homestead State Park Museum → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:jordan-river",
+    "action": "link",
+    "notes": "Manual triage LINK: Jordan River Off-Highway Vehicle State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:flight-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Flight Park State Recreation Area → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:otter-creek",
+    "action": "link",
+    "notes": "Manual triage LINK: Otter Creek State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "utah_state_parks:rockport",
+    "action": "link",
+    "notes": "Manual triage LINK: Rockport State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  }
+]

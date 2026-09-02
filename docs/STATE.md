@@ -1,3 +1,27 @@
+# STATE — branch `promote-ut-state-parks-prod` · 2026-09-02 (later 16) — **UT PROMOTED. ALL SIX STATES ARE LIVE ON PROD.**
+
+(**newest truth: the six-state visitor-content promotion project is complete. CA, WA, OR, NV, AZ and UT are all live on PROD — 723 source_records total.**
+
+*Branch note: this masthead sits above OR's (later 11) because the UT branch was cut from `main` while the NV (later 12–13) and AZ (later 14–15) PRs were still open. Those mastheads live on their own branches and interleave on merge.*
+
+**UT:** ingest **46/46, 0 skipped, 0 errors**; phase-1 **32** and phase-2 load **14**, both exactly as preflight predicted; **46/46 linked, 0 pending, 0 rejected**. Typesense `places_prod` = **22,106** = export view exactly.
+
+**⚠️ AN UNINTENDED PROD WRITE HAPPENED — the data is fine, the process was not.** UT's `ut-state-parks-triage-apply.ts` was still its ORIGINAL one-shot from its TEST round: no argv parsing, no dry-run guard, blanket-confirms on invocation. I called it as `--apply <decisions.json>` expecting a preview and it **ignored both flags and wrote immediately**. Root cause is mine — the six-state audit explicitly recorded that AZ and UT kept their own triage scripts, and I later assumed the uniform `--apply/--write` interface covered all six. An audit confirmed **13/13 landed on exactly the proposed targets**, the same outcome the approved decisions specified, so no data is wrong; what was lost was the safety property. Had one item been a RELINK or REJECT it would have silently applied the wrong thing. **Fixed:** UT's script is rewritten onto the shared runner (dry-run by default, `--write` required) and verified. **AZ's `.mjs` is the last non-uniform one** — dry-run-by-default so it cannot silently write, but outside `tsc` and hardcoding decisions. Recommend converting it.
+
+**A zero Typesense delta did NOT mean the sync was skippable.** UT created zero new master_places, so the document count could not change — but the existing master_places now carry UT prose, so their content had to be refreshed. Confirmed in the index afterwards (Kodachrome Basin, Antelope Island, Goblin Valley, East Canyon all return UT descriptions).
+
+**UT photos:** 46/46 with a photo — 18 `stateparks.utah.gov`, 15 `cdn.recreation.gov`, 13 `upload.wikimedia.org`. UT is photo-lateral priority 11, lowest of the six, so it is outranked by both Wikipedia (2) and RIDB (1) — the only state where RIDB wins a meaningful share. Enrichment: description 45/46, hours 45/46, contact 28/46.
+
+**⚠️ TWO CORRECTIONS to earlier numbers**, both from measuring all six with one consistent method for the first time:
+1. **NV was reported as 6/28 (21%); consistently measured it is 11/28 (39%)** — the earlier run counted `oddity` only, this one counts `oddity` + `park_feature`. Method difference, not data change.
+2. **CA was repeatedly called "isolated cases". Wrong — CA has 24 pairs**, the most of any state in absolute terms. Lowest rate (8%), highest count.
+
+**SIX-STATE DEDUP COLLISION RATE ON PROD:** NV 11/28 (39%) · AZ 9/33 (27%) · UT 6/46 (13%) · OR 17/192 (9%) · CA 24/283 (8%) · WA 11/141 (8%) — **78 pairs across 723 records (11%)**. Rate highest in small states, count highest in CA; prioritisation should probably weigh count over rate.
+
+**ALL SIX LIVE:** CA 283 · OR 192 · WA 141 · UT 46 · AZ 33 · NV 28 = **723**. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-az-state-parks-prod` · 2026-09-02 (later 15) — **AZ's PROD PROMOTION IS COMPLETE.** Five of six states live; only UT remains.
 
 (**newest truth: AZ is fully live on PROD — ingested, entity-resolved, triage queue came back EMPTY so the auto-approval rule applied, and Typesense is synced. Nothing about the AZ promotion remains open.**
