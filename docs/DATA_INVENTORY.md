@@ -225,6 +225,92 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Data added 2026-09-02 `[TEST only]` — `arizona_state_parks` source ingested.**
+> New `source_id = 'arizona_state_parks'` — visitor-facing content from
+> azstateparks.com for all 33 AZ state parks (all 33 ingested; zero
+> skips). Complements the existing `state_parks` GIS source (34 park
+> units + 14 aggregated campgrounds for AZ). Per-state source_id in the
+> OR/NV state-prefixed family (no `_web` suffix), separate from
+> `state_parks_web` (CA), `state_parks_web_wa` (WA), `oregon_state_parks`,
+> and `nevada_state_parks`.
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'arizona_state_parks'`) | **33** |
+> | — with `description` (long-form "about" text) | **33** |
+> | — with `hours` (freeform blob) | **29** |
+> | — with `contact` (raw blob + parsed phone) | **33** |
+> | — with `photo` (azstateparks.com hero) | **33** |
+> | — with `fees` (freeform, normalized_payload only) | **31** |
+> | — with `summary` (short lead blurb, normalized_payload only) | **33** |
+> | — with `advisories` (park-specific alerts) | **3** |
+> | `master_place_id` linked | **31** (2 pending manual triage) |
+> | — via ingest-time name link (direct: matched GIS park already had a mp) | **31** |
+> | — via standard `matchAll` remainder | **0 auto-linked, 2 → manual_review** |
+> | `place_match` rows created | **33** (31 confirmed, 2 pending) |
+>
+> **Why 2 pending, not zero:** the AZ `state_parks` GIS corpus had **32 of 34**
+> park units already linked to a master_place at ingest time; the remaining 2
+> (**Colorado River State Historic Park** GIS `state_parks:AZ:park:8994…`,
+> **Fool Hollow Lake Recreation Area** GIS `state_parks:AZ:park:dd4e…`) had
+> no master_place. Their AZ visitor rows still borrowed the GIS park's
+> geometry at ingest, then `matchAll` proposed low-confidence candidates
+> (Colorado River SHP → Yuma Quartermaster Depot SHP — likely correct, same
+> co-located site; Fool Hollow LRA → Fool Hollow West Launch Boating Site —
+> likely wrong, that's an RIDB sub-facility inside the park). Both queued
+> for Adam's review.
+>
+> **Migration applied:** `20260902003400_arizona_state_parks_field_precedence` —
+> 3 `field_precedence` rows: description (2), hours (3), contact (3).
+> No `amenities` or `operational_status` rows — AZ pages have neither
+> (not a policy choice; the data doesn't exist in the source pages —
+> the 3/33 alerts are freeform prose, not a status enum).
+> `20260902003300_arizona_state_parks_gis_index` — RPC that returns
+> `state_parks:AZ:park:*` records with EWKT geometry, so the ingester
+> can borrow a park boundary's centroid coordinates (AZ scrape has
+> **0/33 lat/lon**; `source_record.geometry` is NOT NULL).
+>
+> **Photos wired into rendering.** `arizona_state_parks` added to both
+> the `pois_along_corridor` and `master_place_search_export` photo
+> lateral joins at priority **10** (slot 9 held by `nevada_state_parks`
+> from PR #349 — merged to main first; AZ's CREATE-OR-REPLACE preserves
+> NV's slot in the CASE / IN list). Credit renders as
+> `"Arizona State Parks"`; license label `"Arizona State Parks"` —
+> **not a public-domain grant.** azstateparks.com's own /privacy states
+> photographs are NOT public domain and require written consent for
+> use; Adam accepted the risk of URL-referencing (no warehousing) with
+> `© Arizona State Parks and Trails` attribution, same posture as NV.
+> Migrations: `20260902003500` (RPC), `20260902003600` (search export).
+> Copyright string stored in `normalized_payload.copyright` on each
+> source_record — no UI surface yet.
+>
+> **Name normalization at ingest** handled two known variants without
+> falling to manual review: `San Rafael State Natural Area` (web)
+> matched `San Rafael Ranch Natural Area` (GIS), and
+> `Sonoita Creek State Natural Area` (web) matched `Sonoita Creek Natural
+> Area` (GIS). Normalization key strips `state`/`ranch` tokens.
+> `Havasu Riviera State Park` exists in GIS but has no visitor page —
+> not touched by this ingest, remains a solo master_place on the GIS side.
+>
+> **Trademark note (no operational impact this pass):**
+> `Kartchner Caverns State Park®` and `Kubla Khan®` carry federal
+> trademark registrations per azstateparks.com/privacy. No special
+> handling for now; flag for consideration before any marketing/hero
+> surfacing.
+>
+> **Category inference:** AZ has no `type` column, so category is derived
+> from name suffix — `recreation_area` (24) + `historic` (9). Historic
+> covers the 7 explicit "State Historic Park" units + Riordan Mansion +
+> Granite Mountain Hotshots Memorial.
+>
+> **Verified enrichment flow:** sampled 5 master_places show
+> `attribution.description = "arizona_state_parks"`,
+> `attribution.hours = "arizona_state_parks"`,
+> `attribution.contact = "arizona_state_parks"`, with the raw
+> azstateparks.com "about" prose (~800 chars – 3 kB) flowing through
+> `recompute_master_place()`. Photo lateral verified populating on
+> `master_place_search_export.photo_url` for all 5 sampled.
+
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `nevada_state_parks` source ingested.**
 > New `source_id = 'nevada_state_parks'` — visitor-facing content from
 > parks.nv.gov for all 28 NV state parks (all ingested; zero coordinate
@@ -299,7 +385,6 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > `master_place` 161,427, `place_match` 171,678. Post-ingest+ER: 185,776
 > (+28), 161,431 (+4), 171,706 (+28) — perfectly clean deltas, no
 > unrelated drift.
-
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `oregon_state_parks` source ingested.**
 > New `source_id = 'oregon_state_parks'` — visitor-facing content from
 > stateparks.oregon.gov for all 192 OR state parks (all ingested; zero coordinate
