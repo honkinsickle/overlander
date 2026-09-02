@@ -13,26 +13,39 @@ PADUS-anchored master_place `d331abb7-e554-4d67-9601-26d196b08183`:
 
 Because both `pois_along_corridor` and `master_place_search_export`
 filter on `is_searchable = true` AND `primary_category <> 'land_status'`,
-this master_place is invisible to the two consumer surfaces even though
-its description and hero photo are now attached. The parks.nv.gov
-content for Old Las Vegas Mormon Fort is stranded.
+this master_place was invisible to the two consumer surfaces even
+though its description and hero photo were attached. The parks.nv.gov
+content for Old Las Vegas Mormon Fort was stranded until the workaround
+was applied (see below).
 
 **Suspected cause:** `recompute_master_place` doesn't re-evaluate
 `is_searchable` / `primary_category` when a source_record of a different
 category is added to a PADUS-anchored mp whose category was already
 `land_status`.
 
-**Scope:** narrow (1 mp on TEST today), but the shape recurs any time a
-visitor-content source is layered onto a PADUS-anchored historic /
+**Scope: still open — the systemic fix has NOT been applied.** Only the
+one row above has been manually corrected. The underlying
+`recompute_master_place` gap still exists and will affect any future
+visitor-content source that lands on a PADUS-anchored historic /
 land-status park. Likely candidates across the six-state corpus:
 similar city / county historic-park entries where PADUS is the only
-prior source. Worth checking before the six-state search cutover.
+prior source, particularly urban parks that state-agency feature
+services (like NV's `state_parks:NV:%`) don't publish. Worth a
+proactive audit before the six-state search cutover — a query for
+master_places with `primary_category = 'land_status'` AND
+`is_searchable = false` AND `source_count >= 2` AND at least one
+non-PADUS source_record would surface any other stranded rows.
 
-**Not fixed in PR #349** (out of scope — triage-only). The workaround
-(if PR reviewer wants Old LV Mormon Fort searchable now) is a one-shot
-`UPDATE master_place SET is_searchable = true, primary_category =
-'historic' WHERE id = 'd331abb7-…'` — but the underlying recompute
-behaviour should be the real fix.
+**One-shot workaround applied 2026-09-02 for Old LV Mormon Fort only**
+(PR #349 follow-up): `UPDATE master_place SET is_searchable = true,
+primary_category = 'historic' WHERE id =
+'d331abb7-e554-4d67-9601-26d196b08183'`. Verified: the row now surfaces
+via `master_place_search_export` (with `photo_url` and
+`description_source = 'source'`) and via `pois_along_corridor` (a 5 km
+Las Vegas corridor query returns it with `photo_credit = "Nevada State
+Parks"`, `description_source = 'source'`, 2736-char description).
+`source_count` and `canonical_name` untouched. **The systemic fix is
+still outstanding.**
 
 ## NV State Parks — `fees` scraper bug in upstream scrape (2026-09-02)
 

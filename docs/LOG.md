@@ -12,6 +12,30 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later-4) — Old LV Mormon Fort one-shot workaround applied (PR #349 follow-up)
+
+- **Manual `UPDATE` applied to `master_place d331abb7-e554-4d67-9601-26d196b08183`:**
+  `is_searchable: false → true`, `primary_category: land_status → historic`.
+  `source_count` (2) and `canonical_name` untouched; the PATCH
+  representation confirmed only those two fields moved. This unblocks
+  the parks.nv.gov content for Old Las Vegas Mormon Fort from the two
+  consumer surfaces.
+- **Verified surface after the update:**
+  - `master_place_search_export`: row present with
+    `photo_url = https://parks.nv.gov/images/parks/olvmf/OLVMF_gallery_image_009_HERO.jpg`,
+    `description_source = 'source'`.
+  - `pois_along_corridor` over a 5 km Las Vegas corridor
+    (`[[-115.20,36.18],[-115.05,36.18]]`, buffer 5000 m) returns 55 rows,
+    Old LV Mormon Fort among them, with `photo_credit = "Nevada State
+    Parks"`, `nps_photo_url` the OLVMF gallery hero, and the full
+    2736-char description.
+- **Systemic bug still open.** Only this ONE row is manually corrected;
+  the underlying `recompute_master_place` gap that leaves
+  PADUS-anchored mps stranded when non-`land_status` source_records are
+  layered on is still in BACKLOG.md as an open item. Added a proactive
+  audit query pattern to the BACKLOG entry so the six-state search
+  cutover can enumerate any other stranded rows before promotion.
+
 ## 2026-09-02 (later-3) — NV State Parks manual-review triage applied (PR #349)
 
 - **All 3 pending manual_review items resolved: all 3 LINKed** — Cave
