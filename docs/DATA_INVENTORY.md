@@ -225,6 +225,78 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Data added 2026-09-02 `[TEST only]` — `oregon_state_parks` source ingested.**
+> New `source_id = 'oregon_state_parks'` — visitor-facing content from
+> stateparks.oregon.gov for all 192 OR state parks (all ingested; zero coordinate
+> skips). Complements the existing `state_parks` GIS source (ArcGIS boundaries).
+> Per-state source_id, separate from CA (`state_parks_web`) and WA
+> (`state_parks_web_wa` on the wa-state-parks branch).
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'oregon_state_parks'`) | **192** |
+> | — with `description` (long-form "about" text) | **192** |
+> | — with `history` (separate history text, normalized_payload only) | **188** |
+> | — with `photo` (stateparks.oregon.gov hero) | **191** |
+> | — with `amenities` | **189** |
+> | — with `accessible` (ADA-flagged subset, normalized_payload only) | **94** |
+> | — with `operational_status` (RESTRICTED / CLOSED — non-Open values only) | **20** |
+> | — with `reservation_url` (external booking, normalized_payload only) | **57** |
+> | — with `overnight = true` (normalized_payload only) | **55** |
+> | `master_place_id` linked | **178** |
+> | — via spatial containment (point-in-polygon vs state_parks GIS) | **107** |
+> | — via standard ER (deterministic + name_dominant + close_nameless etc.) | **71** |
+> | `place_match` pending manual review | **14** |
+> | new `master_place` rows created | **70** |
+>
+> **Migration applied:** `20260902000000_oregon_state_parks_field_precedence` —
+> 3 `field_precedence` rows: description (2), amenities (5),
+> operational_status (2). No `hours` or `contact` rows — OR's CSV lacks
+> dedicated columns for either (not a policy choice; the data doesn't exist
+> in the source pages).
+>
+> **Photos wired into rendering.** `oregon_state_parks` added to both the
+> `pois_along_corridor` and `master_place_search_export` photo lateral
+> joins at priority **8** (slot 7 held by `state_parks_web_wa` from the
+> pending WA branch — the migrations include it in the IN list so the
+> CREATE-OR-REPLACE preserves WA when both PRs land). Credit renders as
+> "Oregon State Parks"; license label
+> `"Oregon State Parks — government publication"` follows the CA precedent
+> per explicit direction, despite the licensing ambiguity flagged during
+> the OR investigation (Oregon.gov terms of use grant no explicit reuse
+> rights; unlike US federal works, OR state works are not public-domain
+> by default). Migrations: `20260902000100` (RPC), `20260902000200`
+> (search export).
+>
+> **Entity resolution completed in two phases** (mirrors the CA precedent).
+> (1) Spatial pre-link: 107 records matched by point-in-polygon against
+> existing OR `state_parks` GIS park boundary polygons (`data/scripts/or-state-parks-er.ts`;
+> point-in-polygon in JS against polygons read from
+> `state_parks.normalized_payload.geometry_polygon` — avoids needing a
+> custom PostGIS RPC for polygon projection through PostgREST).
+> (2) Standard `matchAll` for the remaining 85: 1 auto-link, 14 manual
+> review, 70 new master_places (parks/trailheads/viewpoints/heritage
+> sites without nearby GIS records).
+>
+> **14 pending manual_review items** queued for triage — mostly ambiguous
+> name pairings (e.g. "Detroit Lake SRA", "Wallowa Lake SP") that fell
+> just under the auto-link threshold. Triage deferred pending review.
+>
+> **Category inference:** OR has no `type` column (unlike CA), so
+> categories are derived from name-suffix patterns in the ingester's
+> `inferCategory()`. Ingest tally: recreation_area 59, park 56, viewpoint
+> 18, public_land 36, historic 13, trailhead 7, campground 2,
+> visitor_center 1. **5 ambiguous names** defaulted to `park` (logged as
+> warnings by the ingester): Beaver Creek, Fort Rock Cave,
+> Mongold (Detroit Lake), Smith Creek Village, South Jetty.
+>
+> **Verified enrichment flow:** sampled master_places linked via both
+> spatial and standard ER show `attribution.description = "oregon_state_parks"`
+> and `attribution.amenities = "oregon_state_parks"`, with the parks.oregon.gov
+> long-form text (~1.5–3.5 kB per park) flowing through
+> `recompute_master_place()`. `operational_status = "RESTRICTED"` observed on
+> a "Reduction in Services/Facilities" park.
+
 > **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web` source ingested.**
 > New `source_id = 'state_parks_web'` — visitor-facing content from parks.ca.gov
 > for all 284 CA state park units (283 ingested; 1 skipped for missing coordinates).

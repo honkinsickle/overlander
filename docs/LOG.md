@@ -12,6 +12,67 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 — OR State Parks (`oregon_state_parks`) ingested + entity-resolved on TEST
+
+- **New source `oregon_state_parks`** — visitor-facing content from
+  stateparks.oregon.gov for all 192 OR state parks. Per-state source_id,
+  separate from CA (`state_parks_web`) and WA (`state_parks_web_wa` on
+  the pending `wa-state-parks` branch). External id
+  `oregon_state_parks:<park_id>` (stable OPRD numeric id).
+- **192/192 ingested — zero coordinate skips.** 192 descriptions
+  (`about` text), 188 history, 191 photos, 189 amenities, 94 accessible
+  subsets, 20 non-Open status values (18 RESTRICTED + 2 CLOSED), 57
+  reservation_url, 55 overnight. Ingester
+  `data/ingestion/sources/oregon-state-parks.ts` follows the
+  `state-parks-web.ts` CSV pattern.
+- **Reduced field_precedence set vs. CA/WA — 3 rows, not 5.** OR's CSV
+  genuinely has no dedicated `hours` or `contact` columns (the source
+  pages don't expose them structurally). Description (2), amenities (5),
+  operational_status (2) only. `history`, `accessible`, `overnight`,
+  `reservable`, `first_come`, `day_use_fee`, `reservation_url`,
+  `park_id`, `parent`, photo `caption`/`count` all live in
+  `normalized_payload` only.
+- **Category inference — no `type` column in OR data.** Derived from
+  name-suffix patterns in `inferCategory()`. Tally: recreation_area 59,
+  park 56, viewpoint 18, public_land 36, historic 13, trailhead 7,
+  campground 2, visitor_center 1. **5 names defaulted to `park` and
+  were logged as warnings**: Beaver Creek, Fort Rock Cave,
+  Mongold (Detroit Lake), Smith Creek Village, South Jetty. No silent
+  guesses — the ingester's log lists them all.
+- **Photos wired directly into rendering — license label follows CA
+  precedent per explicit direction**, despite the OR investigation
+  flagging that Oregon.gov's terms of use grant no explicit reuse
+  rights and OR state works are not public-domain by default
+  (unlike US federal works under 17 USC §105). Label:
+  `"Oregon State Parks — government publication"`. Priority 8 in the
+  photo lateral (slot 7 held by state_parks_web_wa). Migrations
+  `20260902000100/000200` include state_parks_web_wa in the IN list
+  so the CREATE-OR-REPLACE preserves WA when both PRs land.
+- **Entity resolution completed in two phases** (mirrors CA precedent,
+  commit 379c213). (1) Spatial pre-link: **107** records matched by
+  point-in-polygon vs OR `state_parks` GIS polygons — the standard 500m
+  ER radius is too small for large parks with polygon centroids
+  kilometers from the website coordinates. (2) Standard `matchAll` on
+  the remaining 85: 1 auto-link, 14 manual_review, 70 new
+  master_places. **Final state: 178/192 linked**, 14 pending review, 70
+  new master_places created. `data/scripts/or-state-parks-er.ts` is the
+  runner (point-in-polygon done in JS against polygons read from
+  `state_parks.normalized_payload.geometry_polygon` — avoids needing a
+  custom PostGIS RPC to project polygons through PostgREST).
+- **Enrichment flow verified:** sampled master_places show
+  `attribution.description = "oregon_state_parks"` and
+  `attribution.amenities = "oregon_state_parks"`, with long-form text
+  (~1.5–3.5 kB/park) flowing through recompute. RESTRICTED status
+  observed on a "Reduction in Services/Facilities" park.
+- **Cross-worktree TEST DB state:** WA migrations (20260901001300 /
+  001400 / 001500) were already applied to TEST from the
+  wa-state-parks branch. To unblock `supabase db push`, WA's migration
+  files were briefly staged into local `supabase/migrations/`, the
+  push completed, then the WA files were removed before commit —
+  keeps my PR scoped to OR only. Whichever of the WA and OR PRs merges
+  second must confirm the photo lateral still lists both source_ids
+  (my migrations do, so the WA→OR order is safe).
+
 ## 2026-09-01 (later 15) — WA State Parks visitor-website source (`state_parks_web_wa`) — full pipeline on TEST
 
 - **New source `state_parks_web_wa`** — per-state source_id (separate from
