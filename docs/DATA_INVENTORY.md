@@ -244,15 +244,15 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `contact` (extracted from hours or explicit block) | **43** |
 > | — with `photo` (stateparks.utah.gov hero) | **46** |
 > | — with `advisories` (park-specific NOTICE/Closure alerts) | **13** |
-> | `place_match` confirmed (Phase 1 ingest-time name link w/ RIDB redirect) | **37** |
-> | `place_match` pending (Phase 2 manual_review) | **9** |
+> | `place_match` confirmed | **46** |
+> | `place_match` pending | **0** |
 > | new `master_place` created | **0** |
 >
 > **Entity resolution:** 37 auto-linked via Phase 1 (17 direct RIDB,
 > 20 redirected from state_parks-only mp to RIDB mp). 9 → manual_review
-> (all `name_dominant_low_conf`, all correct RIDB targets, all
-> recommended LINK). 0 new master_places — all 46 matched existing
-> entries.
+> via Phase 2, all confirmed as LINK by Adam (resolver
+> `adam:ut-triage-2026-09-02`). 0 new master_places — all 46 matched
+> existing entries. **46/46 confirmed, 0 pending, 0 rejected.**
 >
 > **Field precedence:** description priority 1 (above RIDB's 2),
 > hours priority 3, contact priority 4 (below RIDB as fallback).
@@ -262,16 +262,10 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > "Utah State Parks"`, `license = "Utah State Parks"` — risk-acceptance,
 > same posture as NV/AZ.
 >
-> **9 pending triage items (all recommended LINK):**
-> 1. Millsite State Park → Millsite State Park (RIDB, name_sim=1.000, 130m)
-> 2. Great Salt Lake State Park → Great Salt Lake State Park (RIDB, name_sim=1.000, 189m)
-> 3. Green River State Park → Green River State Park (RIDB, name_sim=1.000, 472m)
-> 4. Huntington State Park → Huntington State Park (RIDB, name_sim=1.000, 180m)
-> 5. Otter Creek State Park → Otter Creek State Park (RIDB, name_sim=1.000, 149m)
-> 6. Piute State Park → Piute State Park (RIDB, name_sim=1.000, 157m)
-> 7. Rockport State Park → Rockport State Park (RIDB, name_sim=1.000, 310m)
-> 8. Steinaker State Park → Steinaker Reservoir (RIDB+OSM, name_sim=0.870, 486m)
-> 9. Territorial Statehouse State Park Museum → Territorial Statehouse State Park Museum (RIDB, name_sim=1.000, 211m)
+> **Six-state visitor-content set complete.** CA (283), WA (141),
+> OR (192), NV (28), AZ (33), UT (46) = **723 total parks** across all
+> six target states, all linked on TEST. PROD promotion requires
+> Adam's explicit per-state sign-off.
 
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `arizona_state_parks` source ingested.**
 > New `source_id = 'arizona_state_parks'` — visitor-facing content from

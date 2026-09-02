@@ -16,7 +16,9 @@
 
 **Migrations:** `20260902040000` (GIS index RPC), `20260902040100` (field_precedence), `20260902040200` (pois_along_corridor photo), `20260902040300` (search_export photo). All applied to TEST.
 
-**Entity resolution:** 37/46 auto-linked via Phase 1 (ingest-time name link with RIDB preference — 17 direct, 20 redirected from state_parks-only mp to RIDB mp). 9/46 routed to manual_review via Phase 2 matchAll (all `name_dominant_low_conf`, all correct matches to RIDB mps, all recommended LINK). 0 new master_places. Camp Floyd correctly linked to the RIDB museum entry. All 8 duplicate-target parks redirected to RIDB. 9 pending triage items awaiting Adam's review.
+**Entity resolution:** 37/46 auto-linked via Phase 1 (ingest-time name link with RIDB preference — 17 direct, 20 redirected from state_parks-only mp to RIDB mp). 9/46 routed to manual_review via Phase 2 matchAll (all `name_dominant_low_conf`, all correct matches to RIDB mps). **Triage applied 2026-09-02:** all 9 confirmed as LINK (resolver `adam:ut-triage-2026-09-02`). **Final: 46/46 confirmed, 0 pending, 0 rejected, 0 new master_places.**
+
+**Six-state visitor-content set is now complete.** CA (283), WA (141), OR (192), NV (28), AZ (33), UT (46) = **723 total parks** across all six target states, all linked on TEST. PROD promotion requires Adam's explicit per-state sign-off.
 
 **Gates:** data typecheck clean (pre-existing @anthropic-ai/sdk errors in unrelated scripts only), web typecheck 0, next build 0.)
 

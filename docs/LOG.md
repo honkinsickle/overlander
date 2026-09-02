@@ -12,6 +12,21 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 10) — UT triage applied — 46/46 confirmed, 0 pending (PR #352 follow-up)
+
+- **All 9 pending manual_review items resolved as LINK.** Resolver
+  `adam:ut-triage-2026-09-02`. All 9 `place_match` rows updated to
+  `status=confirmed`, `source_record.master_place_id` set, target mps
+  recomputed.
+- **Final `utah_state_parks` state:** 46/46 confirmed, 0 pending,
+  0 rejected, 0 new master_places. This closes out the UT visitor-content
+  source — the last of the six-state set.
+- **Six-state visitor-content ingestion is now complete across all target
+  states (CA/WA/OR/NV/AZ/UT), pending PROD promotion.**
+  Total visitor-content source_records across the six: CA 283, WA 141,
+  OR 192, NV 28, AZ 33, UT 46 = 723 parks. All linked to master_places
+  on TEST. PROD promotion requires Adam's explicit per-state sign-off.
+
 ## 2026-09-02 (later 9) — UT entity resolution — 37 auto-linked, 9 pending triage (PR #352 follow-up)
 
 - **Entity resolution ran for `utah_state_parks`.** Two-phase script `data/scripts/ut-state-parks-er.ts` (same structure as AZ, with added RIDB-preference logic).
