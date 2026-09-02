@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 10) — UT triage applied — 46/46 confirmed, 0 pending (PR #352 follow-up)
+
+- **All 9 pending manual_review items resolved as LINK.** Resolver
+  `adam:ut-triage-2026-09-02`. All 9 `place_match` rows updated to
+  `status=confirmed`, `source_record.master_place_id` set, target mps
+  recomputed.
+- **Final `utah_state_parks` state:** 46/46 confirmed, 0 pending,
+  0 rejected, 0 new master_places. This closes out the UT visitor-content
+  source — the last of the six-state set.
+- **Six-state visitor-content ingestion is now complete across all target
+  states (CA/WA/OR/NV/AZ/UT), pending PROD promotion.**
+  Total visitor-content source_records across the six: CA 283, WA 141,
+  OR 192, NV 28, AZ 33, UT 46 = 723 parks. All linked to master_places
+  on TEST. PROD promotion requires Adam's explicit per-state sign-off.
+
+## 2026-09-02 (later 9) — UT entity resolution — 37 auto-linked, 9 pending triage (PR #352 follow-up)
+
+- **Entity resolution ran for `utah_state_parks`.** Two-phase script `data/scripts/ut-state-parks-er.ts` (same structure as AZ, with added RIDB-preference logic).
+- **Phase 1 (direct link with RIDB preference):** 37/46 linked. Of these, 17 went directly to an already-RIDB-backed master_place (prom=5+), and **20 were redirected** from a low-prominence state_parks-only mp (prom=2) to the correct RIDB-sourced mp. Without the redirect logic, 20 parks would have linked to the wrong master_place — the state_parks GIS record's own mp (a boundary-only entry) rather than the RIDB point record's mp (which carries description, contact, and photo).
+- **Phase 2 (matchAll):** 9 remaining parks → all routed to `manual_review` via `name_dominant_low_conf`. All 9 are correct matches to RIDB-backed mps (name_sim=1.000 for 8/9, 0.870 for Steinaker→Steinaker Reservoir). The `combined=0.600` is below auto-link threshold because these GIS parks had no `master_place_id` at ingest time, so no spatial pre-link was possible.
+- **Camp Floyd:** correctly linked to the RIDB museum entry (prom=7), not the NPS historical-marker entry (prom=5). Verified in spot-check.
+- **All 8 duplicate-target parks** (Goblin Valley, Dead Horse Point, Snow Canyon, Coral Pink Sand Dunes, Wasatch Mountain, etc.) correctly redirected to the RIDB entry, not OSM/atlas_oddities/google_resolved duplicates.
+- **No new master_places created** (0) — all 46 parks matched existing entries. The investigation's prediction of ~4 unmatched (Echo, Rail Trail, This Is The Place, Utahraptor) was wrong: all 4 had GIS parks with master_places.
+- **9 pending triage items, all recommended as LINK** — awaiting Adam's confirmation.
+
+## 2026-09-02 (later 8) — UT State Parks visitor-website ingestion (utah_state_parks, TEST)
+
+- **Utah State Parks visitor-website source `utah_state_parks` ingested on TEST.** 46/46 parks from stateparks.utah.gov (scraped 2026-09-01). Sixth and final state in the visitor-content set (CA/WA/OR/NV/AZ/UT). JSON-driven ingester at `data/ingestion/sources/utah-state-parks.ts`.
+- **Zero coordinates in source data (0/46)** — same as AZ. Borrows geometry from existing `state_parks:UT:park:*` GIS records via new RPC `utah_state_parks_gis_index()`. All 46 matched after adding 5 explicit NAME_VARIANTS (Fred Hayes→Starvation, Escalante Petrified Forest→Escalante, Great Salt Lake→Great Salt Lake Marina, Historic Union Pacific Rail Trail→Rail Trail, Jordan River OHV→Jordan River OHV) and expanding STRIPPABLE_TOKENS with "recreation"/"area"/"heritage".
+- **Hours/contact separation:** UT's hours field contains phone/fax/management info mixed in on 41/46 rows. Mechanical split at first `Phone:`/`Management:`/`Fax:`/`Email:` marker. Recovers both hours (45/46) and contact (43/46) from a nominally-empty contact column. Two rows (Antelope Island, Bear Lake) have explicit contact blocks — those are preferred.
+- **Fire-stage alert stripping:** 46/46 carry fire-restriction boilerplate (6 distinct texts across Stage 1/Stage 2). Pattern-match via `FIRE_STAGE_RE` (not exact-string like NV's single banner). 13/46 retain park-specific NOTICE/Closure advisories after stripping.
+- **Field precedence:** description at priority 1 (above RIDB's 2 — Adam's explicit call that visitor prose wins), hours at 3, contact at 4 (below RIDB's 3 as fallback). No fees (0/46), no coordinates.
+- **Photo wiring:** slot 11 in both photo lateral joins. `credit = "Utah State Parks"`, same risk-acceptance posture as NV/AZ (utah.gov footer: "All rights reserved", no government-publication framing).
+- **4 migrations applied to TEST:** `20260902040000`–`20260902040300`.
+- **Entity resolution not yet run.** PR to be opened next.
+- **Earlier this session:** verified that the CA/WA/OR/NV source_records ARE present on TEST (185,809 total source_records) — the investigation report's "only 2 source_ids" finding was a query bug (`.limit(50000)` on a 185k-row table).
+
 ## 2026-09-02 (later 7) — AZ triage applied — 33/33 confirmed, 0 pending (PR #350 follow-up)
 
 - **Both AZ pending manual_review items resolved as LINK** against

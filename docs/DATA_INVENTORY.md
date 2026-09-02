@@ -225,6 +225,48 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Data added 2026-09-02 `[TEST only]` — `utah_state_parks` source ingested.**
+> New `source_id = 'utah_state_parks'` — visitor-facing content from
+> stateparks.utah.gov for all 46 UT state parks (all 46 ingested; zero
+> skips). Complements the existing `state_parks` GIS source. Per-state
+> source_id in the OR/NV/AZ state-prefixed family (no `_web` suffix).
+> **Hours/contact separated** from a contaminated hours field (41/46 had
+> phone/management mixed in). Fire-stage boilerplate stripped via
+> pattern match; 13 park-specific advisories retained. Zero coordinates
+> in source data — geometry borrowed from `state_parks:UT:park:*` GIS
+> records.
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'utah_state_parks'`) | **46** |
+> | — with `description` (long-form "about" text) | **45** |
+> | — with `hours` (separated from contaminated field) | **45** |
+> | — with `contact` (extracted from hours or explicit block) | **43** |
+> | — with `photo` (stateparks.utah.gov hero) | **46** |
+> | — with `advisories` (park-specific NOTICE/Closure alerts) | **13** |
+> | `place_match` confirmed | **46** |
+> | `place_match` pending | **0** |
+> | new `master_place` created | **0** |
+>
+> **Entity resolution:** 37 auto-linked via Phase 1 (17 direct RIDB,
+> 20 redirected from state_parks-only mp to RIDB mp). 9 → manual_review
+> via Phase 2, all confirmed as LINK by Adam (resolver
+> `adam:ut-triage-2026-09-02`). 0 new master_places — all 46 matched
+> existing entries. **46/46 confirmed, 0 pending, 0 rejected.**
+>
+> **Field precedence:** description priority 1 (above RIDB's 2),
+> hours priority 3, contact priority 4 (below RIDB as fallback).
+>
+> **Photo wiring:** slot 11 in both `pois_along_corridor` and
+> `master_place_search_export` CASE/IN lists. Attribution: `credit =
+> "Utah State Parks"`, `license = "Utah State Parks"` — risk-acceptance,
+> same posture as NV/AZ.
+>
+> **Six-state visitor-content set complete.** CA (283), WA (141),
+> OR (192), NV (28), AZ (33), UT (46) = **723 total parks** across all
+> six target states, all linked on TEST. PROD promotion requires
+> Adam's explicit per-state sign-off.
+
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `arizona_state_parks` source ingested.**
 > New `source_id = 'arizona_state_parks'` — visitor-facing content from
 > azstateparks.com for all 33 AZ state parks (all 33 ingested; zero
