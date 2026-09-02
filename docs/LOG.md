@@ -12,6 +12,34 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 2) — PR #346 merged, main synced, branch cleanup
+
+- **PR #346 squash-merged to `main` as `324bfcb`** at 2026-09-02 06:05Z.
+  Local `main` fast-forwarded 19 commits behind (WA #345 `1c7796b` merged
+  in between the OR PR open and merge, plus the OR merge itself and
+  whatever else landed in the batch).
+- **One rebase conflict resolved before merge:** WA #345 landed on main
+  first, forcing a rebase of `or-state-parks` onto its new base. Union
+  merge on `data/ingestion/manual.ts` (both `state_parks_web_wa` and
+  `oregon_state_parks` cases kept, both listed in the "Available:" error
+  message) and `docs/LOG.md` (my two 2026-09-02 entries at top, WA's
+  `2026-09-01 (later 15)` entry preserved verbatim below).
+  `DATA_INVENTORY.md` and `STATE.md` auto-merged cleanly.
+- **The three OR migrations were NOT touched during the rebase** — they
+  already listed `state_parks_web_wa` in the photo lateral `IN` list
+  (added preemptively before WA landed, so the `CREATE OR REPLACE`
+  would preserve WA's slot). No comment edits either — the "on the
+  pending wa-state-parks branch" comment is now historically stale but
+  accurate at the time-of-write, and rewriting an applied migration
+  would trip the drift check.
+- **Post-merge cleanup:** local + remote `or-state-parks` branches
+  deleted; working tree clean on `main` at `324bfcb`.
+- **Zero PROD work this session.** All OR ingest + ER + triage was TEST
+  only (`znldzjdatkogdktymtvi`). PROD promotion is Adam's separate call.
+- **Note the `docs/DATA_INVENTORY.md` OR box's line "`state_parks_web_wa`
+  on the wa-state-parks branch" is now stale — WA merged to main as
+  `1c7796b` (#345).** Preserved unedited; the correction is here.
+
 ## 2026-09-02 (later) — OR State Parks manual-review triage applied (PR #346)
 
 - **All 14 pending manual_review items resolved:** 13 linked, 1 rejected +
