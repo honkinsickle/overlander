@@ -12,6 +12,54 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 30) — READ-ONLY trace of three UI surfaces' place-data paths. Two path guesses confirmed, one corrected.
+
+- **Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`**
+  (new directory). Nothing was run — no TEST, no PROD, no Typesense, no
+  browser. Every claim is from source at `9d936af`; the report marks which
+  conclusions are code-path deductions rather than observations.
+- **Surface 1 ("Explore N more near [City], CA →") was mis-guessed as path D,
+  and the correction is the useful part.** The control fetches NOTHING — it is
+  `setExpanded((e) => !e)` on a PURE PRESENTATIONAL component
+  (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment that
+  populates those cards keys on `[hydrateKey]` = the **mounted day set**
+  (`day-detail-corridor-column.tsx:294-351`) and enumerates the **whole**
+  `placePool(d)`, collapsed tiles included. So enrichment already ran, or
+  already failed, before the click. **The link maps to no path A–E; the cards
+  it reveals map to D.** Distinguishing "this surface calls Google" from "this
+  surface displays what a Google call already produced" is the whole point.
+- **Surfaces 2 and 3 confirmed as B and C** — `/api/trip-browse/:trip/:day` and
+  `/api/search-area`. Both are dual-path behind their cutover flags
+  (`TRIP_BROWSE_USE_RESOLVER`, `SEARCH_AREA_USE_RESOLVER`), and **neither flag,
+  nor `DATE_DETAIL_USE_RESOLVER` nor `USE_FEDERATED_POIS`, is set in
+  `web/.env.local` or `.env.development.local`** `[grepped]` — so locally all
+  three run legacy. Vercel's env is not readable from the repo and the report
+  makes no claim about it.
+- **The "NEW" badges on Find Nearby are decorative — provenance settles it.**
+  `isNew` has exactly one consumer (the badge render, `:1000`) and arrived in
+  `6c9d3e3` (2026-05-26), whose own message says *"actual category-fetch wiring
+  is a follow-up"*; `primaryCategories` — the field that makes a tile query
+  anything — landed in `a65d7b7` (2026-06-08). **The badges predate the data
+  wiring.** Corroborated by Groceries: corpus-only, no live path, no badge.
+- **⚠️ Two apparent defects found, BOTH code-reading only, NEITHER reproduced.**
+  Filed to BACKLOG with that caveat attached, deliberately not acted on.
+  (1) The `urban`/`interest` chips on Surface 2 look like they 400 — the route
+  uses one constant as both the `all` expansion and the validation allowlist.
+  (2) Water fill / Showers / Dump stations target
+  `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` in **both** flag
+  states, with no live path either — so they appear structurally empty.
+- **The near-miss worth recording:** the tile list's own comment says its values
+  were "verified against the live Typesense `primary_category` facet." That is
+  probably true *and* compatible with those three tiles returning nothing —
+  suppression happens **downstream in hydration, not in Typesense**. A
+  facet-level verification cannot see it. Same shape as the standing
+  scope-the-instrument lesson: the check was aimed one layer above the filter.
+- **6 of 8 NEW tiles issue no live call at all** (unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` → live half short-circuits to `[]`). Nothing in the
+  UI distinguishes a corpus-only tile from a live-backed one — relevant if the
+  Google-dependency reduction proceeds, since those are precisely the tiles it
+  would not affect.
+
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 
 - **Closes the tooling gap the UT incident exposed.** AZ's
