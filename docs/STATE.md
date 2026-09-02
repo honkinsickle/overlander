@@ -1,3 +1,28 @@
+# STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (CA `state_parks_web` PROD promotion — PREFLIGHT ONLY, HALTED, awaiting Adam's decision)
+
+(**newest truth: the CA PROD promotion was NOT executed. Zero writes reached PROD this session — no migrations, no ingest, no ER, no Typesense sync.** Everything below is read-only measurement via the new `data/scripts/ca-prod-promotion-preflight.ts`.
+
+**PROD is untouched and clean:** `state_parks_web` `source_record` = **0**, `field_precedence` rows = **0**.
+
+**TEST re-verified (not taken from the historical record):** 283 source_records, **283/283 linked**, **0 pending**, and **4 rejected** — the prompt's premise said 0 rejected; the 4 are the intentional 2026-09-01 triage artifacts (2 relinked, 2 → new master_place), i.e. a healthy state read wrongly, not a regression. Methods: 181 spatial_containment, 78 deterministic, 1 name_dominant, 23 manual_triage. Precedence rows: 5.
+
+**The migration set is 3, not 4** (`gh pr view 344 --json files`): `20260901001000` field_precedence, `20260901001100` `pois_along_corridor` photo lateral, `20260901001200` `master_place_search_export` photo lateral. Both laterals are authored for exactly PROD's present baseline (`editorial_food`=5 → `state_parks_web`=6, else 7) with no WA/OR/NV/AZ/UT references — CA applies cleanly on its own.
+
+**CA's photo license framing is confirmed shippable as-is:** `California State Parks — government publication`, the clearest posture of the six states; no risk-acceptance caveat needed (NV/AZ/OR each carry one).
+
+**THREE BLOCKERS, each needing Adam's call before any PROD write:**
+1. **`db push` cannot scope to CA.** PROD is missing all **20** state-park migration files (CA 3, WA 3, OR 3, NV 3, AZ 4, UT 4) — proven by the `field_precedence` delta (TEST 119 rows/23 sources vs PROD 99/17; the 20-row gap is exactly those six sources). A push would carry WA/OR/NV/AZ/UT schema onto PROD, contrary to the CA-only scope. The `editorial_food` precedent records the same constraint: *"ledger ordering required applying them in one pass."* Options: (a) push all 20 (inert for un-ingested states, precedent-backed) or (b) temporarily withhold the other 17 files for a true CA-only ledger.
+2. **TEST's 283/283 cannot be replayed onto PROD.** Substrate is fine (PROD has the identical `state_parks:CA:%` = 914), but the ER corpus is not — `master_place` 28,348 vs 161,431, `osm` 13,804 vs 109,492, `blm` 0 vs 876. PROD will produce a different match set and a **fresh manual-review queue** requiring Adam's adjudication. And **CA's spatial pre-link script was never committed** (`379c213` = `matcher.ts` + docs only; no `ca-state-parks-er.ts` exists, unlike NV/OR) — phase 1 needs new code, not a replay.
+3. **PROD credentials are partial here.** `.env.production-backup` holds only 2 keys, so the documented `data/.env` swap must be field-level or `TYPESENSE_*` is lost. This worktree is not CLI-linked, though `supabase projects list` reports PROD as LINKED from global state.
+
+**Typesense is a required step, confirmed:** `search:sync` reads `master_place_search_export` → `TYPESENSE_COLLECTION`. `places_prod` = **21,965** docs = PROD's export row count exactly, so PROD search is in sync now and promoted CA parks would be unsearchable until a sync runs. `atlas_oddities` skipped this and left PROD search AO-free; `editorial_food` ran it.
+
+**Flagged, not acted on:** `web/.env.local` points Supabase at PROD but `NEXT_PUBLIC_TYPESENSE_COLLECTION` at `places_test` — scope: that local file only; Vercel's deployed env was not read.
+
+**No promotion proceeds until Adam picks a path on blockers 1 and 2. WA is not next until CA is actually promoted and verified.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `ut-state-parks-investigation` · 2026-09-02 (UT State Parks visitor-website ingestion on TEST — PR pending)
 
 (**newest truth: `utah_state_parks` (46/46 parks from stateparks.utah.gov) is live on TEST as of this session.** Per-state source_id following the OR/NV/AZ precedent (state-prefixed, no `_web` suffix). external_id `utah_state_parks:<slug>`. Ingester `data/ingestion/sources/utah-state-parks.ts` (JSON-driven, same as NV/AZ).

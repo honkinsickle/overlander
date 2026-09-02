@@ -12,6 +12,68 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 11) — CA `state_parks_web` PROD promotion: preflight only, HALTED before any PROD write
+
+- **Task was to promote CA to PROD (text + photos). Nothing was written to
+  PROD.** Three findings made the requested mechanism unsafe to execute
+  without a decision from Adam. All measurement this session was read-only,
+  via `data/scripts/ca-prod-promotion-preflight.ts` (new, committed) — inline
+  env, no `supabase link` mutation, refuses to run if a resolved URL doesn't
+  match its expected project ref.
+- **TEST state re-verified, and it does NOT match the prompt's premise on one
+  count.** `state_parks_web` on TEST: 283 source_records, **283/283 linked**
+  (confirmed), **0 pending** — but **4 rejected**, not 0. The 4 are the
+  deliberate triage artifacts recorded in the 2026-09-01 (later 13) entry
+  (2 relinked to a corrected target, 2 rejected → new master_place), so
+  "0 rejected" was the wrong reading of a healthy state, not a regression.
+  Match methods: 181 spatial_containment, 78 deterministic, 1 name_dominant,
+  23 manual_triage.
+- **The migration set is 3, not 4.** `20260901001000` (field_precedence, 5
+  rows), `20260901001100` (`pois_along_corridor` photo lateral),
+  `20260901001200` (`master_place_search_export` photo lateral). Confirmed
+  against `gh pr view 344 --json files`. Both photo laterals are authored for
+  exactly PROD's current baseline — IN list ends `…'editorial_food',
+  'state_parks_web'`, CASE `editorial_food`=5 → `state_parks_web`=6, else 7,
+  with no reference to WA/OR/NV/AZ/UT. So CA applies cleanly to PROD as-is.
+- **BLOCKER 1 — `db push` cannot apply CA alone.** PROD is missing all **20**
+  state-park migration files (CA 3, WA 3, OR 3, NV 3, AZ 4, UT 4). Evidence:
+  `field_precedence` is 119 rows/23 sources on TEST vs 99/17 on PROD, and the
+  20-row delta is exactly those six sources. `supabase db push` applies every
+  pending migration in ledger order, so a CA promotion would drag WA/OR/NV/AZ/UT
+  schema onto PROD — directly contrary to the "CA only" scope. Precedent
+  confirms the constraint rather than resolving it: the `editorial_food`
+  promotion recorded *"ledger ordering required applying them in one pass."*
+- **BLOCKER 2 — TEST's 283/283 is not reproducible on PROD by replay.** The
+  spatial substrate is fine (PROD has the identical `state_parks:CA:%` = 914),
+  but the ER corpus is not: `master_place` 28,348 (PROD) vs 161,431 (TEST),
+  `osm` 13,804 vs 109,492, `blm` 0 vs 876. Phase-2 ER resolves against that
+  corpus, so PROD yields a different match set and a **fresh manual-review
+  queue** needing Adam's adjudication. Worse: **CA's spatial pre-link script
+  was never committed** — `379c213` changed only `matcher.ts` + docs, and
+  unlike NV/OR there is no `ca-state-parks-er.ts`. Reproducing phase 1 means
+  writing new code, not replaying.
+- **BLOCKER 3 — PROD credentials are partial in this workspace.**
+  `~/.config/overlander/env-backups/.env.production-backup` holds only
+  `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (2 keys); a whole-file copy into
+  `data/.env` would strip `TYPESENSE_*`, so the documented swap must stay a
+  field-level edit. This worktree is **not** CLI-linked (`migration list
+  --linked` → *"Cannot find project ref"*), though `supabase projects list`
+  shows PROD as LINKED from global state — worth knowing before anyone runs a
+  bare `db:push-verify`.
+- **Typesense IS a hard dependency — answered explicitly, not omitted.**
+  `search:sync` reads `master_place_search_export` → collection
+  `TYPESENSE_COLLECTION`. Live: `places_prod` = 21,965 docs, exactly equal to
+  PROD's export row count (21,965), so PROD search is in sync *today* and
+  promoted CA parks would be unsearchable until a sync runs. Migration
+  `20260901001200`'s header documents this apply-path. Precedent cuts both
+  ways — `editorial_food` ran it, `atlas_oddities` skipped it and left PROD
+  search AO-free.
+- **Anomaly flagged, not acted on:** `web/.env.local` points
+  `NEXT_PUBLIC_SUPABASE_URL` at PROD but `NEXT_PUBLIC_TYPESENSE_COLLECTION` at
+  **`places_test`**. Scope of that claim: the local file only — Vercel's
+  deployed env was not read and may differ.
+- Gates: `npm run -w data typecheck` exit 0.
+
 ## 2026-09-02 (later 10) — UT triage applied — 46/46 confirmed, 0 pending (PR #352 follow-up)
 
 - **All 9 pending manual_review items resolved as LINK.** Resolver

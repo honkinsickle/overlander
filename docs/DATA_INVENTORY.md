@@ -582,6 +582,47 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > via the existing `photoCredit` pipeline — no web-layer changes needed.
 > Migrations: `20260901001100` (RPC), `20260901001200` (search export).
 >
+> **PROD STATUS 2026-09-02: NOT PROMOTED. `state_parks_web` does not exist on
+> PROD.** Measured read-only this session against `nqzeywzcowujzyegxbsr`
+> (`data/scripts/ca-prod-promotion-preflight.ts`): `source_record` rows for
+> `state_parks_web` = **0**; `field_precedence` rows for `state_parks_web` =
+> **0**. The TEST↔PROD `field_precedence` delta is **119 rows / 23 source_ids
+> (TEST) vs 99 / 17 (PROD)** — the 20-row gap is exactly the six state-park web
+> sources (CA 5, WA 4, OR 3, NV 1, AZ 3, UT 4), i.e. **none of CA/WA/OR/NV/AZ/UT
+> has landed on PROD.** PROD is otherwise current: `master_place` and
+> `master_place_search_export` have identical column sets on both DBs, and
+> `master_place_photo_candidate` exists on PROD — so PROD carries every
+> migration through `20260901000800`, and exactly the **20 state-park migration
+> files** are pending.
+> *(Scope: inferred from schema+data probes, NOT from a direct read of
+> `supabase_migrations.schema_migrations` — no PROD ledger credential exists
+> locally; `~/.config/overlander/prod-db-url` is absent, so `bin/preflight`
+> skips its LEDGER check.)*
+>
+> **Substrate is ready; the ER outcome is NOT transferable.** PROD carries the
+> identical CA GIS slice — `state_parks:CA:%` = **914** (394 park + 520
+> campground), same as TEST — so the spatial pre-link phase has its substrate.
+> But the surrounding corpus differs sharply: `master_place` **28,348 (PROD) vs
+> 161,431 (TEST)**; `osm` **13,804 vs 109,492**; `ridb` **3,961 vs 6,013**;
+> `usfs` **3,188 vs 6,330**; `blm` **0 vs 876**. Phase-2 standard ER resolves
+> against that corpus, so PROD will produce a **different** match set, a
+> different `new_master_place` count, and a **fresh manual-review queue** —
+> TEST's 283/283 is not reproducible by replay. Compounding this: **CA's
+> spatial pre-link script was never committed** (commit `379c213` touched only
+> `matcher.ts` + docs), and the 23 TEST triage decisions reference TEST-only
+> `master_place` UUIDs.
+>
+> **Typesense is a required promotion step, not optional.** `search:sync`
+> (`data/search/sync-typesense.ts`) reads `master_place_search_export` and
+> upserts into the collection named by `TYPESENSE_COLLECTION`. Live counts
+> measured this session: `places_prod` = **21,965** docs, exactly matching
+> PROD's `master_place_search_export` row count (**21,965**) — PROD search is
+> currently in sync, and newly-promoted CA parks would be **unsearchable until a
+> `search:sync` against `places_prod` runs**. Migration `20260901001200`'s own
+> header documents this apply-path. Precedent both ways: the `editorial_food`
+> promotion ran the sync (21,315 indexed); the `atlas_oddities` promotion
+> **skipped** it and left PROD search AO-free.
+>
 > **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web_wa` source ingested.**
 > New `source_id = 'state_parks_web_wa'` — WA counterpart to CA's `state_parks_web`.
 > Per-state source_ids going forward (diverges from the shared `state_parks` GIS pattern).
