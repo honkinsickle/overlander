@@ -12,6 +12,18 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 8) — UT State Parks visitor-website ingestion (utah_state_parks, TEST)
+
+- **Utah State Parks visitor-website source `utah_state_parks` ingested on TEST.** 46/46 parks from stateparks.utah.gov (scraped 2026-09-01). Sixth and final state in the visitor-content set (CA/WA/OR/NV/AZ/UT). JSON-driven ingester at `data/ingestion/sources/utah-state-parks.ts`.
+- **Zero coordinates in source data (0/46)** — same as AZ. Borrows geometry from existing `state_parks:UT:park:*` GIS records via new RPC `utah_state_parks_gis_index()`. All 46 matched after adding 5 explicit NAME_VARIANTS (Fred Hayes→Starvation, Escalante Petrified Forest→Escalante, Great Salt Lake→Great Salt Lake Marina, Historic Union Pacific Rail Trail→Rail Trail, Jordan River OHV→Jordan River OHV) and expanding STRIPPABLE_TOKENS with "recreation"/"area"/"heritage".
+- **Hours/contact separation:** UT's hours field contains phone/fax/management info mixed in on 41/46 rows. Mechanical split at first `Phone:`/`Management:`/`Fax:`/`Email:` marker. Recovers both hours (45/46) and contact (43/46) from a nominally-empty contact column. Two rows (Antelope Island, Bear Lake) have explicit contact blocks — those are preferred.
+- **Fire-stage alert stripping:** 46/46 carry fire-restriction boilerplate (6 distinct texts across Stage 1/Stage 2). Pattern-match via `FIRE_STAGE_RE` (not exact-string like NV's single banner). 13/46 retain park-specific NOTICE/Closure advisories after stripping.
+- **Field precedence:** description at priority 1 (above RIDB's 2 — Adam's explicit call that visitor prose wins), hours at 3, contact at 4 (below RIDB's 3 as fallback). No fees (0/46), no coordinates.
+- **Photo wiring:** slot 11 in both photo lateral joins. `credit = "Utah State Parks"`, same risk-acceptance posture as NV/AZ (utah.gov footer: "All rights reserved", no government-publication framing).
+- **4 migrations applied to TEST:** `20260902040000`–`20260902040300`.
+- **Entity resolution not yet run.** PR to be opened next.
+- **Earlier this session:** verified that the CA/WA/OR/NV source_records ARE present on TEST (185,809 total source_records) — the investigation report's "only 2 source_ids" finding was a query bug (`.limit(50000)` on a 185k-row table).
+
 ## 2026-09-02 (later 7) — AZ triage applied — 33/33 confirmed, 0 pending (PR #350 follow-up)
 
 - **Both AZ pending manual_review items resolved as LINK** against
