@@ -8,9 +8,22 @@
  *
  * The client is a recording fake, so no database is touched.
  */
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyDecisions, type TriageConfig } from "./state-parks-triage.ts";
+
+/** Records outcomes passed to promote.ts's applyMatches, which reject() calls. */
+let applyMatchesCalls: unknown[][] = [];
+vi.mock("../../entity-resolution/promote.ts", () => ({
+  applyMatches: (outcomes: unknown[]) => {
+    applyMatchesCalls.push(outcomes);
+    return Promise.resolve({ auto_linked: 0, amenity_rolled_up: 0, manual_review_queued: 0, new_master_places: outcomes.length, errors: [] });
+  },
+}));
+
+beforeEach(() => {
+  applyMatchesCalls = [];
+});
 
 const CFG: TriageConfig = { sourceId: "california_state_parks", resolver: "test:resolver", label: "t" };
 
@@ -32,7 +45,7 @@ interface Rpc {
  * `.is()`/`.maybeSingle()` but a terminal one after `.update()`.
  */
 function fakeClient(opts: {
-  sourceRecords: { id: string; external_id: string; name: string }[];
+  sourceRecords: Record<string, unknown>[];
   placeMatches: { id: string; source_record_id: string; master_place_id: string; combined_confidence: number }[];
   masterPlaceName?: string;
 }) {
@@ -81,7 +94,15 @@ function fakeClient(opts: {
 }
 
 const PENDING_FIXTURE = {
-  sourceRecords: [{ id: "sr-1", external_id: "california_state_parks:123", name: "Example SP" }],
+  sourceRecords: [
+    {
+      id: "sr-1",
+      external_id: "california_state_parks:123",
+      name: "Example SP",
+      inferred_category: "recreation_area",
+      raw_payload: { row: { lon: "-120.5", lat: "37.25" } },
+    },
+  ],
   placeMatches: [
     { id: "pm-1", source_record_id: "sr-1", master_place_id: "mp-proposed", combined_confidence: 0.72 },
   ],
@@ -140,17 +161,38 @@ describe("applyDecisions", () => {
     expect(calls.filter((c) => c.op === "update")).toHaveLength(0);
   });
 
-  it("reject marks the match rejected and leaves the source_record UNLINKED", async () => {
-    const { sb, calls, rpcs } = fakeClient(PENDING_FIXTURE);
+  it("reject marks the match rejected AND creates a new master_place", async () => {
+    // Regression guard. This previously asserted the record was left UNLINKED
+    // for "phase 2 to re-home" — which never happens: neither matcher.ts nor
+    // promote.ts consults place_match.status, so matchAll re-proposes the same
+    // rejected candidate forever. reject must give the record its own place.
+    const { sb, calls } = fakeClient(PENDING_FIXTURE);
     const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "reject" }], true);
     expect(r).toMatchObject({ rejected: 1, failed: 0 });
 
     const pmUpdate = calls.find((c) => c.table === "place_match" && c.op === "update");
     expect(pmUpdate?.payload).toMatchObject({ status: "rejected", resolved_by: "test:resolver" });
 
-    // the whole point of reject: the record stays unlinked for phase 2 to re-home
-    expect(calls.find((c) => c.table === "source_record" && c.op === "update")).toBeUndefined();
-    expect(rpcs).toHaveLength(0);
+    expect(applyMatchesCalls).toHaveLength(1);
+    const outcome = applyMatchesCalls[0][0] as Record<string, unknown>;
+    expect(outcome.kind).toBe("new_master_place");
+    expect(outcome.source_record_id).toBe("sr-1");
+    expect(outcome.seed_name).toBe("Example SP");
+    expect(outcome.seed_category).toBe("recreation_area");
+    expect(outcome.seed_geometry).toEqual([-120.5, 37.25]);
+    expect(typeof outcome.target).toBe("string");
+  });
+
+  it("reject fails loudly rather than seeding a new master_place at NaN coordinates", async () => {
+    const { sb } = fakeClient({
+      ...PENDING_FIXTURE,
+      sourceRecords: [
+        { id: "sr-1", external_id: "california_state_parks:123", name: "Example SP", inferred_category: "park", raw_payload: {} },
+      ],
+    });
+    const r = await applyDecisions(sb, CFG, [{ external_id: "california_state_parks:123", action: "reject" }], true);
+    expect(r).toMatchObject({ failed: 1, rejected: 0 });
+    expect(applyMatchesCalls).toHaveLength(0);
   });
 
   it("skips a decision whose external_id is not in the pending queue", async () => {

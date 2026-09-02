@@ -28,7 +28,9 @@
  * "reject", "target_mp_id": "<uuid, relink only>", "notes": "..." }]`
  */
 
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { applyMatches } from "../../entity-resolution/promote.ts";
 import { logger } from "../../ingestion/lib/logger.ts";
 
 export interface TriageConfig {
@@ -56,17 +58,33 @@ interface PendingItem {
   proposedMpId: string;
   proposedMpName: string;
   combinedConfidence: number | null;
+  /** Seed fields for a `reject`, which creates a new master_place. */
+  inferredCategory: string | null;
+  lon: number;
+  lat: number;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+/**
+ * Coordinates for a `new_master_place` seed. Every state-parks ingester writes
+ * `rawPayload: { row, ... }` with `row.lat`/`row.lon` (string from the CSV
+ * sources, number from the JSON ones), so read them there rather than trying to
+ * project the PostGIS `geometry` column through PostgREST.
+ */
+function seedCoord(rawPayload: unknown): { lon: number; lat: number } {
+  const row = isRecord(rawPayload) && isRecord(rawPayload.row) ? rawPayload.row : {};
+  const n = (v: unknown) => (typeof v === "number" ? v : parseFloat(String(v)));
+  return { lon: n(row.lon), lat: n(row.lat) };
+}
+
 /** Every unlinked source_record for this source with a pending place_match. */
 export async function fetchPending(sb: SupabaseClient, cfg: TriageConfig): Promise<PendingItem[]> {
   const srs = await sb
     .from("source_record")
-    .select("id, external_id, name")
+    .select("id, external_id, name, inferred_category, raw_payload")
     .eq("source_id", cfg.sourceId)
     .is("master_place_id", null);
   if (srs.error || srs.data == null) {
@@ -102,6 +120,9 @@ export async function fetchPending(sb: SupabaseClient, cfg: TriageConfig): Promi
         proposedMpId: String(m.master_place_id),
         proposedMpName: String(mp.data?.canonical_name ?? "?"),
         combinedConfidence: typeof m.combined_confidence === "number" ? m.combined_confidence : null,
+        inferredCategory: typeof sr?.inferred_category === "string" ? sr.inferred_category : null,
+        lon: seedCoord(sr?.raw_payload).lon,
+        lat: seedCoord(sr?.raw_payload).lat,
       });
     }
   }
@@ -135,10 +156,19 @@ export interface TriageResult {
 /**
  * Apply decisions. `write` is false by default — the caller must opt in.
  *
- * `reject` marks the match rejected and leaves the source_record unlinked; the
- * new master_place is then created by re-running that state's ER script, whose
- * phase 2 routes the record through `matchAll`/`applyMatches`. Deliberately not
- * reimplemented here — `promote.ts` owns master_place creation.
+ * `reject` means "the proposed target is wrong AND this record is its own
+ * place": it marks the match rejected and then creates a NEW master_place for
+ * the record, via `promote.ts`'s `applyMatches` — which owns master_place
+ * creation — using a `new_master_place` outcome.
+ *
+ * ⚠️ This previously only marked the row rejected, on the stated assumption that
+ * re-running the ER script's phase 2 would re-home the record. That was WRONG:
+ * neither `matcher.ts` nor `promote.ts` consults `place_match.status`, so
+ * `matchAll` re-proposes the identical rejected candidate and the record just
+ * re-queues for manual review forever. Caught 2026-09-02 before OR's
+ * `Fall Creek State Recreation Area` reject was applied to PROD. "Reject ⇒ new
+ * master_place" is also the established project semantic (CA's 2026-09-01 TEST
+ * round: "2 rejected — false matches, new master_places created").
  */
 export async function applyDecisions(
   sb: SupabaseClient,
@@ -167,7 +197,7 @@ export async function applyDecisions(
     const verb = d.action.toUpperCase();
     console.log(
       `  ${write ? "APPLY " : "DRYRUN"} ${verb.padEnd(6)} ${item.sourceName} → ` +
-        `${d.action === "reject" ? "(rejected, stays unlinked)" : targetMpId}`,
+        `${d.action === "reject" ? "(rejected → new master_place)" : targetMpId}`,
     );
     if (!write) {
       if (d.action === "link") res.linked += 1;
@@ -188,6 +218,29 @@ export async function applyDecisions(
           })
           .eq("id", item.placeMatchId);
         if (u.error) throw new Error(u.error.message);
+
+        // Then give the record its own master_place. promote.ts owns creation.
+        if (Number.isNaN(item.lon) || Number.isNaN(item.lat)) {
+          throw new Error(
+            `reject ${d.external_id}: no usable coordinates for a new master_place seed`,
+          );
+        }
+        const outcome = {
+          kind: "new_master_place" as const,
+          source_record_id: item.sourceRecordId,
+          target: randomUUID(),
+          seed_category: item.inferredCategory ?? "park",
+          seed_geometry: [item.lon, item.lat] as [number, number],
+          seed_name: item.sourceName,
+        };
+        const applied = await applyMatches([outcome]);
+        if (applied.errors.length > 0) {
+          throw new Error(`reject ${d.external_id}: new_master_place failed: ${JSON.stringify(applied.errors)}`);
+        }
+        logger.info(
+          { externalId: d.external_id, newMasterPlaceId: outcome.target },
+          `${cfg.label}: reject created a new master_place`,
+        );
         res.rejected += 1;
         continue;
       }
