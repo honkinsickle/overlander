@@ -12,6 +12,73 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 22) — OR ingested + entity-resolved on PROD; 19-item triage queue OPEN awaiting sign-off
+
+- **Branched off `main` (`2f8e43c`, PR #355 merged).** No migrations needed —
+  OR's 3 `field_precedence` rows landed in CA's batch push, same as WA.
+- **Ingest: 192 fetched, 192 inserted, 0 skipped, 0 errors.** OR is the only
+  state so far with zero coordinate skips (CA skipped 1, WA 6).
+- **Phase 1 landed 109 — the preflight prediction confirmed exactly.** Preflight
+  had measured PROD's OR polygon substrate as a strict SUPERSET of TEST's (342
+  vs 337 polygons; 5 units present only on PROD) and predicted 107 → 109, with
+  the two gains named in advance: `oregon_state_parks:131` → Cape Meares SSV and
+  `oregon_state_parks:75` → L.L. "Stub" Stewart SP. Both landed. Zero losses,
+  zero changed targets — the opposite direction from WA, which lost one net.
+- **Phase 2 on PROD:** 2 auto_link, 62 new_master_place, 19 manual_review,
+  0 errors. Final: **173/192 linked, 19 pending, 0 rejected** (109
+  spatial_containment · 62 deterministic · 2 name_dominant). 109 carry
+  `auto:oregon_state_parks_er`.
+- **PROD deltas:** `master_place` 28,436 → **28,498** (+62, the new mps);
+  `source_record` 38,272 → **38,464** (+192); export view 22,038 → **22,098**
+  (+60 — the 2-row shortfall is the 2 places that resolved to
+  `operational_status = CLOSED`, which the view excludes). CA still **283** and
+  WA still **141** — untouched.
+- **⚠️ THE PREFLIGHT'S SEARCHABILITY PREDICTION WAS WRONG, and the cause is
+  worth carrying forward.** Preflight measured 31 of 187 OR-linked master_places
+  on TEST as `is_searchable = false` (all `primary_category = land_status`) and
+  predicted "roughly 1 in 6 enriched but not searchable" on PROD. **Actual PROD:
+  0 of 168.** Cause, measured not guessed: **PROD has ZERO `padus`
+  source_records and ZERO `land_status` master_places**, against TEST's 37,701
+  and 35,966. Those 31 TEST links were OR records matching PADUS-derived
+  land-status polygons that simply do not exist on PROD; there they linked to
+  `recreation_area` (115) or became new master_places. **A TEST-measured
+  category distribution does not transfer to PROD when the underlying source
+  isn't on PROD at all** — the same class of error as assuming TEST's ER
+  outcome transfers, one level down.
+- **Photos — outranking confirmed as predicted.** Via the export view's lateral
+  join: **165 of 166** in-view OR master_places carry a photo — **103
+  `stateparks.oregon.gov`, 62 `upload.wikimedia.org`**. OR sits at photo-lateral
+  priority 8, Wikipedia at 2. Expected, not corrected. (TEST showed 152
+  oregon.gov + 1 nps.gov.)
+- **Enrichment:** of 168 distinct OR-linked master_places, **167** carry
+  `attribution.description = oregon_state_parks`, 167 amenities, 16
+  operational_status.
+- **HALTED at triage — 19 items UNAPPLIED. Recommendation: 17 LINK, 1 RELINK,
+  1 REJECT.** Seventeen are trivially clean (most `name_sim = 1.000`, exact
+  names, 80–470m). Two needed real investigation:
+  - **RELINK — `Erratic Rock State Natural Site`.** ER proposed
+    `Erratic Rock State Natural Site (Bellevue Erratic)` (`520ca9b2`) — an
+    **NPS-only `park_feature`** with `cat_compat = 0.000`. The exact-name
+    alternate `Erratic Rock State Natural Site` (`76e0659b`, sim **1.000**,
+    217m) is the **`state_parks:OR:park:` GIS unit backed by state_parks +
+    wikipedia** — the correct canonical home. Same shape as CA's Gray Whale
+    Cove, except here the GIS unit was NOT the proposal, so it needs an
+    override. The script's margin heuristic missed it (1.000 < 0.927 + 0.08),
+    exactly as it missed CA's Topanga.
+  - **REJECT — `Fall Creek State Recreation Area`.** Searched the whole corpus:
+    **no parent unit exists**. The GIS source carries **7 separate sub-unit
+    records** (Cascara, Winberry, Free Meadow, Lakeside 1, Lakeside 2,
+    Fisherman's Point, North Shore), each its own master_place. ER proposed
+    `Cascara` (sim 0.736, 20.7m). Linking whole-park visitor content to one
+    arbitrary campground loop would be wrong and would mislead the other six.
+    Reject → new master_place for the parent. First REJECT recommendation
+    across CA/WA/OR, and only after confirming no better target exists.
+- **Typesense NOT synced**, per sequencing.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 21) — WA triage applied + Typesense synced. **WA's PROD promotion is COMPLETE end-to-end.**
 
 - **Triage applied: 8 LINK, 0 RELINK, 0 REJECT, 0 skipped, 0 failed.** Final

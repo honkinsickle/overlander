@@ -1,3 +1,29 @@
+# STATE — branch `promote-or-state-parks-prod` · 2026-09-02 (later 10) — OR ingested + entity-resolved on PROD; 19-item triage queue OPEN
+
+(**newest truth: OR is on PROD. Ingest and ER done; the 19-item manual-review queue is UNAPPLIED and Typesense is deliberately un-synced.** Branched off `main` (`2f8e43c`, PR #355 merged). No migrations needed — OR's 3 `field_precedence` rows landed in CA's batch push.
+
+**Ingest:** 192 fetched · **192 inserted** · **0 skipped** · 0 errors — the only state so far with zero coordinate skips.
+
+**Entity resolution:** 109 spatial_containment + 62 deterministic + 2 name_dominant → **173/192 linked, 19 pending, 0 rejected**, 0 errors. Phase 2 was 2 auto_link / 62 new_master_place / 19 manual_review.
+
+**Phase 1 landed 109 — the preflight prediction confirmed exactly**, including the two named gains (Cape Meares SSV, L.L. "Stub" Stewart SP). PROD's polygon substrate is a strict superset of TEST's (342 vs 337), so zero losses and zero changed targets — the opposite of WA, which lost one net.
+
+**PROD deltas:** `master_place` 28,436 → **28,498** (+62) · `source_record` 38,272 → **38,464** (+192) · export view 22,038 → **22,098** (+60; the 2-row shortfall is the 2 places resolving to `operational_status = CLOSED`). CA **283** and WA **141** untouched.
+
+**⚠️ The preflight's searchability prediction was WRONG — carry this forward.** Preflight measured 31/187 OR-linked master_places on TEST as `is_searchable = false` (all `land_status`) and predicted ~1-in-6 on PROD. **Actual PROD: 0 of 168.** Cause, measured: **PROD has ZERO `padus` source_records and ZERO `land_status` master_places** (TEST: 37,701 and 35,966). Those TEST links were to PADUS-derived land-status polygons that don't exist on PROD. **A TEST-measured category distribution does not transfer when the underlying source isn't on PROD at all.**
+
+**Photos — outranking confirmed:** 165 of 166 in-view OR master_places carry one — **103 `stateparks.oregon.gov`, 62 `upload.wikimedia.org`** (OR priority 8 vs Wikipedia's 2). Expected, not corrected.
+
+**Enrichment:** 167 of 168 carry `attribution.description = oregon_state_parks`; 167 amenities; 16 operational_status.
+
+**TRIAGE — 19 items, UNAPPLIED. Recommendation: 17 LINK · 1 RELINK · 1 REJECT.** Seventeen are exact-name matches. Two needed investigation:
+- **RELINK `Erratic Rock State Natural Site`** → `76e0659b` (exact name, sim 1.000, the `state_parks:OR:park:` GIS unit backed by state_parks + wikipedia). ER proposed an **NPS-only `park_feature`** with `cat_compat = 0.000`. The margin heuristic missed it, exactly as it missed CA's Topanga.
+- **REJECT `Fall Creek State Recreation Area`** — no parent unit exists in the corpus; the GIS source has **7 sub-unit records** and ER proposed one arbitrary campground loop (`Cascara`, sim 0.736). First REJECT across CA/WA/OR, and only after confirming no better target.
+
+**NEXT:** Adam signs off → apply → Typesense sync. NV/AZ/UT still hold PROD schema with zero PROD data. Credentials: inline exports; `data/.env` never left TEST, CLI never linked to PROD. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-wa-state-parks-prod` · 2026-09-02 (later 9) — **WA's PROD PROMOTION IS COMPLETE END-TO-END.** Two of six states live.
 
 (**newest truth: WA is fully live on PROD — triage applied and Typesense synced. Nothing about the WA promotion remains open.**
