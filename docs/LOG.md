@@ -12,6 +12,71 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
+
+- **Closes the tooling gap the UT incident exposed.** AZ's
+  `az-state-parks-triage-apply.mjs` was the last non-uniform triage script. It
+  was *safer* than UT's — dry-run-by-default, so it could not silently write —
+  but it sat outside `tsc --noEmit` (no type checking at all) and hardcoded its
+  two decisions, so it could only ever replay that one round. Converted to
+  `.ts` on the shared runner: dry-run by default, decisions from JSON,
+  `--write` required.
+- **Its two TEST decisions were preserved, not deleted**, at
+  `data/triage-decisions/az-test-2026-09-02.json` — the `.mjs` was their only
+  structured record (LOG had prose only).
+  - **Deliberately NOT added to `RELINKS_BY_SOURCE` in the decisions builder.**
+    That map holds **PROD** master_place UUIDs and prefix-asserts them; AZ's are
+    **TEST** UUIDs. Putting them there would either fail the assertion or, worse,
+    aim a future PROD relink at an id that does not exist there. AZ's PROD queue
+    came back empty, so there were no PROD relinks to record. Both notes now
+    say explicitly where the record actually landed on PROD (`25bcfe08`,
+    `347fb061`).
+- **Validated by exercising it, not by assuming.** Dry-run against TEST reports
+  the empty queue (matching AZ's known 33/33 linked, 0 pending). Then `--apply`
+  with the historical decisions, still dry-run: it parsed argv, loaded the file,
+  matched against the empty queue and correctly reported `skipped: 2` with the
+  dry-run banner — **proving the apply path is reachable**, since the
+  empty-queue path alone would have been a check that cannot fail. TEST AZ state
+  re-verified unchanged afterwards (33 records, all confirmed, `resolved_by`
+  untouched).
+- **Fixed a stale comment in `lib/state-parks-triage.ts`** that still described
+  AZ's `.mjs` as an existing file. A stale comment in `sync-typesense.ts`
+  already produced one wrong prediction this project; live comments are claims
+  about the code and are kept true.
+- **⚠️ THE AUDIT ITSELF WAS TOO WEAK, and strengthening it found something.**
+  `six-state-er-audit.ts` checked only that a script FILE EXISTS. That was the
+  right check when scripts were missing — but UT's script existed, was
+  committed, and still caused an unintended PROD write because it was
+  **divergent**. The failure mode moved from MISSING to DIVERGENT and the audit
+  had not moved with it. It now asserts each script actually delegates to the
+  shared runner.
+  - **On first run the strengthened audit went RED on AZ's and UT's ER
+    scripts** — a true positive that is **not** a defect: those two use
+    `ingest_time_name_link` (no coordinates; replay the GIS id the ingester
+    recorded), so they legitimately cannot use `runStateParksEr`, which is the
+    *spatial pre-link* runner. Forcing them onto it would be a check demanding
+    the wrong thing.
+  - **Resolved by making the ER expectation per-MECHANISM**: CA/WA/OR/NV must
+    use `runStateParksEr`; AZ/UT must use `applyMatches` (the shared phase-2
+    path they genuinely do share). Triage remains uniform across all six
+    (`runStateParksTriage`). A stray `.mjs` sibling is now itself reported as a
+    finding.
+  - The check is falsifiable and was seen to fail before it passed.
+- **FINAL AUDIT: CLOSED — all six states have committed ER + triage scripts, all
+  on the shared runner.**
+  | state | ER | triage |
+  |---|---|---|
+  | CA | `runStateParksEr` | `runStateParksTriage` |
+  | WA | `runStateParksEr` | `runStateParksTriage` |
+  | OR | `runStateParksEr` | `runStateParksTriage` |
+  | NV | `runStateParksEr` | `runStateParksTriage` |
+  | AZ | `applyMatches` (name-link mechanism) | `runStateParksTriage` |
+  | UT | `applyMatches` (name-link mechanism) | `runStateParksTriage` |
+- **No data changed anywhere.** TEST-only validation; `data/.env` never left
+  TEST, CLI never linked to PROD, both verified after. No PROD reads or writes.
+- Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 28) — UT promoted to PROD. **ALL SIX STATES ARE LIVE.** Plus: an unintended PROD write, and two corrections to earlier numbers.
 
 > **Branch note:** this entry sits directly above OR's (later 23) because the UT

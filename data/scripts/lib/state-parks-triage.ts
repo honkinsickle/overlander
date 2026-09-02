@@ -11,12 +11,16 @@
  * It deliberately does NOT re-apply the historical decisions — TEST already
  * reflects those, and every state currently has an empty pending queue.
  *
- * Shape follows `az-state-parks-triage-apply.mjs`, which is the better of the
- * two existing templates: decision-driven and dry-run-by-default, where
- * `ut-state-parks-triage-apply.ts` can only blanket-confirm every pending item.
- * Two departures from AZ: this is `.ts` (AZ's `.mjs` sits outside
- * `tsc --noEmit` and gets no type checking), and decisions are supplied from a
- * JSON file rather than hardcoded, so the script survives its round.
+ * Shape was taken from AZ's original `az-state-parks-triage-apply.mjs` — the
+ * better of the two per-state templates that existed: decision-driven and
+ * dry-run-by-default, where UT's original could only blanket-confirm every
+ * pending item on invocation. Two departures from it: `.ts` (AZ's `.mjs` sat
+ * outside `tsc --noEmit`), and decisions supplied from a JSON file rather than
+ * hardcoded, so a script survives its round.
+ *
+ * As of 2026-09-02 ALL SIX states run through this module — UT was retrofitted
+ * after its one-shot caused an unintended PROD write, and AZ's `.mjs` was
+ * converted straight after. Neither original file exists any more.
  *
  * Workflow:
  *   1. `--list`             dump the pending queue for review

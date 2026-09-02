@@ -1,0 +1,14 @@
+[
+  {
+    "external_id": "arizona_state_parks:colorado-river",
+    "action": "relink",
+    "target_mp_id": "48785379-779d-47ad-9088-539377ba6ebc",
+    "notes": "TEST-ONLY HISTORICAL RECORD, already applied 2026-09-02 by the original az-state-parks-triage-apply.mjs. Manual triage: matcher proposed Yuma Quartermaster Depot SHP (PADUS-only, public_land) as closest by distance, but the exact-name-match Colorado River SHP (NPS-anchored, park_feature) is the correct target. Same physical park unit - the AZ visitor page opens by explaining the current park sits on the historical Quartermaster Depot grounds. The two candidates describe the same site under different names and should be merged in a future dedup pass. NOTE: target_mp_id is a TEST uuid; on PROD this record phase-1 linked to 25bcfe08 instead, because PROD has no padus so the wrong candidate never existed there."
+  },
+  {
+    "external_id": "arizona_state_parks:fool-hollow",
+    "action": "relink",
+    "target_mp_id": "478b95d7-24cd-421c-97b1-c99c0439a9a2",
+    "notes": "TEST-ONLY HISTORICAL RECORD, already applied 2026-09-02 by the original az-state-parks-triage-apply.mjs. Manual triage: matcher proposed a boat-launch sub-facility (Fool Hollow West Launch Boating Site, RIDB) as closest by distance and name; correct target is the park-unit mp whose alternative_names contains \"Fool Hollow Lake Recreation Area\" exactly. NOTE: target_mp_id is a TEST uuid; on PROD this record phase-1 linked to 347fb061 instead."
+  }
+]
