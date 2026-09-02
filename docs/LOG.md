@@ -12,6 +12,52 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 17) — CA PROD triage queue reported for sign-off (READ-ONLY, nothing applied)
+
+- **28 pending items listed and enriched. No writes.** `data/.env` stayed on
+  TEST and the CLI stayed linked to TEST throughout — PROD creds were exported
+  inline for the read, so nothing was swapped.
+- **Recommendation split: 25 LINK, 3 RELINK, 0 REJECT.** New read-only
+  `data/scripts/ca-prod-triage-report.ts` adds what `--list` doesn't carry —
+  full score breakdown, the proposed target's category/source_count/backing
+  sources, and ALTERNATE targets via the repo's own `findCandidates()` RPC
+  scored with the same Jaro-Winkler-over-`normalizeName` pairing `scoreMatch()`
+  uses.
+- **The alternate search paid for itself three times** — the AZ precedent
+  (a "reject" that had a correctly-named target elsewhere) repeated here:
+  - **Ishxenta State Park** — ER proposed *Point Lobos Ridge NP* (conf 0.389),
+    but **`Ishxenta SP` (453d4ecf, `state_parks:CA:park:435`, 2643m, sim 0.925)**
+    exists. RELINK, not reject.
+  - **Topanga State Park** — proposed *Topanga CP* (sim 0.883); **`Topanga SP`
+    (710517ba, `park:572`, 1294m, sim 0.918)** is the correct unit. CP/SP is a
+    real distinction, so this overrides the script's margin heuristic.
+  - **Colusa-Sacramento River SRA** — proposed the *Campground* (category
+    `campground`, sim 0.959); the source record is the SRA itself
+    (`inferred_category = recreation_area`), and **`Colusa-Sacramento River SRA`
+    (2957ec6f, `park:140`, 1154m, sim 0.972)** is the right home.
+  All three relink targets were verified to be real `state_parks:CA:park:NNN`
+  GIS units, not thin duplicates, before being recommended.
+- **⚠️ Neither TEST reject transfers to PROD — confirming the prediction that a
+  different corpus yields different proposals.**
+  - **Leland Stanford Mansion SHP**: on PROD, ER proposed the *correctly named*
+    `Leland Stanford Mansion SHP` (0600f97e, state_parks+wikipedia) at
+    **name_sim 0.929, 49.9m, confidence 0.712** → **LINK**. TEST rejected it
+    only because TEST's ER had proposed "Downtown Bike Trails". *(TEST's own
+    score was NOT recomputed this session — the 0.652 figure in the request is
+    not one this investigation measured.)*
+  - **Ishxenta State Park**: TEST rejected → new master_place; PROD should
+    **RELINK** (above). Applying TEST's decision here would have created a
+    duplicate alongside the existing `Ishxenta SP`.
+- **Two duplicate pairs spotted, filed not fixed:** `Gray Whale Cove SB`
+  (state_parks GIS) vs `Gray Whale Cove State Beach` (572bd9c7, **NPS
+  `park_feature`**, 138m, exact name) — the GIS unit is the correct canonical
+  target, so LINK stands; and `Watts Towers of Simon Rodia SHP` vs the
+  `atlas_oddities` `Watts Towers` (7d91171d, 68m). Both are pre-existing
+  cross-source duplicates, not caused by this queue.
+- **Nothing applied. Awaiting Adam's sign-off** before any
+  `--apply <decisions.json> --write`.
+- Gates: data typecheck 0.
+
 ## 2026-09-02 (later 16) — ingester filenames renamed to match (closes the item flagged in later 15)
 
 - **Corrects the "flagged, not done" note in (later 15)** — that entry stands as
