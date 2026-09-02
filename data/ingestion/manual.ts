@@ -118,12 +118,12 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/editorial-food.ts");
       return mod.default;
     }
-    case "state_parks_web": {
-      const mod = await import("./sources/state-parks-web.ts");
+    case "california_state_parks": {
+      const mod = await import("./sources/california-state-parks.ts");
       return mod.default;
     }
-    case "state_parks_web_wa": {
-      const mod = await import("./sources/state-parks-web-wa.ts");
+    case "washington_state_parks": {
+      const mod = await import("./sources/washington-state-parks.ts");
       return mod.default;
     }
     case "oregon_state_parks": {
@@ -144,7 +144,7 @@ async function loadSource(name: string): Promise<IngestFn> {
     }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations, editorial_food, state_parks_web, state_parks_web_wa, oregon_state_parks, nevada_state_parks, arizona_state_parks, utah_state_parks`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations, editorial_food, california_state_parks, washington_state_parks, oregon_state_parks, nevada_state_parks, arizona_state_parks, utah_state_parks`,
       );
   }
 }

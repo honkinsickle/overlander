@@ -273,7 +273,7 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > skips). Complements the existing `state_parks` GIS source (34 park
 > units + 14 aggregated campgrounds for AZ). Per-state source_id in the
 > OR/NV state-prefixed family (no `_web` suffix), separate from
-> `state_parks_web` (CA), `state_parks_web_wa` (WA), `oregon_state_parks`,
+> `california_state_parks` (CA), `washington_state_parks` (WA), `oregon_state_parks`,
 > and `nevada_state_parks`. **Triage applied 2026-09-02 (later 2)** —
 > both remaining pending matches resolved as LINK against corpus-side
 > alternate targets (not the matcher's original proposals). See the
@@ -395,7 +395,7 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > parks.nv.gov for all 28 NV state parks (all ingested; zero coordinate
 > skips). Complements the existing `state_parks` GIS source (ArcGIS boundaries).
 > Per-state source_id, following the OR precedent — state-prefixed, no
-> `_web` suffix. Distinct from CA (`state_parks_web`) and WA (`state_parks_web_wa`).
+> `_web` suffix. Distinct from CA (`california_state_parks`) and WA (`washington_state_parks`).
 >
 > | metric | count |
 > |---|---|
@@ -468,8 +468,8 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > New `source_id = 'oregon_state_parks'` — visitor-facing content from
 > stateparks.oregon.gov for all 192 OR state parks (all ingested; zero coordinate
 > skips). Complements the existing `state_parks` GIS source (ArcGIS boundaries).
-> Per-state source_id, separate from CA (`state_parks_web`) and WA
-> (`state_parks_web_wa` on the wa-state-parks branch).
+> Per-state source_id, separate from CA (`california_state_parks`) and WA
+> (`washington_state_parks` on the wa-state-parks branch).
 >
 > | metric | count |
 > |---|---|
@@ -497,7 +497,7 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 >
 > **Photos wired into rendering.** `oregon_state_parks` added to both the
 > `pois_along_corridor` and `master_place_search_export` photo lateral
-> joins at priority **8** (slot 7 held by `state_parks_web_wa` from the
+> joins at priority **8** (slot 7 held by `washington_state_parks` from the
 > pending WA branch — the migrations include it in the IN list so the
 > CREATE-OR-REPLACE preserves WA when both PRs land). Credit renders as
 > "Oregon State Parks"; license label
@@ -544,14 +544,32 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > `recompute_master_place()`. `operational_status = "RESTRICTED"` observed on
 > a "Reduction in Services/Facilities" park.
 
-> **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web` source ingested.**
-> New `source_id = 'state_parks_web'` — visitor-facing content from parks.ca.gov
+> **🔤 RENAMED 2026-09-02 — `state_parks_web` → `california_state_parks`,
+> `state_parks_web_wa` → `washington_state_parks`.** Applied to TEST and to
+> PROD (CA only; WA has no PROD data) via migrations `20260902050000`
+> (source_record + field_precedence + place_match stamps), `20260902050100`
+> (`pois_along_corridor`), `20260902050200` (`master_place_search_export`).
+> All six states now use the `<state>_state_parks` convention. **Identifiers in
+> this file below reflect the NEW names; `docs/LOG.md` entries dated before
+> 2026-09-02 use the old ones and were deliberately left as written.**
+> `external_id` prefixes were renamed too (`state_parks_web:<id>` →
+> `california_state_parks:<id>`) — not in the original plan, but the ingesters
+> derive external_id from SOURCE_ID, so renaming only source_id would have made
+> the next ingest insert 283 duplicates instead of upserting. Verified a pure
+> identifier change: `resolve_field()`'s ORDER BY reaches source_id only as its
+> third key and nothing ties these sources on priority+quality, so **0 resolved
+> values changed owner** (`data/scripts/source-id-rename-tiebreak-sim.ts`,
+> validated against `master_place.attribution` at 1138/1138 + 560/560 on TEST
+> and 1023/1023 on PROD before being trusted).
+>
+> **⚠️ Data added 2026-09-01 `[TEST only]` — `california_state_parks` source ingested.**
+> New `source_id = 'california_state_parks'` — visitor-facing content from parks.ca.gov
 > for all 284 CA state park units (283 ingested; 1 skipped for missing coordinates).
 > Complements the existing `state_parks` GIS source (ArcGIS boundaries/points).
 >
 > | metric | count |
 > |---|---|
-> | `source_record` rows (`source_id = 'state_parks_web'`) | **283** |
+> | `source_record` rows (`source_id = 'california_state_parks'`) | **283** |
 > | — with `description` | **282** |
 > | — with `photo` (parks.ca.gov hero, not wired to rendering) | **275** |
 > | — with `hours` | **276** |
@@ -569,26 +587,120 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | `place_match` rejected (wrong ER match) | **4** (2 relinked to correct target, 2 → new mp) |
 > | new `master_place` rows created | **79** total |
 >
-> **Migration applied:** `20260901001000_state_parks_web_field_precedence` —
+> **Migration applied:** `20260901001000_california_state_parks_field_precedence` —
 > 5 `field_precedence` rows: description (2), hours (3), contact (3),
 > amenities (5), operational_status (2).
 >
-> **Photos wired into rendering.** `state_parks_web` added to both the
+> **Photos wired into rendering.** `california_state_parks` added to both the
 > `pois_along_corridor` and `master_place_search_export` photo lateral
 > joins at priority 6 (after editorial_food, before else). 273 linked
-> master_places now get their photo from `state_parks_web` — none
+> master_places now get their photo from `california_state_parks` — none
 > outranked by a higher-priority source (these parks generally have no
 > NPS/RIDB/Wikipedia photos). Credit renders as "California State Parks"
 > via the existing `photoCredit` pipeline — no web-layer changes needed.
 > Migrations: `20260901001100` (RPC), `20260901001200` (search export).
 >
-> **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web_wa` source ingested.**
-> New `source_id = 'state_parks_web_wa'` — WA counterpart to CA's `state_parks_web`.
+> **PROD STATUS 2026-09-02 (later): PROMOTED — data landed, triage OPEN.**
+> All 20 state-park migrations applied via `db:push-verify` (CLI linked to PROD,
+> field-level `data/.env` swap, both restored after). PROD `field_precedence`
+> **99 → 118 rows, 17 → 23 sources**; `california_state_parks` has its **5** rows.
+> Ingest: **283 inserted / 284 fetched / 1 skipped** (Onyx Ranch SVRA, no
+> coordinates) / 0 errors — identical to TEST. Entity resolution on PROD's own
+> corpus: **181 spatial_containment + 72 deterministic + 2 name_dominant = 255
+> confirmed**, **28 pending manual review**, **0 rejected**, **71 new
+> master_places**, 0 errors. `master_place` 28,348 → **28,419** (+71);
+> `source_record` 37,848 → **38,131** (+283).
+> **TRIAGE APPLIED 2026-09-02** — Adam signed off; 25 LINK + 3 RELINK + 0 REJECT,
+> 0 failed. Final PROD state: **283/283 linked, 0 pending, 0 rejected**
+> (181 spatial_containment · 72 deterministic · 2 name_dominant · 28
+> manual_triage). 3 relinks corrected the ER's proposal: Ishxenta State Park →
+> `Ishxenta SP`, Topanga State Park → `Topanga SP`, Colusa-Sacramento River SRA
+> → the SRA rather than its campground. Decisions committed at
+> `data/triage-decisions/ca-prod-2026-09-02.json`. Distinct CA-linked
+> master_places **280** (252 pre-triage); 279 carry
+> `attribution.description = california_state_parks`, 273 hours, 280 contact.
+> Export view moved **22,024 → 22,022** — McGrath SB and Governor's Mansion SHP
+> resolved to `operational_status = CLOSED`, which the view deliberately
+> excludes. Intended, not a defect.
+> Enrichment verified on PROD: of 252 distinct CA-linked master_places,
+> **251 carry `attribution.description = california_state_parks`**, 245 hours, 252
+> contact.
+> **Photos differ from TEST for a real reason.** Through the export view's
+> lateral join, **233 of 240** CA-linked master_places present in
+> `master_place_search_export` have a photo — **154 from parks.ca.gov, 79 from
+> upload.wikimedia.org**. Wikipedia sits at photo-lateral priority 2 and
+> `california_state_parks` at 6, so Wikipedia legitimately wins those 79. TEST saw 273
+> CA photos because TEST has only **31** wikipedia source_records against PROD's
+> **750** — a corpus difference, not a defect. Note `master_place.photo_url`
+> (the column) reads far lower (82/252) and is NOT the surface that renders;
+> the lateral join in the view/RPC is.
+> **Typesense SYNCED 2026-09-02 — CA's PROD promotion is COMPLETE end-to-end.**
+> `search:sync` against `places_prod`: fetched **22,022**, indexed **22,022**,
+> failed **0**, pruned **12**. Final `places_prod` = **22,022 documents**,
+> exactly matching PROD's `master_place_search_export` row count.
+> `places_test` untouched at **33,047**. The 12 pruned include `McGrath SB`
+> and `Governor's Mansion SHP`, which resolved to `operational_status =
+> CLOSED` and are correctly excluded from both the view and the index.
+> Searchability confirmed with live Typesense queries (not just DB presence)
+> for all three triage relink targets plus three other CA parks.
+>
+> **Superseded PROD reading from earlier the same day (kept for the correction):**
+> Measured read-only against `nqzeywzcowujzyegxbsr`
+> (`data/scripts/ca-prod-promotion-preflight.ts`): `source_record` rows for
+> `california_state_parks` = **0**; `field_precedence` rows for `california_state_parks` =
+> **0**. The TEST↔PROD `field_precedence` delta is **119 rows / 23 source_ids
+> (TEST) vs 99 / 17 (PROD)** — the 20-row gap is exactly the six state-park web
+> sources (CA 5, WA 4, OR 3, NV 1, AZ 3, UT 4), i.e. **none of CA/WA/OR/NV/AZ/UT
+> has landed on PROD.**
+> ⚠️ **CORRECTED 2026-09-02 after the apply — that gap sentence was wrong
+> twice.** UT's `20260902040100` inserts **3** rows, not 4, so the six sources
+> total **19**, not 20; and the remaining 1 row of the 20 is
+> **`osm | amenities` priority 8, present on TEST only** and unrelated to state
+> parks. Post-apply PROD reads 118 rows / 23 sources — complete for these six
+> sources — against TEST's 119. That 1-row difference is the pre-existing OSM
+> drift, not a missing migration. The ledger confirmed the file count
+> independently: exactly 20 pending, applied through `20260901000800`, no gaps.
+> PROD is otherwise current: `master_place` and
+> `master_place_search_export` have identical column sets on both DBs, and
+> `master_place_photo_candidate` exists on PROD — so PROD carries every
+> migration through `20260901000800`, and exactly the **20 state-park migration
+> files** are pending.
+> *(Scope: inferred from schema+data probes, NOT from a direct read of
+> `supabase_migrations.schema_migrations` — no PROD ledger credential exists
+> locally; `~/.config/overlander/prod-db-url` is absent, so `bin/preflight`
+> skips its LEDGER check.)*
+>
+> **Substrate is ready; the ER outcome is NOT transferable.** PROD carries the
+> identical CA GIS slice — `state_parks:CA:%` = **914** (394 park + 520
+> campground), same as TEST — so the spatial pre-link phase has its substrate.
+> But the surrounding corpus differs sharply: `master_place` **28,348 (PROD) vs
+> 161,431 (TEST)**; `osm` **13,804 vs 109,492**; `ridb` **3,961 vs 6,013**;
+> `usfs` **3,188 vs 6,330**; `blm` **0 vs 876**. Phase-2 standard ER resolves
+> against that corpus, so PROD will produce a **different** match set, a
+> different `new_master_place` count, and a **fresh manual-review queue** —
+> TEST's 283/283 is not reproducible by replay. Compounding this: **CA's
+> spatial pre-link script was never committed** (commit `379c213` touched only
+> `matcher.ts` + docs), and the 23 TEST triage decisions reference TEST-only
+> `master_place` UUIDs.
+>
+> **Typesense is a required promotion step, not optional.** `search:sync`
+> (`data/search/sync-typesense.ts`) reads `master_place_search_export` and
+> upserts into the collection named by `TYPESENSE_COLLECTION`. Live counts
+> measured this session: `places_prod` = **21,965** docs, exactly matching
+> PROD's `master_place_search_export` row count (**21,965**) — PROD search is
+> currently in sync, and newly-promoted CA parks would be **unsearchable until a
+> `search:sync` against `places_prod` runs**. Migration `20260901001200`'s own
+> header documents this apply-path. Precedent both ways: the `editorial_food`
+> promotion ran the sync (21,315 indexed); the `atlas_oddities` promotion
+> **skipped** it and left PROD search AO-free.
+>
+> **⚠️ Data added 2026-09-01 `[TEST only]` — `washington_state_parks` source ingested.**
+> New `source_id = 'washington_state_parks'` — WA counterpart to CA's `california_state_parks`.
 > Per-state source_ids going forward (diverges from the shared `state_parks` GIS pattern).
 >
 > | metric | count |
 > |---|---|
-> | `source_record` rows (`source_id = 'state_parks_web_wa'`) | **141** (6 trail parks skipped — no coords) |
+> | `source_record` rows (`source_id = 'washington_state_parks'`) | **141** (6 trail parks skipped — no coords) |
 > | — with `description` | **141** (all) |
 > | — with `photo` | **141** (all, wired into rendering) |
 > | — with `hours` | **141** (all) |

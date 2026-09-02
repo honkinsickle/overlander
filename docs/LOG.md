@@ -12,6 +12,506 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 19) — Typesense synced. **CA's PROD promotion is COMPLETE end-to-end.**
+
+- **`places_prod` synced: fetched 22,022 · indexed 22,022 · failed 0 · pruned
+  12.** Final `places_prod` = **22,022 documents**, exactly equal to PROD's
+  `master_place_search_export` row count. `places_test` **unchanged at 33,047** —
+  only the named collection was touched.
+- **Credential handling per the confirmed preference:** inline exports, no CLI
+  link to PROD, no `data/.env` swap. Verified after: `data/.env` on TEST,
+  `TYPESENSE_COLLECTION=places_test`, CLI linked TEST.
+- **Verified `--env-file` precedence empirically instead of assuming it.** The
+  npm script is `tsx --env-file=.env …`, and `data/.env` carries TEST Supabase +
+  `places_test`. If the file had won over inline exports, the command would have
+  synced the wrong database into the wrong collection. A two-line Node probe
+  confirmed **inline env wins over `--env-file`**, so the requested
+  `npm run -w data search:sync` form was safe to use as-is. Worth keeping: this
+  is the mechanism the whole inline-credential pattern rests on.
+- **⚠️ A stale code comment produced a wrong prediction, now corrected.**
+  `sync-typesense.ts`'s header said stale docs are "NOT cleaned up by this
+  script — follow-up concern". Reading it, I predicted the two CLOSED parks
+  would linger in the index and pre-measured them as already present. **The
+  script does prune** — it deleted 12 stale docs, including both. Comment fixed
+  in this commit. The lesson is the familiar one pointed at documentation: a
+  comment is a claim about the code, not evidence — the pre/post measurement is
+  what settled it.
+- **Both CLOSED parks correctly absent** from the synced index: `McGrath SB` and
+  `Governor's Mansion SHP` were present before the sync and are gone after,
+  consistent with the view's CLOSED/DECOMMISSIONED exclusion.
+- **Searchability spot-checked with real Typesense queries** (not just DB
+  presence) against `places_prod` — all six returned the right place, including
+  all three triage relink targets:
+  `Ishxenta` → Ishxenta SP · `Topanga State Park` → Topanga SP ·
+  `Watts Towers of Simon Rodia` → …SHP · `Zmudowski` → Zmudowski SB ·
+  `Benicia Capitol` → …SHP · `Colusa-Sacramento` → the SRA **and** its
+  Campground as separate rows, confirming the relink picked the SRA.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+### CA PROD promotion — full arc, now closed
+| step | result |
+|---|---|
+| Migrations | 20 applied (`db:push-verify` exit 0); field_precedence 99 → 118 rows, 17 → 23 sources |
+| Ingest | 284 fetched · **283 inserted** · 1 skipped (Onyx Ranch SVRA, no coords) · 0 errors |
+| Entity resolution | 181 spatial_containment + 3 auto_link + 71 new master_places + 28 manual_review |
+| Triage | 25 LINK + 3 RELINK + 0 REJECT, 0 failed → **283/283 linked, 0 pending, 0 rejected** |
+| Rename | `state_parks_web` → `california_state_parks` across TEST + PROD, 0 resolved values changed |
+| Typesense | `places_prod` **21,965 → 22,022**, 12 pruned, 0 failed |
+
+Enrichment on PROD: 280 distinct CA-linked master_places — 279 description,
+273 hours, 280 contact. Photos: 233 of 240 in-view CA master_places carry one
+(154 parks.ca.gov, 79 wikimedia, the latter legitimately outranking at
+photo-lateral priority 2 vs 6).
+
+**Still open, deliberately:** the two cross-source duplicate pairs (Gray Whale
+Cove SB vs the NPS `park_feature`; Watts Towers SHP vs the `atlas_oddities`
+Watts Towers) — separate dedup pass. WA/OR/NV/AZ/UT hold PROD schema with zero
+PROD data; each needs its own promotion decision. WA is next if Adam wants it.
+
+## 2026-09-02 (later 18) — CA PROD triage APPLIED — 283/283 linked, 0 pending, 0 rejected. Only Typesense remains.
+
+- **Adam signed off; applied on PROD. 25 LINK + 3 RELINK + 0 REJECT, 0 failed.**
+  Final `california_state_parks` state on PROD: **283/283 linked, 0 pending,
+  0 rejected**. Methods: 181 spatial_containment, 72 deterministic, 2
+  name_dominant, **28 manual_triage**. Queue now reads 0 items.
+- **The decisions file was GENERATED from the live queue, not hand-written** —
+  new `data/scripts/ca-prod-triage-build-decisions.ts` reads the 28 pending rows
+  and emits `data/triage-decisions/ca-prod-2026-09-02.json` (committed as the
+  audit trail). Transcribing 28 external_ids by hand is how a decision ends up
+  aimed at the wrong record. The 3 relink targets are resolved **by name** and
+  then **asserted against the UUID prefix in the signed-off report** — if a name
+  had resolved to a row nobody reviewed, it fails loudly instead of relinking
+  silently. It also refuses if the decision count ≠ queue size.
+- **Dry-run first** (`--apply` without `--write`): 25/3/0, 0 skipped, 0 failed.
+  Then `--write`, same result.
+- **All 3 relinks verified to have landed on the approved targets**, each
+  stamped `resolved_by = adam:ca-triage-2026-09-02`, `match_method =
+  manual_triage`, and each now carrying
+  `attribution.description = california_state_parks`:
+  - Ishxenta State Park → `Ishxenta SP` `453d4ecf…`
+  - Topanga State Park → `Topanga SP` `710517ba…`
+  - Colusa-Sacramento River SRA → `Colusa-Sacramento River SRA` `2957ec6f…`
+- **Enrichment across the 280 distinct CA-linked master_places** (252 before
+  triage, +28): **279** carry `attribution.description = california_state_parks`,
+  273 hours, 280 contact.
+- **⚠️ CREDENTIAL HANDLING — deliberate deviation, flagged.** The request asked
+  for the field-level `data/.env` swap. **That pattern was NOT used here, on
+  purpose**: it exists because `db:push-verify` hardcodes `--env-file=.env`, and
+  no migration was involved in this step. PROD creds were exported inline for
+  the process instead, so **`data/.env` never pointed at PROD and the CLI was
+  never linked to PROD** — strictly safer, since there was no window in which a
+  concurrent process could pick up PROD credentials from disk. Everything the
+  swap ritual protects was preserved and verified after: `data/.env` on TEST,
+  14/14 keys, `TYPESENSE_COLLECTION=places_test`, CLI linked to TEST. An env
+  backup was taken anyway
+  (`.env.test-preop-ca-triage-20260902-131807`).
+- **The export view DROPPED by 2 and the cause was chased down, not assumed.**
+  PROD `master_place_search_export` went **22,024 → 22,022**. Cause: **McGrath
+  SB** and **Governor's Mansion SHP** picked up `operational_status = CLOSED`
+  from CA's visitor content during recompute, and the view deliberately excludes
+  CLOSED/DECOMMISSIONED. Both are `is_searchable = true`; they are correctly
+  withheld from search because they are closed. Intended behaviour, not a
+  defect. 26 of the 28 triage targets are in the view.
+- **Not touched, as instructed:** the two pre-existing cross-source duplicate
+  pairs (`Gray Whale Cove SB` vs the NPS `park_feature`; `Watts Towers of Simon
+  Rodia SHP` vs the `atlas_oddities` `Watts Towers`). Separate dedup pass.
+- **ONLY REMAINING STEP TO CLOSE CA's PROD PROMOTION: the Typesense sync.**
+  `places_prod` = **21,965** docs vs PROD's export view **22,022** — a **+57**
+  delta. Run `npm run -w data search:sync` with `TYPESENSE_COLLECTION=places_prod`;
+  that one key is the only env change needed (host and admin key are shared).
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+## 2026-09-02 (later 17) — CA PROD triage queue reported for sign-off (READ-ONLY, nothing applied)
+
+- **28 pending items listed and enriched. No writes.** `data/.env` stayed on
+  TEST and the CLI stayed linked to TEST throughout — PROD creds were exported
+  inline for the read, so nothing was swapped.
+- **Recommendation split: 25 LINK, 3 RELINK, 0 REJECT.** New read-only
+  `data/scripts/ca-prod-triage-report.ts` adds what `--list` doesn't carry —
+  full score breakdown, the proposed target's category/source_count/backing
+  sources, and ALTERNATE targets via the repo's own `findCandidates()` RPC
+  scored with the same Jaro-Winkler-over-`normalizeName` pairing `scoreMatch()`
+  uses.
+- **The alternate search paid for itself three times** — the AZ precedent
+  (a "reject" that had a correctly-named target elsewhere) repeated here:
+  - **Ishxenta State Park** — ER proposed *Point Lobos Ridge NP* (conf 0.389),
+    but **`Ishxenta SP` (453d4ecf, `state_parks:CA:park:435`, 2643m, sim 0.925)**
+    exists. RELINK, not reject.
+  - **Topanga State Park** — proposed *Topanga CP* (sim 0.883); **`Topanga SP`
+    (710517ba, `park:572`, 1294m, sim 0.918)** is the correct unit. CP/SP is a
+    real distinction, so this overrides the script's margin heuristic.
+  - **Colusa-Sacramento River SRA** — proposed the *Campground* (category
+    `campground`, sim 0.959); the source record is the SRA itself
+    (`inferred_category = recreation_area`), and **`Colusa-Sacramento River SRA`
+    (2957ec6f, `park:140`, 1154m, sim 0.972)** is the right home.
+  All three relink targets were verified to be real `state_parks:CA:park:NNN`
+  GIS units, not thin duplicates, before being recommended.
+- **⚠️ Neither TEST reject transfers to PROD — confirming the prediction that a
+  different corpus yields different proposals.**
+  - **Leland Stanford Mansion SHP**: on PROD, ER proposed the *correctly named*
+    `Leland Stanford Mansion SHP` (0600f97e, state_parks+wikipedia) at
+    **name_sim 0.929, 49.9m, confidence 0.712** → **LINK**. TEST rejected it
+    only because TEST's ER had proposed "Downtown Bike Trails". *(TEST's own
+    score was NOT recomputed this session — the 0.652 figure in the request is
+    not one this investigation measured.)*
+  - **Ishxenta State Park**: TEST rejected → new master_place; PROD should
+    **RELINK** (above). Applying TEST's decision here would have created a
+    duplicate alongside the existing `Ishxenta SP`.
+- **Two duplicate pairs spotted, filed not fixed:** `Gray Whale Cove SB`
+  (state_parks GIS) vs `Gray Whale Cove State Beach` (572bd9c7, **NPS
+  `park_feature`**, 138m, exact name) — the GIS unit is the correct canonical
+  target, so LINK stands; and `Watts Towers of Simon Rodia SHP` vs the
+  `atlas_oddities` `Watts Towers` (7d91171d, 68m). Both are pre-existing
+  cross-source duplicates, not caused by this queue.
+- **Nothing applied. Awaiting Adam's sign-off** before any
+  `--apply <decisions.json> --write`.
+- Gates: data typecheck 0.
+
+## 2026-09-02 (later 16) — ingester filenames renamed to match (closes the item flagged in later 15)
+
+- **Corrects the "flagged, not done" note in (later 15)** — that entry stands as
+  written, per this file's append-only rule; this is the follow-up that did it.
+  - `data/ingestion/sources/state-parks-web.ts` → `california-state-parks.ts`
+  - `data/ingestion/sources/state-parks-web-wa.ts` → `washington-state-parks.ts`
+  All six states now read `<state>-state-parks.ts`, alongside the shared GIS
+  `state-parks.ts`.
+- **Verified `manual.ts` really was the only importer instead of assuming it.**
+  A repo-ROOT sweep for `state-parks-web` (not a `data/`-rooted one) found
+  exactly two code references, both dynamic `await import()` calls in
+  `manual.ts`, plus one stale comment in `oregon-state-parks.ts` ("shared with
+  state-parks-web.ts pattern"). No `.test.ts` and no `smoke-*` script shadows
+  either module — that pairing is what broke the gate in PR 4b, so it was
+  checked explicitly rather than presumed.
+- **Proved the renamed modules resolve AT RUNTIME, not just under tsc.** These
+  are dynamic `await import()` specifiers; a dry-run ingest actually executes
+  the resolution. Both returned their historical numbers unchanged —
+  `california_state_parks` 284 fetched / 283 inserted / 1 skipped / 0 errors,
+  `washington_state_parks` 147 / 141 / 6 / 0. TEST, dry-run, nothing written.
+- **No data or schema change** — TEST and PROD untouched. CA's 28-item PROD
+  triage queue and the deferred Typesense sync are both unaffected and still
+  open.
+- Historical `docs/LOG.md` references to the old filenames (later 15's flag, and
+  the 2026-09-01 build entries) left verbatim.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+## 2026-09-02 (later 15) — source_id rename: `state_parks_web`→`california_state_parks`, `state_parks_web_wa`→`washington_state_parks` (TEST + PROD)
+
+- **Done before resolving CA's PROD triage queue, per the sequencing call** —
+  rename first, triage under the new name. Queue confirmed intact afterwards.
+- **The rename plan listed 6 surfaces; the audit found 3 more.** New
+  `data/scripts/source-id-rename-audit.ts` swept both databases:
+  1. **`external_id` embeds the old source name** — ALL 283 (TEST CA), 283
+     (PROD CA) and 141 (TEST WA) rows. The ingesters build external_id from
+     `SOURCE_ID`, so renaming source_id alone would make the next ingest write
+     `california_state_parks:<page_id>`, collide with nothing, and **INSERT 283
+     duplicates** instead of upserting — breaking the "idempotent on
+     (source_id, external_id)" invariant. Renamed too, ingesters updated.
+  2. **`master_place.attribution`** carried the old value on 280 (TEST CA),
+     140 (TEST WA), 252 (PROD CA) rows. Refreshed via `recompute_master_place()`
+     — never written directly — by new
+     `data/scripts/source-id-rename-recompute.ts`.
+  3. **`place_match.resolved_by = 'auto:state_parks_web_er'`** on 181 PROD rows.
+     Renamed for consistency with OR/NV's stamp format.
+- **Proved it was a PURE identifier rename before touching anything.**
+  `resolve_field()` orders by `fp.priority asc, sr.source_quality_score desc,
+  sr.source_id asc` — **source_id is the third key**, and
+  `california_state_parks` sorts far earlier than `state_parks_web`, so a tie
+  could have flipped which source owns a field. New
+  `data/scripts/source-id-rename-tiebreak-sim.ts` reproduced that ORDER BY over
+  every affected master_place: **0 field-resolutions where anything ties these
+  sources on priority AND quality → the source_id key is never reached → 0
+  flips**, on both databases. **The model was validated before being trusted**:
+  its "winner before" matched `master_place.attribution` exactly — TEST
+  1138/1138 (CA) + 560/560 (WA), PROD 1023/1023.
+- **TEST first, then PROD**, migrations `20260902050000` / `050100` / `050200`.
+  Both `db:push-verify` runs exit 0. The v1 verifier reports UPDATEs as
+  "unknown, not verified" — expected, so verification was done independently.
+- **Nothing lost or duplicated.** Old source_ids now return **0** on both
+  databases; new ones return TEST CA 283 / TEST WA 141 / PROD CA 283 — moved,
+  not copied. TEST CA still 283/283 linked, 0 pending, 4 rejected; TEST WA
+  141/141, 1 rejected; PROD CA 255 confirmed / 28 pending / 0 rejected. All
+  match_method tallies unchanged.
+- **PROD's 28-item triage queue survived intact** — same 28 items, same
+  proposed master_place UUIDs, same confidences, now keyed
+  `california_state_parks:<page_id>`. Nothing orphaned or duplicated.
+- **Tooling still works under the new names.** ER `--verify`: TEST CA 181/181,
+  TEST WA 117/117, PROD CA 181/181, all 0 disagree. Triage `--list` resolves on
+  every state. Export view + `pois_along_corridor` re-verified by new
+  `data/scripts/source-id-rename-verify.ts` — PROD photo coverage **identical to
+  pre-rename** (233 of 240, 154 parks.ca.gov + 79 wikimedia).
+  - **The first corridor probe was worthless and was replaced.** A
+    continent-wide route hit the RPC's 1000-row cap long before reaching CA
+    parks and returned 0 `parks.ca.gov` photos — which it would have done
+    whether the lateral worked or not. Re-scoped to a Big Sur corridor: 8 CA
+    photos on TEST, 5 on PROD (Monterey SB, Carmel River SB). Same
+    "scope the query to the element under test" trap as before.
+- **Flagged, not done — the two INGESTER FILENAMES still say the old name:**
+  `data/ingestion/sources/state-parks-web.ts` and `state-parks-web-wa.ts`. Every
+  other state uses `<state>-state-parks.ts`. Renaming them is a pure file move
+  (only `manual.ts` imports them) but was left out per the instruction not to
+  rename files unasked. **Recommend doing it** — the filenames now contradict
+  the source_ids they define. ER/triage script filenames (`ca-`/`wa-…`) already
+  match the convention and need no change.
+- **Typesense untouched and still un-synced** — no synced field carries a
+  source_id (`description_source` = 0 for these sources on both DBs), so the
+  rename needs no re-index. `places_prod` remains stale from the CA promotion
+  for the separate reason already logged.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+## 2026-09-02 (later 14) — CA PROD PROMOTION EXECUTED — migrations + ingest + ER landed; 28-item triage queue OPEN, Typesense deliberately NOT synced
+
+- **This is a real PROD write session.** Runbook followed exactly as the AO /
+  editorial_food promotions did: backed `data/.env` up to
+  `~/.config/overlander/env-backups/.env.test-preop-ca-prod-promote-20260902-094313`,
+  `supabase link --project-ref nqzeywzcowujzyegxbsr`, **field-level** swap of
+  only `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (all 14 keys preserved),
+  work, then restored `data/.env` and re-linked to TEST. Both restorations
+  verified.
+- **Deliberately did NOT swap `TYPESENSE_COLLECTION`.** The task defers the
+  sync, so pointing it at `places_prod` would have been a loaded gun with no
+  benefit. Only that one key differs between the two collections; host and
+  admin key are shared.
+- **The prompt had a gap and it was flagged, not silently patched: no ingest
+  step.** Step 3 asked for ER against PROD, but PROD had 0 `state_parks_web`
+  source_records, so ER would have been a no-op. Treated ingest as required
+  and in-scope (the deliverable names "CA source_records ... for PROD", and the
+  AO runbook orders ingest → materialize).
+- **Ledger read for the first time** (only possible once linked): PROD applied
+  through `20260901000800`, **exactly 20 pending**, no earlier gaps — confirming
+  the schema-probe inference from (later 11).
+- **Migrations: all 20 applied, `db:push-verify` exit 0.** field_precedence
+  INSERTs verified per-file: CA 5, WA 4, OR 3, NV 1, AZ 3; UT's uses
+  `ON CONFLICT` so it is not statically verifiable. PROD field_precedence
+  **99 → 118 rows, 17 → 23 sources**, all six state sources present. During the
+  migration step `master_place` and `source_record` were **UNCHANGED** —
+  schema-only, no side effects.
+- **⚠️ CORRECTION to (later 11), found by the post-apply check.** That entry
+  said the 20-row TEST↔PROD `field_precedence` gap "is exactly the six
+  state-park web sources (CA 5, WA 4, OR 3, NV 1, AZ 3, UT 4)". **Wrong twice:**
+  UT's `20260902040100` inserts **3** rows, not 4 — the six sources total
+  **19** — and the remaining row is **`osm | amenities` priority 8, which
+  exists on TEST only** and has nothing to do with state parks. PROD is now 118
+  and TEST is 119; that 1-row delta is pre-existing OSM drift, not a missing
+  migration. Flagged, not fixed — out of scope.
+- **Ingest: 284 fetched, 283 inserted, 1 skipped (Onyx Ranch SVRA — no
+  coordinates), 0 errors** — identical to TEST's history. Dry-run first.
+- **Entity resolution on PROD's own corpus — genuinely different from TEST, as
+  predicted.** Phase 1 spatial pre-link produced **181**, the same as TEST,
+  because PROD carries the identical CA GIS substrate (914 records → 392
+  polygons). Phase 2 over the remaining 102 diverged: **3 auto_link, 71
+  new_master_place, 28 manual_review** (TEST: 2 auto_link, 77 new_master_place,
+  23 manual_review). Final PROD: **255 confirmed** (181 spatial_containment +
+  72 deterministic + 2 name_dominant), **28 pending**, **0 rejected**, 0 errors.
+  `master_place` 28,348 → **28,419** (+71); `source_record` 37,848 → **38,131**
+  (+283). No attempt was made to force TEST's numbers.
+- **HALTED at triage — the 28-item queue is listed but UNAPPLIED**, per the same
+  standard every TEST round used. Captured with the committed
+  `ca-state-parks-triage-apply.ts` (`--list` is read-only). Shape matches TEST's
+  round: mostly GIS name-abbreviation pairs just under the 0.85 threshold
+  (`Santa Monica State Beach` → `Santa Monica SB`, 0.550) plus the two known
+  bad matches that were rejected on TEST — **Leland Stanford Mansion SHP**
+  (0.712) and **Ishxenta State Park → Point Lobos Ridge NP** (0.389, the lowest
+  in the queue).
+- **Enrichment verified on PROD:** of 252 distinct CA-linked master_places,
+  **251** carry `attribution.description = state_parks_web`, 245 hours, 252
+  contact.
+- **Photos: a real divergence from TEST, with a real cause — and an instrument
+  error caught on the way.** First measurement read `master_place.photo_url`
+  (the column) and reported 82/252, which looked like a failure. That is the
+  wrong surface: CA photos render through the **lateral join in the
+  view/RPC**, not the column. Measured correctly, **233 of the 240 CA-linked
+  master_places present in `master_place_search_export` have a photo — 154 from
+  parks.ca.gov, 79 from upload.wikimedia.org.** Wikipedia sits at photo-lateral
+  priority 2 and `state_parks_web` at 6, so those 79 are legitimately outranked.
+  TEST saw 273 CA photos only because TEST has **31** wikipedia source_records
+  against PROD's **750**. Corpus difference, not a defect. Same class as the
+  standing "scope the query to the element under test" lesson.
+- **Typesense NOT synced, by instruction.** `places_prod` = **21,965** docs;
+  PROD's `master_place_search_export` is now **22,024**. A sync today would move
+  +59, but triage will change the final set, so it waits.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
+## 2026-09-02 (later 13) — all six state-park script gaps closed; OR/NV/WA verify CLEAN, no data corrections needed
+
+- **Headline: no TEST data is wrong.** OR, NV and WA all re-derive their
+  recorded `spatial_containment` links exactly. No corrections proposed, so no
+  Adam sign-off was needed. PROD untouched throughout; TEST unmutated (re-ran
+  the audit after every verify — CA still 283/283 / 4 rejected / 181 spatial).
+- **`--verify` results, all four states, run this session on TEST:**
+  | state | polygons | records | recorded | re-derived | agree | disagree | missing | extra |
+  |---|---|---|---|---|---|---|---|---|
+  | CA | 392 | 283 | 181 | 181 | **181** | 0 | 0 | 0 |
+  | OR | 337 | 192 | 107 | 107 | **107** | 0 | 0 | 0 |
+  | NV | 27 | 28 | 21 | 21 | **21** | 0 | 0 | 0 |
+  | WA | 204 | 141 | 117 | 117 | **117** | 0 | 0 | 0 |
+- **Why OR/NV were clean despite carrying the bug — measured, not assumed.**
+  Counted records sitting inside MORE THAN ONE park polygon: **CA 4, WA 0,
+  OR 0, NV 0.** So OR/NV/WA were never *exposed* to first-match-wins; they
+  weren't lucky. CA is the only state where park polygons overlap a visitor
+  point (Wilder Ranch, Manchester, Point Dume, State Indian Museum — of which 3
+  actually picked wrong; Wilder Ranch's first match happened to be the right
+  one). **The fix still matters for the quarterly cadence** — new or redrawn
+  polygons can introduce overlap in any state.
+- **NV had the identical bug and was not named in the task.** Fixed anyway
+  rather than leaving a known-defective sibling next to a fixed one; flagged
+  here as beyond the literal ask.
+- **One runner, four configs.** `data/scripts/lib/state-parks-er.ts` now holds
+  the two-phase logic; `ca/wa/or/nv-state-parks-er.ts` are ~25-line configs
+  (sourceId, GIS prefix, `resolved_by` stamp, label). The four scripts
+  previously carried independently-duplicated containment code — precisely how
+  the CA fix could have landed in one and gone stale in three. Same rationale
+  `lib/eligibility.ts` was extracted for. OR/NV keep their original
+  `resolved_by` stamps so future runs stay consistent with the rows already
+  written.
+- **`lib/spatial-prelink.ts`** holds `pointInPolygon` / `chooseContaining`
+  (name-disambiguated, tie-broken on `mpId` for order-independence) plus the
+  shared `--verify` differ. **11 unit tests**, including the overlap case, an
+  order-independence case, and the Point Dume shape — the tests that would have
+  caught the original bug.
+- **Four missing triage scripts written** — `ca/wa/or/nv-state-parks-triage-apply.ts`
+  over shared `lib/state-parks-triage.ts`. **AZ was the better template** (
+  decision-driven, dry-run by default) over UT's blanket confirm-all; two
+  departures from AZ — `.ts` rather than `.mjs` (AZ's sits outside `tsc`), and
+  decisions come from a JSON file rather than being hardcoded, so the script
+  outlives its round. Actions: `link` / `relink` / `reject`. `reject` marks the
+  match rejected and leaves the record unlinked for the ER script's phase 2 to
+  re-home — `promote.ts` keeps ownership of master_place creation.
+  Historical decisions deliberately NOT re-applied; TEST already reflects them.
+- **The triage scripts needed unit tests, because every pending queue is
+  EMPTY** (CA/WA/OR/NV all 0 items). Running them against TEST exercises only
+  the "nothing to do" path, so the apply branches would have shipped completely
+  unexercised. **7 tests** against a recording fake client cover link / relink /
+  reject / dry-run / missing-target / unknown-external_id / notes. Notably
+  asserts that `reject` does NOT touch `source_record`.
+- **`six-state-er-audit.ts` extended** to check the repo as well as the DB, so
+  "is this closed?" is answerable by the tool rather than by eye. Final line:
+  **CLOSED — every state has a committed ER script and triage script.**
+- Gates: data typecheck 0, **data test 34 files / 644 passed / 3 skipped**,
+  web typecheck 0, next build 0.
+
+## 2026-09-02 (later 12) — CA ER script written + six-state commit-completeness audit (TEST only, PROD untouched)
+
+- **`data/scripts/ca-state-parks-er.ts` written and validated.** Closes the gap
+  found in (later 11): CA's spatial pre-link was never committed. Modelled on
+  `or-state-parks-er.ts` (whose own header says it mirrors the CA pattern — so
+  this closes the loop). Naming follows the committed convention
+  `<xx>-state-parks-er.ts` (or/nv/az/ut). Stamps
+  `resolved_by = auto:state_parks_web_er`, which CA's existing rows lack.
+- **The obvious validation would have been vacuous, and saying so mattered.**
+  All 283 CA records on TEST are already linked, so `--dry-run` finds **0**
+  unlinked, exercises none of the polygon logic, and exits clean. That is a
+  check that cannot fail. Added a **`--verify`** mode instead: it re-derives
+  phase 1 over **all** 283 records ignoring current link state, then diffs the
+  proposals against the `spatial_containment` rows already in `place_match`.
+- **`--verify` found a real bug on the first run — 178 agree / 3 DISAGREE.**
+  Diagnosis: **CA park polygons overlap**, and each of the 3 points sits inside
+  exactly 2 units. Plain first-match-wins (the `or-state-parks-er.ts` behaviour)
+  picked the wrong one every time: State Indian Museum SHP → *Sutter's Fort
+  SHP*; Manchester SP → *Brush Creek/Lagoon Lake Wetlands and Coastal Dunes NP*;
+  Point Dume SB → *Point Dume NP*. In all 3 the correct unit was the
+  name-matching one.
+- **Fix: disambiguate overlapping containments by name**, reusing the repo's own
+  pairing (`natural.JaroWinklerDistance` over `normalizeName`, exactly as
+  `scoreMatch` does), tie-broken on `mpId` so the result is order-independent.
+  Re-run: **181 re-derived vs 181 recorded, 181 AGREE, 0 disagree, 0 missing,
+  0 extra** — phase 1 reproduces the recorded set exactly.
+- **The check is falsifiable, and that was demonstrated rather than assumed.**
+  It went red on a subtly-wrong implementation and green only after the real
+  fix — the negative control happened naturally, no need to break it on purpose.
+- **⚠️ `or-state-parks-er.ts` still has the first-match-wins behaviour.** OR's
+  107 `spatial_containment` links may contain the same class of mis-pick. NOT
+  changed here — OR's data is landed on TEST and out of this task's scope. Filed
+  as a flag; needs the same `--verify` diff before anyone trusts OR's 107.
+- **Six-state commit-completeness audit** via new
+  `data/scripts/six-state-er-audit.ts` (read-only, TEST-pinned). `resolved_by`
+  is the tell — a committed ER script stamps `auto:<source>_er`. Findings:
+  - **CA `state_parks_web`** — 204 links (181 spatial + 23 triage) stamped
+    `(null)`, 79 `auto`. No ER script (**now fixed**), **no triage script**.
+  - **WA `state_parks_web_wa`** — 127 links (117 spatial + 10 triage) stamped
+    `(null)`, 14 `auto`. **NEW GAP, same shape as CA and previously unflagged:
+    no ER script and no triage script.**
+  - **OR `oregon_state_parks`** — ER script ✓ (107 `auto:oregon_state_parks_er`),
+    but 13 links stamped `auto:oregon_state_parks_triage_2026-09-02` with **no
+    committed triage script**.
+  - **NV `nevada_state_parks`** — ER script ✓ (21 `auto:nevada_state_parks_er`),
+    3 links stamped `adam:nv-triage-2026-09-02`, **no committed triage script**.
+  - **AZ / UT — clean.** ER scripts ✓ (31 / 37 `auto:*_er`) and triage scripts
+    committed (`az-state-parks-triage-apply.mjs`, `ut-state-parks-triage-apply.ts`).
+  - All six ingesters are committed and registered in `data/ingestion/manual.ts`;
+    all 20 migrations are committed. The gaps are **ER + triage scripts only**.
+  - Minor: `az-state-parks-triage-apply.mjs` is `.mjs`, so it sits outside
+    `tsc --noEmit` and gets no type checking, unlike UT's `.ts` sibling.
+- **PROD untouched. TEST unmutated** — re-ran the audit after the `--verify`
+  passes and CA still reads 283/283, 4 rejected, 181 spatial_containment.
+  `--verify` and `--dry-run` write nothing.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
+## 2026-09-02 (later 11) — CA `state_parks_web` PROD promotion: preflight only, HALTED before any PROD write
+
+- **Task was to promote CA to PROD (text + photos). Nothing was written to
+  PROD.** Three findings made the requested mechanism unsafe to execute
+  without a decision from Adam. All measurement this session was read-only,
+  via `data/scripts/ca-prod-promotion-preflight.ts` (new, committed) — inline
+  env, no `supabase link` mutation, refuses to run if a resolved URL doesn't
+  match its expected project ref.
+- **TEST state re-verified, and it does NOT match the prompt's premise on one
+  count.** `state_parks_web` on TEST: 283 source_records, **283/283 linked**
+  (confirmed), **0 pending** — but **4 rejected**, not 0. The 4 are the
+  deliberate triage artifacts recorded in the 2026-09-01 (later 13) entry
+  (2 relinked to a corrected target, 2 rejected → new master_place), so
+  "0 rejected" was the wrong reading of a healthy state, not a regression.
+  Match methods: 181 spatial_containment, 78 deterministic, 1 name_dominant,
+  23 manual_triage.
+- **The migration set is 3, not 4.** `20260901001000` (field_precedence, 5
+  rows), `20260901001100` (`pois_along_corridor` photo lateral),
+  `20260901001200` (`master_place_search_export` photo lateral). Confirmed
+  against `gh pr view 344 --json files`. Both photo laterals are authored for
+  exactly PROD's current baseline — IN list ends `…'editorial_food',
+  'state_parks_web'`, CASE `editorial_food`=5 → `state_parks_web`=6, else 7,
+  with no reference to WA/OR/NV/AZ/UT. So CA applies cleanly to PROD as-is.
+- **BLOCKER 1 — `db push` cannot apply CA alone.** PROD is missing all **20**
+  state-park migration files (CA 3, WA 3, OR 3, NV 3, AZ 4, UT 4). Evidence:
+  `field_precedence` is 119 rows/23 sources on TEST vs 99/17 on PROD, and the
+  20-row delta is exactly those six sources. `supabase db push` applies every
+  pending migration in ledger order, so a CA promotion would drag WA/OR/NV/AZ/UT
+  schema onto PROD — directly contrary to the "CA only" scope. Precedent
+  confirms the constraint rather than resolving it: the `editorial_food`
+  promotion recorded *"ledger ordering required applying them in one pass."*
+- **BLOCKER 2 — TEST's 283/283 is not reproducible on PROD by replay.** The
+  spatial substrate is fine (PROD has the identical `state_parks:CA:%` = 914),
+  but the ER corpus is not: `master_place` 28,348 (PROD) vs 161,431 (TEST),
+  `osm` 13,804 vs 109,492, `blm` 0 vs 876. Phase-2 ER resolves against that
+  corpus, so PROD yields a different match set and a **fresh manual-review
+  queue** needing Adam's adjudication. Worse: **CA's spatial pre-link script
+  was never committed** — `379c213` changed only `matcher.ts` + docs, and
+  unlike NV/OR there is no `ca-state-parks-er.ts`. Reproducing phase 1 means
+  writing new code, not replaying.
+- **BLOCKER 3 — PROD credentials are partial in this workspace.**
+  `~/.config/overlander/env-backups/.env.production-backup` holds only
+  `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (2 keys); a whole-file copy into
+  `data/.env` would strip `TYPESENSE_*`, so the documented swap must stay a
+  field-level edit. This worktree is **not** CLI-linked (`migration list
+  --linked` → *"Cannot find project ref"*), though `supabase projects list`
+  shows PROD as LINKED from global state — worth knowing before anyone runs a
+  bare `db:push-verify`.
+- **Typesense IS a hard dependency — answered explicitly, not omitted.**
+  `search:sync` reads `master_place_search_export` → collection
+  `TYPESENSE_COLLECTION`. Live: `places_prod` = 21,965 docs, exactly equal to
+  PROD's export row count (21,965), so PROD search is in sync *today* and
+  promoted CA parks would be unsearchable until a sync runs. Migration
+  `20260901001200`'s header documents this apply-path. Precedent cuts both
+  ways — `editorial_food` ran it, `atlas_oddities` skipped it and left PROD
+  search AO-free.
+- **Anomaly flagged, not acted on:** `web/.env.local` points
+  `NEXT_PUBLIC_SUPABASE_URL` at PROD but `NEXT_PUBLIC_TYPESENSE_COLLECTION` at
+  **`places_test`**. Scope of that claim: the local file only — Vercel's
+  deployed env was not read and may differ.
+- Gates: `npm run -w data typecheck` exit 0.
+
 ## 2026-09-02 (later 10) — UT triage applied — 46/46 confirmed, 0 pending (PR #352 follow-up)
 
 - **All 9 pending manual_review items resolved as LINK.** Resolver

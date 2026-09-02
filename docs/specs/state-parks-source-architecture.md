@@ -406,7 +406,7 @@ results are not in yet.
 - WA's GIS `Description` field (the only real narrative text found across the
   six states' GIS layers `[surveyed 2026-08-18]`) still lands in
   `normalized_payload` as data — it just doesn't participate in field precedence.
-- A future source (working name: `state_parks_web` or similar — source_id NOT
+- A future source (working name: `california_state_parks` or similar — source_id NOT
   finalized) will carry descriptions once the visitor-website investigation
   completes. **That source does not exist yet** — no schema, no endpoint, no
   field_precedence priority, no quality score. It is a placeholder pending the
@@ -641,7 +641,7 @@ for build on everything except description.
   querying without requiring re-ingest.
 - **`description` field_precedence.** Closed — descriptions will come from
   visitor websites, not from the GIS source (§10a). No `description` row in the
-  `state_parks` field_precedence SQL. Future `state_parks_web` source pending
+  `state_parks` field_precedence SQL. Future `california_state_parks` source pending
   a separate investigation.
 - **OR dissolve key.** `FULL_NAME` verified as the dissolve key
   `[full-population 2026-08-18]`: 342 distinct (vs NAME's 339), 0 nulls, no
