@@ -126,6 +126,15 @@ the cards it reveals, and that degradation is already present before the click.
 
 ## Surface 2 — day-scoped browse ("Browsing today Day N within 10 miles of route")
 
+**Diagram:** [Surface 2 Data Flow](https://app.paper.design/file/01M1J899REAQ46Z068V3W9Z1ZW)
+(Paper) — flowchart of this surface's call chain alone: chip tap → the route
+call below → the `TRIP_BROWSE_USE_RESOLVER` fork (active `viaLegacy()` vs.
+dormant `viaResolver()`) → the per-category Mapbox/Google split → the
+deduced-not-reproduced urban/interest 400 risk → render. A separate dashed box
+covers the unrelated `USE_FEDERATED_POIS` flag. Built with `paper-desktop`
+code-to-design from this section, styled against `web/src/app/globals.css`
+tokens.
+
 ### Components
 
 - `web/src/components/trip/category-browse-panel.tsx` — the panel. Header
