@@ -12,6 +12,80 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 31) — PROD impact of the matcher fix, simulated read-only. **0 auto-link · 17 surfaced · 26 still unresolved.**
+
+Read-only simulation against PROD. Nothing applied, no merges, no writes, no
+PROD code change. Script: `data/scripts/prod-matcher-fix-impact-sim.ts`.
+
+- **The replication was validated before it was trusted.** `matchOne` throws on
+  an already-linked source_record and all 43 are linked, so the decision
+  waterfall had to be replicated rather than invoked. Run first under the
+  PRE-patch regime it reproduced **`new_master_place` for 43/43** — matching the
+  known ground truth — so the "after" prediction rests on a model that
+  demonstrably reproduces the present. Same discipline as the source_id rename
+  tie-break sim.
+- **Re-derived from PROD: still exactly 43 pairs** (42 OR, 1 CA).
+
+### Tally under the patched matcher
+
+| outcome | count |
+|---|---|
+| **auto_link** — resolved automatically | **0** |
+| **manual_review** — surfaced for triage instead of silently wrong | **17** |
+| **new_master_place** — still unresolved | **26** |
+
+Of the 17 surfaced: **9** via `name_dominant_low_conf` (all `viewpoint`, 126–468m
+— the category fix working) and **8** via `blended_residual` at exactly 0.600
+(all `recreation_area → recreation_area`, 507–1313m — the wide-radius rescue
+working).
+
+### ⚠️ I predicted this split the wrong way round
+
+(later 30) said the rescue would address the 26 out-of-radius cases and the
+category fix would turn the 17 in-radius ones into manual_review. **The split is
+17/26 as predicted, but the assignment is inverted**: the cases that resolve are
+the ones with a *compatible category*, not the ones inside 500m.
+
+**The rescue is working; the blended floor swallows the result.** Every
+unresolved case carries a confidence that decomposes exactly:
+
+```
+blended = 0.4 × distance_score + 0.4 × name + 0.2 × cat,  distance_score = 0 beyond 100m
+0.540 ⇒ name 1.000, cat 0.70   (public_land / historic → recreation_area)
+0.580 ⇒ name 1.000, cat 0.90   (park → recreation_area)
+0.600 ⇒ name 1.000, cat 1.00   (recreation_area → recreation_area)  ← the only ones ≥ 0.6
+```
+
+A confidence of 0.540/0.580 can only arise from `name_similarity = 1.000` — so
+**the rescue did surface the exact-name GIS record in those 26 cases too.** They
+fail purely because the blended `manual_review` floor is 0.6 and a zeroed
+distance term leaves them at 0.54–0.58. Two to six hundredths short.
+
+So the outcome is decided entirely by `cat_compat`:
+`recreation_area` 1.0 → 0.600 → surfaced; `park` 0.9 → 0.580 → lost;
+`public_land`/`historic` 0.7 → 0.540 → lost.
+
+### The obvious follow-up, deliberately NOT done in this pass
+
+**Rescued candidates should route to `manual_review` by construction rather than
+falling through to blended scoring.** The rescue already applies a far stricter
+name floor (0.95) and a category floor (0.7); anything clearing those is worth
+human eyes regardless of what the distance-zeroed blend computes. That single
+change would convert the remaining 26 to `manual_review` without touching the
+distance clip, the 0.7 `name_dominant` floor, or any category value — i.e.
+without the corpus-wide blast radius those carry.
+
+The alternative — raising `park`/`historic`/`public_land ↔ recreation_area`
+compat — would move far more of the corpus and is the riskier lever.
+
+- **Net effect of what is currently committed: 17 of 43 stop being silent.** None
+  auto-link, which is by design — past the 100m clip the matcher cannot tell
+  "same complex, two agencies" from "adjacent distinct feature", and that
+  reasoning was deliberately left intact.
+- **The existing 43 duplicates are unchanged and still need cleanup**; this only
+  governs what future runs would do.
+- Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped.
+
 ## 2026-09-02 (later 30) — Upstream matcher fixes: `viewpoint` compatibility + wide-radius identical-name rescue
 
 Fixes the two root causes behind the 43 self-created duplicates
