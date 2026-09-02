@@ -12,6 +12,63 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 7) — AZ triage applied — 33/33 confirmed, 0 pending (PR #350 follow-up)
+
+- **Both AZ pending manual_review items resolved as LINK** against
+  targets **other than the matcher's original proposals**. Resolver
+  `adam:az-triage-2026-09-02`. Both `place_match` rows updated
+  in-place with the corrected `master_place_id`, `status = confirmed`,
+  `match_method = manual_review`, plus rationale in `notes`;
+  `source_record.master_place_id` set to the corrected target; target
+  mp recomputed. No new master_places created — both LINKs went to
+  existing mps.
+- **1. Colorado River State Historic Park → mp `48785379…`** (NPS-anchored
+  Colorado River SHP, `park_feature`, exact-name match, 87 m). Matcher
+  had proposed the PADUS-only Yuma Quartermaster Depot SHP mp
+  (`7bf97c6b…`, 6 m) — same physical park, wrong mp. AZ contributed
+  `hours` (new to the mp); NPS still wins `description` and `contact`
+  per field_precedence.
+- **2. Fool Hollow Lake Recreation Area → mp `478b95d7…`** (currently
+  canonical_name "Fool Hollow Lake Recreation Area Campground", RIDB +
+  OSM + USFS anchored, `alternative_names` already contained the exact
+  park name). Matcher had proposed the RIDB "Fool Hollow West Launch
+  Boating Site" sub-facility (`44f648c1…`) — wrong. AZ contributed
+  `hours` + `contact`; RIDB still wins `description`. **source_count
+  3 → 4.**
+- **Canonical_name behavior on `478b95d7` — observed, not assumed.**
+  After AZ ingest + recompute, canonical_name **stayed** at "Fool
+  Hollow Lake Recreation Area Campground" (with the "Campground"
+  suffix); did NOT shift to "Fool Hollow Lake Recreation Area" despite
+  AZ providing that exact form. `alternative_names` correctly holds
+  both. This is the current `recompute_master_place` canonical_name
+  resolution behavior — a display quirk, not blocking any consumer
+  surface, but worth flagging for the eventual six-state canonical
+  cleanup pass. Not filed as a distinct BACKLOG item yet; if it
+  becomes a broader pattern it'll get one.
+- **Final `arizona_state_parks` state (measured):**
+  - `source_record` rows: 33
+  - `master_place_id` linked: **33 / 33** (zero pending, zero rejected)
+  - `place_match` by method: 31 `ingest_time_name_link` + 2
+    `manual_review`
+  - New master_places created by AZ: **0** (both triage LINKs into
+    existing mps)
+- **Two BACKLOG entries filed** (out of scope for this triage; tracked
+  for future passes):
+  1. Colorado River SHP / Yuma Quartermaster Depot SHP master_places
+     duplicate the same physical park under different names
+     (~87 m apart, NPS-anchored vs PADUS-anchored). Same shape as the
+     PADUS-duplicate pattern already noted from NV triage — filed for
+     a future master_place merge/dedup pass.
+  2. The two AZ GIS park boundary records
+     (`state_parks:AZ:park:89946526…`, `state_parks:AZ:park:dd4e655a…`)
+     still show `master_place_id = NULL` even after this triage — the
+     AZ visitor ingest borrowed their geometry but never linked the
+     GIS records themselves. Filed for a future AZ GIS-side ER pass to
+     link them to `48785379` and `478b95d7` respectively.
+- **Zero PROD work.** TEST only.
+- **Gates:** the triage apply is a data-side operation; no code changed
+  beyond the new `data/scripts/az-state-parks-triage-apply.mjs` (idempotent, `--apply` gated).
+
 ## 2026-09-02 (later 5) — AZ State Parks visitor-website ingest (`arizona_state_parks`, TEST) — PR #350
 
 - **New source `arizona_state_parks` ingested on TEST.** All 33 AZ parks
