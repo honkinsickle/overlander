@@ -12,6 +12,16 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 9) — UT entity resolution — 37 auto-linked, 9 pending triage (PR #352 follow-up)
+
+- **Entity resolution ran for `utah_state_parks`.** Two-phase script `data/scripts/ut-state-parks-er.ts` (same structure as AZ, with added RIDB-preference logic).
+- **Phase 1 (direct link with RIDB preference):** 37/46 linked. Of these, 17 went directly to an already-RIDB-backed master_place (prom=5+), and **20 were redirected** from a low-prominence state_parks-only mp (prom=2) to the correct RIDB-sourced mp. Without the redirect logic, 20 parks would have linked to the wrong master_place — the state_parks GIS record's own mp (a boundary-only entry) rather than the RIDB point record's mp (which carries description, contact, and photo).
+- **Phase 2 (matchAll):** 9 remaining parks → all routed to `manual_review` via `name_dominant_low_conf`. All 9 are correct matches to RIDB-backed mps (name_sim=1.000 for 8/9, 0.870 for Steinaker→Steinaker Reservoir). The `combined=0.600` is below auto-link threshold because these GIS parks had no `master_place_id` at ingest time, so no spatial pre-link was possible.
+- **Camp Floyd:** correctly linked to the RIDB museum entry (prom=7), not the NPS historical-marker entry (prom=5). Verified in spot-check.
+- **All 8 duplicate-target parks** (Goblin Valley, Dead Horse Point, Snow Canyon, Coral Pink Sand Dunes, Wasatch Mountain, etc.) correctly redirected to the RIDB entry, not OSM/atlas_oddities/google_resolved duplicates.
+- **No new master_places created** (0) — all 46 parks matched existing entries. The investigation's prediction of ~4 unmatched (Echo, Rail Trail, This Is The Place, Utahraptor) was wrong: all 4 had GIS parks with master_places.
+- **9 pending triage items, all recommended as LINK** — awaiting Adam's confirmation.
+
 ## 2026-09-02 (later 8) — UT State Parks visitor-website ingestion (utah_state_parks, TEST)
 
 - **Utah State Parks visitor-website source `utah_state_parks` ingested on TEST.** 46/46 parks from stateparks.utah.gov (scraped 2026-09-01). Sixth and final state in the visitor-content set (CA/WA/OR/NV/AZ/UT). JSON-driven ingester at `data/ingestion/sources/utah-state-parks.ts`.

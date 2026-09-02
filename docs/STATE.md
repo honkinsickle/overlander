@@ -16,7 +16,7 @@
 
 **Migrations:** `20260902040000` (GIS index RPC), `20260902040100` (field_precedence), `20260902040200` (pois_along_corridor photo), `20260902040300` (search_export photo). All applied to TEST.
 
-**Entity resolution and triage not yet run** — ingestion only this commit. PR to be opened; TEST-only, PROD promotion requires explicit sign-off. The ER script and manual triage will follow in a separate session if needed, or can be bundled into the PR.
+**Entity resolution:** 37/46 auto-linked via Phase 1 (ingest-time name link with RIDB preference — 17 direct, 20 redirected from state_parks-only mp to RIDB mp). 9/46 routed to manual_review via Phase 2 matchAll (all `name_dominant_low_conf`, all correct matches to RIDB mps, all recommended LINK). 0 new master_places. Camp Floyd correctly linked to the RIDB museum entry. All 8 duplicate-target parks redirected to RIDB. 9 pending triage items awaiting Adam's review.
 
 **Gates:** data typecheck clean (pre-existing @anthropic-ai/sdk errors in unrelated scripts only), web typecheck 0, next build 0.)
 
