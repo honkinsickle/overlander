@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 11) — CA State Parks visitor-website source (`state_parks_web`) ingested on TEST
+
+- **New source `state_parks_web`** — visitor-facing content scraped from
+  parks.ca.gov for all 284 CA state park units (283 ingested; 1 skipped for
+  missing coordinates — Onyx Ranch SVRA). Complements the existing
+  `state_parks` GIS source (ArcGIS park boundaries + campground points) with
+  descriptions, hours, phone, amenities, photos, dog policy, fees, status,
+  and advisories.
+- **Investigation phase** identified the dataset structure (CSV, 22 fields,
+  275 JPEG photos at 300px), mapped fields against existing schema, and
+  confirmed 275 photos are government-published (California State Parks,
+  all from parks.ca.gov — no EXIF attribution, attribution tracked via
+  `photo_source_url` column). Found 914 existing `state_parks` source_records
+  for CA (394 parks, 520 campgrounds) linked to 810 master_places — the
+  existing records are geometry-heavy but content-bare (only 3 have photos,
+  2 have hours, 13 have contact info).
+- **Field-home investigation** assessed 6 unmapped fields (fees, dogs,
+  advisories, address, region, district). Recommendation: none warrant a new
+  resolved column. Address already has a home in `master_place.contact`.
+  Dogs are sole-source with no UI consumer. Fees are freeform/time-sensitive.
+  Advisories are dangerous when stale. Region/district are CA-only
+  administrative groupings with no consumer.
+- **Ingester built** at `data/ingestion/sources/state-parks-web.ts` following
+  the `family-destinations.ts` / `atlas-oddities.ts` CSV pattern. Registered
+  in `manual.ts` as `--source state_parks_web`.
+- **Migration `20260901001000`** adds 5 `field_precedence` rows: description
+  (priority 2), hours (3), contact (3), amenities (5), operational_status (2).
+  Applied to TEST via `db:push-verify -- --test`.
+- **Photos stored per photo-pilot pattern** — in `normalized_payload.photo`
+  with full attribution (source, credit, license, source_page URL). NOT
+  wired into the corridor RPC or search export photo lateral joins — staged
+  for review only.
+- **Entity resolution not yet run.** The 283 source_records are unlinked.
+  Running `materialize` will match them to existing GIS master_places by
+  name + proximity.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-01 (later 10) — Photo work shipped to PRODUCTION: UI already live, schema applied, 3 photos wired (explicit sign-off)
 
 Adam authorized deploying the day's photo work to PROD (`nqzeywzcowujzyegxbsr`).
