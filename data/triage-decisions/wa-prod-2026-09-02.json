@@ -1,0 +1,42 @@
+[
+  {
+    "external_id": "washington_state_parks:jackson-house-state-park-heritage-site",
+    "action": "link",
+    "notes": "Manual triage LINK: Jackson House State Park Heritage Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:triton-cove-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Triton Cove State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:conconully-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Conconully State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:matia-island-marine-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Matia Island Marine State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:nolte-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Nolte State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:bottle-beach-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Bottle Beach State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:kopachuck-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Kopachuck State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "washington_state_parks:belfair-state-park",
+    "action": "link",
+    "notes": "Manual triage LINK: Belfair State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  }
+]

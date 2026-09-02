@@ -12,6 +12,63 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 21) — WA triage applied + Typesense synced. **WA's PROD promotion is COMPLETE end-to-end.**
+
+- **Triage applied: 8 LINK, 0 RELINK, 0 REJECT, 0 skipped, 0 failed.** Final
+  `washington_state_parks` on PROD: **141/141 linked, 0 pending, 0 rejected** —
+  116 spatial_containment · 17 deterministic · 8 manual_triage. The 8 carry
+  `resolved_by = adam:wa-triage-2026-09-02`.
+- **All 8 verified individually**: each newly-linked master_place carries
+  `attribution.description`, `hours` AND `contact` = `washington_state_parks`.
+  Jackson House · Triton Cove · Conconully · Matia Island · Nolte ·
+  Bottle Beach · Kopachuck · Belfair.
+- **Decisions generated from the live queue, not hand-transcribed** — same safe
+  pattern CA used. Committed at `data/triage-decisions/wa-prod-2026-09-02.json`.
+  Dry-run first (8/0/0, 0 failed), then `--write`, same result.
+- **Typesense synced: fetched 22,038 · indexed 22,038 · failed 0 · pruned 0.**
+  `places_prod` = **22,038**, exactly equal to PROD's export view.
+  `places_test` untouched at **33,047**. Pruned 0 this time (CA's run pruned 12)
+  — nothing became stale, because WA's 8 triage links went to master_places
+  already in the view.
+- **Re-measured the delta live before syncing rather than trusting the earlier
+  figure**: `places_prod` 22,022 vs export view 22,038 = **+16**, unchanged by
+  triage — the 8 linked to pre-existing GIS master_places already in the view.
+- **Searchability confirmed with live Typesense queries** (not DB presence) for
+  all 8: each returns its `recreation_area` as top hit. Three also correctly
+  surface their campground siblings as separate rows (Belfair, Kopachuck,
+  Triton Cove), and `Conconully` returns 4 hits with the park unit first —
+  confirming the LINK chose the 66m GIS park over the higher-name-scoring
+  Conconully Lake alternates.
+- **The 3 outside `six_state_footprint()` are correctly absent from the index** —
+  Peace Arch, Stuart Island Marine State Park, Posey Island. Consistent with the
+  view's `st_intersects` filter; not a defect.
+- **Tooling generalised again rather than forked:**
+  `ca-prod-triage-build-decisions.ts` → `state-parks-prod-triage-build-decisions.ts`,
+  parameterised on `--source`, with approved relink overrides held in a
+  per-source map (CA's three retained as the record of what was signed off; WA's
+  empty). Both triage scripts are now state-agnostic.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 644 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+### WA PROD promotion — full arc, closed
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's 20-file batch push |
+| Ingest | 147 fetched · **141 inserted** · 6 skipped (trail parks, no coords) · 0 errors |
+| Entity resolution | 116 spatial_containment + 17 deterministic + 8 manual_review |
+| Triage | 8 LINK + 0 RELINK + 0 REJECT → **141/141 linked, 0 pending, 0 rejected** |
+| Typesense | `places_prod` **22,022 → 22,038**, 0 pruned, 0 failed |
+
+Photos on PROD: 129 of 129 in-view WA master_places carry one — **77
+`parks.wa.gov`, 52 `upload.wikimedia.org`** (Wikipedia legitimately outranking
+at photo-lateral priority 2 vs WA's 7). Enrichment: all 132 distinct WA-linked
+master_places carry description/hours/contact.
+
+**Two of six states are now live on PROD (CA, WA). OR/NV/AZ/UT hold PROD schema
+with zero PROD data** — each needs its own promotion decision.
+
 ## 2026-09-02 (later 20) — WA promoted to PROD: ingest + ER done, 8-item triage queue OPEN awaiting sign-off
 
 - **Branched off the merged `main` (`b3b4f28`, PR #354 squash-merged).** Verified

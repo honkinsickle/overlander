@@ -1,5 +1,9 @@
 /**
- * Build the CA PROD triage decisions file from the LIVE pending queue.
+ * Build a state-park PROD triage decisions file from the LIVE pending queue.
+ *
+ * Parameterised over `--source` (was `ca-prod-triage-build-decisions.ts`,
+ * CA-hardcoded). Generalised rather than copied — a forked copy is how the
+ * overlapping-polygon fix landed in one ER script and went stale in three.
  *
  * READ-ONLY against the database; its only write is the JSON file it emits.
  *
@@ -14,16 +18,36 @@
  * than silently relinking to something nobody approved.
  *
  * Usage (PROD creds exported inline):
- *   npx tsx scripts/ca-prod-triage-build-decisions.ts <out.json>
+ *   npx tsx scripts/state-parks-prod-triage-build-decisions.ts --source <id> <out.json>
  */
 
 import { createClient } from "@supabase/supabase-js";
 import { writeFileSync } from "node:fs";
 
-const SOURCE_ID = "california_state_parks";
+interface RelinkSpec {
+  external_id: string;
+  sourceName: string;
+  targetName: string;
+  expectPrefix: string;
+  notes: string;
+}
 
-/** The three overrides Adam signed off. Targets resolved by name, prefix-asserted. */
-const RELINKS = [
+function requireSourceArg(): string {
+  const i = process.argv.indexOf("--source");
+  const v = i === -1 ? undefined : process.argv[i + 1];
+  if (!v) throw new Error("usage: state-parks-prod-triage-build-decisions.ts --source <source_id> <out.json>");
+  return v;
+}
+const SOURCE_ID = requireSourceArg();
+
+/**
+ * Approved relink overrides, per source. Targets are resolved BY NAME and then
+ * asserted against the UUID prefix from that state's signed-off triage report.
+ * A state with no overrides (every item a plain LINK) simply has an empty list.
+ * CA's three are retained as the record of what was approved on 2026-09-02.
+ */
+const RELINKS_BY_SOURCE: Record<string, readonly RelinkSpec[]> = {
+  california_state_parks: [
   {
     external_id: "california_state_parks:569",
     sourceName: "Ishxenta State Park",
@@ -48,7 +72,11 @@ const RELINKS = [
     notes:
       "Manual triage RELINK: ER proposed the Colusa-Sacramento River Campground (category=campground, sim 0.959). The source record is the SRA itself (inferred_category=recreation_area); Colusa-Sacramento River SRA (state_parks:CA:park:140, 1154m, sim 0.972) is the right home, not its campground sub-unit.",
   },
-] as const;
+  ],
+  washington_state_parks: [],
+};
+
+const RELINKS: readonly RelinkSpec[] = RELINKS_BY_SOURCE[SOURCE_ID] ?? [];
 
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -60,7 +88,7 @@ interface Decision {
 }
 
 async function main(): Promise<void> {
-  const outPath = process.argv[2];
+  const outPath = process.argv.slice(2).filter((a, i, arr) => a !== "--source" && arr[i - 1] !== "--source")[0];
   if (!outPath) throw new Error("usage: ca-prod-triage-build-decisions.ts <out.json>");
   console.log(`target db: ${process.env.SUPABASE_URL}`);
 

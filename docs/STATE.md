@@ -1,3 +1,30 @@
+# STATE — branch `promote-wa-state-parks-prod` · 2026-09-02 (later 9) — **WA's PROD PROMOTION IS COMPLETE END-TO-END.** Two of six states live.
+
+(**newest truth: WA is fully live on PROD — triage applied and Typesense synced. Nothing about the WA promotion remains open.**
+
+**Triage:** 8 LINK · 0 RELINK · 0 REJECT · 0 failed → **141/141 linked, 0 pending, 0 rejected** (116 spatial_containment · 17 deterministic · 8 manual_triage, the last stamped `adam:wa-triage-2026-09-02`). All 8 verified individually to carry `attribution.description/hours/contact = washington_state_parks`. Decisions generated from the live queue, committed at `data/triage-decisions/wa-prod-2026-09-02.json`.
+
+**Typesense:** fetched **22,038** · indexed **22,038** · failed **0** · pruned **0**. `places_prod` = **22,038**, exactly equal to PROD's export view; `places_test` untouched at **33,047**. Pruned 0 (CA's run pruned 12) because WA's 8 links went to master_places already in the view. Delta re-measured live before syncing rather than trusting the earlier figure.
+
+**Full arc:**
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's batch push |
+| Ingest | 147 fetched · **141 inserted** · 6 skipped · 0 errors |
+| Entity resolution | 116 spatial + 17 deterministic + 8 manual_review |
+| Triage | 8 LINK → **141/141 linked, 0 pending, 0 rejected** |
+| Typesense | `places_prod` **22,022 → 22,038**, 0 pruned |
+
+**Searchability confirmed with live Typesense queries** for all 8: each returns its `recreation_area` first. `Conconully` returns 4 hits with the park unit top — confirming the LINK chose the 66m GIS park over the higher-name-scoring Conconully Lake alternates. The 3 outside `six_state_footprint()` (Peace Arch, Stuart Island, Posey Island) are correctly absent.
+
+**Photos:** 129/129 in-view WA master_places carry one — 77 `parks.wa.gov`, 52 `upload.wikimedia.org`, Wikipedia legitimately outranking at priority 2 vs 7. Enrichment: all 132 distinct WA-linked master_places.
+
+**Tooling now state-agnostic:** both `state-parks-prod-triage-report.ts` and `state-parks-prod-triage-build-decisions.ts` are parameterised on `--source`; approved relink overrides live in a per-source map (CA's three retained, WA's empty). Generalised, not forked.
+
+**TWO OF SIX STATES LIVE ON PROD (CA, WA).** OR/NV/AZ/UT hold PROD schema with zero PROD data; each needs its own promotion decision. Branch `promote-wa-state-parks-prod` is unpushed. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-wa-state-parks-prod` · 2026-09-02 (later 8) — WA ingested + entity-resolved on PROD; 8-item triage queue OPEN awaiting Adam
 
 (**newest truth: WA is on PROD. Ingest and entity resolution are done; the 8-item manual-review queue is UNAPPLIED and Typesense is deliberately un-synced. Both are Adam's gates.** Branched off the merged `main` (`b3b4f28`, PR #354 squash-merged — squash verified to carry the whole CA arc).
