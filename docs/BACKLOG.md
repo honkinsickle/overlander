@@ -23,17 +23,32 @@ string through `PlaceRich` → tile → the card's existing `photoCredit` render
 Flagged for Adam's decision (compliance urgency + UX). Full trace:
 `docs/measurements/2026-09-01-mackerricher-photo-attribution.md`.
 
-## WA State Parks images hotlinked into photo_url, no attribution — latent (2026-09-01)
+## State-park photos not license-clear for any of the six states — scoped, not built (2026-09-01)
 
-`master_place.photo_url` holds **~59–70** `parks.wa.gov` (Washington State Parks)
-image URLs, backfilled from `state_parks` raw `Imagelink` (measured PROD:
+Scoped photo sourcing for CA/AZ/NV/UT/WA/OR from each state's own official site
+(enumerate-before-measure + six per-state licensing passes with cited terms).
+**Outcome: none is unblocked with clear terms; nothing was built.** Only WA
+exposes a usable image URL via the ingested ArcGIS layer (`Imagelink` →
+`parks.wa.gov` JPGs); AZ `PHOTO`=codes (`hasAttachments:false`), NV `photo`=empty,
+UT `weblink1`=webpage, CA/OR no image field. Terms block reuse in every state
+(CA personal/non-commercial + no deep-link; AZ all-rights-reserved; NV
+educational/scientific only + third-party works; UT SmugMug no grant; WA "All
+rights reserved" + contributed third-party works; OR mandatory "courtesy OPRD"
+credit + web-only). **The standing "official agency media is license-clear"
+assumption is falsified for these six.** If photos are wanted, path is a direct
+written license request per agency (WA/OR nearest to workable). ADR:
+`docs/decisions/2026-09-01-state-park-photos-not-license-clear.md`; scope:
+`docs/measurements/2026-09-01-state-park-photo-sourcing-scope.md`.
+
+**WA `photo_url` residue — flagged.** `master_place.photo_url` holds **~59–70**
+`parks.wa.gov` URLs from the prior `Imagelink` backfill (measured PROD:
 `photo_url ILIKE '%parks.wa.gov%'` = 70; 59 active `state_parks` records carry a
-non-empty `Imagelink`, all WA). **No attribution/license metadata is captured**,
-and hotlinking a state agency's images may need permission/credit. **parks.ca.gov
-contributed 0.** Not currently rendered (the export-view / corridor-RPC photo
-laterals exclude `state_parks`/`blm`), so latent — decide alongside the parked
-`field_precedence` photo-wiring question and the state_parks/blm unmapped-photo
-thread (`20260821070000` header).
+non-empty `Imagelink`, all WA; **parks.ca.gov = 0**), stored with **no confirmed
+reuse grant** and no attribution. Not currently rendered (laterals exclude
+`state_parks`/`blm`), so latent — but should not be wired to display, and Adam
+may want them cleared. Decide alongside the parked `field_precedence`
+photo-wiring question and the state_parks/blm unmapped-photo thread
+(`20260821070000` header).
 
 ## Photo-backfill pilot — review + decide wiring (2026-09-01)
 

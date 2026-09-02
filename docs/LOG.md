@@ -12,6 +12,37 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 12) — State-park photo sourcing scoped for all six states: none is license-clear, nothing built
+
+Follow-on to later 11. Adam wanted park photos from each state's own official
+site (CA/AZ/NV/UT/WA/OR), scoping per-state first (same enumerate-before-measure
+posture as the BLM/state_parks work). Read-only throughout; two grounded scripts
+(`data/scripts/investigate-stateparks-photo-{fields,values}-2026-09-01.ts`) plus
+six parallel per-state licensing-research agents.
+
+- **Grounded field reality:** WA is the ONLY state whose ingested ArcGIS layer
+  carries a usable image URL (`Imagelink` → `parks.wa.gov` JPGs). AZ `PHOTO` =
+  codes (`hasAttachments:false` verified); NV `photo` = empty `" "`; UT
+  `weblink1` = park webpages; CA/OR = no image field. No caption/credit/license
+  field anywhere.
+- **Licensing (cited, blocked everywhere):** CA personal/non-commercial + no
+  deep-link/scrape; AZ not-public-domain/all-rights-reserved; NV
+  educational-scientific-only + third-party Instagram works; UT SmugMug no grant;
+  **WA "All rights reserved," no grant, some contributed third-party works** —
+  the pivotal finding, because WA is the one state with usable URLs; OR mandatory
+  "courtesy OPRD" credit + "may be subject to copyright," web-only.
+- **Decision:** nothing built — none unblocked with clear terms, so report blocked
+  rather than scrape (task rule). The standing "official agency media is
+  license-clear" assumption is falsified for these six; it fails hardest where
+  usable data exists (WA). If photos wanted → direct written license request per
+  agency (WA/OR nearest to workable).
+- **Retroactive:** ~59–70 `parks.wa.gov` URLs already in `master_place.photo_url`
+  (parks.ca.gov = 0) from the prior backfill sit with no confirmed reuse grant;
+  latent (not rendered), flagged for possible clearing, not deleted.
+- ADR `docs/decisions/2026-09-01-state-park-photos-not-license-clear.md`; scope
+  `docs/measurements/2026-09-01-state-park-photo-sourcing-scope.md`. Stacked on
+  PR #343. `npm run -w data typecheck` exit 0.
+
 ## 2026-09-01 (later 11) — MacKerricher "missing photo attribution" traced: it's a Google Places photo, attribution structurally dropped (investigation only)
 
 Adam reported the MacKerricher State Park place card showing a photo with no
