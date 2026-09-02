@@ -263,6 +263,29 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > via the existing `photoCredit` pipeline — no web-layer changes needed.
 > Migrations: `20260901001100` (RPC), `20260901001200` (search export).
 >
+> **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web_wa` source ingested.**
+> New `source_id = 'state_parks_web_wa'` — WA counterpart to CA's `state_parks_web`.
+> Per-state source_ids going forward (diverges from the shared `state_parks` GIS pattern).
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'state_parks_web_wa'`) | **141** (6 trail parks skipped — no coords) |
+> | — with `description` | **141** (all) |
+> | — with `photo` | **141** (all, wired into rendering) |
+> | — with `hours` | **141** (all) |
+> | — with `contact` (phone + email + address) | **~140** (1 missing contact) |
+> | — with `amenities` | **141** (all) |
+> | — with `dogs` / `dogs_allowed` | **~139** (extracted from rules) |
+> | `master_place_id` linked | **141** (all resolved) |
+> | — via spatial containment | **117** |
+> | — via standard ER (deterministic) | **14** |
+> | — via manual triage | **10** (9 linked, 1 rejected → new mp) |
+> | new `master_place` rows created | **15** |
+>
+> **Migrations:** `20260901001300` (4 field_precedence rows — no operational_status,
+> WA has no clean status signal), `20260901001400/001500` (photo lateral joins, priority 7).
+> **Photos wired directly** — same pipeline as CA, "Washington State Parks — government publication".
+
 > **Entity resolution completed in three phases.** (1) Spatial pre-link: 181
 > records matched by point-in-polygon against existing `state_parks` GIS park
 > boundary polygons (the standard 500m ER radius is too small for large parks
