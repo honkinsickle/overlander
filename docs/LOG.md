@@ -12,6 +12,55 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 10) — Photo work shipped to PRODUCTION: UI already live, schema applied, 3 photos wired (explicit sign-off)
+
+Adam authorized deploying the day's photo work to PROD (`nqzeywzcowujzyegxbsr`).
+Three parts:
+
+- **A. UI (already live, no action):** PRs #338 + #339 are both merged to `main`
+  (merge commits `1589120…` / `b2e370c`). **Merging to `main` auto-deploys Vercel
+  Production** (`overlander-one.vercel.app` → PROD Supabase) — no CI deploy job,
+  no manual trigger (found via LOG, not assumed; repo has no vercel.json — the
+  Git linkage is Vercel-side). So the "Photo Unavailable" fallback + hero fixes
+  were live on merge.
+- **B. Schema → PROD:** applied `20260901000600/000700/000800` via the documented
+  two-step (relink `nqzeywzcowujzyegxbsr` + swap only `SUPABASE_URL`/
+  `SERVICE_ROLE_KEY` in `data/.env`; **there is no `--prod` flag** — did not
+  invent one). `migration list` confirmed only those three pending, then all
+  three applied. DDL shows "not verified" (v1 verifier covers literal INSERTs
+  only) — table+columns confirmed present by reading them.
+- **C. Data → PROD (direct data op, NOT a PR artifact):** dry run on TEST =
+  **10 accepted rows / 7 places**, all Wikimedia Commons (7 geo, 3 text), 0 NPS,
+  **compliance scan 0 Google-image-data leaks**. Matched TEST→PROD by **stable
+  source identity** (`ridb:`/`osm:`/`state_parks:` external_id), never raw uuid.
+  Outcome: **2 UNRESOLVED** — Aikens Creek (`ridb:facility:271900`) and Tolkan
+  (`ridb:facility:262792`): **PROD RIDB external_ids are UUIDs, not integers**,
+  and neither name is in PROD's searchable export → genuinely absent, **skipped,
+  not guessed**. **2 already had a `wikipedia` photo on PROD** (Albion, Half Moon
+  Bay — different Commons files, from the earlier backfill) → **skipped, not
+  overridden**. **3 photoless+resolved → wired.** Copied all 7 resolved-place
+  rows into PROD `master_place_photo_candidate` (provenance).
+- **Wiring = approach (a)** (the proven `backfill-wikipedia-photo.ts` pattern, no
+  RPC change): upsert a `wikipedia` `source_record` with
+  `normalized_payload.photo {url,altText,credit,license,licenseUrl}`, external_id
+  `wikipedia:photo-pilot:<file>`, quality 0.6, geometry = place point. **No
+  recompute; `master_place`/precedence/baked-photo/Google-hydration paths
+  untouched.** Wired: **Bunny Flat** (Mount Shasta, CC BY-SA 4.0), **Fort Miller**
+  (1936 HABS crop, PD), **Sugarloaf** (LaserSETIRFO, CC BY 4.0).
+- **Verified on PROD via the exact production RPC** `pois_along_corridor`: all 3
+  return the new `nps_photo_url`+`photo_credit`; untouched control **Albion still
+  returns its pre-existing bridge photo**. All 3 wired URLs return `200
+  image/jpeg` — the `.tiff` was deliberately avoided (wired Fort Miller's `.jpg`
+  crop; browsers can't `<img>` a TIFF). Full browser-card render not done: needs a
+  PROD trip routed through one of these 3 campgrounds — did not create PROD trip
+  data (conservative). RPC + live-image is the render-path proof.
+- **QUALITY FLAG:** `google_verdict='match'` means geo/context-plausible, **not
+  "good hero photo."** Of the 3 wired, Bunny Flat's Mount Shasta view is genuinely
+  good; **Fort Miller (1936 archival building survey) and Sugarloaf (a laser-SETI
+  instrument) are weak** — flagged for optional prune (see BACKLOG). Prune = delete
+  the specific `wikipedia:photo-pilot:*` source_record.
+- Env **restored to TEST** (link + `data/.env`) after. Scripts + docs → PR #335.
+
 ## 2026-09-01 (later 9) — Photo pilot: RIDB-direct pull for RIDB-sourced CA campgrounds (TEST)
 
 - **Target set measured: 163 rows** (RIDB-sourced CA campgrounds with no baked

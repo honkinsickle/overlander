@@ -575,7 +575,7 @@ rolled back 2026-07-23 via `npm run -w data slice:rollback --execute` against th
 STEP-0 snapshot, and `places_test` re-synced. The numbers above are the restored
 baseline.)
 
-### `master_place_photo_candidate` — NEW 2026-09-01, TEST-only, STAGING (not wired)
+### `master_place_photo_candidate` — NEW 2026-09-01; TEST staging + **now on PROD (7 rows, 3 wired)**
 
 Created by migration `20260901000600_master_place_photo_candidate.sql` for the
 CA-campground photo-backfill pilot. Staged, license-clear photo candidates with
@@ -585,6 +585,24 @@ only). **Deliberately NOT read by `recompute_master_place` /
 `pois_along_corridor` / `master_place_search_export` / `field_precedence`** —
 candidates are held for review, never auto-surfaced on cards. Promotion into a
 live read path is a separate, explicitly authorized step.
+
+**PROD promotion (2026-09-01, explicit sign-off — LOG later 10).** Migrations
+`…000600/000700/000800` applied to PROD; the table now exists there too. The
+Google-verified accepted set (`ca-campground-2026-09-01-fixed`, 10 rows / 7
+places) was matched TEST→PROD by **stable source identity** (never raw uuid) and
+**7 rows across 5 places** were copied into PROD `master_place_photo_candidate`
+as provenance. Of the 7 places: 2 unresolved on PROD (Aikens Creek, Tolkan —
+their TEST `ridb:facility:<int>` ids do not exist on PROD, whose RIDB
+external_ids are UUIDs; neither is in PROD's searchable export), 2 already had a
+`wikipedia` photo (Albion, Half Moon Bay), and **3 were wired live** by upserting
+a `wikipedia` `source_record` with `normalized_payload.photo` (the proven
+`backfill-wikipedia-photo.ts` path — the corridor RPC lateral join reads it; no
+RPC change, no recompute): **Bunny Flat** (`Mount_Shasta_as_seen_from_Bunny_Flat.jpg`,
+CC BY-SA 4.0), **Fort Miller** (1936 HABS crop, PD), **Sugarloaf** (`LaserSETIRFO.jpg`,
+CC BY 4.0), external_ids `wikipedia:photo-pilot:<file>`. Verified via
+`pois_along_corridor` on PROD. Fort Miller + Sugarloaf are weak heroes (see
+`docs/BACKLOG.md`) and prunable by deleting their `wikipedia:photo-pilot:*` row.
+Compliance: no Google image data persisted (candidates are Commons only).
 
 Current run `ca-campground-2026-09-01-fixed` (after the six-issue self-audit
 fixes; the prior flawed `ca-campground-2026-09-01` rows were deleted first).
