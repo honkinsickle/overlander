@@ -155,6 +155,16 @@ tempers rather than confirms "RIDB fixes a big chunk of the address gap for free
   401, but the stored `RIDB_API_KEY` returned 200 on every call this
   investigation made. Whatever the preflight checks, the key is currently valid —
   don't read the 401 as "RIDB key dead."
+  - **ROOT-CAUSED AND FIXED 2026-09-01.** The "whatever the preflight checks" was
+    a *second, different* key: `bin/preflight` loaded `web/.env.local`, whose
+    `RIDB_API_KEY` had been stale since 2026-07-23 and was cloned into every
+    worktree by `bin/setup-worktree`; the working key was the one in `data/.env`,
+    which is where RIDB's only consumers read from. Both were tested live in that
+    session — the `web/.env.local` key returned 401, the `data/.env` key 200.
+    `bin/preflight` now reads the key from `data/.env`. The lesson this flag
+    stopped one step short of: when a health check and a direct call disagree,
+    check whether they are using the *same credential* before concluding either
+    is wrong.
 - **Address quality caveat is the real finding for build/buy:** even fetched
   correctly, RIDB facility addresses skew toward mailing/administrative addresses
   and state-only stubs — for many backcountry facilities the "address" is a town
