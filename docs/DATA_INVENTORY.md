@@ -232,7 +232,10 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > units + 14 aggregated campgrounds for AZ). Per-state source_id in the
 > OR/NV state-prefixed family (no `_web` suffix), separate from
 > `state_parks_web` (CA), `state_parks_web_wa` (WA), `oregon_state_parks`,
-> and `nevada_state_parks`.
+> and `nevada_state_parks`. **Triage applied 2026-09-02 (later 2)** —
+> both remaining pending matches resolved as LINK against corpus-side
+> alternate targets (not the matcher's original proposals). See the
+> "Triage" block below for the corrections.
 >
 > | metric | count |
 > |---|---|
@@ -244,21 +247,55 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > | — with `fees` (freeform, normalized_payload only) | **31** |
 > | — with `summary` (short lead blurb, normalized_payload only) | **33** |
 > | — with `advisories` (park-specific alerts) | **3** |
-> | `master_place_id` linked | **31** (2 pending manual triage) |
+> | `master_place_id` linked | **33 / 33** (all resolved after triage) |
 > | — via ingest-time name link (direct: matched GIS park already had a mp) | **31** |
-> | — via standard `matchAll` remainder | **0 auto-linked, 2 → manual_review** |
-> | `place_match` rows created | **33** (31 confirmed, 2 pending) |
+> | — via Adam-approved manual triage | **2** (both LINK against corpus-side alternate targets) |
+> | `place_match` pending | **0** |
+> | `place_match` rejected | **0** |
+> | new `master_place` rows created by AZ | **0** (both triage LINKs went to existing mps) |
 >
-> **Why 2 pending, not zero:** the AZ `state_parks` GIS corpus had **32 of 34**
-> park units already linked to a master_place at ingest time; the remaining 2
-> (**Colorado River State Historic Park** GIS `state_parks:AZ:park:8994…`,
-> **Fool Hollow Lake Recreation Area** GIS `state_parks:AZ:park:dd4e…`) had
-> no master_place. Their AZ visitor rows still borrowed the GIS park's
-> geometry at ingest, then `matchAll` proposed low-confidence candidates
-> (Colorado River SHP → Yuma Quartermaster Depot SHP — likely correct, same
-> co-located site; Fool Hollow LRA → Fool Hollow West Launch Boating Site —
-> likely wrong, that's an RIDB sub-facility inside the park). Both queued
-> for Adam's review.
+> **Triage (2026-09-02 later 2, `adam:az-triage-2026-09-02`):** both
+> pending items had a better target hiding elsewhere in the corpus than
+> the matcher's coordinate-nearest pick.
+>
+> 1. **`arizona_state_parks:colorado-river` → mp `48785379-779d-47ad-9088-539377ba6ebc`**
+>    ("Colorado River State Historic Park", NPS-anchored `park_feature`,
+>    exact-name match at 87 m). Matcher had proposed mp
+>    `7bf97c6b-a517-4fcb-a5da-7934b795a490` (Yuma Quartermaster Depot SHP,
+>    PADUS-only `public_land`, 6 m distance) — same physical site (per
+>    the AZ visitor page's own opening line about being on the historical
+>    Quartermaster Depot grounds), but the wrong mp: the NPS-anchored
+>    exact-name mp is the right home. Duplicate-mp cleanup for the two
+>    same-park entries filed in BACKLOG.md.
+> 2. **`arizona_state_parks:fool-hollow` → mp `478b95d7-24cd-421c-97b1-c99c0439a9a2`**
+>    (canonical_name still "Fool Hollow Lake Recreation Area Campground"
+>    but `alternative_names` already contained "Fool Hollow Lake
+>    Recreation Area" exactly; source_count 3 → 4 after AZ). Matcher had
+>    proposed mp `44f648c1-c4d9-4e8b-ac04-3fa877404671` (Fool Hollow West
+>    Launch Boating Site — a RIDB sub-facility inside the park), which
+>    was wrong. Adding AZ did NOT shift canonical_name away from the
+>    "…Campground" suffix — the underlying `recompute_master_place` still
+>    resolves the canonical to the RIDB-owned name; the AZ park-unit's
+>    "Fool Hollow Lake Recreation Area" name stays in
+>    `alternative_names` only. Behavior confirmed post-recompute, not
+>    assumed.
+>
+> **Post-triage attribution flow:**
+> - mp `48785379`: `attribution.description` remains `nps` (NPS's editorial
+>   description outranks AZ's per field_precedence — description NPS = 1,
+>   AZ = 2); `attribution.hours` = `arizona_state_parks` (new field flowed
+>   through); `attribution.contact` remains `nps`.
+> - mp `478b95d7`: `attribution.description` remains `ridb` (RIDB
+>   description wins over AZ); `attribution.hours` and
+>   `attribution.contact` both = `arizona_state_parks` (AZ brought both
+>   new fields into this mp).
+>
+> **Also filed in BACKLOG (out of scope for triage, tracked separately):**
+> the two AZ GIS boundary records `state_parks:AZ:park:89946526…` and
+> `state_parks:AZ:park:dd4e655a…` still show `master_place_id = NULL` —
+> the AZ visitor ingest borrowed their geometry but never linked the GIS
+> records themselves; a future GIS-side ER pass needs to attach them to
+> `48785379` and `478b95d7` respectively.
 >
 > **Migration applied:** `20260902003400_arizona_state_parks_field_precedence` —
 > 3 `field_precedence` rows: description (2), hours (3), contact (3).

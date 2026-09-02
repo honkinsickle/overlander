@@ -1,5 +1,51 @@
 # Backlog — open work
 
+## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
+
+Same physical park unit represented by two separate master_places, ~87 m apart:
+
+| mp | canonical_name | primary_category | source_count | anchor source |
+|---|---|---|---|---|
+| `48785379-779d-47ad-9088-539377ba6ebc` | Colorado River State Historic Park | park_feature | 2 (after AZ triage) | NPS `nps:place:B25F31E8-CE7C-4AF2-A390-B4D03B633B61` |
+| `7bf97c6b-a517-4fcb-a5da-7934b795a490` | Yuma Quartermaster Depot State Historic Park | public_land | 0 (PADUS-only) | PADUS `padus:9c7e014ed6d939afba062d36aeaa76f2de39acb3` |
+
+Confirmed same site: the AZ visitor page's own "about" text opens *"The
+Colorado River State Historic Park is located on a portion of the
+grounds of the old U.S. Army Quartermaster Depot (QMD) established in
+1864."* — current park name (Colorado River SHP) sits on the
+historically-named Quartermaster Depot grounds. PADUS carries the
+older/legal name; NPS and AZ carry the current name. AZ visitor record
+was linked to the NPS-anchored `48785379` in triage.
+
+**Same shape as the PADUS-duplicate pattern already noted from NV
+triage** (Old LV Mormon Fort / Spring Mountain Ranch also had
+PADUS-anchored duplicates of visitor-content mps). Cross-source
+deduplication of PADUS "public_land" placeholders against real content
+mps is a distinct problem class from
+`recompute_master_place`-doesn't-re-activate below — related but not
+the same fix. Filed for a future master_place merge/dedup pass across
+the six-state corpus; not blocking any current PR.
+
+## AZ GIS park boundary records for Colorado River SHP + Fool Hollow LRA remain orphaned (2026-09-02, TEST)
+
+After the AZ visitor-content triage (PR #350 follow-up), the two
+`state_parks:AZ:park:*` GIS boundary records that had no
+`master_place_id` at AZ ingest time **still have
+`master_place_id = NULL`**:
+
+- `state_parks:AZ:park:89946526-fd06-4c44-9f5d-bc802d669789` — Colorado
+  River State Historic Park (GIS boundary)
+- `state_parks:AZ:park:dd4e655a-f0d2-4984-a50f-14ffeeabd680` — Fool
+  Hollow Lake Recreation Area (GIS boundary)
+
+The AZ visitor ingester borrowed geometry from these GIS records at
+ingest time but never linked the GIS records themselves to a
+master_place. The AZ visitor rows are now correctly linked to their
+target mps (`48785379` and `478b95d7` respectively), but the GIS
+boundaries are still orphaned. Filed for a future AZ GIS-side ER pass —
+should link the GIS boundary records to the same target mps the
+visitor rows point at.
+
 ## `recompute_master_place` doesn't re-activate PADUS-anchored mps when non-`land_status` sources are added (2026-09-02)
 
 Surfaced during the NV state parks manual-review triage (PR #349). After
