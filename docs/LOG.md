@@ -12,6 +12,24 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 14) — state_parks_web photos wired into rendering pipeline
+
+- **Two migrations** add `state_parks_web` to the photo lateral joins in
+  `pois_along_corridor` (20260901001100) and `master_place_search_export`
+  (20260901001200) at priority 6 (after `editorial_food` at 5).
+- **273 master_places** now get their photo from `state_parks_web` — none
+  outranked by a higher-priority source (NPS/RIDB/Wikipedia/AO/FD/EF).
+  These parks generally had no photo at all before this (only 3 out of
+  810 CA state park master_places had photos pre-ingestion).
+- **Attribution flows through automatically** — `photo_credit` carries
+  "California State Parks", rendered by `category-list-card.tsx` in the
+  card hero corner. No web-layer code changes needed.
+- Separate from PR #335's pilot photo pipeline — these are government-
+  published hero images from parks.ca.gov, not web-hunted candidates
+  requiring adjudication.
+- Photo URL verified reachable: Andrew Molera SP returns 200 image/jpeg.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-01 (later 13) — Manual triage applied for `state_parks_web` — all 283 records now resolved
 
 - **Triage applied** for 23 `state_parks_web` records that were pending

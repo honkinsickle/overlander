@@ -254,10 +254,14 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 > 5 `field_precedence` rows: description (2), hours (3), contact (3),
 > amenities (5), operational_status (2).
 >
-> **Photos stored but NOT wired:** photo URLs point to parks.ca.gov originals.
-> `state_parks_web` is NOT in the `pois_along_corridor` or
-> `master_place_search_export` photo lateral joins — photos are staged for
-> review, consistent with the photo-pilot pattern (PR #335).
+> **Photos wired into rendering.** `state_parks_web` added to both the
+> `pois_along_corridor` and `master_place_search_export` photo lateral
+> joins at priority 6 (after editorial_food, before else). 273 linked
+> master_places now get their photo from `state_parks_web` — none
+> outranked by a higher-priority source (these parks generally have no
+> NPS/RIDB/Wikipedia photos). Credit renders as "California State Parks"
+> via the existing `photoCredit` pipeline — no web-layer changes needed.
+> Migrations: `20260901001100` (RPC), `20260901001200` (search export).
 >
 > **Entity resolution completed in three phases.** (1) Spatial pre-link: 181
 > records matched by point-in-polygon against existing `state_parks` GIS park
