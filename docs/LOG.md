@@ -119,6 +119,100 @@ created a pair).
 - Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-02 (later 27) — AZ promoted to PROD end-to-end, auto-applied (empty queue). Five of six states live.
+
+> **Recovered entry.** This and (later 26) below were silently lost when first
+> written: the insert was anchored on a LOG entry that exists only on the NV
+> branch, and `str.replace` with a missing needle is a no-op, so both commits
+> changed `STATE.md` only. Caught 2026-09-02 while resolving this branch's merge
+> conflict. Reconstructed from the STATE mastheads and PR #358. The UT entry had
+> an `assert anchor in s` guard, which is why UT's was caught at write time and
+> these were not — the guard is now used on every insert.
+
+- **Every preflight prediction landed, including the two about a mechanism never
+  exercised on PROD before.** Ingest **33 fetched / 33 inserted / 0 skipped /
+  0 errors** — matching the preflight dry-run exactly. Nothing silently dropped,
+  which was the specific risk of `ingest_time_name_link` (a name miss = record
+  never inserted, since geometry is borrowed and `source_record.geometry` is
+  NOT NULL). Phase 1 predicted **32**, landed **32** (TEST 31). Phase-2 load
+  predicted **1**, landed **1** (TEST 2).
+- **Final PROD state: 33/33 linked, 0 pending, 0 rejected** — 32
+  `ingest_time_name_link` (`auto:arizona_state_parks_er`) + 1 `deterministic`.
+- **The manual-review queue came back EMPTY (0 items)**, so the auto-approval
+  rule applied and no sign-off was needed. Preflight had predicted Tubac
+  Presidio would need RELINK-or-new-master_place; `matchAll` resolved it to
+  `new_master_place` on its own, so it never entered the queue.
+- **AZ's two historical TEST triage cases self-resolved to the correct targets,
+  and the mechanism was the PADUS absence.** `Colorado River SHP` →
+  `Colorado River State Historic Park` (`25bcfe08`, `recreation_area`, now
+  arizona_state_parks + state_parks + wikipedia) and `Fool Hollow Lake RA` →
+  `Fool Hollow Lake Recreation Area` (`347fb061`), both via
+  `ingest_time_name_link`. On TEST the matcher had wrongly picked
+  `Yuma Quartermaster Depot SHP`, a **padus-backed** row — **which does not
+  exist on PROD at all**. Both are precisely the targets Adam's TEST triage
+  concluded manually; PROD reached them with no human step. Verified after the
+  fact — live search returns the `recreation_area` FIRST for Colorado River.
+- **Tubac Presidio verified individually:** new master_place `1960c448`
+  ("Tubac Presidio State Historic Park", `historic`, arizona_state_parks-backed,
+  real description) rather than the same-named **NPS `park_feature`**
+  (`332c61c4`). Correct by CA/OR/NV precedent, and there was no
+  `state_parks`-backed master_place to link to since Tubac's GIS unit is AZ's
+  one unlinked-on-PROD park.
+- **PROD deltas:** `master_place` 28,505 → **28,506** (+1); `source_record`
+  38,492 → **38,525** (+33); export view 22,105 → **22,106** (+1). CA 283,
+  WA 141, OR 192, NV 28 untouched.
+- **Typesense synced:** fetched **22,106** · indexed **22,106** · failed **0** ·
+  pruned **0**. `places_prod` = **22,106** = export view exactly.
+- **Photos:** 33/33 in view, 33/33 with a photo — **20
+  `arizona-content.usedirect.com`, 13 `upload.wikimedia.org`** (AZ is
+  photo-lateral priority 10, Wikipedia 2). **Enrichment 33/33.**
+  `is_searchable = false`: **0**. Licence unchanged (`"Arizona State Parks"`);
+  the third-party CDN is now visibly the photo source for 20 live PROD places.
+- **⚠️ Duplicates worse in AZ than anywhere measured at the time: 9 of 33 (27%)**
+  with a same-named `oddity`/`park_feature` twin within 3 km. **This promotion
+  added one pair** (Tubac's new `historic` row alongside the NPS
+  `park_feature`) — the first time a promotion demonstrably *created* a
+  duplicate rather than revealing one.
+- Gates: data typecheck 0, data test 645 passed / 3 skipped, web typecheck 0,
+  next build 0.
+
+## 2026-09-02 (later 26) — AZ + UT PROD preflight (READ-ONLY, no execution). Worked out the `ingest_time_name_link` equivalent of `--verify`.
+
+> **Recovered entry** — see the note on (later 27) above.
+
+- **PROD read-only throughout. No ingest, no ER, no writes, no code changes.**
+- **The mechanism differs, and so does where the risk sits.** CA/WA/OR/NV
+  spatial pre-link *recomputes* point-in-polygon at ER time, so a substrate
+  difference only changes WHICH PHASE handles a record. AZ/UT have **0
+  coordinates**; the ingester matches visitor name → `state_parks:XX:park:*` GIS
+  record by normalized name, **borrows that record's geometry**, and stores
+  `intended_master_place_id`. **A row with no name match is SKIPPED ENTIRELY at
+  ingest.** The dangerous failure is at INGEST time and is silent data loss.
+- **The equivalent of `--verify` already existed: the ingester's own
+  `--dry-run` against PROD.** It calls the live `*_gis_index()` RPC, exercises
+  the real `normalizeParkKey` + `NAME_VARIANTS` matching, and reports skips —
+  real code path, no reimplementation, no writes. **Nothing needed building.**
+  The polygon-set analogue is a **GIS-index parity check** (external_id set,
+  `name` values, `master_place_id` presence, geometry presence).
+- **Dry-run against PROD: AZ 33/33/0 skipped/0 errors · UT 46/46/0/0.**
+- **GIS-index parity:** AZ 34 units both sides · UT 47 both sides · **0**
+  external_id differences · **0** name differences · full geometry coverage on
+  PROD. Only `master_place_id` presence differed (AZ 32→33, UT 38→33).
+- **Predicted phase split:** AZ phase-1 31 → **32**, phase-2 2 → **1**;
+  UT phase-1 37 → **32**, phase-2 9 → **14**.
+- **UT's hours/contact split has no DB dependency** — `splitHoursContact` is a
+  pure function over `row.hours`; the only DB call is the GIS-index RPC.
+- **Licences unchanged, verified as stored on TEST:** AZ 33/33 photos,
+  `credit`/`license` = **`"Arizona State Parks"`** (bare risk-acceptance label,
+  strictest terms of the six). **AZ's photos are hosted on
+  `arizona-content.usedirect.com`, a third-party booking CDN — the only state of
+  the six not serving from its own official domain.** UT 46/46,
+  `"Utah State Parks"`, host `stateparks.utah.gov`.
+- **TEST re-verified live:** AZ 33/33 linked, 0 pending, 0 rejected; UT 46/46,
+  0 pending, 0 rejected. Migrations already on PROD and identical to TEST for
+  both, with 0 source_records on PROD.
+- **CONFIDENCE: AZ high, UT moderate. No blockers. Recommended AZ first.**
+
 ## 2026-09-02 (later 25) — NV triage applied + Typesense synced. **NV's PROD promotion is COMPLETE.** Four of six states live.
 
 - **Cave Rock confirmed as LINK by Adam; applied.** 1 linked, 0 relinked,
