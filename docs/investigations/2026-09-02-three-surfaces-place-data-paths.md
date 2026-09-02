@@ -5,6 +5,12 @@
 **Mode:** READ-ONLY. No code changed, nothing run against TEST or PROD, no live
 index or DB queried.
 
+**Diagram:** [Three-Surface Place-Data Investigation](https://app.paper.design/file/01M1J6KY3S5MNZM3P2ZF7WJG3A)
+(Paper) — visual walk of the three call chains below, the two flag forks, and
+the two deduced-not-reproduced annotations. Built with `paper-desktop`
+code-to-design from this doc, styled against `web/src/app/globals.css`
+tokens.
+
 ## Scope and method
 
 Adam supplied screenshots of three surfaces and asked for the *actual* code

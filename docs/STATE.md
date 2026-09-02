@@ -1,3 +1,9 @@
+# STATE — branch `paper-diagram-three-surfaces` · 2026-09-02 (later 18) — **Diagram of the three-surface investigation built in Paper.**
+
+(**newest truth: no code changed.** A Paper diagram of the (later 17) investigation below — [Three-Surface Place-Data Investigation](https://app.paper.design/file/01M1J6KY3S5MNZM3P2ZF7WJG3A) — was built via `paper-desktop` code-to-design, styled from `web/src/app/globals.css` tokens (a fresh Paper file was seeded with 58 tokens mirroring globals.css; the existing "Design Tokens" Paper file had none registered). Three columns (one per surface), a flag-state strip, and an out-of-scope band for paths A/E. Both deduced-not-reproduced defects from (later 17) carry their own dashed-red annotation boxes, kept distinct from the confirmed call chains. Linked from the investigation doc's header. **NEXT: Adam's review.**)
+
+---
+
 # STATE — branch `surface-population` · 2026-09-02 (later 17) — **READ-ONLY investigation. Three UI surfaces traced to their real data paths; two defects flagged, neither reproduced.**
 
 *Branch note: this workspace opened on `port-louis` and the branch was renamed twice mid-session by Conductor (`port-louis` → `trace-place-data-paths` → `surface-population`). The work is unaffected — one commit, `8658a29`, off `9d936af`.*
