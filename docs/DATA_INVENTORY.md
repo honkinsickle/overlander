@@ -225,6 +225,58 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Data added 2026-09-01 `[TEST only]` — `state_parks_web` source ingested.**
+> New `source_id = 'state_parks_web'` — visitor-facing content from parks.ca.gov
+> for all 284 CA state park units (283 ingested; 1 skipped for missing coordinates).
+> Complements the existing `state_parks` GIS source (ArcGIS boundaries/points).
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'state_parks_web'`) | **283** |
+> | — with `description` | **282** |
+> | — with `photo` (parks.ca.gov hero, not wired to rendering) | **275** |
+> | — with `hours` | **276** |
+> | — with `contact.phone` | **267** |
+> | — with `contact.address` | **58** |
+> | — with `amenities` | **277** |
+> | — with `operational_status` (CLOSED/RESTRICTED) | **32** |
+> | — with `dogs` (full policy text) | **276** |
+> | — with `fees` | **162** |
+> | — with `advisories` | **26** |
+> | `master_place_id` linked | **283** (all resolved) |
+> | — via spatial containment (point-in-polygon) | **181** |
+> | — via standard ER (deterministic + name_dominant) | **79** |
+> | — via manual triage (Adam-approved) | **23** |
+> | `place_match` rejected (wrong ER match) | **4** (2 relinked to correct target, 2 → new mp) |
+> | new `master_place` rows created | **79** total |
+>
+> **Migration applied:** `20260901001000_state_parks_web_field_precedence` —
+> 5 `field_precedence` rows: description (2), hours (3), contact (3),
+> amenities (5), operational_status (2).
+>
+> **Photos wired into rendering.** `state_parks_web` added to both the
+> `pois_along_corridor` and `master_place_search_export` photo lateral
+> joins at priority 6 (after editorial_food, before else). 273 linked
+> master_places now get their photo from `state_parks_web` — none
+> outranked by a higher-priority source (these parks generally have no
+> NPS/RIDB/Wikipedia photos). Credit renders as "California State Parks"
+> via the existing `photoCredit` pipeline — no web-layer changes needed.
+> Migrations: `20260901001100` (RPC), `20260901001200` (search export).
+>
+> **Entity resolution completed in three phases.** (1) Spatial pre-link: 181
+> records matched by point-in-polygon against existing `state_parks` GIS park
+> boundary polygons (the standard 500m ER radius is too small for large parks
+> whose GIS polygon centroids are 1-11 km from website coordinates).
+> (2) Standard ER for the remaining 102: 4 auto-linked, 23 manual_review,
+> 75 new master_places. (3) Manual triage of the 23 pending items: 19 linked
+> (GIS name abbreviations like SB/SHP just under the auto-link threshold),
+> 2 relinked to correct targets (Caspar Headlands SNR, Kings Beach SRA), 2
+> rejected as false matches and given new master_places (Leland Stanford
+> Mansion, Ishxenta). `CATEGORY_COMPATIBILITY` in `matcher.ts` was extended
+> with `park`, `historic`, and `interest` entries — previously absent, which
+> caused cat_compat=0 and blocked matching even on perfect-name-similarity
+> pairs.
+
 > **⚠️ Mutated 2026-09-01 `[queried + written, TEST only]` — SUPERSEDES the
 > 2026-08-31 box directly below, which has been REVERTED.** PR #327's direct
 > writes into `master_place.description` were undone (6,548 rows restored; the

@@ -12,6 +12,111 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 14) — state_parks_web photos wired into rendering pipeline
+
+- **Two migrations** add `state_parks_web` to the photo lateral joins in
+  `pois_along_corridor` (20260901001100) and `master_place_search_export`
+  (20260901001200) at priority 6 (after `editorial_food` at 5).
+- **273 master_places** now get their photo from `state_parks_web` — none
+  outranked by a higher-priority source (NPS/RIDB/Wikipedia/AO/FD/EF).
+  These parks generally had no photo at all before this (only 3 out of
+  810 CA state park master_places had photos pre-ingestion).
+- **Attribution flows through automatically** — `photo_credit` carries
+  "California State Parks", rendered by `category-list-card.tsx` in the
+  card hero corner. No web-layer code changes needed.
+- Separate from PR #335's pilot photo pipeline — these are government-
+  published hero images from parks.ca.gov, not web-hunted candidates
+  requiring adjudication.
+- Photo URL verified reachable: Andrew Molera SP returns 200 image/jpeg.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
+## 2026-09-01 (later 13) — Manual triage applied for `state_parks_web` — all 283 records now resolved
+
+- **Triage applied** for 23 `state_parks_web` records that were pending
+  manual review after the ER pass. Adam signed off on all recommendations.
+  - **19 linked** — GIS name abbreviations (SB, SHP, CP) just under the
+    auto-link threshold. All clearly the same places.
+  - **2 relinked** — ER matched to wrong target, manually redirected:
+    Caspar Headlands SNR → `31827f6b` (was matched to the Beach, a
+    different adjacent park); Kings Beach SRA → `05f72675` (was matched
+    to "Kings Beach 18e18", an RIDB facility code).
+  - **2 rejected** — false matches, new master_places created: Leland
+    Stanford Mansion SHP (was "Downtown Bike Trails"), Ishxenta State
+    Park (was "Point Lobos Ridge NP").
+- **Final state: 283/283 linked, 0 unlinked.** Match methods: 181
+  spatial_containment, 79 deterministic/name_dominant, 23 manual_triage.
+  4 rejected place_match entries (2 relinked, 2 new mp). 79 total new
+  master_places across all phases.
+- All 23 affected master_places recomputed — enrichment (description,
+  hours, contact, operational_status) flowing through for all.
+
+## 2026-09-01 (later 12) — Entity resolution for `state_parks_web` — spatial pre-link + standard ER
+
+- **Two-phase entity resolution** for 283 `state_parks_web` source_records.
+  Phase 1: spatial pre-link (point-in-polygon against existing `state_parks`
+  GIS park boundary polygons) linked **181** records — this was necessary
+  because the standard 500m ER radius is far too small for large parks whose
+  GIS polygon centroids are 1–11 km from website coordinates (measured:
+  Auburn SRA 10.9 km, Anza-Borrego 7.4 km, Mt. Tamalpais 3.6 km).
+  Phase 2: standard `materialize` for the remaining 102.
+- **Results:** 260 linked total (181 spatial + 79 standard ER), 23 pending
+  manual review, 77 new master_places created (parks without nearby GIS
+  records — historic parks, natural reserves, marine reserves, park
+  properties, points of interest).
+- **Category compatibility gap found and fixed:** `CATEGORY_COMPATIBILITY`
+  in `matcher.ts` had no entries for `park`, `historic`, or `interest` —
+  these categories defaulted to `cat_compat=0`, which killed even
+  perfect-name matches (name_sim=1.0 + dist_score=1.0 + cat_compat=0.0 =
+  combined 0.80, below the 0.85 auto-link threshold). Added compatibility
+  entries: `park ↔ recreation_area` (0.9), `park ↔ public_land` (0.8),
+  `historic ↔ recreation_area/public_land` (0.7), etc.
+- **Enrichment verified flowing through recompute:** sampled 5 linked
+  master_places — all carry `state_parks_web` description, hours, contact.
+  Andrew Molera SP correctly shows `operational_status: CLOSED`.
+- **23 manual_review items** queued for triage. Notable: "Leland Stanford
+  Mansion SHP" matched to "Downtown Bike Trails" (name_sim=0.574) — wrong,
+  should be triaged as new_master_place. Most others are legitimate
+  abbreviated-name matches (e.g. "Zmudowski State Beach" → "Zmudowski
+  State Beach" at 378m apart).
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
+## 2026-09-01 (later 11) — CA State Parks visitor-website source (`state_parks_web`) ingested on TEST
+
+- **New source `state_parks_web`** — visitor-facing content scraped from
+  parks.ca.gov for all 284 CA state park units (283 ingested; 1 skipped for
+  missing coordinates — Onyx Ranch SVRA). Complements the existing
+  `state_parks` GIS source (ArcGIS park boundaries + campground points) with
+  descriptions, hours, phone, amenities, photos, dog policy, fees, status,
+  and advisories.
+- **Investigation phase** identified the dataset structure (CSV, 22 fields,
+  275 JPEG photos at 300px), mapped fields against existing schema, and
+  confirmed 275 photos are government-published (California State Parks,
+  all from parks.ca.gov — no EXIF attribution, attribution tracked via
+  `photo_source_url` column). Found 914 existing `state_parks` source_records
+  for CA (394 parks, 520 campgrounds) linked to 810 master_places — the
+  existing records are geometry-heavy but content-bare (only 3 have photos,
+  2 have hours, 13 have contact info).
+- **Field-home investigation** assessed 6 unmapped fields (fees, dogs,
+  advisories, address, region, district). Recommendation: none warrant a new
+  resolved column. Address already has a home in `master_place.contact`.
+  Dogs are sole-source with no UI consumer. Fees are freeform/time-sensitive.
+  Advisories are dangerous when stale. Region/district are CA-only
+  administrative groupings with no consumer.
+- **Ingester built** at `data/ingestion/sources/state-parks-web.ts` following
+  the `family-destinations.ts` / `atlas-oddities.ts` CSV pattern. Registered
+  in `manual.ts` as `--source state_parks_web`.
+- **Migration `20260901001000`** adds 5 `field_precedence` rows: description
+  (priority 2), hours (3), contact (3), amenities (5), operational_status (2).
+  Applied to TEST via `db:push-verify -- --test`.
+- **Photos stored per photo-pilot pattern** — in `normalized_payload.photo`
+  with full attribution (source, credit, license, source_page URL). NOT
+  wired into the corridor RPC or search export photo lateral joins — staged
+  for review only.
+- **Entity resolution not yet run.** The 283 source_records are unlinked.
+  Running `materialize` will match them to existing GIS master_places by
+  name + proximity.
+- Gates: data typecheck 0, web typecheck 0, next build 0.
+
 ## 2026-09-01 (later 10) — Photo work shipped to PRODUCTION: UI already live, schema applied, 3 photos wired (explicit sign-off)
 
 Adam authorized deploying the day's photo work to PROD (`nqzeywzcowujzyegxbsr`).

@@ -226,7 +226,26 @@ export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
     campground: 0.1,
     recreation_area: 0.1,
   },
-  // Extend as new categories emerge from corridor expansion.
+  park: {
+    park: 1.0,
+    recreation_area: 0.9,
+    public_land: 0.8,
+    land_status: 0.5,
+    campground: 0.5,
+    historic: 0.7,
+  },
+  historic: {
+    historic: 1.0,
+    park: 0.7,
+    recreation_area: 0.7,
+    public_land: 0.7,
+    land_status: 0.3,
+  },
+  interest: {
+    interest: 1.0,
+    park: 0.3,
+    recreation_area: 0.3,
+  },
 };
 
 /**
