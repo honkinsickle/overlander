@@ -1,5 +1,32 @@
 # Backlog — open work
 
+## Matcher gaps surfaced during `oregon_state_parks` triage (2026-09-02)
+
+Two gaps in `data/entity-resolution/matcher.ts` `CATEGORY_COMPATIBILITY`
+made the OR triage load larger than it needed to be. Filed for a future
+matcher pass; not fixed in PR #346 (out of scope):
+
+1. **`park_feature` has no `CATEGORY_COMPATIBILITY` entry.** Same shape
+   as the `park` / `historic` / `interest` gap that commit 379c213 fixed
+   for the CA state_parks_web landing. Scored `cat_compat=0.00` for the
+   `oregon_state_parks:96` Erratic Rock SNS pair despite `name_sim=0.927`
+   (target: NPS-backed "Erratic Rock State Natural Site (Bellevue Erratic)").
+   The triage linked it manually, but the auto-link path should catch
+   `public_land ↔ park_feature` and probably `recreation_area ↔ park_feature`
+   the same way `park ↔ recreation_area` is scored 0.9.
+
+2. **`recreation_area ↔ public_land` (0.70) and `park ↔ recreation_area`
+   (0.90) contributed to 5 of the 13 LINK verdicts on OR sitting in
+   manual review despite `name_sim=1.000` on state_parks-GIS-backed
+   pairs.** The `name_dominant_low_conf` matcher method caps
+   `combined_confidence` at 0.60 — below the 0.85 auto-link threshold —
+   even when name and category are both perfect but coordinates disagree
+   by a few hundred metres (polygon centroid vs website point on a
+   linear/lakeside park). Worth revisiting either the compatibility
+   scores or the auto-link threshold logic before the next state-parks
+   sources (WA is pending on `wa-state-parks`; NV/UT/AZ if any come
+   later) to reduce manual-review load.
+
 ## Photo-backfill pilot — review + decide wiring (2026-09-01)
 
 Pilot ran on TEST: CA `campground` rows with zero photo coverage, license-clear
