@@ -74,9 +74,36 @@ const RELINKS_BY_SOURCE: Record<string, readonly RelinkSpec[]> = {
   },
   ],
   washington_state_parks: [],
+  oregon_state_parks: [
+    {
+      external_id: "oregon_state_parks:96",
+      sourceName: "Erratic Rock State Natural Site",
+      targetName: "Erratic Rock State Natural Site",
+      expectPrefix: "76e0659b",
+      notes:
+        "Manual triage RELINK: ER proposed 'Erratic Rock State Natural Site (Bellevue Erratic)' (520ca9b2), an NPS-only park_feature scoring cat_compat=0.000. The exact-name alternate (76e0659b, sim 1.000, 217m) is the state_parks:OR:park: GIS unit backed by state_parks + wikipedia, and is the correct canonical home. Same shape as CA's Gray Whale Cove, except here the GIS unit was NOT the matcher's proposal.",
+    },
+  ],
+};
+
+/**
+ * Approved REJECTs, per source. A reject means the proposed target is wrong AND
+ * no correct target exists in the corpus, so the record gets its own new
+ * master_place (see lib/state-parks-triage.ts).
+ */
+const REJECTS_BY_SOURCE: Record<string, readonly { external_id: string; sourceName: string; notes: string }[]> = {
+  oregon_state_parks: [
+    {
+      external_id: "oregon_state_parks:176",
+      sourceName: "Fall Creek State Recreation Area",
+      notes:
+        "Manual triage REJECT: ER proposed 'Cascara - Fall Creek State Recreation Area' (sim 0.736, 20.7m). A corpus-wide search found NO parent unit — the state_parks GIS source carries 7 separate sub-unit records (Cascara, Winberry, Free Meadow, Lakeside 1, Lakeside 2, Fisherman's Point, North Shore), each its own master_place. Attaching whole-park visitor content to one arbitrary campground loop would be wrong and would mislead the other six. Reject to a new master_place for the parent unit.",
+    },
+  ],
 };
 
 const RELINKS: readonly RelinkSpec[] = RELINKS_BY_SOURCE[SOURCE_ID] ?? [];
+const REJECTS = REJECTS_BY_SOURCE[SOURCE_ID] ?? [];
 
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -147,9 +174,18 @@ async function main(): Promise<void> {
     console.log(`  relink ${rl.external_id}  ${rl.sourceName} → ${rl.targetName} (${id})`);
   }
 
+  const rejectById = new Map<string, Decision>();
+  for (const rj of REJECTS) {
+    if (!pending.some((p) => p.externalId === rj.external_id)) {
+      throw new Error(`REJECT external_id ${rj.external_id} is not in the live pending queue — refusing`);
+    }
+    rejectById.set(rj.external_id, { external_id: rj.external_id, action: "reject", notes: rj.notes });
+    console.log(`  reject ${rj.external_id}  ${rj.sourceName} → new master_place`);
+  }
+
   const decisions: Decision[] = [];
   for (const p of pending) {
-    const override = relinkById.get(p.externalId);
+    const override = relinkById.get(p.externalId) ?? rejectById.get(p.externalId);
     if (override) {
       decisions.push(override);
       continue;
@@ -167,6 +203,7 @@ async function main(): Promise<void> {
   console.log(`\ndecisions: ${decisions.length} total — ${links} link, ${relinks} relink, ${rejects} reject`);
   if (decisions.length !== pending.length) throw new Error("decision count != queue size — refusing to write");
   if (relinks !== RELINKS.length) throw new Error(`expected ${RELINKS.length} relinks, built ${relinks}`);
+  if (rejects !== REJECTS.length) throw new Error(`expected ${REJECTS.length} rejects, built ${rejects}`);
 
   writeFileSync(outPath, JSON.stringify(decisions, null, 2) + "\n");
   console.log(`wrote ${outPath}`);

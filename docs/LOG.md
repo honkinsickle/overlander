@@ -12,6 +12,78 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 23) — OR triage applied + Typesense synced. **OR's PROD promotion is COMPLETE.** Three of six states live.
+
+- **A REAL BUG IN COMMITTED TOOLING, caught before it reached PROD.** The plan
+  was "apply the reject, then re-run ER so phase 2 re-homes the record" — which
+  is what `lib/state-parks-triage.ts` documented. **It would not have worked.**
+  Grepped both `matcher.ts` and `promote.ts`: **neither references
+  `place_match.status` at all**, so a rejected candidate is not excluded from a
+  later `matchAll` — Fall Creek would simply have been re-proposed against
+  `Cascara` and re-queued for manual review forever, or collided on the
+  `(source_record_id, master_place_id)` unique constraint.
+- **Fixed the lib rather than working around it.** `reject` now means "the
+  proposed target is wrong AND this record is its own place": it marks the match
+  rejected and then creates a **new master_place** through `promote.ts`'s
+  `applyMatches` (a `new_master_place` outcome), which owns creation. That is
+  also the established project semantic — CA's 2026-09-01 TEST round recorded
+  "2 rejected — false matches, new master_places created".
+  - The **existing unit test asserted the WRONG behaviour** ("leaves the
+    source_record UNLINKED") and was rewritten as a regression guard, plus a new
+    test that `reject` **fails loudly rather than seeding at NaN coordinates**.
+    8 tests in that file now; suite total 645.
+  - Also fixed a stale console string that still printed
+    "(rejected, stays unlinked)".
+- **Triage applied: 17 LINK + 1 RELINK + 1 REJECT, 0 skipped, 0 failed.**
+  Dry-run first (17/1/1), then `--write`, same result.
+- **The REJECT's downstream effect verified, not assumed** — the specific thing
+  the plan called for. `oregon_state_parks:176` now links to a **new**
+  master_place `63a038be` — canonical_name "Fall Creek State Recreation Area",
+  `recreation_area`, `source_count 1`, `is_searchable true`, carrying
+  `attribution.description = oregon_state_parks` and real prose. Two
+  `place_match` rows: the Cascara one `rejected`, the new one `confirmed`. Not
+  orphaned, not linked to Cascara.
+- **RELINK verified:** `oregon_state_parks:96` → `76e0659b`
+  ("Erratic Rock State Natural Site", the GIS unit), attribution flowing.
+- **Final PROD state: 192/192 linked, 0 unlinked** — `place_match` 192
+  confirmed + 1 rejected. Methods: 109 spatial_containment · 63 deterministic ·
+  18 manual_triage · 2 name_dominant. (18 manual_triage = 17 LINK + 1 RELINK;
+  the reject's new link is `deterministic`/`auto`, written by `applyMatches`.)
+  `master_place` 28,498 → **28,499** (+1, the new Fall Creek place); export view
+  22,098 → **22,099**. CA still **283**, WA still **141**.
+- **Typesense synced:** fetched **22,099** · indexed **22,099** · failed **0** ·
+  pruned **1**. `places_prod` = **22,099**, exactly equal to the export view.
+  `places_test` untouched at **33,047**. Delta re-measured live first (22,038 vs
+  22,099 = +61).
+- **Searchability spot-checked with live queries**, and both special cases rank
+  correctly:
+  - `"Erratic Rock State Natural Site"` → the **GIS `recreation_area` first**,
+    the NPS `park_feature` second — the relink's whole point.
+  - `"Fall Creek State Recreation Area"` → **the new parent first**, ahead of
+    its 7 sub-units — the reject's whole point.
+  - Wallowa Lake SP, Yaquina Bay SRS, Detroit Lake SRA all resolve.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / **645 passed** / 3 skipped, web
+  typecheck 0, next build 0.
+
+### OR PROD promotion — full arc, closed
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's batch push |
+| Ingest | 192 fetched · **192 inserted** · **0 skipped** · 0 errors |
+| Entity resolution | 109 spatial_containment (predicted exactly) + 2 auto_link + 62 new_master_place + 19 manual_review |
+| Triage | 17 LINK + 1 RELINK + 1 REJECT → **192/192 linked, 0 unlinked** |
+| Typesense | `places_prod` **22,038 → 22,099**, 1 pruned, 0 failed |
+
+Photos: 165 of 166 in-view OR master_places carry one — 103
+`stateparks.oregon.gov`, 62 `upload.wikimedia.org`. Enrichment: 167 of 168 carry
+description, 167 amenities, 16 operational_status.
+
+**Three of six states live on PROD (CA, WA, OR). NV/AZ/UT hold PROD schema with
+zero PROD data.** Note AZ and UT use `ingest_time_name_link` rather than spatial
+pre-link, so they will behave differently from CA/WA/OR/NV.
+
 ## 2026-09-02 (later 22) — OR ingested + entity-resolved on PROD; 19-item triage queue OPEN awaiting sign-off
 
 - **Branched off `main` (`2f8e43c`, PR #355 merged).** No migrations needed —

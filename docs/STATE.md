@@ -1,3 +1,30 @@
+# STATE — branch `promote-or-state-parks-prod` · 2026-09-02 (later 11) — **OR's PROD PROMOTION IS COMPLETE.** Three of six states live.
+
+(**newest truth: OR is fully live on PROD — triage applied and Typesense synced. Nothing about the OR promotion remains open.**
+
+**A real bug in committed tooling was caught before it reached PROD.** The plan was "apply the reject, then re-run ER so phase 2 re-homes the record" — which is what `lib/state-parks-triage.ts` documented. It would NOT have worked: **neither `matcher.ts` nor `promote.ts` references `place_match.status`**, so a rejected candidate isn't excluded from a later `matchAll` — Fall Creek would have been re-proposed against Cascara and re-queued forever. Fixed the lib: `reject` now marks the match rejected AND creates a new master_place via `promote.ts`'s `applyMatches`. The existing unit test asserted the wrong behaviour and was rewritten as a regression guard, plus a new test that reject fails loudly rather than seeding at NaN coordinates.
+
+**Triage:** 17 LINK · 1 RELINK · 1 REJECT · 0 failed → **192/192 linked, 0 unlinked** (192 confirmed + 1 rejected Cascara row). Methods: 109 spatial_containment · 63 deterministic · 18 manual_triage · 2 name_dominant.
+
+**REJECT verified downstream, not assumed:** `oregon_state_parks:176` → new master_place `63a038be` "Fall Creek State Recreation Area" (`recreation_area`, searchable, `attribution.description = oregon_state_parks`, real prose). Not orphaned, not linked to Cascara. **RELINK verified:** `oregon_state_parks:96` → `76e0659b`, the GIS unit.
+
+**Typesense:** fetched **22,099** · indexed **22,099** · failed **0** · pruned **1**. `places_prod` = **22,099** = export view exactly; `places_test` untouched at 33,047.
+
+**Both special cases rank correctly in live search:** `"Erratic Rock State Natural Site"` returns the GIS `recreation_area` **first** and the NPS `park_feature` second; `"Fall Creek State Recreation Area"` returns the **new parent first**, ahead of its 7 sub-units.
+
+**Full arc:**
+| step | result |
+|---|---|
+| Migrations | none needed |
+| Ingest | 192 fetched · **192 inserted** · **0 skipped** · 0 errors |
+| Entity resolution | 109 spatial (predicted exactly) + 2 auto_link + 62 new mps + 19 manual_review |
+| Triage | 17 LINK + 1 RELINK + 1 REJECT → **192/192 linked** |
+| Typesense | `places_prod` **22,038 → 22,099** |
+
+**THREE OF SIX STATES LIVE ON PROD (CA, WA, OR).** NV/AZ/UT hold PROD schema with zero PROD data. AZ and UT use `ingest_time_name_link` rather than spatial pre-link, so they will behave differently. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-or-state-parks-prod` · 2026-09-02 (later 10) — OR ingested + entity-resolved on PROD; 19-item triage queue OPEN
 
 (**newest truth: OR is on PROD. Ingest and ER done; the 19-item manual-review queue is UNAPPLIED and Typesense is deliberately un-synced.** Branched off `main` (`2f8e43c`, PR #355 merged). No migrations needed — OR's 3 `field_precedence` rows landed in CA's batch push.

@@ -1,0 +1,98 @@
+[
+  {
+    "external_id": "oregon_state_parks:54",
+    "action": "link",
+    "notes": "Manual triage LINK: McVay Rock State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:166",
+    "action": "link",
+    "notes": "Manual triage LINK: Jackson F. Kimball State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:92",
+    "action": "link",
+    "notes": "Manual triage LINK: W. B. Nelson State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:96",
+    "action": "relink",
+    "target_mp_id": "76e0659b-4d8c-4885-a14e-707270344f4a",
+    "notes": "Manual triage RELINK: ER proposed 'Erratic Rock State Natural Site (Bellevue Erratic)' (520ca9b2), an NPS-only park_feature scoring cat_compat=0.000. The exact-name alternate (76e0659b, sim 1.000, 217m) is the state_parks:OR:park: GIS unit backed by state_parks + wikipedia, and is the correct canonical home. Same shape as CA's Gray Whale Cove, except here the GIS unit was NOT the matcher's proposal."
+  },
+  {
+    "external_id": "oregon_state_parks:158",
+    "action": "link",
+    "notes": "Manual triage LINK: Fogarty Creek State Recreation Area → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:53",
+    "action": "link",
+    "notes": "Manual triage LINK: Crissey Field State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:148",
+    "action": "link",
+    "notes": "Manual triage LINK: Yaquina Bay State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:177",
+    "action": "link",
+    "notes": "Manual triage LINK: Lowell State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:94",
+    "action": "link",
+    "notes": "Manual triage LINK: Yachats State Recreation Area → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:141",
+    "action": "link",
+    "notes": "Manual triage LINK: Tolovana Beach State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:72",
+    "action": "link",
+    "notes": "Manual triage LINK: TouVelle State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:144",
+    "action": "link",
+    "notes": "Manual triage LINK: Driftwood Beach State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:20",
+    "action": "link",
+    "notes": "Manual triage LINK: Wallowa Lake State Park → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:65",
+    "action": "link",
+    "notes": "Manual triage LINK: Detroit Lake State Recreation Area → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:48",
+    "action": "link",
+    "notes": "Manual triage LINK: Hoffman Memorial State Wayside → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:163",
+    "action": "link",
+    "notes": "Manual triage LINK: Roads End State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:176",
+    "action": "reject",
+    "notes": "Manual triage REJECT: ER proposed 'Cascara - Fall Creek State Recreation Area' (sim 0.736, 20.7m). A corpus-wide search found NO parent unit — the state_parks GIS source carries 7 separate sub-unit records (Cascara, Winberry, Free Meadow, Lakeside 1, Lakeside 2, Fisherman's Point, North Shore), each its own master_place. Attaching whole-park visitor content to one arbitrary campground loop would be wrong and would mislead the other six. Reject to a new master_place for the parent unit."
+  },
+  {
+    "external_id": "oregon_state_parks:7",
+    "action": "link",
+    "notes": "Manual triage LINK: Unity Lake State Recreation Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  },
+  {
+    "external_id": "oregon_state_parks:180",
+    "action": "link",
+    "notes": "Manual triage LINK: Willamette Stone State Heritage Site → ER's proposed target (GIS name-abbreviation pair; Adam-approved 2026-09-02)."
+  }
+]
