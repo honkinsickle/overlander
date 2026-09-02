@@ -1,3 +1,60 @@
+# STATE — branch `promote-wa-state-parks-prod` · 2026-09-02 (later 9) — **WA's PROD PROMOTION IS COMPLETE END-TO-END.** Two of six states live.
+
+(**newest truth: WA is fully live on PROD — triage applied and Typesense synced. Nothing about the WA promotion remains open.**
+
+**Triage:** 8 LINK · 0 RELINK · 0 REJECT · 0 failed → **141/141 linked, 0 pending, 0 rejected** (116 spatial_containment · 17 deterministic · 8 manual_triage, the last stamped `adam:wa-triage-2026-09-02`). All 8 verified individually to carry `attribution.description/hours/contact = washington_state_parks`. Decisions generated from the live queue, committed at `data/triage-decisions/wa-prod-2026-09-02.json`.
+
+**Typesense:** fetched **22,038** · indexed **22,038** · failed **0** · pruned **0**. `places_prod` = **22,038**, exactly equal to PROD's export view; `places_test` untouched at **33,047**. Pruned 0 (CA's run pruned 12) because WA's 8 links went to master_places already in the view. Delta re-measured live before syncing rather than trusting the earlier figure.
+
+**Full arc:**
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's batch push |
+| Ingest | 147 fetched · **141 inserted** · 6 skipped · 0 errors |
+| Entity resolution | 116 spatial + 17 deterministic + 8 manual_review |
+| Triage | 8 LINK → **141/141 linked, 0 pending, 0 rejected** |
+| Typesense | `places_prod` **22,022 → 22,038**, 0 pruned |
+
+**Searchability confirmed with live Typesense queries** for all 8: each returns its `recreation_area` first. `Conconully` returns 4 hits with the park unit top — confirming the LINK chose the 66m GIS park over the higher-name-scoring Conconully Lake alternates. The 3 outside `six_state_footprint()` (Peace Arch, Stuart Island, Posey Island) are correctly absent.
+
+**Photos:** 129/129 in-view WA master_places carry one — 77 `parks.wa.gov`, 52 `upload.wikimedia.org`, Wikipedia legitimately outranking at priority 2 vs 7. Enrichment: all 132 distinct WA-linked master_places.
+
+**Tooling now state-agnostic:** both `state-parks-prod-triage-report.ts` and `state-parks-prod-triage-build-decisions.ts` are parameterised on `--source`; approved relink overrides live in a per-source map (CA's three retained, WA's empty). Generalised, not forked.
+
+**TWO OF SIX STATES LIVE ON PROD (CA, WA).** OR/NV/AZ/UT hold PROD schema with zero PROD data; each needs its own promotion decision. Branch `promote-wa-state-parks-prod` is unpushed. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `promote-wa-state-parks-prod` · 2026-09-02 (later 8) — WA ingested + entity-resolved on PROD; 8-item triage queue OPEN awaiting Adam
+
+(**newest truth: WA is on PROD. Ingest and entity resolution are done; the 8-item manual-review queue is UNAPPLIED and Typesense is deliberately un-synced. Both are Adam's gates.** Branched off the merged `main` (`b3b4f28`, PR #354 squash-merged — squash verified to carry the whole CA arc).
+
+**No migrations needed** — WA's 4 `field_precedence` rows and photo-lateral slot 7 already landed on PROD in CA's 20-file batch push. That removed the hardest blocker CA faced.
+
+**Ingest:** 147 fetched · **141 inserted** · 6 skipped (trail parks, no coords) · 0 errors — matching the dry-run and PR #345 exactly.
+
+**Entity resolution on PROD:** 116 spatial_containment + 17 deterministic → **133/141 linked, 8 pending, 0 rejected**, 0 errors. Phase 2 was 0 auto_link / 17 new_master_place / 8 manual_review. The 116 carry `auto:washington_state_parks_er` — WA's first real resolver stamp.
+
+**Phase 1 gave 116, not TEST's 117 — chased down.** Polygon COUNT is 204 on both, but the SETS differ two-each-way: TEST has `Alta Lake` + `Jarrell Cove`, PROD has `Turn Island` + `Conconully`. Substrate comes only from GIS records already linked to a master_place, and the corpora link differently. 117 − 2 + 1 = **116** exactly. Not a code defect.
+
+**PROD deltas:** `master_place` 28,419 → **28,436** (+17) · `source_record` 38,131 → **38,272** (+141) · export view 22,022 → **22,038** (+16). `california_state_parks` still **283** — CA untouched.
+
+**The +16-vs-+17 gap reconciles exactly.** `Peace Arch`, `Stuart Island Marine State Park` and `Posey Island` are absent from the export view — all `is_searchable = true`, `operational_status = null`, `source_count > 0`, so the only filter left is `st_intersects(geometry, six_state_footprint())`. Peace Arch sits at **latitude 49.0014** (the 49th-parallel border); Stuart and Posey are San Juans past **−123°**. Only Stuart Island is a new mp, so 17 − 1 = +16. Different cause from CA's −2 (which was `CLOSED`).
+
+**Photos — preflight prediction held.** Measured via the export view's lateral join, not the `photo_url` column: PROD **129/129** in-view WA master_places carry a photo — **77 `parks.wa.gov`, 52 `upload.wikimedia.org`** — against TEST's 131 + 2. Wikipedia is photo-lateral priority 2 vs WA's 7 and PROD has far more wikipedia records. **Expected, not corrected.**
+
+**Enrichment:** all **132** distinct WA-linked master_places carry `attribution.description/hours/contact = washington_state_parks`.
+
+**TRIAGE QUEUE — 8 items, UNAPPLIED, recommendation 8 LINK / 0 RELINK / 0 REJECT.** Far cleaner than CA's 28: every item is `X State Park` vs a GIS name that drops the suffix (Nolte, Belfair, Kopachuck, Triton Cove, Bottle Beach, Matia Island, Jackson House, Conconully). Alternate search run on all 8; no better target anywhere. Two worth a glance: `Conconully` has two alternates scoring *higher* on name (0.936 vs 0.925 — a Jaro-Winkler prefix artifact) but they sit 1,747–1,801m away against the proposal's 66m, and the proposal is the GIS park unit; `Belfair` ties its own campground at 0.908, and the park (not the campground) is right.
+
+**Tooling:** `ca-prod-triage-report.ts` → `state-parks-prod-triage-report.ts`, parameterised on `--source` — generalised rather than copied, since a forked copy is how the overlap fix went stale in three scripts.
+
+**Credentials:** inline exports throughout; `data/.env` never left TEST, CLI never linked to PROD. Verified after.
+
+**NEXT:** Adam signs off the 8 items → apply → Typesense sync (final step). OR/NV/AZ/UT still hold PROD schema with zero PROD data. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ca-state-parks-prod` · 2026-09-02 (later 7) — **CA's PROD PROMOTION IS COMPLETE END-TO-END.** Branch held, awaiting Adam's PR call.
 
 (**newest truth: Typesense is synced and CA is fully live on PROD. Nothing about the CA promotion remains open.**
