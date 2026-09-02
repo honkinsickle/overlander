@@ -1,3 +1,29 @@
+# STATE — branch `promote-az-state-parks-prod` · 2026-09-02 (later 15) — **AZ's PROD PROMOTION IS COMPLETE.** Five of six states live; only UT remains.
+
+(**newest truth: AZ is fully live on PROD — ingested, entity-resolved, triage queue came back EMPTY so the auto-approval rule applied, and Typesense is synced. Nothing about the AZ promotion remains open.**
+
+**Every preflight prediction landed**, including the two about `ingest_time_name_link` — a mechanism never exercised on PROD before. Ingest **33/33, 0 skipped** (the specific risk was silent drops: a name miss means the record is never inserted, since geometry is borrowed and NOT NULL). Phase 1 predicted **32**, landed **32**. Phase-2 load predicted **1**, landed **1**.
+
+**Final: 33/33 linked, 0 pending, 0 rejected** — 32 `ingest_time_name_link` + 1 `deterministic`.
+
+**The queue came back EMPTY (0 items)**, so auto-approval applied and no sign-off was needed. Preflight predicted Tubac Presidio would need RELINK-or-new-mp; `matchAll` resolved it to `new_master_place` itself, so it never entered the queue.
+
+**AZ's two historical TEST triage cases self-resolved to the correct targets — via the PADUS absence, as predicted.** `Colorado River SHP` → `Colorado River State Historic Park` (`25bcfe08`, `recreation_area`) and `Fool Hollow Lake RA` → `Fool Hollow Lake Recreation Area` (`347fb061`), both by `ingest_time_name_link`. TEST's wrong pick, `Yuma Quartermaster Depot SHP`, was **padus-backed and does not exist on PROD**. Verified after the fact; live search now returns the `recreation_area` first for Colorado River.
+
+**Tubac Presidio verified individually:** new master_place `1960c448` (`historic`, AZ-backed, real description) rather than the same-named NPS `park_feature` — correct by CA/OR/NV precedent, and there was no `state_parks`-backed target since Tubac's GIS unit is AZ's one unlinked-on-PROD park.
+
+**Deltas:** `master_place` 28,505 → **28,506** · `source_record` 38,492 → **38,525** · export 22,105 → **22,106**. CA 283 · WA 141 · OR 192 · NV 28 untouched.
+
+**Typesense:** fetched **22,106** · indexed **22,106** · failed **0** · pruned **0**. `places_prod` = **22,106** = export view exactly.
+
+**Photos:** 33/33 in view, 33/33 with a photo — **20 `arizona-content.usedirect.com`, 13 `upload.wikimedia.org`**. **Enrichment 33/33.** Licence unchanged (`"Arizona State Parks"`); the third-party CDN is now visibly the photo source for 20 live PROD places.
+
+**⚠️ Duplicates are worse in AZ than anywhere measured: 9 of 33 (27%)** have a same-named `oddity`/`park_feature` twin within 3 km (vs NV 6/28 = 21%). And this promotion **added one** — Tubac's new `historic` row alongside the NPS `park_feature`. First time a promotion demonstrably created a duplicate rather than just revealed one. Dedup backlog now has real priority.
+
+**FIVE OF SIX LIVE (CA, WA, OR, NV, AZ). Only UT remains** — same mechanism, already preflighted, but phase-2 load predicted to grow 9 → 14, so the larger queue. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `preflight-az-ut-prod` · 2026-09-02 (later 14) — AZ + UT PROD preflight complete (READ-ONLY). No blockers; AZ recommended first.
 
 (**newest truth: AZ and UT are both preflighted and clear. Nothing was written to PROD — no ingest, no ER, no code changes. Awaiting Adam's decision on order and go-ahead.**
