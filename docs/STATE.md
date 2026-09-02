@@ -1,3 +1,29 @@
+# STATE — branch `preflight-az-ut-prod` · 2026-09-02 (later 14) — AZ + UT PROD preflight complete (READ-ONLY). No blockers; AZ recommended first.
+
+(**newest truth: AZ and UT are both preflighted and clear. Nothing was written to PROD — no ingest, no ER, no code changes. Awaiting Adam's decision on order and go-ahead.**
+
+**The mechanism differs, and so does where the risk sits.** CA/WA/OR/NV spatial pre-link *recomputes* containment at ER time, so a substrate difference only re-orders phases. AZ/UT have **0 coordinates**; the ingester matches visitor name → GIS park by normalized name, **borrows that record's geometry**, and stores `intended_master_place_id`. **A row with no name match is SKIPPED ENTIRELY at ingest.** So the dangerous failure is at INGEST time and is silent data loss.
+
+**The equivalent of `--verify` therefore already exists: the ingester's own `--dry-run` against PROD.** It calls the live `*_gis_index()` RPC, exercises the real name matching, and reports skips — real code path, no reimplementation, no writes. Nothing needed building. The polygon-set analogue is a **GIS-index parity check** (external_id set, `name` values, `master_place_id` presence, geometry presence).
+
+**RESULT — dry-run against PROD: AZ 33/33/0 skipped/0 errors · UT 46/46/0/0.** No record is dropped. That is the key number for these two.
+
+**GIS-index parity:** AZ 34 units both sides · UT 47 both sides · **0** external_id differences · **0** name differences · full geometry coverage on PROD. Only `master_place_id` presence differs (AZ 32→33, UT 38→33), which shifts the phase split.
+
+**Predicted phase split on PROD:** AZ phase-1 31 → **32**, phase-2 2 → **1**. UT phase-1 37 → **32**, phase-2 9 → **14** — UT will produce the larger queue.
+
+**AZ's two historical triage cases self-resolve on PROD, via the PADUS fact.** TEST's wrong pick for Colorado River SHP was `Yuma Quartermaster Depot SHP`, a **padus-backed** row — and **PROD has no padus, so it doesn't exist**. Both GIS units are linked on PROD, so both records phase-1 link straight to the `state_parks` GIS unit, which is exactly what the TEST triage manually concluded. Flagged because it bypasses review, not because it looks wrong.
+
+**The one AZ record likely to need triage is Tubac Presidio SHP** — its GIS unit is the single AZ park unit unlinked on PROD, so it falls to matchAll where the only same-named candidate is an **NPS `park_feature`**. By CA/OR/NV precedent that is not the canonical home; expect a RELINK or new master_place.
+
+**UT's hours/contact split has no DB dependency** — `splitHoursContact` is a pure function over `row.hours`; the only DB call is the GIS-index RPC. Identical behaviour on PROD.
+
+**Licences unchanged, verified as stored on TEST:** AZ 33/33 photos, `credit`/`license` = **`"Arizona State Parks"`** (bare risk-acceptance label, strictest terms of the six). **⚠️ AZ's photos are hosted on `arizona-content.usedirect.com`, a third-party booking CDN — the only state of the six not serving from its own official domain.** UT 46/46, `"Utah State Parks"`, host `stateparks.utah.gov`.
+
+**CONFIDENCE: AZ high, UT moderate. No blockers for either. Recommend AZ first.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-or-state-parks-prod` · 2026-09-02 (later 11) — **OR's PROD PROMOTION IS COMPLETE.** Three of six states live.
 
 (**newest truth: OR is fully live on PROD — triage applied and Typesense synced. Nothing about the OR promotion remains open.**
