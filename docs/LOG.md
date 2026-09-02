@@ -12,6 +12,72 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-01 (later 12) — State-park photo sourcing scoped for all six states: none is license-clear, nothing built
+
+Follow-on to later 11. Adam wanted park photos from each state's own official
+site (CA/AZ/NV/UT/WA/OR), scoping per-state first (same enumerate-before-measure
+posture as the BLM/state_parks work). Read-only throughout; two grounded scripts
+(`data/scripts/investigate-stateparks-photo-{fields,values}-2026-09-01.ts`) plus
+six parallel per-state licensing-research agents.
+
+- **Grounded field reality:** WA is the ONLY state whose ingested ArcGIS layer
+  carries a usable image URL (`Imagelink` → `parks.wa.gov` JPGs). AZ `PHOTO` =
+  codes (`hasAttachments:false` verified); NV `photo` = empty `" "`; UT
+  `weblink1` = park webpages; CA/OR = no image field. No caption/credit/license
+  field anywhere.
+- **Licensing (cited, blocked everywhere):** CA personal/non-commercial + no
+  deep-link/scrape; AZ not-public-domain/all-rights-reserved; NV
+  educational-scientific-only + third-party Instagram works; UT SmugMug no grant;
+  **WA "All rights reserved," no grant, some contributed third-party works** —
+  the pivotal finding, because WA is the one state with usable URLs; OR mandatory
+  "courtesy OPRD" credit + "may be subject to copyright," web-only.
+- **Decision:** nothing built — none unblocked with clear terms, so report blocked
+  rather than scrape (task rule). The standing "official agency media is
+  license-clear" assumption is falsified for these six; it fails hardest where
+  usable data exists (WA). If photos wanted → direct written license request per
+  agency (WA/OR nearest to workable).
+- **Retroactive:** ~59–70 `parks.wa.gov` URLs already in `master_place.photo_url`
+  (parks.ca.gov = 0) from the prior backfill sit with no confirmed reuse grant;
+  latent (not rendered), flagged for possible clearing, not deleted.
+- ADR `docs/decisions/2026-09-01-state-park-photos-not-license-clear.md`; scope
+  `docs/measurements/2026-09-01-state-park-photo-sourcing-scope.md`. Stacked on
+  PR #343. `npm run -w data typecheck` exit 0.
+
+## 2026-09-01 (later 11) — MacKerricher "missing photo attribution" traced: it's a Google Places photo, attribution structurally dropped (investigation only)
+
+Adam reported the MacKerricher State Park place card showing a photo with no
+source/attribution, confirmed live on PROD. Read-only investigation, PROD + TEST,
+nothing modified. Two throwaway-but-kept scripts:
+`data/scripts/investigate-mackerricher-{photo,baked-tile}-2026-09-01.ts`
+(hard-guarded on project ref; PROD read via `--env-file` against the prod backup,
+env never swapped).
+
+- **Root cause: the photo is a live Google Places photo, not an ingested one.**
+  The card is a baked **Google-resolved LLM key-stop tile** ("MacKerricher State
+  **Park**", `placeId ChIJrSiZmdI0gIARBI706DgDanc`, no baked `photoUrl`) in PROD
+  user trip `63634fd5…`. `day-detail-corridor-column.tsx:308-351` hydrates any
+  `placeId && !photoUrl` tile via `/api/places/details`; `placeDetails()` pulls
+  `photos[0].name` only. `GooglePlace.photos` is typed `Array<{ name: string }>`,
+  so Google's `authorAttributions` are **structurally discarded**, and
+  `PlaceRich` has no credit field. `photoCredit` only ever comes from CC
+  federated sources. → **Google Places attribution-display gap, live on PROD** —
+  affects every live-hydrated Google photo, not just this card.
+- **Corpus rows carry no photo at all.** Both PROD `master_place` MacKerricher
+  rows ("MacKerricher SP", "MacKerricher Walk-in Camp") are `state_parks`-only,
+  `photo_url` NULL, export-view lateral NULL, no google id. Name mismatch
+  ("SP" vs "State Park") is the tell it's the Google tile, not the corpus row.
+- **Answered Adam's live question — parks.ca.gov photos ingested: ZERO.** Of
+  1,736 PROD `state_parks` records, 572 CA rows carry 0 `Imagelink`; the only 59
+  populated `Imagelink`s all point at `parks.wa.gov`. `master_place.photo_url`
+  (7,223 non-null) has 70 `parks.wa.gov`, **0 `parks.ca.gov`**. Those WA images
+  are hotlinked with no attribution but **not rendered** (laterals exclude
+  state_parks) → latent, filed.
+- **The BLM/state_parks unmapped-photo thread (`20260821070000` header) does not
+  affect MacKerricher** — its records carry no image field to map.
+- Report only; nothing removed/modified per the task. Two BACKLOG items filed
+  (live Google-attribution gap; latent WA hotlink gap). Full trace:
+  `docs/measurements/2026-09-01-mackerricher-photo-attribution.md`.
+
 ## 2026-09-01 (later 10) — Photo work shipped to PRODUCTION: UI already live, schema applied, 3 photos wired (explicit sign-off)
 
 Adam authorized deploying the day's photo work to PROD (`nqzeywzcowujzyegxbsr`).
