@@ -34,18 +34,41 @@ const STATES = [
 
 const SOURCES = STATES.map((s) => s.sourceId);
 
-/** Repo-side half of the audit: is the tooling actually committed? */
+/** States whose phase 1 is spatial pre-link and therefore share `runStateParksEr`. */
+const SPATIAL_CODES = new Set(["ca", "wa", "or", "nv"]);
+
+/**
+ * Repo-side half of the audit: is the tooling committed, AND is it on the shared
+ * runner?
+ *
+ * "Exists" was the right check when scripts were simply missing (the original
+ * gap-closure pass). It is no longer sufficient: UT's triage script existed and
+ * was committed, but was its own one-shot with no dry-run guard, and invoking it
+ * with the shared `--apply/--write` flags caused an unintended PROD write
+ * 2026-09-02. The failure mode has moved from MISSING to DIVERGENT, so this now
+ * asserts each script actually delegates to the shared runner.
+ */
 function scriptStatus(code: string): { er: string; triage: string } {
-  const er = `${code}-state-parks-er.ts`;
-  const triageTs = `${code}-state-parks-triage-apply.ts`;
-  const triageMjs = `${code}-state-parks-triage-apply.mjs`;
+  const check = (file: string, mustImport: string): string => {
+    const path = join(SCRIPTS, file);
+    if (!existsSync(path)) {
+      // A stray .mjs sibling is itself a finding — it sits outside tsc.
+      const mjs = file.replace(/\.ts$/, ".mjs");
+      return existsSync(join(SCRIPTS, mjs)) ? `${mjs}  *** .mjs — outside tsc, NOT on shared runner ***` : "MISSING";
+    }
+    const src = readFileSync(path, "utf8");
+    return src.includes(mustImport) ? `${file}  (shared: ${mustImport})` : `${file}  *** DIVERGENT — does not use ${mustImport} ***`;
+  };
+  // ER expectation is per-MECHANISM, not one-size-fits-all. CA/WA/OR/NV do
+  // spatial pre-link and share `runStateParksEr`. AZ/UT have no coordinates and
+  // use `ingest_time_name_link` (replaying the GIS id the ingester recorded),
+  // so they legitimately have their own phase 1 and must NOT be forced onto the
+  // spatial runner — asserting otherwise would be a check that demands the
+  // wrong thing. They still share phase 2 via applyMatches.
+  const erExpect = SPATIAL_CODES.has(code) ? "runStateParksEr" : "applyMatches";
   return {
-    er: existsSync(join(SCRIPTS, er)) ? er : "MISSING",
-    triage: existsSync(join(SCRIPTS, triageTs))
-      ? triageTs
-      : existsSync(join(SCRIPTS, triageMjs))
-        ? `${triageMjs}  (.mjs — outside tsc scope)`
-        : "MISSING",
+    er: check(`${code}-state-parks-er.ts`, erExpect),
+    triage: check(`${code}-state-parks-triage-apply.ts`, "runStateParksTriage"),
   };
 }
 
@@ -137,13 +160,13 @@ async function main(): Promise<void> {
   let gaps = 0;
   for (const st of STATES) {
     const s = scriptStatus(st.code);
-    if (s.er === "MISSING" || s.triage === "MISSING") gaps += 1;
+    if (s.er.includes("MISSING") || s.er.includes("***") || s.triage.includes("MISSING") || s.triage.includes("***")) gaps += 1;
     console.log(`\n${st.sourceId} (${st.code})`);
     console.log(`   ER script     : ${s.er}`);
     console.log(`   triage script : ${s.triage}`);
   }
   console.log(
-    `\n${gaps === 0 ? "CLOSED — every state has a committed ER script and triage script." : `OPEN — ${gaps} state(s) still missing tooling.`}\n`,
+    `\n${gaps === 0 ? "CLOSED — all six states have committed ER + triage scripts, all on the shared runner." : `OPEN — ${gaps} state(s) missing or divergent.`}\n`,
   );
 }
 
