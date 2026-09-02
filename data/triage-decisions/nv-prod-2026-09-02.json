@@ -1,0 +1,7 @@
+[
+  {
+    "external_id": "nevada_state_parks:lake-tahoe-nevada-state-park-2",
+    "action": "link",
+    "notes": "Manual triage LINK: Cave Rock -> the ER's proposed target 'Cave Rock Lake Tahoe-Nevada State Park' (9d6a04cc, recreation_area, backed by state_parks GIS + wikipedia, 309m, sim 0.855). A closer, exact-name alternate exists -- 'Cave Rock' (59b30566, sim 1.000, 15m) -- but it is an ODDITY backed by atlas_oddities alone (atlasobscura:cave-rock) describing the geological formation, not the park unit. The NV record is inferred_category=park carrying state-park visitor content (boat launch / park use), so the state_parks GIS unit is the canonical home. Same principle as CA's Gray Whale Cove and OR's Erratic Rock. The name-similarity heuristic is misled because the NV site names the sub-unit 'Cave Rock' while the GIS unit carries the full park name. Adam-approved 2026-09-02."
+  }
+]

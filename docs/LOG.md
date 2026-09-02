@@ -119,6 +119,128 @@ created a pair).
 - Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-02 (later 25) — NV triage applied + Typesense synced. **NV's PROD promotion is COMPLETE.** Four of six states live.
+
+- **Cave Rock confirmed as LINK by Adam; applied.** 1 linked, 0 relinked,
+  0 rejected, 0 failed. Dry-run first. Final `nevada_state_parks` on PROD:
+  **28/28 linked, 0 pending, 0 rejected** — 21 spatial_containment ·
+  6 deterministic · 1 manual_triage (`adam:nv-triage-2026-09-02`).
+- **Verified the link landed on the GIS unit**, not the oddity: Cave Rock →
+  `Cave Rock Lake Tahoe-Nevada State Park` (`9d6a04cc`, `recreation_area`),
+  carrying `attribution.description = nevada_state_parks`.
+- **The decisions file's auto-generated note was hand-corrected before
+  applying.** The builder writes a generic "GIS name-abbreviation pair" note for
+  every LINK, which is accurate for CA/WA/OR but wrong for Cave Rock — that case
+  is "closer exact-name alternate rejected because it's an atlas_oddities
+  formation, not the park unit". The decisions JSON is the permanent audit
+  trail, so it now records the actual reasoning.
+- **Typesense synced:** fetched **22,105** · indexed **22,105** · failed **0** ·
+  pruned **0**. `places_prod` = **22,105**, exactly equal to the export view.
+  `places_test` untouched at **33,047**. Delta re-measured live first (+6).
+- **Searchability spot-checked live:** Cave Rock, Valley of Fire,
+  Berlin-Ichthyosaur, Spring Mountain Ranch, Cathedral Gorge all resolve; the
+  triage target `9d6a04cc` is indexed under its full park name.
+- **⚠️ NEW, QUANTIFIED: the state-park ↔ `atlas_oddities` duplication is
+  systematic, not incidental.** Measured on PROD — **6 of 28 NV records have a
+  same-named `atlas_oddities` twin within 3 km**, several at **0 m**:
+  Berlin-Ichthyosaur (0m), Fort Churchill (0m), Cathedral Gorge (0m),
+  Ward Charcoal Ovens (10m), Cave Rock (15m), Valley of Fire (1,885m). That is
+  **21% of NV**, against isolated single cases noted for CA (Gray Whale Cove,
+  Watts Towers) and OR (Erratic Rock). Live search returns both rows for these.
+  **Not fixed here** — it is a pre-existing cross-source dedup problem, not
+  caused by these promotions — but it is now measured rather than anecdotal and
+  belongs in the dedup backlog. NV's own Cave Rock triage decision was
+  effectively a manual instance of this same collision.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
+### NV PROD promotion — full arc, closed
+| step | result |
+|---|---|
+| Migrations | none needed — landed in CA's batch push |
+| Ingest | 28 fetched · **28 inserted** · 0 skipped · 0 errors |
+| Entity resolution | 21 spatial_containment (predicted exactly) + 6 new_master_place + 1 manual_review |
+| Triage | 1 LINK → **28/28 linked, 0 pending, 0 rejected** |
+| Typesense | `places_prod` **22,099 → 22,105**, 0 pruned, 0 failed |
+
+Photos: 27 of 27 in-view NV master_places carried one at ER time — 20
+`parks.nv.gov`, 7 `upload.wikimedia.org`. Enrichment: every NV-linked
+master_place carries `attribution.description = nevada_state_parks`.
+
+**Four of six states live on PROD (CA, WA, OR, NV). AZ and UT remain** — both use
+`ingest_time_name_link` rather than spatial pre-link, so neither the polygon-set
+comparison nor the `--verify` mode that anchored all four preflights applies to
+them in the same form. They need a genuinely fresh read.
+
+## 2026-09-02 (later 24) — NV ingested + entity-resolved on PROD; 1-item queue HALTED for sign-off (auto-approval rule NOT met)
+
+- **Preflight was the cleanest of the four spatial states.** TEST 28/28 linked,
+  0 pending, 0 rejected. PROD `field_precedence` 1 row (`description:2`),
+  identical to TEST; 0 NV source_records. GIS substrate **105 on both**.
+  `--verify` 21/21 agree, 0 disagree.
+- **First state where the polygon SETS match exactly** — 27 on both databases,
+  0 only-TEST, 0 only-PROD, predicted phase-1 21 on both. WA's sets differed
+  (net −1) and OR's differed (net +2); NV's are identical, and phase 1 landed
+  **21** exactly as predicted.
+- **Licence posture confirmed distinct and unchanged.** As STORED on TEST, all
+  28 records carry `credit: "Nevada State Parks"` and `license: "Nevada State
+  Parks"` — **not** the `"— government publication"` framing CA/WA/OR use. That
+  is Adam's explicit risk-acceptance call (parks.nv.gov grants no reuse text;
+  US state works are not §105-exempt). No new caveat needed.
+- **Ingest: 28 fetched, 28 inserted, 0 skipped, 0 errors.**
+- **Entity resolution:** 21 spatial_containment + 6 deterministic → **27/28
+  linked, 1 pending, 0 rejected**, 0 errors. Phase 2 on 7: 0 auto_link,
+  6 new_master_place, 1 manual_review.
+- **PROD deltas:** `master_place` 28,499 → **28,505** (+6); `source_record`
+  38,464 → **38,492** (+28); export view 22,099 → **22,105** (+6). CA **283**,
+  WA **141**, OR **192** — all untouched.
+- **THE NV `is_searchable`/PADUS BUG CLASS CANNOT OCCUR ON PROD — structurally,
+  not by luck.** The original TEST bug needed a non-`land_status` source to link
+  onto a **PADUS-anchored** master_place. Measured on PROD: **0 `padus`
+  source_records and 0 `land_status` master_places in the entire database**
+  (TEST has 37,701 and 35,966). Verified empirically too — of 27 NV-linked
+  master_places, **0** have `is_searchable = false` and **0** are `land_status`.
+  Same root fact that made OR's searchability prediction wrong; it now closes
+  this check for every remaining state.
+- **Photos:** all 27 in-view NV master_places carry one — **20 `parks.nv.gov`,
+  7 `upload.wikimedia.org`** (NV sits at photo-lateral priority 9, Wikipedia 2).
+  Expected. **Enrichment: 27 of 27** carry
+  `attribution.description = nevada_state_parks`.
+- **⚠️ HALTED — auto-approval rule deliberately NOT invoked, on one item.** The
+  queue is a single record, **Cave Rock**
+  (`nevada_state_parks:lake-tahoe-nevada-state-park-2`), and the tooling's own
+  output recommends **RELINK**, which by the stated rule ("if even one item is
+  RELINK/REJECT/UNCLEAR, halt") is disqualifying on its face.
+  - ER proposed **`Cave Rock Lake Tahoe-Nevada State Park`** (`9d6a04cc`,
+    `recreation_area`, backed by **state_parks GIS + wikipedia**,
+    `state_parks:NV:park:Cave Rock Lake Tahoe-Nevada State Park`, 309m,
+    sim 0.855).
+  - The alternate that outscored it is **`Cave Rock`** (`59b30566`, sim
+    **1.000**, 15m) — but it is an **`oddity` backed by atlas_oddities alone**
+    (`atlasobscura:cave-rock`), describing the geological formation
+    ("a 360-foot-high and 800-foot-wide geological marvel").
+  - The NV source record is `inferred_category = park` and its description is
+    state-park visitor content ("a great place to put in a boat and explore…").
+  - **Recommendation: LINK to the proposed GIS unit**, overriding the script.
+    Same principle as CA's Gray Whale Cove and OR's Erratic Rock — the
+    `state_parks` GIS unit is the canonical home for state-park visitor content,
+    not a co-located feature from another source. The name-similarity heuristic
+    is misled here because the NV site names the sub-unit "Cave Rock" while the
+    GIS unit carries the full park name.
+  - **Why halt rather than auto-apply:** my override runs toward the *less*
+    conservative action (skipping sign-off) on a categorical judgment the tool
+    disagrees with, and it required investigating what the alternate actually
+    was. The previous two overrides (CA Topanga, OR Erratic Rock) went the other
+    way — LINK → RELINK. Overriding a flag in order to skip review is exactly
+    the case the rule exists for.
+- **Typesense NOT synced** and **triage NOT applied** — both wait on sign-off.
+- Credentials: inline exports throughout; `data/.env` never left TEST, CLI never
+  linked to PROD. Verified after.
+- Gates: data typecheck 0, data test 34 files / 645 passed / 3 skipped, web
+  typecheck 0, next build 0.
+
 ## 2026-09-02 (later 23) — OR triage applied + Typesense synced. **OR's PROD promotion is COMPLETE.** Three of six states live.
 
 - **A REAL BUG IN COMMITTED TOOLING, caught before it reached PROD.** The plan

@@ -22,6 +22,53 @@
 
 ---
 
+# STATE — branch `promote-nv-state-parks-prod` · 2026-09-02 (later 13) — **NV's PROD PROMOTION IS COMPLETE.** Four of six states live.
+
+(**newest truth: NV is fully live on PROD — Cave Rock confirmed as LINK, applied, Typesense synced. Nothing about the NV promotion remains open.**
+
+**Triage:** 1 LINK · 0 relink · 0 reject · 0 failed → **28/28 linked, 0 pending, 0 rejected** (21 spatial_containment · 6 deterministic · 1 manual_triage). Cave Rock verified to have landed on the **GIS unit** `Cave Rock Lake Tahoe-Nevada State Park` (`9d6a04cc`, `recreation_area`), not the atlas_oddities formation, with attribution flowing.
+
+**Typesense:** fetched **22,105** · indexed **22,105** · failed **0** · pruned **0**. `places_prod` = **22,105** = export view exactly; `places_test` untouched at 33,047.
+
+**Full arc:**
+| step | result |
+|---|---|
+| Migrations | none needed |
+| Ingest | 28 fetched · **28 inserted** · 0 skipped · 0 errors |
+| Entity resolution | 21 spatial (predicted exactly) + 6 new mps + 1 manual_review |
+| Triage | 1 LINK → **28/28 linked** |
+| Typesense | `places_prod` **22,099 → 22,105** |
+
+NV was the **first state whose polygon sets matched exactly** between TEST and PROD (27/27), and phase 1 landed 21 precisely as predicted.
+
+**⚠️ NEW, QUANTIFIED — state-park ↔ `atlas_oddities` duplication is systematic.** Measured on PROD: **6 of 28 NV records have a same-named `atlas_oddities` twin within 3 km**, several at **0 m** (Berlin-Ichthyosaur, Fort Churchill, Cathedral Gorge at 0m; Ward Charcoal Ovens 10m; Cave Rock 15m; Valley of Fire 1,885m) — **21% of NV**, against isolated single cases in CA and OR. Live search returns both rows. Pre-existing, not caused by these promotions, **not fixed here** — but now measured rather than anecdotal, and it belongs in the dedup backlog alongside CA's Gray Whale Cove / Watts Towers pairs.
+
+**FOUR OF SIX STATES LIVE ON PROD (CA, WA, OR, NV). AZ and UT remain** — both use `ingest_time_name_link` rather than spatial pre-link, so neither the polygon-set comparison nor the `--verify` mode that anchored all four preflights applies in the same form. They need a genuinely fresh read. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `promote-nv-state-parks-prod` · 2026-09-02 (later 12) — NV ingested + entity-resolved on PROD; 1-item queue HALTED for sign-off
+
+(**newest truth: NV is on PROD. Ingest and ER done; the single manual-review item is UNAPPLIED and Typesense is un-synced. The auto-approval rule was deliberately NOT invoked.**
+
+**Preflight was the cleanest of the four spatial states**, and NV is the **first state whose polygon SETS match exactly** — 27 on both databases, 0 only-TEST, 0 only-PROD. Phase 1 landed **21**, exactly as predicted. (WA's sets differed net −1, OR's net +2.) `--verify` 21/21. GIS substrate 105 on both. PROD `field_precedence` 1 row (`description:2`), identical to TEST.
+
+**Licence confirmed distinct and unchanged:** all 28 records carry `credit`/`license` = **`"Nevada State Parks"`**, NOT the `"— government publication"` framing CA/WA/OR use. Adam's explicit risk-acceptance call. No new caveat needed.
+
+**Ingest:** 28 fetched · **28 inserted** · 0 skipped · 0 errors.
+**ER:** 21 spatial_containment + 6 deterministic → **27/28 linked, 1 pending, 0 rejected**.
+**Deltas:** `master_place` 28,499 → **28,505** · `source_record` 38,464 → **38,492** · export 22,099 → **22,105**. CA 283 · WA 141 · OR 192 untouched.
+
+**THE NV `is_searchable`/PADUS BUG CLASS CANNOT OCCUR ON PROD — structurally.** It needed a non-`land_status` source linking onto a PADUS-anchored master_place. PROD has **0 `padus` source_records and 0 `land_status` master_places** (TEST: 37,701 / 35,966). Verified empirically too: 0 of 27 NV-linked mps are non-searchable or `land_status`. Same root fact that made OR's searchability prediction wrong; this now closes the check for every remaining state.
+
+**Photos:** 27/27 in-view carry one — 20 `parks.nv.gov`, 7 `upload.wikimedia.org` (NV priority 9 vs Wikipedia 2). **Enrichment 27/27.**
+
+**⚠️ HALTED on one item — Cave Rock.** The tooling recommends **RELINK**, which by the stated rule is disqualifying on its face. ER proposed `Cave Rock Lake Tahoe-Nevada State Park` (`9d6a04cc`, `recreation_area`, **state_parks GIS + wikipedia**, 309m, sim 0.855); the higher-scoring alternate `Cave Rock` (`59b30566`, sim 1.000, 15m) is an **`oddity` backed by atlas_oddities alone**, describing the rock formation. The NV record is `inferred_category = park` with state-park visitor content. **Recommendation: LINK to the proposed GIS unit**, same principle as CA's Gray Whale Cove and OR's Erratic Rock. Halting because this override runs toward *skipping* review on a categorical judgment the tool disagrees with — the opposite direction from the previous two overrides.
+
+**NEXT:** sign off Cave Rock as LINK → apply → Typesense sync → PR. AZ/UT remain, and both use `ingest_time_name_link` rather than spatial pre-link. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-or-state-parks-prod` · 2026-09-02 (later 11) — **OR's PROD PROMOTION IS COMPLETE.** Three of six states live.
 
 (**newest truth: OR is fully live on PROD — triage applied and Typesense synced. Nothing about the OR promotion remains open.**
