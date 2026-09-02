@@ -1,5 +1,95 @@
 # Backlog — open work
 
+## `recompute_master_place` doesn't re-activate PADUS-anchored mps when non-`land_status` sources are added (2026-09-02)
+
+Surfaced during the NV state parks manual-review triage (PR #349). After
+linking `nevada_state_parks:old-las-vegas-mormon-fort` into the existing
+PADUS-anchored master_place `d331abb7-e554-4d67-9601-26d196b08183`:
+
+- `description` correctly flowed through: 0 → 2736 chars ✓
+- `source_count` correctly incremented: 1 → 2 ✓
+- **`is_searchable` stayed `false`** ✗
+- **`primary_category` stayed `land_status`** ✗
+
+Because both `pois_along_corridor` and `master_place_search_export`
+filter on `is_searchable = true` AND `primary_category <> 'land_status'`,
+this master_place was invisible to the two consumer surfaces even
+though its description and hero photo were attached. The parks.nv.gov
+content for Old Las Vegas Mormon Fort was stranded until the workaround
+was applied (see below).
+
+**Suspected cause:** `recompute_master_place` doesn't re-evaluate
+`is_searchable` / `primary_category` when a source_record of a different
+category is added to a PADUS-anchored mp whose category was already
+`land_status`.
+
+**Scope: still open — the systemic fix has NOT been applied.** Only the
+one row above has been manually corrected. The underlying
+`recompute_master_place` gap still exists and will affect any future
+visitor-content source that lands on a PADUS-anchored historic /
+land-status park. Likely candidates across the six-state corpus:
+similar city / county historic-park entries where PADUS is the only
+prior source, particularly urban parks that state-agency feature
+services (like NV's `state_parks:NV:%`) don't publish. Worth a
+proactive audit before the six-state search cutover — a query for
+master_places with `primary_category = 'land_status'` AND
+`is_searchable = false` AND `source_count >= 2` AND at least one
+non-PADUS source_record would surface any other stranded rows.
+
+**One-shot workaround applied 2026-09-02 for Old LV Mormon Fort only**
+(PR #349 follow-up): `UPDATE master_place SET is_searchable = true,
+primary_category = 'historic' WHERE id =
+'d331abb7-e554-4d67-9601-26d196b08183'`. Verified: the row now surfaces
+via `master_place_search_export` (with `photo_url` and
+`description_source = 'source'`) and via `pois_along_corridor` (a 5 km
+Las Vegas corridor query returns it with `photo_credit = "Nevada State
+Parks"`, `description_source = 'source'`, 2736-char description).
+`source_count` and `canonical_name` untouched. **The systemic fix is
+still outstanding.**
+
+## NV State Parks — `fees` scraper bug in upstream scrape (2026-09-02)
+
+The `/Users/adamwagner/nv-state-parks` scrape pipeline
+(`scripts/sp_extract.py`) writes the site nav-menu string ("Annual
+Permits Concessions Discounts, Special Fees & Refunds Group Use &
+Special Use Photography Permits Learn Back") into every row's `fees`
+column instead of the real per-park fee amounts. Real amounts DO exist
+on parks.nv.gov pages (e.g. beaver-dam has `$5.00 / $10 / $15.00 /
+$20.00 / $2.00 / $10.00` for day-use + camping tiers) — the extractor
+just picks up the menu selector instead of the fees section.
+
+**Ingester behaviour (PR NV):** the raw string is stored at
+`normalized_payload.provenance.fees_raw` on all 28 nevada_state_parks
+source_records as a marker, but is **never surfaced** and no
+`field_precedence` row is written for `fees`. This preserves the
+signal for a follow-up re-scrape without polluting user-facing surfaces.
+
+**Fix path:** patch `sp_extract.py` to target the correct fees region,
+re-scrape, re-ingest. When the fix lands, drop `provenance.fees_raw`,
+add a real `fees` field to `normalized_payload`, and decide whether to
+add a `field_precedence` row (CA/WA precedent = write as a raw string,
+priority not yet standardized).
+
+## NV State Parks — photo-license risk-acceptance (2026-09-02)
+
+`nevada_state_parks` photos are stored with `credit = "Nevada State
+Parks"` and `license = "Nevada State Parks"` — **NOT** the
+"— government publication" framing CA/WA/OR used. Reason: parks.nv.gov
+has no reuse-grant text on the site, and nv.gov's site-wide notice is
+"Copyright © 2026 State of Nevada — All Rights Reserved". US state
+works are **not** §105-exempt from copyright (that exemption is federal
+only), so the default is copyrighted-with-no-reuse-grant.
+
+**This is Adam's explicit risk acceptance, not a resolved license-clear
+determination.** All 28 photos are hotlinked from parks.nv.gov (not
+mirrored). If Nevada State Parks objects or if a formal review requires
+removal, the mitigation is: drop `credit`/`license` from the 28
+`nevada_state_parks` `normalized_payload.photo` blobs (or set
+`photo = null`), which removes them from the two lateral joins that
+render them (`pois_along_corridor`, `master_place_search_export`).
+Consider reaching out to `stparks@parks.nv.gov` / (775) 684-2770 for a
+written reuse grant, then update the license label if approved.
+
 ## Matcher gaps surfaced during `oregon_state_parks` triage (2026-09-02)
 
 Two gaps in `data/entity-resolution/matcher.ts` `CATEGORY_COMPATIBILITY`

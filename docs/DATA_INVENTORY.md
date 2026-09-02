@@ -225,6 +225,81 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **⚠️ Data added 2026-09-02 `[TEST only]` — `nevada_state_parks` source ingested.**
+> New `source_id = 'nevada_state_parks'` — visitor-facing content from
+> parks.nv.gov for all 28 NV state parks (all ingested; zero coordinate
+> skips). Complements the existing `state_parks` GIS source (ArcGIS boundaries).
+> Per-state source_id, following the OR precedent — state-prefixed, no
+> `_web` suffix. Distinct from CA (`state_parks_web`) and WA (`state_parks_web_wa`).
+>
+> | metric | count |
+> |---|---|
+> | `source_record` rows (`source_id = 'nevada_state_parks'`) | **28** |
+> | — with `description` (long-form "about" text, 2–8 KB per park) | **28** |
+> | — with `photo` (parks.nv.gov gallery hero) | **28** |
+> | — with `advisories` (residual after statewide-banner strip) | **1** (Valley of Fire — winter maintenance closure) |
+> | — with `provenance.fees_raw` (marker for future re-scrape; nav-menu garbage, NOT surfaced) | **28** |
+> | `master_place_id` linked | **28 / 28** (all resolved after triage) |
+> | — via spatial containment (point-in-polygon vs NV `state_parks` GIS polygons) | **21** |
+> | — via standard ER (`deterministic` new-master-place) | **4** |
+> | — via Adam-approved manual triage | **3** (all LINK verdicts — Cave Rock into the Lake Tahoe NV `state_parks:NV:park:Cave Rock…` polygon; Old LV Mormon Fort and Spring Mountain Ranch into existing PADUS-anchored master_places. All 3 blocked by `name_dominant_low_conf` 0.60 cap and/or category-compatibility gaps — same shape as OR's 13 LINKs) |
+> | `place_match` pending | **0** |
+> | `place_match` rejected | **0** |
+> | new `master_place` rows created | **4** |
+>
+> **⚠️ Search-activation follow-up (not fixed here):** the Old LV Mormon
+> Fort master_place (`d331abb7…`) remains `is_searchable = false` and
+> `primary_category = land_status` after triage, despite receiving a
+> 2.7 KB description and source_count reaching 2. `recompute_master_place`
+> doesn't appear to re-evaluate these fields when a non-`land_status`
+> source_record is added to a PADUS-anchored mp. Result: parks.nv.gov
+> content for Old LV Mormon Fort won't reach corridor search or Typesense
+> sync until this is addressed. Not blocking this PR; filed in BACKLOG.md.
+>
+> **Fields intentionally NOT ingested:**
+> - `hours`, `contact` — columns present in the source JSON but 0/28
+>   populated. Following OR precedent, no `field_precedence` rows written.
+> - `fees` — 28/28 populated but with the site nav-menu string ("Annual
+>   Permits Concessions Discounts, Special Fees & Refunds Group Use &
+>   Special Use Photography Permits Learn Back"), not real fee amounts —
+>   upstream scraper bug (`sp_extract.py`). Real amounts do exist on the
+>   pages ($5, $10, $15, $20 tiers seen on beaver-dam) but weren't
+>   captured. Raw text parked in `normalized_payload.provenance.fees_raw`
+>   as a marker for the future re-scrape; never surfaced. Tracked in
+>   BACKLOG.md.
+> - `amenities`, `operational_status`, `type`/`designation` — no columns
+>   in the source data.
+>
+> **Migration applied:** `20260902003000_nevada_state_parks_field_precedence` —
+> exactly **1** `field_precedence` row: `('description', 'nevada_state_parks', 2)`.
+> The thinnest set among CA/WA/OR/NV (CA 5, WA 4, OR 3, NV 1). Reflects
+> NV's honest content — description is the only field the scrape delivers
+> at all completely.
+>
+> **Photos wired into rendering.** `nevada_state_parks` added to both the
+> `pois_along_corridor` and `master_place_search_export` photo lateral
+> joins at priority **9** (after `oregon_state_parks` at 8). Migrations:
+> `20260902003100` (RPC), `20260902003200` (search export). Credit and
+> license both render as `"Nevada State Parks"` — **NOT** the "government
+> publication" framing CA/WA/OR use. parks.nv.gov carries no reuse-grant
+> text and nv.gov's site-wide notice is "All Rights Reserved"; this is
+> Adam's explicit risk acceptance, not a resolved license-clear
+> determination. Tracked in BACKLOG.md. Photo-lateral wiring verified on
+> TEST: `master_place_search_export` returns the parks.nv.gov gallery URL
+> for 5/5 sampled linked NV mps; `pois_along_corridor` RPC over a
+> Beaver-Dam-area route returns the park with `photo_credit = "Nevada
+> State Parks"` and the correct URL.
+>
+> **Attribution flow verified.** `master_place.attribution.description =
+> "nevada_state_parks"` on sampled linked mps (Berlin-Ichthyosaur SP:
+> 4033-char description now sourced from `nevada_state_parks`, geometry
+> and canonical_name still from `state_parks`).
+>
+> **Baseline / delta.** Pre-ingest TEST snapshot: `source_record` 185,748,
+> `master_place` 161,427, `place_match` 171,678. Post-ingest+ER: 185,776
+> (+28), 161,431 (+4), 171,706 (+28) — perfectly clean deltas, no
+> unrelated drift.
+
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `oregon_state_parks` source ingested.**
 > New `source_id = 'oregon_state_parks'` — visitor-facing content from
 > stateparks.oregon.gov for all 192 OR state parks (all ingested; zero coordinate

@@ -130,9 +130,13 @@ async function loadSource(name: string): Promise<IngestFn> {
       const mod = await import("./sources/oregon-state-parks.ts");
       return mod.default;
     }
+    case "nevada_state_parks": {
+      const mod = await import("./sources/nevada-state-parks.ts");
+      return mod.default;
+    }
     default:
       throw new Error(
-        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations, editorial_food, state_parks_web, state_parks_web_wa, oregon_state_parks`,
+        `Unknown source: ${name}. Available: osm, ridb, nps, google, parks_canada, bc_parks, alberta_parks, padus, usfs, blm, state_parks, atlas_oddities, family_destinations, editorial_food, state_parks_web, state_parks_web_wa, oregon_state_parks, nevada_state_parks`,
       );
   }
 }

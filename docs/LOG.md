@@ -12,6 +12,165 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later-4) — Old LV Mormon Fort one-shot workaround applied (PR #349 follow-up)
+
+- **Manual `UPDATE` applied to `master_place d331abb7-e554-4d67-9601-26d196b08183`:**
+  `is_searchable: false → true`, `primary_category: land_status → historic`.
+  `source_count` (2) and `canonical_name` untouched; the PATCH
+  representation confirmed only those two fields moved. This unblocks
+  the parks.nv.gov content for Old Las Vegas Mormon Fort from the two
+  consumer surfaces.
+- **Verified surface after the update:**
+  - `master_place_search_export`: row present with
+    `photo_url = https://parks.nv.gov/images/parks/olvmf/OLVMF_gallery_image_009_HERO.jpg`,
+    `description_source = 'source'`.
+  - `pois_along_corridor` over a 5 km Las Vegas corridor
+    (`[[-115.20,36.18],[-115.05,36.18]]`, buffer 5000 m) returns 55 rows,
+    Old LV Mormon Fort among them, with `photo_credit = "Nevada State
+    Parks"`, `nps_photo_url` the OLVMF gallery hero, and the full
+    2736-char description.
+- **Systemic bug still open.** Only this ONE row is manually corrected;
+  the underlying `recompute_master_place` gap that leaves
+  PADUS-anchored mps stranded when non-`land_status` source_records are
+  layered on is still in BACKLOG.md as an open item. Added a proactive
+  audit query pattern to the BACKLOG entry so the six-state search
+  cutover can enumerate any other stranded rows before promotion.
+
+## 2026-09-02 (later-3) — NV State Parks manual-review triage applied (PR #349)
+
+- **All 3 pending manual_review items resolved: all 3 LINKed** — Cave
+  Rock, Old Las Vegas Mormon Fort, Spring Mountain Ranch. Pattern
+  identical to OR's 13 LINKs from PR #346: all real matches blocked
+  purely by matcher-scoring quirks (`name_dominant_low_conf` 0.60
+  combined-confidence cap + category-compatibility gaps —
+  `park↔recreation_area` 0.9, `historic↔land_status` 0.3,
+  `park↔public_land` 0.8, all previously filed in BACKLOG). No PR — folded
+  into PR #349 before merge. resolver `adam:nv-triage-2026-09-02`.
+- **Final `nevada_state_parks` state: 28/28 confirmed, 0 pending, 0
+  rejected.** 4 new master_places (unchanged from before triage — the
+  triage merged into existing PADUS/state_parks mps rather than
+  spawning new ones).
+- **Investigation-report correction (from the 2026-09-02 (later-2)
+  entry).** The NV investigation §7 predicted Old LV Mormon Fort,
+  Spring Mountain Ranch, and Nevada's Newest State Park would each
+  spawn solo master_places (visitor-only, no GIS row). This was
+  scoped-wrong — it checked only `state_parks:NV:%` GIS coverage, not
+  PADUS. PADUS has rows for both **Old LV Mormon Fort**
+  (`padus:7b229f2e…`) and **Spring Mountain Ranch** (`padus:9fb3e57d…`),
+  so triage merged them into existing mps rather than spawning new
+  solos. The 4 actual new mps came from the ER Phase 2
+  `deterministic new_master_place` outcomes (Nevada's Newest State Park
+  + 3 others — likely including Ice Age Fossils and Sand Harbor).
+  Population estimate right on count (4 new mps), wrong on which rows.
+- **Post-apply description flow-through verified on all 3 targets:**
+  - Cave Rock mp: description 70 → **4252** chars (was `generated_template`, now real `nevada_state_parks` content). primary_category unchanged (`recreation_area`). source_count 1 → 2. is_searchable already TRUE.
+  - Old LV Mormon Fort mp: description 0 → **2736** chars. primary_category **unchanged** at `land_status` and **is_searchable stayed FALSE** despite the new content — see follow-up note below.
+  - Spring Mountain Ranch mp: description 0 → **4713** chars. primary_category unchanged (`public_land`). source_count 0 → **1** (not 2 — PADUS records don't count toward source_count for search-activation purposes; adding nevada_state_parks brought it from 0 to 1 alone). is_searchable already TRUE.
+- **⚠️ Search-activation follow-up (not a triage issue, but surfaced
+  by it):** **Old LV Mormon Fort remains `is_searchable = false` even
+  after linking**, despite the 2.7 KB description flowing through and
+  source_count reaching 2. Likely because `recompute_master_place`
+  doesn't re-evaluate `is_searchable` or `primary_category` when a
+  non-`land_status` source_record is added to a PADUS-anchored mp
+  whose primary_category was already `land_status`. Result: this
+  master_place will not appear in `master_place_search_export` or
+  `pois_along_corridor` (both filter on `is_searchable = true` /
+  `primary_category <> 'land_status'`), which means the parks.nv.gov
+  description and hero photo for Old LV Mormon Fort will **not be
+  reachable through the corridor search or Typesense sync until this
+  is addressed**. Filing as a BACKLOG item — not blocking this PR,
+  but worth solving before the six-state search cutover. Same shape
+  may affect other PADUS-backed historic parks across states that get
+  visitor-content sources layered on later.
+
+## 2026-09-02 (later-2) — NV State Parks (`nevada_state_parks`) ingested + entity-resolved on TEST
+
+- **New source `nevada_state_parks`** — visitor-facing content from
+  parks.nv.gov for all 28 NV state parks. Per-state source_id, follows
+  the OR precedent (state-prefixed, no `_web` suffix — diverges from CA
+  `state_parks_web` / WA `state_parks_web_wa`). External id
+  `nevada_state_parks:<slug>` (stable slug from parks.nv.gov URL, matches
+  photo filenames).
+- **Investigation-first, then implementation.** Two prompts before the
+  implementation prompt: (1) NV data investigation (report only, no
+  code), which produced the field-mapping recommendation now shipped;
+  (2) OR verification pass after the investigation's first §0
+  incorrectly claimed OR wasn't shipped — a scoping error (checked
+  local checkout at `1c7796b` before `origin/main` had #346's `324bfcb`;
+  the branch was created ~40 min before #346 merged). Retracted the
+  claim, rebased onto `origin/main`, redid the 4-way field comparison
+  against the actual shipped OR ingester + migrations, and confirmed
+  NV should follow OR's "omit precedence rows for fields the source
+  lacks" pattern (not CA/WA's "always write hours/contact rows"
+  pattern).
+- **28/28 ingested — zero coordinate skips, ~3.3 s.** All 28 have
+  `description` (2–8 KB `about` text from parks.nv.gov), `photo` (hero
+  from the separate `/galleries/<slug>` page), and
+  `provenance.fees_raw` (marker for the future fees re-scrape — see
+  below). Exactly **1** has `advisories` after the statewide-banner
+  strip (Valley of Fire's December maintenance closure); the other 27
+  had only the boilerplate fire-restriction banner and correctly
+  reduced to no residual.
+- **Field precedence is the thinnest of any state so far.** **1** row:
+  `('description', 'nevada_state_parks', 2)`. Compare: CA 5, WA 4, OR
+  3, NV 1. Reflects NV's honest content — no `hours`/`contact`/`amenities`/
+  `operational_status` data exists in the source pages, so no row is
+  written (OR precedent, not CA/WA's).
+- **Fees deferred.** The upstream scraper (`sp_extract.py` in
+  `/Users/adamwagner/nv-state-parks/scripts`) captured the site
+  nav-menu string for `fees` on all 28 rows instead of the real per-park
+  amounts. Real amounts DO exist on the pages (verified on beaver-dam:
+  `$5 / $10 / $15 / $20 / $2` day-use + camping tiers). Raw text
+  parked in `provenance.fees_raw` as a marker only, never surfaced.
+  BACKLOG.md entry filed for the upstream fix + re-scrape.
+- **Photo license is Adam's explicit risk acceptance, not license-clear.**
+  Credit and license both render as `"Nevada State Parks"` — NOT the
+  "— government publication" framing CA/WA/OR used. Rationale (from
+  the investigation): parks.nv.gov has no reuse-grant text and nv.gov's
+  site-wide notice is `"Copyright © 2026 State of Nevada — All Rights
+  Reserved"`; US state works are NOT §105-exempt from copyright
+  (that's federal-only). Adam accepted the risk explicitly. BACKLOG.md
+  entry filed with the mitigation path (drop credit/license from
+  normalized_payload.photo → removes from both lateral joins) and the
+  suggested outreach path (`stparks@parks.nv.gov` / (775) 684-2770).
+- **Entity-resolution ran cleanly, mostly.** Two-phase runner
+  (`nv-state-parks-er.ts`) mirrored the OR pattern:
+  - **Phase 1 spatial**: 21/28 linked via point-in-polygon against
+    existing `state_parks:NV:%` GIS polygons (27 polygons in scope).
+  - **Phase 2 matchAll on the remaining 7**: 4 `new_master_place` (all
+    `deterministic` self-matches, correctly not-in-corpus — Old LV
+    Mormon Fort, Spring Mountain Ranch, Nevada's Newest State Park,
+    and one more), 3 `manual_review` pending.
+  - **Final linkage: 25 confirmed + 3 pending.** The 3 pending —
+    `nevada_state_parks:lake-tahoe-nevada-state-park-2` (Cave Rock),
+    `:old-las-vegas-mormon-fort`, `:spring-mountain-ranch` — need
+    Adam's triage (same treatment as CA's Leland Stanford / OR's
+    HCRHT). One of these (Cave Rock) is expected to be an M:N case
+    where the investigation predicted Lake Tahoe's 3 GIS polygons
+    would over-split against multiple visitor rows.
+- **Delta from baseline is perfectly clean.** Pre-ingest snapshot:
+  `source_record` 185,748 / `master_place` 161,427 / `place_match`
+  171,678. Post-ingest+ER: 185,776 (+28) / 161,431 (+4) / 171,706 (+28).
+  No unrelated drift.
+- **Photos wired directly into rendering.** `nevada_state_parks` added
+  to both `pois_along_corridor` (RPC) and `master_place_search_export`
+  (view) photo laterals at priority **9** (after `oregon_state_parks`
+  at 8). Verified on TEST:
+  - `master_place_search_export.photo_url` returns the parks.nv.gov
+    gallery URL for 5/5 sampled linked NV mps.
+  - `pois_along_corridor` over a Beaver-Dam-area route returns Beaver
+    Dam SP with `photo_credit = "Nevada State Parks"` and the correct
+    hero URL.
+- **Attribution flow-through verified.**
+  `master_place.attribution.description = "nevada_state_parks"` on
+  Berlin-Ichthyosaur SP (4033-char description now sourced from
+  parks.nv.gov's `about`; geometry / canonical_name / geometry_polygon
+  still from `state_parks` GIS).
+- Migrations applied to TEST via `db:push-verify -- --test`:
+  - `20260902003000_nevada_state_parks_field_precedence` — 1 row (verified).
+  - `20260902003100_pois_along_corridor_nevada_state_parks_photo` — RPC replace (v1 verifier doesn't cover DDL; live smoke test confirmed).
+  - `20260902003200_master_place_search_export_nevada_state_parks_photo` — view replace (live smoke test confirmed).
+
 ## 2026-09-02 (later 2) — PR #346 merged, main synced, branch cleanup
 
 - **PR #346 squash-merged to `main` as `324bfcb`** at 2026-09-02 06:05Z.
