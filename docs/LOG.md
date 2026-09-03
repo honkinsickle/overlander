@@ -12,6 +12,65 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 34) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
+
+*(Numbered 34, not 31: this session ran on a branch cut from `9d936af`, before #365 (later 30-32) and #361 (later 33) merged. Numbered to land after them — the number is merge order, not clock order.)*
+
+- **Report: `docs/investigations/2026-09-02-category-source-audit.md`.**
+  Read-only, TEST only, PROD not measured. Two new measurement scripts
+  (`data/scripts/measure-category-source-audit-2026-09-02.ts`,
+  `web/scripts/rollup-category-audit-2026-09-02.ts`) plus a live fetch of
+  Mapbox's canonical category list. **The brief said "no code changes"; two
+  new read-only scripts are a deviation, taken deliberately and flagged in the
+  report** — it is this repo's established pattern for a measurement pass, and
+  bucketing was imported unchanged from `lib/eligibility.ts` rather than
+  re-derived.
+- **The headline was not the one the brief anticipated.** The ask was framed as
+  coverage ("how much does the corpus have"). The dominant finding is that
+  **three category vocabularies compete** — the 9-key taxonomy, the 7-key
+  route allowlist, and Find Nearby's 13 `primary_category` tiles — with **3**
+  primaries tile-claimed-but-slide-unclaimed, **45** the reverse, **40**
+  claimed with zero rows, and **22** corpus values claimed by nothing. **Which
+  source serves a category depends on which surface is asking.** A routing
+  table can't be written until one vocabulary is canonical.
+- **⚠️ I misread the corpus collapse first, and probing corrected it.** The
+  huge total→in-scope drops (`peak` 33,775→15, `spring` 30,990→2,
+  `gas_station` 5,947→1) looked like a searchability filter. A direct probe
+  showed **every one of those rows is still `is_searchable = true`** — the
+  filter is `source_count = 0`, the residue of the 2026-08 deactivation passes.
+  Hollow `master_place` rows the export view drops. Written into
+  `DATA_INVENTORY.md` because "don't read an MP total as available content" is
+  inventory-level guidance, not a one-off.
+- **Splitting "no live source EXISTS" from "a live source exists but isn't
+  WIRED" was the move that made the summary actionable**, and it needed a real
+  measurement — Mapbox's live category list (**482** ids) — not a judgement
+  call. Result: showers and dump stations have **no** Mapbox category at all
+  (wiring cannot help; it is a sourcing decision), while Auto/Repair has
+  `auto_repair`/`repair_shop`/`car_wash` sitting unwired against **0** corpus
+  rows. Same symptom, opposite remedy.
+- **Fuel is inverted between the two halves:** corpus `gas_station` in-scope =
+  **1** but `ev_charging` = **2,886**; live Mapbox serves `gas_station` and not
+  EV (`charging_station` exists, unwired). Also caught a **stale rationale** —
+  BACKLOG §#214 still justifies the lapsed corpus gas population with "covered
+  live by Google Places", but Google's fuel types were emptied 2026-08-25.
+  Conclusion still holds, stated reason no longer does.
+- **Enumerating callers instead of trusting the three known surfaces paid off.**
+  Found `resolveSuggestions`/`resolveOvernights` running **Overpass instead of
+  Google, with no Mapbox at all** on the reference-trip path — so
+  camping/scenic/food/oddity have two different providers depending on surface
+  — and `FuelStopCard`, which calls `?category=fuel` and **has no importer
+  anywhere in the repo**.
+- **Two honest negatives with their scope named:** Foursquare's amenity
+  taxonomy is **unmeasured** (endpoint 404s on the pinned
+  `x-places-api-version: 2025-06-17`, tried three URLs), so "no compliant
+  source exists" is established against **Mapbox's list only**. And a Mapbox
+  canonical id means **the query is expressible**, not that data exists at a
+  location — coverage was not sampled.
+- **The web typecheck earned its place in the gate again.** `web/` does not set
+  `allowImportingTsExtensions` but `data/` does, so the `.ts` import suffix
+  that is idiomatic in `data/scripts` failed `npm run -w web typecheck` — the
+  per-workspace divergence CLAUDE.md already warns about, hit from a new
+  direction. All three gates exit 0 after the fix.
 ## 2026-09-02 (later 33) — READ-ONLY trace of three UI surfaces' place-data paths. Two path guesses confirmed, one corrected.
 
 *(Numbered 33, not 30: this session ran on a branch cut from `9d936af`, before #365 merged and claimed later 30-32. Numbered to land after it, per this repo's parallel-branch interleaving convention — the number is merge order, not clock order.)*
