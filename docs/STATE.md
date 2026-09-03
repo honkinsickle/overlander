@@ -47,6 +47,18 @@
 
 **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
 
+# STATE — branch `investigate-38-related-pairs` · 2026-09-03 (later 22) — verdict on PR #370's 38 already-related pairs: 37 same-entity duplicates, 1 excluded.
+
+(**newest truth: PR #370's §3 design tension resolved by hand-classifying each of the 38 pairs. 37 are true same-entity duplicates whose `contained_in` relationship row is a geometric byproduct of `ST_Covers(parent_polygon, child_point)`. 1 exception — Agua Caliente CP (ABDSP) ↔ NPS Anza-Borrego — is a legitimate duplicate on top of an upstream state_parks-federation bug and should exit the SAME set until that bug is fixed.**
+
+Read-only pass. No writes to TEST or PROD, no code/schema changes. New doc: `docs/investigations/2026-09-03-38-related-pairs-verdict.md`. Confidence key in §7; one concrete question for Adam in §8.
+
+**New bucket state after this verdict:** SAME 135 · DIFFERENT 247 · UNCLEAR 2 (down from 136/246/2 in PR #369). One pair moved out of SAME.
+
+**Two 3-way duplicate clusters surfaced.** `This Is The Place` (UT) has two absorbed variants (NPS + RIDB); `Ginkgo Petrified Forest` (WA) has two (NPS "National Natural Landmark" + atlas_oddities). Consequence for a real merge tool: process pair-by-pair with in-flight state updates, or group into n-way merges upfront.
+
+**PR #368, PR #369, and PR #370 remain open/unmerged.** This branch is cut from `main` and reads PR #370's on-disk `.context/merge-preview-136.json` artifact for the 38-pair filter. Nothing on those PRs is touched.)
+
 ---
 
 # STATE — branch `mapbox-coverage-sampling` · 2026-09-03 (later 21) — **Live-source coverage SAMPLED. Two of #364's "just needs wiring" rows reverse. Decision still deferred.**
