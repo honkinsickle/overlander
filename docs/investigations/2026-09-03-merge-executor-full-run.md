@@ -99,6 +99,17 @@ Filed as follow-up work; not landed on this branch. `[unverified — the
 fix hasn't been designed yet; class hazard is inferred from the
 mechanism, not directly measured on a second unrelated recompute]`
 
+**Update 2026-09-04:** the class-level fix landed as v5
+(`20260904120000_recompute_master_place_skip_soft_retired.sql`). v5 adds
+an `EXISTS(active source_record)` filter to Step 7's containment scan on
+both sides and guards the re-insert on the recomputed mp's own active-SR
+presence. Actual signal turned out to be "has active source_record", not
+`(is_searchable=false AND source_count=0)` — the latter would falsely
+exclude land_status mps (which use is_searchable=false legitimately) and
+generated-only mps (which have source_count=0 by design). With v5 in
+place, v4's post-recompute sweep still runs but is a no-op. See
+`docs/investigations/2026-09-04-recompute-skip-soft-retired.md`.
+
 **Historical cleanup:** the 41 pre-existing orphans were swept via
 `data/scripts/cleanup-post-recompute-orphans.ts --confirm`. Post-delete
 count on TEST: 0 `[literal]`.
