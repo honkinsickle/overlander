@@ -227,6 +227,59 @@ is the next pass.** TEST-only validation; no writes to either database.
 - Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-03 (later 33) — Re-verified the Aug 25 resolver findings. Four of six were false when written, not changed since.
+
+- **Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
+  Read-only; verified against `main` @ `0dae80c` rather than against the Aug 25
+  report or my own #361/#364/#366 in this thread.
+- **The framing in the ask — "about a week of work has landed since, re-verify"
+  — turned out to be the wrong model.** The three flag-gated resolver cutovers
+  merged **2026-08-23**, *two days before* the Aug 25 session: #260
+  (`d62f660`), #266 (`a086cb8`), #269 (`b227e65`). The #255/#256/#259/#260
+  tiering chain merged the same day, all four inside ninety minutes. So findings
+  1, 2 and 6 were **stale on arrival**, not superseded by later work.
+- **Checked that three ways before asserting it**, because it contradicts the
+  premise I was handed: each commit is an ancestor of `origin/main`, each has an
+  Aug 23 committer date, and main carries ~20 further commits dated Aug 24–27 on
+  top of them. Any one alone would have been weak evidence.
+- **The likely cause is a worktree cut from an older main** — routine in this
+  Conductor setup — but I cannot verify which checkout that session used, so it
+  is recorded as a hypothesis about *why*, explicitly UNVERIFIED. The timeline
+  itself is established.
+- **Consequence worth stating plainly: the Paper diagram from that session
+  depicts a superseded architecture** and should not be used as a current
+  reference. Its centre-piece ("additive only — imported by nothing") was false
+  at render time.
+- **Finding #4 needed re-reading rather than re-confirming, and that was the
+  most interesting item.** The four enrichment columns *are* still unselected —
+  technically UNCHANGED. But measured on TEST: `rating`, `review_count` and
+  `price_tier` are **0 non-null across 161,431 rows**, and the backfill script
+  *asserts* they must stay NULL ("no source carries one"). **Wiring those three
+  would return nothing.** Only `master_place.photo_url` has substance (10,311
+  rows unread). Restating "unchanged" without measuring would have preserved a
+  misleading implication.
+- **A near-miss I caught: the export view's `photo_url` is NOT the migration's
+  column.** `hydrate.ts:87` does select `photo_url` — but from the view, where
+  it is a `LEFT JOIN LATERAL` over `source_record.normalized_payload`. Same
+  name, different value. A check that stopped at "photo_url is selected" would
+  have marked finding #4 resolved and been wrong.
+- **✅ Answered an open BACKLOG blocker while verifying #5.** The
+  `preComputeFacts` → `resolvePlaces()` item's blocker 2 (suppression parity)
+  is resolved, negatively: `isSuppressedCategory` has exactly **two** call sites
+  in `web/src`, `fetchFederatedPois` applies only `isClosedPlace`, and the RPC's
+  `WHERE` doesn't filter them either. **But I checked the call pattern before
+  calling it a live bug** — `p_categories` is always a slide bucket's list and
+  no bucket claims a suppressed value, so nothing leaks today. **Safety from an
+  allowlist, not a filter** — which is the fragile part worth recording.
+- **"Branch still exists" is not "PR still open."** `fix/hydrate-description-
+  source` exists locally and on origin, which is probably what made #259 look
+  unmerged on Aug 25. It merged 2026-08-23T21:14Z.
+- **Durable, mechanical lesson: a finding about whether code is wired is only
+  valid against a stated commit.** Neither the Aug 25 report nor its diagram
+  pins one. Every claim in this report is anchored to `0dae80c`, cutover
+  commits cited by SHA.
+- Gates not run — docs-only diff, zero source files touched.
+
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 
 - **Closes the tooling gap the UT incident exposed.** AZ's

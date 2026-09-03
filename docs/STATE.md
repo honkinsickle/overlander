@@ -1,3 +1,36 @@
+# STATE — branch `reverify-aug25-findings` · 2026-09-03 (later 20) — **Re-verified the Aug 25 resolver findings. FOUR OF SIX WERE ALREADY FALSE WHEN WRITTEN.**
+
+(**newest truth: nothing written to TEST or PROD, no code changed. One report + doc updates. Verified against `main` @ `0dae80c`, not against my own earlier PRs in this thread.**
+
+*Branch note: cut from `main` at `0dae80c` while #361/#362/#363/#364/#366 are all open. Their mastheads live on their own branches and interleave on merge, per this file's convention.*
+
+**Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
+
+**⚠️ THE HEADLINE IS NOT "a week of work changed things." The Aug 25 session's central finding was stale at the moment it was written.** All three flag-gated resolver cutovers merged **2026-08-23 — two days earlier**: **#260** (`d62f660`, Search + `SEARCH_AREA_USE_RESOLVER`), **#266** (`a086cb8`, Date Detail), **#269** (`b227e65`, day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day, all four **inside ninety minutes**. Verified three ways: each commit is an ancestor of `origin/main`, each has an Aug 23 committer date, and main carries ~20 further commits dated Aug 24–27 on top.
+
+**So the Paper diagram from that session depicts a superseded architecture and must not be used as a current reference.** Its centre-piece — *"additive only — imported by nothing"* — was false at render time.
+
+| Aug 25 finding | Verdict |
+|---|---|
+| `resolvePlaces()` imported by nothing | **CHANGED** — 3 importers in `src/app`; **still 0 in `src/components`** |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** |
+| no polyline support | **UNCHANGED — genuinely open** |
+| tiering route swap unmerged | **CHANGED** — merged Aug 23 |
+
+**ONLY TWO of the six are genuinely still open:** the shared client cache (no `swr`/`react-query`/`@tanstack` dep, no cache keyed by canonical id; the three caches that exist are per-route, server-side, in-process — the opposite of the ADR) and the polyline gap.
+
+**⚠️ FINDING #4 NEEDS RE-READING, not just re-confirming.** The four columns are unselected — but **measured on TEST today: `rating` 0, `review_count` 0, `price_tier` 0 non-null across 161,431 rows**, and the backfill script *asserts* they must stay NULL. **Wiring those three up would return nothing.** Only `master_place.photo_url` has substance — **10,311** populated rows unread. And the export view's `photo_url` is a **different value** (a lateral over `source_record`), so `hydrate.ts:87` selecting `photo_url` does NOT mean the migration's column is read — a check stopping there concludes wrongly.
+
+**✅ RESOLVED AN OPEN BACKLOG BLOCKER.** The `preComputeFacts` → `resolvePlaces()` item's blocker 2 ("suppression-filter parity unverified") is now answered, and the answer is the feared one: **`isSuppressedCategory` has exactly two call sites in `web/src`** (`hydrate.ts:140`, `bake-corridors.ts:134`); `fetchFederatedPois` applies only `isClosedPlace`; and the RPC's `WHERE` does not filter the suppressed categories either. **Not a live bug today only because `p_categories` is always a slide bucket's list and no bucket claims a suppressed value — safety from an allowlist, not a filter.** Blocker 1 (polyline scope) remains open.
+
+**Durable process lesson, mechanical not judgemental: a finding about whether code is wired is only valid against a stated commit.** Neither the Aug 25 report nor its diagram pins one. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA.
+
+**Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ut-state-parks-prod` · 2026-09-02 (later 16) — **UT PROMOTED. ALL SIX STATES ARE LIVE ON PROD.**
 
 (**newest truth: the six-state visitor-content promotion project is complete. CA, WA, OR, NV, AZ and UT are all live on PROD — 723 source_records total.**
