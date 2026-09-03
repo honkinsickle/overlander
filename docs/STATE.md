@@ -50,9 +50,20 @@
 
 **Main moved again mid-PR — `75207ba` → `7aea8eb`, six more merges — and the verification transfers, measured not assumed:** `git diff --stat 75207ba..7aea8eb -- web/src` is **empty**; all six are `data/`-side or docs. The diagram's header stamp was deliberately **left at `75207ba`** — the ref the claims were actually executed against — rather than bumped to one this pass never ran against.
 
-**⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` carries three LITERAL CONFLICT MARKERS committed into it** — `<<<<<<< HEAD` / `=======` / `>>>>>>> 03d0b6e` at lines 572/595/596, introduced by **`abc03f8` (#370)**. `STATE.md` and `BACKLOG.md` are clean. Content on both sides is intact and preserved; only the three marker lines are dropped. This PR already edits `LOG.md`, so re-committing them was not a real option. **The content-preservation check is what found them** — and minutes earlier it caught a first merge resolution that had silently dropped main's entire `(later 7)` entry, before anything was committed.
-
+**⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` carries three LITERAL CONFLICT MARKERS committed into it** — `<<<<<<< HEAD` / `` / `
 **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `present-8-ambiguous-groups` · 2026-09-03 (later 26) — the 8 ambiguous merge groups surfaced for manual decision. Reporting only.
+
+(**newest truth: fresh classifier re-run against post-#375 PROD reproduces SAME 135 · DIFFERENT 246 · UNCLEAR 2 → 123 merge groups → 8 undecidable. Doc: `docs/investigations/2026-09-03-ambiguous-merge-groups.md` walks each of the 8 with per-record fields, trade-offs, and a labeled "suggested tiebreaker" per group. Zero writes to either database; no changes to the merge preview tool.**
+
+7 pairs + 1 three-way (Hat Rock, OR, which contains an intra-NPS duplicate). All 8 groups tie at score 1 because no member has `state_parks` GIS backing. 1 pair (Salton Sea, CA) is suggested to move to DIFFERENT rather than merged — SRA on a lake vs the lake itself, same shape as Torrey Pines SB/SNR. Every suggestion labeled as such; not applied.
+
+**Directly-verified counts:** 8 groups, 7 pairs, 1 three-way, 4 "visitor wins" suggestions, 3 "NPS wins" suggestions, 1 "move to DIFFERENT" suggestion.
+
+**PRs on main (from earlier today):** #368 · #369 · #370 · #372 · #374 · #375 · #376 · #378. No new PROD writes this session.)
 
 ---
 

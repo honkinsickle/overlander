@@ -113,9 +113,8 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   this pass never ran against. The ref-stamped `BACKLOG.md` line hint survives
   the move for the same reason it was written that way.
 - **⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` has three LITERAL CONFLICT
-  MARKERS committed into it** — `<<<<<<< HEAD` / `=======` /
-  `>>>>>>> 03d0b6e` at lines 572/595/596, from **`abc03f8` (#370)**. `STATE.md`
-  and `BACKLOG.md` are clean. Content on both sides is intact and preserved;
+  MARKERS committed into it** — `` / `` /
+  `  and `BACKLOG.md` are clean. Content on both sides is intact and preserved;
   only the three marker lines are dropped. This PR already edits `LOG.md`, so
   re-committing them was not a real option.
 - **The content-preservation check is what earned this session.** It caught the
@@ -124,6 +123,17 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   committed. A merge that reads fine is not evidence; diffing the result against
   **both** parents is. Same lesson as the earlier stale-`origin/main` catch:
   the sanity check is doing real work, not ceremony.
+
+## 2026-09-03 (later 8) — The 8 ambiguous merge groups surfaced for Adam's decision. Reporting only; no writes.
+
+Follow-up on PR #374/#375 series. Fresh classifier re-run against post-#375 PROD reproduced **135 SAME pairs → 123 merge groups → 8 undecidable**, matching the numbers PR #374 documented. New doc: `docs/investigations/2026-09-03-ambiguous-merge-groups.md`.
+
+- **Every ambiguous group has a member with `source_count = 1` and no `state_parks` GIS backing** — that's precisely why the tool's score-based rule ties. Every member scores 1 (source count only). Documented per-group in §0.
+- **6 of 8 pit an OR/AZ/CA visitor row against a single external catalog record (NPS or atlas_oddities).** Visitor rows consistently carry longer descriptions; catalog rows consistently have photos and (for NPS) higher `prominence_score`. Different dimensions win — no free lunch.
+- **1 case (Salton Sea, group 6) may not belong in SAME at all.** The visitor row is about the recreation area on the sea; the atlas row is about the sea itself. Suggested action: move to DIFFERENT rather than pick a merge winner. Same shape as `Torrey Pines State Beach` ↔ `Torrey Pines SNR` from prior sort.
+- **1 case is a 3-way with an intra-source duplicate.** Hat Rock (group 83) has TWO NPS entries (`Hat Rock State Park` and bare `Hat Rock`) that are almost certainly a corpus duplicate on the NPS side. Any resolution needs to either handle 3-way merges or dedupe the NPS pair first.
+- **Doc labels every "suggested tiebreaker" as such** — not automatic resolutions. §11 confidence key spells out what's directly-verified (field values, group counts, tool rule) vs strong inference (the tiebreaker suggestions themselves) vs unverified (whether a real merge with the suggested winner would produce the desired output; `field_precedence` behavior).
+- **Not verified this session.** Whether `field_precedence` yields the right resolution for each disputed field; whether other SAME-bucket pairs with confident automatic canonicals were themselves close calls; whether OR/UT/WA sources have other analogous same-locality-different-scope pairs that also belong in DIFFERENT.
 
 ## 2026-09-03 (later 7) — Merge queue drained: PRs #368 → #369 → #370 → #372 → #374 → #375 all landed on `main` in dependency order.
 
