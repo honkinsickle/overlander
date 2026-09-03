@@ -15,6 +15,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -163,6 +164,17 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   ADR (bug fix, and the product calls are deferred). `DATA_INVENTORY.md`
   untouched — no data changed.
 - Gates: data typecheck, web typecheck and `next build` all exit 0.
+
+## 2026-09-03 (later 4) — Verdict on the 38 already-related pairs from PR #370: 37 are true same-entity duplicates, 1 excluded.
+
+Follow-up on PR #370's §3 design tension. Read-only. Every one of the 38 `place_relationships` rows involving a SAME-bucket pair was queried; all 38 are `contained_in`; 37 have canonical (state_parks GIS row w/ polygon) as PARENT and absorbed (atlas_oddities / NPS / RIDB Point-only row) as CHILD; 1 has direction reversed because the canonical row has no polygon and the absorbed row does. New doc: `docs/investigations/2026-09-03-38-related-pairs-verdict.md`.
+
+- **Verdict: 37 of 38 are same-entity duplicates.** The `contained_in` row is a mechanical byproduct of `ST_Covers(parent_polygon, child_point)` — geometrically true, conceptually redundant. A merge would need to drop the edge (post-merge parent==child would violate the schema's `no_self_ref_chk`). Classifier's SAME assignment stands.
+- **1 exception — `Agua Caliente County Park (ABDSP)` ↔ NPS `Anza-Borrego Desert State Park`.** Pair-formation is coherent (visitor source_record is literally named `Anza-Borrego Desert State Park ®`, 285 m from NPS's ABDSP, similarity 1.000) but the canonical master_place has federated TWO source_records for DIFFERENT parks (Agua Caliente CP + ABDSP) under one row. Merging as-is would compound the upstream federation bug. Recommend: split the canonical row first (upstream state_parks-federation fix), then re-classify. Removes 1 pair from SAME, adds 1 to DIFFERENT — new bucket state: **SAME 135 · DIFFERENT 247 · UNCLEAR 2**.
+- **Two 3-way duplicate clusters worth naming.** `This Is The Place` (UT) appears as canonical in 2 pairs (NPS + RIDB variants of the heritage park). `Ginkgo Petrified Forest` (WA) appears as canonical in 2 pairs (NPS "National Natural Landmark" + atlas_oddities variants). A real merge tool must either process pair-by-pair with in-flight state updates or group these into n-way merges upfront.
+- **Direction pattern was uniform.** 37 canonical=parent + 1 canonical=child (Fort Churchill State Park's canonical has no polygon; the absorbed does). All 38 canonicals are `state_parks`-backed.
+- **Not verified this session.** Whether the parent polygons still cover the child points *today* (relationships `computed_at 2026-09-02`); whether other pairs among the 37 hide canonical-federation issues similar to Agua Caliente (I spot-checked source_record names but did not query for complete rosters); whether merging is the right product decision (a UX question).
+- **One concrete question passed up in §8** — should the Agua Caliente canonical row be split as a prerequisite? Not filed as backlog per the brief.
 
 ## 2026-09-03 (later 3) — Sampled live-source coverage. Two "just needs wiring" rows from #364 reverse under measurement.
 
