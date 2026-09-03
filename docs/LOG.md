@@ -17,6 +17,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -107,6 +108,18 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   `fetch`; a self-stubbing test would overwrite the thrower, and raw
   `node:http` was not covered.
 
+
+## 2026-09-03 (later 5) — Root-cause fix for the CA state_parks UNITNBR-dissolve bug. Code + tests + TEST re-ingest + surgical PROD write (first of the thread).
+
+Follow-up on PR #374's §5 scoped plan. Code fix landed in `data/ingestion/sources/state-parks.ts`; TEST re-ingested; PROD surgical fix executed for UNITNBR=622 (the one observably-broken record). **First PROD writes of this whole PR chain.** New doc: `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`.
+
+- **Root cause confirmed via CA DPR ArcGIS query.** CA's ParkBoundaries source has 461 features under 56 UNITNBRs with ≥2 features; **14 of those (post-whitespace-normalize) have features with divergent UNITNAMEs.** At least 3 are genuinely different parks under one UNITNBR (622 Agua Caliente/Anza-Borrego; 534 Huntington City Beach/Bolsa Chica SB; 449 Point Lobos SMR/SNR). The other 11 are main-park + satellite-property patterns. All 14 were being merged into single oversized polygons by the pre-fix `dissolveBoundaries`.
+- **Code fix.** Added `EndpointConfig.disambiguateBy`, set to `"UNITNAME"` on CA config only. `dissolveBoundaries` now groups by (UNITNBR, UNITNAME_trimmed) when configured; alphabetically-first UNITNAME keeps `{UNITNBR}` external_id, others get `{UNITNBR}-{slug}`. 5 new tests including the Agua Caliente split, Fort Ross unchanged-behavior baseline, and Mount Diablo 3-way split.
+- **TEST re-ingest verified.** Full CA state_parks ingest on TEST: 992 fetched, 933 inserted, 0 errors. All 14 divergent UNITNBRs split into per-UNITNAME records. UNITNBR=622 point-in-polygon: Agua Caliente polygon (2 parts) does NOT contain ABDSP visitor Point ✓; Anza-Borrego polygon (248 parts) does ✓.
+- **PROD surgical fix executed for UNITNBR=622 only.** 9-step script (`.context/apply-622-fix.py --confirm`): UPDATE existing `:622` record → Agua Caliente polygon only (250→2 parts), INSERT `:622-Anza-Borrego_Desert_SP`, repoint visitor SR to NPS Anza-Borrego mp, update place_match rows to `manual_correction`, recompute both mps. Post-fix: Agua Caliente CP mp `source_count` 2→1; NPS Anza-Borrego mp 1→3 (NPS + CA visitor + new state_parks).
+- **Post-fix classifier: 426 pairs (was 427).** The AC pair no longer forms because the two mps are correctly separated. Bucket state: **SAME 135 · DIFFERENT 246 · UNCLEAR 2** (unchanged for SAME; DIFFERENT drops 1 from PR #372's post-verdict 247 because the pair is gone entirely, not just moved).
+- **Not verified this session.** Whether the other 13 divergent UNITNBRs on PROD are causing observable downstream damage beyond the merge-preview scope; whether OR/UT/WA sources have analogous bugs (their `groupBy` is a name-based field, so structurally less likely — not scanned).
+- **BACKLOG note.** The UNITNBR-dissolve backlog item PR #374 added is now moot on the observably-broken case. That item lives on PR #374's branch (not on main yet), so nothing to remove here — noted in the new doc's §9.
 
 ## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
 
