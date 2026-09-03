@@ -1,5 +1,83 @@
 # Backlog — open work
 
+## Category × source gaps — MEASURED 2026-09-02, decision deferred
+
+Full data: `docs/investigations/2026-09-02-category-source-audit.md`. Corpus
+figures are **TEST only**; PROD was not measured. The routing-table decision was
+explicitly held out of that pass — this is the parked input to it.
+
+**Tier 1 — no corpus AND no compliant live source exists. Wiring cannot fix
+these.**
+- **Showers** (`shower`: 4 in-scope) and **Dump stations** (`dump_station`: 6
+  in-scope). Neither has a match in Mapbox Search Box's **482** canonical
+  category ids (probed `shower`, `dump`, `sanit`, `sewage`, `disposal`, `rv`).
+  Both are additionally dropped at `hydrate.ts:140` (suppressed), so they are
+  empty twice over — and both carry a NEW badge. Fix is a **sourcing** decision
+  (new provider, or an OSM-derived ingest), not a routing one.
+- **`urban`** — **0** corpus rows (`shopping_mall`, `city_park` both empty) and
+  no live source. A fully dead bucket that still occupies a chip on two
+  surfaces.
+
+**Tier 2 — no corpus, but a compliant live source EXISTS and is merely unwired.
+Cheap wiring decisions.**
+- **Auto / Repair** — **0** corpus rows, no live wiring, but Mapbox publishes
+  `auto_repair`, `repair_shop`, `car_wash`. Cheapest gap in the audit.
+- **Trailheads** (4,759 in-scope, corpus-only; Mapbox has `trailhead`) and
+  **Groceries** (546 in-scope, corpus-only; Mapbox has `grocery`,
+  `supermarket`). Not broken — just single-sourced.
+- **`ev_charging`** — 2,886 in-scope corpus rows, but **not** in
+  `LIVE_SLIDE_FOR_PRIMARY`, so it never reaches the live half. Mapbox publishes
+  `charging_station`, unwired. See the fuel inversion below.
+
+**Tier 3 — thin corpus, live wired. Live-dependent by design; the exposure is an
+outage, not a gap.**
+- **`overnight`/Hotels: 4 in-scope rows.** **Coffee: 2.** **`attraction`: 106**,
+  with all three of its Google types at zero corpus rows.
+
+**Cross-cutting — arguably ahead of all of the above:**
+- **Three competing category vocabularies.** DESIGN.md's 9 ↔
+  `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` do match. But the day-browse
+  route accepts only **7** of the 9, and the 13 Find Nearby tiles are a third
+  vocabulary keyed on `primary_category` — **3** primaries are tile-claimed and
+  slide-unclaimed (`water`, `shower`, `dump_station`), **45** are slide-claimed
+  and tile-unclaimed, **40** are claimed by one or both with **zero** corpus
+  rows, and **22** corpus values are claimed by nothing (incl. `picnic_area`
+  1,223 in-scope, `public_land` 448). **A routing table has to pick one
+  vocabulary as canonical before it can be written.**
+- **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
+  sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
+  Surface 3 expands the same chip through `SLIDE_TO_PRIMARY_CATEGORY` and has no
+  allowlist. The `interest` chip is a working filter over **2,537** in-scope
+  rows on one surface and an error on the other.
+- **Fuel is inverted between corpus and live.** Corpus `gas_station` in-scope =
+  **1**; `ev_charging` = **2,886**. Live Mapbox serves `gas_station` only. The
+  corpus has EV and no gas; the live source has gas and no EV.
+- **⚠️ Stale rationale to correct when this is decided:** §"OSM fuel family
+  retired (#214)" below still justifies letting corpus `gas_station` lapse
+  because "gas_station is covered **live** by Google Places." Google's
+  `TYPES_BY_CATEGORY.fuel` was emptied 2026-08-25 and fuel moved to Mapbox. The
+  conclusion holds; the stated reason names a source that no longer serves fuel.
+
+**Two uncounted sourcing paths found while enumerating (Finding 4):**
+- **`resolveSuggestions` / `resolveOvernights`** (`web/src/lib/trips/`, used by
+  `alaska.ts`) run a **different source list**: `[overpassSource, recGovSource,
+  usfsSource, blmSource, foursquareSource]` — **OSM/Overpass instead of Google,
+  no Mapbox at all**. `overpassSource` is wired here and nowhere else. So
+  `camping`/`scenic`/`food`/`oddity` are Google-led on the browse surfaces and
+  Overpass-led on the reference-trip path. **Fuel is absent entirely** from
+  `resolveSuggestions`'s 4 categories.
+- **`FuelStopCard`** (`web/src/components/trip/fuel-stop-card.tsx`) calls
+  `/api/trip-browse/…?category=fuel` and **has no importer anywhere in the
+  repo** (scope: repo-root grep over `*.ts`/`*.tsx`, excluding `node_modules`).
+  Dead code; decide whether to delete it when the routing work lands.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy. Its categories
+endpoint 404s on the pinned `x-places-api-version: 2025-06-17` at both
+`places-api.foursquare.com/places/{categories,taxonomy}` and legacy
+`api.foursquare.com/v3/places/categories`. So "no compliant live source exists"
+for showers/dump stations/water fill is established **against Mapbox's list
+only**, not against every provider.
+
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 
 Same physical park unit represented by two separate master_places, ~87 m apart:

@@ -1,3 +1,36 @@
+# STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
+
+(**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
+
+*Branch note: cut from `main` at `9d936af` while `surface-population` (PR #361, the three-surface trace this builds on) is still open. Both mastheads interleave on merge, per this file's convention. **The (later 17) masthead lives on that branch.***
+
+**Report: `docs/investigations/2026-09-02-category-source-audit.md`.** Corpus figures are **TEST (`znldzjdatkogdktymtvi`) ONLY — PROD was not measured** and nothing here describes it.
+
+**THE HEADLINE IS A VOCABULARY PROBLEM, not a coverage problem.** There are **three** competing category vocabularies. DESIGN.md's 9 ↔ `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` **do** match (9/9, isomorphic but for the documented `hotel`↔`overnight` rename). But the day-browse route accepts only **7** of the 9, and Find Nearby's **13** tiles are a third vocabulary keyed on `primary_category`: **3** primaries are tile-claimed and slide-unclaimed (`water`, `shower`, `dump_station` — exactly the suppressed three), **45** are slide-claimed and tile-unclaimed, **40** are claimed with **zero** corpus rows, and **22** corpus values are claimed by nothing. **"Which source serves category X" has no single answer today — it depends on the surface.** A routing table must pick a canonical vocabulary before it can be written.
+
+**⚠️ THE CORPUS COLLAPSE IS `source_count = 0`, NOT `is_searchable` — I read it wrong first and probed it.** `peak` 33,775 rows → **15**; `spring` 30,990 → **2**; `gas_station` 5,947 → **1**; `viewpoint` 6,442 → **339**. **Every one is still `is_searchable = true`.** The 2026-08 deactivation passes emptied their `source_record`s, leaving hollow `master_place` rows the export view drops. **Never read a `master_place` total as available content.** Recorded in `DATA_INVENTORY.md`.
+
+**Run totals (TEST):** `master_place` **161,431** · in-scope **33,216** · active `source_record` **94,410** (**51,062** linked in-scope) · **70** distinct `primary_category` · **STRONG 32,922 / WEAK 46 / NONE 248**.
+
+**WORST CASES, in the order a decision should take them:**
+1. **Showers (4 in-scope) and Dump stations (6)** — no corpus, **and no compliant live source exists at all**: no match in Mapbox's **482** canonical ids. Both also dropped at `hydrate.ts:140`, and both carry a NEW badge. **Wiring cannot fix these; it is a sourcing decision.**
+2. **`urban` — 0 corpus rows, no live source, both claimed primaries empty.** A dead bucket still holding a chip on two surfaces.
+3. **Auto/Repair — 0 corpus rows, but Mapbox HAS `auto_repair`/`repair_shop`/`car_wash`.** Available, unwired. Cheapest gap in the audit.
+
+**Separating "no source exists" from "a source exists but isn't wired" was the key move** — it splits the worst cases into two groups needing different remedies, and only Mapbox's live category list could settle it.
+
+**Fuel is inverted:** corpus `gas_station` in-scope = **1**, `ev_charging` = **2,886**; live Mapbox serves `gas_station` only (`charging_station` exists, unwired). Corpus has EV and no gas; live has gas and no EV.
+
+**Two uncounted sourcing paths found:** `resolveSuggestions`/`resolveOvernights` (reference-trip load) run **Overpass instead of Google and no Mapbox**, so camping/scenic/food/oddity are Google-led on browse and Overpass-led there; and **`FuelStopCard` has no importer anywhere in the repo** — dead code.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy (endpoint 404s on the pinned API version), and Mapbox *coverage* — a canonical id means the query is expressible, not that data exists at a location.
+
+**Gates: all three exit 0** — `npm run -w data typecheck`, `npm run -w web typecheck`, `cd web && npx next build`. The web typecheck caught a real error first: `web/` does not set `allowImportingTsExtensions` while `data/` does, so a `.ts` import suffix that is fine in one workspace fails the other. Fixed.
+
+**NEXT: Adam's review, then the routing-table decision — explicitly out of scope here.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `promote-ut-state-parks-prod` · 2026-09-02 (later 16) — **UT PROMOTED. ALL SIX STATES ARE LIVE ON PROD.**
 
 (**newest truth: the six-state visitor-content promotion project is complete. CA, WA, OR, NV, AZ and UT are all live on PROD — 723 source_records total.**
