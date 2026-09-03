@@ -3,34 +3,29 @@
 
 
 
-## CA state_parks — `dissolveBoundaries` conflates features that share a `UNITNBR` value (2026-09-03, PROD)
+## CA state_parks — 13 remaining divergent-UNITNBR records on PROD (2026-09-03, PROD)
 
-**Concrete instance (measured this session):** `state_parks:CA:park:622`,
-named `Agua Caliente County Park (ABDSP)`, carries a 250-part MultiPolygon
-whose bounding box (63 km × 102 km) spans all of Anza-Borrego. Cause:
-CA DPR's ParkBoundaries source has **two distinct features** sharing
-`UNITNBR = "622"` (`normalized_payload.provenance.dissolved_from` lists
-both GlobalIDs); the ingest's `dissolveBoundaries` in
-`data/ingestion/sources/state-parks.ts:208` groups by `UNITNBR` and keeps
-whichever `props` came first, merging both polygons under Agua Caliente CP's
-name.
+**Status: partially resolved.** #375 landed the code fix
+(`dissolveBoundaries` now respects `disambiguateBy: "UNITNAME"`) and
+surgically fixed the observably-broken record on PROD (UNITNBR=622,
+Agua Caliente / Anza-Borrego). Full scan of the CA DPR ParkBoundaries
+source in #375 found **14 divergent-UNITNAME UNITNBRs total** on the
+source side; the surgical PROD fix only touched **1** (622). The other
+**13** still carry aggregated polygons on PROD (they were not producing
+observable downstream damage in the merge-preview or duplicate-sort work
+at the time; details in `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`
+§1.2 + §5.1).
 
-**Downstream damage:** any visitor SR whose Point sits inside the oversized
-polygon hits `spatial_containment` and links onto the corrupted mp. Verified
-on the CA state_parks ingest this session — the `california_state_parks:638`
-SR named `Anza-Borrego Desert State Park ®` linked onto the `Agua Caliente County
-Park (ABDSP)` master_place because its Point falls inside that polygon.
+**Concrete follow-up:** run the fixed CA state_parks ingest against PROD
+(`npm run -w data ingest:manual -- --source state_parks --state CA` with
+PROD `.env`). This will split each of the 13 remaining aggregated records
+into per-UNITNAME records (alphabetical winner keeps `{UNITNBR}` external_id;
+others get `{UNITNBR}-{slug}` external_ids). Verified equivalent behavior on
+TEST during #375.
 
-**Not resolved this session.** The symptom-level fix (repoint the misplaced
-visitor SR to the existing NPS Anza-Borrego mp) is documented in
-`docs/investigations/2026-09-03-merge-preview-v2-nway.md` §5.3 and left for
-Adam's decision. This backlog item is for the upstream fix: either detect
-divergent features under a shared `UNITNBR` in the dissolve step, or
-require CA DPR data to have unique UNITNBR-per-unit before dissolving.
-
-**Follow-up scan not yet done:** search CA state_parks source_records for
-any other records whose `normalized_payload.provenance.dissolved_from`
-lists more than one GlobalID. Each is a candidate for the same bug.
+**Also not verified:** whether OR / UT / WA sources have analogous bugs
+(their `groupBy` is a name-based field, so structurally less likely — not
+scanned in #375).
 
 ## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
 

@@ -18,6 +18,17 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 
 
+## 2026-09-03 (later 7) — Merge queue drained: PRs #368 → #369 → #370 → #372 → #374 → #375 all landed on `main` in dependency order.
+
+Six PRs merged in one session with all conflicts resolved mechanically (newest-at-top preservation on STATE.md/LOG.md/BACKLOG.md; add/add conflict on `data/scripts/merge-preview-same-pairs.ts` resolved by taking v2 from #374 as it explicitly supersedes v1 from #370).
+
+- **Order used:** #368 (parent NP + cross-source investigation) → #369 (verification pass on #368) → #370 (dry-run merge preview v1) → #372 (38-pair verdict) → #374 (merge preview v2 + n-way + AC exclusion; supersedes v1's tool file) → #375 (UNITNBR root-cause fix + PROD write). Order derived from content dependencies (each PR's doc references artifacts from earlier PRs).
+- **All CI required checks passed on each rebased PR:** `typecheck`, `test`, `test-web`, `build`. No CI failures required backing out. `test-web` (added by #376 earlier the same day) fired on all six after rebase.
+- **Final `main` tip:** `7aea8eb` (#375). `git log --oneline -20` shows the 6 merges on top of `#376`.
+- **BACKLOG cleanup:** #374 added a `dissolveBoundaries UNITNBR` follow-up item; #375 landed the code fix + surgical PROD fix for the observably-broken record (UNITNBR=622). Reframed the item to reflect what's actually left: 13 remaining structurally-affected PROD records, cleared on next full CA state_parks re-ingest. Full-remove not done because the PROD remainder is a real (though non-buggy) follow-up.
+- **Confidence: directly verified.** Every merge status confirmed via `gh pr view --json state,mergedAt`; conflict resolutions preserved content from both sides (verified via `grep -c` on distinctive strings after each resolve); typecheck passes on both workspaces on the final `main` tip.
+- **Not verified this session:** whether the merged `main` behaves correctly at runtime for anything beyond typecheck (the merges were doc-heavy plus one code fix that had TEST re-ingest verification before merge in its own PR).
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
