@@ -2643,6 +2643,52 @@ Shipped feature in `STATE.md` §2026-08-03; mechanics in
   `overnight` naming what is now half B's endpoint (authored content stays with A;
   the endpoint moved to M). Kept literal and flagged in #182; still open.
 
+## Card photos & disambiguation — Fort Vancouver investigation (2026-08-04)
+
+Both are RECORDS, not fixes. Surfaced diagnosing why "Fort Vancouver National
+Historic Site" renders with no photo on a PROD trip.
+
+- **NPS-sourced corpus tiles structurally can't show a photo under the
+  hydrate-by-place-id model.** An `nps`-only `master_place` has no `google`
+  `source_record`, so `pois_along_corridor`'s `LEFT JOIN … source_id='google'`
+  returns `google_place_id = null` → the tile carries no `placeId` → it is never
+  included in a `/api/places/details` hydration request and can never graft a
+  Google photo; NPS ingestion also bakes no native imagery, so `photoUrl` stays
+  null and the card renders the placeholder gradient. **Verified `[queried PROD,
+  2026-08-04]`:** `master_place 5ab3bf1a` ("Fort Vancouver National Historic
+  Site, the Oregon Trail", `park_feature`) is **`nps`-only with `google_place_id`
+  null**; the tile is `mp:5ab3bf1a…` with `placeId` null and stored `photoUrl`
+  null. The failure mode is **no-placeId → never-asked**, NOT `MAX_IDS`
+  truncation (see the MAX_IDS entry below — the day carried 0 placeIds, far under
+  40, and #176's chunking is irrelevant) and NOT "resolved empty" (there is no id
+  to resolve). **Fix is a corpus/ingestion decision, not a render fix:** link
+  these rows to a Google place (to earn a `placeId`), or surface NPS's own media
+  if it carries any.
+  - **Scope tags — do not overclaim from this one probe:** the "**15 tiles / 0
+    placeIds**" figure is **trip-and-day-specific** (`4534add5` day 11). The
+    broader "the whole day is NPS / photoless across the board" reading is
+    **sampled, not measured** — source was checked on **7 of 15** day-11 tiles
+    (all `nps`), and stored `photoUrl` on **1 of 15** (Fort Vancouver, null). The
+    other 8 tiles' sources and `photoUrl`s are **`[UNVERIFIED]`**.
+  - **Two PROD trips carry the Fort Vancouver tile** — `4534add5`
+    ("San Diego → Portland") and `b97d06bf` ("Port Angeles → Palo Alto")
+    `[queried PROD, 2026-08-04]`. Only `4534add5` was analysed. The root cause is
+    corpus-level (same `master_place`), so "no photo" holds for both, but
+    `b97d06bf`'s day-level tile mix is **`[UNVERIFIED]`**.
+
+- **Title truncation hides the part that distinguishes near-duplicate cards.**
+  Six DISTINCT Lillian Pitt public-artwork tiles — **6 `master_place` ids, 6
+  coordinates ~13 km apart, all `nps`, all `placeId`-null** `[queried PROD,
+  2026-08-04]` — render as near-identical cards because they share a name
+  **prefix** ("Lillian Pitt Public Artwork: …"), a category, and (since none
+  carry a `placeId`) the same photoless placeholder. The card's title
+  **truncation cuts exactly the differing suffix** (the specific installation —
+  "Rosa Parks Station", "River Guardian on the Willamette", "Voices at the Oregon
+  Convention Center", …), so six different works read as duplicates. **Not a
+  dedup / entity-resolution failure — they are genuinely distinct places at
+  distinct coordinates.** Fix is render-side: show the distinguishing suffix
+  (truncate from the front, or middle-ellipsis), or disambiguate by locality.
+
 ## Geometry defects (measured by the day-mile pass, 2026-07-26)
 
 Both surfaced while scoping the generated-day mile defect; neither IS that
