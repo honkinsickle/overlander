@@ -1,5 +1,6 @@
 # Backlog — open work
 
+
 ## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
 
 Full data: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.
@@ -284,6 +285,36 @@ a live-backed one, and the "NEW" badge does not correlate with the difference
 (it predates the data wiring entirely — see the report). **6 of the 8
 NEW-badged tiles issue no live call at all**, so they are precisely the tiles a
 Google reduction would not affect.
+
+## CA — Natural Preserve SubUnits as `place_relationships (contained_in)` under their parent units (2026-09-02, PROD)
+
+CA DPR's `state_parks` GIS source emits both parent-unit polygons AND their
+`SUBTYPE = SubUnit` polygons (Natural Preserve / Cultural Preserve / State
+Wilderness) as separate rows. Every SubUnit is a distinct managed area *inside*
+a parent state park unit — legally and operationally. On PROD there are 63 NP,
+24 CP, 12 SW SubUnit rows (99 total; identical on TEST).
+
+The ER handles these correctly as far as "not a duplicate": 61 of 62 NP
+master_places have `source_count = 1` (never linked to another source), and the
+9 NP pairs that surfaced in the pre-existing cross-source duplicate sort are all
+DIFFERENT-bucket (see `docs/investigations/2026-09-02-ca-np-designation.md`).
+
+What is NOT modeled: the sub-unit ↔ parent-unit relationship. `place_relationships`
+already has a `contained_in` type and the schema is set up for it, but there is
+no code that populates it from CA DPR's SubUnit rows. Consequence: a user
+searching for "Point Dume" gets both `Point Dume State Beach` and `Point Dume
+NP` as independent hits, with no relational link.
+
+**Not a bug; a product/UX call.** May be desirable behaviour (both are real
+searchable places), may be a duplication users experience as noise. Would need:
+
+- Walk all 99 SubUnit master_places, geospatially or by `UNITNBR` prefix match
+  find the parent-unit master_place, write the `contained_in` row.
+- Decide whether SubUnits should keep independent search visibility or be
+  suppressed when a parent match is present.
+
+No prescription here — the investigation surfaced the class; the product
+decision is separate.
 
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 

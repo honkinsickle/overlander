@@ -26,6 +26,7 @@
 
 ---
 
+
 # STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
 
 (**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**
@@ -165,6 +166,20 @@
 **Near-miss worth carrying:** the tile list's comment says its values were "verified against the live Typesense `primary_category` facet." That can be **true and still compatible with those three tiles being empty** — suppression happens downstream in **hydration**, not in Typesense, so a facet-level check cannot see it. Same shape as the standing scope-the-instrument rule: the check was aimed one layer above the filter it needed to catch.
 
 **NEXT: Adam's review. Nothing is queued off this.** The masthead below is preserved verbatim per this file's convention.
+
+# STATE — branch `investigate-ca-np-designation` · 2026-09-02 (later 33) — CA state_parks "NP" suffix identified as Natural Preserve SubUnit; 4 sort-pass UNCLEAR pairs reclassified to DIFFERENT.
+
+(**newest truth: the "NP" suffix on 63 CA `state_parks` rows means CA DPR's *Natural Preserve* — a sub-unit classification, not a data quirk. All 9 NP-suffixed pairs in the pre-existing 384-pair cross-source-duplicate set are parent unit ↔ Natural Preserve SubUnit — parent/child, not duplicate. Investigation only, no writes.**
+
+Docs landed this session:
+- `docs/investigations/2026-09-02-ca-np-designation.md` — this session's finding
+- `docs/investigations/2026-09-02-cross-source-duplicates.md` + `data/scripts/crosssource-duplicate-investigation.ts` — cherry-picked from `investigate-crosssource-duplicates` (prior investigation that was previously unmerged, referenced by the NP doc and needed for the PR to read self-contained).
+
+The taxonomy, measured against PROD (TEST identical): 63 SubUnit rows are `NP`, 24 are `CP`, 12 are `SW`. All 99 are CA-only, in `ParkBoundaries` layer, `SUBTYPE = SubUnit`. CP = Cultural Preserve is **directly confirmed** via CA State Parks Foundation; SW = State Wilderness is canonical; NP = Natural Preserve is inferred by elimination (high confidence, but no CA DPR data-dictionary read this session — the DPR PDFs returned only binary through WebFetch).
+
+Reclassification of the prior sort's 6-pair UNCLEAR bucket: the 4 "SP/SB/SRA-vs-NP" pairs (Anderson Marsh, Burton Creek, Point Dume, Woodson Bridge) move to DIFFERENT. Updated: SAME 136 · DIFFERENT 246 · UNCLEAR 2 (remaining: Munson Creek Falls SNS ↔ Munson Creek SNA, and Berlin-Ichthyosaur SP ↔ Berlin).
+
+Explicitly out of scope: writing `place_relationships (contained_in)` from NPs to their parent units. 62 NP master_places on PROD; only 9 surfaced in the 384-pair set — a relationship-build pass would need to walk all 62, not just the 9. Whether to build that at all is a product decision, not a data-quality one.)
 
 ---
 
