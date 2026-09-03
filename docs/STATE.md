@@ -1,3 +1,24 @@
+# STATE — branch `refresh-resolver-diagram` · 2026-09-03 — **Full refresh of the resolvePlaces() Paper diagram — current as of this pass.**
+
+(**newest truth: no code changed.** The `resolvePlaces() — built vs. wired`
+Paper diagram (node `3R4-0`, file "Card data model and ofrmation") was fully
+re-verified against `origin/main` at `0dae80c` and brought current — see
+`docs/investigations/2026-09-03-resolver-diagram-full-refresh.md` for the
+full source-by-source evidence. Headline: `resolvePlaces()` now has 3 real
+importers in `src/app` (0 in `src/components`); all three cutover flags
+(`SEARCH_AREA_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`,
+`DATE_DETAIL_USE_RESOLVER`) are real and default OFF locally, so Date Detail /
+Search / Day-scoped browse are **WIRED · FLAG OFF**, not "not wired." The
+shared client cache is still genuinely unbuilt. The rating/review_count/
+price_tier/photo_url gap is real only for `photo_url` (10,311 populated rows
+on TEST, unread) — the other three are NULL corpus-wide by design. A new
+`POLYLINE` callout was added (the 2-point day-corridor limitation had no prior
+diagram element at all). Day Column's `NO ENDPOINT` badge was reconfirmed and
+recolored to stop sharing a color with "wired but flagged off." **NEXT:
+Adam's review.**)
+
+---
+
 # STATE — branch `promote-ut-state-parks-prod` · 2026-09-02 (later 16) — **UT PROMOTED. ALL SIX STATES ARE LIVE ON PROD.**
 
 (**newest truth: the six-state visitor-content promotion project is complete. CA, WA, OR, NV, AZ and UT are all live on PROD — 723 source_records total.**

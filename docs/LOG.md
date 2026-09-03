@@ -12,6 +12,38 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 — Full refresh of the `resolvePlaces()` Paper diagram, verified fresh against `main` at `0dae80c`
+
+- Re-verified every claim on the diagram against current source directly —
+  grep, `git log`, two executed `node:test` runs, one TEST query — rather
+  than trusting #361/#364/#366/#367's prose, per the standing "source-checking
+  catches errors, introspection invents them" lesson in this thread.
+- **`resolvePlaces()` importers:** confirmed 3 in `src/app` (2 call it
+  directly, 1 imports `enrichByGoogleId` from the same module), 0 in
+  `src/components`. The diagram's "additive only" line and its warning-red
+  color were both stale.
+- **All three cutover flags are real and default OFF locally**
+  (`SEARCH_AREA_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`,
+  `DATE_DETAIL_USE_RESOLVER`) — confirmed via grep, not assumed. Their cutover
+  commits (#260/#266/#269, plus #255/#256/#259/#267 in the chain) are all real
+  ancestors of `main`, all committed 2026-08-23 PDT — re-dated fresh via
+  `git log --format`, not copied. Date Detail / Search / Day-scoped browse
+  badges flipped from `NOT WIRED` to `WIRED · FLAG OFF`.
+- **Column gap nuance:** measured fresh on TEST — `rating`/`review_count`/
+  `price_tier` are NULL for all 161,431 `master_place` rows (empty by design);
+  `photo_url` has 10,311 populated, unread rows. Only the last is a real gap.
+- **Found a genuinely missing element, not just stale ones:** the diagram had
+  no polyline/curved-route callout at all. Added one, citing
+  `resolve-places.ts:114-120`, `federated.ts:305-307`,
+  `bake-corridors.ts:122`, and the still-open `docs/BACKLOG.md:760` item.
+- **Caught a quoting bug in a `write_html` call mid-session** — an
+  over-escaped HTML string produced a malformed layer name (`\"NO`); deleted
+  and redid it plainly. Recorded because it's a mechanical trap worth
+  remembering: this tool's `html` parameter takes literal HTML, not a
+  JSON-encoded string.
+- Full evidence and per-item detail:
+  `docs/investigations/2026-09-03-resolver-diagram-full-refresh.md`.
+
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
 Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
