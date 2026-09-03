@@ -13,6 +13,41 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 12) — One master-reference Paper diagram synthesizing #361–#384
+
+- Built a new artboard, *"Place Data — Master Reference (sources, surfaces,
+  categories)"*, in the "Card data model and ofrmation" Paper file — separate
+  from the `resolvePlaces()`-specific diagram at node `3R4-0`, per
+  instruction. Five sections: data sources, the four UI surfaces, the
+  `resolvePlaces()` unification effort, the 9-category taxonomy, known gaps.
+- Every claim carries one of four confidence tags (`VERIFIED THIS PASS` /
+  `CITED #NNN` / `DESIGNED, NOT BUILT` / `OPEN`), matched to whether it was
+  re-checked this pass, carried from a named prior PR, describes a decided-
+  but-unshipped design, or is genuinely undecided.
+- **Checked first, per instruction: #380/#382/#384 are not merged.** Branch
+  cut from `category-resolve-theaters-park-renames` (#384's tip) at `5d811d3`,
+  not from `main`.
+- **Caught one real error in the brief this diagram was built from.** It
+  described Urban/Water fill/Showers/Dump stations as "removed from the UI
+  entirely." The taxonomy ADR's own status line reads "Proposed — awaiting
+  Adam's review," and its closing section names that exact question as the
+  one substantive item still open. Confirmed structurally too — zero UI files
+  have changed since `0dae80c` other than #373's route fix. Built a dedicated
+  `OPEN — NOT DECIDED` callout on the diagram instead of the brief's premise.
+- Re-verified fresh rather than trusted: Overpass's two call sites
+  (`resolveOvernights`, `resolveSuggestions`), Surface 2's `TRIP_BROWSE_USE_
+  RESOLVER` flag and #373's chip fix, Surface 3's `find-nearby-panel.tsx`
+  still declaring its original 6-group/13-tile `BUCKETS` (unchanged),
+  `resolvePlaces()`'s 3 importers / 0-in-components / no-cache / 2-point-
+  corridor facts. `TRIP_BROWSE_USE_RESOLVER`'s line number had drifted from
+  `route.ts:39` to `:120` since #373 — caught by re-grepping instead of
+  reusing a cited line number.
+- Hit one Paper tooling quirk: writing inline `<b>` tags mid-sentence splits
+  the paragraph into separate text nodes and drops the surrounding
+  whitespace, running words together. Fixed by re-setting text content with
+  explicit boundary spaces; noted for future diagram work in this file.
+- Full evidence: `docs/investigations/2026-09-03-place-data-master-reference-diagram.md`.
+
 ## 2026-09-03 (later 11) — Closed all three #382 items: Theaters out of Culture, `park` → `scenic`, renames declined.
 
 - **Theaters: #382 had the polarity backwards, and Adam's clarification exposed
