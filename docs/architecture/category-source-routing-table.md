@@ -66,6 +66,17 @@ pass would otherwise waste effort wiring a source that does not exist.
 Corpus = TEST in-scope, this pass. "Live available" = a source exists at all;
 "coverage" = what #366 measured, in its own metro/rural framing.
 
+**Structure after Decision 9 — the row count is unchanged and that is
+deliberate.** `[literal]` Removing `urban`, water fill, showers and dump stations
+from the UI **deleted no rows from this table.** They are struck through and
+marked *no UI surface*, because this table's job is "which source serves category
+X" and the answer for those four — **none, measured twice** — is the fact most
+worth keeping. A deleted row reads as an unasked question; a struck row reads as
+an answered one.
+
+**It still reads at 9 parents.** `urban` keeps its section (empty, no surface);
+the other eight are unchanged. **Surfaced chips: 8.**
+
 ### camping
 
 | Subtype | Corpus `[literal]` | Live available | Coverage `[cited #366]` | Rule | resolvePlaces serves? |
@@ -103,16 +114,24 @@ Foursquare is `[open]` as a *candidate to test*, not a source to wire.
 | `truck_stop` | 0 | Mapbox `gas_station` loosely | — | R2 | Yes |
 | **Services** → Auto/Repair (`car_repair`, `car_wash`) | 0 | Mapbox `auto_repair`, `repair_shop`, `car_wash` — **unwired** | **6/6 metro, 4/6 rural; highest rural total of any id sampled** | **R2 LIVE-PRIMARY** | **Not today** — #366's *"cleanest wiring win"* |
 | **Services** → Rest areas (`rest_area`) | in `interest` today | Mapbox `rest_area` | 5/6 metro, **1/6 rural** — thin | R1/R3 | partial at best |
-| **Services** → Water fill (`water`) | 169 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
-| **Services** → Showers (`shower`) | 4 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
-| **Services** → Dump stations (`dump_station`) | 6 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
-| **Services** → Toilets (`toilet`) | 128 — **suppressed**, unclaimed today | none | — | **R4 NONE** | No |
+| ~~Services → Water fill (`water`)~~ | 169 — suppressed | none anywhere checked | — | **R4 NONE** | **No UI surface — Decision 9** |
+| ~~Services → Showers (`shower`)~~ | 4 — suppressed | none anywhere checked | — | **R4 NONE** | **No UI surface — Decision 9** |
+| ~~Services → Dump stations (`dump_station`)~~ | 6 — suppressed | none anywhere checked | — | **R4 NONE** | **No UI surface — Decision 9** |
+| ~~Services → Toilets (`toilet`)~~ | 128 — suppressed, unclaimed | none | — | **R4 NONE** | no surface; proposal stood down |
 
 **AMENDED 2026-09-03 — `fuel` absorbs the Services cluster** (mapping doc §4.1,
-§4.3, §4.7). Routing consequence: **`fuel` now contains both the table's
-highest-value wiring target (`charging_station`, `auto_repair`) and four of its
-five R4-NONE rows.** A single parent chip spanning "dense live data" and "nothing
-exists" needs per-subtype empty states, not one category-level one.
+§4.3, §4.7), **then Decision 9 removed four of its six members from the UI.**
+
+**Rows are struck through, not deleted.** Deleting them is exactly how a
+"removed until a real source exists" decision gets rediscovered as a gap and
+re-litigated. They stay as R4 NONE with **no UI surface**, so the next reader
+sees the measurement and the decision together.
+
+**Routing consequence, now simpler than it was:** `fuel` ships as
+`gas_station` + `ev_charging` + `truck_stop` + Services(Auto/Repair, Rest areas).
+The earlier warning that one parent chip would span "dense live data" and
+"nothing exists" **no longer applies** — the "nothing exists" rows are not
+surfaced. **No per-subtype empty-state work is required.**
 
 **The fuel inversion, restated.** `[cited #364]` The corpus is ~all EV while the
 live half is ~all gas — #364 called it *"the worst in the audit."* `[cited #366]`
@@ -215,9 +234,19 @@ a laundry primary is ever ingested.
 **`urban` is structurally empty, not merely sparse** `[literal]` — both of its
 claimed primaries have zero corpus rows. `[cited #366]` Mapbox `park` is dense
 (6/6, 6/6) but *"is a different concept and maps more naturally to `scenic`."*
-**RESOLVED 2026-09-03: `park` routes to `scenic`** (§3.2). **The consequence for
-`urban` is that it now has no live source and no corpus — nothing routes to it at
-all**, which is exactly the ADR's open decision and is now the whole of it.
+**RESOLVED 2026-09-03: `park` routes to `scenic`** (§3.2), leaving `urban` with
+no live source and no corpus — **nothing routes to it at all.**
+
+**FINAL, Decision 9: `urban` is REMOVED from the UI.** No chip in the browse
+filter row, no Find Nearby presence. **It remains one of the canonical nine in
+the data model** — `SlideCategoryKey`, `BROWSE_CARD_CATEGORIES`, DESIGN.md §1.2
+tokens and its section label are all untouched. **This section is retained on
+purpose:** a category with no route and no surface is precisely the thing a
+future reader would otherwise rediscover as an oversight.
+
+`[literal]` **Removing the chip changes no fanout:** `categories=all` already
+expands to seven buckets and already excludes `urban` — verified by executing
+`resolveRequestedCategories` earlier in this chain.
 
 ---
 
@@ -249,10 +278,10 @@ divergence between the corpus and live paths, which is the failure mode §3.1
 existed to fix.
 
 **Fully resolved, including the consequence:** `urban` is left with **no live
-source and no corpus — nothing routes to it at all.** That is not a side effect
-to be discovered later; it collapses the ADR's open decision on `urban` to a
-single clean question — *keep an empty chip, or remove it* — with no remaining
-sourcing option behind it. Recorded in the ADR's open-decision section.
+source and no corpus — nothing routes to it at all.** That collapsed the ADR's
+open decision on `urban` to a single clean question — *keep an empty chip, or
+remove it* — with no remaining sourcing option behind it. **That question has
+since been answered: removed (ADR Decision 9, §3.3 below).**
 
 ### 3.3 The R4 NONE set — `water`, `shower`, `dump_station`, and `urban`
 
@@ -263,9 +292,17 @@ empty twice over.
 
 **Routing consequence, and it is the whole point of marking them R4:** *no amount
 of wiring makes these work.* The available levers are **unsuppression** (only
-`water` has a real corpus behind it — 169 in-scope) or **new ingest**. **Their UI
-fate is Adam's decision, recorded as open in the ADR — this table only records
-that there is nothing to route.**
+`water` has a real corpus behind it — 169 in-scope) or **new ingest**.
+
+**RESOLVED 2026-09-03 — Decision 9: all four are REMOVED from the UI.** Not kept
+as empty-state subtypes. **This is a "removed until a real data source exists"
+decision, not an oversight**, and it is written here as well as in the ADR so
+that anyone arriving at this table first sees it.
+
+**Nothing about the corpus changes.** `water`'s 169 in-scope rows still exist and
+are still suppressed at `hydrate.ts:140`; removal is a surface decision only. If
+a source appears, or unsuppression is decided independently, these rows are
+available and these rows are where to start.
 
 ---
 
@@ -318,7 +355,10 @@ is what the table says, for the follow-up pass to argue with.
 5. **Do NOT wire Mapbox `trailhead`/`viewpoint`.** #366 measured them as
    near-empty. Route corpus-primary instead; test Foursquare's *category* API if
    the taxonomy ever becomes enumerable.
-6. **Decide the R4 set** (ADR open decision) before any UI work assumes it.
+6. ~~Decide the R4 set~~ **DONE — Decision 9: removed from the UI.** The
+   implementation consequence is a *deletion*, not a wiring step: drop the Water
+   fill / Showers / Dump stations tiles and the `urban` chip. **Not started —
+   that is component work for the follow-up pass.**
 7. ~~Theaters last.~~ **WITHDRAWN — Theaters is not part of Culture (§3.4).** No
    ingest mapping, no `foursquare.ts` change and no Mapbox probe are required.
    **This removes the only item in the list that was blocked on work outside the

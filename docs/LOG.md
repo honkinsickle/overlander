@@ -13,6 +13,44 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 12) — Chain closed: `urban` + the three amenities removed from the UI. No open items left across #380/#382/#384.
+
+- **Adam's final call: remove, not keep-as-empty-state.** Written into all three
+  docs as a *"removed until a real data source exists"* decision, explicitly
+  labelled not-an-oversight, so the next reader doesn't rediscover it as a gap.
+  That framing was the actual ask — the edit itself was small.
+- **The load-bearing subtlety: the taxonomy stays at 9, the UI renders 8 chips.**
+  `urban` keeps its `SlideCategoryKey` member, `BROWSE_CARD_CATEGORIES` entry,
+  tokens and section label; it loses only its chip. **Stated head-on in all three
+  docs** because "ADR says 9, product shows 8" is exactly the kind of divergence
+  that reads as a bug later. It is the ADR's own Decision 5 applied to a parent.
+- **Caught that the scope is wider than Find Nearby.** `[literal]` `urban` also
+  renders in the **browse filter row** — `BROWSE_CARD_CATEGORIES` holds all nine
+  and the row renders every one. Reading "removed from the UI" as Find-Nearby-only
+  would have left that chip in place.
+- **Checked the fanout before asserting no side effects:** `categories=all`
+  already expands to seven buckets and already excludes `urban`, so removing the
+  chip changes no default feed. That was verified by execution earlier in this
+  chain, not assumed.
+- **Kept the routing-table rows rather than deleting them.** Struck through and
+  marked *no UI surface*. A deleted row reads as an unasked question; a struck row
+  reads as an answered one — and deletion is how this decision would get
+  re-litigated in three months.
+- **A prior concern is now void, and saying so is part of closing cleanly:**
+  #382/#384 flagged that `fuel`/Services would need per-subtype empty states.
+  With the four removed, no empty chip ships, so that work disappears.
+- **Grepped the chain and cleaned every orphan; one survived the first sweep.**
+  §4.3's *"assigning a parent is still not deciding their UI fate"* was caught by
+  a second pass filtered to un-struck matches. **A single grep was not enough —
+  the second pass is what made the sweep true.**
+- **Flagged `toilet` rather than folding it in.** Identical R4 position, was
+  *proposed* for Services, but Adam did not name it. It has no UI presence, so
+  nothing is removed; the proposal stands down. Recorded as a one-liner to
+  reverse.
+- **No UI code touched**, though fully resolving this would mean editing
+  `find-nearby-panel.tsx` and the browse filter row. Per the brief that is
+  follow-up work; the diff is docs-only.
+
 ## 2026-09-03 (later 11) — Closed all three #382 items: Theaters out of Culture, `park` → `scenic`, renames declined.
 
 - **Theaters: #382 had the polarity backwards, and Adam's clarification exposed
