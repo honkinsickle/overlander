@@ -13,6 +13,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -516,6 +517,17 @@ Investigation only. Read-only queries against PROD and TEST; no writes, no schem
 - **PR self-contained by cherry-pick.** The referenced parent investigation doc `2026-09-02-cross-source-duplicates.md` and its script `data/scripts/crosssource-duplicate-investigation.ts` were on branch `investigate-crosssource-duplicates` (unpushed, previously). Cherry-picked both commits onto this branch so the NP doc's cross-reference is not a broken link on `main`. The unpushed sibling branch remains — nothing was moved off it, just copied on.
 - **Confidence limit.** NP = Natural Preserve is inferred (CP directly confirmed via a CA State Parks Foundation write-up; SW canonical; NP = the remaining classification). A CA DPR ParkBoundaries data-dictionary verification is `[unverified this session]` — two DPR PDFs I could reach returned only binary content through WebFetch. If a merge tool ever depends on this reading, verify against the ParkBoundaries schema before acting.
 - **Explicitly out of scope.** Writing `place_relationships (contained_in)` from NPs to parent units. Only 9 of the 62 NP master_places surface in the 384-pair sort set; a real relationship-build would need to walk all 62 (and to decide whether the model warrants the build at all — Natural Preserves as independent searchable rows may be the right product answer already).
+
+## 2026-09-02 (later 34) — Verification pass on PR #368's NP investigation. Three of four claims confirmed; one upgraded.
+
+Follow-up on PR #368's own self-review, which flagged four verification gaps. Read-only, no writes, no touching PR #368. New doc: `docs/investigations/2026-09-02-np-verification-followup.md`. PR #368 remains open/unmerged; this branch (`verify-np-followup`) is cut from `main`, so its "later 33" entry is not yet present here — will land with PR #368 when merged.
+
+- **Fresh classifier run vs `.context/` reuse.** Re-ran the sort script against live PROD and re-applied the classifier from scratch. Fresh CSV is byte-identical to the prior session's, and the classifier reproduced pre-NP `SAME 136 · DIFFERENT 242 · UNCLEAR 6` and post-NP `136 · 246 · 2` exactly. **No drift, no error.**
+- **Full-set grep for CP/SW/NP.** Grepped `\bNP$` / `\bCP$` / `\bSW$` across both name columns of the full 384-pair set (rather than eyeballing the printed unclear-bucket sample). Same counts as claimed: 9 NP · 1 CP · 2 SW, all in DIFFERENT. **Eyeballed counts were exhaustive.**
+- **NP = Natural Preserve via `curl` + `pdftotext`.** Downloaded three CA DPR PDFs, extracted text. **Direct confirmation obtained**: a DPR classification resolution names *"Tatlun Cultural Preserve, San Jose Natural Preserve and Pt. Lobos Ridge Natural Preserve"* — 1↔1 with corpus rows `Tatlun CP`, `San Jose Creek NP`, `Point Lobos Ridge NP`. A separate DPR rulemaking says *"approximately 61 Natural Preserves"* — corpus has 63 " NP" rows (one is a double-record; see next bullet). NP = Natural Preserve now stands on documentary evidence, not inference.
+- **Los Penasquitos Marsh NP double-record — not a quirk.** The two records are legitimate CA DPR polygons (different GISID/FID/UNITNBR/area) sharing a UNITNAME, ~459m apart. On TEST both attach to one mp via Adam's 2026-08-20 triage. On PROD one is deterministic-auto-linked, the OTHER is `place_match.status = pending` (`blended_residual`, conf=0.60, dist=458m) — never triaged. Same 100m-distance-clip mechanism as the 43 self-created duplicates. It is the *only* unlinked CA state_parks SubUnit on PROD (152 unlinked state_parks rows total; one CA-SubUnit under filter). Follow-up: apply the same TEST triage decision on PROD to close.
+- **Correction to PR #368 wording.** The NP doc's phrase "63 source_records → 62 distinct master_places (some NPs share a master_place)" is loose — the actual mechanism is one unlinked record, not sharing. Documented in the follow-up doc; PR #368 itself not touched.
+- **Also: TEST duplicate-classifier run completed** and reported 775 broad pairs on TEST, matching the prior investigation's number. Not re-classified per-bucket (not needed for any of the four items).
 
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
