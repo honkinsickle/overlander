@@ -27,6 +27,19 @@
 ---
 
 
+
+# STATE — branch `fix-state-parks-unitnbr-dissolve` · 2026-09-03 (later 24) — root-cause fix for CA state_parks UNITNBR-dissolve bug. Code + tests + TEST re-ingest + first PROD writes of this PR chain.
+
+(**newest truth: `dissolveBoundaries` in the CA state_parks ingester now honors `disambiguateBy: "UNITNAME"`, so features that share a UNITNBR but disagree on UNITNAME no longer merge into oversized MultiPolygons. Applied surgically to PROD for UNITNBR=622 (Agua Caliente/Anza-Borrego, the one observably-broken record). The Agua Caliente ↔ Anza-Borrego duplicate pair no longer forms in the classifier output — 427 pairs → 426. First PROD writes of the whole #368–#374 chain.**
+
+Scanned CA DPR source: 461 features under 56 multi-feature UNITNBRs; 14 have divergent UNITNAMEs (post-whitespace-normalize). 3 are genuinely different parks; 11 are main-park + satellite-property patterns. Code fix splits all 14 on next full re-ingest; PROD write this session was narrowly scoped to UNITNBR=622 per the brief's "affected record(s)" wording. Full details in `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`.
+
+**Bucket state post-fix:** SAME 135 · DIFFERENT 246 · UNCLEAR 2 (was 135/247/2 after PR #372's manual verdict; the root-cause fix removes AC entirely instead of just re-classifying it). PROD writes: 3 UPDATEs on source_record, 2 INSERTs (1 source_record + 1 place_match), 2 recompute_master_place RPCs. All reversible if needed; verified in-session against the intended target state.
+
+**PRs #368, #369, #370, #372, #374 all remain open/unmerged.** This branch is cut from main and doesn't depend on any of them for correctness. Verification steps that need PR #368's sort script or PR #374's merge-preview tool restore those temporarily and delete after; working tree clean at commit.)
+
+---
+
 # STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
 
 (**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**

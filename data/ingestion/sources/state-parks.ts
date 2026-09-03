@@ -53,6 +53,24 @@ interface EndpointConfig {
   where?: string;
   stableKey: string;
   groupBy?: string;
+  /**
+   * Optional secondary group key that disambiguates features sharing a
+   * `groupBy` value. When multiple features share `groupBy` but disagree on
+   * `disambiguateBy`, the dissolve treats them as distinct units instead of
+   * merging their polygons under whichever `props` came first.
+   *
+   * Rationale: CA's ParkBoundaries source (measured 2026-09-03) has 14
+   * distinct UNITNBR values shared across features with divergent UNITNAMEs
+   * — most benignly (main park + satellite easements), but at least three
+   * cases (UNITNBR=622 Agua Caliente vs Anza-Borrego; UNITNBR=534
+   * Huntington City Beach vs Bolsa Chica SB; UNITNBR=449 Point Lobos
+   * SMR vs SNR) are genuinely different parks under one UNITNBR. Without
+   * disambiguation, the ingest merges their polygons into a single
+   * oversized MultiPolygon, which then produces false-positive
+   * `spatial_containment` matches downstream in the CA visitor-content ER.
+   * See docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md.
+   */
+  disambiguateBy?: string;
 }
 
 interface StateConfig {
@@ -68,6 +86,7 @@ const STATE_CONFIGS: Record<string, StateConfig> = {
     parks: {
       url: "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/ParkBoundaries/FeatureServer/0",
       groupBy: "UNITNBR",
+      disambiguateBy: "UNITNAME",
       stableKey: "GlobalID",
     },
     campgrounds: {
@@ -195,7 +214,18 @@ function classifyFacility(
 // ── Boundary dissolve (CA, UT, OR) — follows padus.ts pattern ────────────
 
 interface DissolvedPark {
+  /** Composite hash key used for grouping this unit. */
   groupKey: string;
+  /** Primary group key value (e.g. UNITNBR), independent of disambiguation. */
+  primaryKey: string | null;
+  /** Secondary group key value (e.g. UNITNAME), when disambiguateBy is set. */
+  secondaryKey: string | null;
+  /**
+   * True when other units in the result share this unit's primaryKey — i.e.
+   * the disambiguateBy field caused a split. Consumed by buildParkRow to
+   * decide the external_id scheme.
+   */
+  divergent: boolean;
   props: Record<string, unknown>;
   members: unknown[];
   stableKeys: Set<string>;
@@ -205,6 +235,7 @@ function dissolveBoundaries(
   features: GeoJsonFeature[],
   groupByField: string,
   stableKeyField: string,
+  disambiguateByField?: string,
 ): DissolvedPark[] {
   const byKey = new Map<string, DissolvedPark>();
 
@@ -217,6 +248,9 @@ function dissolveBoundaries(
       const singletonKey = `__null__${sk}`;
       byKey.set(singletonKey, {
         groupKey: singletonKey,
+        primaryKey: null,
+        secondaryKey: null,
+        divergent: false,
         props,
         members: [],
         stableKeys: new Set([sk]),
@@ -233,10 +267,26 @@ function dissolveBoundaries(
       continue;
     }
 
-    let unit = byKey.get(gk);
+    // Composite key: primary + (optional) secondary. Features sharing the
+    // primary but disagreeing on the secondary form separate units instead
+    // of merging polygons.
+    const secondary = disambiguateByField
+      ? trimOrNull(props[disambiguateByField])
+      : null;
+    const compositeKey = disambiguateByField ? `${gk}|${secondary ?? ""}` : gk;
+
+    let unit = byKey.get(compositeKey);
     if (!unit) {
-      unit = { groupKey: gk, props, members: [], stableKeys: new Set() };
-      byKey.set(gk, unit);
+      unit = {
+        groupKey: compositeKey,
+        primaryKey: gk,
+        secondaryKey: secondary,
+        divergent: false,
+        props,
+        members: [],
+        stableKeys: new Set(),
+      };
+      byKey.set(compositeKey, unit);
     }
 
     const sk = getStableKey(props, stableKeyField);
@@ -252,7 +302,54 @@ function dissolveBoundaries(
     }
   }
 
+  // Second pass: mark units as divergent when other units share their
+  // primaryKey. Also mark ONE unit per divergent group as the "primary"
+  // (alphabetically first non-null secondaryKey) so its external_id stays
+  // `{primaryKey}` and only the other divergent units get suffixed. This
+  // preserves backward-compatibility with existing PROD external_ids in
+  // cases where the current record is already the alphabetical winner.
+  if (disambiguateByField) {
+    const primaryUnits = new Map<string, DissolvedPark[]>();
+    for (const u of byKey.values()) {
+      if (u.primaryKey) {
+        if (!primaryUnits.has(u.primaryKey)) primaryUnits.set(u.primaryKey, []);
+        primaryUnits.get(u.primaryKey)!.push(u);
+      }
+    }
+    for (const [_, units] of primaryUnits) {
+      if (units.length <= 1) continue;
+      // Sort by secondaryKey (nulls sort last) to pick a deterministic primary.
+      const sorted = [...units].sort((a, b) => {
+        const ak = a.secondaryKey ?? "￿";
+        const bk = b.secondaryKey ?? "￿";
+        return ak.localeCompare(bk);
+      });
+      // Mark all as divergent EXCEPT the alphabetical winner: it keeps the
+      // bare primaryKey as its external_id, matching pre-fix behavior for
+      // records where the alphabetical winner is already the PROD name.
+      for (let i = 1; i < sorted.length; i++) sorted[i].divergent = true;
+    }
+  }
+
   return [...byKey.values()];
+}
+
+/**
+ * Slugify a UNITNAME for use as an external_id suffix on a divergent unit.
+ * Keeps ASCII alnum + hyphens/underscores; folds whitespace to underscores;
+ * strips other punctuation. Case-preserving because the ArcGIS layer's
+ * UNITNAMEs are already mixed-case and the ingester's upsert is
+ * case-sensitive.
+ */
+function unitNameSlug(name: string): string {
+  return name
+    .trim()
+    // Non-ASCII → best-effort ASCII (drop diacritics)
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 60);
 }
 
 // ── AZ park-point lookup (bridges PARK_ABBR4 codes to real names) ────────
@@ -478,8 +575,21 @@ function buildParkRow(
   const centroid = bboxCentroid(multiPoly);
   if (!centroid) return null;
 
+  // external_id derivation:
+  //   - No groupBy on this config → use the feature's stableKey directly.
+  //   - groupBy without divergence → use the primary group value (e.g. UNITNBR).
+  //   - groupBy + divergent (feature shares primaryKey with a sibling unit
+  //     that won the alphabetical-secondaryKey tiebreak) → suffix with a
+  //     slugified UNITNAME so each unit under the shared primary gets a
+  //     distinct, deterministic external_id. The alphabetical winner keeps
+  //     `{primaryKey}` unsuffixed, matching pre-fix PROD state for
+  //     UNITNBR=622 (Agua Caliente wins alphabetically over Anza-Borrego).
   const key = config.groupBy
-    ? unit.groupKey.startsWith("__null__") ? unit.groupKey.slice(8) : unit.groupKey
+    ? unit.groupKey.startsWith("__null__")
+      ? unit.groupKey.slice(8)
+      : unit.divergent && unit.secondaryKey
+      ? `${unit.primaryKey ?? unit.groupKey}-${unitNameSlug(unit.secondaryKey)}`
+      : unit.primaryKey ?? unit.groupKey
     : getStableKey(props, config.stableKey);
   if (!key) return null;
 
@@ -694,7 +804,7 @@ async function ingestState(
     rawParkFeatures = features;
 
     if (parkConfig.groupBy) {
-      const units = dissolveBoundaries(features, parkConfig.groupBy, parkConfig.stableKey);
+      const units = dissolveBoundaries(features, parkConfig.groupBy, parkConfig.stableKey, parkConfig.disambiguateBy);
       logger.info({ state, features: features.length, dissolved: units.length }, "state_parks: dissolved");
       for (const unit of units) {
         const row = buildParkRow(state, unit, parkConfig);
