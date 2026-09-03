@@ -13,6 +13,18 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 9) — Merge executor built + validated on TEST. Migration landed on TEST (not PROD). 5 merges executed on TEST; 1 reversed via audit trail.
+
+Follow-up on PR #379. Read-only pass in name, but includes **real TEST writes** — the migration applied to TEST, 5 merges executed against TEST as validation, 1 reversed. **Zero PROD writes.** Migration file present but not applied to PROD. New doc: `docs/investigations/2026-09-03-merge-executor.md`.
+
+- **New artifacts.** `supabase/migrations/20260903195200_merge_master_place.sql` (function + audit table); `data/scripts/lib/merge-canonical.ts` (extracted shared canonical rule; dry-run preview now imports from it); `data/scripts/execute-merge-groups.ts` (CLI executor with 5 safety gates).
+- **FK re-enumerated: 6 columns.** `source_record.master_place_id` (SET NULL); `place_match.master_place_id` (CASCADE, UNIQUE with source_record_id); `place_relationships.{child,parent}_master_place_id` (CASCADE, PK + no-self-ref CHECK); `master_place_generated_content.master_place_id` (CASCADE, UNIQUE with field_name); `master_place_photo_candidate.master_place_id` (CASCADE, UNIQUE with image_url). All handled in the function; non-FK references (function return types, views) checked and excluded.
+- **Function is one atomic PL/pgSQL transaction.** Any `raise exception` rolls back all writes including the audit row. Precondition-fail tests confirmed the invariant: 3 failure paths executed, all raised expected errors, `merge_audit_log` count unchanged (5 → 5). Mid-execution rollback generalizes from Postgres semantics; not directly induced.
+- **CLI safety gates (5, all tested):** `--confirm` required; `--groups` required; `--target=prod` requires ALSO `--confirm-prod`; PR #379's blocked groups (6, 83) refused without `--force-blocked`; canonical drift between input file and shared-lib rule refused.
+- **5 TEST merges executed successfully.** Fort Ross, Malakoff Diggins, Cathedral Gorge, Fort Rock, Ward Charcoal Ovens — all state_parks-GIS-backed canonical vs atlas_oddities absorbed. Each: canonical `source_count` +1, absorbed `source_count` → 0 + `is_searchable` → false, source_records repointed correctly, audit row + local JSON both written.
+- **Manual reversal proven.** Group 901 (Fort Ross) merge reversed using ONLY the audit row: extract before-snapshot → repoint absorbed's original source_records back → restore is_searchable → recompute both mps. State matches before-snapshot exactly. Net TEST state now: 4 merges present, 1 reversed.
+- **Not verified:** whether the executor behaves identically on PROD (schema identical; not tested); whether `field_precedence` produces intended canonical values for every field after a real merge (spot-checked source_count and is_searchable only); whether Typesense's live search reflects merges after `search:sync` (not tested); reversal for n-way merges or merges with complex `place_relationships` edges (only 2-way with simple edges exercised).
+
 ## 2026-09-03 (later 8) — Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. One stale citation, thirteen claims intact.
 
 - **Numbered 8, skipping 7 on purpose.** #371 is still open carrying

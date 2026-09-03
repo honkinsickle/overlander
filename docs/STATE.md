@@ -1,3 +1,19 @@
+# STATE — branch `build-merge-executor` · 2026-09-03 (later 27) — merge executor built + validated on TEST. Migration on TEST only; no PROD writes this session.
+
+(**newest truth: the SAME-bucket merge writer is built and validated. `merge_master_place(canonical, absorbed[])` PL/pgSQL function + `merge_audit_log` table landed on TEST via `db:push-verify --test`. 5 merges executed on TEST as validation; 1 reversed via manual audit-trail rollback to prove the reversal path. Zero PROD writes.** See `docs/investigations/2026-09-03-merge-executor.md`.
+
+**Safety posture (5 gates, all tested):** `--confirm`, `--groups`, `--target=prod` + `--confirm-prod`, blocked-group refusal (groups 6, 83 per PR #379), canonical-drift refusal between input file and shared-lib rule.
+
+**FK re-enumeration confirmed 6 columns.** `source_record`, `place_match` (with UNIQUE), `place_relationships` × 2 (with PK + no-self-ref CHECK), `master_place_generated_content` (with UNIQUE), `master_place_photo_candidate` (with UNIQUE). All handled in the function. Non-FK references (function return types, views) checked and excluded.
+
+**Atomicity: Postgres transactional guarantee.** Function is one PL/pgSQL transaction; any `raise exception` rolls back all writes including the audit row. 3 precondition-fail tests confirm audit invariant holds.
+
+**Migration NOT yet on PROD.** Applying to PROD is a standard operator action per CLAUDE.md (relink + `.env` swap + `db:push-verify` without `--test`).
+
+**Next steps (Adam's call):** apply migration to PROD; decide whether to (a) execute against 113-or-so decidable non-blocked groups on TEST as fuller validation, or (b) go directly to PROD in small batches, or (c) resolve PR #379's 8 undecidable groups first.)
+
+---
+
 # STATE — branch `reverify-resolver-diagram` · 2026-09-03 (later 25) — **Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. Thirteen claims held; one line citation was stale and is fixed.**
 
 (**newest truth: no code changed, nothing written to TEST or PROD. One investigation doc, two Paper text nodes, STATE + LOG.**

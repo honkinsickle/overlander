@@ -269,15 +269,13 @@ async function hydrate(db: SupabaseClient, mp_id: string): Promise<Side> {
 }
 
 // ---------- canonical rule ----------
+//
+// Extracted to data/scripts/lib/merge-canonical.ts so the merge executor
+// uses the same rule. pickCanonicalPair stays local because the dry-run
+// output includes a pair-level `canonical_side` column that the group-level
+// picker doesn't have; the pair function reuses VISITOR_SRC from the lib.
 
-const VISITOR_SRC = new Set([
-  "california_state_parks",
-  "washington_state_parks",
-  "oregon_state_parks",
-  "nevada_state_parks",
-  "arizona_state_parks",
-  "utah_state_parks",
-]);
+import { VISITOR_SRC, pickCanonicalGroup } from "./lib/merge-canonical.ts";
 
 function pickCanonicalPair(a: Side, b: Side): { winner: Side; loser: Side; reason: string } | { reason: string } {
   const av = new Set(a.source_ids);
@@ -296,51 +294,6 @@ function pickCanonicalPair(a: Side, b: Side): { winner: Side; loser: Side; reaso
   if (av.size > bv.size) return { winner: a, loser: b, reason: "neither GIS; more sources wins" };
   if (bv.size > av.size) return { winner: b, loser: a, reason: "neither GIS; more sources wins" };
   return { reason: "neither GIS and equal sources; needs manual" };
-}
-
-/**
- * Score a single member under the canonical rule. Higher wins. Encoded so
- * the same rule that decides a pair produces a well-defined ranking across
- * an arbitrary-sized group without pairwise-reduction losing information —
- * i.e. if only one of three members has state_parks, it wins even when the
- * other two would compare as "either" against each other.
- */
-function scoreMember(s: Side): number {
-  const has_gis = s.source_ids.includes("state_parks");
-  const has_visitor = s.source_ids.some((x) => VISITOR_SRC.has(x));
-  let score = 0;
-  if (has_gis) score += 100; // GIS-backed strongly preferred
-  if (has_gis && !has_visitor) score += 10; // untagged GIS home tiebreaker
-  score += s.source_ids.length; // more sources > fewer
-  return score;
-}
-
-/**
- * Pick THE canonical across an arbitrary-sized group. Ranks every member by
- * the scoring function and picks the max; if the top tier ties, the group is
- * flagged as needing manual review rather than guessing.
- */
-function pickCanonicalGroup(members: Side[]): { canonical: Side | null; reason: string } {
-  if (members.length === 0) return { canonical: null, reason: "empty group" };
-  if (members.length === 1) return { canonical: members[0], reason: "single-member group" };
-  const scored = members.map((m) => ({ m, s: scoreMember(m) }));
-  const max = Math.max(...scored.map((x) => x.s));
-  const top = scored.filter((x) => x.s === max);
-  if (top.length === 1) {
-    const w = top[0].m;
-    const has_gis = w.source_ids.includes("state_parks");
-    const has_visitor = w.source_ids.some((x) => VISITOR_SRC.has(x));
-    const reason = has_gis
-      ? has_visitor
-        ? "state_parks-GIS-backed row wins (also visitor-tagged; no better GIS candidate in group)"
-        : "state_parks-GIS-backed row wins (untagged GIS home)"
-      : "no GIS-backed row in group; row with most sources wins";
-    return { canonical: w, reason };
-  }
-  return {
-    canonical: null,
-    reason: `${top.length} members tie at score ${max} — needs manual review`,
-  };
 }
 
 // ---------- field-conflict detection ----------
