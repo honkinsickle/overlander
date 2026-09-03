@@ -78,6 +78,46 @@ Follow-up on PR #379. Read-only pass in name, but includes **real TEST writes** 
 - **Manual reversal proven.** Group 901 (Fort Ross) merge reversed using ONLY the audit row: extract before-snapshot → repoint absorbed's original source_records back → restore is_searchable → recompute both mps. State matches before-snapshot exactly. Net TEST state now: 4 merges present, 1 reversed.
 - **Not verified:** whether the executor behaves identically on PROD (schema identical; not tested); whether `field_precedence` produces intended canonical values for every field after a real merge (spot-checked source_count and is_searchable only); whether Typesense's live search reflects merges after `search:sync` (not tested); reversal for n-way merges or merges with complex `place_relationships` edges (only 2-way with simple edges exercised).
 
+## 2026-09-03 (later 11) — Closed all three #382 items: Theaters out of Culture, `park` → `scenic`, renames declined.
+
+- **Theaters: #382 had the polarity backwards, and Adam's clarification exposed
+  it.** I had treated `foursquare.ts:84-89` ("Roadside-quirky entertainment stays
+  oddity") as a blocker to route around. It was a **signal that Culture's scope
+  was wrong** — `federated.ts:42` defines `attraction` as *"the formal cultural
+  set only"*, so a novelty theater is the `oddity` sense by the code's own words.
+  Culture drops to three chips and the rule stays untouched.
+- **Three items of "required work" from #382 withdrawn:** add a `theater`
+  primary, move the regex, probe Mapbox. None needed. That removed the only
+  Culture item blocked on work outside the routing layer — **the correction made
+  the plan smaller, not larger.**
+- **Caught a dependency the brief didn't mention:** `amphitheatre` was promoted
+  into Culture/Theaters in #382 on the sole justification "performance venue →
+  Theaters." With Theaters gone the justification lapses, so it returns to
+  `interest`. 0 corpus rows, so no practical change — but leaving it promoted
+  would have been an orphaned decision with no stated basis.
+- **The empty-chip re-check gave a non-obvious answer, which is why it was worth
+  running.** Culture is now 2-empty-of-3 rather than 2-empty-plus-1-nonexistent
+  of 4: *proportionally worse, absolutely better.* The decisive distinction is
+  that Museums and Galleries are R2 LIVE-PRIMARY — empty in corpus, filling the
+  moment the §3.1 live route lands — whereas Theaters was permanently blocked
+  without ingest. **#382 lumped all three together as "empty"; that was too
+  coarse.** Museums/Galleries need no separate ship step at all.
+- **`park` → `scenic`, and the consequence chased rather than left dangling.**
+  It matches the corpus (`scenic` already claims `park`, 2,518 in-scope; `urban`
+  claims `city_park`, zero), so live and corpus agree — the same failure mode
+  §3.1 exists to prevent. **It also simplifies the `urban` question:** nothing
+  routes to `urban` at all now, so it collapses to keep-or-remove with no
+  sourcing option behind it. Updated in three places so no stale "still open"
+  pointer survives.
+- **Renames declined, marked rather than deleted.** A silent removal would lose
+  that it was considered twice. Noted the display consequence: the Find Nearby
+  heading "FUEL & REPAIR" is closer to `fuel`'s real contents than the canonical
+  chip label — the two will read differently, deliberately.
+- **Kept a question separate instead of folding it in:** a novelty-theater chip
+  under `oddity` is *not* proposed. Flagged that the Foursquare rule classifies
+  live results by name only and does nothing for corpus rows, so it would still
+  need a `theater` primary — the rule is not a substitute.
+
 ## 2026-09-03 (later 10) — Resolved both #380 open questions: Culture under `attraction`, and the `interest` bucket fix.
 
 - **Amendment to #380, not a rewrite.** Three deliverables updated in place;
