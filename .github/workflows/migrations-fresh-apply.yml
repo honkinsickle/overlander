@@ -1,0 +1,169 @@
+name: migrations-fresh-apply
+
+# Fresh-apply the full migration chain to an empty Postgres+PostGIS via
+# the Supabase CLI's local stack. Catches ordering, dependency, and
+# fresh-DB-only bugs that incremental `db push` against the linked TEST
+# project cannot — because that DB already carries every prior schema
+# state. Runs on PRs that add or modify any `supabase/migrations/**`
+# file, plus on pushes to `main` as a safety net if a PR merges without
+# having triggered the check for some reason.
+#
+# Why not `supabase db push --linked`? Because push against the linked
+# TEST project builds on the existing schema — a migration that only
+# succeeds because a prior migration left something behind will pass
+# there and fail on any first-time apply (including future PROD).
+#
+# Docker: ubuntu-latest runners have Docker + docker-compose available
+# natively; the Supabase CLI uses them to spin up the local stack.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migrations-fresh-apply.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migrations-fresh-apply.yml'
+  workflow_dispatch:
+
+jobs:
+  fresh-apply:
+    runs-on: ubuntu-latest
+    # Pulling the supabase local-stack images on cold cache is the bulk
+    # of the wall time (~3-5 min). Migrations themselves apply in
+    # seconds. 20 min gives ample headroom.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Bootstrap minimal supabase/config.toml
+        # The repo has no committed supabase/config.toml — migrations
+        # have always been applied via `db push` to the linked remote,
+        # not via a local stack. `supabase db start` needs this file.
+        # Generated inline so the repo stays unchanged and no config
+        # can drift between what CI runs and what a dev would.
+        #
+        # major_version = 17 matches TEST (supabase/.temp/postgres-version).
+        # project_id is local-only; never touches any real project.
+        run: |
+          if [ -f supabase/config.toml ]; then
+            echo "config.toml already exists — leaving it as-is"
+          else
+            cat > supabase/config.toml <<'TOML'
+          project_id = "overlander-fresh-apply-ci"
+
+          [db]
+          port = 54322
+          major_version = 17
+
+          [api]
+          enabled = false
+
+          [studio]
+          enabled = false
+
+          [auth]
+          enabled = false
+
+          [storage]
+          enabled = false
+
+          [inbucket]
+          enabled = false
+
+          [edge_runtime]
+          enabled = false
+
+          [analytics]
+          enabled = false
+          TOML
+          fi
+
+      - name: Start Postgres + apply every migration from empty
+        # `supabase db start` boots the local Postgres container and
+        # applies every migration in `supabase/migrations/` in
+        # chronological order. If any migration errors, the command
+        # exits non-zero and this step fails.
+        #
+        # We disable every non-db service in config.toml above so we're
+        # not paying to spin up auth/storage/studio/kong/etc. — only
+        # the DB matters for a migration-apply check.
+        run: supabase db start
+
+      - name: Verify every migration file was applied
+        # Belt-and-suspenders: even if `db start` reported success,
+        # cross-check the ledger. Migrations that get skipped (e.g.
+        # empty body, no-op DDL) show up here as a count mismatch.
+        run: |
+          expected=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
+          # Local db connection string per Supabase CLI convention.
+          conn='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          applied=$(psql "$conn" -Atc "select count(*) from supabase_migrations.schema_migrations")
+          echo "expected=$expected applied=$applied"
+          if [ "$expected" != "$applied" ]; then
+            echo "MISMATCH: $expected migration files on disk, $applied applied to fresh DB"
+            echo "Applied versions:"
+            psql "$conn" -Atc "select version from supabase_migrations.schema_migrations order by version"
+            echo "Disk versions:"
+            ls supabase/migrations/*.sql | sed 's|.*/||;s|_.*||'
+            exit 1
+          fi
+
+      - name: Sanity-check critical objects exist
+        # Names touched by the recent v2-v5 chain. If any of these are
+        # missing after fresh apply, the check catches ordering /
+        # dependency bugs that a schema-migrations count alone would
+        # miss.
+        run: |
+          conn='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          check() {
+            local kind="$1" label="$2" sql="$3"
+            local result
+            result=$(psql "$conn" -Atc "$sql")
+            if [ "$result" = "t" ]; then
+              echo "  ✓ $kind $label"
+            else
+              echo "  ✗ MISSING $kind $label"
+              exit 1
+            fi
+          }
+          check function 'merge_master_place(uuid,uuid[],text,text,integer,text)' \
+            "select exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='merge_master_place')"
+          check function 'recompute_master_place(uuid)' \
+            "select exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='recompute_master_place')"
+          check table 'merge_audit_log' \
+            "select exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='merge_audit_log')"
+          check table 'master_place' \
+            "select exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='master_place')"
+          check table 'place_relationships' \
+            "select exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='place_relationships')"
+          check extension 'postgis' \
+            "select exists (select 1 from pg_extension where extname='postgis')"
+
+      - name: Verify recompute_master_place is at v5 (skip-soft-retired)
+        # v5 (20260904120000) redefined this function to include a
+        # v_self_has_active_sr guard. Grep the pg_proc source to
+        # confirm the LATEST definition landed — a chain that stopped
+        # applying at v0.5 would leave the earlier body in place and
+        # this check catches that.
+        run: |
+          conn='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          src=$(psql "$conn" -Atc "select pg_get_functiondef(oid) from pg_proc where proname='recompute_master_place' and pronamespace='public'::regnamespace")
+          if echo "$src" | grep -q v_self_has_active_sr; then
+            echo "  ✓ recompute_master_place is at v5 (skip-soft-retired)"
+          else
+            echo "  ✗ recompute_master_place body missing v5 guard — chain may have stopped at v0.5"
+            exit 1
+          fi
+
+      - name: Stop local stack
+        if: always()
+        run: supabase stop --no-backup || true
