@@ -1,27 +1,50 @@
 /**
- * READ-ONLY dry-run merge preview for the SAME-bucket duplicate pairs surfaced
- * by the cross-source duplicate sort (see
- * docs/investigations/2026-09-02-cross-source-duplicates.md and its
- * subsequent sorting pass).
+ * READ-ONLY dry-run merge preview for the SAME-bucket duplicate pairs.
  *
- * For each pair the tool decides which side would be canonical (per the
- * state_parks-GIS-wins precedent established across CA/OR/NV), enumerates what
- * would need to move if the merge executed (source_records, place_relationships,
- * generated_content, photo_candidates), and surfaces any field-level conflict
- * between the two rows that a real merge would need a human decision on.
+ * v2 (2026-09-03). Adds n-way cluster detection and the Agua Caliente
+ * exclusion from PR #372's verdict.
+ *   - v1 (PR #370): per-pair preview only. Handled every pair independently.
+ *   - v2: union-find over all pairs so any master_place involved in more
+ *         than one pair collapses into a single n-way merge group. Emits
+ *         both per-pair rows (for backward compatibility) AND per-group
+ *         rows (the new correct unit of work for a real merge).
  *
- * WRITES NOTHING. Every query is a SELECT. The tool refuses to run with any
- * argument resembling `--apply`, `--write`, or `--execute`. Emits two files:
+ * For each pair the tool hydrates both master_place rows, applies the
+ * state_parks-GIS-wins canonical rule from the parent investigation
+ * (docs/investigations/2026-09-02-cross-source-duplicates.md §3), enumerates
+ * FK deltas a real merge would need to perform, and diffs field-by-field.
  *
- *   .context/merge-preview-136.csv   — one flat row per pair, spreadsheet-friendly
- *   .context/merge-preview-136.json  — full structured per-pair record
+ * For each merge group it picks THE single canonical winner across all
+ * records in the group (using the same rule), lists every other record as
+ * an "absorbed" candidate, and rolls up the per-pair conflicts into a
+ * per-group set with the pair each conflict came from.
+ *
+ * WRITES NOTHING. Every query is a SELECT. Refuses any argument matching
+ * --apply|--write|--execute|--commit|--run|--do.
+ *
+ * Inputs and exclusions:
+ *   - Reads pairs from .context/same-pairs-resolved.json by default (may be
+ *     overridden via --input <path>). That file is produced by PR #368's
+ *     sort script + a prefix-resolver query — same input as v1.
+ *   - Excludes one specific pair by default: Agua Caliente County Park
+ *     (ABDSP) ↔ NPS Anza-Borrego Desert State Park. PR #372's verdict found
+ *     the canonical master_place there is a corrupted state_parks federation
+ *     (upstream dissolveBoundaries bug: UNITNBR="622" shares between two
+ *     source features and the merge kept both polygons under one name).
+ *     Not a merge candidate until that upstream bug is fixed. Pass
+ *     --include-agua-caliente to override.
+ *
+ * Outputs (both .context/, gitignored):
+ *   merge-preview-135.csv    — one row per pair (post-exclusion count)
+ *   merge-preview-135.json   — full structured per-pair record
+ *   merge-preview-groups.csv — one row per n-way merge group
+ *   merge-preview-groups.json— full structured per-group record
  *
  * Usage:
  *   npx tsx data/scripts/merge-preview-same-pairs.ts
- *       [--input .context/same-pairs-resolved.json]   # override input
- *       [--limit N]                                    # preview first N pairs
- *
- * Reads PROD from web/.env.local. Refuses to run against any other project.
+ *       [--input .context/same-pairs-resolved.json]
+ *       [--limit N]                     # first N pairs (for testing)
+ *       [--include-agua-caliente]       # override the exclusion
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -32,6 +55,10 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const PROD_HOST = "nqzeywzcowujzyegxbsr.supabase.co";
+
+// The single pair excluded by default. See PR #372 §3.
+const AGUA_CALIENTE_CANONICAL = "9cf912c6-10c8-4af2-bada-499abcdeb2d7";
+const NPS_ANZA_BORREGO_ABSORBED = "2e118c6f-aad5-43ad-926b-5bb0f04626dc";
 
 // Refuse write-flavoured arguments outright.
 for (const arg of process.argv.slice(2)) {
@@ -83,13 +110,13 @@ interface Side {
   price_tier: number | null;
   photo_url: string | null;
   geometry_polygon: unknown;
-  source_ids: string[]; // active backing sources
-  source_record_ids: string[]; // active source_record ids pointing at this mp
+  source_ids: string[];
+  source_record_ids: string[];
   place_match_count: number;
   gen_content_count: number;
   photo_candidate_count: number;
-  child_relationships: string[]; // parent mp_ids where this row is CHILD
-  parent_relationships: string[]; // child mp_ids where this row is PARENT
+  child_relationships: string[];
+  parent_relationships: string[];
 }
 
 interface Preview {
@@ -109,9 +136,23 @@ interface Preview {
     child_relationships: number;
     parent_relationships: number;
   };
-  conflicts: string[]; // human-readable per-field conflict descriptions
-  risks: string[]; // dry-run-execution risk flags
+  conflicts: string[];
+  risks: string[];
   original: PairIn;
+}
+
+interface Group {
+  group_id: number;
+  member_mp_ids: string[]; // all records in the group
+  pair_keys: string[]; // pair_keys of the pairs that built this group
+  size: number; // count of member records
+  states: string[]; // distinct states across member records
+  canonical_mp_id: string | null; // single canonical picked across the group
+  canonical_reason: string;
+  absorbed_mp_ids: string[]; // all non-canonical members
+  member_sides: Array<{ id: string; canonical_name: string; source_ids: string[]; source_count: number; has_polygon: boolean }>;
+  conflict_summary: string[]; // union of pair-level conflicts, with which pair each came from
+  risk_summary: string[]; // union of pair-level risks, deduped
 }
 
 // ---------- env / client ----------
@@ -151,10 +192,7 @@ function readInput(path: string): PairIn[] {
   }
   const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
   if (!Array.isArray(raw)) throw new Error("input must be an array");
-  const pairs = (raw as PairIn[]).filter(
-    (r) => r.visitor_mp_full && r.other_mp_full,
-  );
-  return pairs;
+  return (raw as PairIn[]).filter((r) => r.visitor_mp_full && r.other_mp_full);
 }
 
 // ---------- data hydration ----------
@@ -168,37 +206,24 @@ async function hydrate(db: SupabaseClient, mp_id: string): Promise<Side> {
     .eq("id", mp_id)
     .maybeSingle();
   if (mp.error || mp.data == null) {
-    throw new Error(
-      `QUERY FAILED [master_place ${mp_id}]: ${JSON.stringify(mp.error)}`,
-    );
+    throw new Error(`QUERY FAILED [master_place ${mp_id}]: ${JSON.stringify(mp.error)}`);
   }
 
-  const sr = await db
-    .from("source_record")
-    .select("id,source_id,is_active")
-    .eq("master_place_id", mp_id);
+  const sr = await db.from("source_record").select("id,source_id,is_active").eq("master_place_id", mp_id);
   if (sr.error || sr.data == null) {
     throw new Error(`QUERY FAILED [source_record ${mp_id}]: ${JSON.stringify(sr.error)}`);
   }
   const active = (sr.data ?? []).filter((x) => x.is_active !== false);
 
-  const pm = await db
-    .from("place_match")
-    .select("id", { count: "exact", head: true })
-    .eq("master_place_id", mp_id);
-  const pm_count = pm.count ?? 0;
-
+  const pm = await db.from("place_match").select("id", { count: "exact", head: true }).eq("master_place_id", mp_id);
   const gc = await db
     .from("master_place_generated_content")
     .select("id", { count: "exact", head: true })
     .eq("master_place_id", mp_id);
-  const gc_count = gc.count ?? 0;
-
   const pc = await db
     .from("master_place_photo_candidate")
     .select("id", { count: "exact", head: true })
     .eq("master_place_id", mp_id);
-  const pc_count = pc.count ?? 0;
 
   const rel_child = await db
     .from("place_relationships")
@@ -235,15 +260,11 @@ async function hydrate(db: SupabaseClient, mp_id: string): Promise<Side> {
     geometry_polygon: mp.data.geometry_polygon,
     source_ids: [...new Set(active.map((x) => String(x.source_id)))].sort(),
     source_record_ids: active.map((x) => String(x.id)),
-    place_match_count: pm_count,
-    gen_content_count: gc_count,
-    photo_candidate_count: pc_count,
-    child_relationships: (rel_child.data ?? []).map((x) =>
-      String(x.parent_master_place_id),
-    ),
-    parent_relationships: (rel_parent.data ?? []).map((x) =>
-      String(x.child_master_place_id),
-    ),
+    place_match_count: pm.count ?? 0,
+    gen_content_count: gc.count ?? 0,
+    photo_candidate_count: pc.count ?? 0,
+    child_relationships: (rel_child.data ?? []).map((x) => String(x.parent_master_place_id)),
+    parent_relationships: (rel_parent.data ?? []).map((x) => String(x.child_master_place_id)),
   };
 }
 
@@ -258,34 +279,68 @@ const VISITOR_SRC = new Set([
   "utah_state_parks",
 ]);
 
-function pickCanonical(visitor: Side, other: Side): { side: "visitor" | "other" | "either"; reason: string } {
-  const v = new Set(visitor.source_ids);
-  const o = new Set(other.source_ids);
-  const v_has_gis = v.has("state_parks");
-  const o_has_gis = o.has("state_parks");
-  const v_visitor = [...v].some((s) => VISITOR_SRC.has(s));
-  const o_visitor = [...o].some((s) => VISITOR_SRC.has(s));
-  // Primary rule: whichever side has state_parks GIS is canonical
-  if (o_has_gis && !v_has_gis) {
-    return { side: "other", reason: "other side has state_parks GIS record; visitor does not" };
+function pickCanonicalPair(a: Side, b: Side): { winner: Side; loser: Side; reason: string } | { reason: string } {
+  const av = new Set(a.source_ids);
+  const bv = new Set(b.source_ids);
+  const a_gis = av.has("state_parks");
+  const b_gis = bv.has("state_parks");
+  const a_visitor = [...av].some((s) => VISITOR_SRC.has(s));
+  const b_visitor = [...bv].some((s) => VISITOR_SRC.has(s));
+  if (b_gis && !a_gis) return { winner: b, loser: a, reason: "state_parks-GIS-backed row wins" };
+  if (a_gis && !b_gis) return { winner: a, loser: b, reason: "state_parks-GIS-backed row wins" };
+  if (a_gis && b_gis) {
+    if (b_visitor && !a_visitor) return { winner: a, loser: b, reason: "both GIS-backed; untagged GIS home wins" };
+    if (a_visitor && !b_visitor) return { winner: b, loser: a, reason: "both GIS-backed; untagged GIS home wins" };
+    return { reason: "both GIS-backed and both visitor-tagged; needs manual" };
   }
-  if (v_has_gis && !o_has_gis) {
-    return { side: "visitor", reason: "visitor side has state_parks GIS record; other does not" };
+  if (av.size > bv.size) return { winner: a, loser: b, reason: "neither GIS; more sources wins" };
+  if (bv.size > av.size) return { winner: b, loser: a, reason: "neither GIS; more sources wins" };
+  return { reason: "neither GIS and equal sources; needs manual" };
+}
+
+/**
+ * Score a single member under the canonical rule. Higher wins. Encoded so
+ * the same rule that decides a pair produces a well-defined ranking across
+ * an arbitrary-sized group without pairwise-reduction losing information —
+ * i.e. if only one of three members has state_parks, it wins even when the
+ * other two would compare as "either" against each other.
+ */
+function scoreMember(s: Side): number {
+  const has_gis = s.source_ids.includes("state_parks");
+  const has_visitor = s.source_ids.some((x) => VISITOR_SRC.has(x));
+  let score = 0;
+  if (has_gis) score += 100; // GIS-backed strongly preferred
+  if (has_gis && !has_visitor) score += 10; // untagged GIS home tiebreaker
+  score += s.source_ids.length; // more sources > fewer
+  return score;
+}
+
+/**
+ * Pick THE canonical across an arbitrary-sized group. Ranks every member by
+ * the scoring function and picks the max; if the top tier ties, the group is
+ * flagged as needing manual review rather than guessing.
+ */
+function pickCanonicalGroup(members: Side[]): { canonical: Side | null; reason: string } {
+  if (members.length === 0) return { canonical: null, reason: "empty group" };
+  if (members.length === 1) return { canonical: members[0], reason: "single-member group" };
+  const scored = members.map((m) => ({ m, s: scoreMember(m) }));
+  const max = Math.max(...scored.map((x) => x.s));
+  const top = scored.filter((x) => x.s === max);
+  if (top.length === 1) {
+    const w = top[0].m;
+    const has_gis = w.source_ids.includes("state_parks");
+    const has_visitor = w.source_ids.some((x) => VISITOR_SRC.has(x));
+    const reason = has_gis
+      ? has_visitor
+        ? "state_parks-GIS-backed row wins (also visitor-tagged; no better GIS candidate in group)"
+        : "state_parks-GIS-backed row wins (untagged GIS home)"
+      : "no GIS-backed row in group; row with most sources wins";
+    return { canonical: w, reason };
   }
-  // Both GIS-backed: prefer whichever is NOT visitor-source-tagged (cleaner GIS home)
-  if (v_has_gis && o_has_gis) {
-    if (o_visitor && !v_visitor) {
-      return { side: "visitor", reason: "both GIS-backed; visitor is the untagged GIS home" };
-    }
-    if (v_visitor && !o_visitor) {
-      return { side: "other", reason: "both GIS-backed; other is the untagged GIS home" };
-    }
-    return { side: "either", reason: "both GIS-backed and both visitor-tagged; needs manual call" };
-  }
-  // Neither has state_parks GIS
-  if (v.size > o.size) return { side: "visitor", reason: "neither has state_parks; visitor has more sources" };
-  if (o.size > v.size) return { side: "other", reason: "neither has state_parks; other has more sources" };
-  return { side: "either", reason: "neither has state_parks and equal sources; needs manual call" };
+  return {
+    canonical: null,
+    reason: `${top.length} members tie at score ${max} — needs manual review`,
+  };
 }
 
 // ---------- field-conflict detection ----------
@@ -344,7 +399,6 @@ function fieldConflicts(canonical: Side, absorbed: Side): string[] {
       out.push(`${String(k)}: both non-null with different values`);
     }
   }
-  // Arrays
   const arr: (keyof Side)[] = ["secondary_categories", "overlander_tags"];
   for (const k of arr) {
     const cv = (canonical[k] as string[] | null) ?? [];
@@ -355,11 +409,35 @@ function fieldConflicts(canonical: Side, absorbed: Side): string[] {
       out.push(`${String(k)}: canonical=[${cs.join(",")}] absorbed=[${as_.join(",")}]`);
     }
   }
-  // Geometry polygon
   if (nonNull(canonical.geometry_polygon) && nonNull(absorbed.geometry_polygon)) {
     out.push("geometry_polygon: both sides have a polygon");
   }
   return out;
+}
+
+// ---------- union-find ----------
+
+class UnionFind {
+  private parent = new Map<string, string>();
+  find(x: string): string {
+    if (!this.parent.has(x)) this.parent.set(x, x);
+    if (this.parent.get(x) !== x) this.parent.set(x, this.find(this.parent.get(x)!));
+    return this.parent.get(x)!;
+  }
+  union(a: string, b: string): void {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra !== rb) this.parent.set(ra, rb);
+  }
+  groups(): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    for (const x of this.parent.keys()) {
+      const r = this.find(x);
+      if (!out.has(r)) out.set(r, []);
+      out.get(r)!.push(x);
+    }
+    return out;
+  }
 }
 
 // ---------- main ----------
@@ -367,17 +445,20 @@ function fieldConflicts(canonical: Side, absorbed: Side): string[] {
 interface Args {
   input: string;
   limit: number | null;
+  includeAguaCaliente: boolean;
 }
 
 function parseArgs(): Args {
   const argv = process.argv.slice(2);
   let input = join(REPO, ".context/same-pairs-resolved.json");
   let limit: number | null = null;
+  let includeAguaCaliente = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--input") input = argv[++i];
     else if (argv[i] === "--limit") limit = Number(argv[++i]);
+    else if (argv[i] === "--include-agua-caliente") includeAguaCaliente = true;
   }
-  return { input, limit };
+  return { input, limit, includeAguaCaliente };
 }
 
 function toCsvRow(cells: (string | number | null)[]): string {
@@ -396,65 +477,79 @@ async function main(): Promise<void> {
   const args = parseArgs();
   const db = makeClient();
 
-  const inputPairs = readInput(args.input);
-  const pairs = args.limit != null ? inputPairs.slice(0, args.limit) : inputPairs;
-  console.log(`loaded ${inputPairs.length} pairs${args.limit != null ? ` (using first ${pairs.length})` : ""}`);
+  const allPairs = readInput(args.input);
+  console.log(`loaded ${allPairs.length} pairs from input`);
+
+  // Apply the Agua Caliente exclusion.
+  let pairs = allPairs;
+  const excluded: PairIn[] = [];
+  if (!args.includeAguaCaliente) {
+    pairs = allPairs.filter((p) => {
+      const isAC =
+        (p.visitor_mp_full === AGUA_CALIENTE_CANONICAL && p.other_mp_full === NPS_ANZA_BORREGO_ABSORBED) ||
+        (p.other_mp_full === AGUA_CALIENTE_CANONICAL && p.visitor_mp_full === NPS_ANZA_BORREGO_ABSORBED);
+      if (isAC) excluded.push(p);
+      return !isAC;
+    });
+    console.log(`excluded ${excluded.length} pair(s) (Agua Caliente / NPS Anza-Borrego, per PR #372 §3)`);
+  }
+  if (args.limit != null) pairs = pairs.slice(0, args.limit);
+  console.log(`processing ${pairs.length} pair(s)`);
 
   const previews: Preview[] = [];
   let idx = 0;
   for (const p of pairs) {
     idx++;
     const [visitor, other] = await Promise.all([hydrate(db, p.visitor_mp_full), hydrate(db, p.other_mp_full)]);
-    const c = pickCanonical(visitor, other);
-    const canonical = c.side === "visitor" ? visitor : c.side === "other" ? other : null;
-    const absorbed = c.side === "visitor" ? other : c.side === "other" ? visitor : null;
+    const c = pickCanonicalPair(visitor, other);
+    const decided = "winner" in c;
+    const canonical = decided ? (c as { winner: Side }).winner : null;
+    const absorbed = decided ? (c as { loser: Side }).loser : null;
 
-    // Deltas assume the absorbed side's rows would repoint or be dropped.
-    // If canonical_side === "either", we don't decide who moves; we report both sides' inventories separately.
     const moves = {
       source_records: absorbed ? absorbed.source_record_ids.length : Math.max(visitor.source_record_ids.length, other.source_record_ids.length),
-      place_matches_dropped_by_cascade: absorbed ? absorbed.place_match_count : Math.max(visitor.place_match_count, other.place_match_count),
+      place_matches_dropped_by_cascade: absorbed
+        ? absorbed.place_match_count
+        : Math.max(visitor.place_match_count, other.place_match_count),
       generated_content: absorbed ? absorbed.gen_content_count : Math.max(visitor.gen_content_count, other.gen_content_count),
       photo_candidates: absorbed ? absorbed.photo_candidate_count : Math.max(visitor.photo_candidate_count, other.photo_candidate_count),
-      child_relationships: absorbed ? absorbed.child_relationships.length : Math.max(visitor.child_relationships.length, other.child_relationships.length),
-      parent_relationships: absorbed ? absorbed.parent_relationships.length : Math.max(visitor.parent_relationships.length, other.parent_relationships.length),
+      child_relationships: absorbed
+        ? absorbed.child_relationships.length
+        : Math.max(visitor.child_relationships.length, other.child_relationships.length),
+      parent_relationships: absorbed
+        ? absorbed.parent_relationships.length
+        : Math.max(visitor.parent_relationships.length, other.parent_relationships.length),
     };
 
     const conflicts = canonical && absorbed ? fieldConflicts(canonical, absorbed) : ["canonical side unresolved — cannot compute conflicts"];
 
     const risks: string[] = [];
-    if (c.side === "either") risks.push("canonical_side=either — needs manual decision");
+    if (!decided) risks.push(`canonical_side=either — needs manual decision (${c.reason})`);
     if (canonical && absorbed && canonical.primary_category !== absorbed.primary_category) {
       risks.push(`primary_category differs (${canonical.primary_category} vs ${absorbed.primary_category})`);
     }
     if (moves.parent_relationships > 0 || moves.child_relationships > 0) {
-      // A merge would rewrite these; guard against self-reference and dedupe.
-      const self_ref_hazard =
+      const self_ref =
         absorbed &&
         canonical &&
-        (absorbed.child_relationships.includes(canonical.id) ||
-          absorbed.parent_relationships.includes(canonical.id));
-      if (self_ref_hazard) risks.push("absorbed row participates in a relationship WITH the canonical row — merging would create a self-reference (deduplicate)");
-      else risks.push(`${moves.parent_relationships + moves.child_relationships} place_relationships edge(s) would need rewriting`);
+        (absorbed.child_relationships.includes(canonical.id) || absorbed.parent_relationships.includes(canonical.id));
+      if (self_ref) risks.push("self-reference hazard — absorbed is already in a place_relationships row with canonical");
+      else risks.push(`${moves.parent_relationships + moves.child_relationships} place_relationships edge(s) need rewriting`);
     }
     if (canonical && absorbed && nonNull(canonical.geometry_polygon) && nonNull(absorbed.geometry_polygon)) {
-      risks.push("both rows have geometry_polygon — a real merge would need to pick one");
+      risks.push("both rows have geometry_polygon — real merge needs a polygon-picking rule");
     }
-    if (moves.place_matches_dropped_by_cascade > 0) {
-      risks.push(`${moves.place_matches_dropped_by_cascade} place_match rows on absorbed side would drop via CASCADE unless explicitly repointed`);
-    }
+    if (moves.place_matches_dropped_by_cascade > 0)
+      risks.push(`${moves.place_matches_dropped_by_cascade} place_match rows on absorbed would drop via CASCADE`);
     if (moves.generated_content > 0) risks.push(`${moves.generated_content} master_place_generated_content row(s) to move`);
     if (moves.photo_candidates > 0) risks.push(`${moves.photo_candidates} master_place_photo_candidate row(s) to move`);
-    if (conflicts.length > 0 && !risks.some((r) => r.includes("category differs"))) {
-      // Called out separately because field conflicts are a distinct risk class from FK moves
-    }
 
-    const preview: Preview = {
+    previews.push({
       pair_key: [visitor.id, other.id].sort().join("|"),
       state: p.state,
       visitor,
       other,
-      canonical_side: c.side,
+      canonical_side: decided ? (canonical === visitor ? "visitor" : "other") : "either",
       canonical_reason: c.reason,
       canonical_mp_id: canonical?.id ?? null,
       absorbed_mp_id: absorbed?.id ?? null,
@@ -462,19 +557,66 @@ async function main(): Promise<void> {
       conflicts,
       risks,
       original: p,
-    };
-    previews.push(preview);
+    });
 
     if (idx % 20 === 0) console.log(`  processed ${idx}/${pairs.length}`);
   }
   console.log(`processed ${previews.length}/${pairs.length}`);
 
+  // ---------- union-find over all mp_ids from all pairs ----------
+  const uf = new UnionFind();
+  const sideById = new Map<string, Side>();
+  for (const p of previews) {
+    uf.union(p.visitor.id, p.other.id);
+    sideById.set(p.visitor.id, p.visitor);
+    sideById.set(p.other.id, p.other);
+  }
+  const rawGroups = uf.groups();
+  const groups: Group[] = [];
+  let gid = 0;
+  for (const [, members] of rawGroups) {
+    gid++;
+    const memberSides = members.map((id) => sideById.get(id)!).filter(Boolean);
+    if (memberSides.length < 2) continue; // only groups with real merge work
+    const pairsInGroup = previews.filter((p) => members.includes(p.visitor.id) || members.includes(p.other.id));
+    const uniquePairKeys = [...new Set(pairsInGroup.map((p) => p.pair_key))];
+    const gpick = pickCanonicalGroup(memberSides);
+    const canonical = gpick.canonical;
+    const absorbedIds = canonical ? memberSides.filter((s) => s.id !== canonical.id).map((s) => s.id) : [];
+
+    const conflict_summary: string[] = [];
+    const risk_summary_set = new Set<string>();
+    for (const p of pairsInGroup) {
+      for (const c of p.conflicts) conflict_summary.push(`[pair ${p.visitor.canonical_name} ↔ ${p.other.canonical_name}] ${c}`);
+      for (const r of p.risks) risk_summary_set.add(r);
+    }
+
+    groups.push({
+      group_id: gid,
+      member_mp_ids: members,
+      pair_keys: uniquePairKeys,
+      size: memberSides.length,
+      states: [...new Set(pairsInGroup.map((p) => p.state))],
+      canonical_mp_id: canonical?.id ?? null,
+      canonical_reason: gpick.reason,
+      absorbed_mp_ids: absorbedIds,
+      member_sides: memberSides.map((s) => ({
+        id: s.id,
+        canonical_name: s.canonical_name,
+        source_ids: s.source_ids,
+        source_count: s.source_count,
+        has_polygon: nonNull(s.geometry_polygon),
+      })),
+      conflict_summary,
+      risk_summary: [...risk_summary_set],
+    });
+  }
+
   // ---------- outputs ----------
 
-  const jsonOut = join(REPO, ".context/merge-preview-136.json");
+  const jsonOut = join(REPO, ".context/merge-preview-135.json");
   writeFileSync(jsonOut, JSON.stringify(previews, null, 2));
-
-  const csvOut = join(REPO, ".context/merge-preview-136.csv");
+  const csvOut = join(REPO, ".context/merge-preview-135.csv");
   const header = [
     "state",
     "canonical_side",
@@ -526,29 +668,72 @@ async function main(): Promise<void> {
   }
   writeFileSync(csvOut, rows.join("\n"));
 
+  const groupsJsonOut = join(REPO, ".context/merge-preview-groups.json");
+  writeFileSync(groupsJsonOut, JSON.stringify(groups, null, 2));
+  const groupsCsvOut = join(REPO, ".context/merge-preview-groups.csv");
+  const gHeader = [
+    "group_id",
+    "size",
+    "states",
+    "canonical_mp_id",
+    "canonical_name",
+    "canonical_reason",
+    "member_count",
+    "absorbed_ids",
+    "absorbed_names",
+    "n_conflicts",
+    "n_risks",
+  ];
+  const gRows: string[] = [gHeader.join(",")];
+  for (const g of groups) {
+    const canonicalSide = g.canonical_mp_id ? g.member_sides.find((m) => m.id === g.canonical_mp_id) : null;
+    const absorbedSides = g.member_sides.filter((m) => g.absorbed_mp_ids.includes(m.id));
+    gRows.push(
+      toCsvRow([
+        g.group_id,
+        g.size,
+        g.states.join("+"),
+        g.canonical_mp_id ?? "",
+        canonicalSide?.canonical_name ?? "",
+        g.canonical_reason,
+        g.size,
+        g.absorbed_mp_ids.join("+"),
+        absorbedSides.map((s) => s.canonical_name).join(" | "),
+        g.conflict_summary.length,
+        g.risk_summary.length,
+      ]),
+    );
+  }
+  writeFileSync(groupsCsvOut, gRows.join("\n"));
+
   console.log(`\nwrote: ${jsonOut}`);
   console.log(`wrote: ${csvOut}`);
+  console.log(`wrote: ${groupsJsonOut}`);
+  console.log(`wrote: ${groupsCsvOut}`);
 
   // ---------- summary ----------
-
   const by_side: Record<string, number> = {};
-  const by_state: Record<string, Record<string, number>> = {};
-  let any_conflicts = 0;
-  let any_risks = 0;
-  let either_count = 0;
-  for (const p of previews) {
-    by_side[p.canonical_side] = (by_side[p.canonical_side] ?? 0) + 1;
-    (by_state[p.state] ??= {})[p.canonical_side] = ((by_state[p.state] ??= {})[p.canonical_side] ?? 0) + 1;
-    if (p.conflicts.length > 0 && !(p.conflicts.length === 1 && p.conflicts[0].includes("unresolved"))) any_conflicts++;
-    if (p.risks.length > 0) any_risks++;
-    if (p.canonical_side === "either") either_count++;
+  for (const p of previews) by_side[p.canonical_side] = (by_side[p.canonical_side] ?? 0) + 1;
+  console.log(`\ncanonical_side across ${previews.length} pairs: ${JSON.stringify(by_side)}`);
+
+  const sizes = new Map<number, number>();
+  for (const g of groups) sizes.set(g.size, (sizes.get(g.size) ?? 0) + 1);
+  console.log(`\nmerge groups: ${groups.length}`);
+  for (const [s, n] of [...sizes.entries()].sort()) console.log(`  size ${s}: ${n} groups`);
+
+  const multi = groups.filter((g) => g.size > 2);
+  console.log(`\nn-way clusters (size > 2): ${multi.length}`);
+  for (const g of multi) {
+    const canonical = g.member_sides.find((m) => m.id === g.canonical_mp_id);
+    console.log(`  group ${g.group_id}: size=${g.size}, canonical=${canonical?.canonical_name}, states=${g.states.join(",")}`);
+    for (const m of g.member_sides) {
+      const isCanonical = m.id === g.canonical_mp_id;
+      console.log(`    ${isCanonical ? "★" : " "} ${m.canonical_name} [${m.source_ids.join("+")}] polygon=${m.has_polygon} sc=${m.source_count}`);
+    }
   }
-  console.log(`\ncanonical side: ${JSON.stringify(by_side)}`);
-  console.log(`by state:`);
-  for (const [st, m] of Object.entries(by_state).sort()) console.log(`  ${st}  ${JSON.stringify(m)}`);
-  console.log(`\npairs with any field conflict: ${any_conflicts}`);
-  console.log(`pairs with any risk flag: ${any_risks}`);
-  console.log(`"either" canonical side (needs manual call): ${either_count}`);
+
+  const unresolved = groups.filter((g) => !g.canonical_mp_id);
+  console.log(`\ngroups without a decidable canonical: ${unresolved.length}`);
 }
 
 main().catch((e: unknown) => {

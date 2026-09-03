@@ -16,6 +16,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -175,6 +176,18 @@ Follow-up on PR #370's §3 design tension. Read-only. Every one of the 38 `place
 - **Direction pattern was uniform.** 37 canonical=parent + 1 canonical=child (Fort Churchill State Park's canonical has no polygon; the absorbed does). All 38 canonicals are `state_parks`-backed.
 - **Not verified this session.** Whether the parent polygons still cover the child points *today* (relationships `computed_at 2026-09-02`); whether other pairs among the 37 hide canonical-federation issues similar to Agua Caliente (I spot-checked source_record names but did not query for complete rosters); whether merging is the right product decision (a UX question).
 - **One concrete question passed up in §8** — should the Agua Caliente canonical row be split as a prerequisite? Not filed as backlog per the brief.
+
+## 2026-09-03 (later 5) — Merge preview v2: n-way cluster handling, Agua Caliente exclusion, federation-bug plan (not executed).
+
+Follow-up on PR #372's design tension + user's ask for n-way support in PR #370's tool. Read-only. New tool: `data/scripts/merge-preview-same-pairs.ts` supersedes PR #370's file. New doc: `docs/investigations/2026-09-03-merge-preview-v2-nway.md`. No writes to either database — the Agua Caliente fix was investigated but not executed (see below).
+
+- **Root-caused the Agua Caliente federation bug.** CA state_parks GIS record `state_parks:CA:park:622` labeled `Agua Caliente County Park (ABDSP)` actually carries a 250-part MultiPolygon whose bounding box (63 km × 102 km) covers all of Anza-Borrego. Cause: CA DPR's ParkBoundaries source has two distinct features sharing `UNITNBR = "622"`, and `dissolveBoundaries` in `data/ingestion/sources/state-parks.ts:208` groups by that field, so it merged both polygons under the first feature's `props`. The visitor SR `california_state_parks:638` (name `"Anza-Borrego Desert State Park ®"`) then hit `spatial_containment` because the polygon covers its Point — the ingest and ER both did what the code said; the source data has divergent features under one UNITNBR.
+- **Fix scoped but NOT executed.** A 2-UPDATE + 2-RPC plan documented in §5.3: repoint the visitor SR to the existing NPS Anza-Borrego mp (`2e118c6f-…`), recompute both. First PROD write of the thread, fixes symptom not root cause, and `field_precedence` merged-mp canonical_name outcome is unverified. Per brief's "if ambiguous or risky, stop and report" — stopped. Question passed up in §8.
+- **n-way cluster detection via union-find + score-based group picker.** Tool consolidates 135 pairs into **123 merge groups**: 113 size-2, 9 size-3, 1 size-4 (Fort Churchill NV).
+- **10 n-way clusters (size > 2) total — 8 more than the 2 named in the ask.** By state: 3 CA, 2 WA, 2 UT, 2 OR, 1 NV. 9 of 10 have a decidable canonical (state_parks GIS wins); 1 undecidable (Hat Rock OR, 3 members none with state_parks).
+- **Bug in v1's group logic surfaced by group 78 (Fort Rock OR).** v1 reduced pairwise: `A vs B` returned "either" (neither has state_parks), so v1 short-circuited before comparing C (which has state_parks). v2's score-based ranking correctly picks C. Same effect on group 51 (California Citrus) and group 39 (Empire Mine). All three now decidable.
+- **Set size: 136 input − 1 Agua Caliente exclusion = 135 processed.** Per-pair canonical distribution 63 other / 59 visitor / 13 either. The `visitor` count differs from PR #370's 60 by exactly the Agua Caliente exclusion (that pair was `visitor` in v1 because the corrupted canonical was state_parks-backed).
+- **Also: 8 groups total have undecidable canonicals** — 7 are the classic size-2 `either` cases (Old Town San Diego SHP, Salton Sea SRA, etc.), 1 is the Hat Rock 3-way cluster. Score-based ties surface these deterministically; v2 flags rather than guesses.
 
 ## 2026-09-03 (later 3) — Sampled live-source coverage. Two "just needs wiring" rows from #364 reverse under measurement.
 
