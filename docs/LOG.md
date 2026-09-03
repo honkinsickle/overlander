@@ -13,6 +13,55 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 9) — Design pass: 9-category taxonomy declared canonical; subtype mapping and the long-deferred routing table written.
+
+- **Three artifacts, design only, no code.** ADR
+  `2026-09-03-nine-category-taxonomy-canonical.md`, plus
+  `architecture/category-subtype-mapping.md` and
+  `architecture/category-source-routing-table.md`. This closes the question #364
+  ended on: a vocabulary had to be picked before a routing table could exist.
+- **Two of the brief's premises were wrong, and correcting them made the ADR
+  stronger, not weaker.** (a) **#364 contains no "3 of the 4 systems agreed"
+  finding** — it frames three vocabularies; the agreeing trio is DESIGN.md §1.2 ↔
+  `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey`. (b) The natural fourth — the
+  route allowlist — **has since been fixed by #373**, and executing
+  `resolveRequestedCategories` this pass confirms all nine are accepted. So the
+  ADR ratifies a convergence that already completed instead of asserting a
+  contested one. Citing a quote that doesn't exist would have been the easy path.
+- **#364 does not enumerate three of the four sets the brief asked me to map.**
+  Counts for all four, names for only the tile-only 3 plus a 4-member sample of
+  the 22. So every list was re-derived: code sets by differencing the live
+  constants, corpus sets by re-running #364's own read-only TEST instrument.
+- **All four counts reproduced — and the one that didn't, resolved exactly.**
+  Tile-only 3 ✓, slide-only 45 ✓, unclaimed corpus 22 ✓, and the empty set at
+  **42 against #364's 40**. Not a disagreement: #364 counted zero rows *at all*,
+  this pass counted zero **in-scope** rows, and exactly two primaries (`river`,
+  `steak_house`) carry one out-of-scope row each. Chasing that 2 down was worth
+  more than the sets themselves — it converts "roughly agrees" into "agrees, and
+  here is the definition that separates them."
+- **The headline design finding: the collapse is mostly already in the data
+  model.** 10 of the 13 tiles query primaries that already have a parent; only
+  the three suppressed amenities are unparented. The hierarchy is latent and the
+  UI simply doesn't express it — which reframes the work from "invent a taxonomy"
+  to "surface one."
+- **⚠️ Found a contradiction nobody had written down:**
+  `museum`/`art_gallery`/`historical_landmark` are `attraction` on the corpus
+  path and `oddity` on the live path, while Google is asked for them under
+  `attraction`. Invisible so far only because those primaries have zero corpus
+  rows. `attraction` cannot be routed until it's decided.
+- **Named the design's own weakest point rather than letting review find it:**
+  `interest` becomes a dumping ground — 24 of the 45 slide-only primaries, plus
+  mechanics, car washes, and (proposed) dump stations and showers, under a chip
+  reading "POINT OF INTEREST." Three exits set out, none taken.
+- **Held the line on two seductive over-reads.** #366's "coverage tracks
+  settlement" hypothesis rests on two remote points and #366 says weigh it, not
+  build on it — so the routing is conservative *with respect to it*, never
+  dependent on it. And "Foursquare beats Mapbox" is a category-filter measurement
+  compared against a name-search; the table says "candidate worth testing," never
+  "better source."
+- **Open decision left open, per the brief:** `urban` / water fill / showers /
+  dump stations. Facts assembled, call not made.
+
 ## 2026-09-03 (later 8) — Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. One stale citation, thirteen claims intact.
 
 - **Numbered 8, skipping 7 on purpose.** #371 is still open carrying

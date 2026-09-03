@@ -1,3 +1,29 @@
+# STATE — branch `category-taxonomy-design` · 2026-09-03 (later 26) — **DESIGN PASS: the 9-category taxonomy is declared canonical, every category is mapped to a parent, and the routing table #364 deferred now exists.**
+
+(**newest truth: design only. No code changed, nothing written to TEST or PROD. One ADR, two architecture docs, doc updates. The Find Nearby migration is deliberately NOT started.**
+
+**Three artifacts:** `docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md` (ADR) · `docs/architecture/category-subtype-mapping.md` (every category → parent) · `docs/architecture/category-source-routing-table.md` (category → source). Together they answer the question #364 closed on: *"a routing table has to pick one vocabulary as canonical before it can be written."*
+
+**⚠️ TWO PREMISES IN THE BRIEF DID NOT SURVIVE CONTACT WITH THE SOURCES — both are corrected in the ADR rather than repeated.** First, **#364 contains no "3 of the 4 systems already agreed" finding** `[literal]`; it frames the problem as *three* vocabularies. What it does say is that DESIGN.md §1.2 ↔ `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` match 9-for-9. Second, and better: **the natural fourth system has since been fixed.** PR #373's `REQUESTABLE_CATEGORIES` is derived from `BROWSE_CARD_CATEGORIES`, and executing it in this pass confirms **all nine are accepted**, with `categories=all` still expanding to the 7 live-fanout buckets. So **four of four now agree** — the ADR ratifies a convergence that already happened rather than asserting a disputed one.
+
+**⚠️ #364 DOES NOT ENUMERATE THREE OF THE FOUR MISMATCH SETS THE BRIEF ASKED ME TO MAP.** It gives counts for all four but names only the tile-only 3 plus a 4-member sample of the 22. So every list was **re-derived in this pass** — the code sets by differencing the live constants, the corpus sets by re-running #364's own read-only TEST instrument. **All four counts reproduce**, which is a genuine independent check on #364: tile-only **3**, slide-only **45**, unclaimed corpus **22**, and the empty set at **42 vs #364's 40** — a gap that resolves exactly, because #364 counted zero rows *at all* while this pass counted zero **in-scope** rows, and precisely two primaries (`river`, `steak_house`) hold one out-of-scope row each.
+
+**THE COLLAPSE IS MOSTLY ALREADY IN THE DATA MODEL.** `[literal]` 10 of the 13 Find Nearby tiles query primaries that already have a parent in `SLIDE_TO_PRIMARY_CATEGORY`; only `water`/`shower`/`dump_station` are unparented. **The hierarchy is latent; the UI just doesn't express it.** The 13 fold into **6** of the 9 — `attraction`, `oddity` and `urban` gain no subtypes at all.
+
+**⚠️ A CONTRADICTION FOUND IN THIS PASS, NOT PREVIOUSLY WRITTEN DOWN:** `museum`/`art_gallery`/`historical_landmark` are filed under **`attraction`** by the corpus path (`federated.ts:43-46`) and under **`oddity`** by the live path (`resolve-places.ts:236`), while Google is asked for them under `attraction`. No comment or commit explains it `[unverified whether deliberate]`. It has had no visible effect only because those primaries have zero corpus rows. **`attraction` is unroutable until it is decided.**
+
+**THE DESIGN'S WEAKEST POINT, STATED AS SUCH: `interest` becomes a dumping ground.** It already holds 24 of the 45 slide-only primaries, and the collapse adds mechanics, car washes and (as proposed) dump stations and showers — under a chip reading "POINT OF INTEREST." **A user looking for a mechanic taps "Point of Interest."** Three exits are set out; none is taken.
+
+**Open decision NOT taken, per the brief:** `urban` / water fill / showers / dump stations — keep as empty-state subtypes or remove from the UI. The ADR lays out the bearing facts (only `water` has a real corpus behind it; `urban` is structurally empty but is one of the canonical 9) and stops there.
+
+**Routing table's headline recommendations, ordered by measured value:** wire Mapbox `charging_station` (closes #364's worst-rated inconsistency, makes ~2.9k existing EV corpus rows live-reachable) · wire `auto_repair` (#366's *"cleanest wiring win"*) · wire `grocery` · and **do NOT wire `trailhead`/`viewpoint`** — #366 measured those near-empty and reversed #364's "just needs wiring" reading. All of it rests on #366's 12-point one-day sample and says so.
+
+**Deliberately not built on:** #366's "Mapbox tracks settlement not geography" hypothesis (two remote points — #366 says weigh it, don't build on it) and any "Foursquare beats Mapbox" reading (#366 walks that back — name-search vs category-filter are different instruments).
+
+**NEXT: Adam's review. Implementation is a separate pass and was not begun.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `reverify-resolver-diagram` · 2026-09-03 (later 25) — **Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. Thirteen claims held; one line citation was stale and is fixed.**
 
 (**newest truth: no code changed, nothing written to TEST or PROD. One investigation doc, two Paper text nodes, STATE + LOG.**
