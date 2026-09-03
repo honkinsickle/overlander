@@ -101,6 +101,18 @@ Foursquare is `[open]` as a *candidate to test*, not a source to wire.
 | `ev_charging` | 2,886 | Mapbox `charging_station` — **available, unwired** | 6/6 metro, 4/6 rural | **R3 MERGE** | **Yes — highest-value change in this table** |
 | `gas_station` | ~0 corpus; live-carried | Mapbox `gas_station` (the only wired Mapbox category) | 6/6 metro, 4/6 rural | **R2 LIVE-PRIMARY** | Yes — already does |
 | `truck_stop` | 0 | Mapbox `gas_station` loosely | — | R2 | Yes |
+| **Services** → Auto/Repair (`car_repair`, `car_wash`) | 0 | Mapbox `auto_repair`, `repair_shop`, `car_wash` — **unwired** | **6/6 metro, 4/6 rural; highest rural total of any id sampled** | **R2 LIVE-PRIMARY** | **Not today** — #366's *"cleanest wiring win"* |
+| **Services** → Rest areas (`rest_area`) | in `interest` today | Mapbox `rest_area` | 5/6 metro, **1/6 rural** — thin | R1/R3 | partial at best |
+| **Services** → Water fill (`water`) | 169 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
+| **Services** → Showers (`shower`) | 4 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
+| **Services** → Dump stations (`dump_station`) | 6 — **suppressed** | none anywhere checked | — | **R4 NONE** | No |
+| **Services** → Toilets (`toilet`) | 128 — **suppressed**, unclaimed today | none | — | **R4 NONE** | No |
+
+**AMENDED 2026-09-03 — `fuel` absorbs the Services cluster** (mapping doc §4.1,
+§4.3, §4.7). Routing consequence: **`fuel` now contains both the table's
+highest-value wiring target (`charging_station`, `auto_repair`) and four of its
+five R4-NONE rows.** A single parent chip spanning "dense live data" and "nothing
+exists" needs per-subtype empty states, not one category-level one.
 
 **The fuel inversion, restated.** `[cited #364]` The corpus is ~all EV while the
 live half is ~all gas — #364 called it *"the worst in the audit."* `[cited #366]`
@@ -132,11 +144,20 @@ not a coverage gap.
 
 | Subtype | Corpus `[literal]` | Live available | Coverage `[cited #366]` | Rule | resolvePlaces serves? |
 |---|--:|---|---|---|---|
-| `visitor_center` + `landmark` | ~106 bucket `[cited #364]` | Google, FSQ | — | **R3 MERGE** | Yes |
-| `museum`, `art_gallery` | 0 | Mapbox `museum`, `art_gallery` | 6/6 metro; 4/6 and 3/6 rural | R2 | ⚠️ **BLOCKED — see §3.1** |
-| `historic`, `monument`, `historical_place` | 24 / 1 / 1 | Mapbox `historic_site`, `monument` | **6/6 metro, 6/6 rural** | R3 | Not claimed today (§5.1 of the mapping doc) |
+| `visitor_center` (outside Culture) | 102 `[cited #364]` | Google, FSQ | — | **R3 MERGE** | Yes |
+| **Culture** → Museums (`museum`) | 0 | Mapbox `museum`, Google, FSQ | 6/6 metro, 4/6 rural | **R2 LIVE-PRIMARY** | Yes, once §3.1 lands |
+| **Culture** → Galleries (`art_gallery`) | 0 | Mapbox `art_gallery`, Google, FSQ | 6/6 metro, 3/6 rural | **R2 LIVE-PRIMARY** | Yes, once §3.1 lands |
+| **Culture** → Historic Sites (`historic`, `landmark`, `historical_landmark`, `historical_place`, `monument`, `national_historic_site`) | 24 · 3 · 1 · 1 · 1 · 0 | Mapbox `historic_site`, `monument`; Google `historical_landmark`; FSQ | **6/6 metro, 6/6 rural** — the strongest coverage sampled | **R3 MERGE** | Yes, once claimed |
+| **Culture** → Theaters (`theater`) | **primary does not exist** `[literal]` | `[unverified]` — Mapbox not checked | — | **R4 until ingest exists** | No |
 
-**⚠️ This category cannot be routed until §3.1 is resolved.**
+**§3.1 RESOLVED 2026-09-03 — this category is now routable.** Culture sits under
+`attraction`; `LIVE_SLIDE_FOR_PRIMARY` moves `museum`/`art_gallery`/
+`historical_landmark` from `oddity` to `attraction`. Mapping doc §4.4, §4.7.
+
+**Three of Culture's four chips are empty or non-existent today.** Historic Sites
+is the only one with corpus behind it, and it also has the best-measured live
+coverage in the whole table (6/6 and 6/6). **Ship order should follow that**, not
+the order the chips are listed in.
 
 ### oddity
 
@@ -145,6 +166,14 @@ not a coverage gap.
 | `oddity` (Atlas Obscura) | 2,745 | Google emits nothing by design; FSQ Arts, BLM | — | **R1 CORPUS-PRIMARY** | Yes |
 | `tourist_attraction`, `roadside_attraction` | 0 | Mapbox `tourist_attraction` | **6/6 metro, 6/6 rural** | R2 | Available, unwired |
 
+**⚠️ `oddity` loses live results when §3.1 lands, and that is intended.** `[literal]`
+It currently receives museum/gallery/landmark results misfiled by
+`LIVE_SLIDE_FOR_PRIMARY`. After the move, `oddity`'s bbox live half returns
+**nothing** — Google emits nothing for it by design and the Mapbox source is
+fuel-only. Correct for an R1 corpus-primary category on 2,745 rows, but it should
+be expected rather than discovered. Wiring Mapbox `tourist_attraction` is the
+obvious follow-up if a live complement is wanted.
+
 `tourist_attraction` is one of only **two** ids #366 measured at full 6/6 metro
 **and** 6/6 rural. It is unwired and its corpus is empty — a quiet gap.
 
@@ -152,12 +181,24 @@ not a coverage gap.
 
 | Subtype | Corpus `[literal]` | Live available | Coverage `[cited #366]` | Rule | resolvePlaces serves? |
 |---|--:|---|---|---|---|
-| `car_repair`, `car_wash` | **0** | Mapbox `auto_repair`, `repair_shop`, `car_wash` | **6/6 metro, 4/6 rural; highest rural total of any id sampled** | **R2 LIVE-PRIMARY** | **Not today** — the cleanest wiring win `[cited #366]` |
-| `facility` | 2,245 | none | — | **R1** | Yes, corpus-only |
-| `rest_area` | ~in `interest` bucket | Mapbox `rest_area` | 5/6 metro, **1/6 rural** — thin | **R1/R3** | partial at best |
-| `laundry` (unclaimed by any primary) | n/a | Mapbox `laundry` | 6/6 metro, 4/6 rural | `[open]` | not a primary today |
-| `water`, `shower`, `dump_station` | 169 / 4 / 6 — **all suppressed** | **none anywhere checked** | — | **R4 NONE** | **No** — see §3.3 |
-| ~20 further residuals | mostly 0 | none | — | R4 | no-op |
+| `facility` | 2,245 | none | — | **R1 CORPUS-PRIMARY** | Yes, corpus-only |
+| ~20 further residuals (`unknown`, `point_of_interest`, `atm`, `bus_stop`, `park_boundary`, …) | mostly 0 | none | — | R4 | no-op |
+
+**AMENDED 2026-09-03 — most of what this section used to route has moved out**
+(mapping doc §4.6): `car_repair`/`car_wash` and `rest_area` → `fuel`/Services ·
+`water`/`shower`/`dump_station` → `fuel`/Services · `amphitheatre` →
+`attraction`/Culture · `marina` → `scenic`.
+
+**What is left routes as one rule, which is why it needs no table.** Everything
+remaining is **R1 corpus-primary or R4**, because no live source maps to any of
+it. `facility` (2,245) is the only meaningful mass, and `[cited #364]` it is *"a
+generic RIDB container that spans campgrounds, day-use sites and offices"* — so
+its rows cannot be routed more precisely than "corpus, unsplit." **`interest`
+renders no subtype chips**, so there is nothing finer to route.
+
+`[open]` Mapbox `laundry` measured 6/6 metro, 4/6 rural `[cited #366]` but
+corresponds to no `primary_category` today. It is a plausible Services member if
+a laundry primary is ever ingested.
 
 ### urban
 
@@ -175,16 +216,21 @@ not resolve it either** — see §3.2.
 
 ## 3. Blocking items — routing cannot be implemented until these are decided
 
-### 3.1 `attraction` vs `oddity` for museums and galleries `[literal, unresolved]`
+### 3.1 ~~`attraction` vs `oddity`~~ — **RESOLVED 2026-09-03**
 
-The corpus path files `museum`/`art_gallery`/`historical_landmark` under
-**`attraction`**; the live bbox path files them under **`oddity`**; Google is
-asked for them when a caller requests **`attraction`**. Detail and file
-references in the mapping doc §4.4.
+**Resolved to `attraction`**, per Adam's Culture decision. `[literal]` The
+evidence is stronger than #380 reported: re-checking found a **third** encoding,
+Foursquare's classifier (`foursquare.ts:76-82`), which already files
+museum/gallery/historic under `attraction` with the comment *"Formal cultural →
+attraction (mirrors the federated corpus split)."* With Google's fanout that
+makes **three encodings against one** — `LIVE_SLIDE_FOR_PRIMARY` is the sole
+outlier, which is strong inference that it is a slip rather than a decision.
 
-**A routing table cannot have two answers for one primary.** Until this is
-decided, the `attraction` row above is unimplementable. It has had no visible
-effect only because those primaries have zero corpus rows.
+Fix: move those three primaries from `oddity` to `attraction` in
+`LIVE_SLIDE_FOR_PRIMARY` (`resolve-places.ts:236`). One constant, three lines;
+no other file changes. Consequence for `oddity` is stated in §2.
+
+**One new blocking item takes its place — see §3.4 (Theaters).**
 
 ### 3.2 Does Mapbox `park` route to `urban` or `scenic`? `[open]`
 
@@ -209,6 +255,30 @@ that there is nothing to route.**
 
 ---
 
+### 3.4 Theaters conflicts with an existing deliberate Foursquare rule `[literal]`
+
+`[literal]` No `theater` / `theatre` `primary_category` exists — not among the 70
+distinct values in the TEST corpus, and nowhere in `web/src` or `data/` as a
+taxonomy constant. Adam's instruction is to add one.
+
+**The blocker is not that it is missing; it is that something else already claims
+it.** `foursquare.ts:84-89` matches
+`/\b(theater|theatre|artwork|public art|roadside)\b/` and returns **`oddity`**,
+under the comment *"Roadside-quirky entertainment stays oddity."* With Culture
+shipped and that rule unchanged, **Foursquare theater results land in `oddity`
+while the Theaters chip queries `attraction`** — recreating, for theaters
+specifically, exactly the split §3.1 just closed.
+
+Implementation must move `theater|theatre` out of the oddity regex into the
+attraction regex above it. **Flagged rather than assumed:** that rule may have
+been aimed at drive-in and novelty theaters, which genuinely are roadside-quirky,
+whereas Adam's "Theaters" reads as performing-arts and cinema venues. The regex
+cannot distinguish them. Worth one sentence of confirmation.
+
+`[unverified]` Mapbox theater coverage was **not** checked — no stored Mapbox
+category-id list exists in the repo, so it needs a live vendor probe. Do not
+assume an id exists.
+
 ## 4. Implementation order this table implies `[proposed]`
 
 Ordered by measured value per unit of work. **Nothing here is authorised** — it
@@ -220,11 +290,20 @@ is what the table says, for the follow-up pass to argue with.
    wiring win"*; zero corpus against the densest rural coverage sampled. Blocked
    on the §4.1 parent question in the mapping doc (`interest` vs `fuel`).
 3. **Wire Mapbox `grocery`/`supermarket`.** Available, unwired, real corpus.
-4. **Resolve §3.1** — no code, one decision, unblocks `attraction`.
+4. ~~Resolve §3.1~~ **DONE.** Its implementation is now a 3-line change to
+   `LIVE_SLIDE_FOR_PRIMARY`, and it should ship **with** the Culture cluster, not
+   before it — on its own it silently empties `oddity`'s live half.
+4b. **Claim `historic`, `historical_place`, `monument` under `attraction`.** They
+   are unclaimed today `[literal]` and carry Culture's only real corpus. Historic
+   Sites also has the best-measured live coverage in the table (6/6 metro, 6/6
+   rural) — **this, not Museums, is the chip that makes Culture look alive.**
 5. **Do NOT wire Mapbox `trailhead`/`viewpoint`.** #366 measured them as
    near-empty. Route corpus-primary instead; test Foursquare's *category* API if
    the taxonomy ever becomes enumerable.
 6. **Decide the R4 set** (ADR open decision) before any UI work assumes it.
+7. **Theaters last.** It needs an ingest mapping, the `foursquare.ts` fix (§3.4),
+   and a Mapbox check that has not been done. Shipping the chip before those is
+   shipping a guaranteed-empty filter.
 
 **A caution on ordering by these numbers.** Items 1–3 rest on #366's 12-point,
 one-day sample. That is enough to justify trying them in the stated order — it is

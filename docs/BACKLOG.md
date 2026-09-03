@@ -188,7 +188,13 @@ outage, not a gap.**
   declares the 9 canonical; `docs/architecture/category-subtype-mapping.md`
   enumerates all four mismatch sets (three of the four were **not** enumerated in
   #364 and were re-derived); `docs/architecture/category-source-routing-table.md`
-  is the routing table. Also note the "accepts only 7 of the 9" clause is now
+  is the routing table. **Amended 2026-09-03:** Culture cluster under
+  `attraction` (resolving the corpus-vs-live split) and the `interest`
+  dumping-ground fix. **Two new implementation blockers recorded there:**
+  `foursquare.ts:84-89` routes `theater|theatre` to `oddity` and must move for
+  Culture to work (routing table §3.4), and `theater` is not a
+  `primary_category` anywhere, so the chip needs an ingest mapping before it can
+  return anything. Also note the "accepts only 7 of the 9" clause is now
   **stale** — PR #373 fixed it, so all four vocabularies agree on membership.
 - **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
   sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
@@ -256,6 +262,12 @@ only**, not against every provider.
 > to keep the "NEW" badges on tiles that cannot return results, and whether
 > `urban` should keep a chip at all given it has no corpus rows and no live
 > source. The original analysis for each is preserved verbatim below.
+> **AMENDED 2026-09-03 (second design pass):** water fill / showers / dump
+> stations now have a *parent* — `fuel` → Services, not `interest` — but **a
+> parent is not a source.** Their keep-or-remove fate is still open and still
+> Adam's. New adjacent item: `fuel`/Services will hold the routing table's
+> best-covered live target (`auto_repair`) beside four guaranteed-empty chips,
+> so it needs per-chip empty states rather than one at category level.
 > **CARRIED FORWARD 2026-09-03 — these are now the ADR's single open decision**
 > (`docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md` §Open
 > decision), which sets out the facts bearing on each and deliberately does not
