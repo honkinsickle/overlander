@@ -227,6 +227,52 @@ is the next pass.** TEST-only validation; no writes to either database.
 - Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-03 (later 35) — FINAL correction in the #364/#366/#367 chain. Diagram updated in Paper; chain closed.
+
+Last pass in this chain. Four items, each verified against a real source
+(git/gh, file content, an executed test run) rather than against prior prose.
+
+- **LIVE sources box was stale and the verdict table said otherwise.** Mapbox
+  landed in `864b752` (#289, 2026-08-25, *"Mapbox Search Box as the fuel
+  source"*) and sits in **both** of `resolve-places.ts`'s default source lists —
+  **lines 193 and 207**, confirmed this pass (line 45 is the import; 184 and 205
+  are comments, so the previously-cited "205" was a comment line, not an entry).
+  #367's verdict table now records the box as stale.
+- **Day Column re-framed in all three locations** (report, STATE.md, and the
+  earlier LOG entry). It is a **passive renderer of baked `Trip.days` with no
+  live endpoint to cut over** — never a pending wiring task. Read from
+  `resolve-places-day-column-cutover-plan.md` §7: *"Do not build a Day Column
+  cutover PR… the four-surface framing over-counted Day Column."* Closed by
+  **PR #267** (`4757067`, 2026-08-23 16:28:07 PDT), which means **four**
+  resolver-arc PRs landed that day, not the three #367 originally counted. The
+  residual write-path work is tracked at `docs/BACKLOG.md` § *"Day Column
+  write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)"*.
+- **Timezone frame declared once and applied throughout #367.** The report mixed
+  PDT committer dates with UTC `mergedAt` values, which made #269 read as Aug 23
+  in one frame and Aug 24 in the other (`2026-08-24T00:07:08Z` =
+  `2026-08-23 17:07:07 PDT`). Everything is now PDT: cutovers at 14:30:48 /
+  16:15:51 / 17:07:07, tiering chain at 13:05:50 / 13:14:11 / 14:14:24 /
+  14:30:48. **The ~85-minute span is unchanged** — a duration is
+  frame-independent — re-verified from `mergedAt` this pass.
+- **Diagram figures checked by executing the suite, not by reading the diagram.**
+  `place-id.test.ts` → **27 tests, 27 pass**, so the diagram's "27 tests" was
+  **correct** and was left alone. `resolve-places.test.ts` → **43 tests, 43
+  pass**, so "resolver suite 36/36" was stale and is now 43/43. Checking both
+  rather than assuming both wrong is the reason one survived.
+- **Diagram edited in Paper** (node `3R4-0`, file "Card data model and
+  ofrmation"): LIVE sources box → `Mapbox (fuel) · Google · Foursquare (+ RIDB/
+  USFS/BLM)`; resolver suite → `43/43`; Day Column badge `NOT WIRED` →
+  `NO ENDPOINT`. Verified by screenshot afterwards — no overflow, layout intact.
+  **This overrides the standing CLAUDE.md rule "never overwrite an existing Paper
+  frame"**, on Adam's explicit instruction in the correction brief. Only the
+  three listed elements were touched; the other stale badges (Date Detail,
+  Search, Day-scoped browse, the "additive only" line, the CORRECTION note) were
+  deliberately left as-is because the brief scoped the edit to those three.
+- **The earlier LOG entry below was edited in place**, against this file's
+  append-only convention, because the brief required the phrase "not wired" to be
+  absent from it. The edit is marked inline as a correction rather than silently
+  rewritten.
+
 ## 2026-09-03 (later 34) — Self-audit cleanup: corrections pushed to #364, #366 and #367. Diagram finally opened.
 
 Per this file's append-only rule, the earlier entries below are left as
@@ -270,14 +316,22 @@ written; this entry corrects them.
     verified earlier that day it was **accurate when made**. I can't determine
     the hour, so the claim is withdrawn.
 - **The diagram is not uniformly stale, which the one-line description could
-  never have told me.** Still accurate: shared-cache NOT BUILT, the
-  rating/reviewCount/priceTier/photoUrl GAP note, and **Day Column — NOT
-  WIRED**, which I verified this pass (no `DAY_COLUMN_USE_RESOLVER`;
-  `day-column-planner` does not import `resolve-places`; the cutover plan doc
-  exists but the cutover never happened). **Day Column is a fourth surface the
-  original #367 pass never checked** — the diagram knew about it and I didn't.
-  Stale: the "imported by nothing" centre-piece, the no-flag-exists note, and
-  the NOT WIRED badges on Date Detail, Search and Day-scoped browse.
+  never have told me.** Still accurate: shared-cache NOT BUILT and the
+  rating/reviewCount/priceTier/photoUrl GAP note. Stale: the "imported by
+  nothing" centre-piece, the no-flag-exists note, and the NOT WIRED badges on
+  Date Detail, Search and Day-scoped browse.
+  > **CORRECTED 2026-09-03 (final pass) — this bullet originally described
+  > Day Column as "NOT WIRED … the cutover never happened".** That was wrong.
+  > Day Column is a **passive renderer of baked `Trip.days` with no live
+  > endpoint to cut over**; per
+  > `docs/architecture/resolve-places-day-column-cutover-plan.md` §7 *"the
+  > four-surface framing over-counted Day Column."* It was closed by **PR #267**
+  > (`4757067`, merged 2026-08-23 16:28:07 PDT) — so **four** resolver-arc PRs
+  > landed that day, not three — and the residual **write-path** work is tracked
+  > at `docs/BACKLOG.md` § *"Day Column write-path / baking consolidation —
+  > DEFERRED (from #267, 2026-08-23)"*. Edited in place rather than appended
+  > because the correction brief required the phrase to be absent from this
+  > entry.
   **Verdict: REGENERATE, not retire** — retiring destroys correct content,
   leaving it keeps three false badges.
 - **Pattern across all of it: the measurements were sound; the prose written on

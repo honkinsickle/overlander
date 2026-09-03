@@ -20,10 +20,26 @@ inherited from the Aug 25 report or from my own earlier PRs in this thread.
 This is the single most important result, and it is **not** "a week of work
 changed things."
 
-**The three flag-gated resolver cutovers all merged on 2026-08-23 — two days
-before the Aug 25 investigation.** Verified three ways: each commit is an
-ancestor of `origin/main`, each carries an Aug 23 committer date, and main
-contains **33** further commits dated Aug 24–27 on top of them (exact count,
+> **TIMEZONE — every clock time in this report is PDT (UTC−7), the repo's local
+> frame and the one its committer dates carry.** Stated once, here, and used
+> consistently below. An earlier draft mixed PDT committer dates with UTC
+> `mergedAt` values in the same paragraph, which made #269 look like an Aug 23
+> merge in one frame and an Aug 24 merge in the other. In UTC that PR merged
+> `2026-08-24T00:07:08Z`; in PDT it is `2026-08-23 17:07:07`. Same instant,
+> different date label — hence the single declared frame.
+
+**The three flag-gated resolver cutovers all merged on 2026-08-23 PDT — two days
+before the Aug 25 investigation.** Merge times, all PDT:
+
+| PR | merged (PDT) | cutover |
+|---|---|---|
+| #260 | 2026-08-23 14:30:48 | Search + `SEARCH_AREA_USE_RESOLVER` |
+| #266 | 2026-08-23 16:15:51 | Date Detail + `DATE_DETAIL_USE_RESOLVER` |
+| #269 | 2026-08-23 17:07:07 | Day-scoped browse + `TRIP_BROWSE_USE_RESOLVER` |
+
+Verified three ways: each commit is an ancestor of `origin/main`, each carries an
+Aug 23 PDT committer date, and main contains **33** further commits dated
+Aug 24–27 on top of them (exact count,
 `git log origin/main --since=2026-08-24 --until=2026-08-28 | wc -l`,
 re-verified 2026-09-03; the earlier "~20" was read off a `head -20`-truncated
 listing, not counted).
@@ -34,8 +50,11 @@ listing, not counted).
 | Date Detail → `enrichByGoogleId` + `DATE_DETAIL_USE_RESOLVER` | `a086cb8` | 2026-08-23 | #266 |
 | Day-scoped browse → `resolvePlaces()` + `TRIP_BROWSE_USE_RESOLVER` | `b227e65` | 2026-08-23 | #269 |
 
-And the tiering chain: **#255** merged 2026-08-23T20:05Z, **#256** 20:14Z,
-**#259** 21:14Z, **#260** 21:30Z — all four inside ninety minutes on Aug 23.
+And the tiering chain, same PDT frame: **#255** 13:05:50, **#256** 13:14:11,
+**#259** 14:14:24, **#260** 14:30:48 — all four on Aug 23, spanning **~85
+minutes** first-to-last. (A span is frame-independent, so that figure is
+unchanged by the timezone correction above; re-verified from `mergedAt` in this
+pass.)
 
 So findings 1, 2 and 6 described a state that had already passed. **The Paper
 diagram rendered from them depicts a codebase that had not existed for two
@@ -189,12 +208,12 @@ suppressed rows with no filter to catch it.
 `fix/hydrate-description-source` is **merged**, not open and not abandoned —
 and so is the route swap:
 
-| PR | Branch | State | Merged (UTC) |
+| PR | Branch | State | Merged (PDT) |
 |---|---|---|---|
-| #255 | — | **MERGED** | 2026-08-23T20:05:50Z |
-| #256 | — | **MERGED** | 2026-08-23T20:14:11Z |
-| #259 | `fix/hydrate-description-source` | **MERGED** | 2026-08-23T21:14:24Z |
-| #260 | (Search cutover / route swap) | **MERGED** | 2026-08-23T21:30:48Z |
+| #255 | — | **MERGED** | 2026-08-23 13:05:50 |
+| #256 | — | **MERGED** | 2026-08-23 13:14:11 |
+| #259 | `fix/hydrate-description-source` | **MERGED** | 2026-08-23 14:14:24 |
+| #260 | (Search cutover / route swap) | **MERGED** | 2026-08-23 14:30:48 |
 
 The fix is present in main today: `hydrate.ts:87` selects `description_source`,
 and lines 108/117 carry its type through. The branch still exists locally and on
@@ -246,26 +265,50 @@ no evidence for and have withdrawn.
 
 | Diagram element | Status now |
 |---|---|
-| `master_place` SCHEMA BUILT · LIVE sources BUILT | still accurate |
+| `master_place` SCHEMA BUILT | still accurate |
+| **LIVE sources box — "Google, Foursquare (+ RIDB/USFS/BLM per scope)"** | **stale — Mapbox is missing.** `mapboxSearchBoxSource` landed in `864b752` (#289, 2026-08-25, *"Mapbox Search Box as the fuel source"*) and today sits in **both** of `resolve-places.ts`'s default source lists, at **lines 193 and 207** (verified this pass; the import is line 45, lines 184/205 are comments). The same change emptied Google's fuel types, so the box is wrong about both providers |
 | GAP note — rating/reviewCount/priceTier/photoUrl columns real but unread | **still accurate** (see item 4; three of four are also empty corpus-wide) |
 | Shared client cache — NOT BUILT, "ADR step 4 — decided, zero implementation" | **still accurate** (item 3) |
-| **Day Column — NOT WIRED** | **still accurate** — verified this pass: no `DAY_COLUMN_USE_RESOLVER`, and `day-column-planner` does not import `resolve-places`. Its cutover plan doc exists; the cutover never happened |
+| "id normalization across known formats (27 tests)" | **still accurate** — `place-id.test.ts` runs **27 tests, 27 pass** (executed this pass) |
+| "resolver suite 36/36" | **stale** — `resolve-places.test.ts` now runs **43 tests, 43 pass** (executed this pass) |
+| **Day Column box** | **mis-framed rather than stale** — see below |
 | "additive only — imported by nothing in src/app or src/components" | **stale** — three importers in `src/app` |
 | CORRECTION note — "No `SEARCH_AREA_USE_RESOLVER` flag exists in code… not flag-gated, just not wired" | **stale** — all three flags exist and all three surfaces are flag-gated |
 | Date Detail — NOT WIRED | **stale** — wired behind `DATE_DETAIL_USE_RESOLVER` |
-| Search — NOT WIRED, "route swap not merged" | **stale** — #260 merged 2026-08-23 |
+| Search — NOT WIRED, "route swap not merged" | **stale** — #260 merged 2026-08-23 PDT |
 | Day-scoped browse — NOT WIRED | **stale** — wired behind `TRIP_BROWSE_USE_RESOLVER` |
+
+**Day Column was never a pending wiring task, and earlier versions of this
+report were wrong to describe it as "not wired."** Read directly from
+`docs/architecture/resolve-places-day-column-cutover-plan.md` §7: *"Do not build
+a Day Column cutover PR. There is no endpoint, no client contract, and no
+read-path flag… The four-surface framing over-counted Day Column: it is not an
+independent read surface but the rendered form of the write path's output."*
+
+Day Column is a **passive renderer of the baked `Trip.days` JSONB** — it calls no
+live endpoint, so there was nothing to cut over and no wiring that failed to
+happen. That question was closed by **PR #267** (`4757067`, merged
+**2026-08-23 16:28:07 PDT**, *"docs: Day Column cutover plan — no endpoint to
+wrap, it's a write-path question"*), which means **four** PRs in the resolver arc
+landed that day, not the three this report originally counted.
+
+The residual work is a **write-path** question, tracked separately at
+`docs/BACKLOG.md` § *"Day Column write-path / baking consolidation — DEFERRED
+(from #267, 2026-08-23)"*, which records that the bake already reads the same
+`pois_along_corridor` RPC and mapper the resolver's day-corridor half uses, so
+routing it through `resolvePlaces()` is largely redundant today.
 
 **Recommendation: REGENERATE, not retire.** Grounded in the table above rather
 than in the diagram's reputation: its architectural shape (`master_place` +
-LIVE sources → `resolvePlaces()` → shared cache → four surfaces) is still the
-correct shape; four of its elements are still accurate, including the two items
-this report found genuinely open (shared cache, the columns gap) and the one
-surface that really is still unwired (Day Column). Retiring it would destroy
-correct information. Leaving it as-is is also wrong — three of its four surface
-boxes now carry false NOT WIRED badges, and its CORRECTION note asserts a flag
-does not exist when three do. What needs changing is the wiring state of three
-surface boxes and two of the three side-notes.
+LIVE sources → `resolvePlaces()` → shared cache → surfaces) is still the correct
+shape, and three of its elements are still accurate — the shared-cache
+NOT BUILT box and the columns GAP note, which are the two items this report found
+genuinely open, plus the "27 tests" figure. Retiring it would destroy correct
+information. Leaving it as-is is also wrong on six counts: the LIVE sources box
+omits Mapbox, the resolver-suite figure is stale, three surface boxes carry false
+NOT WIRED badges, and the CORRECTION note asserts a flag does not exist when
+three do. The Day Column box needs re-framing rather than a status flip — it was
+never a pending wiring task.
 
 The durable lesson survives, but narrower than I first wrote it, and it now
 applies to me rather than to that session: **do not characterise an artefact you
