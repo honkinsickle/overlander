@@ -93,7 +93,7 @@ sources that actually emit for that key today.
 | `food` | Google `restaurant`,`cafe`,`bar`,`bakery` · FSQ Dining | B, C | **Yes** — FSQ wired; Mapbox has `restaurant`+46 cuisines, `cafe`, `coffee_shop` | 1,273 → **1,112** | 1,096 / 0 / 16 | S1 S2 S2b S3 S5 | **No** — S5 Overpass-led | **15 of 25** claimed primaries have 0 rows |
 | `fuel` | **Mapbox `gas_station` ONLY** | B, C | **Yes** — currently the only Mapbox-served category | 9,581 → **2,887** | 2,885 / 0 / 2 | S1 S2 S3 S4(dead) A | **No — worst in the audit** | Corpus is ~all EV, live is ~all gas. See Finding 3 |
 | `overnight` / `hotel` | Google `lodging`,`hotel` · FSQ Travel · rec-gov lodge/cabin · USFS cabin/lookout · BLM cabin | B, C | **Yes** — 4 non-Google wired; Mapbox has `hotel`,`motel`,`lodging` | 4 → **4** | 4 / 0 / 0 | S1 S2 S2b S3 S5 | **No** — S5 `resolve-overnights` Overpass-led | **Effectively no corpus.** Entirely live-dependent. `motel` **0** rows |
-| `attraction` | Google `museum`,`art_gallery`,`historical_landmark` · FSQ Arts (split) | B, C | **Yes** — FSQ wired | 198 → **106** | 106 / 0 / 0 | S1 S2 S2b S3 | Yes | All 3 Google types have **0** corpus rows — live-only in practice |
+| `attraction` | Google `museum`,`art_gallery`,`historical_landmark` · FSQ Arts (split) | B, C | **Yes** — FSQ wired | 198 → **106** | 106 / 0 / 0 | S1 S2 S2b S3 | Yes | **3 of the bucket's 6 primaries have 0 corpus rows** — `national_historic_site`, `museum`, `art_gallery`. Of the three Google fanout types, `museum` and `art_gallery` are zero but **`historical_landmark` is not** (2 total / 1 in-scope). The 106 in-scope is `visitor_center` 102 + `landmark` 3 + `historical_landmark` 1 |
 | `oddity` | **Google emits nothing** (`TYPES_BY_CATEGORY.oddity = []`) · FSQ Arts · BLM fire lookout/lighthouse | B, C | **Yes** — already non-Google by design | 2,747 → **2,745** | 2,745 / 0 / 0 | S1 S2 S2b S3 S5 | **No** — S5 Overpass-led | Corpus is the Atlas Obscura `oddity` primary. `roadside_attraction`, `tourist_attraction` **0** rows |
 | `interest` | **NONE** | — | **Partly** — Mapbox has `rest_area`, `laundry`, `auto_repair`, `car_wash`; no single "interest" concept | 2,692 → **2,537** | 2,537 / 0 / 0 | S1 S2(**400s**) S2b S3(works) | **No — same chip, opposite behaviour** | Residual bucket, 26 primaries, **12** with 0 rows. See Finding 1 |
 | `urban` | **NONE** | — | Partly — Mapbox has `park`, `theme_park`, `dog_park`; not `shopping_mall`/`city_park` as wired | **0 → 0** | 0 / 0 / 0 | S1 S2(**400s**) S2b S3(empty) | **No — same as `interest`** | **Both claimed primaries have zero rows. Completely dead bucket.** |
@@ -297,7 +297,11 @@ design; the risk is a live outage, not a gap.**
 
 6. **`overnight`/Hotels** (4 in-scope) and **Coffee** (2 in-scope) — essentially
    no corpus at all. Both work today only because the live half carries them.
-7. **`attraction`** (106 in-scope; all three Google types have 0 corpus rows).
+7. **`attraction`** (106 in-scope). Two of its three Google fanout types
+   (`museum`, `art_gallery`) have 0 corpus rows; `historical_landmark` has
+   2 total / 1 in-scope. The bucket's corpus is carried almost entirely by
+   `visitor_center` (102), which Google's fanout does not request — so the
+   live and corpus halves barely overlap here.
 
 **Tier 4 — corpus is deep, live is absent, and nothing is broken; these are
 opportunities, not gaps.**

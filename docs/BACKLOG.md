@@ -31,8 +31,12 @@ Cheap wiring decisions.**
 
 **Tier 3 — thin corpus, live wired. Live-dependent by design; the exposure is an
 outage, not a gap.**
-- **`overnight`/Hotels: 4 in-scope rows.** **Coffee: 2.** **`attraction`: 106**,
-  with all three of its Google types at zero corpus rows.
+- **`overnight`/Hotels: 4 in-scope rows.** **Coffee: 2.** **`attraction`: 106**
+  — of its three Google fanout types, `museum` and `art_gallery` have 0 corpus
+  rows but `historical_landmark` has 2 total / 1 in-scope. The 106 is carried
+  almost entirely by `visitor_center` (102), which Google's fanout does not
+  request. *(Corrected 2026-09-03 — the original text said all three were
+  zero.)*
 
 **Cross-cutting — arguably ahead of all of the above:**
 - **Three competing category vocabularies.** DESIGN.md's 9 ↔
