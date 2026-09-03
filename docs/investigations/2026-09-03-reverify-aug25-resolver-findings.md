@@ -23,7 +23,10 @@ changed things."
 **The three flag-gated resolver cutovers all merged on 2026-08-23 — two days
 before the Aug 25 investigation.** Verified three ways: each commit is an
 ancestor of `origin/main`, each carries an Aug 23 committer date, and main
-contains ~20 further commits dated Aug 24–27 on top of them.
+contains **33** further commits dated Aug 24–27 on top of them (exact count,
+`git log origin/main --since=2026-08-24 --until=2026-08-28 | wc -l`,
+re-verified 2026-09-03; the earlier "~20" was read off a `head -20`-truncated
+listing, not counted).
 
 | Cutover | Commit | Date | PR |
 |---|---|---|---|
@@ -218,15 +221,57 @@ design). **Three were stale on arrival** (#1, #2, #6).
 
 ### What this says about the Aug 25 artefacts
 
-The Paper diagram from that session **depicts a superseded architecture** and
-should not be used as a current reference. Its "additive only — imported by
-nothing" centre-piece was false at render time.
+> **⚠️ CORRECTED 2026-09-03. The first version of this section made two claims
+> about the Paper diagram without opening it. Both were wrong.** The diagram has
+> since been read directly (node `3R4-0`, *"resolvePlaces() — verified current
+> state"*, in the Paper file "Card data model and ofrmation"). Findings below.
 
-The durable lesson is narrow and mechanical, not a judgement about that session:
-**a finding about whether code is wired is only valid against a stated commit.**
-Neither the Aug 25 report nor the diagram appears to pin one. Every claim in
-this report is anchored to `0dae80c`, and the cutover commits are cited by SHA
-so a future reader can date them without re-deriving.
+**The diagram DOES pin a reference point — my original claim that it did not was
+false.** Its header line reads, verbatim:
+
+> `OVERLANDER · QUICK REFERENCE · VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL BRANCH`
+
+So it names both a date and an explicit ref, and goes out of its way to say it
+was checked against `origin/main` rather than a local branch — the exact
+discipline I claimed was missing. It pins no SHA, which is the only part of the
+original criticism that survives, and a much smaller point.
+
+**Note the date: the diagram says 2026-08-23, not Aug 25.** The three cutovers
+merged that same day, at 14:30, 16:15 and 17:07 PDT. **So if the diagram was
+verified earlier on Aug 23, it was accurate when it was made.** I cannot
+determine the hour, so my original "false at render time" was an assertion I had
+no evidence for and have withdrawn.
+
+**The diagram is also not uniformly stale.** Read against this report:
+
+| Diagram element | Status now |
+|---|---|
+| `master_place` SCHEMA BUILT · LIVE sources BUILT | still accurate |
+| GAP note — rating/reviewCount/priceTier/photoUrl columns real but unread | **still accurate** (see item 4; three of four are also empty corpus-wide) |
+| Shared client cache — NOT BUILT, "ADR step 4 — decided, zero implementation" | **still accurate** (item 3) |
+| **Day Column — NOT WIRED** | **still accurate** — verified this pass: no `DAY_COLUMN_USE_RESOLVER`, and `day-column-planner` does not import `resolve-places`. Its cutover plan doc exists; the cutover never happened |
+| "additive only — imported by nothing in src/app or src/components" | **stale** — three importers in `src/app` |
+| CORRECTION note — "No `SEARCH_AREA_USE_RESOLVER` flag exists in code… not flag-gated, just not wired" | **stale** — all three flags exist and all three surfaces are flag-gated |
+| Date Detail — NOT WIRED | **stale** — wired behind `DATE_DETAIL_USE_RESOLVER` |
+| Search — NOT WIRED, "route swap not merged" | **stale** — #260 merged 2026-08-23 |
+| Day-scoped browse — NOT WIRED | **stale** — wired behind `TRIP_BROWSE_USE_RESOLVER` |
+
+**Recommendation: REGENERATE, not retire.** Grounded in the table above rather
+than in the diagram's reputation: its architectural shape (`master_place` +
+LIVE sources → `resolvePlaces()` → shared cache → four surfaces) is still the
+correct shape; four of its elements are still accurate, including the two items
+this report found genuinely open (shared cache, the columns gap) and the one
+surface that really is still unwired (Day Column). Retiring it would destroy
+correct information. Leaving it as-is is also wrong — three of its four surface
+boxes now carry false NOT WIRED badges, and its CORRECTION note asserts a flag
+does not exist when three do. What needs changing is the wiring state of three
+surface boxes and two of the three side-notes.
+
+The durable lesson survives, but narrower than I first wrote it, and it now
+applies to me rather than to that session: **do not characterise an artefact you
+have not opened.** Every claim in this report is anchored to `0dae80c` with
+cutover commits cited by SHA; the diagram claims above are anchored to a direct
+read of node `3R4-0`.
 
 **Scope of the negatives here:** "zero importers in `src/components`", "no
 client-cache library", "two `isSuppressedCategory` call sites" are all scoped to

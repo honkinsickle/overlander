@@ -227,6 +227,73 @@ is the next pass.** TEST-only validation; no writes to either database.
 - Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-03 (later 34) — Self-audit cleanup: corrections pushed to #364, #366 and #367. Diagram finally opened.
+
+Per this file's append-only rule, the earlier entries below are left as
+written; this entry corrects them.
+
+- **One real factual error, in #364.** The `attraction` row said "all 3 Google
+  types have 0 corpus rows." False — `historical_landmark` has 2 total /
+  1 in-scope. **The rollup script printed the right answer and I typed a
+  different one**: its `zero_row_primaries` field reads
+  `3/6 [national_historic_site,museum,art_gallery]`, so the three zero-row
+  primaries were never the three Google types. Re-verified against the same run
+  output rather than re-derived: visitor_center 193/102, landmark 3/3,
+  historical_landmark 2/1, summing to the 106 in-scope the rollup already
+  reported — **the arithmetic was right all along, only the prose was wrong.**
+  No re-run would have caught it; only reading the output against the sentence.
+- **Two overstatements softened in #366, no measurement changed.**
+  (a) "Foursquare is visibly better than Mapbox at trailheads/viewpoints"
+  compared a **category filter** against a **name text-search**. I had flagged
+  that instrument mismatch for the *absence* claims and then reused the same
+  data for a *comparative* claim without re-flagging it. Now stated as: Mapbox's
+  own trailhead/viewpoint categories are genuinely sparse (direct measurement,
+  stands), FSQ is a candidate to test first, not an established better source.
+  (b) "Mapbox tracks settlement, not geography — the most decision-relevant
+  fact" rests on **two** remote points. Sample size was disclosed, then the
+  rhetoric ran past it. Now framed as a hypothesis worth testing, with the
+  two-point basis inline.
+- **#367 count fixed: "~20 further commits Aug 24–27" is actually 33.** The
+  tilde made a `head -20` truncation artifact look like a deliberate estimate —
+  a direct breach of the number discipline I had set for the pass. Conclusion
+  unaffected; the timeline rests on ancestry and committer dates, not the count.
+- **⚠️ The worst item was #367's diagram claims, because I made them about an
+  artefact I never opened.** Opened now (node `3R4-0`, *"resolvePlaces() —
+  verified current state"*). Two claims were wrong:
+  - I wrote that neither the report nor the diagram "pins a commit." **The
+    diagram's header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL
+    BRANCH`** — it names a date AND an explicit ref, and specifically says it
+    was checked against origin/main rather than a local branch. That is the
+    exact discipline I accused it of lacking. Only "pins no SHA" survives.
+  - I wrote it was "false at render time." **It is dated Aug 23, not Aug 25**,
+    and the cutovers merged that day at 14:30/16:15/17:07 PDT — so if it was
+    verified earlier that day it was **accurate when made**. I can't determine
+    the hour, so the claim is withdrawn.
+- **The diagram is not uniformly stale, which the one-line description could
+  never have told me.** Still accurate: shared-cache NOT BUILT, the
+  rating/reviewCount/priceTier/photoUrl GAP note, and **Day Column — NOT
+  WIRED**, which I verified this pass (no `DAY_COLUMN_USE_RESOLVER`;
+  `day-column-planner` does not import `resolve-places`; the cutover plan doc
+  exists but the cutover never happened). **Day Column is a fourth surface the
+  original #367 pass never checked** — the diagram knew about it and I didn't.
+  Stale: the "imported by nothing" centre-piece, the no-flag-exists note, and
+  the NOT WIRED badges on Date Detail, Search and Day-scoped browse.
+  **Verdict: REGENERATE, not retire** — retiring destroys correct content,
+  leaving it keeps three false badges.
+- **Pattern across all of it: the measurements were sound; the prose written on
+  top of them drifted harder than the data supported.** Four of the five items
+  are the same failure — an instrument produced a bounded result and I wrote a
+  stronger sentence than it licensed. The #364 error is the sharpest instance,
+  since the script's output was on screen next to what I typed.
+- **Where the corrections went, and why LOG entries were not rewritten.**
+  #364 → `category-source-audit`, #366 → `mapbox-coverage-sampling`,
+  #367 → `reverify-aug25-findings`, each as a follow-up commit, no force-push.
+  STATE.md and BACKLOG.md were edited on the #364/#366 branches — a flagged
+  deviation from the brief, taken because both carried the *same* confirmed
+  error/overstatement and fixing only the reports would have left the
+  decision-facing docs wrong. LOG.md was deliberately not edited on those
+  branches: its header makes it append-only, so this entry is the correction.
+
 ## 2026-09-03 (later 33) — Re-verified the Aug 25 resolver findings. Four of six were false when written, not changed since.
 
 - **Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**

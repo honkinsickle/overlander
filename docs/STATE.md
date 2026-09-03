@@ -6,9 +6,11 @@
 
 **Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
 
-**⚠️ THE HEADLINE IS NOT "a week of work changed things." The Aug 25 session's central finding was stale at the moment it was written.** All three flag-gated resolver cutovers merged **2026-08-23 — two days earlier**: **#260** (`d62f660`, Search + `SEARCH_AREA_USE_RESOLVER`), **#266** (`a086cb8`, Date Detail), **#269** (`b227e65`, day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day, all four **inside ninety minutes**. Verified three ways: each commit is an ancestor of `origin/main`, each has an Aug 23 committer date, and main carries ~20 further commits dated Aug 24–27 on top.
+**⚠️ THE HEADLINE IS NOT "a week of work changed things." The Aug 25 session's central finding was stale at the moment it was written.** All three flag-gated resolver cutovers merged **2026-08-23 — two days earlier**: **#260** (`d62f660`, Search + `SEARCH_AREA_USE_RESOLVER`), **#266** (`a086cb8`, Date Detail), **#269** (`b227e65`, day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day, all four **inside ninety minutes**. Verified three ways: each commit is an ancestor of `origin/main`, each has an Aug 23 committer date, and main carries **33** further commits dated Aug 24–27 on top (exact count re-verified 2026-09-03; an earlier draft said "~20", read off a truncated listing).
 
-**So the Paper diagram from that session depicts a superseded architecture and must not be used as a current reference.** Its centre-piece — *"additive only — imported by nothing"* — was false at render time.
+**⚠️ THE DIAGRAM VERDICT WAS CORRECTED 2026-09-03 AFTER ACTUALLY OPENING IT** (node `3R4-0`, *"resolvePlaces() — verified current state"*). Two earlier claims here were made without looking and were wrong. **The diagram DOES pin a reference** — its header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL BRANCH`, naming a date and an explicit ref. And **it is dated Aug 23, not Aug 25**; the cutovers merged that same day at 14:30/16:15/17:07 PDT, so **if it was verified earlier that day it was accurate when made** — "false at render time" was asserted without evidence and is withdrawn.
+
+**It is also not uniformly stale. VERDICT: REGENERATE, not retire.** Still accurate: the shared-cache NOT BUILT box, the rating/reviewCount/priceTier/photoUrl GAP note, and **Day Column — NOT WIRED** (verified this pass: no `DAY_COLUMN_USE_RESOLVER`, `day-column-planner` does not import `resolve-places`; its cutover plan doc exists but the cutover never happened). Stale: the "imported by nothing" centre-piece, the note claiming no `SEARCH_AREA_USE_RESOLVER` exists, and the NOT WIRED badges on Date Detail, Search and Day-scoped browse. Retiring would destroy correct content; leaving as-is keeps three false badges.
 
 | Aug 25 finding | Verdict |
 |---|---|
@@ -25,7 +27,7 @@
 
 **✅ RESOLVED AN OPEN BACKLOG BLOCKER.** The `preComputeFacts` → `resolvePlaces()` item's blocker 2 ("suppression-filter parity unverified") is now answered, and the answer is the feared one: **`isSuppressedCategory` has exactly two call sites in `web/src`** (`hydrate.ts:140`, `bake-corridors.ts:134`); `fetchFederatedPois` applies only `isClosedPlace`; and the RPC's `WHERE` does not filter the suppressed categories either. **Not a live bug today only because `p_categories` is always a slide bucket's list and no bucket claims a suppressed value — safety from an allowlist, not a filter.** Blocker 1 (polyline scope) remains open.
 
-**Durable process lesson, mechanical not judgemental: a finding about whether code is wired is only valid against a stated commit.** Neither the Aug 25 report nor its diagram pins one. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA.
+**Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
 
 **Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
 
