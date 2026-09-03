@@ -1,3 +1,17 @@
+# STATE — branch `docs/wrap-merge-368-through-375` · 2026-09-03 (later 25) — six PRs drained in one merge queue. Main is now consistent post-#375.
+
+(**newest truth: PRs #368, #369, #370, #372, #374, #375 all landed on `main` today, in dependency order, on top of #376's CI change. All required checks passed on each rebased PR; no CI failure required backing out. The Agua Caliente / Anza-Borrego duplicate pair no longer forms on PROD (#375's surgical fix), and the ingest code prevents this class of bug from recurring on future CA state_parks ingests.**
+
+**BACKLOG cleanup applied.** #374's UNITNBR-dissolve item is reframed: the code fix landed via #375, the observably-broken UNITNBR=622 record is fixed on PROD; the item now captures only the 13 remaining structurally-affected PROD records (fixable on next full CA state_parks re-ingest).
+
+**Confidence: directly verified.** Every PR's merged state confirmed via `gh pr view`; typecheck passes on `data` and `web`; STATE/LOG/BACKLOG content preserved through all mechanical conflict resolutions.
+
+**PRs on main tip (post-merge):** #368 `75207ba` · #369 `e0a1e14` · #370 `abc03f8` · #372 `c94222a` · #374 `9eff946` · #375 `7aea8eb` (final).
+
+**Not covered on this branch:** runtime testing beyond typecheck — the merged content is doc-heavy plus one code fix that had TEST re-ingest verification in its own PR before merge.)
+
+---
+
 # STATE — branch `wire-web-tests-into-ci` (pushed as `surface-pop2`) · 2026-09-03 (later 23) — **CI now runs the web test suite AND blocks on it. 714 tests that never executed automatically now gate every merge to `main`.**
 
 (**newest truth: no product code changed; nothing written to PROD. Two config lines, two test-file header corrections, doc updates.** *The local gate run included `npm run -w data test`, which routes at `SUPABASE_TEST_URL` exactly as CI's own `test` job does — the destructive `phase3a`/`phase3b` suites are excluded by `vitest.config.ts`, but "wrote nothing to TEST" is the config's stated intent, **not** something audited per-test here.*
