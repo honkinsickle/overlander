@@ -13,6 +13,50 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 8) — Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. One stale citation, thirteen claims intact.
+
+- **Numbered 8, skipping 7 on purpose.** #371 is still open carrying
+  `(later 7)`; leaving the slot free avoids a second merge collision in this
+  file today.
+- **Verified against `75207ba`, not the `4e55039` the brief named.** Main moved
+  again mid-request — #368 merged on top of #376. Checked what main actually
+  was rather than what was assumed.
+- **#373's constant split touches nothing on the diagram, for two independent
+  reasons.** All 40 text nodes on artboard `3R4-0` were enumerated: none
+  mentions `SLIDE_CATEGORIES`, category validation, the chip row, or
+  `urban`/`interest`. And the diff sits entirely upstream of the resolver
+  hand-off — `useResolver: TRIP_BROWSE_USE_RESOLVER` is outside every hunk,
+  `handler.ts` untouched.
+- **Resisted the tidy conclusion the brief offered.** "Purely internal, same
+  behaviour, different names" is **wrong**: `REQUESTABLE_CATEGORIES` is
+  deliberately wider than `ALL_VIEW_CATEGORIES`, so the chips really did go
+  400 → 200. The true statement is narrower — *real behaviour change, but the
+  diagram never described that layer.*
+- **Swept everything, not just the named angle.** The non-docs diff since
+  `0dae80c` is 11 files; exactly one is product code (#373's `route.ts`).
+  #376 changed no product code at all, so its only candidate impact was the
+  quoted test counts — re-executed: `place-id` 27/27, resolver suite 43/43.
+- **One real stale claim: `BACKLOG.md:760`.** Correct at `0dae80c`, now at
+  1076 — `BACKLOG.md` grew 4287 → 4665 lines over 7 merges. #373/#376
+  contributed but are not the cause. Replaced with a **section** citation plus
+  a ref-stamped line hint; a bare line number into an append-only doc rots by
+  construction.
+- **A near-miss that would have shipped as a false finding.** The importer
+  sweep first read `search-area/handler.ts:37` against the diagram's `:32` —
+  a `grep` artifact, matching the closing `} from …` of a multi-line import.
+  The file is byte-identical there since `0dae80c` and no commit has touched
+  it. **Checking whether the file had changed at all is what settled it** — a
+  drift claim needs a commit behind it, not just a differing line number.
+- **Said plainly what was not checked:** the GAP box's `161,431` and `10,311`
+  row counts need live DB queries and were not re-measured. Neither PR carries
+  a migration or corpus write, but the corpus moves independently of merges, so
+  they stay dated to #371. The diagram's header stamp now scopes itself to
+  "code re-verified" rather than implying more.
+- **The first header edit overflowed the artboard** (1649px fixed text box in a
+  1700px artboard) and clipped at `— NOT LOCAL BRANC`. Caught by screenshotting
+  after the write instead of trusting its success, then shortened and
+  re-confirmed.
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,

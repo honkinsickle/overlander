@@ -1,3 +1,31 @@
+# STATE — branch `reverify-resolver-diagram` · 2026-09-03 (later 25) — **Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. Thirteen claims held; one line citation was stale and is fixed.**
+
+(**newest truth: no code changed, nothing written to TEST or PROD. One investigation doc, two Paper text nodes, STATE + LOG.**
+
+*Numbered **25** deliberately — #371 is still open carrying `(later 24)`, so this leaves its slot free rather than colliding on merge.*
+
+**Report: `docs/investigations/2026-09-03-resolver-diagram-reverify-75207ba.md`.** Diagram is Paper artboard **`3R4-0`** in *Card data model and ofrmation*; last verified in #371 against `0dae80c`.
+
+**⚠️ THE REF IS `75207ba`, NOT `4e55039`.** Main moved again between the request and the pass — **#368** merged on top of #376. Verified against what main actually was, not what the brief assumed.
+
+**#373's constant split changes nothing on the diagram — for two independent reasons, not one.** First, all **40** text nodes on `3R4-0` were enumerated and read: **none** mentions `SLIDE_CATEGORIES`, category validation, the chip row, or `urban`/`interest`. Second, the diff is entirely **upstream of the resolver hand-off** — `useResolver: TRIP_BROWSE_USE_RESOLVER` sits outside every hunk and `handler.ts` was untouched. **But do not call the fix "purely internal, same behaviour":** `REQUESTABLE_CATEGORIES` is deliberately **wider** than `ALL_VIEW_CATEGORIES`, so the chips genuinely changed from 400 to 200. Real behaviour change; zero diagram impact — those are different statements.
+
+**The general sweep, not just the category angle:** the full non-docs diff since `0dae80c` is **11 files**, of which **exactly one is product code** (#373's `route.ts` + its tests). **#376 changed no product code at all** — its only `web/src` edits are test-file comment headers, so its sole candidate impact was the quoted test counts, which were re-executed.
+
+**Thirteen claims re-verified `[literal]`, all holding:** three importers at lines 30/32/23 · 0 importers in `src/components` · `place-id.test.ts` **27/27** · resolver suite **43/43** · the LIVE source list · three flags all `=== "true"` (default OFF) · #260/#266/#269 all merged **2026-08-23** · no cache in the resolver · 2-point day-corridor scope · `federated.ts:305-307` · `bake-corridors.ts:122` · the enrichment-field/tier line.
+
+**ONE STALE CLAIM, FIXED: `BACKLOG.md:760` no longer resolves.** It was correct at `0dae80c` and the section now sits at **1076** — `BACKLOG.md` grew **4287 → 4665** lines across **7** merges. **#373 and #376 are contributors, not the cause.** Replaced with a **section citation** plus a ref-stamped line hint, because a bare line number into an append-only doc is guaranteed to rot.
+
+**A near-miss that would have been a false finding:** the importer sweep first appeared to show `search-area/handler.ts` at line **37** vs the diagram's **32**. It was a `grep` artifact — the match landed on the closing `} from …` of a multi-line import. The file is byte-identical at those lines since `0dae80c` and **no commit has touched it**. The diagram was right.
+
+**⚠️ NOT RE-MEASURED — the GAP box's two row counts** (`161,431` NULL-rating rows, `10,311` with `photo_url`). Those need live DB queries. Neither PR carries a migration or a corpus write, but the corpus grows independently of merges, so they stay dated to #371's measurement. **The header stamp now says so explicitly** rather than implying a full re-verification.
+
+**A first header edit overflowed the artboard** (fixed 1649px box, 1700px artboard) and clipped at `— NOT LOCAL BRANC`. Caught and corrected, then confirmed by screenshot — read back, don't trust the write.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `wire-web-tests-into-ci` (pushed as `surface-pop2`) · 2026-09-03 (later 23) — **CI now runs the web test suite AND blocks on it. 714 tests that never executed automatically now gate every merge to `main`.**
 
 (**newest truth: no product code changed; nothing written to PROD. Two config lines, two test-file header corrections, doc updates.** *The local gate run included `npm run -w data test`, which routes at `SUPABASE_TEST_URL` exactly as CI's own `test` job does — the destructive `phase3a`/`phase3b` suites are excluded by `vitest.config.ts`, but "wrote nothing to TEST" is the config's stated intent, **not** something audited per-test here.*
