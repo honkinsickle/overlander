@@ -4,6 +4,10 @@ import {
   BROWSE_PLACES,
   type SlideCategoryKey,
 } from "@/lib/trip-browse/places";
+import {
+  BROWSE_CARD_CATEGORIES,
+  browseCategoryToSlide,
+} from "@/lib/trip-browse/palette";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { produceBrowsePlaces } from "./handler";
 
@@ -13,7 +17,11 @@ import { produceBrowsePlaces } from "./handler";
 // feed surfaces them instead of only showing them when the chip is selected.
 // `interest`/`urban` stay OUT — their live query sets are empty and no source
 // derives a result into them; they're corpus-backed via the federated RPC.
-const SLIDE_CATEGORIES: SlideCategoryKey[] = [
+//
+// ⚠️ THIS LIST IS THE `all` EXPANSION ONLY. It used to double as the
+// validation allowlist, which is exactly the bug fixed here — see
+// REQUESTABLE_CATEGORIES below.
+const ALL_VIEW_CATEGORIES: SlideCategoryKey[] = [
   "scenic",
   "food",
   "oddity",
@@ -22,6 +30,79 @@ const SLIDE_CATEGORIES: SlideCategoryKey[] = [
   "overnight",
   "fuel",
 ];
+
+/** What a client may legally ASK for — every slide key the browse chip row can
+ *  actually produce, derived FROM that row so the two cannot drift apart again.
+ *
+ *  Deliberately WIDER than `ALL_VIEW_CATEGORIES`. `urban` and `interest` have
+ *  empty live query sets, so they contribute nothing to the `all` fanout and
+ *  stay out of it — but they are corpus-backed and the filter row renders a
+ *  chip for each, so a single-chip request for them is legitimate and must
+ *  return a normal (possibly empty) result rather than an HTTP 400.
+ *
+ *  Before this split, one constant answered both "what does `all` mean" and
+ *  "what is legal to request", so tapping the urban or interest chip produced
+ *  `400 Invalid category "urban"` — reproduced against this route on
+ *  2026-09-03 before the fix. See docs/investigations/
+ *  2026-09-02-three-surfaces-place-data-paths.md (the finding) and
+ *  2026-09-02-category-source-audit.md §"Finding 1" (the vocabulary split). */
+const REQUESTABLE_CATEGORIES: readonly SlideCategoryKey[] = Array.from(
+  new Set(BROWSE_CARD_CATEGORIES.map(browseCategoryToSlide)),
+);
+
+export type ParsedCategories =
+  | { ok: true; categories: SlideCategoryKey[] }
+  | { ok: false; error: string };
+
+/**
+ * Resolve the requested category set from the query params. PURE — no I/O, so
+ * it is unit-testable without a DB or network.
+ *
+ * Extracted and exported specifically because this is where the urban/interest
+ * 400 bug lived. `handler.test.ts` states the route "has no tests of its own
+ * because it is a thin wrapper (validate + cache + fixture + shape)" — that
+ * assumption is what let a validation bug ship unnoticed, so the validate half
+ * now has its own guard in `route.test.ts`.
+ *
+ * `categories=` wins when both params are present (pre-existing behaviour,
+ * unchanged).
+ */
+export function resolveRequestedCategories(
+  categoriesParam: string | null,
+  categoryParam: string | null,
+): ParsedCategories {
+  if (categoriesParam) {
+    if (categoriesParam === "all") {
+      // `all` still means the LIVE-fanout set only — deliberately narrower
+      // than what is requestable. See both constants above.
+      return { ok: true, categories: [...ALL_VIEW_CATEGORIES] };
+    }
+    const parts = categoriesParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const bad = parts.find(
+      (p) => !REQUESTABLE_CATEGORIES.includes(p as SlideCategoryKey),
+    );
+    if (bad) {
+      return {
+        ok: false,
+        error: `Invalid category "${bad}". Expected: ${REQUESTABLE_CATEGORIES.join(", ")}`,
+      };
+    }
+    return { ok: true, categories: parts as SlideCategoryKey[] };
+  }
+  if (categoryParam) {
+    if (!REQUESTABLE_CATEGORIES.includes(categoryParam as SlideCategoryKey)) {
+      return {
+        ok: false,
+        error: `Invalid category. Expected one of: ${REQUESTABLE_CATEGORIES.join(", ")}`,
+      };
+    }
+    return { ok: true, categories: [categoryParam as SlideCategoryKey] };
+  }
+  return { ok: false, error: "Missing `category` or `categories` query param" };
+}
 
 /** Server-side flag (default OFF). Gates whether federated `pois_along_corridor`
  *  rows are merged into the feed. Independent of the resolver flag below — see
@@ -119,42 +200,11 @@ export async function GET(
   const categoriesParam = searchParams.get("categories");
   const categoryParam = searchParams.get("category");
 
-  // Resolve the requested category set. `categories=` wins if both
-  // are present.
-  let requested: SlideCategoryKey[];
-  if (categoriesParam) {
-    if (categoriesParam === "all") {
-      requested = [...SLIDE_CATEGORIES];
-    } else {
-      const parts = categoriesParam
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const bad = parts.find(
-        (p) => !SLIDE_CATEGORIES.includes(p as SlideCategoryKey),
-      );
-      if (bad) {
-        return NextResponse.json(
-          { error: `Invalid category "${bad}". Expected: ${SLIDE_CATEGORIES.join(", ")}` },
-          { status: 400 },
-        );
-      }
-      requested = parts as SlideCategoryKey[];
-    }
-  } else if (categoryParam) {
-    if (!SLIDE_CATEGORIES.includes(categoryParam as SlideCategoryKey)) {
-      return NextResponse.json(
-        { error: `Invalid category. Expected one of: ${SLIDE_CATEGORIES.join(", ")}` },
-        { status: 400 },
-      );
-    }
-    requested = [categoryParam as SlideCategoryKey];
-  } else {
-    return NextResponse.json(
-      { error: "Missing `category` or `categories` query param" },
-      { status: 400 },
-    );
+  const parsed = resolveRequestedCategories(categoriesParam, categoryParam);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
+  const requested: SlideCategoryKey[] = parsed.categories;
 
   // Cache lookup — happens before the trip fetch so a warm cache hit
   // is a single Map.get(). Key includes the normalized category set so

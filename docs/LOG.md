@@ -12,6 +12,64 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
+
+- **Reproduced both before touching code, as the brief required — and the two
+  findings came out differently.** #361's deduction about urban/interest held;
+  #364/#366's worry about the amenity tiles did not describe a defect.
+- **BUG 1 was real.** Pre-fix, `?categories=urban`, `?categories=interest` and
+  both singular `?category=` forms returned `400 Invalid category`, while
+  `camping`/`scenic` returned 404 "Trip not found" — proving validation was the
+  thing rejecting them. Root cause exactly as deduced: one constant answered
+  both "what does `all` expand to" and "what is legal to request".
+- **Fixed by splitting the constant, and deriving the allowlist rather than
+  listing it.** `ALL_VIEW_CATEGORIES` keeps the `all` expansion at the 7
+  live-fanout buckets; `REQUESTABLE_CATEGORIES` is computed from
+  `BROWSE_CARD_CATEGORIES` via `browseCategoryToSlide`, so adding a chip
+  automatically makes it requestable. A hand-written second list would have
+  been the same bug waiting to recur.
+- **⚠️ The bug was blocking real data, which the static analysis had not
+  established.** With `USE_FEDERATED_POIS=true`, `interest` returns corpus rows
+  on a real TEST day (e.g. "Las Vegas Natural History Museum"). So this wasn't
+  a cosmetic error on an empty bucket — a working, corpus-backed filter was
+  unreachable. `urban` does return empty, matching #364's zero-corpus finding.
+- **BUG 2 needed no code change, and I resisted making one.** All three
+  suppressed categories return HTTP 200 / zero places / empty `failedSources`,
+  with a `campground` control on the same bbox returning results — so the empty
+  set is the category, not a broken route. Surface 3 renders `"0 results in
+  view"`; Surface 2 renders "No places match the selected filters". Both are
+  clean empty states, so per the brief there was nothing to fix. Did not source
+  data, remove tiles, or touch the "NEW" badges.
+- **Two pre-existing testing gaps found while adding the guard — flagged, not
+  fixed.** (1) **No CI job runs the web test suite at all**: `ci.yml`'s `test`
+  job is `npm run -w data test`, and `web/package.json` has no `test` script.
+  (2) **`npx tsx --test` collects ZERO tests for any file under a `[param]`
+  directory** — node:test reads `[tripId]` as a glob character class — so the
+  invocation documented atop `handler.test.ts` does not run it. Running the
+  file directly works (verified: 8/8 for handler, 9/9 for the new route test).
+  Together these mean the new guard is manual-only today. Wiring web tests into
+  CI could surface unrelated failures and is not a bug-fix-pass change.
+- **The comment that explains how this shipped.** `handler.test.ts` opens by
+  saying the route "has no tests of its own because it is a thin wrapper
+  (validate + cache + fixture + shape); the behaviour lives here." Validation
+  was declared not worth testing, and validation is where the bug was. Noted in
+  the new test file so the next reader sees the causal link.
+- **One flagged deviation:** extracted the validation into a pure exported
+  `resolveRequestedCategories()` so it is testable without a DB or network.
+  More than a minimal edit, but it turns the untested half of the wrapper into
+  the tested half.
+- **Verified `categories=all` separately**, since I renamed the constant it
+  reads: 200 with places across exactly the 7 live buckets, no `urban`, no
+  `interest`. An earlier check on this reported "UNPARSEABLE" — that was my
+  inline parser choking on a ~380 KB payload, not a route fault; re-run to a
+  file, it parsed fine.
+- **Docs:** `architecture/resolve-places-design.md` §D8 named this exact
+  divergence as a design note — it was a defect, now marked resolved; and the
+  day-scoped-browse cutover plan referenced the renamed constant. No `decisions/`
+  ADR (bug fix, and the product calls are deferred). `DATA_INVENTORY.md`
+  untouched — no data changed.
+- Gates: data typecheck, web typecheck and `next build` all exit 0.
+
 ## 2026-09-03 (later 3) — Sampled live-source coverage. Two "just needs wiring" rows from #364 reverse under measurement.
 
 *(Renumbered on merge: `later N` resets per date in this file, and 2026-09-03 already holds three entries on main, so this is `later 3` — it was originally `later 32`, continuing 2026-09-02's counter by mistake, and sat below the 09-02 block despite this file being newest-first. The number is merge order: this sampling session actually ran BEFORE the three 2026-09-03 entries below it.)*

@@ -189,7 +189,48 @@ endpoint 404s on the pinned `x-places-api-version: 2025-06-17` at both
 `api.foursquare.com/v3/places/categories`. So "no compliant live source exists"
 for showers/dump stations/water fill is established **against Mapbox's list
 only**, not against every provider.
-## Two apparent web-client defects — CODE-READING ONLY, NEITHER REPRODUCED (2026-09-02)
+## Two apparent web-client defects — BOTH NOW REPRODUCED AND RESOLVED (2026-09-03)
+
+> **RESOLVED 2026-09-03.** Both were reproduced against the running route on
+> TEST before any code changed — the 2026-09-02 deductions were correct.
+> - **#1 (urban/interest 400) was REAL and is FIXED.** Confirmed pre-fix:
+>   `?categories=urban`, `?categories=interest`, `?category=urban` and
+>   `?category=interest` all returned `400 Invalid category`, while
+>   `camping`/`scenic` returned 404 "Trip not found" (i.e. validation passed).
+>   Fixed by splitting the one constant into `ALL_VIEW_CATEGORIES` (the `all`
+>   expansion, still 7 buckets) and `REQUESTABLE_CATEGORIES` (derived from
+>   `BROWSE_CARD_CATEGORIES` via `browseCategoryToSlide`, so the two cannot
+>   drift again). Post-fix, all nine chips return 200 on a real trip/day;
+>   a bogus category still 400s; `categories=all` still fans out to exactly
+>   the 7 live buckets with no `urban`/`interest`.
+>   **This was blocking real data, not just erroring on an empty bucket** —
+>   with `USE_FEDERATED_POIS=true`, `interest` returns corpus rows on a real
+>   day (e.g. "Las Vegas Natural History Museum"). `urban` returns empty
+>   because it has no corpus rows, which matches the #364 measurement.
+>   Guarded by a new `route.test.ts`.
+> - **#2 (water fill / showers / dump stations) NEEDED NO FIX.** They already
+>   fail gracefully: on the search-area route all three return HTTP 200 with
+>   zero places and an empty `failedSources`, against a `campground` control on
+>   the same bbox that returns results. Surface 3 renders `"0 results in view"`
+>   with no error box; Surface 2 renders "No places match the selected
+>   filters". `urban` behaves the same way. **No live source was sourced and no
+>   tile was removed — those remain open product decisions, below.**
+>
+> **STILL OPEN — product decisions, deliberately not taken in the bug-fix pass:**
+> whether to drop the Water fill / Showers / Dump stations tiles, whether to
+> narrow `SUPPRESSED_PRIMARY_CATEGORIES` for the search-area path only, whether
+> to keep the "NEW" badges on tiles that cannot return results, and whether
+> `urban` should keep a chip at all given it has no corpus rows and no live
+> source. The original analysis for each is preserved verbatim below.
+>
+> **ALSO FOUND, NOT FIXED (flagged):** no CI job runs the `web` test suite —
+> `.github/workflows/ci.yml`'s `test` job runs `npm run -w data test` only, and
+> `web/package.json` has no `test` script. Separately, `npx tsx --test` collects
+> **zero** tests for any file under a `[param]` directory (node:test reads
+> `[tripId]` as a glob character class), so the invocation documented at the top
+> of `handler.test.ts` does not run it. Both mean the new guard is manual-only.
+> Wiring web tests into CI is out of scope here and could surface unrelated
+> pre-existing failures.
 
 Surfaced by the read-only surface trace,
 `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`. **Both are

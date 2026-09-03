@@ -221,10 +221,18 @@ delete. Named here because it changes the payload.
 ### D8. `interest` and `urban` are reachable in one endpoint and not the other
 
 Both are members of `SlideCategoryKey` and both have entries in
-`SLIDE_TO_PRIMARY_CATEGORY`, but `trip-browse`'s `SLIDE_CATEGORIES` excludes them ("their
-live query sets are empty"). So they are corpus-reachable via search-area and not via day
-browse. `resolvePlaces()` accepts them in `day-corridor` scope and routes them
-federated-only. Divergence named.
+`SLIDE_TO_PRIMARY_CATEGORY`, but `trip-browse` used to validate against a 7-bucket list
+that excluded them ("their live query sets are empty"), so they were corpus-reachable via
+search-area and **rejected with a 400** via day browse. `resolvePlaces()` accepts them in
+`day-corridor` scope and routes them federated-only.
+
+**RESOLVED 2026-09-03 (bug fix).** The divergence this section named was a defect, not a
+design choice: day browse's validation allowlist was split from its `all`-expansion list
+(`REQUESTABLE_CATEGORIES` vs `ALL_VIEW_CATEGORIES` in the route), so both endpoints now
+accept `interest`/`urban` and route them federated-only. Verified end-to-end on TEST —
+`interest` returns corpus rows on a real day with `USE_FEDERATED_POIS=true`; `urban`
+returns an empty set because it has no corpus rows. They remain out of the `all` fanout
+by design.
 
 ### D9. Corridor geometry is a two-point line, not the day's real polyline
 
