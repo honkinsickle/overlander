@@ -141,7 +141,48 @@ one route file, #376 is CI config. But the corpus grows independently of this
 repo's merges, so **treat both numbers as dated to #371's measurement, not to
 `75207ba`.** The header stamp now says exactly that.
 
-## 6. Outcome
+## 6. Main moved again during the pass — the verification still transfers
+
+While this PR was open, six more PRs landed and `main` went **`75207ba` →
+`7aea8eb`** (#368 → #369 → #370 → #372 → #374 → #375).
+
+**The verification is unaffected, and that is measured, not assumed** `[literal]`:
+
+```
+git diff --stat 75207ba..7aea8eb -- web/src   →  (empty)
+```
+
+Every one of those six PRs is `data/`-side or docs. **No file under `web/src`
+changed**, so all thirteen code-facing claims verified in §3 hold identically at
+`7aea8eb`. The diagram's header stamp names `75207ba`, which is the ref the
+claims were actually executed against — deliberately left as-is rather than
+bumped to a ref this pass did not run against.
+
+**The `BACKLOG.md` line hint survives the move for the same reason it was
+written that way:** the citation reads `(line 1076 @75207ba)`. Because it is
+ref-stamped, it stays true even though `BACKLOG.md` has grown again since.
+
+### A defect on `main`, found by this pass and fixed here
+
+**`origin/main`'s `docs/LOG.md` carries three LITERAL CONFLICT MARKERS committed
+into the file** `[literal]` — `<<<<<<< HEAD`, `=======`, and
+`>>>>>>> 03d0b6e (feat(data): dry-run merge preview tool …)` at lines
+**572 / 595 / 596**, introduced by **`abc03f8` (#370)**. `STATE.md` and
+`BACKLOG.md` are clean (checked; zero markers in each).
+
+The content on **both** sides of those markers is intact and is preserved here —
+only the three marker lines are dropped. This PR already edits `LOG.md`, so
+re-committing known-broken markers was not a real option.
+
+**How it was found is worth more than the fix.** The content-preservation check
+run after resolving this branch's merge reported "3 lines from `origin/main`
+missing" — and those three lines *were the markers*. The same check had already
+earned its place minutes earlier: a first resolution attempt genuinely **dropped
+`main`'s entire `(later 7)` entry**, and the check caught it before anything was
+committed. A merge that "looks fine" is not evidence; diffing the result against
+both parents is.
+
+## 7. Outcome
 
 **One text fix, one header stamp, no structural change.** The diagram's model of
 `resolvePlaces()` — what is built, what is wired, which flags gate which

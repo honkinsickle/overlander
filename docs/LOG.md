@@ -56,6 +56,25 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   1700px artboard) and clipped at `— NOT LOCAL BRANC`. Caught by screenshotting
   after the write instead of trusting its success, then shortened and
   re-confirmed.
+- **Main moved again mid-PR — `75207ba` → `7aea8eb`, six more merges — and the
+  verification transfers, measured not assumed.**
+  `git diff --stat 75207ba..7aea8eb -- web/src` is **empty**; all six are
+  `data/`-side or docs. The header stamp was deliberately **left at `75207ba`**,
+  the ref the claims were actually executed against, rather than bumped to one
+  this pass never ran against. The ref-stamped `BACKLOG.md` line hint survives
+  the move for the same reason it was written that way.
+- **⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` has three LITERAL CONFLICT
+  MARKERS committed into it** — `<<<<<<< HEAD` / `=======` /
+  `>>>>>>> 03d0b6e` at lines 572/595/596, from **`abc03f8` (#370)**. `STATE.md`
+  and `BACKLOG.md` are clean. Content on both sides is intact and preserved;
+  only the three marker lines are dropped. This PR already edits `LOG.md`, so
+  re-committing them was not a real option.
+- **The content-preservation check is what earned this session.** It caught the
+  markers — and minutes earlier it caught a first merge resolution that had
+  **silently dropped `main`'s entire `(later 7)` entry**, before anything was
+  committed. A merge that reads fine is not evidence; diffing the result against
+  **both** parents is. Same lesson as the earlier stale-`origin/main` catch:
+  the sanity check is doing real work, not ceremony.
 
 ## 2026-09-03 (later 7) — Merge queue drained: PRs #368 → #369 → #370 → #372 → #374 → #375 all landed on `main` in dependency order.
 

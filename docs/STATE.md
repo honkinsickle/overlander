@@ -22,6 +22,10 @@
 
 **A first header edit overflowed the artboard** (fixed 1649px box, 1700px artboard) and clipped at `— NOT LOCAL BRANC`. Caught and corrected, then confirmed by screenshot — read back, don't trust the write.
 
+**Main moved again mid-PR — `75207ba` → `7aea8eb`, six more merges — and the verification transfers, measured not assumed:** `git diff --stat 75207ba..7aea8eb -- web/src` is **empty**; all six are `data/`-side or docs. The diagram's header stamp was deliberately **left at `75207ba`** — the ref the claims were actually executed against — rather than bumped to one this pass never ran against.
+
+**⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` carries three LITERAL CONFLICT MARKERS committed into it** — `<<<<<<< HEAD` / `=======` / `>>>>>>> 03d0b6e` at lines 572/595/596, introduced by **`abc03f8` (#370)**. `STATE.md` and `BACKLOG.md` are clean. Content on both sides is intact and preserved; only the three marker lines are dropped. This PR already edits `LOG.md`, so re-committing them was not a real option. **The content-preservation check is what found them** — and minutes earlier it caught a first merge resolution that had silently dropped main's entire `(later 7)` entry, before anything was committed.
+
 **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
 
 ---
