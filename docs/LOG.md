@@ -13,10 +13,68 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
 
+## 2026-09-03 (later 8) — Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. One stale citation, thirteen claims intact.
 
-
-
-
+- **Numbered 8, skipping 7 on purpose.** #371 is still open carrying
+  `(later 7)`; leaving the slot free avoids a second merge collision in this
+  file today.
+- **Verified against `75207ba`, not the `4e55039` the brief named.** Main moved
+  again mid-request — #368 merged on top of #376. Checked what main actually
+  was rather than what was assumed.
+- **#373's constant split touches nothing on the diagram, for two independent
+  reasons.** All 40 text nodes on artboard `3R4-0` were enumerated: none
+  mentions `SLIDE_CATEGORIES`, category validation, the chip row, or
+  `urban`/`interest`. And the diff sits entirely upstream of the resolver
+  hand-off — `useResolver: TRIP_BROWSE_USE_RESOLVER` is outside every hunk,
+  `handler.ts` untouched.
+- **Resisted the tidy conclusion the brief offered.** "Purely internal, same
+  behaviour, different names" is **wrong**: `REQUESTABLE_CATEGORIES` is
+  deliberately wider than `ALL_VIEW_CATEGORIES`, so the chips really did go
+  400 → 200. The true statement is narrower — *real behaviour change, but the
+  diagram never described that layer.*
+- **Swept everything, not just the named angle.** The non-docs diff since
+  `0dae80c` is 11 files; exactly one is product code (#373's `route.ts`).
+  #376 changed no product code at all, so its only candidate impact was the
+  quoted test counts — re-executed: `place-id` 27/27, resolver suite 43/43.
+- **One real stale claim: `BACKLOG.md:760`.** Correct at `0dae80c`, now at
+  1076 — `BACKLOG.md` grew 4287 → 4665 lines over 7 merges. #373/#376
+  contributed but are not the cause. Replaced with a **section** citation plus
+  a ref-stamped line hint; a bare line number into an append-only doc rots by
+  construction.
+- **A near-miss that would have shipped as a false finding.** The importer
+  sweep first read `search-area/handler.ts:37` against the diagram's `:32` —
+  a `grep` artifact, matching the closing `} from …` of a multi-line import.
+  The file is byte-identical there since `0dae80c` and no commit has touched
+  it. **Checking whether the file had changed at all is what settled it** — a
+  drift claim needs a commit behind it, not just a differing line number.
+- **Said plainly what was not checked:** the GAP box's `161,431` and `10,311`
+  row counts need live DB queries and were not re-measured. Neither PR carries
+  a migration or corpus write, but the corpus moves independently of merges, so
+  they stay dated to #371. The diagram's header stamp now scopes itself to
+  "code re-verified" rather than implying more.
+- **The first header edit overflowed the artboard** (1649px fixed text box in a
+  1700px artboard) and clipped at `— NOT LOCAL BRANC`. Caught by screenshotting
+  after the write instead of trusting its success, then shortened and
+  re-confirmed.
+- **Main moved again mid-PR — `75207ba` → `7aea8eb`, six more merges — and the
+  verification transfers, measured not assumed.**
+  `git diff --stat 75207ba..7aea8eb -- web/src` is **empty**; all six are
+  `data/`-side or docs. The header stamp was deliberately **left at `75207ba`**,
+  the ref the claims were actually executed against, rather than bumped to one
+  this pass never ran against. The ref-stamped `BACKLOG.md` line hint survives
+  the move for the same reason it was written that way.
+- **⚠️ FOUND ON `main`, FIXED HERE: `docs/LOG.md` has three LITERAL CONFLICT
+  MARKERS committed into it** — `<<<<<<< HEAD` / `=======` /
+  `>>>>>>> 03d0b6e` at lines 572/595/596, from **`abc03f8` (#370)**. `STATE.md`
+  and `BACKLOG.md` are clean. Content on both sides is intact and preserved;
+  only the three marker lines are dropped. This PR already edits `LOG.md`, so
+  re-committing them was not a real option.
+- **The content-preservation check is what earned this session.** It caught the
+  markers — and minutes earlier it caught a first merge resolution that had
+  **silently dropped `main`'s entire `(later 7)` entry**, before anything was
+  committed. A merge that reads fine is not evidence; diffing the result against
+  **both** parents is. Same lesson as the earlier stale-`origin/main` catch:
+  the sanity check is doing real work, not ceremony.
 
 ## 2026-09-03 (later 7) — Merge queue drained: PRs #368 → #369 → #370 → #372 → #374 → #375 all landed on `main` in dependency order.
 
@@ -569,7 +627,6 @@ Branch `merge-preview-same-pairs`, cut from `main` (not from PR #368/#369, both 
   Google-dependency reduction proceeds, since those are precisely the tiles it
   would not affect.
 
-<<<<<<< HEAD
 ## 2026-09-02 (later 33) — CA state_parks "NP" suffix identified as Natural Preserve SubUnit; 4 sort-pass UNCLEAR pairs reclassified to DIFFERENT.
 
 Investigation only. Read-only queries against PROD and TEST; no writes, no schema changes, no code changes. Doc: `docs/investigations/2026-09-02-ca-np-designation.md`.
@@ -592,8 +649,6 @@ Follow-up on PR #368's own self-review, which flagged four verification gaps. Re
 - **Correction to PR #368 wording.** The NP doc's phrase "63 source_records → 62 distinct master_places (some NPs share a master_place)" is loose — the actual mechanism is one unlinked record, not sharing. Documented in the follow-up doc; PR #368 itself not touched.
 - **Also: TEST duplicate-classifier run completed** and reported 775 broad pairs on TEST, matching the prior investigation's number. Not re-classified per-bucket (not needed for any of the four items).
 
-=======
->>>>>>> 03d0b6e (feat(data): dry-run merge preview tool for the 136 SAME-bucket duplicate pairs)
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
 Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
