@@ -1,5 +1,290 @@
 # Backlog — open work
 
+## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
+
+Full data: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.
+Sampled at **12 points on one day** — a sample, not a population measurement.
+Corpus figures carried from #364 (TEST in-scope).
+
+**⚠️ AMENDS THE #364 BACKLOG ENTRY BELOW.** #364's Tier 2 listed Trailheads and
+Groceries together as "a compliant live source exists, just unwired." **That is
+now wrong for Trailheads.**
+
+- **Trailheads — DO NOT wire Mapbox.** `trailhead` returned hits at **2/6 metro
+  and 2/6 rural points, 3 and 2 total features**, against a corpus of
+  **4,759**. That is a direct category measurement and stands.
+  **Foursquare — already wired, mapped to `scenic` via its Outdoors top-level —
+  returned relevant hits at 10/12 points, but that is a NAME TEXT-SEARCH against
+  Mapbox's CATEGORY FILTER and the two are not like-for-like.** Treat FSQ as the
+  candidate to *test first*, not as an established better source; confirming it
+  needs a like-for-like category probe, which the unreachable FSQ taxonomy
+  currently prevents. *(Softened 2026-09-03.)*
+- **Viewpoints — same reversal.** Mapbox `viewpoint`: **4/6 metro, 0/6 rural, 8
+  total metro features** against a corpus of 340. Same FSQ caveat as above
+  (6/12 and 9/12, same non-comparable instrument).
+- **`rest_area` (inside `interest`) is thin too** — 5/6 metro but **1/6 rural**.
+
+**Confirmed genuinely just-needs-wiring (dense where sampled):**
+- **Auto / Repair** — **0** corpus rows vs Mapbox `auto_repair` saturating at
+  **all six** metro and **four of six** rural points; highest rural total of any
+  id sampled. Cleanest win available.
+- **`charging_station`** — corpus holds **2,886** EV rows the live half cannot
+  reach; Mapbox's EV id is dense wherever `gas_station` is. Closes #364's fuel
+  inversion.
+- **Groceries** — `grocery`/`supermarket` dense in metro, present at 4/6 rural.
+
+**Confirmed NO viable live source anywhere checked** (neither a Mapbox id nor
+usable FSQ text-search evidence). Wiring cannot fix these; sourcing or
+unsuppression can:
+- **Dump stations** — **1** plausible hit in 24 point-queries.
+- **Showers** — **~1** genuine public shower in 24 point-queries.
+- **Water fill** — **0** relevant hits. The only one with a real corpus (169
+  in-scope, suppressed), so **unsuppression is the likelier lever than sourcing.**
+- **Dispersed camping** — no Mapbox id, 1 real FSQ hit, but corpus is **2,533**
+  in-scope, so it is already well served and simply has no live complement.
+
+**⚠️ CARRY INTO THE ROUTING DECISION AS A HYPOTHESIS, NOT A FINDING — Mapbox
+coverage may track settlement rather than geography.** At the **two** genuinely
+remote sample points (Ohanapecosh on Rainier, Cave Lake in eastern NV) Mapbox
+returned **0** for campground, gas, auto repair and most commercial categories.
+Every "4/6 rural" above means "all but the two wilderness points". **The sample
+contains exactly two remote points — enough to notice a pattern, not enough to
+establish one**; no further remote points were sampled and no other provider was
+compared there. If it holds it would argue for corpus-primary in the deep-corpus
+categories (campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed
+2,533). More remote points are cheap to add to the instrument.
+*(Softened 2026-09-03; originally stated as an unqualified finding.)*
+
+**Foursquare taxonomy — no longer "unmeasured", now a bounded negative.**
+Retried across **24 combinations** (4 paths × 3 API versions × 2 auth styles),
+all HTTP 404, including the legacy `api.foursquare.com/v3` host which returns
+the same error shape as the new host. **Auth is not the cause** — the same key
+returns 200 on `/places/search`. The vocabulary is unenumerable, so the FSQ
+findings above rest on **free-text probing**, and FSQ text search matches
+**names, not categories**. Read every FSQ near-zero as *evidence of absence via
+the only reachable interface*, not proof of absence.
+## ⚠️ The 2026-08-25 `resolvePlaces()` findings — RE-VERIFIED 2026-09-03, four of six were stale on arrival
+
+Full detail: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`,
+verified against `main` @ **`0dae80c`**.
+
+**The Aug 25 session's headline — "`resolvePlaces()` is additive only, imported
+by nothing" — was already false when written.** All three flag-gated resolver
+cutovers merged **2026-08-23**, two days earlier: #260 (`d62f660`, Search +
+`SEARCH_AREA_USE_RESOLVER`), #266 (`a086cb8`, Date Detail), #269 (`b227e65`,
+day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day,
+all four inside ninety minutes.
+
+**The Paper diagram rendered from that session depicts a superseded
+architecture and should not be used as a current reference.**
+
+| Aug 25 finding | Verdict |
+|---|---|
+| imported by nothing | **CHANGED** — 3 importers in `src/app`; still 0 in `src/components` |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely still open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** (below) |
+| no polyline support | **UNCHANGED — genuinely still open** (see the `preComputeFacts` item) |
+| tiering swap unmerged | **CHANGED** — merged Aug 23; the branch still existing is what made it look open |
+
+**Still genuinely open and worth acting on — only two:**
+- **Shared client cache (ADR step 4).** No `swr`/`react-query`/`@tanstack`/
+  `apollo`/`urql` in `web/package.json`, no cache keyed by canonical id
+  anywhere. The only caches are three **per-route, server-side, in-process**
+  ones — the opposite of the ADR's shared client cache.
+- **Polyline scope** — see the `preComputeFacts` → `resolvePlaces()` item below;
+  its blocker 2 is now answered, blocker 1 is not.
+
+**⚠️ Correction to how finding #4 should be read.** The four enrichment columns
+(migration `20260821060000`) are indeed unselected — but measured on TEST
+2026-09-03, `rating`, `review_count` and `price_tier` are **0 non-null across
+161,431 rows**, and `backfill-master-place-enrichment.ts` *asserts* they must
+stay NULL ("no source carries one"). **Wiring those three up would return
+nothing.** Only `master_place.photo_url` has substance — **10,311** populated
+rows currently unread. Note the export view's `photo_url` is a **different
+value** (a `LEFT JOIN LATERAL` over `source_record`), so "photo_url is selected"
+in `hydrate.ts:87` does **not** mean the migration's column is read.
+
+**Process note worth keeping:** a finding about whether code is wired is only
+valid against a stated commit. Neither the Aug 25 report nor its diagram pins
+one. Pin the SHA.
+## Category × source gaps — MEASURED 2026-09-02, decision deferred
+
+Full data: `docs/investigations/2026-09-02-category-source-audit.md`. Corpus
+figures are **TEST only**; PROD was not measured. The routing-table decision was
+explicitly held out of that pass — this is the parked input to it.
+
+**Tier 1 — no corpus AND no compliant live source exists. Wiring cannot fix
+these.**
+- **Showers** (`shower`: 4 in-scope) and **Dump stations** (`dump_station`: 6
+  in-scope). Neither has a match in Mapbox Search Box's **482** canonical
+  category ids (probed `shower`, `dump`, `sanit`, `sewage`, `disposal`, `rv`).
+  Both are additionally dropped at `hydrate.ts:140` (suppressed), so they are
+  empty twice over — and both carry a NEW badge. Fix is a **sourcing** decision
+  (new provider, or an OSM-derived ingest), not a routing one.
+- **`urban`** — **0** corpus rows (`shopping_mall`, `city_park` both empty) and
+  no live source. A fully dead bucket that still occupies a chip on two
+  surfaces.
+
+**Tier 2 — no corpus, but a compliant live source EXISTS and is merely unwired.
+Cheap wiring decisions.**
+- **Auto / Repair** — **0** corpus rows, no live wiring, but Mapbox publishes
+  `auto_repair`, `repair_shop`, `car_wash`. Cheapest gap in the audit.
+- **Trailheads** (4,759 in-scope, corpus-only; Mapbox has `trailhead`) and
+  **Groceries** (546 in-scope, corpus-only; Mapbox has `grocery`,
+  `supermarket`). Not broken — just single-sourced.
+- **`ev_charging`** — 2,886 in-scope corpus rows, but **not** in
+  `LIVE_SLIDE_FOR_PRIMARY`, so it never reaches the live half. Mapbox publishes
+  `charging_station`, unwired. See the fuel inversion below.
+
+**Tier 3 — thin corpus, live wired. Live-dependent by design; the exposure is an
+outage, not a gap.**
+- **`overnight`/Hotels: 4 in-scope rows.** **Coffee: 2.** **`attraction`: 106**
+  — of its three Google fanout types, `museum` and `art_gallery` have 0 corpus
+  rows but `historical_landmark` has 2 total / 1 in-scope. The 106 is carried
+  almost entirely by `visitor_center` (102), which Google's fanout does not
+  request. *(Corrected 2026-09-03 — the original text said all three were
+  zero.)*
+
+**Cross-cutting — arguably ahead of all of the above:**
+- **Three competing category vocabularies.** DESIGN.md's 9 ↔
+  `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` do match. But the day-browse
+  route accepts only **7** of the 9, and the 13 Find Nearby tiles are a third
+  vocabulary keyed on `primary_category` — **3** primaries are tile-claimed and
+  slide-unclaimed (`water`, `shower`, `dump_station`), **45** are slide-claimed
+  and tile-unclaimed, **40** are claimed by one or both with **zero** corpus
+  rows, and **22** corpus values are claimed by nothing (incl. `picnic_area`
+  1,223 in-scope, `public_land` 448). **A routing table has to pick one
+  vocabulary as canonical before it can be written.**
+- **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
+  sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
+  Surface 3 expands the same chip through `SLIDE_TO_PRIMARY_CATEGORY` and has no
+  allowlist. The `interest` chip is a working filter over **2,537** in-scope
+  rows on one surface and an error on the other.
+- **Fuel is inverted between corpus and live.** Corpus `gas_station` in-scope =
+  **1**; `ev_charging` = **2,886**. Live Mapbox serves `gas_station` only. The
+  corpus has EV and no gas; the live source has gas and no EV.
+- **⚠️ Stale rationale to correct when this is decided:** §"OSM fuel family
+  retired (#214)" below still justifies letting corpus `gas_station` lapse
+  because "gas_station is covered **live** by Google Places." Google's
+  `TYPES_BY_CATEGORY.fuel` was emptied 2026-08-25 and fuel moved to Mapbox. The
+  conclusion holds; the stated reason names a source that no longer serves fuel.
+
+**Two uncounted sourcing paths found while enumerating (Finding 4):**
+- **`resolveSuggestions` / `resolveOvernights`** (`web/src/lib/trips/`, used by
+  `alaska.ts`) run a **different source list**: `[overpassSource, recGovSource,
+  usfsSource, blmSource, foursquareSource]` — **OSM/Overpass instead of Google,
+  no Mapbox at all**. `overpassSource` is wired here and nowhere else. So
+  `camping`/`scenic`/`food`/`oddity` are Google-led on the browse surfaces and
+  Overpass-led on the reference-trip path. **Fuel is absent entirely** from
+  `resolveSuggestions`'s 4 categories.
+- **`FuelStopCard`** (`web/src/components/trip/fuel-stop-card.tsx`) calls
+  `/api/trip-browse/…?category=fuel` and **has no importer anywhere in the
+  repo** (scope: repo-root grep over `*.ts`/`*.tsx`, excluding `node_modules`).
+  Dead code; decide whether to delete it when the routing work lands.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy. Its categories
+endpoint 404s on the pinned `x-places-api-version: 2025-06-17` at both
+`places-api.foursquare.com/places/{categories,taxonomy}` and legacy
+`api.foursquare.com/v3/places/categories`. So "no compliant live source exists"
+for showers/dump stations/water fill is established **against Mapbox's list
+only**, not against every provider.
+## Two apparent web-client defects — BOTH NOW REPRODUCED AND RESOLVED (2026-09-03)
+
+> **RESOLVED 2026-09-03.** Both were reproduced against the running route on
+> TEST before any code changed — the 2026-09-02 deductions were correct.
+> - **#1 (urban/interest 400) was REAL and is FIXED.** Confirmed pre-fix:
+>   `?categories=urban`, `?categories=interest`, `?category=urban` and
+>   `?category=interest` all returned `400 Invalid category`, while
+>   `camping`/`scenic` returned 404 "Trip not found" (i.e. validation passed).
+>   Fixed by splitting the one constant into `ALL_VIEW_CATEGORIES` (the `all`
+>   expansion, still 7 buckets) and `REQUESTABLE_CATEGORIES` (derived from
+>   `BROWSE_CARD_CATEGORIES` via `browseCategoryToSlide`, so the two cannot
+>   drift again). Post-fix, all nine chips return 200 on a real trip/day;
+>   a bogus category still 400s; `categories=all` still fans out to exactly
+>   the 7 live buckets with no `urban`/`interest`.
+>   **This was blocking real data, not just erroring on an empty bucket** —
+>   with `USE_FEDERATED_POIS=true`, `interest` returns corpus rows on a real
+>   day (e.g. "Las Vegas Natural History Museum"). `urban` returns empty
+>   because it has no corpus rows, which matches the #364 measurement.
+>   Guarded by a new `route.test.ts`.
+> - **#2 (water fill / showers / dump stations) NEEDED NO FIX.** They already
+>   fail gracefully: on the search-area route all three return HTTP 200 with
+>   zero places and an empty `failedSources`, against a `campground` control on
+>   the same bbox that returns results. Surface 3 renders `"0 results in view"`
+>   with no error box; Surface 2 renders "No places match the selected
+>   filters". `urban` behaves the same way. **No live source was sourced and no
+>   tile was removed — those remain open product decisions, below.**
+>
+> **STILL OPEN — product decisions, deliberately not taken in the bug-fix pass:**
+> whether to drop the Water fill / Showers / Dump stations tiles, whether to
+> narrow `SUPPRESSED_PRIMARY_CATEGORIES` for the search-area path only, whether
+> to keep the "NEW" badges on tiles that cannot return results, and whether
+> `urban` should keep a chip at all given it has no corpus rows and no live
+> source. The original analysis for each is preserved verbatim below.
+>
+> ~~**ALSO FOUND, NOT FIXED (flagged):** no CI job runs the `web` test suite —
+> `.github/workflows/ci.yml`'s `test` job runs `npm run -w data test` only, and
+> `web/package.json` has no `test` script. Separately, `npx tsx --test` collects
+> **zero** tests for any file under a `[param]` directory (node:test reads
+> `[tripId]` as a glob character class), so the invocation documented at the top
+> of `handler.test.ts` does not run it. Both mean the new guard is manual-only.~~
+> **RESOLVED 2026-09-03 (own PR, off `main`).** `web/package.json` now has a
+> `test` script globbing `src` recursively — the recursive wildcard walks INTO
+> `[tripId]`, which the literal path could not match. `ci.yml` gained a
+> `test-web` job running it. The suite passes whole; **no pre-existing web test
+> failures were surfaced by enforcing it** `[executed 2026-09-03]`.
+
+Surfaced by the read-only surface trace,
+`docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`. **Both are
+deductions from source, not observations. Confirm at runtime before acting** —
+either could be wrong for a reason the code doesn't show.
+
+- **1. `urban` / `interest` chips on the day-scoped browse panel look like they
+  return HTTP 400.** `browseCategoryToSlide` (`lib/trip-browse/palette.ts:58-63`)
+  is now **total** — it returns `"urban"` / `"interest"` rather than null — so
+  the panel's `.filter((k) => k !== null)`
+  (`components/trip/category-browse-panel.tsx:310`) can no longer drop anything,
+  and `?categories=urban` reaches the route. The route validates against
+  `SLIDE_CATEGORIES` (`app/api/trip-browse/[tripId]/[dayId]/route.ts:16-24`), a
+  7-key list that **deliberately excludes** both because their live query sets
+  are empty — so it takes the `bad` branch at `:133-141` and 400s. The panel
+  renders that as an `HTTP 400` error box, not the empty state its own comment
+  at `:302-305` predicts.
+  **Root shape:** one constant is doing two jobs — "what `all` expands to" and
+  "what is a legal request". Those want to differ for corpus-backed buckets.
+  **Fix sketch:** split the constant; keep `urban`/`interest` valid as requests
+  but out of the `all` expansion, so they fall through to the federated half.
+
+- **2. Find Nearby's Water fill / Showers / Dump stations tiles appear
+  structurally unable to return a result.** They target `water`, `shower` and
+  `dump_station` (`components/trip/find-nearby-panel.tsx:198, :212, :219`) —
+  all three in `SUPPRESSED_PRIMARY_CATEGORIES`
+  (`lib/trip-browse/federated.ts:72-75`), which `hydratePlacesByIds` drops at
+  `lib/trip-browse/hydrate.ts:140`. Their live half is unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` too, so it short-circuits to `[]`. **The resolver
+  flag does not change this** — both `SEARCH_AREA_USE_RESOLVER` states route the
+  bbox federated half through the same `hydratePlacesByIds`
+  (`app/api/search-area/handler.ts:194` legacy,
+  `lib/places/resolve-places.ts:497` resolver).
+  **Note the near-miss:** the tile list's comment
+  (`find-nearby-panel.tsx:80-83`) says the values were "verified against the
+  live Typesense `primary_category` facet". That is plausibly **true and still
+  compatible with an empty tile** — suppression happens downstream in
+  **hydration**, not in Typesense, so a facet-level check cannot see it.
+  **Fix is a product call, not obviously a code call:** drop the three tiles, or
+  narrow the suppression for the search-area path only (the suppression is
+  deliberate — `federated.ts:18-20` argues standalone amenities are "not cards
+  in their own right", which is a reasonable position for *browse* and a
+  debatable one for an explicit *search* for a dump station).
+
+**Related, no defect, worth a look if the Google-dependency reduction
+proceeds:** nothing in the Find Nearby UI distinguishes a corpus-only tile from
+a live-backed one, and the "NEW" badge does not correlate with the difference
+(it predates the data wiring entirely — see the report). **6 of the 8
+NEW-badged tiles issue no live call at all**, so they are precisely the tiles a
+Google reduction would not affect.
+
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 
 Same physical park unit represented by two separate master_places, ~87 m apart:
@@ -787,6 +1072,29 @@ shared substrate). Deferred, blocked on:
    the same suppression filter applies there — or whether
    `preComputeFacts`-via-resolver would let suppressed rows through —
    is unverified this session and needs confirming before any swap.
+
+   > ### ✅ ANSWERED 2026-09-03 — and the answer is the feared one.
+   > Verified against `main` @ `0dae80c`
+   > (`docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`).
+   > **`preComputeFacts`-via-resolver WOULD let suppressed rows through.**
+   > - `isSuppressedCategory` has exactly **two** call sites in `web/src`:
+   >   `hydrate.ts:140` (bbox/ids) and `bake-corridors.ts:134` (generation).
+   > - `fetchFederatedPois` applies only `isClosedPlace`
+   >   (`federated.ts:336-338`) — **no suppression filter**.
+   > - The RPC does not filter them either: `pois_along_corridor`'s `WHERE`
+   >   (migration `20260902050100`, lines 139-148) excludes `land_status`,
+   >   closed/decommissioned rows and template-only descriptions, but **not**
+   >   `dump_station`/`water`/`toilet`/`fire_pit`/`shower`/`picnic_area`/
+   >   `picnic_ground`.
+   >
+   > **⚠️ Not a live bug today, and the reason matters.** `fetchFederatedPois`
+   > always passes `p_categories = SLIDE_TO_PRIMARY_CATEGORY[slideKey]`, never
+   > `null` (`federated.ts:320-321`), and per #364 no slide bucket claims a
+   > suppressed value. **Safety comes from the category allowlist, not from a
+   > suppression filter** — so passing `null` categories, or adding an amenity
+   > to a slide bucket, would start leaking suppressed rows with nothing to
+   > catch them. Any swap should add the filter rather than rely on the
+   > allowlist. **Blocker 1 (polyline scope) remains open and unchanged.**
 
 Not in scope for the guarantee-selector build (spec §11 steps 5/6/7).
 `pickAnchorStop`, `pickGuaranteedStop`, and every pool-consuming
@@ -1620,10 +1928,49 @@ readable from here, so that it is genuinely distinct from the working
 corpus is the workflow's stated intent, not something confirmed — and it
 EXCLUDES the `phase3a`/`phase3b` destructive suites per
 `vitest.config.ts`), and **`build`** (`cd web && npx next build`, web
-only). Worth a periodic re-check that the prose still matches the
+only).
+**The predicted drift happened 2026-09-03:** a fourth job, **`test-web`**
+(`npm run -w web test`, no secrets, not serialized on the shared test
+project) was added, and CLAUDE.md's prose was updated in the same PR.
+Worth a periodic re-check that the prose still matches the
 workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
+
+## ~~`test-web` runs but is NOT a required status check~~ — RESOLVED same day (2026-09-03)
+
+**RESOLVED 2026-09-03 11:51:07 -07:00** via `gh api --method PUT
+repos/honkinsickle/overlander/rulesets/19629589`, authorized by Adam.
+`required_status_checks` is now **`typecheck`, `test`, `build`, `test-web`**,
+confirmed by read-back with every other ruleset field byte-identical. See
+`LOG.md` (later 6) — a settings change leaves no trace in `git log`.
+
+The original finding, kept for the lesson: `main` is protected by a **ruleset**
+(id `19629589`), not classic branch protection — `…/branches/main/protection`
+returns 404 "Branch not protected", which is misleading if read alone; the rules
+live under `/rules/`. The `test-web` job was added to `ci.yml` and reported on
+PRs while **not** being required, so a red web suite was visible and still
+mergeable. The guard reported without enforcing — the failure class the STANDING
+RULES name ("a check that cannot fail is not evidence"), one layer up from the
+code, and it survived a full self-review before being caught.
+
+**Generalisable, and the reason this entry stays:** adding a CI job is only half
+of adding a gate. Whenever a job is added or **renamed**, check the ruleset's
+`required_status_checks` in the same pass —
+`gh api repos/<owner>/<repo>/rules/branches/main`. A rename silently
+un-requires the check with no error anywhere.
+
+## The web `test` script can pass vacuously if tests move out of `src/` (2026-09-03)
+
+`web/package.json`'s `test` script globs `src` recursively. A glob that matches
+**zero** files exits **0** with `tests 0` `[measured 2026-09-03 on Node 24]` —
+so a future test file placed outside `src/` (say `web/scripts/`, which IS in the
+type-check scope) would be silently uncollected and CI would stay green. This is
+the same class as the bug this script was written to fix: the failure mode is a
+check that cannot fail. Cheapest guard is a floor assertion on the collected
+count, or a `--test-reporter` post-step comparing collected files against a
+`find`. Not built — it is extra machinery for a risk that has not yet bitten,
+and it was outside the wiring pass's scope. Related: the doc-hygiene entry above.
 
 ## Manual-review queue — first bulk-clearing mechanism shipped; framework still not built (updated 2026-08-17)
 

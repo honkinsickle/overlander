@@ -1,4 +1,4 @@
-# STATE — branch `refresh-resolver-diagram` · 2026-09-03 — **Full refresh of the resolvePlaces() Paper diagram — current as of this pass.**
+# STATE — branch `refresh-resolver-diagram` · 2026-09-03 (later 24) — **Full refresh of the resolvePlaces() Paper diagram — current as of this pass.**
 
 (**newest truth: no code changed.** The `resolvePlaces() — built vs. wired`
 Paper diagram (node `3R4-0`, file "Card data model and ofrmation") was fully
@@ -16,6 +16,176 @@ on TEST, unread) — the other three are NULL corpus-wide by design. A new
 diagram element at all). Day Column's `NO ENDPOINT` badge was reconfirmed and
 recolored to stop sharing a color with "wired but flagged off." **NEXT:
 Adam's review.**)
+
+---
+
+# STATE — branch `wire-web-tests-into-ci` (pushed as `surface-pop2`) · 2026-09-03 (later 23) — **CI now runs the web test suite AND blocks on it. 714 tests that never executed automatically now gate every merge to `main`.**
+
+(**newest truth: no product code changed; nothing written to PROD. Two config lines, two test-file header corrections, doc updates.** *The local gate run included `npm run -w data test`, which routes at `SUPABASE_TEST_URL` exactly as CI's own `test` job does — the destructive `phase3a`/`phase3b` suites are excluded by `vitest.config.ts`, but "wrote nothing to TEST" is the config's stated intent, **not** something audited per-test here.*
+
+*Branch note: cut from `main` at `eeb66d6` (#373 merged). Scoped deliberately narrow — wiring only, per the brief.*
+
+**THE ROOT CAUSE OF THE ZERO-COLLECTION WAS THE GLOB, NOT THE FILE.** `node:test` treats a `--test` positional argument as a **glob pattern**, and `[tripId]` reads as a **character class** — so the literal path `src/app/api/trip-browse/[tripId]/[dayId]/route.test.ts` never matches itself and reports `tests 0 / pass 0` `[reproduced 2026-09-03]`. Escaping the brackets does not help (`Could not find …`). A **recursive wildcard that walks into the directory does** match it — so a recursive `src` glob collects those files normally. Verified two ways: the glob run collects them, and `fs.globSync` (node's own engine) returns **64** paths against **64** `*.test.ts` files on disk, with an empty set-difference.
+
+**`web/package.json` now has a `test` script**; `ci.yml` gained a **`test-web`** job. **Deliberately a separate job, not a step in `test`:** the existing `test` job is serialized on a shared TEST Supabase project via `concurrency: test-supabase` and carries its secrets. The web suite needs neither, so it should not queue behind other PRs' data runs or be hidden by a data-side failure. **The "needs no network/env" claim is measured, not assumed:** the whole suite passes **714/714 with `globalThis.fetch` replaced by a thrower**, zero network attempts, and it passes in CI with **no secrets wired**. Negative control run — the preload does apply inside the test child process, and a test that calls ambient `fetch` goes red — so the green is not vacuous. Scope: this proves nothing calls the **ambient global `fetch`**; a test that stubs `fetch` itself would overwrite the thrower, and raw `node:http`/`net` was not covered.
+
+**IT NOW BLOCKS — but that took a SECOND change, outside git.** The job alone did not gate anything. `main`'s protection is a **ruleset** (id `19629589`), not classic branch protection — `…/branches/main/protection` returns 404 "Branch not protected", which reads like no protection at all — and its `required_status_checks` named exactly **`typecheck`, `test`, `build`**. `test-web` was **not** among them, so a red web suite was visible and still mergeable. **Fixed 2026-09-03 11:51:07 -07:00** by `gh api --method PUT …/rulesets/19629589` (Adam-authorized): the list is now **`typecheck`, `test`, `build`, `test-web`**, verified by read-back with every other ruleset field byte-identical. **A settings change leaves no trace in `git log`** — recorded in `LOG.md` (later 6), pre-change JSON at `.context/ruleset-19629589-before-2026-09-03.json`.
+
+**⚠️ THE LESSON, which cost a full self-review to catch:** adding a CI job is only *half* of adding a gate. The first version of this masthead claimed enforcement without ever reading the enforcement layer — the same "a check that cannot fail is not evidence" class the STANDING RULES warn about, one layer up from the code. **Renaming the job would silently un-require it**, with no error anywhere.
+
+**Scope of the enforcement claim, stated rather than glossed:** `…/rules/branches/main` lists all four contexts and #376 targets `main`, so the rule applies `[literal]`. That a **red** `test-web` actually blocks the merge button is **strong inference from ruleset semantics** — all four checks are green, so `mergeStateStatus: CLEAN` reads the same either way. The real negative control (push a knowingly-failing test, confirm the block) was **not** run: it means committing a broken state to an open PR.
+
+**NO PRE-EXISTING WEB FAILURES WERE SURFACED.** The whole suite is **714 tests, 714 pass, 0 fail** `[executed 2026-09-03]`. The three counts the brief asked to confirm reproduce exactly: trip-browse `handler.test.ts` **8/8**, `search-area/handler.test.ts` **10/10**, trip-browse `route.test.ts` **9/9**.
+
+**Verified on CI's Node version, not just this machine.** Local Node is 24; CI pins **22**. `node --test` glob support is version-sensitive, and a version that did not glob would collect zero and pass **vacuously** — the exact failure this PR exists to remove. Re-ran the suite under a fetched **Node 22.11.0**: **714/714, exit 0**.
+
+**⚠️ RESIDUAL RISK, FLAGGED NOT FIXED:** a glob matching **zero** files exits **0** `[measured]`. A future test file placed outside `src/` would be silently uncollected and CI would stay green. Recorded in `BACKLOG.md`; a floor-count assertion is the cheap guard, and building it was outside this pass.
+
+**Gates — five local commands, each exit 0** `[executed 2026-09-03]`: `npm run -w web typecheck` · `npm run -w data typecheck` · `npm run -w data test` (34 files, 656 pass / 3 skip) · `npm run -w web test` (714 pass) · `cd web && npx next build`. (An earlier draft of this line said "all four" over a list of five — the four is the CI **job** count, the five is the local **command** count.) **On CI, all four jobs pass and `test-web`'s log reads `# tests 714 / # pass 714 / # fail 0`** — the collection is real on the runner, not just locally.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
+
+(**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**
+
+**BUG 1 — REAL, FIXED.** Reproduced pre-fix: `?categories=urban`, `?categories=interest` and both singular `?category=` forms returned `400 Invalid category`, while `camping`/`scenic` returned 404 "Trip not found" (validation passed). Root cause was as #361 deduced — one constant answered both *"what does `categories=all` expand to"* and *"what is legal to request"*. **Split into `ALL_VIEW_CATEGORIES`** (the `all` expansion, still the 7 live-fanout buckets) **and `REQUESTABLE_CATEGORIES`**, derived from `BROWSE_CARD_CATEGORIES` via `browseCategoryToSlide` so the two cannot drift apart again.
+
+**Post-fix, verified on a real TEST trip/day:** all nine chips return 200; a bogus category still 400s; `categories=all` still fans out to exactly the 7 live buckets with no `urban`/`interest`.
+
+**⚠️ THIS WAS BLOCKING REAL DATA, not just erroring on an empty bucket.** With `USE_FEDERATED_POIS=true`, `interest` returns corpus rows on a real day (e.g. "Las Vegas Natural History Museum"). `urban` returns empty — consistent with #364's finding that it has no corpus rows.
+
+**BUG 2 — NOT A BUG, no code changed.** Water fill / Showers / Dump stations already fail gracefully: all three return **HTTP 200, zero places, empty `failedSources`** on the search-area route, against a `campground` control on the same bbox that returns results. Surface 3 renders `"0 results in view"` with no error box; Surface 2 renders "No places match the selected filters". `urban` behaves identically. **No data was sourced for them and no tile or "NEW" badge was touched** — those are product decisions, held open per the brief.
+
+**A REGRESSION GUARD THAT CI CANNOT RUN — flagged, not fixed.** New `route.test.ts` (9 tests, all pass) covers every chip, the bogus-category rejection, the `hotel`-is-not-a-slide-key boundary, and the deliberate `all` asymmetry. But **no CI job runs the web test suite** — `ci.yml`'s `test` job runs `npm run -w data test` only, and `web/package.json` has no `test` script. Separately, **`npx tsx --test` collects ZERO tests for any file under a `[param]` directory** (node:test parses `[tripId]` as a glob character class), so the command documented atop the sibling `handler.test.ts` does not actually run it. Wiring web tests into CI is outside a bug-fix pass and could surface unrelated failures.
+
+**One deviation, flagged:** the validation logic was extracted into a pure exported `resolveRequestedCategories()` so it could be unit-tested without a DB. Slightly more than a minimal edit, but the bug lived in code `handler.test.ts` explicitly declared not worth testing ("it is a thin wrapper (validate + …)"), and that assumption is what let it ship.
+
+**Docs touched:** `architecture/resolve-places-design.md` §D8 (the divergence it named was this defect — now marked resolved) and `architecture/resolve-places-day-scoped-browse-cutover-plan.md` (both referenced the renamed constant). No `decisions/` ADR — this is a bug fix, and the product calls it surfaced are explicitly deferred. `DATA_INVENTORY.md` untouched; no data changed.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `mapbox-coverage-sampling` · 2026-09-03 (later 21) — **Live-source coverage SAMPLED. Two of #364's "just needs wiring" rows reverse. Decision still deferred.**
+
+(**newest truth: nothing written to TEST or PROD. Two read-only vendor-API sampling scripts, one report, doc updates. The routing/vocabulary decision remains explicitly NOT made.**
+
+*Branch note: cut from `main` at `9d936af` while `surface-population` (#361) and `category-source-audit` (#364) are both open. Their mastheads — (later 17) and (later 18) — live on their own branches and interleave on merge, per this file's convention.*
+
+**Report: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.** Closes the one gap #364 left open: it established which Mapbox category ids **exist**, never whether data **comes back**.
+
+**⚠️ THE HEADLINE IS A REVERSAL. #364 labelled Trailheads and Viewpoints "available, unwired" — implying wiring would help. It would not.** Sampled: Mapbox `trailhead` returned hits at **2/6 metro and 2/6 rural points, 3 and 2 total features**, against a corpus of **4,759**. Mapbox `viewpoint`: **4/6 metro, 0/6 rural, 8 total metro features**, against a corpus of 340. That much is a direct category measurement and stands. **Foursquare is a candidate worth testing first, NOT an established better source** — its trailhead hits at **10/12** points come from a **name text-search** compared against Mapbox's **category filter**, which are not like-for-like. *(Softened 2026-09-03; originally read "visibly better at both".)*
+
+**Auto/Repair CONFIRMED as the cleanest wiring win:** **0** corpus rows against Mapbox `auto_repair` saturating (`25+`) at **all six** metro points and **four of six** rural — the two exceptions being the genuinely remote ones. Highest rural total of any id sampled.
+
+**A SUGGESTIVE PATTERN, ON TWO DATA POINTS — weigh it, don't build on it: Mapbox coverage may track settlement rather than geography.** At the **two** genuinely remote points — Ohanapecosh (Mt Rainier) and Cave Lake (eastern NV) — Mapbox returned **0** for campground, gas, auto repair and most commercial categories. Every "4/6 rural" in the report is really "every rural point except the two wilderness ones." **Two points are enough to notice a pattern and not enough to establish one**; no further remote points were sampled and no other provider was compared there. If it holds it matters a lot — it would argue for corpus-primary routing in the deep-corpus categories (campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed 2,533) — but it is a hypothesis to test, and more remote points are cheap to add. *(Softened 2026-09-03; originally asserted as "the most decision-relevant fact".)*
+
+**FOURSQUARE IS NO LONGER "UNMEASURED".** The taxonomy endpoint was re-attempted across **4 paths × 3 API versions × 2 auth styles = 24 combinations, all HTTP 404** — including the legacy v3 host, which returns the same error shape as the new one. **Auth is not the cause:** the same key returns 200 on `/places/search`. So the vocabulary is genuinely unenumerable, and the question was answered a different way — free-text probing. **⚠️ FSQ text search matches NAMES, not categories** ("dump station" → *Union Station*, *Crêpe Station*; "shower" → delicatessens), so a near-zero is **evidence of absence via the only reachable interface, NOT proof of absence.**
+
+**CONFIRMED no viable live source anywhere checked:** Dump stations (**1** plausible hit in 24 point-queries), Showers (**~1** genuine), Water fill (**0** relevant). All three also dropped at `hydrate.ts:140`, all three NEW-badged. **Wiring cannot fix them — sourcing or unsuppression can.** Water fill is the one with a real corpus (169), so unsuppression is the likelier lever there.
+
+**Apparatus was validated before the numbers were trusted.** The first aggregate looked implausibly uniform — the signature of an endpoint ignoring its category filter. Negative control: a nonsense category id returned **0** at the same bbox where `campground` returned 13. The filter works; the metro saturation is real.
+
+**NV could not be sampled by geometry at all** — the repo's `STATE_BOXES` classifier returns `ambiguous` for essentially all of Nevada (its box sits inside CA's), and a naive bbox pick returned Sierra National Forest, **California**. NV was selected by **source provenance** (`nevada_state_parks`) instead. The known state-boundary limitation, hit from a new direction.
+
+**Gates: all three exit 0.** **NEXT: Adam's review, then the vocabulary + routing decision — still deferred.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `reverify-aug25-findings` · 2026-09-03 (later 20) — **Re-verified the Aug 25 resolver findings. FOUR OF SIX WERE ALREADY FALSE WHEN WRITTEN.**
+
+(**newest truth: nothing written to TEST or PROD, no code changed. One report + doc updates. Verified against `main` @ `0dae80c`, not against my own earlier PRs in this thread.**
+
+*Branch note: cut from `main` at `0dae80c` while #361/#362/#363/#364/#366 are all open. Their mastheads live on their own branches and interleave on merge, per this file's convention.*
+
+**Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
+
+**⚠️ THE HEADLINE IS NOT "a week of work changed things." The Aug 25 session's central finding was stale at the moment it was written.** **All clock times here are PDT (UTC−7), the repo's local frame — stated once; an earlier draft mixed PDT committer dates with UTC `mergedAt` values, which made #269 read as Aug 23 in one frame and Aug 24 in the other.** All three flag-gated resolver cutovers merged **2026-08-23 PDT — two days earlier**: **#260** (`d62f660`, Search + `SEARCH_AREA_USE_RESOLVER`) 14:30:48, **#266** (`a086cb8`, Date Detail) 16:15:51, **#269** (`b227e65`, day-scoped browse) 17:07:07. The #255/#256/#259/#260 tiering chain merged the same day (13:05:50 · 13:14:11 · 14:14:24 · 14:30:48), spanning **~85 minutes** first-to-last — a span is frame-independent, so that figure is unaffected by the timezone correction. Verified three ways: each commit is an ancestor of `origin/main`, each has an Aug 23 committer date, and main carries **33** further commits dated Aug 24–27 on top (exact count re-verified 2026-09-03; an earlier draft said "~20", read off a truncated listing).
+
+**⚠️ THE DIAGRAM VERDICT WAS CORRECTED 2026-09-03 AFTER ACTUALLY OPENING IT** (node `3R4-0`, *"resolvePlaces() — verified current state"*). Two earlier claims here were made without looking and were wrong. **The diagram DOES pin a reference** — its header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL BRANCH`, naming a date and an explicit ref. And **it is dated Aug 23, not Aug 25**; the cutovers merged that same day at 14:30/16:15/17:07 PDT, so **if it was verified earlier that day it was accurate when made** — "false at render time" was asserted without evidence and is withdrawn.
+
+**It is also not uniformly stale. VERDICT: REGENERATE, not retire.** Still accurate: the shared-cache NOT BUILT box, the rating/reviewCount/priceTier/photoUrl GAP note, and the "27 tests" id-normalization figure (`place-id.test.ts` runs 27/27, executed 2026-09-03). Stale: the "imported by nothing" centre-piece; the note claiming no `SEARCH_AREA_USE_RESOLVER` exists; the NOT WIRED badges on Date Detail, Search and Day-scoped browse; the **LIVE sources box, which omits Mapbox** (landed `864b752` / #289, 2026-08-25; now in both default source lists in `resolve-places.ts` at lines 193 and 207); and **"resolver suite 36/36", now 43/43** (executed 2026-09-03).
+
+**⚠️ DAY COLUMN CORRECTED — it was never a pending wiring task, and an earlier version of this masthead was wrong to imply otherwise.** Per `docs/architecture/resolve-places-day-column-cutover-plan.md` §7, Day Column is a **passive renderer of baked `Trip.days`** with **no live endpoint to cut over**; the plan's own words are *"the four-surface framing over-counted Day Column."* That question was closed by **PR #267** (`4757067`, merged 2026-08-23 16:28:07 PDT), so **four** resolver-arc PRs landed that day, not three. The residual **write-path** work is tracked separately at `docs/BACKLOG.md` § *"Day Column write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)"*.
+
+| Aug 25 finding | Verdict |
+|---|---|
+| `resolvePlaces()` imported by nothing | **CHANGED** — 3 importers in `src/app`; **still 0 in `src/components`** |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** |
+| no polyline support | **UNCHANGED — genuinely open** |
+| tiering route swap unmerged | **CHANGED** — merged Aug 23 |
+
+**ONLY TWO of the six are genuinely still open:** the shared client cache (no `swr`/`react-query`/`@tanstack` dep, no cache keyed by canonical id; the three caches that exist are per-route, server-side, in-process — the opposite of the ADR) and the polyline gap.
+
+**⚠️ FINDING #4 NEEDS RE-READING, not just re-confirming.** The four columns are unselected — but **measured on TEST today: `rating` 0, `review_count` 0, `price_tier` 0 non-null across 161,431 rows**, and the backfill script *asserts* they must stay NULL. **Wiring those three up would return nothing.** Only `master_place.photo_url` has substance — **10,311** populated rows unread. And the export view's `photo_url` is a **different value** (a lateral over `source_record`), so `hydrate.ts:87` selecting `photo_url` does NOT mean the migration's column is read — a check stopping there concludes wrongly.
+
+**✅ RESOLVED AN OPEN BACKLOG BLOCKER.** The `preComputeFacts` → `resolvePlaces()` item's blocker 2 ("suppression-filter parity unverified") is now answered, and the answer is the feared one: **`isSuppressedCategory` has exactly two call sites in `web/src`** (`hydrate.ts:140`, `bake-corridors.ts:134`); `fetchFederatedPois` applies only `isClosedPlace`; and the RPC's `WHERE` does not filter the suppressed categories either. **Not a live bug today only because `p_categories` is always a slide bucket's list and no bucket claims a suppressed value — safety from an allowlist, not a filter.** Blocker 1 (polyline scope) remains open.
+
+**Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
+
+**Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
+
+(**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
+
+*Branch note: cut from `main` at `9d936af` while `surface-population` (PR #361, the three-surface trace this builds on) is still open. Both mastheads interleave on merge, per this file's convention. **The (later 17) masthead lives on that branch.***
+
+**Report: `docs/investigations/2026-09-02-category-source-audit.md`.** Corpus figures are **TEST (`znldzjdatkogdktymtvi`) ONLY — PROD was not measured** and nothing here describes it.
+
+**THE HEADLINE IS A VOCABULARY PROBLEM, not a coverage problem.** There are **three** competing category vocabularies. DESIGN.md's 9 ↔ `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` **do** match (9/9, isomorphic but for the documented `hotel`↔`overnight` rename). But the day-browse route accepts only **7** of the 9, and Find Nearby's **13** tiles are a third vocabulary keyed on `primary_category`: **3** primaries are tile-claimed and slide-unclaimed (`water`, `shower`, `dump_station` — exactly the suppressed three), **45** are slide-claimed and tile-unclaimed, **40** are claimed with **zero** corpus rows, and **22** corpus values are claimed by nothing. **"Which source serves category X" has no single answer today — it depends on the surface.** A routing table must pick a canonical vocabulary before it can be written.
+
+**⚠️ THE CORPUS COLLAPSE IS `source_count = 0`, NOT `is_searchable` — I read it wrong first and probed it.** `peak` 33,775 rows → **15**; `spring` 30,990 → **2**; `gas_station` 5,947 → **1**; `viewpoint` 6,442 → **339**. **Every one is still `is_searchable = true`.** The 2026-08 deactivation passes emptied their `source_record`s, leaving hollow `master_place` rows the export view drops. **Never read a `master_place` total as available content.** Recorded in `DATA_INVENTORY.md`.
+
+**Run totals (TEST):** `master_place` **161,431** · in-scope **33,216** · active `source_record` **94,410** (**51,062** linked in-scope) · **70** distinct `primary_category` · **STRONG 32,922 / WEAK 46 / NONE 248**.
+
+**WORST CASES, in the order a decision should take them:**
+1. **Showers (4 in-scope) and Dump stations (6)** — no corpus, **and no compliant live source exists at all**: no match in Mapbox's **482** canonical ids. Both also dropped at `hydrate.ts:140`, and both carry a NEW badge. **Wiring cannot fix these; it is a sourcing decision.**
+2. **`urban` — 0 corpus rows, no live source, both claimed primaries empty.** A dead bucket still holding a chip on two surfaces.
+3. **Auto/Repair — 0 corpus rows, but Mapbox HAS `auto_repair`/`repair_shop`/`car_wash`.** Available, unwired. Cheapest gap in the audit.
+
+**Separating "no source exists" from "a source exists but isn't wired" was the key move** — it splits the worst cases into two groups needing different remedies, and only Mapbox's live category list could settle it.
+
+**Fuel is inverted:** corpus `gas_station` in-scope = **1**, `ev_charging` = **2,886**; live Mapbox serves `gas_station` only (`charging_station` exists, unwired). Corpus has EV and no gas; live has gas and no EV.
+
+**Two uncounted sourcing paths found:** `resolveSuggestions`/`resolveOvernights` (reference-trip load) run **Overpass instead of Google and no Mapbox**, so camping/scenic/food/oddity are Google-led on browse and Overpass-led there; and **`FuelStopCard` has no importer anywhere in the repo** — dead code.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy (endpoint 404s on the pinned API version), and Mapbox *coverage* — a canonical id means the query is expressible, not that data exists at a location.
+
+**Gates: all three exit 0** — `npm run -w data typecheck`, `npm run -w web typecheck`, `cd web && npx next build`. The web typecheck caught a real error first: `web/` does not set `allowImportingTsExtensions` while `data/` does, so a `.ts` import suffix that is fine in one workspace fails the other. Fixed.
+
+**NEXT: Adam's review, then the routing-table decision — explicitly out of scope here.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `surface-population` · 2026-09-02 (later 17) — **READ-ONLY investigation. Three UI surfaces traced to their real data paths; two defects flagged, neither reproduced.**
+
+*Branch note: this workspace opened on `port-louis` and the branch was renamed twice mid-session by Conductor (`port-louis` → `trace-place-data-paths` → `surface-population`). The work is unaffected — one commit, `8658a29`, off `9d936af`.*
+
+(**newest truth: nothing was executed and nothing was changed. No TEST, no PROD, no Typesense, no browser, no code edits. The deliverable is one report doc plus BACKLOG entries.** The six-state promotion below is unaffected and remains the standing data truth.)
+
+**Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`** (new directory). Traces where three screenshotted surfaces actually get their place data, at tree `9d936af`.
+
+**Two of Adam's three path guesses confirmed; one corrected.**
+| Surface | Guess | Verdict |
+|---|---|---|
+| "Explore N more near [City], CA →" | D (place-details enrichment) | **CORRECTED — maps to no path A–E** |
+| Day-scoped browse ("Browsing today Day N…") | B | **CONFIRMED** — `/api/trip-browse/:trip/:day` |
+| "Find on: Current Location" picker | C | **CONFIRMED** — `/api/search-area` |
+
+**The Surface 1 correction is the substantive one.** That control fetches nothing — it is `setExpanded((e) => !e)` on a component whose own header declares it PURE PRESENTATIONAL (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment behind those cards keys on the **mounted day set** and enumerates the **whole** `placePool(d)`, collapsed tiles included (`day-detail-corridor-column.tsx:294-351`) — so it already ran, or already failed, before the click. The cards map to D; the link maps to nothing. **"Surface calls Google" and "surface displays what a Google call already produced" are different claims**, and only the second is true here.
+
+**Paths A and E are unreachable from all three surfaces.** A (`itinerary/fuel-live-resolve.ts`) is generation-time behind `FUEL_LIVE_RESOLVE`; E is the offline corpus ingester. Neither appeared in any trace.
+
+**FLAG STATE, stated with its scope: `SEARCH_AREA_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER` and `USE_FEDERATED_POIS` are all absent from `web/.env.local` and `web/.env.development.local`** `[grepped 2026-09-02]` — so **locally** every surface runs its legacy path. **Vercel's environment is not readable from the repo and this makes no claim about production.**
+
+**The "NEW" badges on Find Nearby are decorative, and provenance proves it rather than inferring it.** `isNew` has exactly one consumer — the badge render — and shipped in `6c9d3e3` (2026-05-26), whose commit message ends *"actual category-fetch wiring is a follow-up."* `primaryCategories`, the field that makes a tile query anything, arrived in `a65d7b7` (2026-06-08). **The badges predate the data wiring.** Groceries corroborates: corpus-only, no live path, no badge. **6 of the 8 NEW tiles issue no live call at all** — unmapped in `LIVE_SLIDE_FOR_PRIMARY`, so the live half short-circuits to `[]`.
+
+**⚠️ TWO APPARENT DEFECTS — BOTH DEDUCED FROM CODE READING, NEITHER REPRODUCED. Do not act before a runtime check.** Filed to `docs/BACKLOG.md` with that caveat attached.
+1. **`urban` / `interest` chips on the day-browse panel look like they return HTTP 400.** `browseCategoryToSlide` is now total, the panel's `k !== null` filter can no longer drop anything, and the route validates against `SLIDE_CATEGORIES` — a 7-key list that deliberately excludes both. One constant is serving as both "what `all` expands to" and "what is a legal request".
+2. **Water fill / Showers / Dump stations appear structurally unable to return a result.** They target `water` / `shower` / `dump_station`, all in `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` — and both flag states reach that same function. Their live half is unmapped too.
+
+**Near-miss worth carrying:** the tile list's comment says its values were "verified against the live Typesense `primary_category` facet." That can be **true and still compatible with those three tiles being empty** — suppression happens downstream in **hydration**, not in Typesense, so a facet-level check cannot see it. Same shape as the standing scope-the-instrument rule: the check was aimed one layer above the filter it needed to catch.
+
+**NEXT: Adam's review. Nothing is queued off this.** The masthead below is preserved verbatim per this file's convention.
 
 ---
 

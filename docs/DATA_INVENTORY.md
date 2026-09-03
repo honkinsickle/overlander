@@ -225,6 +225,32 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **📊 Per-category composition measured 2026-09-02 `[TEST only]` —
+> `docs/investigations/2026-09-02-category-source-audit.md`.**
+> Full 70-row `primary_category` breakdown (total → in-scope, plus
+> STRONG/WEAK/NONE) lives in that report; reproduce with
+> `data/scripts/measure-category-source-audit-2026-09-02.ts` (read-only,
+> TEST-guarded). Headline totals at that run: `master_place` **161,431**;
+> in-scope (`master_place_search_export`) **33,216**; active `source_record`
+> **94,410** of which **51,062** link to an in-scope MP; **70** distinct
+> `primary_category` values. Buckets **STRONG 32,922 · WEAK 46 · NONE 248**.
+>
+> **⚠️ The inventory-relevant structural fact: large categories are HOLLOW, not
+> unsearchable.** `peak` 33,775 rows → **15** with `source_count > 0`; `spring`
+> 30,990 → **2**; `gas_station` 5,947 → **1**; `viewpoint` 6,442 → **339**.
+> **All of these are still `is_searchable = true`** — probed directly. What
+> removed them is `source_count = 0`: every linked `source_record` was
+> deactivated by the 2026-08 category-deactivation passes, leaving
+> `master_place` rows with no live content behind them. The export view drops
+> them, so they are absent from Typesense and from every corpus-backed surface.
+> **Do not read a `master_place` total as available content** — take the
+> `source_count > 0` figure, or the export-view count.
+>
+> Also measured: **1,530** in-scope rows (**4.61%** of 33,216) carry a
+> `primary_category` in `SUPPRESSED_PRIMARY_CATEGORIES` and are indexed but
+> discarded at `hydrate.ts:140` — `picnic_area` 1,223, `water` 169, `toilet`
+> 128, `dump_station` 6, `shower` 4.
+
 > **⚠️ Data added 2026-09-02 `[TEST only]` — `utah_state_parks` source ingested.**
 > New `source_id = 'utah_state_parks'` — visitor-facing content from
 > stateparks.utah.gov for all 46 UT state parks (all 46 ingested; zero

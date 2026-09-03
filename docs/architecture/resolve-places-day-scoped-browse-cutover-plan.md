@@ -29,10 +29,17 @@ re-read in full this session. Companions: the three prior cutover plans and the 
 `GET /api/trip-browse/:tripId/:dayId?category=|categories=|categories=all` — browse-panel
 data for one day.
 
-- **Params:** `categories=` (comma list or `all`) or `category=` (single), validated against
-  `SLIDE_CATEGORIES` — **7 buckets** (`scenic, food, oddity, attraction, camping, overnight,
-  fuel`); `interest`/`urban` are excluded ("their live query sets are empty"). Bad category
+- **Params:** `categories=` (comma list or `all`) or `category=` (single). Bad category
   → 400.
+  - **CORRECTED 2026-09-03 (bug fix).** Validation used to run against the 7-bucket
+    `all`-expansion list, so `interest`/`urban` — both real chips — were rejected with a
+    400. The one constant is now split: `ALL_VIEW_CATEGORIES` (**7 buckets**: `scenic,
+    food, oddity, attraction, camping, overnight, fuel`) is still what `all` expands to,
+    while `REQUESTABLE_CATEGORIES` (derived from `BROWSE_CARD_CATEGORIES` via
+    `browseCategoryToSlide`) is what may legally be asked for. The asymmetry is
+    deliberate: `interest`/`urban` have empty live query sets so they stay out of the
+    `all` fanout, but a single-chip request for either now returns a normal (possibly
+    empty) result.
 - **Cache:** in-process LRU, 15-min TTL, 200 entries, keyed `tripId|dayId|sorted-categories`.
 - **Trip/day resolution:** `getTrip(tripId)` → find the day → derive `dayStart` (prev day's
   `coords`, or `trip.startCoords` on day 1) and `dayEnd = day.coords`. 404 on missing

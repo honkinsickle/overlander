@@ -48,6 +48,30 @@ jobs:
           TYPESENSE_COLLECTION: places_ci
         run: npm run -w data test
 
+  test-web:
+    # Separate from `test` on purpose. That job is serialized on a shared test
+    # Supabase project and carries its secrets; the web suite needs neither, so
+    # it must not inherit that queue — and a data-side failure should not hide
+    # the web result (or vice versa). "Needs no network/env" is measured, not
+    # assumed: the suite passes 714/714 with globalThis.fetch replaced by a
+    # thrower, and passes here with no secrets wired.
+    #
+    # This job is a REQUIRED status check on main — added to ruleset 19629589
+    # on 2026-09-03, alongside `typecheck`, `test` and `build`. Renaming the job
+    # renames the check context and silently un-requires it; update the ruleset
+    # in the same change if you ever rename it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install
+      - name: Run web test suite
+        run: npm run -w web test
+
   build:
     # The gate that matches production. `next build` catches RSC boundary
     # errors, 'use client' violations, route-type mismatches, and static-gen
