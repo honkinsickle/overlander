@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const PROD_HOST = "nqzeywzcowujzyegxbsr.supabase.co";
+const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 
 // The single pair excluded by default. See PR #372 §3.
 const AGUA_CALIENTE_CANONICAL = "9cf912c6-10c8-4af2-bada-499abcdeb2d7";
@@ -171,12 +172,14 @@ function parseEnvFile(path: string): Record<string, string> {
   return out;
 }
 
-function makeClient(): SupabaseClient {
-  const env = parseEnvFile(join(REPO, "web/.env.local"));
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+function makeClient(target: "test" | "prod"): SupabaseClient {
+  const envPath = target === "prod" ? "web/.env.local" : "data/.env";
+  const env = parseEnvFile(join(REPO, envPath));
+  const url = target === "prod" ? env.NEXT_PUBLIC_SUPABASE_URL : env.SUPABASE_URL;
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !url.includes(PROD_HOST)) {
-    throw new Error(`refusing — resolved url ${url} is not PROD (${PROD_HOST})`);
+  const expected = target === "prod" ? PROD_HOST : TEST_HOST;
+  if (!url || !url.includes(expected)) {
+    throw new Error(`refusing — resolved url ${url} is not ${target} (${expected})`);
   }
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -269,15 +272,13 @@ async function hydrate(db: SupabaseClient, mp_id: string): Promise<Side> {
 }
 
 // ---------- canonical rule ----------
+//
+// Extracted to data/scripts/lib/merge-canonical.ts so the merge executor
+// uses the same rule. pickCanonicalPair stays local because the dry-run
+// output includes a pair-level `canonical_side` column that the group-level
+// picker doesn't have; the pair function reuses VISITOR_SRC from the lib.
 
-const VISITOR_SRC = new Set([
-  "california_state_parks",
-  "washington_state_parks",
-  "oregon_state_parks",
-  "nevada_state_parks",
-  "arizona_state_parks",
-  "utah_state_parks",
-]);
+import { VISITOR_SRC, pickCanonicalGroup } from "./lib/merge-canonical.ts";
 
 function pickCanonicalPair(a: Side, b: Side): { winner: Side; loser: Side; reason: string } | { reason: string } {
   const av = new Set(a.source_ids);
@@ -296,51 +297,6 @@ function pickCanonicalPair(a: Side, b: Side): { winner: Side; loser: Side; reaso
   if (av.size > bv.size) return { winner: a, loser: b, reason: "neither GIS; more sources wins" };
   if (bv.size > av.size) return { winner: b, loser: a, reason: "neither GIS; more sources wins" };
   return { reason: "neither GIS and equal sources; needs manual" };
-}
-
-/**
- * Score a single member under the canonical rule. Higher wins. Encoded so
- * the same rule that decides a pair produces a well-defined ranking across
- * an arbitrary-sized group without pairwise-reduction losing information —
- * i.e. if only one of three members has state_parks, it wins even when the
- * other two would compare as "either" against each other.
- */
-function scoreMember(s: Side): number {
-  const has_gis = s.source_ids.includes("state_parks");
-  const has_visitor = s.source_ids.some((x) => VISITOR_SRC.has(x));
-  let score = 0;
-  if (has_gis) score += 100; // GIS-backed strongly preferred
-  if (has_gis && !has_visitor) score += 10; // untagged GIS home tiebreaker
-  score += s.source_ids.length; // more sources > fewer
-  return score;
-}
-
-/**
- * Pick THE canonical across an arbitrary-sized group. Ranks every member by
- * the scoring function and picks the max; if the top tier ties, the group is
- * flagged as needing manual review rather than guessing.
- */
-function pickCanonicalGroup(members: Side[]): { canonical: Side | null; reason: string } {
-  if (members.length === 0) return { canonical: null, reason: "empty group" };
-  if (members.length === 1) return { canonical: members[0], reason: "single-member group" };
-  const scored = members.map((m) => ({ m, s: scoreMember(m) }));
-  const max = Math.max(...scored.map((x) => x.s));
-  const top = scored.filter((x) => x.s === max);
-  if (top.length === 1) {
-    const w = top[0].m;
-    const has_gis = w.source_ids.includes("state_parks");
-    const has_visitor = w.source_ids.some((x) => VISITOR_SRC.has(x));
-    const reason = has_gis
-      ? has_visitor
-        ? "state_parks-GIS-backed row wins (also visitor-tagged; no better GIS candidate in group)"
-        : "state_parks-GIS-backed row wins (untagged GIS home)"
-      : "no GIS-backed row in group; row with most sources wins";
-    return { canonical: w, reason };
-  }
-  return {
-    canonical: null,
-    reason: `${top.length} members tie at score ${max} — needs manual review`,
-  };
 }
 
 // ---------- field-conflict detection ----------
@@ -446,6 +402,8 @@ interface Args {
   input: string;
   limit: number | null;
   includeAguaCaliente: boolean;
+  target: "test" | "prod";
+  outputSuffix: string;
 }
 
 function parseArgs(): Args {
@@ -453,12 +411,22 @@ function parseArgs(): Args {
   let input = join(REPO, ".context/same-pairs-resolved.json");
   let limit: number | null = null;
   let includeAguaCaliente = false;
+  let target: "test" | "prod" = "prod"; // backward-compat: prod is default
+  let outputSuffix = "";
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--input") input = argv[++i];
     else if (argv[i] === "--limit") limit = Number(argv[++i]);
     else if (argv[i] === "--include-agua-caliente") includeAguaCaliente = true;
+    else if (argv[i] === "--target=test") target = "test";
+    else if (argv[i] === "--target=prod") target = "prod";
+    else if (argv[i] === "--target") {
+      const t = argv[++i];
+      if (t !== "test" && t !== "prod") throw new Error(`--target must be test or prod, got ${t}`);
+      target = t;
+    }
+    else if (argv[i] === "--output-suffix") outputSuffix = argv[++i];
   }
-  return { input, limit, includeAguaCaliente };
+  return { input, limit, includeAguaCaliente, target, outputSuffix };
 }
 
 function toCsvRow(cells: (string | number | null)[]): string {
@@ -475,7 +443,7 @@ function toCsvRow(cells: (string | number | null)[]): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const db = makeClient();
+  const db = makeClient(args.target);
 
   const allPairs = readInput(args.input);
   console.log(`loaded ${allPairs.length} pairs from input`);
@@ -614,9 +582,10 @@ async function main(): Promise<void> {
 
   // ---------- outputs ----------
 
-  const jsonOut = join(REPO, ".context/merge-preview-135.json");
+  const suffix = args.outputSuffix ? `-${args.outputSuffix}` : "";
+  const jsonOut = join(REPO, `.context/merge-preview-135${suffix}.json`);
   writeFileSync(jsonOut, JSON.stringify(previews, null, 2));
-  const csvOut = join(REPO, ".context/merge-preview-135.csv");
+  const csvOut = join(REPO, `.context/merge-preview-135${suffix}.csv`);
   const header = [
     "state",
     "canonical_side",
@@ -668,9 +637,9 @@ async function main(): Promise<void> {
   }
   writeFileSync(csvOut, rows.join("\n"));
 
-  const groupsJsonOut = join(REPO, ".context/merge-preview-groups.json");
+  const groupsJsonOut = join(REPO, `.context/merge-preview-groups${suffix}.json`);
   writeFileSync(groupsJsonOut, JSON.stringify(groups, null, 2));
-  const groupsCsvOut = join(REPO, ".context/merge-preview-groups.csv");
+  const groupsCsvOut = join(REPO, `.context/merge-preview-groups${suffix}.csv`);
   const gHeader = [
     "group_id",
     "size",
