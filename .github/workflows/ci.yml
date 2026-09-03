@@ -50,9 +50,15 @@ jobs:
 
   test-web:
     # Separate from `test` on purpose. That job is serialized on a shared test
-    # Supabase project and carries its secrets; the web suite touches no network,
-    # no DB and no env, so it must not inherit that queue — and a data-side
-    # failure should not hide the web result (or vice versa).
+    # Supabase project and carries its secrets; the web suite needs neither, so
+    # it must not inherit that queue — and a data-side failure should not hide
+    # the web result (or vice versa). "Needs no network/env" is measured, not
+    # assumed: the suite passes 714/714 with globalThis.fetch replaced by a
+    # thrower, and passes here with no secrets wired.
+    #
+    # ⚠️ NOT a required status check as of 2026-09-03. main's ruleset (19629589)
+    # requires `typecheck`, `test`, `build` only — so a red run here is visible
+    # but does not block merge. Add `test-web` to the ruleset to make it a gate.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

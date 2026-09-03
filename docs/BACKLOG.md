@@ -1937,6 +1937,26 @@ workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
 
+## `test-web` runs but is NOT a required status check — merges are not blocked by it (2026-09-03)
+
+**Adam's action, not a code change.** `main` is protected by a **ruleset**
+(id `19629589`), not classic branch protection — `…/branches/main/protection`
+returns 404 "Branch not protected", which is misleading if read alone. The
+ruleset's `required_status_checks` names exactly three contexts: **`typecheck`,
+`test`, `build`** `[read from the GitHub API 2026-09-03]`. The new **`test-web`**
+job is **not** among them, so a red web suite is visible on the PR and still
+mergeable.
+
+Until it is added, the guard reports but does not enforce — which is the failure
+class the STANDING RULES name ("a check that cannot fail is not evidence"),
+one layer up from the code. **Fix: add `test-web` to the ruleset's required
+checks.** Fallback if a fourth required check is unwanted: move the step into the
+already-required `test` job and accept its shared-Supabase serialization.
+
+**Generalisable:** adding a CI job is only half of adding a gate. Whenever a job
+is added, check the ruleset's `required_status_checks` in the same pass —
+`gh api repos/<owner>/<repo>/rules/branches/main`.
+
 ## The web `test` script can pass vacuously if tests move out of `src/` (2026-09-03)
 
 `web/package.json`'s `test` script globs `src` recursively. A glob that matches

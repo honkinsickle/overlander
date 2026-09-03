@@ -41,6 +41,33 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   data runs and let either failure mask the other's signal.
 - **Flagged, not fixed:** a glob matching zero files exits 0, so a test file
   placed outside `src/` would be silently uncollected. In `BACKLOG.md`.
+- **⚠️ SELF-CORRECTION, same session, after the PR was already open and green.**
+  I reported this as "CI now runs the web test suite" with an enforcement
+  framing, having never checked the enforcement layer. `main` is governed by a
+  **ruleset**, and its required checks are `typecheck`/`test`/`build` only —
+  **`test-web` is not required**, so a red web suite still permits merge. The
+  job reports; it does not block. Adding it is Adam's settings change.
+  *(Note `…/branches/main/protection` returns 404 "Branch not protected" — read
+  alone that suggests no protection at all; the rules live under `/rules/`.)*
+  **The lesson is the repo's own, applied one layer up: adding a CI job is only
+  half of adding a gate.** I built a guard and called it enforcement without
+  asking whether anything enforced it.
+- **Two more claims re-examined under challenge; one held, one was an
+  over-claim.** *Held:* "verified on Node 22" — a version probe inside the test
+  child process printed `v22.11.0`, so tsx did spawn the fetched binary rather
+  than falling back to local Node 24. *Over-claimed:* the masthead's "nothing
+  written to TEST" — the local gate run included `npm run -w data test`, which
+  routes at `SUPABASE_TEST_URL` exactly as CI does. Destructive suites are
+  excluded by `vitest.config.ts`, but that is the config's intent, not a
+  per-test audit I performed. Softened in STATE.
+- **"Needs no network/env" was upgraded from assertion to measurement.** It had
+  been written into `ci.yml`'s comment as a bare claim. Re-ran the suite with
+  `globalThis.fetch` replaced by a thrower: 714/714, zero network attempts —
+  **and a negative control first**, confirming the preload reaches the test
+  child process and that a test calling ambient `fetch` does go red. Scope
+  stated rather than glossed: it proves nothing uses the *ambient* global
+  `fetch`; a self-stubbing test would overwrite the thrower, and raw
+  `node:http` was not covered.
 
 ## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
 
