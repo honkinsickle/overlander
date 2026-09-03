@@ -1,3 +1,26 @@
+# STATE — branch `mapbox-coverage-sampling` · 2026-09-03 (later 21) — **Live-source coverage SAMPLED. Two of #364's "just needs wiring" rows reverse. Decision still deferred.**
+
+(**newest truth: nothing written to TEST or PROD. Two read-only vendor-API sampling scripts, one report, doc updates. The routing/vocabulary decision remains explicitly NOT made.**
+
+*Branch note: cut from `main` at `9d936af` while `surface-population` (#361) and `category-source-audit` (#364) are both open. Their mastheads — (later 17) and (later 18) — live on their own branches and interleave on merge, per this file's convention.*
+
+**Report: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.** Closes the one gap #364 left open: it established which Mapbox category ids **exist**, never whether data **comes back**.
+
+**⚠️ THE HEADLINE IS A REVERSAL. #364 labelled Trailheads and Viewpoints "available, unwired" — implying wiring would help. It would not.** Sampled: Mapbox `trailhead` returned hits at **2/6 metro and 2/6 rural points, 3 and 2 total features**, against a corpus of **4,759**. Mapbox `viewpoint`: **4/6 metro, 0/6 rural, 8 total metro features**, against a corpus of 340. That much is a direct category measurement and stands. **Foursquare is a candidate worth testing first, NOT an established better source** — its trailhead hits at **10/12** points come from a **name text-search** compared against Mapbox's **category filter**, which are not like-for-like. *(Softened 2026-09-03; originally read "visibly better at both".)*
+
+**Auto/Repair CONFIRMED as the cleanest wiring win:** **0** corpus rows against Mapbox `auto_repair` saturating (`25+`) at **all six** metro points and **four of six** rural — the two exceptions being the genuinely remote ones. Highest rural total of any id sampled.
+
+**A SUGGESTIVE PATTERN, ON TWO DATA POINTS — weigh it, don't build on it: Mapbox coverage may track settlement rather than geography.** At the **two** genuinely remote points — Ohanapecosh (Mt Rainier) and Cave Lake (eastern NV) — Mapbox returned **0** for campground, gas, auto repair and most commercial categories. Every "4/6 rural" in the report is really "every rural point except the two wilderness ones." **Two points are enough to notice a pattern and not enough to establish one**; no further remote points were sampled and no other provider was compared there. If it holds it matters a lot — it would argue for corpus-primary routing in the deep-corpus categories (campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed 2,533) — but it is a hypothesis to test, and more remote points are cheap to add. *(Softened 2026-09-03; originally asserted as "the most decision-relevant fact".)*
+
+**FOURSQUARE IS NO LONGER "UNMEASURED".** The taxonomy endpoint was re-attempted across **4 paths × 3 API versions × 2 auth styles = 24 combinations, all HTTP 404** — including the legacy v3 host, which returns the same error shape as the new one. **Auth is not the cause:** the same key returns 200 on `/places/search`. So the vocabulary is genuinely unenumerable, and the question was answered a different way — free-text probing. **⚠️ FSQ text search matches NAMES, not categories** ("dump station" → *Union Station*, *Crêpe Station*; "shower" → delicatessens), so a near-zero is **evidence of absence via the only reachable interface, NOT proof of absence.**
+
+**CONFIRMED no viable live source anywhere checked:** Dump stations (**1** plausible hit in 24 point-queries), Showers (**~1** genuine), Water fill (**0** relevant). All three also dropped at `hydrate.ts:140`, all three NEW-badged. **Wiring cannot fix them — sourcing or unsuppression can.** Water fill is the one with a real corpus (169), so unsuppression is the likelier lever there.
+
+**Apparatus was validated before the numbers were trusted.** The first aggregate looked implausibly uniform — the signature of an endpoint ignoring its category filter. Negative control: a nonsense category id returned **0** at the same bbox where `campground` returned 13. The filter works; the metro saturation is real.
+
+**NV could not be sampled by geometry at all** — the repo's `STATE_BOXES` classifier returns `ambiguous` for essentially all of Nevada (its box sits inside CA's), and a naive bbox pick returned Sierra National Forest, **California**. NV was selected by **source provenance** (`nevada_state_parks`) instead. The known state-boundary limitation, hit from a new direction.
+
+**Gates: all three exit 0.** **NEXT: Adam's review, then the vocabulary + routing decision — still deferred.** The masthead below is preserved verbatim per this file's convention.)
 # STATE — branch `reverify-aug25-findings` · 2026-09-03 (later 20) — **Re-verified the Aug 25 resolver findings. FOUR OF SIX WERE ALREADY FALSE WHEN WRITTEN.**
 
 (**newest truth: nothing written to TEST or PROD, no code changed. One report + doc updates. Verified against `main` @ `0dae80c`, not against my own earlier PRs in this thread.**

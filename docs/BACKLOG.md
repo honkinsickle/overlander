@@ -1,5 +1,68 @@
 # Backlog — open work
 
+## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
+
+Full data: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.
+Sampled at **12 points on one day** — a sample, not a population measurement.
+Corpus figures carried from #364 (TEST in-scope).
+
+**⚠️ AMENDS THE #364 BACKLOG ENTRY BELOW.** #364's Tier 2 listed Trailheads and
+Groceries together as "a compliant live source exists, just unwired." **That is
+now wrong for Trailheads.**
+
+- **Trailheads — DO NOT wire Mapbox.** `trailhead` returned hits at **2/6 metro
+  and 2/6 rural points, 3 and 2 total features**, against a corpus of
+  **4,759**. That is a direct category measurement and stands.
+  **Foursquare — already wired, mapped to `scenic` via its Outdoors top-level —
+  returned relevant hits at 10/12 points, but that is a NAME TEXT-SEARCH against
+  Mapbox's CATEGORY FILTER and the two are not like-for-like.** Treat FSQ as the
+  candidate to *test first*, not as an established better source; confirming it
+  needs a like-for-like category probe, which the unreachable FSQ taxonomy
+  currently prevents. *(Softened 2026-09-03.)*
+- **Viewpoints — same reversal.** Mapbox `viewpoint`: **4/6 metro, 0/6 rural, 8
+  total metro features** against a corpus of 340. Same FSQ caveat as above
+  (6/12 and 9/12, same non-comparable instrument).
+- **`rest_area` (inside `interest`) is thin too** — 5/6 metro but **1/6 rural**.
+
+**Confirmed genuinely just-needs-wiring (dense where sampled):**
+- **Auto / Repair** — **0** corpus rows vs Mapbox `auto_repair` saturating at
+  **all six** metro and **four of six** rural points; highest rural total of any
+  id sampled. Cleanest win available.
+- **`charging_station`** — corpus holds **2,886** EV rows the live half cannot
+  reach; Mapbox's EV id is dense wherever `gas_station` is. Closes #364's fuel
+  inversion.
+- **Groceries** — `grocery`/`supermarket` dense in metro, present at 4/6 rural.
+
+**Confirmed NO viable live source anywhere checked** (neither a Mapbox id nor
+usable FSQ text-search evidence). Wiring cannot fix these; sourcing or
+unsuppression can:
+- **Dump stations** — **1** plausible hit in 24 point-queries.
+- **Showers** — **~1** genuine public shower in 24 point-queries.
+- **Water fill** — **0** relevant hits. The only one with a real corpus (169
+  in-scope, suppressed), so **unsuppression is the likelier lever than sourcing.**
+- **Dispersed camping** — no Mapbox id, 1 real FSQ hit, but corpus is **2,533**
+  in-scope, so it is already well served and simply has no live complement.
+
+**⚠️ CARRY INTO THE ROUTING DECISION AS A HYPOTHESIS, NOT A FINDING — Mapbox
+coverage may track settlement rather than geography.** At the **two** genuinely
+remote sample points (Ohanapecosh on Rainier, Cave Lake in eastern NV) Mapbox
+returned **0** for campground, gas, auto repair and most commercial categories.
+Every "4/6 rural" above means "all but the two wilderness points". **The sample
+contains exactly two remote points — enough to notice a pattern, not enough to
+establish one**; no further remote points were sampled and no other provider was
+compared there. If it holds it would argue for corpus-primary in the deep-corpus
+categories (campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed
+2,533). More remote points are cheap to add to the instrument.
+*(Softened 2026-09-03; originally stated as an unqualified finding.)*
+
+**Foursquare taxonomy — no longer "unmeasured", now a bounded negative.**
+Retried across **24 combinations** (4 paths × 3 API versions × 2 auth styles),
+all HTTP 404, including the legacy `api.foursquare.com/v3` host which returns
+the same error shape as the new host. **Auth is not the cause** — the same key
+returns 200 on `/places/search`. The vocabulary is unenumerable, so the FSQ
+findings above rest on **free-text probing**, and FSQ text search matches
+**names, not categories**. Read every FSQ near-zero as *evidence of absence via
+the only reachable interface*, not proof of absence.
 ## ⚠️ The 2026-08-25 `resolvePlaces()` findings — RE-VERIFIED 2026-09-03, four of six were stale on arrival
 
 Full detail: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`,
