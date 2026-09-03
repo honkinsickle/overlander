@@ -36,12 +36,14 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   "nothing else moved" needed proving rather than assuming.
 - **Scope of the verification, stated plainly.** `…/rules/branches/main` now
   lists all four contexts, and #376 targets `main` — so the rule applies to it.
-  That a **red** `test-web` will actually block the merge button is **strong
-  inference from ruleset semantics, not something forced**: all four checks are
-  currently green, so `mergeStateStatus: CLEAN` would read the same either way.
-  The real negative control — push a knowingly-failing test and confirm the
-  merge is blocked — was **not** run; it means committing a broken state to an
-  open PR, which is Adam's call to authorize.
+  **An unplanned observation upgrades this past pure inference:** right after
+  the next push, #376 read **`mergeStateStatus: BLOCKED`** while its checks were
+  still pending, then flipped to **`CLEAN`** once all four passed `[both
+  literal]`. The required-check mechanism is demonstrably live on this PR. It
+  does **not isolate `test-web`**, though — any of the four pending produces the
+  same BLOCKED. The fully discriminating negative control — push a knowingly-
+  failing web test, confirm the block — was **not** run; it means committing a
+  broken state to an open PR, which is Adam's call to authorize.
 
 ## 2026-09-03 (later 5) — Wired the web test suite into CI. The `[param]` zero-collection was a glob quirk, not a broken file.
 
