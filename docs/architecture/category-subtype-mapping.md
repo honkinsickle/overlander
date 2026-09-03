@@ -124,8 +124,9 @@ Two structural observations, both `[literal]`:
   regardless of how the UI presents it.
 - **`interest` holds 24 of the 45.** It is not a category; it is the residue of
   one. §4.1 and §6 both follow from this. **AMENDED 2026-09-03:** §4.6 promotes
-  `car_repair`, `car_wash`, `rest_area`, `amphitheatre`, `marina` and (weakly)
-  `library` out of it, and rules that what remains renders no subtype chips.
+  `car_repair`, `car_wash`, `rest_area`, `marina` and (weakly) `library` out of
+  it, and rules that what remains renders no subtype chips. (`amphitheatre` was
+  promoted in the previous revision and **returns here** — §4.7.)
 
 ---
 
@@ -185,8 +186,10 @@ at all remains the ADR's open decision, and remains Adam's call.
 
 ### 4.4 `museum` / `art_gallery` / `historical_landmark` — **RESOLVED: `attraction`, on both paths**
 
-**Adam's decision, 2026-09-03: introduce "Culture" covering Museums, Galleries,
-Theaters and Historic Sites, as a subtype cluster under one of the 9.**
+**Adam's decision, 2026-09-03: introduce "Culture" as a subtype cluster under
+one of the 9.** Originally scoped as Museums, Galleries, Theaters and Historic
+Sites; **amended the same day to Museums, Galleries and Historic Sites** — see
+§4.7, "Theaters is out.
 
 **It goes under `attraction`, and the code already says so in prose** `[literal]`:
 
@@ -263,7 +266,6 @@ Four parts.
 |---|---|---|---|
 | `car_repair`, `car_wash` | `interest` | **`fuel`** / Services | §4.1 — the UI already says "Fuel & Repair" |
 | `rest_area` | `interest` | **`fuel`** / Services | a stop-service, same errand class |
-| `amphitheatre` | `interest` | **`attraction`** / Culture | performance venue (§4.7) |
 | `marina` | `interest` | **`scenic`** | a waterfront destination, not an errand |
 | `library` | `interest` | **`attraction`** / Culture | `[weakest of these]` — civic-cultural; if it reads wrong, leave it |
 | `hut` | *(unclaimed)* | **`overnight`** | shelter (§5.1) |
@@ -322,44 +324,70 @@ at 9.** A cluster is a heading over a group of filter chips inside one parent.
 
 | Chip | Primaries | Corpus (TEST in-scope) `[literal]` | Status |
 |---|---|---|---|
-| Museums | `museum` | 0 | claimed, empty |
-| Galleries | `art_gallery` | 0 | claimed, empty |
-| Historic Sites | `historical_landmark`, `national_historic_site`, `landmark`, `historic`, `historical_place`, `monument` | 1 · 0 · 3 · 24 · 1 · 1 | `historic`, `historical_place`, `monument` are **unclaimed today** (mapping §5.1) and must be claimed by `attraction` |
-| **Theaters** | **`theater` — DOES NOT EXIST** | n/a | see below |
+| Museums | `museum` | 0 | claimed, empty in corpus — **live-pending, not dead** |
+| Galleries | `art_gallery` | 0 | claimed, empty in corpus — **live-pending, not dead** |
+| Historic Sites | `historical_landmark`, `national_historic_site`, `landmark`, `historic`, `historical_place`, `monument` | 1 · 0 · 3 · 24 · 1 · 1 | `historic`, `historical_place`, `monument` are **unclaimed today** (§5.1) and must be claimed by `attraction` |
 | *(ungrouped)* | `visitor_center` | 102 `[cited #364]` | stays in `attraction`, outside Culture — it is wayfinding, not culture |
 
-**Theaters: checked, and the primary does not exist** `[literal]`. `theater` /
-`theatre` appears **nowhere** as a `primary_category` — not among the 70 distinct
-values in the TEST corpus, and nowhere in `web/src` or `data/` as a taxonomy
-constant. The single occurrence anywhere is a Foursquare **name regex** (below).
-So Adam's instruction applies: **add `theater` as a new primary.**
+#### ⚠️ AMENDED 2026-09-03 (third pass): Culture is THREE chips. Theaters is out.
 
-Three things that must be true before a Theaters chip can return anything, none
-of which is a UI change:
+**Adam's clarification: "Theaters" means novelty / roadside theaters** — the same
+sense `foursquare.ts:84-89` already encodes (*"Roadside-quirky entertainment
+stays oddity"*). **That rule stays untouched.**
 
-1. **An ingest mapping must produce `theater`.** `primary_category` values are
-   written by ingestion normalisation; adding the value to
-   `SLIDE_TO_PRIMARY_CATEGORY` alone yields a permanently empty chip.
-2. **⚠️ Foursquare currently routes theaters to `oddity`, deliberately.**
-   `[literal]` `foursquare.ts:84-89` matches
-   `/(theater|theatre|artwork|public art|roadside)/` and returns `"oddity"`,
-   under the comment *"Roadside-quirky entertainment stays oddity."* **Culture
-   and this rule directly contradict each other**: with Culture shipped and this
-   rule unchanged, FSQ theater results land in `oddity` while the Theaters chip
-   queries `attraction`. Implementation must move `theater|theatre` out of the
-   oddity regex into the attraction regex above it.
-   **Flagged rather than assumed away:** that rule may have been aimed at
-   *drive-in* and novelty theaters, which are genuinely roadside-quirky, while
-   Adam's "Theaters" means performing-arts and cinema venues. The regex cannot
-   tell them apart. Worth one sentence of confirmation before implementation.
-3. **`[unverified]` Mapbox theater coverage was not checked in this pass.** No
-   stored Mapbox category-id list exists in the repo, so establishing it needs a
-   live vendor probe, which is out of scope for a docs pass. Do not assume a
-   `theater` id exists.
+**This removes Theaters from Culture on the cluster's own definition, not as a
+compromise.** `[literal]` Culture is scoped to `attraction`, which
+`federated.ts:42` defines as *"the formal cultural set only"*, and the adjacent
+comment puts roadside/generic attractions in `oddity`. **A novelty theater is
+the `oddity` sense by the code's own words** — putting it in Culture would have
+imported into the formal-cultural bucket exactly what that bucket is defined to
+exclude.
 
-`amphitheatre` `[proposed]` moves from `interest` into Culture/Theaters — it is
-a performance venue, it is one fewer resident of the residual bucket, and it has
-0 corpus rows so the move costs nothing today.
+**Three consequences, all simplifications:**
+
+1. **The `theater` primary is no longer needed.** The instruction to add one
+   (recorded in the previous revision of this section) is **withdrawn** — no
+   chip requires it.
+2. **The `foursquare.ts` blocker is gone.** The previous revision required moving
+   `theater|theatre` out of the oddity regex. It stays where it is, correctly.
+3. **`amphitheatre` returns to `interest`.** `[proposed]` Its promotion in the
+   previous revision was justified *only* by "performance venue → Theaters." With
+   Theaters gone from Culture that justification lapses, and it does not belong
+   in Museums, Galleries or Historic Sites. It has **0** corpus rows `[literal]`
+   so nothing changes in practice. `[strong inference]` In a corpus this
+   RIDB/USFS-heavy, `amphitheatre` most likely denotes a campground interpretive
+   amphitheatre — a facility, not a venue — which supports leaving it residual.
+
+**A novelty-theater chip under `oddity` is a separate open question.** Not
+proposed here, and deliberately not added unprompted. If it is ever wanted, note
+`[literal]` that the Foursquare rule classifies **live FSQ results by name only**
+— it does nothing for corpus rows — so a corpus-backed Theaters chip would still
+need a `theater` `primary_category` and an ingest mapping. The FSQ rule alone is
+not a substitute.
+
+#### Does dropping Theaters change the ship-order risk? Yes — and not in the obvious direction
+
+`[literal]` Culture now has **3** chips, **2** of which have zero corpus rows. The
+previous revision had 4 chips with 2 empty and 1 non-existent.
+
+- **Absolutely better:** the permanently-blocked chip is gone. Nothing in Culture
+  now depends on an ingest change that does not exist.
+- **Proportionally worse:** two of three chips are empty rather than two of four.
+  A smaller cluster makes each empty chip more conspicuous.
+- **But the two empties are not the same kind of empty as Theaters was, and this
+  is the part that actually changes the ordering advice.** `[cited #366]` Mapbox
+  `museum` measured 6/6 metro and 4/6 rural; `art_gallery` 6/6 and 3/6. Both are
+  **R2 LIVE-PRIMARY** rows — empty *in corpus*, and non-empty as soon as the
+  `attraction` live route lands (routing table §3.1). **Their emptiness is
+  conditional on wiring, not permanent.** Theaters' was permanent without ingest.
+
+**Revised ordering:** Historic Sites first — it is the only chip that returns
+anything from corpus today, and `[cited #366]` it also has the strongest measured
+live coverage in the routing table (6/6 metro, 6/6 rural). Museums and Galleries
+follow **the §3.1 live-route fix**, not an ingest project. **The #382 framing that
+lumped all three together as "empty" was too coarse: one was blocked, two were
+merely unwired.**
+
 
 **Services — under `fuel`**
 
@@ -478,14 +506,16 @@ against dense live coverage per #366 — §4.1).
    already sit inside a parent; the collapse *removes a level of navigation*
    rather than removing concepts — provided the subtype chips actually ship. If
    subtypes are deferred, this is a capability regression, not a simplification.
-4. **NEW, from the 2026-09-03 amendment: two clusters ship empty.** `[literal]`
-   Culture's Museums and Galleries chips have **0** corpus rows, and its Theaters
-   chip has **no primary at all** until ingest produces one. Services' Water
-   fill / Showers / Dump stations are suppressed *and* sourceless. **A cluster
-   whose chips all return nothing is worse than no cluster** — Culture's only
-   non-empty members today are Historic Sites (`historic` 24, `landmark` 3, and
-   one row each of `historical_landmark`, `historical_place`, `monument`
-   `[literal]`). Sequencing matters more here than in any other part of this
-   design.
+4. **Empty chips at ship time — REVISED after Theaters was dropped.**
+   `[literal]` Culture is now **3** chips, **2** with zero corpus rows
+   (Museums, Galleries). **But those two are `R2 LIVE-PRIMARY` rows: empty in
+   corpus, non-empty as soon as the `attraction` live route lands** — their
+   emptiness is conditional on wiring, whereas Theaters' was permanent without an
+   ingest change. Dropping Theaters therefore removed the only *blocked* chip
+   while raising the *share* of empty ones. Historic Sites remains the only chip
+   that returns anything today (`historic` 24, `landmark` 3, one row each of
+   `historical_landmark`/`historical_place`/`monument`) and ships first.
+   Services is the genuinely hard case: Water fill / Showers / Dump stations are
+   suppressed **and** sourceless — R4, not merely unwired.
 
 Points 3 and 4 are the ones worth the most scrutiny before implementation.

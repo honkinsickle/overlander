@@ -1,7 +1,9 @@
 # 2026-09-03 — The 9-category taxonomy is canonical across the app
 
 **Status:** Proposed — awaiting Adam's review. Design only; no implementation.
-**Amended 2026-09-03** (Decisions 7-8) resolving the two questions #380 left open.
+**Amended 2026-09-03** (Decisions 7-8) resolving the two questions #380 left
+open, and again the same day for Culture's scope, `park` → `scenic`, and the
+declined chip renames.
 **Companions:** `docs/architecture/category-subtype-mapping.md` (every category
 assigned to a parent) · `docs/architecture/category-source-routing-table.md`
 (category → source).
@@ -88,7 +90,12 @@ Both were referred to Adam and are now decided. **Neither adds a category; the
 count stays at 9.**
 
 **7. "Culture" is a subtype cluster under `attraction`, not a 10th category.**
-Adam's decision, covering Museums, Galleries, Theaters and Historic Sites.
+Adam's decision. **Scope amended the same day to Museums, Galleries and Historic
+Sites — three chips, not four.** Adam clarified that "Theaters" means novelty /
+roadside theaters, which `foursquare.ts:84-89` already routes to `oddity` and
+which are the explicit opposite of `attraction`'s *"formal cultural set only"*
+definition. **The code was right and the cluster's scope was wrong**; the rule
+stays untouched. Mapping doc §4.7.
 
 `[literal]` **`attraction` is where it fits, and the code already says so in
 prose** — `federated.ts:42` reads `// attraction: the formal cultural set only.`,
@@ -149,19 +156,21 @@ here because they are the parts most likely to be objected to.
    `LIVE_SLIDE_FOR_PRIMARY` is the sole outlier — **strong inference that it is a
    slip, not a decision**, upgrading #380's `[unverified]`. Fix is three lines in
    one constant.
-   **⚠️ A new blocker replaces it:** `foursquare.ts:84-89` deliberately routes
-   `theater|theatre` to `oddity` (*"Roadside-quirky entertainment stays oddity"*),
-   which would recreate the same split for Theaters specifically. Routing table
-   §3.4.
+   ~~**⚠️ A new blocker replaces it:**~~ **CLOSED 2026-09-03.** The
+   `foursquare.ts` theater rule was not a blocker but a signal that Culture's
+   scope was wrong. Theaters left the cluster; the rule stands. **§3.1's fix now
+   has no remaining blocker.** Routing table §3.4.
 5. **Two "just needs wiring" beliefs must not survive this ADR.** `[cited #366]`
    Mapbox `trailhead` and `viewpoint` were measured near-empty; wiring them
    *"would be near-worthless."* Both route corpus-primary.
-6. **NEW (2026-09-03): two of Culture's four chips are empty and a third does not exist.**
-   `[literal]` Museums and Galleries have **0** corpus rows; `theater` is not a
-   `primary_category` anywhere. Only **Historic Sites** has corpus behind it —
-   and it also has the best-measured live coverage in the routing table. **A
-   cluster whose chips all return nothing is worse than no cluster**, so ship
-   order inside Culture matters: Historic Sites first, Theaters last.
+6. **REVISED (2026-09-03): Culture is three chips, two empty in corpus — but
+   "empty" now means one thing, not two.** `[literal]` Museums and Galleries have
+   **0** corpus rows, and both are `R2 LIVE-PRIMARY`: they fill as soon as the
+   §3.1 live route lands. Theaters — the one chip whose emptiness was *permanent*
+   without an ingest change — is out of the cluster entirely. **Dropping it
+   removed the only blocked chip while raising the share of empty ones (2 of 3
+   rather than 2 of 4); the first effect matters more than the second.** Historic
+   Sites still ships first as the only chip with corpus behind it.
 
 ---
 
@@ -200,9 +209,12 @@ Facts that bear on it, and nothing more:
   carries design tokens and a section label. Removing it from Find Nearby is a
   smaller decision than removing it from the taxonomy, and this ADR keeps it in
   the 9 either way.
-- `[cited #366]` A live-source question sits underneath `urban`: Mapbox `park` is
-  dense but *"maps more naturally to `scenic`"* — unresolved there, unresolved
-  here (routing table §3.2).
+- ~~A live-source question sits underneath `urban`~~ — **RESOLVED 2026-09-03:
+  Mapbox `park` routes to `scenic`** (routing table §3.2), matching what the
+  corpus already does. **This makes the `urban` decision simpler, not harder:**
+  with `park` gone to `scenic`, `urban` has **no live source and no corpus —
+  nothing routes to it at all.** There is no sourcing option left behind the
+  question, so it reduces to a clean binary: keep an empty chip, or remove it.
 
 ---
 
@@ -219,10 +231,9 @@ parent. Flagged for review, not redesigned here.
 | **Trailheads, Viewpoints** (group "CAMP & EXPLORE") | subtypes of **scenic** → "SCENIC" | Reasonable, but they move out of the camping-flavoured group they live in today. |
 | **Dispersed, Campgrounds** | subtypes of **camping** | Clean. |
 | Group headings **CAMP & EXPLORE / FUEL & REPAIR / FOOD / SUPPLY / SERVICE / STAY** | replaced by the 9 chips | Six headings disappear. Two of them (**FUEL & REPAIR**, **SUPPLY**) currently express groupings the 9 categories *cannot* — that expressiveness is lost, and the Auto/Repair row above is the sharpest instance. |
-| Chip label **"POINT OF INTEREST"** for `interest` | **rename required** | **Decision 8 makes this mandatory, not optional.** The bucket now renders no subtypes and holds only unclassifiable residue; "Point of Interest" claims a curation it does not have. Suggested direction: name it as a remainder ("Other", "Everything else"). Final wording is Adam's. |
-| Chip label **"FUEL"** | **rename required** | `fuel` now spans gas, EV charging, mechanics, car washes, rest areas and (pending the open decision) water/showers/dump stations. "Fuel" no longer describes its contents. The existing Find Nearby heading "FUEL & REPAIR" is closer but still omits the amenities. |
-| **NEW cluster headings** "Culture" (under `attraction`) and "Services" (under `fuel`) | new copy | Neither exists in the UI today. "Culture" is Adam's wording. "Services" is this pass's proposal and is the weaker of the two — it is generic, and "Amenities" or "Town stop" may read better to an overlander. |
-| **Theaters** chip | new copy, **and a conflicting rule** | Beyond copy: `foursquare.ts:84-89` currently classifies theaters as `oddity` ("roadside-quirky"). If Adam's "Theaters" means performing-arts/cinema, that rule must move; if it means drive-ins and novelty theaters, the current rule may be right and Culture is the wrong home. **This is a product question, not an implementation detail.** |
+| ~~Chip label **"POINT OF INTEREST"** for `interest`~~ | **NO RENAME — declined 2026-09-03** | Adam's call. `interest` keeps its name despite no longer describing its contents. Recorded as a deliberate non-change, not an oversight: the label was flagged twice in this ADR's history and the decision is to live with it. The reasoning for *why* it is imprecise stands above (Decision 8) and is the thing to re-read if it is ever revisited. |
+| ~~Chip label **"FUEL"**~~ | **NO RENAME — declined 2026-09-03** | Same call. `fuel` spans gas, EV charging, mechanics, car washes and rest areas, and "Fuel" does not cover that — accepted knowingly. **Note the display consequence:** the Find Nearby heading "FUEL & REPAIR" is *closer* to the truth than the canonical chip label, so the two will read slightly differently. Deliberate. |
+| **NEW cluster headings** "Culture" (under `attraction`) and "Services" (under `fuel`) | new copy | Neither exists in the UI today. "Culture" is Adam's wording. "Services" is this pass's proposal and is the weaker of the two — it is generic, and "Amenities" or "Town stop" may read better to an overlander. **Unaffected by the no-rename decision**, which covers the nine canonical chip labels, not new cluster headings. |
 
 **The `interest` label and the Auto/Repair placement are the two items most
 worth settling before implementation starts.** Both are cosmetic-looking and
@@ -232,11 +243,20 @@ neither is: they determine whether a user can find a mechanic.
 
 ## Not decided here
 
-Deliberately out of scope: which subtype chips actually render; the exact
-`interest` and `fuel` chip wording; `park` → `urban` vs `scenic` (still open,
-routing table §3.2); unsuppressing `water`; whether `theater` means
-performing-arts venues or roadside novelty (routing table §3.4); and all
-implementation sequencing. **Closed by the 2026-09-03 amendment:** the
-`attraction`/`oddity` contradiction, and whether `car_repair`/`car_wash` move to
-`fuel` — both now decided above. The routing table §4 proposes an
+Deliberately out of scope: which subtype chips actually render; the "Services"
+cluster heading wording; unsuppressing `water`; and all implementation
+sequencing.
+
+**Closed across the 2026-09-03 amendments:** the `attraction`/`oddity`
+contradiction · whether `car_repair`/`car_wash` move to `fuel` · what "Theaters"
+means and where it belongs (novelty → stays `oddity`, out of Culture) · `park` →
+`scenic` · and the `interest`/`fuel` chip renames, **declined**.
+
+`[open, newly separated]` **A novelty-theater chip under `oddity`.** Not proposed
+and deliberately not added unprompted. If wanted, it needs a `theater`
+`primary_category` and an ingest mapping — `[literal]` the Foursquare rule
+classifies live results by name only and does nothing for corpus rows.
+
+**The only substantive open item left is the original one:** `urban` / water fill
+/ showers / dump stations — keep as empty-state subtypes, or remove. The routing table §4 proposes an
 order; it is an argument, not an authorisation.

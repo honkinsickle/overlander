@@ -191,10 +191,18 @@ outage, not a gap.**
   is the routing table. **Amended 2026-09-03:** Culture cluster under
   `attraction` (resolving the corpus-vs-live split) and the `interest`
   dumping-ground fix. **Two new implementation blockers recorded there:**
-  `foursquare.ts:84-89` routes `theater|theatre` to `oddity` and must move for
-  Culture to work (routing table §3.4), and `theater` is not a
-  `primary_category` anywhere, so the chip needs an ingest mapping before it can
-  return anything. Also note the "accepts only 7 of the 9" clause is now
+  ~~`foursquare.ts:84-89` routes `theater|theatre` to `oddity` and must move for
+  Culture to work~~ — **WITHDRAWN same day.** Adam clarified "Theaters" means
+  novelty/roadside theaters, which is exactly what that rule already encodes.
+  **The rule stays; Culture drops to three chips** (Museums, Galleries, Historic
+  Sites). No `theater` primary and no ingest mapping are needed. **Newly
+  separated open question:** whether to surface a novelty-theater chip under
+  `oddity` at all — not proposed, and it would need a `theater` primary plus an
+  ingest mapping, since the Foursquare rule classifies live results by name only
+  and does nothing for corpus rows.
+  **Also resolved:** `park` → **`scenic`** (matching the corpus), which leaves
+  `urban` with no live source and no corpus at all. And the `interest` / `fuel`
+  chip renames are **declined** — both keep their names knowingly. Also note the "accepts only 7 of the 9" clause is now
   **stale** — PR #373 fixed it, so all four vocabularies agree on membership.
 - **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
   sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
@@ -268,6 +276,10 @@ only**, not against every provider.
 > Adam's. New adjacent item: `fuel`/Services will hold the routing table's
 > best-covered live target (`auto_repair`) beside four guaranteed-empty chips,
 > so it needs per-chip empty states rather than one at category level.
+> **Narrowed 2026-09-03:** with `park` routed to `scenic`, `urban` has **no live
+> source and no corpus — nothing routes to it at all**, so its half of this
+> decision is now a clean binary (keep an empty chip or remove it) with no
+> sourcing option behind it.
 > **CARRIED FORWARD 2026-09-03 — these are now the ADR's single open decision**
 > (`docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md` §Open
 > decision), which sets out the facts bearing on each and deliberately does not
