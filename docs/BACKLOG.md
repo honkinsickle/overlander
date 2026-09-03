@@ -1,5 +1,50 @@
 # Backlog — open work
 
+## ⚠️ The 2026-08-25 `resolvePlaces()` findings — RE-VERIFIED 2026-09-03, four of six were stale on arrival
+
+Full detail: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`,
+verified against `main` @ **`0dae80c`**.
+
+**The Aug 25 session's headline — "`resolvePlaces()` is additive only, imported
+by nothing" — was already false when written.** All three flag-gated resolver
+cutovers merged **2026-08-23**, two days earlier: #260 (`d62f660`, Search +
+`SEARCH_AREA_USE_RESOLVER`), #266 (`a086cb8`, Date Detail), #269 (`b227e65`,
+day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day,
+all four inside ninety minutes.
+
+**The Paper diagram rendered from that session depicts a superseded
+architecture and should not be used as a current reference.**
+
+| Aug 25 finding | Verdict |
+|---|---|
+| imported by nothing | **CHANGED** — 3 importers in `src/app`; still 0 in `src/components` |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely still open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** (below) |
+| no polyline support | **UNCHANGED — genuinely still open** (see the `preComputeFacts` item) |
+| tiering swap unmerged | **CHANGED** — merged Aug 23; the branch still existing is what made it look open |
+
+**Still genuinely open and worth acting on — only two:**
+- **Shared client cache (ADR step 4).** No `swr`/`react-query`/`@tanstack`/
+  `apollo`/`urql` in `web/package.json`, no cache keyed by canonical id
+  anywhere. The only caches are three **per-route, server-side, in-process**
+  ones — the opposite of the ADR's shared client cache.
+- **Polyline scope** — see the `preComputeFacts` → `resolvePlaces()` item below;
+  its blocker 2 is now answered, blocker 1 is not.
+
+**⚠️ Correction to how finding #4 should be read.** The four enrichment columns
+(migration `20260821060000`) are indeed unselected — but measured on TEST
+2026-09-03, `rating`, `review_count` and `price_tier` are **0 non-null across
+161,431 rows**, and `backfill-master-place-enrichment.ts` *asserts* they must
+stay NULL ("no source carries one"). **Wiring those three up would return
+nothing.** Only `master_place.photo_url` has substance — **10,311** populated
+rows currently unread. Note the export view's `photo_url` is a **different
+value** (a `LEFT JOIN LATERAL` over `source_record`), so "photo_url is selected"
+in `hydrate.ts:87` does **not** mean the migration's column is read.
+
+**Process note worth keeping:** a finding about whether code is wired is only
+valid against a stated commit. Neither the Aug 25 report nor its diagram pins
+one. Pin the SHA.
 ## Category × source gaps — MEASURED 2026-09-02, decision deferred
 
 Full data: `docs/investigations/2026-09-02-category-source-audit.md`. Corpus
@@ -920,6 +965,29 @@ shared substrate). Deferred, blocked on:
    the same suppression filter applies there — or whether
    `preComputeFacts`-via-resolver would let suppressed rows through —
    is unverified this session and needs confirming before any swap.
+
+   > ### ✅ ANSWERED 2026-09-03 — and the answer is the feared one.
+   > Verified against `main` @ `0dae80c`
+   > (`docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`).
+   > **`preComputeFacts`-via-resolver WOULD let suppressed rows through.**
+   > - `isSuppressedCategory` has exactly **two** call sites in `web/src`:
+   >   `hydrate.ts:140` (bbox/ids) and `bake-corridors.ts:134` (generation).
+   > - `fetchFederatedPois` applies only `isClosedPlace`
+   >   (`federated.ts:336-338`) — **no suppression filter**.
+   > - The RPC does not filter them either: `pois_along_corridor`'s `WHERE`
+   >   (migration `20260902050100`, lines 139-148) excludes `land_status`,
+   >   closed/decommissioned rows and template-only descriptions, but **not**
+   >   `dump_station`/`water`/`toilet`/`fire_pit`/`shower`/`picnic_area`/
+   >   `picnic_ground`.
+   >
+   > **⚠️ Not a live bug today, and the reason matters.** `fetchFederatedPois`
+   > always passes `p_categories = SLIDE_TO_PRIMARY_CATEGORY[slideKey]`, never
+   > `null` (`federated.ts:320-321`), and per #364 no slide bucket claims a
+   > suppressed value. **Safety comes from the category allowlist, not from a
+   > suppression filter** — so passing `null` categories, or adding an amenity
+   > to a slide bucket, would start leaking suppressed rows with nothing to
+   > catch them. Any swap should add the filter rather than rely on the
+   > allowlist. **Blocker 1 (polyline scope) remains open and unchanged.**
 
 Not in scope for the guarantee-selector build (spec §11 steps 5/6/7).
 `pickAnchorStop`, `pickGuaranteedStop`, and every pool-consuming

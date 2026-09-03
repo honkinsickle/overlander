@@ -1,3 +1,37 @@
+# STATE — branch `reverify-aug25-findings` · 2026-09-03 (later 20) — **Re-verified the Aug 25 resolver findings. FOUR OF SIX WERE ALREADY FALSE WHEN WRITTEN.**
+
+(**newest truth: nothing written to TEST or PROD, no code changed. One report + doc updates. Verified against `main` @ `0dae80c`, not against my own earlier PRs in this thread.**
+
+*Branch note: cut from `main` at `0dae80c` while #361/#362/#363/#364/#366 are all open. Their mastheads live on their own branches and interleave on merge, per this file's convention.*
+
+**Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
+
+**⚠️ THE HEADLINE IS NOT "a week of work changed things." The Aug 25 session's central finding was stale at the moment it was written.** **All clock times here are PDT (UTC−7), the repo's local frame — stated once; an earlier draft mixed PDT committer dates with UTC `mergedAt` values, which made #269 read as Aug 23 in one frame and Aug 24 in the other.** All three flag-gated resolver cutovers merged **2026-08-23 PDT — two days earlier**: **#260** (`d62f660`, Search + `SEARCH_AREA_USE_RESOLVER`) 14:30:48, **#266** (`a086cb8`, Date Detail) 16:15:51, **#269** (`b227e65`, day-scoped browse) 17:07:07. The #255/#256/#259/#260 tiering chain merged the same day (13:05:50 · 13:14:11 · 14:14:24 · 14:30:48), spanning **~85 minutes** first-to-last — a span is frame-independent, so that figure is unaffected by the timezone correction. Verified three ways: each commit is an ancestor of `origin/main`, each has an Aug 23 committer date, and main carries **33** further commits dated Aug 24–27 on top (exact count re-verified 2026-09-03; an earlier draft said "~20", read off a truncated listing).
+
+**⚠️ THE DIAGRAM VERDICT WAS CORRECTED 2026-09-03 AFTER ACTUALLY OPENING IT** (node `3R4-0`, *"resolvePlaces() — verified current state"*). Two earlier claims here were made without looking and were wrong. **The diagram DOES pin a reference** — its header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL BRANCH`, naming a date and an explicit ref. And **it is dated Aug 23, not Aug 25**; the cutovers merged that same day at 14:30/16:15/17:07 PDT, so **if it was verified earlier that day it was accurate when made** — "false at render time" was asserted without evidence and is withdrawn.
+
+**It is also not uniformly stale. VERDICT: REGENERATE, not retire.** Still accurate: the shared-cache NOT BUILT box, the rating/reviewCount/priceTier/photoUrl GAP note, and the "27 tests" id-normalization figure (`place-id.test.ts` runs 27/27, executed 2026-09-03). Stale: the "imported by nothing" centre-piece; the note claiming no `SEARCH_AREA_USE_RESOLVER` exists; the NOT WIRED badges on Date Detail, Search and Day-scoped browse; the **LIVE sources box, which omits Mapbox** (landed `864b752` / #289, 2026-08-25; now in both default source lists in `resolve-places.ts` at lines 193 and 207); and **"resolver suite 36/36", now 43/43** (executed 2026-09-03).
+
+**⚠️ DAY COLUMN CORRECTED — it was never a pending wiring task, and an earlier version of this masthead was wrong to imply otherwise.** Per `docs/architecture/resolve-places-day-column-cutover-plan.md` §7, Day Column is a **passive renderer of baked `Trip.days`** with **no live endpoint to cut over**; the plan's own words are *"the four-surface framing over-counted Day Column."* That question was closed by **PR #267** (`4757067`, merged 2026-08-23 16:28:07 PDT), so **four** resolver-arc PRs landed that day, not three. The residual **write-path** work is tracked separately at `docs/BACKLOG.md` § *"Day Column write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)"*.
+
+| Aug 25 finding | Verdict |
+|---|---|
+| `resolvePlaces()` imported by nothing | **CHANGED** — 3 importers in `src/app`; **still 0 in `src/components`** |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** |
+| no polyline support | **UNCHANGED — genuinely open** |
+| tiering route swap unmerged | **CHANGED** — merged Aug 23 |
+
+**ONLY TWO of the six are genuinely still open:** the shared client cache (no `swr`/`react-query`/`@tanstack` dep, no cache keyed by canonical id; the three caches that exist are per-route, server-side, in-process — the opposite of the ADR) and the polyline gap.
+
+**⚠️ FINDING #4 NEEDS RE-READING, not just re-confirming.** The four columns are unselected — but **measured on TEST today: `rating` 0, `review_count` 0, `price_tier` 0 non-null across 161,431 rows**, and the backfill script *asserts* they must stay NULL. **Wiring those three up would return nothing.** Only `master_place.photo_url` has substance — **10,311** populated rows unread. And the export view's `photo_url` is a **different value** (a lateral over `source_record`), so `hydrate.ts:87` selecting `photo_url` does NOT mean the migration's column is read — a check stopping there concludes wrongly.
+
+**✅ RESOLVED AN OPEN BACKLOG BLOCKER.** The `preComputeFacts` → `resolvePlaces()` item's blocker 2 ("suppression-filter parity unverified") is now answered, and the answer is the feared one: **`isSuppressedCategory` has exactly two call sites in `web/src`** (`hydrate.ts:140`, `bake-corridors.ts:134`); `fetchFederatedPois` applies only `isClosedPlace`; and the RPC's `WHERE` does not filter the suppressed categories either. **Not a live bug today only because `p_categories` is always a slide bucket's list and no bucket claims a suppressed value — safety from an allowlist, not a filter.** Blocker 1 (polyline scope) remains open.
+
+**Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
+
+**Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
 # STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
 
 (**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
