@@ -413,10 +413,16 @@ export type MatchOutcome =
        *                            distance clip makes >~75m identical-name
        *                            pairs undecidable from coordinates — defer
        *                            to a human rather than auto-link)
+       *   wide_rescue           — surfaced by the wide-radius identical-name
+       *                            rescue. Beyond 500m the distance term is
+       *                            zeroed, so these can never reach auto_link
+       *                            or any earlier rule; routed straight to a
+       *                            human rather than discarded over hundredths
+       *                            of a point.
        * Stored as place_match.match_method so the 3b audit CLI can group
        * pending rows by why-they're-pending without re-running the matcher.
        */
-      method: "close_nameless" | "blended_residual" | "name_dominant_low_conf";
+      method: "close_nameless" | "blended_residual" | "name_dominant_low_conf" | "wide_rescue";
     }
   | {
       kind: "new_master_place";
@@ -1196,6 +1202,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   // reasoning holds more strongly at 500m+, so these fall through to the normal
   // rules and land in manual_review. The goal is to make the collision VISIBLE
   // to triage, not to guess.
+  let rescued = false;
   if (candidates.length === 0) {
     const wide = await findCandidates(source.id, WIDE_RESCUE_RADIUS_M);
     candidates = wide.filter(
@@ -1204,6 +1211,7 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
         lookupCompatibility(source.inferred_category, c.primary_category) >= WIDE_RESCUE_CAT_FLOOR,
     );
     if (candidates.length > 0) {
+      rescued = true;
       logger.debug(
         { source_record_id: source.id, rescued: candidates.length },
         "matcher: wide-radius identical-name rescue found candidates outside 500m",
@@ -1232,6 +1240,60 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   // each return path below.
   const scoringStart = performance.now();
   const scored = candidates.map((c) => ({ c, score: scoreMatch(source, c) }));
+
+  // Step 2.5: rescued candidates go straight to manual_review.
+  //
+  // A rescued candidate is by definition >500m away (the rescue only runs when
+  // the 500m search found nothing). That makes every downstream rule
+  // unreachable or useless for it:
+  //   - Step 3 name_dominant gates on distance ≤ 500m — cannot fire.
+  //   - Step 4 close_nameless gates on distance ≤ 100m — cannot fire.
+  //   - Step 5 blended is the only path left, and beyond the 100m clip
+  //     distance_score is 0, so the blend maxes out at
+  //     0.4×1.0 + 0.2×1.0 = 0.60. It can NEVER reach the 0.85 auto_link bar,
+  //     and only clears the 0.6 manual_review floor when cat_compat is exactly
+  //     1.0. Measured on PROD 2026-09-02, over the 43 known exact-name duplicate
+  //     pairs: the rescue admits 21 of them. Of those 21, only the 8 with
+  //     cat_compat 1.00 reached exactly 0.600 and survived as manual_review;
+  //     the other 13 scored 0.540 (cat 0.70, six of them) or 0.580 (cat 0.90,
+  //     seven) — all with name_similarity 1.000 — and were discarded as
+  //     new_master_place. The remaining 22 of the 43 never reach this branch:
+  //     they have in-radius candidates, so the rescue never runs for them.
+  //
+  // So routing here forfeits no auto_link that was ever reachable; it only
+  // stops a near-perfect name match being thrown away over hundredths of a
+  // point. The rescue's own filters (name ≥ 0.95, cat ≥ 0.7) are the admission
+  // criteria, and a human makes the call — which is the whole point of the
+  // rescue, since at this range the matcher genuinely cannot distinguish
+  // "same complex named differently" from "adjacent distinct feature".
+  if (rescued) {
+    let pick = scored[0]!;
+    for (const x of scored) {
+      if (x.score.combined_confidence > pick.score.combined_confidence) pick = x;
+    }
+    logger.debug(
+      {
+        source_record_id: source.id,
+        target: pick.c.id,
+        distance_m: pick.score.distance_meters,
+        name_sim: pick.score.name_similarity,
+        cat_compat: pick.score.category_compatibility,
+        confidence: pick.score.combined_confidence,
+      },
+      "matcher: wide_rescue manual_review",
+    );
+    const outcome: MatchOutcome = {
+      kind: "manual_review",
+      source_record_id: source.id,
+      target: pick.c.id,
+      confidence: pick.score.combined_confidence,
+      score: pick.score,
+      method: "wide_rescue",
+    };
+    recordScoring(performance.now() - scoringStart);
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
+  }
 
   // Step 3: name_dominant auto_link.
   //

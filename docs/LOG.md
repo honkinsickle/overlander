@@ -12,6 +12,73 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
+
+Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
+0.7 `name_dominant` floor, and every category-compatibility value are
+**untouched**. TEST + unit tests for the change; PROD read-only for the
+confirmation sim. No writes to either database.
+
+- **The change:** a new Step 2.5 in `matchOne`. A candidate admitted only by the
+  wide-radius rescue (>500m, name >= 0.95, cat >= 0.7) now returns
+  `manual_review` with method `wide_rescue` instead of falling through to
+  blended scoring.
+- **This forfeits nothing reachable, and that is arithmetic rather than
+  judgement.** A rescued candidate is by construction >500m, so `name_dominant`
+  (<=500m) and `close_nameless` (<=100m) cannot fire for it. Beyond the 100m
+  clip `distance_score` is 0, so blended maxes at `0.4x0 + 0.4x1.0 + 0.2x1.0 =
+  0.60` — it can **never** reach the 0.85 auto_link threshold. The old path could
+  only ever discard it or surface it at 0.6; routing surfaces it always.
+  Five unit tests pin this, including that 0.540/0.580 were previously discarded.
+- **The regression evidence that counts is the rescue-path slice, not the broad
+  one.** On TEST, 70 records have zero 500m candidates, 26 are admitted by the
+  rescue, 6 already surfaced, **20 newly surfaced**. The broad "1,874 candidate
+  pairs, 0 lost auto-links" figure was ALSO cited in the first version of this
+  entry and the `ba8ab05` commit message — **it is vacuous for this change** and
+  the citation was wrong. `rescued` is only ever set inside
+  `if (candidates.length === 0)`, so Step 2.5 is structurally unreachable for any
+  record that has a 500m candidate. The 1,874-pair population is exactly those
+  records; the check would read identically if Step 2.5 did not exist. It was
+  real evidence for the earlier category-compatibility fix on this branch, and
+  got carried across to a change it cannot speak to. Textbook case of the
+  standing "what would this measurement show if the thing I am testing did not
+  exist at all?" test — asked afterwards here, not before.
+- **PROD read-only sim, replication re-validated at 43/43 pre-patch:**
+  21 `wide_rescue` + 9 `name_dominant_low_conf` = **30 surfaced**, 13 still
+  `new_master_place`.
+
+### Why it is 30 and not 43 — measured, not inferred
+
+The deliverable anticipated "approach or reach 43/43". It does not, and my first
+explanation for the shortfall was **wrong**. I assumed the 13 were all cases
+where an unrelated in-radius candidate suppressed the rescue. Decomposing them
+individually against PROD instead of reasoning from the trigger condition:
+
+- **9 of 13 — the exact-name GIS record IS within 500m** (79-385m), so the rescue
+  is neither needed nor fired. They fail because `cat_compat` is **below the 0.8
+  `name_dominant` gate**: `public_land`/`historic` <-> `recreation_area` = 0.7
+  (eight cases, all >100m so the distance term is zeroed —
+  `0.4x0 + 0.4x1.0 + 0.2x0.7 = 0.540` < 0.6). The ninth, Farewell Bend, is a
+  different arithmetic and the first version of this entry wrongly folded it in
+  with the other eight: it sits at **79m**, inside the 100m clip, so its distance
+  term is NOT zero — `0.4x0.21 + 0.4x1.0 + 0.2x0.5 = 0.584`, which is the value
+  the sim reported. Same conclusion (cat below the 0.8 gate), different numbers.
+  These are blocked by exactly the
+  category-compatibility values this pass was told not to touch — so they are
+  out of scope by construction, not an escape from the fix.
+- **4 of 13 — my original hypothesis, and only these.** No exact-name candidate
+  within 500m, but 1-2 other candidates exist, so the rescue never fires and the
+  distant true match is never considered (Bridal Veil Falls 0.230, Devil's Lake
+  0.302, Illinois River Forks 0.320, William M. Tugman 0.283).
+- **The next lever is therefore a choice between two distinct changes**, not one:
+  raising `public_land`/`historic` <-> `recreation_area` compatibility (unblocks 9),
+  or widening the rescue trigger from "500m returned nothing" to "no in-radius
+  candidate clears the name floor" (unblocks up to 4). Both are out of scope here.
+- **Lesson, same shape as the apparatus entries above:** I had a plausible
+  mechanism and the aggregate number was consistent with it. Consistent is not
+  confirmed — the per-case decomposition split it 9/4 against a hypothesis I was
+  ready to report as the whole story.
+
 ## 2026-09-02 (later 31) — PROD impact of the matcher fix, simulated read-only. **0 auto-link · 17 surfaced · 26 still unresolved.**
 
 Read-only simulation against PROD. Nothing applied, no merges, no writes, no

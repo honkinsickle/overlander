@@ -138,6 +138,7 @@ async function decide(
 
   let candidates = (await findCandidates(sr.id, 500)).filter((c) => c.id !== sr.ownMp);
 
+  let rescued = false;
   if (candidates.length === 0 && patched) {
     const wide = (await findCandidates(sr.id, WIDE_RESCUE_RADIUS_M)).filter((c) => c.id !== sr.ownMp);
     candidates = wide.filter(
@@ -145,10 +146,24 @@ async function decide(
         jaroWinkler(normalizeName(sr.name), normalizeName(c.canonical_name)) >= WIDE_RESCUE_NAME_FLOOR &&
         compat(sr.inferred_category, c.primary_category) >= WIDE_RESCUE_CAT_FLOOR,
     );
+    if (candidates.length > 0) rescued = true;
   }
   if (candidates.length === 0) return { kind: "new_master_place", method: "no_candidates" };
 
   const scored = candidates.map((c) => ({ c, s: score(sr.name, sr.inferred_category, c, compat) }));
+
+  // Step 2.5: rescued candidates route straight to manual_review.
+  if (rescued) {
+    let pick = scored[0];
+    for (const x of scored) if (x.s.combined_confidence > pick.s.combined_confidence) pick = x;
+    return {
+      kind: "manual_review",
+      method: "wide_rescue",
+      target: pick.c.id,
+      targetName: pick.c.canonical_name,
+      confidence: pick.s.combined_confidence,
+    };
+  }
 
   // Step 3 name_dominant
   for (const { c, s } of scored) {
