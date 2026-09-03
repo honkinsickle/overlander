@@ -181,6 +181,16 @@ Reclassification of the prior sort's 6-pair UNCLEAR bucket: the 4 "SP/SB/SRA-vs-
 
 Explicitly out of scope: writing `place_relationships (contained_in)` from NPs to their parent units. 62 NP master_places on PROD; only 9 surfaced in the 384-pair set — a relationship-build pass would need to walk all 62, not just the 9. Whether to build that at all is a product decision, not a data-quality one.)
 
+# STATE — branch `verify-np-followup` · 2026-09-02 (later 34) — verification pass on PR #368's NP investigation: 3 of 4 claims confirmed, 1 upgraded.
+
+(**newest truth: PR #368's four self-reviewed verification gaps are closed. Bucket totals (SAME 136 · DIFFERENT 246 · UNCLEAR 2) reproduced exactly on fresh PROD data. CP/SW pair counts (1/2, all DIFFERENT) confirmed via full-set grep. NP = Natural Preserve elevated from inference to direct documentary confirmation via `curl` + `pdftotext` on CA DPR PDFs. The "Los Penasquitos Marsh NP double-record" upgraded from "minor quirk" to a named open triage item on PROD — one pending `place_match` at `blended_residual` conf 0.60, same mechanism as the 43 self-created duplicates.**
+
+Read-only pass. No writes to TEST or PROD, no code changes, no touching PR #368. Working tree clean before commit. New doc: `docs/investigations/2026-09-02-np-verification-followup.md`.
+
+**Branch note:** cut from `main`, not from PR #368's branch. PR #368 remains open/unmerged. The "later 33" masthead that PR #368 introduces is not present in this branch — will interleave on merge.
+
+**One concrete follow-up.** Apply Adam's TEST triage decision to PROD: confirm the pending place_match for the second Los Penasquitos Marsh NP polygon (source_record `e41d6e18-…`, external_id `state_parks:CA:park:fec71bff-…`) → attach to mp `46561990-…`. Filed in BACKLOG.md. Not applied here — this pass is verification only.)
+
 ---
 
 # STATE — branch `promote-ut-state-parks-prod` · 2026-09-02 (later 16) — **UT PROMOTED. ALL SIX STATES ARE LIVE ON PROD.**
