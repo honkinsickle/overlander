@@ -1,3 +1,23 @@
+# STATE — branch `master-reference-diagram-place-data` · 2026-09-03 (later 29) — **One master-reference Paper diagram synthesizing the whole place-data investigation chain (#361–#384).**
+
+(**newest truth: no code changed.** A single new Paper artboard — *"Place Data
+— Master Reference (sources, surfaces, categories)"*, in the file "Card data
+model and ofrmation", separate from the `resolvePlaces()`-specific diagram at
+node `3R4-0` — covers the 5 data sources, the 4 UI surfaces, the
+`resolvePlaces()` unification effort, the 9-category taxonomy, and known
+gaps, all in plain language with per-claim confidence tags. Full evidence:
+`docs/investigations/2026-09-03-place-data-master-reference-diagram.md`.
+**The one correction found this pass: the design brief claimed Urban/Water
+fill/Showers/Dump stations were "removed from the UI entirely" — the taxonomy
+ADR's own status line says "Proposed — awaiting Adam's review," and its
+closing section states that exact removal question is still the one
+substantive open item. Nothing has been removed from any screen; no UI code
+has changed.** Checked first, per instruction: #380/#382/#384 are NOT merged
+— this branch is cut from #384's tip (`category-resolve-theaters-park-
+renames` @ `5d811d3`), not `main`. **NEXT: Adam's review.**)
+
+---
+
 # STATE — branch `category-resolve-theaters-park-renames` · 2026-09-03 (later 28) — **All three #382 items closed. Theaters leaves Culture, `park` → `scenic`, renames declined. One substantive open item left.**
 
 (**newest truth: design only, third amendment in the chain. No code, nothing written to TEST or PROD. Still 9 categories.**
