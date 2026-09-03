@@ -148,19 +148,29 @@ jobs:
           check extension 'postgis' \
             "select exists (select 1 from pg_extension where extname='postgis')"
 
-      - name: Verify recompute_master_place is at v5 (skip-soft-retired)
+      - name: Verify recompute_master_place is at v5 (if v5 file present)
         # v5 (20260904120000) redefined this function to include a
         # v_self_has_active_sr guard. Grep the pg_proc source to
         # confirm the LATEST definition landed — a chain that stopped
-        # applying at v0.5 would leave the earlier body in place and
-        # this check catches that.
+        # applying at v0.5 would leave the earlier body in place.
+        #
+        # Gated on the file's presence so this workflow works across
+        # branches whose main-parent is pre-v5: on such branches the
+        # file isn't there, nothing to check, step reports skip. Once
+        # v5 lands on main, every subsequent branch inherits the file
+        # and the check enforces.
         run: |
+          v5='supabase/migrations/20260904120000_recompute_master_place_skip_soft_retired.sql'
+          if [ ! -f "$v5" ]; then
+            echo "  ◦ v5 file not on disk — skipping (chain expected to be at v0.5)"
+            exit 0
+          fi
           conn='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
           src=$(psql "$conn" -Atc "select pg_get_functiondef(oid) from pg_proc where proname='recompute_master_place' and pronamespace='public'::regnamespace")
           if echo "$src" | grep -q v_self_has_active_sr; then
             echo "  ✓ recompute_master_place is at v5 (skip-soft-retired)"
           else
-            echo "  ✗ recompute_master_place body missing v5 guard — chain may have stopped at v0.5"
+            echo "  ✗ v5 file exists on disk but function body missing v_self_has_active_sr guard — chain may have stopped mid-way"
             exit 1
           fi
 
