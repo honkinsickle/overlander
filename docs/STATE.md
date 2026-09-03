@@ -28,6 +28,36 @@
 **Gates: all three exit 0** — `npm run -w data typecheck`, `npm run -w web typecheck`, `cd web && npx next build`. The web typecheck caught a real error first: `web/` does not set `allowImportingTsExtensions` while `data/` does, so a `.ts` import suffix that is fine in one workspace fails the other. Fixed.
 
 **NEXT: Adam's review, then the routing-table decision — explicitly out of scope here.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `surface-population` · 2026-09-02 (later 17) — **READ-ONLY investigation. Three UI surfaces traced to their real data paths; two defects flagged, neither reproduced.**
+
+*Branch note: this workspace opened on `port-louis` and the branch was renamed twice mid-session by Conductor (`port-louis` → `trace-place-data-paths` → `surface-population`). The work is unaffected — one commit, `8658a29`, off `9d936af`.*
+
+(**newest truth: nothing was executed and nothing was changed. No TEST, no PROD, no Typesense, no browser, no code edits. The deliverable is one report doc plus BACKLOG entries.** The six-state promotion below is unaffected and remains the standing data truth.)
+
+**Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`** (new directory). Traces where three screenshotted surfaces actually get their place data, at tree `9d936af`.
+
+**Two of Adam's three path guesses confirmed; one corrected.**
+| Surface | Guess | Verdict |
+|---|---|---|
+| "Explore N more near [City], CA →" | D (place-details enrichment) | **CORRECTED — maps to no path A–E** |
+| Day-scoped browse ("Browsing today Day N…") | B | **CONFIRMED** — `/api/trip-browse/:trip/:day` |
+| "Find on: Current Location" picker | C | **CONFIRMED** — `/api/search-area` |
+
+**The Surface 1 correction is the substantive one.** That control fetches nothing — it is `setExpanded((e) => !e)` on a component whose own header declares it PURE PRESENTATIONAL (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment behind those cards keys on the **mounted day set** and enumerates the **whole** `placePool(d)`, collapsed tiles included (`day-detail-corridor-column.tsx:294-351`) — so it already ran, or already failed, before the click. The cards map to D; the link maps to nothing. **"Surface calls Google" and "surface displays what a Google call already produced" are different claims**, and only the second is true here.
+
+**Paths A and E are unreachable from all three surfaces.** A (`itinerary/fuel-live-resolve.ts`) is generation-time behind `FUEL_LIVE_RESOLVE`; E is the offline corpus ingester. Neither appeared in any trace.
+
+**FLAG STATE, stated with its scope: `SEARCH_AREA_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER` and `USE_FEDERATED_POIS` are all absent from `web/.env.local` and `web/.env.development.local`** `[grepped 2026-09-02]` — so **locally** every surface runs its legacy path. **Vercel's environment is not readable from the repo and this makes no claim about production.**
+
+**The "NEW" badges on Find Nearby are decorative, and provenance proves it rather than inferring it.** `isNew` has exactly one consumer — the badge render — and shipped in `6c9d3e3` (2026-05-26), whose commit message ends *"actual category-fetch wiring is a follow-up."* `primaryCategories`, the field that makes a tile query anything, arrived in `a65d7b7` (2026-06-08). **The badges predate the data wiring.** Groceries corroborates: corpus-only, no live path, no badge. **6 of the 8 NEW tiles issue no live call at all** — unmapped in `LIVE_SLIDE_FOR_PRIMARY`, so the live half short-circuits to `[]`.
+
+**⚠️ TWO APPARENT DEFECTS — BOTH DEDUCED FROM CODE READING, NEITHER REPRODUCED. Do not act before a runtime check.** Filed to `docs/BACKLOG.md` with that caveat attached.
+1. **`urban` / `interest` chips on the day-browse panel look like they return HTTP 400.** `browseCategoryToSlide` is now total, the panel's `k !== null` filter can no longer drop anything, and the route validates against `SLIDE_CATEGORIES` — a 7-key list that deliberately excludes both. One constant is serving as both "what `all` expands to" and "what is a legal request".
+2. **Water fill / Showers / Dump stations appear structurally unable to return a result.** They target `water` / `shower` / `dump_station`, all in `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` — and both flag states reach that same function. Their live half is unmapped too.
+
+**Near-miss worth carrying:** the tile list's comment says its values were "verified against the live Typesense `primary_category` facet." That can be **true and still compatible with those three tiles being empty** — suppression happens downstream in **hydration**, not in Typesense, so a facet-level check cannot see it. Same shape as the standing scope-the-instrument rule: the check was aimed one layer above the filter it needed to catch.
+
+**NEXT: Adam's review. Nothing is queued off this.** The masthead below is preserved verbatim per this file's convention.
 
 ---
 

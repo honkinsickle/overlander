@@ -12,7 +12,9 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
-## 2026-09-02 (later 31) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
+## 2026-09-02 (later 34) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
+
+*(Numbered 34, not 31: this session ran on a branch cut from `9d936af`, before #365 (later 30-32) and #361 (later 33) merged. Numbered to land after them — the number is merge order, not clock order.)*
 
 - **Report: `docs/investigations/2026-09-02-category-source-audit.md`.**
   Read-only, TEST only, PROD not measured. Two new measurement scripts
@@ -69,6 +71,269 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   that is idiomatic in `data/scripts` failed `npm run -w web typecheck` — the
   per-workspace divergence CLAUDE.md already warns about, hit from a new
   direction. All three gates exit 0 after the fix.
+## 2026-09-02 (later 33) — READ-ONLY trace of three UI surfaces' place-data paths. Two path guesses confirmed, one corrected.
+
+*(Numbered 33, not 30: this session ran on a branch cut from `9d936af`, before #365 merged and claimed later 30-32. Numbered to land after it, per this repo's parallel-branch interleaving convention — the number is merge order, not clock order.)*
+
+- **Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`**
+  (new directory). Nothing was run — no TEST, no PROD, no Typesense, no
+  browser. Every claim is from source at `9d936af`; the report marks which
+  conclusions are code-path deductions rather than observations.
+- **Surface 1 ("Explore N more near [City], CA →") was mis-guessed as path D,
+  and the correction is the useful part.** The control fetches NOTHING — it is
+  `setExpanded((e) => !e)` on a PURE PRESENTATIONAL component
+  (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment that
+  populates those cards keys on `[hydrateKey]` = the **mounted day set**
+  (`day-detail-corridor-column.tsx:294-351`) and enumerates the **whole**
+  `placePool(d)`, collapsed tiles included. So enrichment already ran, or
+  already failed, before the click. **The link maps to no path A–E; the cards
+  it reveals map to D.** Distinguishing "this surface calls Google" from "this
+  surface displays what a Google call already produced" is the whole point.
+- **Surfaces 2 and 3 confirmed as B and C** — `/api/trip-browse/:trip/:day` and
+  `/api/search-area`. Both are dual-path behind their cutover flags
+  (`TRIP_BROWSE_USE_RESOLVER`, `SEARCH_AREA_USE_RESOLVER`), and **neither flag,
+  nor `DATE_DETAIL_USE_RESOLVER` nor `USE_FEDERATED_POIS`, is set in
+  `web/.env.local` or `.env.development.local`** `[grepped]` — so locally all
+  three run legacy. Vercel's env is not readable from the repo and the report
+  makes no claim about it.
+- **The "NEW" badges on Find Nearby are decorative — provenance settles it.**
+  `isNew` has exactly one consumer (the badge render, `:1000`) and arrived in
+  `6c9d3e3` (2026-05-26), whose own message says *"actual category-fetch wiring
+  is a follow-up"*; `primaryCategories` — the field that makes a tile query
+  anything — landed in `a65d7b7` (2026-06-08). **The badges predate the data
+  wiring.** Corroborated by Groceries: corpus-only, no live path, no badge.
+- **⚠️ Two apparent defects found, BOTH code-reading only, NEITHER reproduced.**
+  Filed to BACKLOG with that caveat attached, deliberately not acted on.
+  (1) The `urban`/`interest` chips on Surface 2 look like they 400 — the route
+  uses one constant as both the `all` expansion and the validation allowlist.
+  (2) Water fill / Showers / Dump stations target
+  `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` in **both** flag
+  states, with no live path either — so they appear structurally empty.
+- **The near-miss worth recording:** the tile list's own comment says its values
+  were "verified against the live Typesense `primary_category` facet." That is
+  probably true *and* compatible with those three tiles returning nothing —
+  suppression happens **downstream in hydration, not in Typesense**. A
+  facet-level verification cannot see it. Same shape as the standing
+  scope-the-instrument lesson: the check was aimed one layer above the filter.
+- **6 of 8 NEW tiles issue no live call at all** (unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` → live half short-circuits to `[]`). Nothing in the
+  UI distinguishes a corpus-only tile from a live-backed one — relevant if the
+  Google-dependency reduction proceeds, since those are precisely the tiles it
+  would not affect.
+## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
+
+Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
+0.7 `name_dominant` floor, and every category-compatibility value are
+**untouched**. TEST + unit tests for the change; PROD read-only for the
+confirmation sim. No writes to either database.
+
+- **The change:** a new Step 2.5 in `matchOne`. A candidate admitted only by the
+  wide-radius rescue (>500m, name >= 0.95, cat >= 0.7) now returns
+  `manual_review` with method `wide_rescue` instead of falling through to
+  blended scoring.
+- **This forfeits nothing reachable, and that is arithmetic rather than
+  judgement.** A rescued candidate is by construction >500m, so `name_dominant`
+  (<=500m) and `close_nameless` (<=100m) cannot fire for it. Beyond the 100m
+  clip `distance_score` is 0, so blended maxes at `0.4x0 + 0.4x1.0 + 0.2x1.0 =
+  0.60` — it can **never** reach the 0.85 auto_link threshold. The old path could
+  only ever discard it or surface it at 0.6; routing surfaces it always.
+  Five unit tests pin this, including that 0.540/0.580 were previously discarded.
+- **The regression evidence that counts is the rescue-path slice, not the broad
+  one.** On TEST, 70 records have zero 500m candidates, 26 are admitted by the
+  rescue, 6 already surfaced, **20 newly surfaced**. The broad "1,874 candidate
+  pairs, 0 lost auto-links" figure was ALSO cited in the first version of this
+  entry and the `ba8ab05` commit message — **it is vacuous for this change** and
+  the citation was wrong. `rescued` is only ever set inside
+  `if (candidates.length === 0)`, so Step 2.5 is structurally unreachable for any
+  record that has a 500m candidate. The 1,874-pair population is exactly those
+  records; the check would read identically if Step 2.5 did not exist. It was
+  real evidence for the earlier category-compatibility fix on this branch, and
+  got carried across to a change it cannot speak to. Textbook case of the
+  standing "what would this measurement show if the thing I am testing did not
+  exist at all?" test — asked afterwards here, not before.
+- **PROD read-only sim, replication re-validated at 43/43 pre-patch:**
+  21 `wide_rescue` + 9 `name_dominant_low_conf` = **30 surfaced**, 13 still
+  `new_master_place`.
+
+### Why it is 30 and not 43 — measured, not inferred
+
+The deliverable anticipated "approach or reach 43/43". It does not, and my first
+explanation for the shortfall was **wrong**. I assumed the 13 were all cases
+where an unrelated in-radius candidate suppressed the rescue. Decomposing them
+individually against PROD instead of reasoning from the trigger condition:
+
+- **9 of 13 — the exact-name GIS record IS within 500m** (79-385m), so the rescue
+  is neither needed nor fired. They fail because `cat_compat` is **below the 0.8
+  `name_dominant` gate**: `public_land`/`historic` <-> `recreation_area` = 0.7
+  (eight cases, all >100m so the distance term is zeroed —
+  `0.4x0 + 0.4x1.0 + 0.2x0.7 = 0.540` < 0.6). The ninth, Farewell Bend, is a
+  different arithmetic and the first version of this entry wrongly folded it in
+  with the other eight: it sits at **79m**, inside the 100m clip, so its distance
+  term is NOT zero — `0.4x0.21 + 0.4x1.0 + 0.2x0.5 = 0.584`, which is the value
+  the sim reported. Same conclusion (cat below the 0.8 gate), different numbers.
+  These are blocked by exactly the
+  category-compatibility values this pass was told not to touch — so they are
+  out of scope by construction, not an escape from the fix.
+- **4 of 13 — my original hypothesis, and only these.** No exact-name candidate
+  within 500m, but 1-2 other candidates exist, so the rescue never fires and the
+  distant true match is never considered (Bridal Veil Falls 0.230, Devil's Lake
+  0.302, Illinois River Forks 0.320, William M. Tugman 0.283).
+- **The next lever is therefore a choice between two distinct changes**, not one:
+  raising `public_land`/`historic` <-> `recreation_area` compatibility (unblocks 9),
+  or widening the rescue trigger from "500m returned nothing" to "no in-radius
+  candidate clears the name floor" (unblocks up to 4). Both are out of scope here.
+- **Lesson, same shape as the apparatus entries above:** I had a plausible
+  mechanism and the aggregate number was consistent with it. Consistent is not
+  confirmed — the per-case decomposition split it 9/4 against a hypothesis I was
+  ready to report as the whole story.
+
+## 2026-09-02 (later 31) — PROD impact of the matcher fix, simulated read-only. **0 auto-link · 17 surfaced · 26 still unresolved.**
+
+Read-only simulation against PROD. Nothing applied, no merges, no writes, no
+PROD code change. Script: `data/scripts/prod-matcher-fix-impact-sim.ts`.
+
+- **The replication was validated before it was trusted.** `matchOne` throws on
+  an already-linked source_record and all 43 are linked, so the decision
+  waterfall had to be replicated rather than invoked. Run first under the
+  PRE-patch regime it reproduced **`new_master_place` for 43/43** — matching the
+  known ground truth — so the "after" prediction rests on a model that
+  demonstrably reproduces the present. Same discipline as the source_id rename
+  tie-break sim.
+- **Re-derived from PROD: still exactly 43 pairs** (42 OR, 1 CA).
+
+### Tally under the patched matcher
+
+| outcome | count |
+|---|---|
+| **auto_link** — resolved automatically | **0** |
+| **manual_review** — surfaced for triage instead of silently wrong | **17** |
+| **new_master_place** — still unresolved | **26** |
+
+Of the 17 surfaced: **9** via `name_dominant_low_conf` (all `viewpoint`, 126–468m
+— the category fix working) and **8** via `blended_residual` at exactly 0.600
+(all `recreation_area → recreation_area`, 507–1313m — the wide-radius rescue
+working).
+
+### ⚠️ I predicted this split the wrong way round
+
+(later 30) said the rescue would address the 26 out-of-radius cases and the
+category fix would turn the 17 in-radius ones into manual_review. **The split is
+17/26 as predicted, but the assignment is inverted**: the cases that resolve are
+the ones with a *compatible category*, not the ones inside 500m.
+
+**The rescue is working; the blended floor swallows the result.** Every
+unresolved case carries a confidence that decomposes exactly:
+
+```
+blended = 0.4 × distance_score + 0.4 × name + 0.2 × cat,  distance_score = 0 beyond 100m
+0.540 ⇒ name 1.000, cat 0.70   (public_land / historic → recreation_area)
+0.580 ⇒ name 1.000, cat 0.90   (park → recreation_area)
+0.600 ⇒ name 1.000, cat 1.00   (recreation_area → recreation_area)  ← the only ones ≥ 0.6
+```
+
+A confidence of 0.540/0.580 can only arise from `name_similarity = 1.000` — so
+**the rescue did surface the exact-name GIS record in those 26 cases too.** They
+fail purely because the blended `manual_review` floor is 0.6 and a zeroed
+distance term leaves them at 0.54–0.58. Two to six hundredths short.
+
+So the outcome is decided entirely by `cat_compat`:
+`recreation_area` 1.0 → 0.600 → surfaced; `park` 0.9 → 0.580 → lost;
+`public_land`/`historic` 0.7 → 0.540 → lost.
+
+### The obvious follow-up, deliberately NOT done in this pass
+
+**Rescued candidates should route to `manual_review` by construction rather than
+falling through to blended scoring.** The rescue already applies a far stricter
+name floor (0.95) and a category floor (0.7); anything clearing those is worth
+human eyes regardless of what the distance-zeroed blend computes. That single
+change would convert the remaining 26 to `manual_review` without touching the
+distance clip, the 0.7 `name_dominant` floor, or any category value — i.e.
+without the corpus-wide blast radius those carry.
+
+The alternative — raising `park`/`historic`/`public_land ↔ recreation_area`
+compat — would move far more of the corpus and is the riskier lever.
+
+- **Net effect of what is currently committed: 17 of 43 stop being silent.** None
+  auto-link, which is by design — past the 100m clip the matcher cannot tell
+  "same complex, two agencies" from "adjacent distinct feature", and that
+  reasoning was deliberately left intact.
+- **The existing 43 duplicates are unchanged and still need cleanup**; this only
+  governs what future runs would do.
+- Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped.
+
+## 2026-09-02 (later 30) — Upstream matcher fixes: `viewpoint` compatibility + wide-radius identical-name rescue
+
+Fixes the two root causes behind the 43 self-created duplicates
+(`docs/investigations/2026-09-02-cross-source-duplicates.md`), so a quarterly
+refresh stops recreating them. **No cleanup of existing duplicate pairs — that
+is the next pass.** TEST-only validation; no writes to either database.
+
+- **⚠️ THE BIGGER BUG WAS NOT THE ONE REPORTED.** Auditing the full
+  `viewpoint` row as asked surfaced a more general defect:
+  `lookupCompatibility` is `CAT[a]?.[b] ?? CAT[b]?.[a] ?? 0`, so **any category
+  absent as a TOP-LEVEL key scored 0 against ITSELF**. `public_land` only ever
+  appears as a value key, so `lookupCompatibility("public_land","public_land")`
+  returned **0** — and since cat_compat=0 caps `combined_confidence` at 0.80
+  even at 0m with an identical name, those pairs could never auto-link.
+  Fixed with a universal rule: `if (a === b) return 1.0`. Consistent with the
+  table, where every explicit self-entry is already 1.0.
+- **`viewpoint ↔ recreation_area` = 0.8** — the reported gap. OR's "State Scenic
+  Viewpoint" units are a park designation that the GIS source categorises as
+  `recreation_area`; 10 of the 43 duplicates were this pair. 0.8 (not park's
+  0.9) clears the `name_dominant` gate without asserting near-equivalence.
+- **AUDITED AND DELIBERATELY LEFT AT 0**, with reasoning recorded in the table:
+  `viewpoint ↔ park` (103 pairs in-corpus) and `viewpoint ↔ park_feature` (33).
+  A park is generally the **parent** of a viewpoint, not the same place —
+  merging those would destroy exactly the parent/child distinction the
+  investigation says must be preserved. `trailhead` and `peak` have the
+  identical self-only shape and are left alone for the same reason.
+- **The 839 zero-compat candidate pairs in the corpus are mostly CORRECT.**
+  `park → ev_charging`, `→ gas_station`, `→ toilet`, `→ picnic_area`,
+  `→ fire_pit`. The `?? 0` default is protective, not a bug. Blanket-filling
+  zeros would have been actively harmful; only the two defects above were
+  changed.
+- **Wide-radius identical-name rescue** (`WIDE_RESCUE_RADIUS_M = 3000`,
+  `NAME_FLOOR = 0.95`, `CAT_FLOOR = 0.7`). Nothing within 500m returns
+  `new_master_place` immediately — the path that silently created 26 of the 43.
+  Rather than widen the global radius (more unrelated candidates scored for
+  every record, slower RPC), this runs **only when the normal search finds
+  nothing**, so it cannot alter any decision that already had candidates.
+- **These deliberately do NOT auto-link.** Past the 100m distance clip an
+  identical-name pair tops out at 0.60, and `scoreMatch`'s own comment explains
+  why: at range, name+category cannot distinguish "same complex named
+  differently by two agencies" from "adjacent-but-distinct feature". That
+  reasoning holds more strongly at 500m+. **The distance clip and the 0.7
+  `name_dominant` floor were left untouched — they are deliberate, documented
+  design, not bugs.** The fix converts silent duplicates into VISIBLE
+  manual_review items; a human decides.
+- **REGRESSION CHECK against the real patched code**, TEST six-state corpus,
+  1,874 candidate pairs:
+  | | |
+  |---|---|
+  | pairs whose cat_compat changed | 43 |
+  | **NEW auto-links** | **13** — every one `public_land → public_land`, **0m apart, name_similarity 1.000** |
+  | **LOST auto-links (regression)** | **0** |
+  | newly reaching manual_review | 3 |
+  There are no questionable new auto-links: all 13 are identical-name,
+  identical-category, zero-distance pairs that were failing only on the
+  self-pair bug.
+- **Rescue pass measured, not assumed:** 70 records have zero candidates at
+  500m; the rescue finds a near-identical-name candidate for **26** of them —
+  e.g. `Border Field State Park` → same name 644m, `Prairie City SVRA` → same
+  name 1022m, `San Onofre State Beach` → same name 2455m, `Portola Redwoods
+  State Park` → `Portola Redwoods SP` 1715m. The other 44 still become
+  `new_master_place`, unchanged.
+- **6 new unit tests** covering the self-pair rule, the explicit-self-entry
+  non-regression, the blended-score consequence, `viewpoint↔recreation_area`
+  symmetry, the deliberate `viewpoint↔park`/`park_feature` zeros, and that
+  unrelated categories still score 0. Suite: **651 passed** / 3 skipped (was
+  645).
+- **PROD confirmation is explicitly NOT in this pass.** The 43-case target list
+  lives on PROD; this is a code change validated on TEST. Whether these fixes
+  would have prevented each of the 43 needs a PROD-side pass, and the existing
+  43 still need cleanup.
+- Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
+  typecheck 0, next build 0.
 
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 

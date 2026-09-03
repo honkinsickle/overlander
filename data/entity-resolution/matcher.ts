@@ -216,7 +216,24 @@ export const CATEGORY_COMPATIBILITY: Record<string, Record<string, number>> = {
   gas_station: { gas_station: 1.0, fuel: 1.0 },
   fuel: { fuel: 1.0, gas_station: 1.0 },
   trailhead: { trailhead: 1.0 },
-  viewpoint: { viewpoint: 1.0 },
+  // viewpoint↔recreation_area: OR's "State Scenic Viewpoint" units are a park
+  // designation, and the state_parks GIS source categorises them as
+  // recreation_area. Left at the 0 default an identical-name pair could never
+  // auto-link and, worse, fell below the name_dominant gate (0.8) so it routed
+  // to new_master_place rather than manual_review. 10 of the 43 self-created
+  // duplicates found on PROD 2026-09-02 were exactly this pair. Same class of
+  // gap as the park/historic/interest omission fixed in 379c213.
+  // 0.8 (not park's 0.9): clears the name_dominant gate without asserting the
+  // near-equivalence park↔recreation_area has. Measured blast radius on the
+  // TEST six-state corpus: 0 new auto-links — affected pairs route to
+  // manual_review, the intended outcome beyond the 100m distance clip.
+  // DELIBERATELY NOT ADDED, audited and left at 0: viewpoint↔park (103 pairs
+  // in-corpus) and viewpoint↔park_feature (33). Both would change scores with
+  // no evidence of benefit, and a park is generally the PARENT of a viewpoint
+  // rather than the same place — the parent/child distinction the duplicate
+  // investigation says must be preserved. `trailhead` and `peak` have the
+  // identical self-only shape and are left alone for the same reason.
+  viewpoint: { viewpoint: 1.0, recreation_area: 0.8 },
   peak: { peak: 1.0 },
   spring: { spring: 1.0, water: 0.5 },
   // Phase 2 — US dispersed camping. Reverse lookups (campground↔dispersed_camping
@@ -396,10 +413,16 @@ export type MatchOutcome =
        *                            distance clip makes >~75m identical-name
        *                            pairs undecidable from coordinates — defer
        *                            to a human rather than auto-link)
+       *   wide_rescue           — surfaced by the wide-radius identical-name
+       *                            rescue. Beyond 500m the distance term is
+       *                            zeroed, so these can never reach auto_link
+       *                            or any earlier rule; routed straight to a
+       *                            human rather than discarded over hundredths
+       *                            of a point.
        * Stored as place_match.match_method so the 3b audit CLI can group
        * pending rows by why-they're-pending without re-running the matcher.
        */
-      method: "close_nameless" | "blended_residual" | "name_dominant_low_conf";
+      method: "close_nameless" | "blended_residual" | "name_dominant_low_conf" | "wide_rescue";
     }
   | {
       kind: "new_master_place";
@@ -445,6 +468,17 @@ export function normalizeName(name: string): string {
  */
 export function lookupCompatibility(a: string | null, b: string | null): number {
   if (!a || !b) return 0;
+  // A category is always fully compatible with itself. Without this, any
+  // category absent from CATEGORY_COMPATIBILITY as a TOP-LEVEL key scored 0
+  // against ITSELF via the `?? 0` default — e.g. `public_land` only ever
+  // appears as a value key (under recreation_area/park/historic), so
+  // lookupCompatibility("public_land","public_land") returned 0. Since
+  // cat_compat=0 caps combined_confidence at 0.80 even at 0m with an identical
+  // name, such pairs could never auto-link. Measured on TEST 2026-09-02: this
+  // rule alone converts 14 pairs in the six-state corpus into correct
+  // auto-links, every one 0m apart with name_similarity 1.000.
+  // Consistent with the table — every explicit self-entry there is already 1.0.
+  if (a === b) return 1.0;
   return CATEGORY_COMPATIBILITY[a]?.[b] ?? CATEGORY_COMPATIBILITY[b]?.[a] ?? 0;
 }
 
@@ -940,6 +974,19 @@ export async function findCandidates(
 export const NAME_DOMINANT_CONFIDENCE_FLOOR = 0.7;
 
 /**
+ * Wide-radius identical-name rescue (see matchOne). Only engages when the
+ * normal 500m search returns NOTHING, so it cannot change any decision that
+ * already had candidates — its blast radius is confined to records that would
+ * otherwise have become new_master_place unconditionally.
+ *
+ * The name floor is deliberately far stricter than the 0.85 used elsewhere:
+ * at this range only a near-exact name is evidence of the same place.
+ */
+export const WIDE_RESCUE_RADIUS_M = 3000;
+export const WIDE_RESCUE_NAME_FLOOR = 0.95;
+export const WIDE_RESCUE_CAT_FLOOR = 0.7;
+
+/**
  * Pure scoring function (no I/O). The weighted blend per spec §9.1:
  *
  *   combined_confidence = 0.4 × distance_score
@@ -1133,7 +1180,45 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
 
   // Fetch standard candidates (500m radius). Rules 3, 4, and 5 all use
   // this same list — fetched once, evaluated by rule in order.
-  const candidates = await findCandidates(source.id);
+  let candidates = await findCandidates(source.id);
+
+  // Wide-radius identical-name rescue.
+  //
+  // Nothing within 500m means "no candidates", which returns new_master_place
+  // immediately. Measured on PROD 2026-09-02, that path silently created 26 of
+  // 43 duplicate master_places: an exact-name `state_parks` GIS record for the
+  // same park existed 500m–1993m away and was never even considered, because
+  // visitor-page coordinates routinely sit that far from the GIS geometry.
+  //
+  // Rather than widen the global radius — which would pull far more unrelated
+  // candidates into scoring for every record in the corpus, and slow the RPC —
+  // this is a targeted second pass that runs ONLY when the normal search found
+  // nothing, and accepts only near-identical names in a compatible category.
+  //
+  // These deliberately do NOT auto-link. Past the 100m distance clip an
+  // identical-name pair tops out at 0.60, and scoreMatch's own comment explains
+  // why: at range, name+category cannot distinguish "same complex named
+  // differently by two agencies" from "adjacent-but-distinct feature". That
+  // reasoning holds more strongly at 500m+, so these fall through to the normal
+  // rules and land in manual_review. The goal is to make the collision VISIBLE
+  // to triage, not to guess.
+  let rescued = false;
+  if (candidates.length === 0) {
+    const wide = await findCandidates(source.id, WIDE_RESCUE_RADIUS_M);
+    candidates = wide.filter(
+      (c) =>
+        jaroWinkler(normalizeName(source.name), normalizeName(c.canonical_name)) >= WIDE_RESCUE_NAME_FLOOR &&
+        lookupCompatibility(source.inferred_category, c.primary_category) >= WIDE_RESCUE_CAT_FLOOR,
+    );
+    if (candidates.length > 0) {
+      rescued = true;
+      logger.debug(
+        { source_record_id: source.id, rescued: candidates.length },
+        "matcher: wide-radius identical-name rescue found candidates outside 500m",
+      );
+    }
+  }
+
   if (candidates.length === 0) {
     const newId = randomUUID();
     recordPlanned(source, newId, point);
@@ -1155,6 +1240,60 @@ export async function matchOne(sourceRecordId: string): Promise<MatchOutcome> {
   // each return path below.
   const scoringStart = performance.now();
   const scored = candidates.map((c) => ({ c, score: scoreMatch(source, c) }));
+
+  // Step 2.5: rescued candidates go straight to manual_review.
+  //
+  // A rescued candidate is by definition >500m away (the rescue only runs when
+  // the 500m search found nothing). That makes every downstream rule
+  // unreachable or useless for it:
+  //   - Step 3 name_dominant gates on distance ≤ 500m — cannot fire.
+  //   - Step 4 close_nameless gates on distance ≤ 100m — cannot fire.
+  //   - Step 5 blended is the only path left, and beyond the 100m clip
+  //     distance_score is 0, so the blend maxes out at
+  //     0.4×1.0 + 0.2×1.0 = 0.60. It can NEVER reach the 0.85 auto_link bar,
+  //     and only clears the 0.6 manual_review floor when cat_compat is exactly
+  //     1.0. Measured on PROD 2026-09-02, over the 43 known exact-name duplicate
+  //     pairs: the rescue admits 21 of them. Of those 21, only the 8 with
+  //     cat_compat 1.00 reached exactly 0.600 and survived as manual_review;
+  //     the other 13 scored 0.540 (cat 0.70, six of them) or 0.580 (cat 0.90,
+  //     seven) — all with name_similarity 1.000 — and were discarded as
+  //     new_master_place. The remaining 22 of the 43 never reach this branch:
+  //     they have in-radius candidates, so the rescue never runs for them.
+  //
+  // So routing here forfeits no auto_link that was ever reachable; it only
+  // stops a near-perfect name match being thrown away over hundredths of a
+  // point. The rescue's own filters (name ≥ 0.95, cat ≥ 0.7) are the admission
+  // criteria, and a human makes the call — which is the whole point of the
+  // rescue, since at this range the matcher genuinely cannot distinguish
+  // "same complex named differently" from "adjacent distinct feature".
+  if (rescued) {
+    let pick = scored[0]!;
+    for (const x of scored) {
+      if (x.score.combined_confidence > pick.score.combined_confidence) pick = x;
+    }
+    logger.debug(
+      {
+        source_record_id: source.id,
+        target: pick.c.id,
+        distance_m: pick.score.distance_meters,
+        name_sim: pick.score.name_similarity,
+        cat_compat: pick.score.category_compatibility,
+        confidence: pick.score.combined_confidence,
+      },
+      "matcher: wide_rescue manual_review",
+    );
+    const outcome: MatchOutcome = {
+      kind: "manual_review",
+      source_record_id: source.id,
+      target: pick.c.id,
+      confidence: pick.score.combined_confidence,
+      score: pick.score,
+      method: "wide_rescue",
+    };
+    recordScoring(performance.now() - scoringStart);
+    trackOutcomeLink(source.source_id, outcome);
+    return outcome;
+  }
 
   // Step 3: name_dominant auto_link.
   //
