@@ -227,6 +227,63 @@ is the next pass.** TEST-only validation; no writes to either database.
 - Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
   typecheck 0, next build 0.
 
+## 2026-09-03 (later 32) — Sampled live-source coverage. Two "just needs wiring" rows from #364 reverse under measurement.
+
+- **Report: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.**
+  Read-only; two new vendor-API sampling scripts under `web/scripts`. Closes
+  the single gap #364 left: it proved which Mapbox category ids **exist**, never
+  whether data **comes back**.
+- **The headline is a reversal, and it is the whole point of the pass.** #364
+  labelled Trailheads and Viewpoints "id exists, available, unwired" — which
+  reads as *wiring would help*. Sampled: Mapbox `trailhead` hits at **2/6 metro
+  and 2/6 rural, 3 and 2 total features**, against a corpus of **4,759**;
+  `viewpoint` **4/6 metro, 0/6 rural**. Wiring Mapbox for either would be
+  near-worthless. **Foursquare, already wired, is visibly better at both.**
+  Existence and usefulness are different questions and #364 could only answer
+  the first.
+- **Auto/Repair held up completely** — 0 corpus rows vs Mapbox `auto_repair`
+  saturating at all six metro and four of six rural points. The cleanest wiring
+  win available, now backed by data rather than by an id being present.
+- **The finding I did not expect, and the one that probably matters most:
+  Mapbox coverage tracks settlement, not geography.** At the two genuinely
+  remote sample points (Ohanapecosh on Rainier, Cave Lake in eastern NV) Mapbox
+  returned **0** for campground, gas, auto repair and most commercial
+  categories. So every "4/6 rural" reading is really "all but the two wilderness
+  points". **Live sources degrade exactly where overlanding happens.** Worth
+  weighing heavily in the routing decision — it argues for corpus-primary in
+  precisely the categories with deep corpora.
+- **Validated the apparatus before trusting it, and nearly didn't need to —
+  but it was the right call.** The first Mapbox aggregate looked implausibly
+  uniform, the signature of an endpoint ignoring its category filter. Negative
+  control: a nonsense category id returned **0** at the same bbox where
+  `campground` returned 13. Filter works; metro saturation is real. Recorded
+  because a different result would have invalidated all 312 requests.
+- **Foursquare moved from "unmeasured" to a precisely-bounded negative.** The
+  taxonomy endpoint was retried across **24 combinations** (4 paths × 3 API
+  versions × 2 auth styles) — all 404, including the legacy v3 host, which
+  returns the *same error shape* as the new host. **Auth is not the cause**: the
+  same key returns 200 on `/places/search`. So I answered the underlying
+  question by free-text probing instead of repeating "unmeasured".
+- **⚠️ But FSQ text search matches NAMES, not categories** — "dump station"
+  returns *Union Station* and *Crêpe Station*, "shower" returns delicatessens.
+  So the honest claim is **evidence of absence via the only reachable
+  interface**, not proof of absence. The heuristic's own hits needed a second
+  hand-filter: 6 of 7 `primitive camping` matches are businesses (*Future
+  Primitive Brewing*, *Primitive Accents Body Piercing*); exactly one is a
+  campsite. Every accepted name is printed so the judgement can be re-made.
+- **NV could not be sampled by geometry at all.** The repo's `STATE_BOXES`
+  classifier returns `ambiguous` for essentially all of Nevada (its box sits
+  inside CA's), and a naive bbox pick handed back Sierra National Forest,
+  **California**. Caught it before it reached the sample. Selected NV by
+  **source provenance** (`nevada_state_parks`) instead. The documented
+  state-boundary limitation, hit from a new direction.
+- **Sample points were reused, not invented**, per the brief — metro from the
+  atlas-oddities/family-destinations verify scripts, rural from the browse
+  fixtures, with AZ and NV drawn from the TEST corpus because no fixture
+  existed. Recorded the resulting weakness plainly: only 2 of the 6 "rural"
+  points are genuinely remote; the rest sit beside small towns.
+- **Gates all exit 0** on both workspaces plus the build.
+
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 
 - **Closes the tooling gap the UT incident exposed.** AZ's
