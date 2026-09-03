@@ -14,6 +14,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 
 
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -398,6 +399,18 @@ written; this entry corrects them.
   commits cited by SHA.
 - Gates not run — docs-only diff, zero source files touched.
 
+## 2026-09-03 — Dry-run merge preview tool for the 136 SAME-bucket duplicate pairs. Read-only, previews only.
+
+Branch `merge-preview-same-pairs`, cut from `main` (not from PR #368/#369, both still open). New doc: `docs/investigations/2026-09-03-merge-preview-136-same-pairs.md`. New tool: `data/scripts/merge-preview-same-pairs.ts`. Outputs land in `.context/` (gitignored). Zero writes to either database. The tool refuses any argument matching `--apply|--write|--execute|--commit|--run|--do`.
+
+- **Canonical-side outputs match the parent investigation exactly.** 63 `other` · 60 `visitor` · 13 `either`, reproduced fresh against PROD this session — same as PR #368's §3 table.
+- **Data-flow observations, per §4 of the doc.** 58 pairs where the absorbed side has a description and the canonical does not; 20 where absorbed has a `photo_url` and canonical does not. Framed as "artifactual because `recompute_master_place()` re-resolves via `field_precedence` after a repoint" — confidence flagged as strong inference (from reading the migration source) not from executing a recompute this session.
+- **38 pairs are ALREADY linked via `place_relationships`.** Spot-checked 6 of 38: canonical row as PARENT, absorbed as CHILD (SHP-contains-landmark shape). Design tension named, not resolved: merging collapses a distinction the schema was deliberately built to preserve.
+- **2 canonical-picks-leaner cases surfaced.** `Grayland Beach OBA` (sc=1) vs `Grayland Beach` (sc=2); `Fort Churchill State Park` (sc=1) vs `Fort Churchill Historic State Monument` (sc=2). Both fall out of the "both GIS-backed, prefer the untagged home" tiebreaker. Flagged as a question, not fixed.
+- **Confidence levels used throughout the doc** per the ask: "directly verified" (queried this session), "strong inference" (reasoned from source), or "unverified / estimated" (guessed or not checked). Explicit key in §8.
+- **Five questions passed up to Adam in §10** rather than filed as backlog. Per the brief, no speculative BACKLOG additions.
+- **Not verified this session.** Whether `field_precedence` yields the "right" resolution per pair (needs a recompute simulator); whether the 32 unspot-checked already-linked pairs all have the canonical-as-parent direction (likely, but only 6 confirmed); whether the two canonical-picks-leaner cases are miscategorizations vs the intended outcome.
+
 ## 2026-09-02 (later 34) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
 
 *(Numbered 34, not 31: this session ran on a branch cut from `9d936af`, before #365 (later 30-32) and #361 (later 33) merged. Numbered to land after them — the number is merge order, not clock order.)*
@@ -507,6 +520,7 @@ written; this entry corrects them.
   Google-dependency reduction proceeds, since those are precisely the tiles it
   would not affect.
 
+<<<<<<< HEAD
 ## 2026-09-02 (later 33) — CA state_parks "NP" suffix identified as Natural Preserve SubUnit; 4 sort-pass UNCLEAR pairs reclassified to DIFFERENT.
 
 Investigation only. Read-only queries against PROD and TEST; no writes, no schema changes, no code changes. Doc: `docs/investigations/2026-09-02-ca-np-designation.md`.
@@ -529,6 +543,8 @@ Follow-up on PR #368's own self-review, which flagged four verification gaps. Re
 - **Correction to PR #368 wording.** The NP doc's phrase "63 source_records → 62 distinct master_places (some NPs share a master_place)" is loose — the actual mechanism is one unlinked record, not sharing. Documented in the follow-up doc; PR #368 itself not touched.
 - **Also: TEST duplicate-classifier run completed** and reported 775 broad pairs on TEST, matching the prior investigation's number. Not re-classified per-bucket (not needed for any of the four items).
 
+=======
+>>>>>>> 03d0b6e (feat(data): dry-run merge preview tool for the 136 SAME-bucket duplicate pairs)
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
 Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the

@@ -106,6 +106,19 @@
 **Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
 
 **Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+# STATE — branch `merge-preview-same-pairs` · 2026-09-03 — dry-run merge preview for the 136 SAME-bucket pairs; read-only tool + doc landed.
+
+(**newest truth: `data/scripts/merge-preview-same-pairs.ts` produces a per-pair merge preview for the 136 SAME-bucket duplicates from the parent cross-source investigation. Read-only. No writes to either database. Refuses `--apply|--write|--execute|--commit|--run|--do` outright.**
+
+Canonical-side outputs on fresh PROD data: 63 `other` · 60 `visitor` · 13 `either` — matching PR #368's §3 table. Corpus-wide: ~125 `source_record` repoints across 123 decidable pairs; 0 `master_place_generated_content` and 0 `master_place_photo_candidate` rows to move (neither table populated for these pairs today); 57 pairs touching `place_relationships` of which **38 are already linked to each other** via `contained_in` — a design tension named in §3 of the doc, not resolved. Two canonical-picks-leaner edge cases surfaced (Grayland Beach OBA, Fort Churchill SP) — flagged, not corrected.
+
+Doc: `docs/investigations/2026-09-03-merge-preview-136-same-pairs.md`. Confidence key in §8; five questions for Adam in §10 (rather than speculative backlog items).
+
+**PR #368 and PR #369 remain open/unmerged.** This branch is cut from `main` and doesn't depend on either — the tool re-derives its input from `.context/prod-pairs-bucketed-fresh.json` on disk (produced last session) with a fresh prefix-resolver query on the 28,506 PROD master_place ids (zero prefix collisions). To reproduce from a clean workspace, either restore PR #368's sort script or feed the tool a `--input` file of your own.)
+
+---
+
 # STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
 
 (**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
