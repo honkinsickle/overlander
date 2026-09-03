@@ -1,5 +1,57 @@
 # Backlog — open work
 
+## Two apparent web-client defects — CODE-READING ONLY, NEITHER REPRODUCED (2026-09-02)
+
+Surfaced by the read-only surface trace,
+`docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`. **Both are
+deductions from source, not observations. Confirm at runtime before acting** —
+either could be wrong for a reason the code doesn't show.
+
+- **1. `urban` / `interest` chips on the day-scoped browse panel look like they
+  return HTTP 400.** `browseCategoryToSlide` (`lib/trip-browse/palette.ts:58-63`)
+  is now **total** — it returns `"urban"` / `"interest"` rather than null — so
+  the panel's `.filter((k) => k !== null)`
+  (`components/trip/category-browse-panel.tsx:310`) can no longer drop anything,
+  and `?categories=urban` reaches the route. The route validates against
+  `SLIDE_CATEGORIES` (`app/api/trip-browse/[tripId]/[dayId]/route.ts:16-24`), a
+  7-key list that **deliberately excludes** both because their live query sets
+  are empty — so it takes the `bad` branch at `:133-141` and 400s. The panel
+  renders that as an `HTTP 400` error box, not the empty state its own comment
+  at `:302-305` predicts.
+  **Root shape:** one constant is doing two jobs — "what `all` expands to" and
+  "what is a legal request". Those want to differ for corpus-backed buckets.
+  **Fix sketch:** split the constant; keep `urban`/`interest` valid as requests
+  but out of the `all` expansion, so they fall through to the federated half.
+
+- **2. Find Nearby's Water fill / Showers / Dump stations tiles appear
+  structurally unable to return a result.** They target `water`, `shower` and
+  `dump_station` (`components/trip/find-nearby-panel.tsx:198, :212, :219`) —
+  all three in `SUPPRESSED_PRIMARY_CATEGORIES`
+  (`lib/trip-browse/federated.ts:72-75`), which `hydratePlacesByIds` drops at
+  `lib/trip-browse/hydrate.ts:140`. Their live half is unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` too, so it short-circuits to `[]`. **The resolver
+  flag does not change this** — both `SEARCH_AREA_USE_RESOLVER` states route the
+  bbox federated half through the same `hydratePlacesByIds`
+  (`app/api/search-area/handler.ts:194` legacy,
+  `lib/places/resolve-places.ts:497` resolver).
+  **Note the near-miss:** the tile list's comment
+  (`find-nearby-panel.tsx:80-83`) says the values were "verified against the
+  live Typesense `primary_category` facet". That is plausibly **true and still
+  compatible with an empty tile** — suppression happens downstream in
+  **hydration**, not in Typesense, so a facet-level check cannot see it.
+  **Fix is a product call, not obviously a code call:** drop the three tiles, or
+  narrow the suppression for the search-area path only (the suppression is
+  deliberate — `federated.ts:18-20` argues standalone amenities are "not cards
+  in their own right", which is a reasonable position for *browse* and a
+  debatable one for an explicit *search* for a dump station).
+
+**Related, no defect, worth a look if the Google-dependency reduction
+proceeds:** nothing in the Find Nearby UI distinguishes a corpus-only tile from
+a live-backed one, and the "NEW" badge does not correlate with the difference
+(it predates the data wiring entirely — see the report). **6 of the 8
+NEW-badged tiles issue no live call at all**, so they are precisely the tiles a
+Google reduction would not affect.
+
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 
 Same physical park unit represented by two separate master_places, ~87 m apart:
