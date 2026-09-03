@@ -1,6 +1,32 @@
 # Backlog — open work
 
 
+
+
+## CA state_parks — 13 remaining divergent-UNITNBR records on PROD (2026-09-03, PROD)
+
+**Status: partially resolved.** #375 landed the code fix
+(`dissolveBoundaries` now respects `disambiguateBy: "UNITNAME"`) and
+surgically fixed the observably-broken record on PROD (UNITNBR=622,
+Agua Caliente / Anza-Borrego). Full scan of the CA DPR ParkBoundaries
+source in #375 found **14 divergent-UNITNAME UNITNBRs total** on the
+source side; the surgical PROD fix only touched **1** (622). The other
+**13** still carry aggregated polygons on PROD (they were not producing
+observable downstream damage in the merge-preview or duplicate-sort work
+at the time; details in `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`
+§1.2 + §5.1).
+
+**Concrete follow-up:** run the fixed CA state_parks ingest against PROD
+(`npm run -w data ingest:manual -- --source state_parks --state CA` with
+PROD `.env`). This will split each of the 13 remaining aggregated records
+into per-UNITNAME records (alphabetical winner keeps `{UNITNBR}` external_id;
+others get `{UNITNBR}-{slug}` external_ids). Verified equivalent behavior on
+TEST during #375.
+
+**Also not verified:** whether OR / UT / WA sources have analogous bugs
+(their `groupBy` is a name-based field, so structurally less likely — not
+scanned in #375).
+
 ## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
 
 Full data: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.
@@ -315,6 +341,21 @@ searchable places), may be a duplication users experience as noise. Would need:
 
 No prescription here — the investigation surfaced the class; the product
 decision is separate.
+
+## PROD — one pending `place_match` on the second Los Penasquitos Marsh NP polygon (2026-09-02, PROD)
+
+CA DPR's `ParkBoundaries` layer emits two polygons named "Los Penasquitos Marsh NP" (different `GISID` / `FID` / `UNITNBR` / `Shape__Area`, Point centroids ~459 m apart — legitimately two source-side features under one UNITNAME). On PROD:
+
+- Record A (`state_parks:CA:park:640`) — deterministic auto-link to `master_place` `46561990-1243-454d-8a40-a07d11aeef11`.
+- Record B (`state_parks:CA:park:fec71bff-7bde-49ab-a6e6-314dca964cea`, `source_record.id = e41d6e18-8900-4fac-8381-8dcc7beb252c`) — `place_match.status = pending`, `match_method = blended_residual`, `combined_confidence = 0.60`, `distance_meters = 458.29`, suggested `master_place_id = 46561990-…`. Never triaged. `master_place_id` still `null` on the source_record.
+
+Effect: Record B's polygon contributes nothing to search on PROD until this triage clears. Only one unlinked CA state_parks SubUnit on PROD (measured this session).
+
+**Precedent already set on TEST.** On TEST both records point at the same mp (`edfa4e0b-…`); the pending row was manually confirmed by Adam on 2026-08-20 (`resolved_by = adam_triage_2026-08-20`). Applying the same decision on PROD is straightforward.
+
+**Mechanism note.** This is a manifestation of the same `100 m` distance-clip pattern that produced the 43 self-created duplicates: identical name + 100–500 m centroid distance → `blended_residual = 0.4×0 + 0.4×1.0 + 0.2×1.0 = 0.60`, below the 0.85 auto-link bar. Not a bug in ingest or in ER.
+
+See `docs/investigations/2026-09-02-np-verification-followup.md` §4.
 
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 

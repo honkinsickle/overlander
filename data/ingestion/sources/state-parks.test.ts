@@ -313,6 +313,110 @@ describe("dissolveBoundaries", () => {
     const result = dissolveBoundaries(features, "UNITNBR", "GlobalID");
     expect(result.length).toBe(2);
   });
+
+  // ── disambiguateBy behavior (the UNITNBR=622 fix) ─────────────────────
+  //
+  // See docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md. CA's
+  // source has 14 UNITNBR values shared across features with different
+  // UNITNAMEs; without disambiguation the polygons get merged. The
+  // Agua Caliente / Anza-Borrego case is the observably-broken instance.
+
+  it("splits divergent-UNITNAME features under one UNITNBR (Agua Caliente / Anza-Borrego)", () => {
+    const features = [
+      feature(
+        { UNITNBR: "622", UNITNAME: "Agua Caliente County Park (ABDSP)", GlobalID: "aa" },
+        polyGeom([ring]),
+      ),
+      feature(
+        { UNITNBR: "622", UNITNAME: "Anza-Borrego Desert SP", GlobalID: "bb" },
+        polyGeom([[[-115, 33], [-114, 33], [-114, 34], [-115, 34], [-115, 33]]]),
+      ),
+    ];
+    const result = dissolveBoundaries(features, "UNITNBR", "GlobalID", "UNITNAME");
+    expect(result.length).toBe(2);
+    const agua = result.find((u) => u.secondaryKey === "Agua Caliente County Park (ABDSP)")!;
+    const anza = result.find((u) => u.secondaryKey === "Anza-Borrego Desert SP")!;
+    expect(agua).toBeDefined();
+    expect(anza).toBeDefined();
+    // Both share the primary but only the alphabetical loser is divergent
+    // (Agua Caliente < Anza-Borrego).
+    expect(agua.primaryKey).toBe("622");
+    expect(anza.primaryKey).toBe("622");
+    expect(agua.divergent).toBe(false); // alphabetical winner keeps the base external_id
+    expect(anza.divergent).toBe(true);
+    // Each unit carries only its own polygon (not the merged pair).
+    expect(agua.members.length).toBe(1);
+    expect(anza.members.length).toBe(1);
+  });
+
+  it("dissolves features with identical UNITNAME under one UNITNBR (Fort Ross-style)", () => {
+    const features = [
+      feature(
+        { UNITNBR: "207", UNITNAME: "Fort Ross SHP", GlobalID: "aaa" },
+        polyGeom([ring]),
+      ),
+      feature(
+        { UNITNBR: "207", UNITNAME: "Fort Ross SHP", GlobalID: "bbb" },
+        polyGeom([ring]),
+      ),
+    ];
+    const result = dissolveBoundaries(features, "UNITNBR", "GlobalID", "UNITNAME");
+    expect(result.length).toBe(1);
+    expect(result[0].primaryKey).toBe("207");
+    expect(result[0].secondaryKey).toBe("Fort Ross SHP");
+    expect(result[0].divergent).toBe(false);
+    expect(result[0].stableKeys.size).toBe(2);
+    expect(result[0].members.length).toBe(2);
+  });
+
+  it("treats trailing-whitespace UNITNAMEs as identical (Bidwell Mansion SHP case)", () => {
+    const features = [
+      feature(
+        { UNITNBR: "139", UNITNAME: "Bidwell Mansion SHP", GlobalID: "aaa" },
+        polyGeom([ring]),
+      ),
+      feature(
+        { UNITNBR: "139", UNITNAME: "Bidwell Mansion SHP ", GlobalID: "bbb" },
+        polyGeom([ring]),
+      ),
+    ];
+    const result = dissolveBoundaries(features, "UNITNBR", "GlobalID", "UNITNAME");
+    expect(result.length).toBe(1);
+    expect(result[0].divergent).toBe(false);
+  });
+
+  it("without disambiguateBy, keeps the pre-fix merge behavior (existing state_parks_er PROD compat)", () => {
+    const features = [
+      feature(
+        { UNITNBR: "622", UNITNAME: "Agua Caliente County Park (ABDSP)", GlobalID: "aa" },
+        polyGeom([ring]),
+      ),
+      feature(
+        { UNITNBR: "622", UNITNAME: "Anza-Borrego Desert SP", GlobalID: "bb" },
+        polyGeom([ring]),
+      ),
+    ];
+    const result = dissolveBoundaries(features, "UNITNBR", "GlobalID");
+    expect(result.length).toBe(1); // merged into one, as before the fix
+    expect(result[0].members.length).toBe(2);
+    expect(result[0].divergent).toBe(false);
+  });
+
+  it("handles 3+ features under a shared UNITNBR with all divergent UNITNAMEs (Mount Diablo SP style)", () => {
+    const features = [
+      feature({ UNITNBR: "203", UNITNAME: "Mount Diablo SP", GlobalID: "1" }, polyGeom([ring])),
+      feature({ UNITNBR: "203", UNITNAME: "Mount Diablo SP - Diablo Foothills Regional Park", GlobalID: "2" }, polyGeom([ring])),
+      feature({ UNITNBR: "203", UNITNAME: "Mount Diablo SP - Morgan Territory Regional Preserve", GlobalID: "3" }, polyGeom([ring])),
+    ];
+    const result = dissolveBoundaries(features, "UNITNBR", "GlobalID", "UNITNAME");
+    expect(result.length).toBe(3);
+    // Alphabetical winner is "Mount Diablo SP" (comes before hyphenated variants).
+    const winner = result.find((u) => u.secondaryKey === "Mount Diablo SP")!;
+    expect(winner.divergent).toBe(false);
+    const others = result.filter((u) => u.secondaryKey !== "Mount Diablo SP");
+    expect(others.every((u) => u.divergent)).toBe(true);
+    expect(others.length).toBe(2);
+  });
 });
 
 // ── buildAzAggRow ────────────────────────────────────────────────────────

@@ -57,6 +57,17 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   after the write instead of trusting its success, then shortened and
   re-confirmed.
 
+## 2026-09-03 (later 7) — Merge queue drained: PRs #368 → #369 → #370 → #372 → #374 → #375 all landed on `main` in dependency order.
+
+Six PRs merged in one session with all conflicts resolved mechanically (newest-at-top preservation on STATE.md/LOG.md/BACKLOG.md; add/add conflict on `data/scripts/merge-preview-same-pairs.ts` resolved by taking v2 from #374 as it explicitly supersedes v1 from #370).
+
+- **Order used:** #368 (parent NP + cross-source investigation) → #369 (verification pass on #368) → #370 (dry-run merge preview v1) → #372 (38-pair verdict) → #374 (merge preview v2 + n-way + AC exclusion; supersedes v1's tool file) → #375 (UNITNBR root-cause fix + PROD write). Order derived from content dependencies (each PR's doc references artifacts from earlier PRs).
+- **All CI required checks passed on each rebased PR:** `typecheck`, `test`, `test-web`, `build`. No CI failures required backing out. `test-web` (added by #376 earlier the same day) fired on all six after rebase.
+- **Final `main` tip:** `7aea8eb` (#375). `git log --oneline -20` shows the 6 merges on top of `#376`.
+- **BACKLOG cleanup:** #374 added a `dissolveBoundaries UNITNBR` follow-up item; #375 landed the code fix + surgical PROD fix for the observably-broken record (UNITNBR=622). Reframed the item to reflect what's actually left: 13 remaining structurally-affected PROD records, cleared on next full CA state_parks re-ingest. Full-remove not done because the PROD remainder is a real (though non-buggy) follow-up.
+- **Confidence: directly verified.** Every merge status confirmed via `gh pr view --json state,mergedAt`; conflict resolutions preserved content from both sides (verified via `grep -c` on distinctive strings after each resolve); typecheck passes on both workspaces on the final `main` tip.
+- **Not verified this session:** whether the merged `main` behaves correctly at runtime for anything beyond typecheck (the merges were doc-heavy plus one code fix that had TEST re-ingest verification before merge in its own PR).
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -148,6 +159,18 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   `node:http` was not covered.
 
 
+## 2026-09-03 (later 5) — Root-cause fix for the CA state_parks UNITNBR-dissolve bug. Code + tests + TEST re-ingest + surgical PROD write (first of the thread).
+
+Follow-up on PR #374's §5 scoped plan. Code fix landed in `data/ingestion/sources/state-parks.ts`; TEST re-ingested; PROD surgical fix executed for UNITNBR=622 (the one observably-broken record). **First PROD writes of this whole PR chain.** New doc: `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`.
+
+- **Root cause confirmed via CA DPR ArcGIS query.** CA's ParkBoundaries source has 461 features under 56 UNITNBRs with ≥2 features; **14 of those (post-whitespace-normalize) have features with divergent UNITNAMEs.** At least 3 are genuinely different parks under one UNITNBR (622 Agua Caliente/Anza-Borrego; 534 Huntington City Beach/Bolsa Chica SB; 449 Point Lobos SMR/SNR). The other 11 are main-park + satellite-property patterns. All 14 were being merged into single oversized polygons by the pre-fix `dissolveBoundaries`.
+- **Code fix.** Added `EndpointConfig.disambiguateBy`, set to `"UNITNAME"` on CA config only. `dissolveBoundaries` now groups by (UNITNBR, UNITNAME_trimmed) when configured; alphabetically-first UNITNAME keeps `{UNITNBR}` external_id, others get `{UNITNBR}-{slug}`. 5 new tests including the Agua Caliente split, Fort Ross unchanged-behavior baseline, and Mount Diablo 3-way split.
+- **TEST re-ingest verified.** Full CA state_parks ingest on TEST: 992 fetched, 933 inserted, 0 errors. All 14 divergent UNITNBRs split into per-UNITNAME records. UNITNBR=622 point-in-polygon: Agua Caliente polygon (2 parts) does NOT contain ABDSP visitor Point ✓; Anza-Borrego polygon (248 parts) does ✓.
+- **PROD surgical fix executed for UNITNBR=622 only.** 9-step script (`.context/apply-622-fix.py --confirm`): UPDATE existing `:622` record → Agua Caliente polygon only (250→2 parts), INSERT `:622-Anza-Borrego_Desert_SP`, repoint visitor SR to NPS Anza-Borrego mp, update place_match rows to `manual_correction`, recompute both mps. Post-fix: Agua Caliente CP mp `source_count` 2→1; NPS Anza-Borrego mp 1→3 (NPS + CA visitor + new state_parks).
+- **Post-fix classifier: 426 pairs (was 427).** The AC pair no longer forms because the two mps are correctly separated. Bucket state: **SAME 135 · DIFFERENT 246 · UNCLEAR 2** (unchanged for SAME; DIFFERENT drops 1 from PR #372's post-verdict 247 because the pair is gone entirely, not just moved).
+- **Not verified this session.** Whether the other 13 divergent UNITNBRs on PROD are causing observable downstream damage beyond the merge-preview scope; whether OR/UT/WA sources have analogous bugs (their `groupBy` is a name-based field, so structurally less likely — not scanned).
+- **BACKLOG note.** The UNITNBR-dissolve backlog item PR #374 added is now moot on the observably-broken case. That item lives on PR #374's branch (not on main yet), so nothing to remove here — noted in the new doc's §9.
+
 ## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
 
 - **Reproduced both before touching code, as the brief required — and the two
@@ -205,6 +228,29 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   ADR (bug fix, and the product calls are deferred). `DATA_INVENTORY.md`
   untouched — no data changed.
 - Gates: data typecheck, web typecheck and `next build` all exit 0.
+
+## 2026-09-03 (later 4) — Verdict on the 38 already-related pairs from PR #370: 37 are true same-entity duplicates, 1 excluded.
+
+Follow-up on PR #370's §3 design tension. Read-only. Every one of the 38 `place_relationships` rows involving a SAME-bucket pair was queried; all 38 are `contained_in`; 37 have canonical (state_parks GIS row w/ polygon) as PARENT and absorbed (atlas_oddities / NPS / RIDB Point-only row) as CHILD; 1 has direction reversed because the canonical row has no polygon and the absorbed row does. New doc: `docs/investigations/2026-09-03-38-related-pairs-verdict.md`.
+
+- **Verdict: 37 of 38 are same-entity duplicates.** The `contained_in` row is a mechanical byproduct of `ST_Covers(parent_polygon, child_point)` — geometrically true, conceptually redundant. A merge would need to drop the edge (post-merge parent==child would violate the schema's `no_self_ref_chk`). Classifier's SAME assignment stands.
+- **1 exception — `Agua Caliente County Park (ABDSP)` ↔ NPS `Anza-Borrego Desert State Park`.** Pair-formation is coherent (visitor source_record is literally named `Anza-Borrego Desert State Park ®`, 285 m from NPS's ABDSP, similarity 1.000) but the canonical master_place has federated TWO source_records for DIFFERENT parks (Agua Caliente CP + ABDSP) under one row. Merging as-is would compound the upstream federation bug. Recommend: split the canonical row first (upstream state_parks-federation fix), then re-classify. Removes 1 pair from SAME, adds 1 to DIFFERENT — new bucket state: **SAME 135 · DIFFERENT 247 · UNCLEAR 2**.
+- **Two 3-way duplicate clusters worth naming.** `This Is The Place` (UT) appears as canonical in 2 pairs (NPS + RIDB variants of the heritage park). `Ginkgo Petrified Forest` (WA) appears as canonical in 2 pairs (NPS "National Natural Landmark" + atlas_oddities variants). A real merge tool must either process pair-by-pair with in-flight state updates or group these into n-way merges upfront.
+- **Direction pattern was uniform.** 37 canonical=parent + 1 canonical=child (Fort Churchill State Park's canonical has no polygon; the absorbed does). All 38 canonicals are `state_parks`-backed.
+- **Not verified this session.** Whether the parent polygons still cover the child points *today* (relationships `computed_at 2026-09-02`); whether other pairs among the 37 hide canonical-federation issues similar to Agua Caliente (I spot-checked source_record names but did not query for complete rosters); whether merging is the right product decision (a UX question).
+- **One concrete question passed up in §8** — should the Agua Caliente canonical row be split as a prerequisite? Not filed as backlog per the brief.
+
+## 2026-09-03 (later 5) — Merge preview v2: n-way cluster handling, Agua Caliente exclusion, federation-bug plan (not executed).
+
+Follow-up on PR #372's design tension + user's ask for n-way support in PR #370's tool. Read-only. New tool: `data/scripts/merge-preview-same-pairs.ts` supersedes PR #370's file. New doc: `docs/investigations/2026-09-03-merge-preview-v2-nway.md`. No writes to either database — the Agua Caliente fix was investigated but not executed (see below).
+
+- **Root-caused the Agua Caliente federation bug.** CA state_parks GIS record `state_parks:CA:park:622` labeled `Agua Caliente County Park (ABDSP)` actually carries a 250-part MultiPolygon whose bounding box (63 km × 102 km) covers all of Anza-Borrego. Cause: CA DPR's ParkBoundaries source has two distinct features sharing `UNITNBR = "622"`, and `dissolveBoundaries` in `data/ingestion/sources/state-parks.ts:208` groups by that field, so it merged both polygons under the first feature's `props`. The visitor SR `california_state_parks:638` (name `"Anza-Borrego Desert State Park ®"`) then hit `spatial_containment` because the polygon covers its Point — the ingest and ER both did what the code said; the source data has divergent features under one UNITNBR.
+- **Fix scoped but NOT executed.** A 2-UPDATE + 2-RPC plan documented in §5.3: repoint the visitor SR to the existing NPS Anza-Borrego mp (`2e118c6f-…`), recompute both. First PROD write of the thread, fixes symptom not root cause, and `field_precedence` merged-mp canonical_name outcome is unverified. Per brief's "if ambiguous or risky, stop and report" — stopped. Question passed up in §8.
+- **n-way cluster detection via union-find + score-based group picker.** Tool consolidates 135 pairs into **123 merge groups**: 113 size-2, 9 size-3, 1 size-4 (Fort Churchill NV).
+- **10 n-way clusters (size > 2) total — 8 more than the 2 named in the ask.** By state: 3 CA, 2 WA, 2 UT, 2 OR, 1 NV. 9 of 10 have a decidable canonical (state_parks GIS wins); 1 undecidable (Hat Rock OR, 3 members none with state_parks).
+- **Bug in v1's group logic surfaced by group 78 (Fort Rock OR).** v1 reduced pairwise: `A vs B` returned "either" (neither has state_parks), so v1 short-circuited before comparing C (which has state_parks). v2's score-based ranking correctly picks C. Same effect on group 51 (California Citrus) and group 39 (Empire Mine). All three now decidable.
+- **Set size: 136 input − 1 Agua Caliente exclusion = 135 processed.** Per-pair canonical distribution 63 other / 59 visitor / 13 either. The `visitor` count differs from PR #370's 60 by exactly the Agua Caliente exclusion (that pair was `visitor` in v1 because the corrupted canonical was state_parks-backed).
+- **Also: 8 groups total have undecidable canonicals** — 7 are the classic size-2 `either` cases (Old Town San Diego SHP, Salton Sea SRA, etc.), 1 is the Hat Rock 3-way cluster. Score-based ties surface these deterministically; v2 flags rather than guesses.
 
 ## 2026-09-03 (later 3) — Sampled live-source coverage. Two "just needs wiring" rows from #364 reverse under measurement.
 
@@ -441,6 +487,18 @@ written; this entry corrects them.
   commits cited by SHA.
 - Gates not run — docs-only diff, zero source files touched.
 
+## 2026-09-03 — Dry-run merge preview tool for the 136 SAME-bucket duplicate pairs. Read-only, previews only.
+
+Branch `merge-preview-same-pairs`, cut from `main` (not from PR #368/#369, both still open). New doc: `docs/investigations/2026-09-03-merge-preview-136-same-pairs.md`. New tool: `data/scripts/merge-preview-same-pairs.ts`. Outputs land in `.context/` (gitignored). Zero writes to either database. The tool refuses any argument matching `--apply|--write|--execute|--commit|--run|--do`.
+
+- **Canonical-side outputs match the parent investigation exactly.** 63 `other` · 60 `visitor` · 13 `either`, reproduced fresh against PROD this session — same as PR #368's §3 table.
+- **Data-flow observations, per §4 of the doc.** 58 pairs where the absorbed side has a description and the canonical does not; 20 where absorbed has a `photo_url` and canonical does not. Framed as "artifactual because `recompute_master_place()` re-resolves via `field_precedence` after a repoint" — confidence flagged as strong inference (from reading the migration source) not from executing a recompute this session.
+- **38 pairs are ALREADY linked via `place_relationships`.** Spot-checked 6 of 38: canonical row as PARENT, absorbed as CHILD (SHP-contains-landmark shape). Design tension named, not resolved: merging collapses a distinction the schema was deliberately built to preserve.
+- **2 canonical-picks-leaner cases surfaced.** `Grayland Beach OBA` (sc=1) vs `Grayland Beach` (sc=2); `Fort Churchill State Park` (sc=1) vs `Fort Churchill Historic State Monument` (sc=2). Both fall out of the "both GIS-backed, prefer the untagged home" tiebreaker. Flagged as a question, not fixed.
+- **Confidence levels used throughout the doc** per the ask: "directly verified" (queried this session), "strong inference" (reasoned from source), or "unverified / estimated" (guessed or not checked). Explicit key in §8.
+- **Five questions passed up to Adam in §10** rather than filed as backlog. Per the brief, no speculative BACKLOG additions.
+- **Not verified this session.** Whether `field_precedence` yields the "right" resolution per pair (needs a recompute simulator); whether the 32 unspot-checked already-linked pairs all have the canonical-as-parent direction (likely, but only 6 confirmed); whether the two canonical-picks-leaner cases are miscategorizations vs the intended outcome.
+
 ## 2026-09-02 (later 34) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
 
 *(Numbered 34, not 31: this session ran on a branch cut from `9d936af`, before #365 (later 30-32) and #361 (later 33) merged. Numbered to land after them — the number is merge order, not clock order.)*
@@ -560,6 +618,17 @@ Investigation only. Read-only queries against PROD and TEST; no writes, no schem
 - **PR self-contained by cherry-pick.** The referenced parent investigation doc `2026-09-02-cross-source-duplicates.md` and its script `data/scripts/crosssource-duplicate-investigation.ts` were on branch `investigate-crosssource-duplicates` (unpushed, previously). Cherry-picked both commits onto this branch so the NP doc's cross-reference is not a broken link on `main`. The unpushed sibling branch remains — nothing was moved off it, just copied on.
 - **Confidence limit.** NP = Natural Preserve is inferred (CP directly confirmed via a CA State Parks Foundation write-up; SW canonical; NP = the remaining classification). A CA DPR ParkBoundaries data-dictionary verification is `[unverified this session]` — two DPR PDFs I could reach returned only binary content through WebFetch. If a merge tool ever depends on this reading, verify against the ParkBoundaries schema before acting.
 - **Explicitly out of scope.** Writing `place_relationships (contained_in)` from NPs to parent units. Only 9 of the 62 NP master_places surface in the 384-pair sort set; a real relationship-build would need to walk all 62 (and to decide whether the model warrants the build at all — Natural Preserves as independent searchable rows may be the right product answer already).
+
+## 2026-09-02 (later 34) — Verification pass on PR #368's NP investigation. Three of four claims confirmed; one upgraded.
+
+Follow-up on PR #368's own self-review, which flagged four verification gaps. Read-only, no writes, no touching PR #368. New doc: `docs/investigations/2026-09-02-np-verification-followup.md`. PR #368 remains open/unmerged; this branch (`verify-np-followup`) is cut from `main`, so its "later 33" entry is not yet present here — will land with PR #368 when merged.
+
+- **Fresh classifier run vs `.context/` reuse.** Re-ran the sort script against live PROD and re-applied the classifier from scratch. Fresh CSV is byte-identical to the prior session's, and the classifier reproduced pre-NP `SAME 136 · DIFFERENT 242 · UNCLEAR 6` and post-NP `136 · 246 · 2` exactly. **No drift, no error.**
+- **Full-set grep for CP/SW/NP.** Grepped `\bNP$` / `\bCP$` / `\bSW$` across both name columns of the full 384-pair set (rather than eyeballing the printed unclear-bucket sample). Same counts as claimed: 9 NP · 1 CP · 2 SW, all in DIFFERENT. **Eyeballed counts were exhaustive.**
+- **NP = Natural Preserve via `curl` + `pdftotext`.** Downloaded three CA DPR PDFs, extracted text. **Direct confirmation obtained**: a DPR classification resolution names *"Tatlun Cultural Preserve, San Jose Natural Preserve and Pt. Lobos Ridge Natural Preserve"* — 1↔1 with corpus rows `Tatlun CP`, `San Jose Creek NP`, `Point Lobos Ridge NP`. A separate DPR rulemaking says *"approximately 61 Natural Preserves"* — corpus has 63 " NP" rows (one is a double-record; see next bullet). NP = Natural Preserve now stands on documentary evidence, not inference.
+- **Los Penasquitos Marsh NP double-record — not a quirk.** The two records are legitimate CA DPR polygons (different GISID/FID/UNITNBR/area) sharing a UNITNAME, ~459m apart. On TEST both attach to one mp via Adam's 2026-08-20 triage. On PROD one is deterministic-auto-linked, the OTHER is `place_match.status = pending` (`blended_residual`, conf=0.60, dist=458m) — never triaged. Same 100m-distance-clip mechanism as the 43 self-created duplicates. It is the *only* unlinked CA state_parks SubUnit on PROD (152 unlinked state_parks rows total; one CA-SubUnit under filter). Follow-up: apply the same TEST triage decision on PROD to close.
+- **Correction to PR #368 wording.** The NP doc's phrase "63 source_records → 62 distinct master_places (some NPs share a master_place)" is loose — the actual mechanism is one unlinked record, not sharing. Documented in the follow-up doc; PR #368 itself not touched.
+- **Also: TEST duplicate-classifier run completed** and reported 775 broad pairs on TEST, matching the prior investigation's number. Not re-classified per-bucket (not needed for any of the four items).
 
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 

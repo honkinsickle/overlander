@@ -26,6 +26,20 @@
 
 ---
 
+# STATE — branch `docs/wrap-merge-368-through-375` · 2026-09-03 (later 25) — six PRs drained in one merge queue. Main is now consistent post-#375.
+
+(**newest truth: PRs #368, #369, #370, #372, #374, #375 all landed on `main` today, in dependency order, on top of #376's CI change. All required checks passed on each rebased PR; no CI failure required backing out. The Agua Caliente / Anza-Borrego duplicate pair no longer forms on PROD (#375's surgical fix), and the ingest code prevents this class of bug from recurring on future CA state_parks ingests.**
+
+**BACKLOG cleanup applied.** #374's UNITNBR-dissolve item is reframed: the code fix landed via #375, the observably-broken UNITNBR=622 record is fixed on PROD; the item now captures only the 13 remaining structurally-affected PROD records (fixable on next full CA state_parks re-ingest).
+
+**Confidence: directly verified.** Every PR's merged state confirmed via `gh pr view`; typecheck passes on `data` and `web`; STATE/LOG/BACKLOG content preserved through all mechanical conflict resolutions.
+
+**PRs on main tip (post-merge):** #368 `75207ba` · #369 `e0a1e14` · #370 `abc03f8` · #372 `c94222a` · #374 `9eff946` · #375 `7aea8eb` (final).
+
+**Not covered on this branch:** runtime testing beyond typecheck — the merged content is doc-heavy plus one code fix that had TEST re-ingest verification in its own PR before merge.)
+
+---
+
 # STATE — branch `wire-web-tests-into-ci` (pushed as `surface-pop2`) · 2026-09-03 (later 23) — **CI now runs the web test suite AND blocks on it. 714 tests that never executed automatically now gate every merge to `main`.**
 
 (**newest truth: no product code changed; nothing written to PROD. Two config lines, two test-file header corrections, doc updates.** *The local gate run included `npm run -w data test`, which routes at `SUPABASE_TEST_URL` exactly as CI's own `test` job does — the destructive `phase3a`/`phase3b` suites are excluded by `vitest.config.ts`, but "wrote nothing to TEST" is the config's stated intent, **not** something audited per-test here.*
@@ -55,6 +69,19 @@
 ---
 
 
+
+# STATE — branch `fix-state-parks-unitnbr-dissolve` · 2026-09-03 (later 24) — root-cause fix for CA state_parks UNITNBR-dissolve bug. Code + tests + TEST re-ingest + first PROD writes of this PR chain.
+
+(**newest truth: `dissolveBoundaries` in the CA state_parks ingester now honors `disambiguateBy: "UNITNAME"`, so features that share a UNITNBR but disagree on UNITNAME no longer merge into oversized MultiPolygons. Applied surgically to PROD for UNITNBR=622 (Agua Caliente/Anza-Borrego, the one observably-broken record). The Agua Caliente ↔ Anza-Borrego duplicate pair no longer forms in the classifier output — 427 pairs → 426. First PROD writes of the whole #368–#374 chain.**
+
+Scanned CA DPR source: 461 features under 56 multi-feature UNITNBRs; 14 have divergent UNITNAMEs (post-whitespace-normalize). 3 are genuinely different parks; 11 are main-park + satellite-property patterns. Code fix splits all 14 on next full re-ingest; PROD write this session was narrowly scoped to UNITNBR=622 per the brief's "affected record(s)" wording. Full details in `docs/investigations/2026-09-03-ca-unitnbr-dissolve-fix.md`.
+
+**Bucket state post-fix:** SAME 135 · DIFFERENT 246 · UNCLEAR 2 (was 135/247/2 after PR #372's manual verdict; the root-cause fix removes AC entirely instead of just re-classifying it). PROD writes: 3 UPDATEs on source_record, 2 INSERTs (1 source_record + 1 place_match), 2 recompute_master_place RPCs. All reversible if needed; verified in-session against the intended target state.
+
+**PRs #368, #369, #370, #372, #374 all remain open/unmerged.** This branch is cut from main and doesn't depend on any of them for correctness. Verification steps that need PR #368's sort script or PR #374's merge-preview tool restore those temporarily and delete after; working tree clean at commit.)
+
+---
+
 # STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
 
 (**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**
@@ -74,6 +101,28 @@
 **Docs touched:** `architecture/resolve-places-design.md` §D8 (the divergence it named was this defect — now marked resolved) and `architecture/resolve-places-day-scoped-browse-cutover-plan.md` (both referenced the renamed constant). No `decisions/` ADR — this is a bug fix, and the product calls it surfaced are explicitly deferred. `DATA_INVENTORY.md` untouched; no data changed.
 
 **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+# STATE — branch `investigate-38-related-pairs` · 2026-09-03 (later 22) — verdict on PR #370's 38 already-related pairs: 37 same-entity duplicates, 1 excluded.
+
+(**newest truth: PR #370's §3 design tension resolved by hand-classifying each of the 38 pairs. 37 are true same-entity duplicates whose `contained_in` relationship row is a geometric byproduct of `ST_Covers(parent_polygon, child_point)`. 1 exception — Agua Caliente CP (ABDSP) ↔ NPS Anza-Borrego — is a legitimate duplicate on top of an upstream state_parks-federation bug and should exit the SAME set until that bug is fixed.**
+
+Read-only pass. No writes to TEST or PROD, no code/schema changes. New doc: `docs/investigations/2026-09-03-38-related-pairs-verdict.md`. Confidence key in §7; one concrete question for Adam in §8.
+
+**New bucket state after this verdict:** SAME 135 · DIFFERENT 247 · UNCLEAR 2 (down from 136/246/2 in PR #369). One pair moved out of SAME.
+
+**Two 3-way duplicate clusters surfaced.** `This Is The Place` (UT) has two absorbed variants (NPS + RIDB); `Ginkgo Petrified Forest` (WA) has two (NPS "National Natural Landmark" + atlas_oddities). Consequence for a real merge tool: process pair-by-pair with in-flight state updates, or group into n-way merges upfront.
+
+**PR #368, PR #369, and PR #370 remain open/unmerged.** This branch is cut from `main` and reads PR #370's on-disk `.context/merge-preview-136.json` artifact for the 38-pair filter. Nothing on those PRs is touched.)
+
+# STATE — branch `fix-agua-caliente-and-nway-preview` · 2026-09-03 (later 23) — merge preview v2: n-way clusters + Agua Caliente federation-bug plan (not executed).
+
+(**newest truth: `data/scripts/merge-preview-same-pairs.ts` v2 supersedes PR #370's v1. Adds n-way merge groups via union-find over all 135 SAME pairs (135 = 136 raw − 1 Agua Caliente exclusion per PR #372). Score-based canonical picker corrects a v1 bug that mis-ordered pairwise reduction. Read-only. Zero writes to either database — the Agua Caliente fix was scoped but not executed.**
+
+135 pairs consolidate into 123 merge groups: 113 size-2, 9 size-3, 1 size-4 (Fort Churchill NV). **10 n-way clusters (size > 2) — 8 more than the 2 named in the ask.** 9 decidable + 1 undecidable (Hat Rock OR).
+
+**Agua Caliente root cause identified: shared `UNITNBR = "622"` in CA state_parks source.** `dissolveBoundaries` groups by UNITNBR, so it merged Agua Caliente CP + ABDSP polygons under one name. The polygon (250-part MultiPolygon spanning 63 km × 102 km) covers all of Anza-Borrego, which is why `spatial_containment` fires for any visitor SR at ABDSP center. Fix plan documented in §5.3 of the new doc (2 UPDATEs + 2 recomputes). Not executed — first PROD write of the thread, fixes symptom not root cause, `field_precedence` outcome unverified. Question in §8.
+
+New doc: `docs/investigations/2026-09-03-merge-preview-v2-nway.md`. Confidence key in §7. All PRs #368–#372 remain open/unmerged; this branch is cut from `main` and reads their on-disk `.context/` artifacts.)
 
 ---
 
@@ -134,6 +183,19 @@
 **Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
 
 **Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+# STATE — branch `merge-preview-same-pairs` · 2026-09-03 — dry-run merge preview for the 136 SAME-bucket pairs; read-only tool + doc landed.
+
+(**newest truth: `data/scripts/merge-preview-same-pairs.ts` produces a per-pair merge preview for the 136 SAME-bucket duplicates from the parent cross-source investigation. Read-only. No writes to either database. Refuses `--apply|--write|--execute|--commit|--run|--do` outright.**
+
+Canonical-side outputs on fresh PROD data: 63 `other` · 60 `visitor` · 13 `either` — matching PR #368's §3 table. Corpus-wide: ~125 `source_record` repoints across 123 decidable pairs; 0 `master_place_generated_content` and 0 `master_place_photo_candidate` rows to move (neither table populated for these pairs today); 57 pairs touching `place_relationships` of which **38 are already linked to each other** via `contained_in` — a design tension named in §3 of the doc, not resolved. Two canonical-picks-leaner edge cases surfaced (Grayland Beach OBA, Fort Churchill SP) — flagged, not corrected.
+
+Doc: `docs/investigations/2026-09-03-merge-preview-136-same-pairs.md`. Confidence key in §8; five questions for Adam in §10 (rather than speculative backlog items).
+
+**PR #368 and PR #369 remain open/unmerged.** This branch is cut from `main` and doesn't depend on either — the tool re-derives its input from `.context/prod-pairs-bucketed-fresh.json` on disk (produced last session) with a fresh prefix-resolver query on the 28,506 PROD master_place ids (zero prefix collisions). To reproduce from a clean workspace, either restore PR #368's sort script or feed the tool a `--input` file of your own.)
+
+---
+
 # STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
 
 (**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
@@ -208,6 +270,16 @@ The taxonomy, measured against PROD (TEST identical): 63 SubUnit rows are `NP`, 
 Reclassification of the prior sort's 6-pair UNCLEAR bucket: the 4 "SP/SB/SRA-vs-NP" pairs (Anderson Marsh, Burton Creek, Point Dume, Woodson Bridge) move to DIFFERENT. Updated: SAME 136 · DIFFERENT 246 · UNCLEAR 2 (remaining: Munson Creek Falls SNS ↔ Munson Creek SNA, and Berlin-Ichthyosaur SP ↔ Berlin).
 
 Explicitly out of scope: writing `place_relationships (contained_in)` from NPs to their parent units. 62 NP master_places on PROD; only 9 surfaced in the 384-pair set — a relationship-build pass would need to walk all 62, not just the 9. Whether to build that at all is a product decision, not a data-quality one.)
+
+# STATE — branch `verify-np-followup` · 2026-09-02 (later 34) — verification pass on PR #368's NP investigation: 3 of 4 claims confirmed, 1 upgraded.
+
+(**newest truth: PR #368's four self-reviewed verification gaps are closed. Bucket totals (SAME 136 · DIFFERENT 246 · UNCLEAR 2) reproduced exactly on fresh PROD data. CP/SW pair counts (1/2, all DIFFERENT) confirmed via full-set grep. NP = Natural Preserve elevated from inference to direct documentary confirmation via `curl` + `pdftotext` on CA DPR PDFs. The "Los Penasquitos Marsh NP double-record" upgraded from "minor quirk" to a named open triage item on PROD — one pending `place_match` at `blended_residual` conf 0.60, same mechanism as the 43 self-created duplicates.**
+
+Read-only pass. No writes to TEST or PROD, no code changes, no touching PR #368. Working tree clean before commit. New doc: `docs/investigations/2026-09-02-np-verification-followup.md`.
+
+**Branch note:** cut from `main`, not from PR #368's branch. PR #368 remains open/unmerged. The "later 33" masthead that PR #368 introduces is not present in this branch — will interleave on merge.
+
+**One concrete follow-up.** Apply Adam's TEST triage decision to PROD: confirm the pending place_match for the second Los Penasquitos Marsh NP polygon (source_record `e41d6e18-…`, external_id `state_parks:CA:park:fec71bff-…`) → attach to mp `46561990-…`. Filed in BACKLOG.md. Not applied here — this pass is verification only.)
 
 ---
 
