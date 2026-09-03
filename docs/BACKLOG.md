@@ -1937,25 +1937,28 @@ workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
 
-## `test-web` runs but is NOT a required status check — merges are not blocked by it (2026-09-03)
+## ~~`test-web` runs but is NOT a required status check~~ — RESOLVED same day (2026-09-03)
 
-**Adam's action, not a code change.** `main` is protected by a **ruleset**
+**RESOLVED 2026-09-03 11:51:07 -07:00** via `gh api --method PUT
+repos/honkinsickle/overlander/rulesets/19629589`, authorized by Adam.
+`required_status_checks` is now **`typecheck`, `test`, `build`, `test-web`**,
+confirmed by read-back with every other ruleset field byte-identical. See
+`LOG.md` (later 6) — a settings change leaves no trace in `git log`.
+
+The original finding, kept for the lesson: `main` is protected by a **ruleset**
 (id `19629589`), not classic branch protection — `…/branches/main/protection`
-returns 404 "Branch not protected", which is misleading if read alone. The
-ruleset's `required_status_checks` names exactly three contexts: **`typecheck`,
-`test`, `build`** `[read from the GitHub API 2026-09-03]`. The new **`test-web`**
-job is **not** among them, so a red web suite is visible on the PR and still
-mergeable.
+returns 404 "Branch not protected", which is misleading if read alone; the rules
+live under `/rules/`. The `test-web` job was added to `ci.yml` and reported on
+PRs while **not** being required, so a red web suite was visible and still
+mergeable. The guard reported without enforcing — the failure class the STANDING
+RULES name ("a check that cannot fail is not evidence"), one layer up from the
+code, and it survived a full self-review before being caught.
 
-Until it is added, the guard reports but does not enforce — which is the failure
-class the STANDING RULES name ("a check that cannot fail is not evidence"),
-one layer up from the code. **Fix: add `test-web` to the ruleset's required
-checks.** Fallback if a fourth required check is unwanted: move the step into the
-already-required `test` job and accept its shared-Supabase serialization.
-
-**Generalisable:** adding a CI job is only half of adding a gate. Whenever a job
-is added, check the ruleset's `required_status_checks` in the same pass —
-`gh api repos/<owner>/<repo>/rules/branches/main`.
+**Generalisable, and the reason this entry stays:** adding a CI job is only half
+of adding a gate. Whenever a job is added or **renamed**, check the ruleset's
+`required_status_checks` in the same pass —
+`gh api repos/<owner>/<repo>/rules/branches/main`. A rename silently
+un-requires the check with no error anywhere.
 
 ## The web `test` script can pass vacuously if tests move out of `src/` (2026-09-03)
 

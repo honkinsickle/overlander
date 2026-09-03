@@ -12,6 +12,37 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
+
+- **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
+  ruleset **19629589** (`main`, `enforcement: active`) was updated via
+  **`gh api --method PUT repos/honkinsickle/overlander/rulesets/19629589`** —
+  authorized by Adam in-session. `required_status_checks` went from
+  **`typecheck`, `test`, `build`** to **`typecheck`, `test`, `build`,
+  `test-web`** (all `integration_id: 15368`, GitHub Actions).
+  **This closes the gap flagged in `BACKLOG.md` and PR #376: the `test-web` job
+  existed and reported, but could not block a merge.**
+- **Recorded here because a settings change leaves no trace in `git log`.** Same
+  reason `db:push-verify`-bypassing DDL is called out in CLAUDE.md — the ledger
+  only knows what went through it. The pre-change ruleset JSON is saved at
+  `.context/ruleset-19629589-before-2026-09-03.json` (gitignored) as the
+  rollback reference.
+- **Verified by read-back, not by trusting the write.** A fresh `GET` of the
+  ruleset shows `test-web` literally present, and a field-by-field comparison
+  against the pre-change JSON confirms **everything else is byte-identical** —
+  `enforcement`, `conditions`, `bypass_actors`, and the `deletion` /
+  `non_fast_forward` / `pull_request` rules all unchanged. The full ruleset was
+  re-sent on the PUT (the API replaces the `rules` array wholesale), so
+  "nothing else moved" needed proving rather than assuming.
+- **Scope of the verification, stated plainly.** `…/rules/branches/main` now
+  lists all four contexts, and #376 targets `main` — so the rule applies to it.
+  That a **red** `test-web` will actually block the merge button is **strong
+  inference from ruleset semantics, not something forced**: all four checks are
+  currently green, so `mergeStateStatus: CLEAN` would read the same either way.
+  The real negative control — push a knowingly-failing test and confirm the
+  merge is blocked — was **not** run; it means committing a broken state to an
+  open PR, which is Adam's call to authorize.
+
 ## 2026-09-03 (later 5) — Wired the web test suite into CI. The `[param]` zero-collection was a glob quirk, not a broken file.
 
 - **Closed the item #373 flagged and deliberately deferred.** `web/package.json`

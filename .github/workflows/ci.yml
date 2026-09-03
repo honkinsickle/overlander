@@ -56,9 +56,10 @@ jobs:
     # assumed: the suite passes 714/714 with globalThis.fetch replaced by a
     # thrower, and passes here with no secrets wired.
     #
-    # ⚠️ NOT a required status check as of 2026-09-03. main's ruleset (19629589)
-    # requires `typecheck`, `test`, `build` only — so a red run here is visible
-    # but does not block merge. Add `test-web` to the ruleset to make it a gate.
+    # This job is a REQUIRED status check on main — added to ruleset 19629589
+    # on 2026-09-03, alongside `typecheck`, `test` and `build`. Renaming the job
+    # renames the check context and silently un-requires it; update the ruleset
+    # in the same change if you ever rename it.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
