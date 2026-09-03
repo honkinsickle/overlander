@@ -14,7 +14,8 @@
  * internal deps) to prove the Verified-before-Unverified sort end-to-end — the
  * one behaviour change the cutover plan flagged.
  *
- * Run: cd web && npx tsx --test 'src/app/api/trip-browse/[tripId]/[dayId]/handler.test.ts'
+ * Run: `npm run -w web test`. Passing this file's literal path to `--test`
+ * collects zero tests — see the note in the sibling route.test.ts.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

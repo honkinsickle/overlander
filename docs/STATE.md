@@ -1,3 +1,25 @@
+# STATE — branch `wire-web-tests-into-ci` · 2026-09-03 (later 23) — **CI now runs the web test suite. 714 tests that were never executed automatically now are — and none of them were failing.**
+
+(**newest truth: nothing written to TEST or PROD; no product code changed. Two config lines, two test-file header corrections, doc updates.**
+
+*Branch note: cut from `main` at `eeb66d6` (#373 merged). Scoped deliberately narrow — wiring only, per the brief.*
+
+**THE ROOT CAUSE OF THE ZERO-COLLECTION WAS THE GLOB, NOT THE FILE.** `node:test` treats a `--test` positional argument as a **glob pattern**, and `[tripId]` reads as a **character class** — so the literal path `src/app/api/trip-browse/[tripId]/[dayId]/route.test.ts` never matches itself and reports `tests 0 / pass 0` `[reproduced 2026-09-03]`. Escaping the brackets does not help (`Could not find …`). A **recursive wildcard that walks into the directory does** match it — so a recursive `src` glob collects those files normally. Verified two ways: the glob run collects them, and `fs.globSync` (node's own engine) returns **64** paths against **64** `*.test.ts` files on disk, with an empty set-difference.
+
+**`web/package.json` now has a `test` script**; `ci.yml` gained a **`test-web`** job. **Deliberately a separate job, not a step in `test`:** the existing `test` job is serialized on a shared TEST Supabase project via `concurrency: test-supabase` and carries its secrets. The web suite touches no network, no DB and no env, so it should neither queue behind other PRs' data runs nor be hidden by a data-side failure.
+
+**NO PRE-EXISTING WEB FAILURES WERE SURFACED.** The whole suite is **714 tests, 714 pass, 0 fail** `[executed 2026-09-03]`. The three counts the brief asked to confirm reproduce exactly: trip-browse `handler.test.ts` **8/8**, `search-area/handler.test.ts` **10/10**, trip-browse `route.test.ts` **9/9**.
+
+**Verified on CI's Node version, not just this machine.** Local Node is 24; CI pins **22**. `node --test` glob support is version-sensitive, and a version that did not glob would collect zero and pass **vacuously** — the exact failure this PR exists to remove. Re-ran the suite under a fetched **Node 22.11.0**: **714/714, exit 0**.
+
+**⚠️ RESIDUAL RISK, FLAGGED NOT FIXED:** a glob matching **zero** files exits **0** `[measured]`. A future test file placed outside `src/` would be silently uncollected and CI would stay green. Recorded in `BACKLOG.md`; a floor-count assertion is the cheap guard, and building it was outside this pass.
+
+**Gates, all four, each exit 0** `[executed 2026-09-03]`: `npm run -w web typecheck` · `npm run -w data typecheck` · `npm run -w data test` (34 files, 656 pass / 3 skip) · `npm run -w web test` (714 pass) · `cd web && npx next build`.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
 
 (**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**

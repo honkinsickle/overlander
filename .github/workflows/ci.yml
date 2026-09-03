@@ -48,6 +48,23 @@ jobs:
           TYPESENSE_COLLECTION: places_ci
         run: npm run -w data test
 
+  test-web:
+    # Separate from `test` on purpose. That job is serialized on a shared test
+    # Supabase project and carries its secrets; the web suite touches no network,
+    # no DB and no env, so it must not inherit that queue — and a data-side
+    # failure should not hide the web result (or vice versa).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install
+      - name: Run web test suite
+        run: npm run -w web test
+
   build:
     # The gate that matches production. `next build` catches RSC boundary
     # errors, 'use client' violations, route-type mismatches, and static-gen

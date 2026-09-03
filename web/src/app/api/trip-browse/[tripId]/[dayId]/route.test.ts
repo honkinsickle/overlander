@@ -15,22 +15,13 @@
  * These tests drive the PURE `resolveRequestedCategories`, so they need no DB,
  * no network and no env.
  *
- * ⚠️ RUN IT WITHOUT `--test`:
- *     cd web && npx tsx "src/app/api/trip-browse/[tripId]/[dayId]/route.test.ts"
+ * Run: `npm run -w web test` — the whole web suite, this file included.
  *
- * `npx tsx --test <path>` collects ZERO tests for any file under a
- * `[param]` directory — node:test treats `[tripId]` as a glob character class,
- * so the path never matches. Verified 2026-09-03: the invocation documented at
- * the top of the sibling `handler.test.ts` reports `tests 0 / pass 0` for the
- * same reason, i.e. those tests are not running when invoked as documented.
- * Executing the file directly registers and runs them normally.
- *
- * ⚠️ NOT RUN BY CI. `.github/workflows/ci.yml`'s `test` job runs
- * `npm run -w data test` only, and `web/package.json` has no `test` script —
- * so no web test file is executed in CI today. This guard is therefore
- * manual-only until that is wired up. Flagged as an open item rather than
- * fixed here: adding a web test job is outside this bug-fix pass and could
- * surface unrelated pre-existing failures.
+ * ⚠️ DO NOT pass this file's literal path to `--test`; it collects ZERO tests.
+ * node:test treats the positional argument as a glob, and `[tripId]` reads as a
+ * character class, so the path never matches itself. A recursive-wildcard
+ * pattern that walks into the directory does match it — which is why the `test`
+ * script in web/package.json globs `src` recursively instead of listing files.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

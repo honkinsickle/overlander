@@ -223,14 +223,17 @@ only**, not against every provider.
 > `urban` should keep a chip at all given it has no corpus rows and no live
 > source. The original analysis for each is preserved verbatim below.
 >
-> **ALSO FOUND, NOT FIXED (flagged):** no CI job runs the `web` test suite —
+> ~~**ALSO FOUND, NOT FIXED (flagged):** no CI job runs the `web` test suite —
 > `.github/workflows/ci.yml`'s `test` job runs `npm run -w data test` only, and
 > `web/package.json` has no `test` script. Separately, `npx tsx --test` collects
 > **zero** tests for any file under a `[param]` directory (node:test reads
 > `[tripId]` as a glob character class), so the invocation documented at the top
-> of `handler.test.ts` does not run it. Both mean the new guard is manual-only.
-> Wiring web tests into CI is out of scope here and could surface unrelated
-> pre-existing failures.
+> of `handler.test.ts` does not run it. Both mean the new guard is manual-only.~~
+> **RESOLVED 2026-09-03 (own PR, off `main`).** `web/package.json` now has a
+> `test` script globbing `src` recursively — the recursive wildcard walks INTO
+> `[tripId]`, which the literal path could not match. `ci.yml` gained a
+> `test-web` job running it. The suite passes whole; **no pre-existing web test
+> failures were surfaced by enforcing it** `[executed 2026-09-03]`.
 
 Surfaced by the read-only surface trace,
 `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`. **Both are
@@ -1925,10 +1928,26 @@ readable from here, so that it is genuinely distinct from the working
 corpus is the workflow's stated intent, not something confirmed — and it
 EXCLUDES the `phase3a`/`phase3b` destructive suites per
 `vitest.config.ts`), and **`build`** (`cd web && npx next build`, web
-only). Worth a periodic re-check that the prose still matches the
+only).
+**The predicted drift happened 2026-09-03:** a fourth job, **`test-web`**
+(`npm run -w web test`, no secrets, not serialized on the shared test
+project) was added, and CLAUDE.md's prose was updated in the same PR.
+Worth a periodic re-check that the prose still matches the
 workflow: a drift (CI stops running the data suite, or adds a gate)
 silently invalidates the "run the same gates locally as CI" assumption
 the STANDING RULES lean on. Cheap to confirm; expensive to assume.
+
+## The web `test` script can pass vacuously if tests move out of `src/` (2026-09-03)
+
+`web/package.json`'s `test` script globs `src` recursively. A glob that matches
+**zero** files exits **0** with `tests 0` `[measured 2026-09-03 on Node 24]` —
+so a future test file placed outside `src/` (say `web/scripts/`, which IS in the
+type-check scope) would be silently uncollected and CI would stay green. This is
+the same class as the bug this script was written to fix: the failure mode is a
+check that cannot fail. Cheapest guard is a floor assertion on the collected
+count, or a `--test-reporter` post-step comparing collected files against a
+`find`. Not built — it is extra machinery for a risk that has not yet bitten,
+and it was outside the wiring pass's scope. Related: the doc-hygiene entry above.
 
 ## Manual-review queue — first bulk-clearing mechanism shipped; framework still not built (updated 2026-08-17)
 
