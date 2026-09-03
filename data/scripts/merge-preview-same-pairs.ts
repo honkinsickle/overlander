@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const PROD_HOST = "nqzeywzcowujzyegxbsr.supabase.co";
+const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 
 // The single pair excluded by default. See PR #372 §3.
 const AGUA_CALIENTE_CANONICAL = "9cf912c6-10c8-4af2-bada-499abcdeb2d7";
@@ -171,12 +172,14 @@ function parseEnvFile(path: string): Record<string, string> {
   return out;
 }
 
-function makeClient(): SupabaseClient {
-  const env = parseEnvFile(join(REPO, "web/.env.local"));
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+function makeClient(target: "test" | "prod"): SupabaseClient {
+  const envPath = target === "prod" ? "web/.env.local" : "data/.env";
+  const env = parseEnvFile(join(REPO, envPath));
+  const url = target === "prod" ? env.NEXT_PUBLIC_SUPABASE_URL : env.SUPABASE_URL;
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !url.includes(PROD_HOST)) {
-    throw new Error(`refusing — resolved url ${url} is not PROD (${PROD_HOST})`);
+  const expected = target === "prod" ? PROD_HOST : TEST_HOST;
+  if (!url || !url.includes(expected)) {
+    throw new Error(`refusing — resolved url ${url} is not ${target} (${expected})`);
   }
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -399,6 +402,8 @@ interface Args {
   input: string;
   limit: number | null;
   includeAguaCaliente: boolean;
+  target: "test" | "prod";
+  outputSuffix: string;
 }
 
 function parseArgs(): Args {
@@ -406,12 +411,22 @@ function parseArgs(): Args {
   let input = join(REPO, ".context/same-pairs-resolved.json");
   let limit: number | null = null;
   let includeAguaCaliente = false;
+  let target: "test" | "prod" = "prod"; // backward-compat: prod is default
+  let outputSuffix = "";
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--input") input = argv[++i];
     else if (argv[i] === "--limit") limit = Number(argv[++i]);
     else if (argv[i] === "--include-agua-caliente") includeAguaCaliente = true;
+    else if (argv[i] === "--target=test") target = "test";
+    else if (argv[i] === "--target=prod") target = "prod";
+    else if (argv[i] === "--target") {
+      const t = argv[++i];
+      if (t !== "test" && t !== "prod") throw new Error(`--target must be test or prod, got ${t}`);
+      target = t;
+    }
+    else if (argv[i] === "--output-suffix") outputSuffix = argv[++i];
   }
-  return { input, limit, includeAguaCaliente };
+  return { input, limit, includeAguaCaliente, target, outputSuffix };
 }
 
 function toCsvRow(cells: (string | number | null)[]): string {
@@ -428,7 +443,7 @@ function toCsvRow(cells: (string | number | null)[]): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const db = makeClient();
+  const db = makeClient(args.target);
 
   const allPairs = readInput(args.input);
   console.log(`loaded ${allPairs.length} pairs from input`);
@@ -567,9 +582,10 @@ async function main(): Promise<void> {
 
   // ---------- outputs ----------
 
-  const jsonOut = join(REPO, ".context/merge-preview-135.json");
+  const suffix = args.outputSuffix ? `-${args.outputSuffix}` : "";
+  const jsonOut = join(REPO, `.context/merge-preview-135${suffix}.json`);
   writeFileSync(jsonOut, JSON.stringify(previews, null, 2));
-  const csvOut = join(REPO, ".context/merge-preview-135.csv");
+  const csvOut = join(REPO, `.context/merge-preview-135${suffix}.csv`);
   const header = [
     "state",
     "canonical_side",
@@ -621,9 +637,9 @@ async function main(): Promise<void> {
   }
   writeFileSync(csvOut, rows.join("\n"));
 
-  const groupsJsonOut = join(REPO, ".context/merge-preview-groups.json");
+  const groupsJsonOut = join(REPO, `.context/merge-preview-groups${suffix}.json`);
   writeFileSync(groupsJsonOut, JSON.stringify(groups, null, 2));
-  const groupsCsvOut = join(REPO, ".context/merge-preview-groups.csv");
+  const groupsCsvOut = join(REPO, `.context/merge-preview-groups${suffix}.csv`);
   const gHeader = [
     "group_id",
     "size",

@@ -12,6 +12,59 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 — merge executor full run on TEST (v2/v3/v4)
+
+- Executed `execute-merge-groups.ts` against 106 TEST-mapped groups (of
+  113 PROD decidable non-blocked). 51 succeeded under v1, 25 more under
+  v2, 30 more under v3. Two failures during the run; both rolled back
+  cleanly (Postgres transactional guarantee held — no audit row inserted,
+  mp states unchanged for the failed group).
+- v2 (`20260903203500`): n-way UNIQUE conflict fix. When two absorbed
+  rows share a `(source_record_id, mp_id)` or `(field_name, mp_id)` or
+  `(image_url, mp_id)` tuple, v1's dedup only checked collisions against
+  canonical — missed the absorbed↔absorbed collision. v2 adds a
+  smallest-id-wins tie-break among absorbed rows themselves. Surfaced by
+  group 55 (Ginkgo Petrified Forest 3-way, WA).
+- v3 (`20260903211000`): absorbed↔absorbed self-ref fix. When an edge
+  had BOTH endpoints as absorbed mps, both column UPDATEs ran and
+  produced `(canonical, canonical)`, violating
+  `place_relationships_no_self_ref_chk`. v3 extends the self-ref
+  cleanup delete to include absorbed↔absorbed. Surfaced by group 89
+  (Fort Churchill NV 4-way).
+- v4 (`20260903213500`): post-recompute orphan cleanup. After the full
+  run, 41 `place_relationships` rows referenced soft-retired absorbed
+  mps with `computed_at` timestamps AFTER the merges. Mechanism: step 7
+  calls `recompute_master_place(canonical)`, whose containment scan
+  finds the canonical's polygon covers absorbed's Point and inserts
+  fresh `(child=absorbed, parent=canonical, contained_in)` edges. v4
+  adds a delete pass after recompute to sweep those. Historical
+  cleanup: 41 → 0 via `cleanup-post-recompute-orphans.ts`.
+- **The real underlying issue is NOT solved by v4.** Any future
+  recompute on an unrelated canonical whose polygon covers an OLD
+  absorbed mp will keep re-inserting garbage. Long-term fix: recompute
+  should skip soft-retired mps (`is_searchable=false, source_count=0`).
+  Filed as follow-up.
+- Reversals: 2 executed. Alamo Lake (2-way, audit `ecd51935-…`) and
+  Fort Churchill (4-way, audit `6301d7de-…`) — the explicit n-way that
+  PR #381 §6 asked for. `reverse-merge.ts` preflight-asserts mp state
+  matches after-snapshot before touching anything; refuses if drifted.
+  Reversal scope: `source_record`, `master_place`, `place_match`
+  (the last added mid-review after a self-review pass surfaced the
+  re-merge hazard). Does NOT unwind `place_relationships`,
+  `generated_content`, `photo_candidate` — their before-state isn't in
+  the audit snapshot.
+- Field-precedence hand-check: 20 canonicals sampled from the run (17
+  × 2-way + 3 × 3-way, excluding the reversed pair). 92 MATCH, 40
+  UNCHECKABLE, 0 MISMATCH. Uncheckable = geometry (2 fields × 20
+  canonicals) — needs PostGIS-aware compare — no MISMATCH class was
+  observed in the sample.
+- Migration state on TEST: v4 applied. PROD still on v1. Executing on
+  PROD requires applying v2+v3+v4 first, plus (ideally) the recompute
+  skip-soft-retired fix so future recomputes stop re-creating orphans.
+- Zero PROD writes this session. Every `db:push-verify` used `--test`;
+  every script hard-checks `SUPABASE_URL` against the TEST project ref.
+- Investigation: `docs/investigations/2026-09-03-merge-executor-full-run.md`.
+
 
 ## 2026-09-03 (later 9) — Merge executor built + validated on TEST. Migration landed on TEST (not PROD). 5 merges executed on TEST; 1 reversed via audit trail.
 
