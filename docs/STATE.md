@@ -32,6 +32,66 @@
 **Durable process lesson, now pointed at me rather than at that session: do not characterise an artefact you have not opened.** The original version of this masthead judged the diagram from a one-line description and got two claims wrong. The narrower surviving point: a wiring finding is only fully reproducible if it pins a **SHA** — the diagram pins a date and a ref, which is most of the way there. Every claim in this report is anchored to `0dae80c` with cutover commits cited by SHA; the diagram claims are anchored to a direct read of node `3R4-0`.
 
 **Gates not run — docs-only diff, zero source files touched.** **NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `category-source-audit` · 2026-09-02 (later 18) — **READ-ONLY category × source audit. Measurement only; the routing decision is deliberately NOT made.**
+
+(**newest truth: nothing was written to TEST or PROD. Two new read-only measurement scripts, one report, doc updates. The follow-up architecture decision is the deferred deliverable — this pass produces its input.**
+
+*Branch note: cut from `main` at `9d936af` while `surface-population` (PR #361, the three-surface trace this builds on) is still open. Both mastheads interleave on merge, per this file's convention. **The (later 17) masthead lives on that branch.***
+
+**Report: `docs/investigations/2026-09-02-category-source-audit.md`.** Corpus figures are **TEST (`znldzjdatkogdktymtvi`) ONLY — PROD was not measured** and nothing here describes it.
+
+**THE HEADLINE IS A VOCABULARY PROBLEM, not a coverage problem.** There are **three** competing category vocabularies. DESIGN.md's 9 ↔ `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` **do** match (9/9, isomorphic but for the documented `hotel`↔`overnight` rename). But the day-browse route accepts only **7** of the 9, and Find Nearby's **13** tiles are a third vocabulary keyed on `primary_category`: **3** primaries are tile-claimed and slide-unclaimed (`water`, `shower`, `dump_station` — exactly the suppressed three), **45** are slide-claimed and tile-unclaimed, **40** are claimed with **zero** corpus rows, and **22** corpus values are claimed by nothing. **"Which source serves category X" has no single answer today — it depends on the surface.** A routing table must pick a canonical vocabulary before it can be written.
+
+**⚠️ THE CORPUS COLLAPSE IS `source_count = 0`, NOT `is_searchable` — I read it wrong first and probed it.** `peak` 33,775 rows → **15**; `spring` 30,990 → **2**; `gas_station` 5,947 → **1**; `viewpoint` 6,442 → **339**. **Every one is still `is_searchable = true`.** The 2026-08 deactivation passes emptied their `source_record`s, leaving hollow `master_place` rows the export view drops. **Never read a `master_place` total as available content.** Recorded in `DATA_INVENTORY.md`.
+
+**Run totals (TEST):** `master_place` **161,431** · in-scope **33,216** · active `source_record` **94,410** (**51,062** linked in-scope) · **70** distinct `primary_category` · **STRONG 32,922 / WEAK 46 / NONE 248**.
+
+**WORST CASES, in the order a decision should take them:**
+1. **Showers (4 in-scope) and Dump stations (6)** — no corpus, **and no compliant live source exists at all**: no match in Mapbox's **482** canonical ids. Both also dropped at `hydrate.ts:140`, and both carry a NEW badge. **Wiring cannot fix these; it is a sourcing decision.**
+2. **`urban` — 0 corpus rows, no live source, both claimed primaries empty.** A dead bucket still holding a chip on two surfaces.
+3. **Auto/Repair — 0 corpus rows, but Mapbox HAS `auto_repair`/`repair_shop`/`car_wash`.** Available, unwired. Cheapest gap in the audit.
+
+**Separating "no source exists" from "a source exists but isn't wired" was the key move** — it splits the worst cases into two groups needing different remedies, and only Mapbox's live category list could settle it.
+
+**Fuel is inverted:** corpus `gas_station` in-scope = **1**, `ev_charging` = **2,886**; live Mapbox serves `gas_station` only (`charging_station` exists, unwired). Corpus has EV and no gas; live has gas and no EV.
+
+**Two uncounted sourcing paths found:** `resolveSuggestions`/`resolveOvernights` (reference-trip load) run **Overpass instead of Google and no Mapbox**, so camping/scenic/food/oddity are Google-led on browse and Overpass-led there; and **`FuelStopCard` has no importer anywhere in the repo** — dead code.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy (endpoint 404s on the pinned API version), and Mapbox *coverage* — a canonical id means the query is expressible, not that data exists at a location.
+
+**Gates: all three exit 0** — `npm run -w data typecheck`, `npm run -w web typecheck`, `cd web && npx next build`. The web typecheck caught a real error first: `web/` does not set `allowImportingTsExtensions` while `data/` does, so a `.ts` import suffix that is fine in one workspace fails the other. Fixed.
+
+**NEXT: Adam's review, then the routing-table decision — explicitly out of scope here.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `surface-population` · 2026-09-02 (later 17) — **READ-ONLY investigation. Three UI surfaces traced to their real data paths; two defects flagged, neither reproduced.**
+
+*Branch note: this workspace opened on `port-louis` and the branch was renamed twice mid-session by Conductor (`port-louis` → `trace-place-data-paths` → `surface-population`). The work is unaffected — one commit, `8658a29`, off `9d936af`.*
+
+(**newest truth: nothing was executed and nothing was changed. No TEST, no PROD, no Typesense, no browser, no code edits. The deliverable is one report doc plus BACKLOG entries.** The six-state promotion below is unaffected and remains the standing data truth.)
+
+**Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`** (new directory). Traces where three screenshotted surfaces actually get their place data, at tree `9d936af`.
+
+**Two of Adam's three path guesses confirmed; one corrected.**
+| Surface | Guess | Verdict |
+|---|---|---|
+| "Explore N more near [City], CA →" | D (place-details enrichment) | **CORRECTED — maps to no path A–E** |
+| Day-scoped browse ("Browsing today Day N…") | B | **CONFIRMED** — `/api/trip-browse/:trip/:day` |
+| "Find on: Current Location" picker | C | **CONFIRMED** — `/api/search-area` |
+
+**The Surface 1 correction is the substantive one.** That control fetches nothing — it is `setExpanded((e) => !e)` on a component whose own header declares it PURE PRESENTATIONAL (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment behind those cards keys on the **mounted day set** and enumerates the **whole** `placePool(d)`, collapsed tiles included (`day-detail-corridor-column.tsx:294-351`) — so it already ran, or already failed, before the click. The cards map to D; the link maps to nothing. **"Surface calls Google" and "surface displays what a Google call already produced" are different claims**, and only the second is true here.
+
+**Paths A and E are unreachable from all three surfaces.** A (`itinerary/fuel-live-resolve.ts`) is generation-time behind `FUEL_LIVE_RESOLVE`; E is the offline corpus ingester. Neither appeared in any trace.
+
+**FLAG STATE, stated with its scope: `SEARCH_AREA_USE_RESOLVER`, `TRIP_BROWSE_USE_RESOLVER`, `DATE_DETAIL_USE_RESOLVER` and `USE_FEDERATED_POIS` are all absent from `web/.env.local` and `web/.env.development.local`** `[grepped 2026-09-02]` — so **locally** every surface runs its legacy path. **Vercel's environment is not readable from the repo and this makes no claim about production.**
+
+**The "NEW" badges on Find Nearby are decorative, and provenance proves it rather than inferring it.** `isNew` has exactly one consumer — the badge render — and shipped in `6c9d3e3` (2026-05-26), whose commit message ends *"actual category-fetch wiring is a follow-up."* `primaryCategories`, the field that makes a tile query anything, arrived in `a65d7b7` (2026-06-08). **The badges predate the data wiring.** Groceries corroborates: corpus-only, no live path, no badge. **6 of the 8 NEW tiles issue no live call at all** — unmapped in `LIVE_SLIDE_FOR_PRIMARY`, so the live half short-circuits to `[]`.
+
+**⚠️ TWO APPARENT DEFECTS — BOTH DEDUCED FROM CODE READING, NEITHER REPRODUCED. Do not act before a runtime check.** Filed to `docs/BACKLOG.md` with that caveat attached.
+1. **`urban` / `interest` chips on the day-browse panel look like they return HTTP 400.** `browseCategoryToSlide` is now total, the panel's `k !== null` filter can no longer drop anything, and the route validates against `SLIDE_CATEGORIES` — a 7-key list that deliberately excludes both. One constant is serving as both "what `all` expands to" and "what is a legal request".
+2. **Water fill / Showers / Dump stations appear structurally unable to return a result.** They target `water` / `shower` / `dump_station`, all in `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` — and both flag states reach that same function. Their live half is unmapped too.
+
+**Near-miss worth carrying:** the tile list's comment says its values were "verified against the live Typesense `primary_category` facet." That can be **true and still compatible with those three tiles being empty** — suppression happens downstream in **hydration**, not in Typesense, so a facet-level check cannot see it. Same shape as the standing scope-the-instrument rule: the check was aimed one layer above the filter it needed to catch.
+
+**NEXT: Adam's review. Nothing is queued off this.** The masthead below is preserved verbatim per this file's convention.
 
 ---
 

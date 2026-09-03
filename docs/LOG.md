@@ -12,6 +12,290 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 2) — FINAL correction in the #364/#366/#367 chain. Diagram updated in Paper; chain closed.
+
+*(Renumbered on merge: `later N` resets per date in this file — main's 2026-09-02 runs to `later 34`, and 2026-09-03 had no entries, so this day restarts. These three were originally numbered 33/34/35, continuing 09-02's counter by mistake, and sat below the 09-02 block despite this file being newest-first.)*
+
+Last pass in this chain. Four items, each verified against a real source
+(git/gh, file content, an executed test run) rather than against prior prose.
+
+- **LIVE sources box was stale and the verdict table said otherwise.** Mapbox
+  landed in `864b752` (#289, 2026-08-25, *"Mapbox Search Box as the fuel
+  source"*) and sits in **both** of `resolve-places.ts`'s default source lists —
+  **lines 193 and 207**, confirmed this pass (line 45 is the import; 184 and 205
+  are comments, so the previously-cited "205" was a comment line, not an entry).
+  #367's verdict table now records the box as stale.
+- **Day Column re-framed in all three locations** (report, STATE.md, and the
+  earlier LOG entry). It is a **passive renderer of baked `Trip.days` with no
+  live endpoint to cut over** — never a pending wiring task. Read from
+  `resolve-places-day-column-cutover-plan.md` §7: *"Do not build a Day Column
+  cutover PR… the four-surface framing over-counted Day Column."* Closed by
+  **PR #267** (`4757067`, 2026-08-23 16:28:07 PDT), which means **four**
+  resolver-arc PRs landed that day, not the three #367 originally counted. The
+  residual write-path work is tracked at `docs/BACKLOG.md` § *"Day Column
+  write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)"*.
+- **Timezone frame declared once and applied throughout #367.** The report mixed
+  PDT committer dates with UTC `mergedAt` values, which made #269 read as Aug 23
+  in one frame and Aug 24 in the other (`2026-08-24T00:07:08Z` =
+  `2026-08-23 17:07:07 PDT`). Everything is now PDT: cutovers at 14:30:48 /
+  16:15:51 / 17:07:07, tiering chain at 13:05:50 / 13:14:11 / 14:14:24 /
+  14:30:48. **The ~85-minute span is unchanged** — a duration is
+  frame-independent — re-verified from `mergedAt` this pass.
+- **Diagram figures checked by executing the suite, not by reading the diagram.**
+  `place-id.test.ts` → **27 tests, 27 pass**, so the diagram's "27 tests" was
+  **correct** and was left alone. `resolve-places.test.ts` → **43 tests, 43
+  pass**, so "resolver suite 36/36" was stale and is now 43/43. Checking both
+  rather than assuming both wrong is the reason one survived.
+- **Diagram edited in Paper** (node `3R4-0`, file "Card data model and
+  ofrmation"): LIVE sources box → `Mapbox (fuel) · Google · Foursquare (+ RIDB/
+  USFS/BLM)`; resolver suite → `43/43`; Day Column badge `NOT WIRED` →
+  `NO ENDPOINT`. Verified by screenshot afterwards — no overflow, layout intact.
+  **This overrides the standing CLAUDE.md rule "never overwrite an existing Paper
+  frame"**, on Adam's explicit instruction in the correction brief. Only the
+  three listed elements were touched; the other stale badges (Date Detail,
+  Search, Day-scoped browse, the "additive only" line, the CORRECTION note) were
+  deliberately left as-is because the brief scoped the edit to those three.
+- **The earlier LOG entry below was edited in place**, against this file's
+  append-only convention, because the brief required the phrase "not wired" to be
+  absent from it. The edit is marked inline as a correction rather than silently
+  rewritten.
+
+## 2026-09-03 (later) — Self-audit cleanup: corrections pushed to #364, #366 and #367. Diagram finally opened.
+
+Per this file's append-only rule, the earlier entries below are left as
+written; this entry corrects them.
+
+- **One real factual error, in #364.** The `attraction` row said "all 3 Google
+  types have 0 corpus rows." False — `historical_landmark` has 2 total /
+  1 in-scope. **The rollup script printed the right answer and I typed a
+  different one**: its `zero_row_primaries` field reads
+  `3/6 [national_historic_site,museum,art_gallery]`, so the three zero-row
+  primaries were never the three Google types. Re-verified against the same run
+  output rather than re-derived: visitor_center 193/102, landmark 3/3,
+  historical_landmark 2/1, summing to the 106 in-scope the rollup already
+  reported — **the arithmetic was right all along, only the prose was wrong.**
+  No re-run would have caught it; only reading the output against the sentence.
+- **Two overstatements softened in #366, no measurement changed.**
+  (a) "Foursquare is visibly better than Mapbox at trailheads/viewpoints"
+  compared a **category filter** against a **name text-search**. I had flagged
+  that instrument mismatch for the *absence* claims and then reused the same
+  data for a *comparative* claim without re-flagging it. Now stated as: Mapbox's
+  own trailhead/viewpoint categories are genuinely sparse (direct measurement,
+  stands), FSQ is a candidate to test first, not an established better source.
+  (b) "Mapbox tracks settlement, not geography — the most decision-relevant
+  fact" rests on **two** remote points. Sample size was disclosed, then the
+  rhetoric ran past it. Now framed as a hypothesis worth testing, with the
+  two-point basis inline.
+- **#367 count fixed: "~20 further commits Aug 24–27" is actually 33.** The
+  tilde made a `head -20` truncation artifact look like a deliberate estimate —
+  a direct breach of the number discipline I had set for the pass. Conclusion
+  unaffected; the timeline rests on ancestry and committer dates, not the count.
+- **⚠️ The worst item was #367's diagram claims, because I made them about an
+  artefact I never opened.** Opened now (node `3R4-0`, *"resolvePlaces() —
+  verified current state"*). Two claims were wrong:
+  - I wrote that neither the report nor the diagram "pins a commit." **The
+    diagram's header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL
+    BRANCH`** — it names a date AND an explicit ref, and specifically says it
+    was checked against origin/main rather than a local branch. That is the
+    exact discipline I accused it of lacking. Only "pins no SHA" survives.
+  - I wrote it was "false at render time." **It is dated Aug 23, not Aug 25**,
+    and the cutovers merged that day at 14:30/16:15/17:07 PDT — so if it was
+    verified earlier that day it was **accurate when made**. I can't determine
+    the hour, so the claim is withdrawn.
+- **The diagram is not uniformly stale, which the one-line description could
+  never have told me.** Still accurate: shared-cache NOT BUILT and the
+  rating/reviewCount/priceTier/photoUrl GAP note. Stale: the "imported by
+  nothing" centre-piece, the no-flag-exists note, and the NOT WIRED badges on
+  Date Detail, Search and Day-scoped browse.
+  > **CORRECTED 2026-09-03 (final pass) — this bullet originally described
+  > Day Column as "NOT WIRED … the cutover never happened".** That was wrong.
+  > Day Column is a **passive renderer of baked `Trip.days` with no live
+  > endpoint to cut over**; per
+  > `docs/architecture/resolve-places-day-column-cutover-plan.md` §7 *"the
+  > four-surface framing over-counted Day Column."* It was closed by **PR #267**
+  > (`4757067`, merged 2026-08-23 16:28:07 PDT) — so **four** resolver-arc PRs
+  > landed that day, not three — and the residual **write-path** work is tracked
+  > at `docs/BACKLOG.md` § *"Day Column write-path / baking consolidation —
+  > DEFERRED (from #267, 2026-08-23)"*. Edited in place rather than appended
+  > because the correction brief required the phrase to be absent from this
+  > entry.
+  **Verdict: REGENERATE, not retire** — retiring destroys correct content,
+  leaving it keeps three false badges.
+- **Pattern across all of it: the measurements were sound; the prose written on
+  top of them drifted harder than the data supported.** Four of the five items
+  are the same failure — an instrument produced a bounded result and I wrote a
+  stronger sentence than it licensed. The #364 error is the sharpest instance,
+  since the script's output was on screen next to what I typed.
+- **Where the corrections went, and why LOG entries were not rewritten.**
+  #364 → `category-source-audit`, #366 → `mapbox-coverage-sampling`,
+  #367 → `reverify-aug25-findings`, each as a follow-up commit, no force-push.
+  STATE.md and BACKLOG.md were edited on the #364/#366 branches — a flagged
+  deviation from the brief, taken because both carried the *same* confirmed
+  error/overstatement and fixing only the reports would have left the
+  decision-facing docs wrong. LOG.md was deliberately not edited on those
+  branches: its header makes it append-only, so this entry is the correction.
+
+## 2026-09-03 — Re-verified the Aug 25 resolver findings. Four of six were false when written, not changed since.
+
+- **Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
+  Read-only; verified against `main` @ `0dae80c` rather than against the Aug 25
+  report or my own #361/#364/#366 in this thread.
+- **The framing in the ask — "about a week of work has landed since, re-verify"
+  — turned out to be the wrong model.** The three flag-gated resolver cutovers
+  merged **2026-08-23**, *two days before* the Aug 25 session: #260
+  (`d62f660`), #266 (`a086cb8`), #269 (`b227e65`). The #255/#256/#259/#260
+  tiering chain merged the same day, all four inside ninety minutes. So findings
+  1, 2 and 6 were **stale on arrival**, not superseded by later work.
+- **Checked that three ways before asserting it**, because it contradicts the
+  premise I was handed: each commit is an ancestor of `origin/main`, each has an
+  Aug 23 committer date, and main carries ~20 further commits dated Aug 24–27 on
+  top of them. Any one alone would have been weak evidence.
+- **The likely cause is a worktree cut from an older main** — routine in this
+  Conductor setup — but I cannot verify which checkout that session used, so it
+  is recorded as a hypothesis about *why*, explicitly UNVERIFIED. The timeline
+  itself is established.
+- **Consequence worth stating plainly: the Paper diagram from that session
+  depicts a superseded architecture** and should not be used as a current
+  reference. Its centre-piece ("additive only — imported by nothing") was false
+  at render time.
+- **Finding #4 needed re-reading rather than re-confirming, and that was the
+  most interesting item.** The four enrichment columns *are* still unselected —
+  technically UNCHANGED. But measured on TEST: `rating`, `review_count` and
+  `price_tier` are **0 non-null across 161,431 rows**, and the backfill script
+  *asserts* they must stay NULL ("no source carries one"). **Wiring those three
+  would return nothing.** Only `master_place.photo_url` has substance (10,311
+  rows unread). Restating "unchanged" without measuring would have preserved a
+  misleading implication.
+- **A near-miss I caught: the export view's `photo_url` is NOT the migration's
+  column.** `hydrate.ts:87` does select `photo_url` — but from the view, where
+  it is a `LEFT JOIN LATERAL` over `source_record.normalized_payload`. Same
+  name, different value. A check that stopped at "photo_url is selected" would
+  have marked finding #4 resolved and been wrong.
+- **✅ Answered an open BACKLOG blocker while verifying #5.** The
+  `preComputeFacts` → `resolvePlaces()` item's blocker 2 (suppression parity)
+  is resolved, negatively: `isSuppressedCategory` has exactly **two** call sites
+  in `web/src`, `fetchFederatedPois` applies only `isClosedPlace`, and the RPC's
+  `WHERE` doesn't filter them either. **But I checked the call pattern before
+  calling it a live bug** — `p_categories` is always a slide bucket's list and
+  no bucket claims a suppressed value, so nothing leaks today. **Safety from an
+  allowlist, not a filter** — which is the fragile part worth recording.
+- **"Branch still exists" is not "PR still open."** `fix/hydrate-description-
+  source` exists locally and on origin, which is probably what made #259 look
+  unmerged on Aug 25. It merged 2026-08-23T21:14Z.
+- **Durable, mechanical lesson: a finding about whether code is wired is only
+  valid against a stated commit.** Neither the Aug 25 report nor its diagram
+  pins one. Every claim in this report is anchored to `0dae80c`, cutover
+  commits cited by SHA.
+- Gates not run — docs-only diff, zero source files touched.
+
+## 2026-09-02 (later 34) — Category × source audit. The answer turned out to be a vocabulary problem, not a coverage problem.
+
+*(Numbered 34, not 31: this session ran on a branch cut from `9d936af`, before #365 (later 30-32) and #361 (later 33) merged. Numbered to land after them — the number is merge order, not clock order.)*
+
+- **Report: `docs/investigations/2026-09-02-category-source-audit.md`.**
+  Read-only, TEST only, PROD not measured. Two new measurement scripts
+  (`data/scripts/measure-category-source-audit-2026-09-02.ts`,
+  `web/scripts/rollup-category-audit-2026-09-02.ts`) plus a live fetch of
+  Mapbox's canonical category list. **The brief said "no code changes"; two
+  new read-only scripts are a deviation, taken deliberately and flagged in the
+  report** — it is this repo's established pattern for a measurement pass, and
+  bucketing was imported unchanged from `lib/eligibility.ts` rather than
+  re-derived.
+- **The headline was not the one the brief anticipated.** The ask was framed as
+  coverage ("how much does the corpus have"). The dominant finding is that
+  **three category vocabularies compete** — the 9-key taxonomy, the 7-key
+  route allowlist, and Find Nearby's 13 `primary_category` tiles — with **3**
+  primaries tile-claimed-but-slide-unclaimed, **45** the reverse, **40**
+  claimed with zero rows, and **22** corpus values claimed by nothing. **Which
+  source serves a category depends on which surface is asking.** A routing
+  table can't be written until one vocabulary is canonical.
+- **⚠️ I misread the corpus collapse first, and probing corrected it.** The
+  huge total→in-scope drops (`peak` 33,775→15, `spring` 30,990→2,
+  `gas_station` 5,947→1) looked like a searchability filter. A direct probe
+  showed **every one of those rows is still `is_searchable = true`** — the
+  filter is `source_count = 0`, the residue of the 2026-08 deactivation passes.
+  Hollow `master_place` rows the export view drops. Written into
+  `DATA_INVENTORY.md` because "don't read an MP total as available content" is
+  inventory-level guidance, not a one-off.
+- **Splitting "no live source EXISTS" from "a live source exists but isn't
+  WIRED" was the move that made the summary actionable**, and it needed a real
+  measurement — Mapbox's live category list (**482** ids) — not a judgement
+  call. Result: showers and dump stations have **no** Mapbox category at all
+  (wiring cannot help; it is a sourcing decision), while Auto/Repair has
+  `auto_repair`/`repair_shop`/`car_wash` sitting unwired against **0** corpus
+  rows. Same symptom, opposite remedy.
+- **Fuel is inverted between the two halves:** corpus `gas_station` in-scope =
+  **1** but `ev_charging` = **2,886**; live Mapbox serves `gas_station` and not
+  EV (`charging_station` exists, unwired). Also caught a **stale rationale** —
+  BACKLOG §#214 still justifies the lapsed corpus gas population with "covered
+  live by Google Places", but Google's fuel types were emptied 2026-08-25.
+  Conclusion still holds, stated reason no longer does.
+- **Enumerating callers instead of trusting the three known surfaces paid off.**
+  Found `resolveSuggestions`/`resolveOvernights` running **Overpass instead of
+  Google, with no Mapbox at all** on the reference-trip path — so
+  camping/scenic/food/oddity have two different providers depending on surface
+  — and `FuelStopCard`, which calls `?category=fuel` and **has no importer
+  anywhere in the repo**.
+- **Two honest negatives with their scope named:** Foursquare's amenity
+  taxonomy is **unmeasured** (endpoint 404s on the pinned
+  `x-places-api-version: 2025-06-17`, tried three URLs), so "no compliant
+  source exists" is established against **Mapbox's list only**. And a Mapbox
+  canonical id means **the query is expressible**, not that data exists at a
+  location — coverage was not sampled.
+- **The web typecheck earned its place in the gate again.** `web/` does not set
+  `allowImportingTsExtensions` but `data/` does, so the `.ts` import suffix
+  that is idiomatic in `data/scripts` failed `npm run -w web typecheck` — the
+  per-workspace divergence CLAUDE.md already warns about, hit from a new
+  direction. All three gates exit 0 after the fix.
+## 2026-09-02 (later 33) — READ-ONLY trace of three UI surfaces' place-data paths. Two path guesses confirmed, one corrected.
+
+*(Numbered 33, not 30: this session ran on a branch cut from `9d936af`, before #365 merged and claimed later 30-32. Numbered to land after it, per this repo's parallel-branch interleaving convention — the number is merge order, not clock order.)*
+
+- **Report: `docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`**
+  (new directory). Nothing was run — no TEST, no PROD, no Typesense, no
+  browser. Every claim is from source at `9d936af`; the report marks which
+  conclusions are code-path deductions rather than observations.
+- **Surface 1 ("Explore N more near [City], CA →") was mis-guessed as path D,
+  and the correction is the useful part.** The control fetches NOTHING — it is
+  `setExpanded((e) => !e)` on a PURE PRESENTATIONAL component
+  (`day-detail-corridor.tsx:1120`). The Google Place Details enrichment that
+  populates those cards keys on `[hydrateKey]` = the **mounted day set**
+  (`day-detail-corridor-column.tsx:294-351`) and enumerates the **whole**
+  `placePool(d)`, collapsed tiles included. So enrichment already ran, or
+  already failed, before the click. **The link maps to no path A–E; the cards
+  it reveals map to D.** Distinguishing "this surface calls Google" from "this
+  surface displays what a Google call already produced" is the whole point.
+- **Surfaces 2 and 3 confirmed as B and C** — `/api/trip-browse/:trip/:day` and
+  `/api/search-area`. Both are dual-path behind their cutover flags
+  (`TRIP_BROWSE_USE_RESOLVER`, `SEARCH_AREA_USE_RESOLVER`), and **neither flag,
+  nor `DATE_DETAIL_USE_RESOLVER` nor `USE_FEDERATED_POIS`, is set in
+  `web/.env.local` or `.env.development.local`** `[grepped]` — so locally all
+  three run legacy. Vercel's env is not readable from the repo and the report
+  makes no claim about it.
+- **The "NEW" badges on Find Nearby are decorative — provenance settles it.**
+  `isNew` has exactly one consumer (the badge render, `:1000`) and arrived in
+  `6c9d3e3` (2026-05-26), whose own message says *"actual category-fetch wiring
+  is a follow-up"*; `primaryCategories` — the field that makes a tile query
+  anything — landed in `a65d7b7` (2026-06-08). **The badges predate the data
+  wiring.** Corroborated by Groceries: corpus-only, no live path, no badge.
+- **⚠️ Two apparent defects found, BOTH code-reading only, NEITHER reproduced.**
+  Filed to BACKLOG with that caveat attached, deliberately not acted on.
+  (1) The `urban`/`interest` chips on Surface 2 look like they 400 — the route
+  uses one constant as both the `all` expansion and the validation allowlist.
+  (2) Water fill / Showers / Dump stations target
+  `SUPPRESSED_PRIMARY_CATEGORIES`, dropped at `hydrate.ts:140` in **both** flag
+  states, with no live path either — so they appear structurally empty.
+- **The near-miss worth recording:** the tile list's own comment says its values
+  were "verified against the live Typesense `primary_category` facet." That is
+  probably true *and* compatible with those three tiles returning nothing —
+  suppression happens **downstream in hydration, not in Typesense**. A
+  facet-level verification cannot see it. Same shape as the standing
+  scope-the-instrument lesson: the check was aimed one layer above the filter.
+- **6 of 8 NEW tiles issue no live call at all** (unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` → live half short-circuits to `[]`). Nothing in the
+  UI distinguishes a corpus-only tile from a live-backed one — relevant if the
+  Google-dependency reduction proceeds, since those are precisely the tiles it
+  would not affect.
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
 Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
@@ -226,180 +510,6 @@ is the next pass.** TEST-only validation; no writes to either database.
   43 still need cleanup.
 - Gates: data typecheck 0, data test 34 files / 651 passed / 3 skipped, web
   typecheck 0, next build 0.
-
-## 2026-09-03 (later 35) — FINAL correction in the #364/#366/#367 chain. Diagram updated in Paper; chain closed.
-
-Last pass in this chain. Four items, each verified against a real source
-(git/gh, file content, an executed test run) rather than against prior prose.
-
-- **LIVE sources box was stale and the verdict table said otherwise.** Mapbox
-  landed in `864b752` (#289, 2026-08-25, *"Mapbox Search Box as the fuel
-  source"*) and sits in **both** of `resolve-places.ts`'s default source lists —
-  **lines 193 and 207**, confirmed this pass (line 45 is the import; 184 and 205
-  are comments, so the previously-cited "205" was a comment line, not an entry).
-  #367's verdict table now records the box as stale.
-- **Day Column re-framed in all three locations** (report, STATE.md, and the
-  earlier LOG entry). It is a **passive renderer of baked `Trip.days` with no
-  live endpoint to cut over** — never a pending wiring task. Read from
-  `resolve-places-day-column-cutover-plan.md` §7: *"Do not build a Day Column
-  cutover PR… the four-surface framing over-counted Day Column."* Closed by
-  **PR #267** (`4757067`, 2026-08-23 16:28:07 PDT), which means **four**
-  resolver-arc PRs landed that day, not the three #367 originally counted. The
-  residual write-path work is tracked at `docs/BACKLOG.md` § *"Day Column
-  write-path / baking consolidation — DEFERRED (from #267, 2026-08-23)"*.
-- **Timezone frame declared once and applied throughout #367.** The report mixed
-  PDT committer dates with UTC `mergedAt` values, which made #269 read as Aug 23
-  in one frame and Aug 24 in the other (`2026-08-24T00:07:08Z` =
-  `2026-08-23 17:07:07 PDT`). Everything is now PDT: cutovers at 14:30:48 /
-  16:15:51 / 17:07:07, tiering chain at 13:05:50 / 13:14:11 / 14:14:24 /
-  14:30:48. **The ~85-minute span is unchanged** — a duration is
-  frame-independent — re-verified from `mergedAt` this pass.
-- **Diagram figures checked by executing the suite, not by reading the diagram.**
-  `place-id.test.ts` → **27 tests, 27 pass**, so the diagram's "27 tests" was
-  **correct** and was left alone. `resolve-places.test.ts` → **43 tests, 43
-  pass**, so "resolver suite 36/36" was stale and is now 43/43. Checking both
-  rather than assuming both wrong is the reason one survived.
-- **Diagram edited in Paper** (node `3R4-0`, file "Card data model and
-  ofrmation"): LIVE sources box → `Mapbox (fuel) · Google · Foursquare (+ RIDB/
-  USFS/BLM)`; resolver suite → `43/43`; Day Column badge `NOT WIRED` →
-  `NO ENDPOINT`. Verified by screenshot afterwards — no overflow, layout intact.
-  **This overrides the standing CLAUDE.md rule "never overwrite an existing Paper
-  frame"**, on Adam's explicit instruction in the correction brief. Only the
-  three listed elements were touched; the other stale badges (Date Detail,
-  Search, Day-scoped browse, the "additive only" line, the CORRECTION note) were
-  deliberately left as-is because the brief scoped the edit to those three.
-- **The earlier LOG entry below was edited in place**, against this file's
-  append-only convention, because the brief required the phrase "not wired" to be
-  absent from it. The edit is marked inline as a correction rather than silently
-  rewritten.
-
-## 2026-09-03 (later 34) — Self-audit cleanup: corrections pushed to #364, #366 and #367. Diagram finally opened.
-
-Per this file's append-only rule, the earlier entries below are left as
-written; this entry corrects them.
-
-- **One real factual error, in #364.** The `attraction` row said "all 3 Google
-  types have 0 corpus rows." False — `historical_landmark` has 2 total /
-  1 in-scope. **The rollup script printed the right answer and I typed a
-  different one**: its `zero_row_primaries` field reads
-  `3/6 [national_historic_site,museum,art_gallery]`, so the three zero-row
-  primaries were never the three Google types. Re-verified against the same run
-  output rather than re-derived: visitor_center 193/102, landmark 3/3,
-  historical_landmark 2/1, summing to the 106 in-scope the rollup already
-  reported — **the arithmetic was right all along, only the prose was wrong.**
-  No re-run would have caught it; only reading the output against the sentence.
-- **Two overstatements softened in #366, no measurement changed.**
-  (a) "Foursquare is visibly better than Mapbox at trailheads/viewpoints"
-  compared a **category filter** against a **name text-search**. I had flagged
-  that instrument mismatch for the *absence* claims and then reused the same
-  data for a *comparative* claim without re-flagging it. Now stated as: Mapbox's
-  own trailhead/viewpoint categories are genuinely sparse (direct measurement,
-  stands), FSQ is a candidate to test first, not an established better source.
-  (b) "Mapbox tracks settlement, not geography — the most decision-relevant
-  fact" rests on **two** remote points. Sample size was disclosed, then the
-  rhetoric ran past it. Now framed as a hypothesis worth testing, with the
-  two-point basis inline.
-- **#367 count fixed: "~20 further commits Aug 24–27" is actually 33.** The
-  tilde made a `head -20` truncation artifact look like a deliberate estimate —
-  a direct breach of the number discipline I had set for the pass. Conclusion
-  unaffected; the timeline rests on ancestry and committer dates, not the count.
-- **⚠️ The worst item was #367's diagram claims, because I made them about an
-  artefact I never opened.** Opened now (node `3R4-0`, *"resolvePlaces() —
-  verified current state"*). Two claims were wrong:
-  - I wrote that neither the report nor the diagram "pins a commit." **The
-    diagram's header reads `VERIFIED AGAINST ORIGIN/MAIN 2026-08-23, NOT LOCAL
-    BRANCH`** — it names a date AND an explicit ref, and specifically says it
-    was checked against origin/main rather than a local branch. That is the
-    exact discipline I accused it of lacking. Only "pins no SHA" survives.
-  - I wrote it was "false at render time." **It is dated Aug 23, not Aug 25**,
-    and the cutovers merged that day at 14:30/16:15/17:07 PDT — so if it was
-    verified earlier that day it was **accurate when made**. I can't determine
-    the hour, so the claim is withdrawn.
-- **The diagram is not uniformly stale, which the one-line description could
-  never have told me.** Still accurate: shared-cache NOT BUILT and the
-  rating/reviewCount/priceTier/photoUrl GAP note. Stale: the "imported by
-  nothing" centre-piece, the no-flag-exists note, and the NOT WIRED badges on
-  Date Detail, Search and Day-scoped browse.
-  > **CORRECTED 2026-09-03 (final pass) — this bullet originally described
-  > Day Column as "NOT WIRED … the cutover never happened".** That was wrong.
-  > Day Column is a **passive renderer of baked `Trip.days` with no live
-  > endpoint to cut over**; per
-  > `docs/architecture/resolve-places-day-column-cutover-plan.md` §7 *"the
-  > four-surface framing over-counted Day Column."* It was closed by **PR #267**
-  > (`4757067`, merged 2026-08-23 16:28:07 PDT) — so **four** resolver-arc PRs
-  > landed that day, not three — and the residual **write-path** work is tracked
-  > at `docs/BACKLOG.md` § *"Day Column write-path / baking consolidation —
-  > DEFERRED (from #267, 2026-08-23)"*. Edited in place rather than appended
-  > because the correction brief required the phrase to be absent from this
-  > entry.
-  **Verdict: REGENERATE, not retire** — retiring destroys correct content,
-  leaving it keeps three false badges.
-- **Pattern across all of it: the measurements were sound; the prose written on
-  top of them drifted harder than the data supported.** Four of the five items
-  are the same failure — an instrument produced a bounded result and I wrote a
-  stronger sentence than it licensed. The #364 error is the sharpest instance,
-  since the script's output was on screen next to what I typed.
-- **Where the corrections went, and why LOG entries were not rewritten.**
-  #364 → `category-source-audit`, #366 → `mapbox-coverage-sampling`,
-  #367 → `reverify-aug25-findings`, each as a follow-up commit, no force-push.
-  STATE.md and BACKLOG.md were edited on the #364/#366 branches — a flagged
-  deviation from the brief, taken because both carried the *same* confirmed
-  error/overstatement and fixing only the reports would have left the
-  decision-facing docs wrong. LOG.md was deliberately not edited on those
-  branches: its header makes it append-only, so this entry is the correction.
-
-## 2026-09-03 (later 33) — Re-verified the Aug 25 resolver findings. Four of six were false when written, not changed since.
-
-- **Report: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`.**
-  Read-only; verified against `main` @ `0dae80c` rather than against the Aug 25
-  report or my own #361/#364/#366 in this thread.
-- **The framing in the ask — "about a week of work has landed since, re-verify"
-  — turned out to be the wrong model.** The three flag-gated resolver cutovers
-  merged **2026-08-23**, *two days before* the Aug 25 session: #260
-  (`d62f660`), #266 (`a086cb8`), #269 (`b227e65`). The #255/#256/#259/#260
-  tiering chain merged the same day, all four inside ninety minutes. So findings
-  1, 2 and 6 were **stale on arrival**, not superseded by later work.
-- **Checked that three ways before asserting it**, because it contradicts the
-  premise I was handed: each commit is an ancestor of `origin/main`, each has an
-  Aug 23 committer date, and main carries ~20 further commits dated Aug 24–27 on
-  top of them. Any one alone would have been weak evidence.
-- **The likely cause is a worktree cut from an older main** — routine in this
-  Conductor setup — but I cannot verify which checkout that session used, so it
-  is recorded as a hypothesis about *why*, explicitly UNVERIFIED. The timeline
-  itself is established.
-- **Consequence worth stating plainly: the Paper diagram from that session
-  depicts a superseded architecture** and should not be used as a current
-  reference. Its centre-piece ("additive only — imported by nothing") was false
-  at render time.
-- **Finding #4 needed re-reading rather than re-confirming, and that was the
-  most interesting item.** The four enrichment columns *are* still unselected —
-  technically UNCHANGED. But measured on TEST: `rating`, `review_count` and
-  `price_tier` are **0 non-null across 161,431 rows**, and the backfill script
-  *asserts* they must stay NULL ("no source carries one"). **Wiring those three
-  would return nothing.** Only `master_place.photo_url` has substance (10,311
-  rows unread). Restating "unchanged" without measuring would have preserved a
-  misleading implication.
-- **A near-miss I caught: the export view's `photo_url` is NOT the migration's
-  column.** `hydrate.ts:87` does select `photo_url` — but from the view, where
-  it is a `LEFT JOIN LATERAL` over `source_record.normalized_payload`. Same
-  name, different value. A check that stopped at "photo_url is selected" would
-  have marked finding #4 resolved and been wrong.
-- **✅ Answered an open BACKLOG blocker while verifying #5.** The
-  `preComputeFacts` → `resolvePlaces()` item's blocker 2 (suppression parity)
-  is resolved, negatively: `isSuppressedCategory` has exactly **two** call sites
-  in `web/src`, `fetchFederatedPois` applies only `isClosedPlace`, and the RPC's
-  `WHERE` doesn't filter them either. **But I checked the call pattern before
-  calling it a live bug** — `p_categories` is always a slide bucket's list and
-  no bucket claims a suppressed value, so nothing leaks today. **Safety from an
-  allowlist, not a filter** — which is the fragile part worth recording.
-- **"Branch still exists" is not "PR still open."** `fix/hydrate-description-
-  source` exists locally and on origin, which is probably what made #259 look
-  unmerged on Aug 25. It merged 2026-08-23T21:14Z.
-- **Durable, mechanical lesson: a finding about whether code is wired is only
-  valid against a stated commit.** Neither the Aug 25 report nor its diagram
-  pins one. Every claim in this report is anchored to `0dae80c`, cutover
-  commits cited by SHA.
-- Gates not run — docs-only diff, zero source files touched.
 
 ## 2026-09-02 (later 29) — AZ triage script converted; all six now uniform. Audit strengthened from "exists" to "on the shared runner".
 
