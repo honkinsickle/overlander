@@ -1,3 +1,25 @@
+# STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
+
+(**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**
+
+**BUG 1 — REAL, FIXED.** Reproduced pre-fix: `?categories=urban`, `?categories=interest` and both singular `?category=` forms returned `400 Invalid category`, while `camping`/`scenic` returned 404 "Trip not found" (validation passed). Root cause was as #361 deduced — one constant answered both *"what does `categories=all` expand to"* and *"what is legal to request"*. **Split into `ALL_VIEW_CATEGORIES`** (the `all` expansion, still the 7 live-fanout buckets) **and `REQUESTABLE_CATEGORIES`**, derived from `BROWSE_CARD_CATEGORIES` via `browseCategoryToSlide` so the two cannot drift apart again.
+
+**Post-fix, verified on a real TEST trip/day:** all nine chips return 200; a bogus category still 400s; `categories=all` still fans out to exactly the 7 live buckets with no `urban`/`interest`.
+
+**⚠️ THIS WAS BLOCKING REAL DATA, not just erroring on an empty bucket.** With `USE_FEDERATED_POIS=true`, `interest` returns corpus rows on a real day (e.g. "Las Vegas Natural History Museum"). `urban` returns empty — consistent with #364's finding that it has no corpus rows.
+
+**BUG 2 — NOT A BUG, no code changed.** Water fill / Showers / Dump stations already fail gracefully: all three return **HTTP 200, zero places, empty `failedSources`** on the search-area route, against a `campground` control on the same bbox that returns results. Surface 3 renders `"0 results in view"` with no error box; Surface 2 renders "No places match the selected filters". `urban` behaves identically. **No data was sourced for them and no tile or "NEW" badge was touched** — those are product decisions, held open per the brief.
+
+**A REGRESSION GUARD THAT CI CANNOT RUN — flagged, not fixed.** New `route.test.ts` (9 tests, all pass) covers every chip, the bogus-category rejection, the `hotel`-is-not-a-slide-key boundary, and the deliberate `all` asymmetry. But **no CI job runs the web test suite** — `ci.yml`'s `test` job runs `npm run -w data test` only, and `web/package.json` has no `test` script. Separately, **`npx tsx --test` collects ZERO tests for any file under a `[param]` directory** (node:test parses `[tripId]` as a glob character class), so the command documented atop the sibling `handler.test.ts` does not actually run it. Wiring web tests into CI is outside a bug-fix pass and could surface unrelated failures.
+
+**One deviation, flagged:** the validation logic was extracted into a pure exported `resolveRequestedCategories()` so it could be unit-tested without a DB. Slightly more than a minimal edit, but the bug lived in code `handler.test.ts` explicitly declared not worth testing ("it is a thin wrapper (validate + …)"), and that assumption is what let it ship.
+
+**Docs touched:** `architecture/resolve-places-design.md` §D8 (the divergence it named was this defect — now marked resolved) and `architecture/resolve-places-day-scoped-browse-cutover-plan.md` (both referenced the renamed constant). No `decisions/` ADR — this is a bug fix, and the product calls it surfaced are explicitly deferred. `DATA_INVENTORY.md` untouched; no data changed.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `mapbox-coverage-sampling` · 2026-09-03 (later 21) — **Live-source coverage SAMPLED. Two of #364's "just needs wiring" rows reverse. Decision still deferred.**
 
 (**newest truth: nothing written to TEST or PROD. Two read-only vendor-API sampling scripts, one report, doc updates. The routing/vocabulary decision remains explicitly NOT made.**
