@@ -25,6 +25,9 @@ import {
   ID_FETCH_CHUNK,
   isPlaceholderName,
   lookupCompatibility,
+  WIDE_RESCUE_CAT_FLOOR,
+  WIDE_RESCUE_NAME_FLOOR,
+  WIDE_RESCUE_RADIUS_M,
   MatchAllCircuitBreakerError,
   matchOne,
   NAME_DOMINANT_CONFIDENCE_FLOOR,
@@ -263,6 +266,99 @@ describe("scoreMatch — placeholder-name channel (2026-08-10 fix)", () => {
     // Confidence itself is below auto-link but the close_nameless step
     // handles routing before Step 5 fires.
     expect(s.combined_confidence).toBeLessThan(0.85);
+  });
+});
+
+describe("wide-radius rescue routing (2026-09-02)", () => {
+  // The rescue only runs when the 500m search found NOTHING, so every rescued
+  // candidate is >500m away. These tests pin the arithmetic that makes routing
+  // them straight to manual_review lossless.
+  const blended = (dist: number, name: number, cat: number) =>
+    0.4 * (1 - Math.min(dist, 100) / 100) + 0.4 * name + 0.2 * cat;
+
+  it("a rescued candidate can NEVER reach the 0.85 auto_link bar", () => {
+    // Beyond the 100m clip distance_score is 0, so the ceiling is
+    // 0.4*1.0 + 0.2*1.0 = 0.60 — even with a perfect name and category.
+    expect(blended(501, 1.0, 1.0)).toBeCloseTo(0.6, 10);
+    expect(blended(3000, 1.0, 1.0)).toBeLessThan(0.85);
+  });
+
+  it("routing rescued candidates to manual_review forfeits no reachable auto_link", () => {
+    // name_dominant gates on distance <= 500m and close_nameless on <= 100m,
+    // so neither can fire for a rescued candidate. Blended is the only other
+    // path and it is capped at 0.60 (above). Nothing is given up.
+    expect(blended(501, 1.0, 1.0)).toBeLessThan(0.85);
+  });
+
+  it("an exact-name rescued pair below the 0.6 floor would previously be DISCARDED", () => {
+    // The regression this fixes. Measured on PROD: name 1.000 with
+    // cat 0.70 scores 0.540 and cat 0.90 scores 0.580 — both below the 0.6
+    // blended manual_review floor, so both became new_master_place despite an
+    // identical name.
+    expect(blended(700, 1.0, 0.7)).toBeCloseTo(0.54, 10);
+    expect(blended(700, 1.0, 0.9)).toBeCloseTo(0.58, 10);
+    expect(blended(700, 1.0, 0.7)).toBeLessThan(0.6);
+    expect(blended(700, 1.0, 0.9)).toBeLessThan(0.6);
+    // ...and only cat_compat exactly 1.0 survived.
+    expect(blended(700, 1.0, 1.0)).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("the rescue admission floors are stricter than the general matcher gates", () => {
+    // Name floor 0.95 vs the 0.85 used by name_dominant — at this range only a
+    // near-exact name is evidence, so the bar is deliberately higher.
+    expect(WIDE_RESCUE_NAME_FLOOR).toBeGreaterThan(0.85);
+    expect(WIDE_RESCUE_CAT_FLOOR).toBeGreaterThan(0);
+    expect(WIDE_RESCUE_RADIUS_M).toBeGreaterThan(500);
+  });
+
+  it("a pair that fails the rescue name floor is not admitted at all", () => {
+    const name = 0.9; // clears name_dominant's 0.85 but not the rescue's 0.95
+    expect(name).toBeGreaterThanOrEqual(0.85);
+    expect(name).toBeLessThan(WIDE_RESCUE_NAME_FLOOR);
+  });
+});
+
+describe("lookupCompatibility — self-pair and viewpoint gap (2026-09-02)", () => {
+  it("a category is fully compatible with itself even when absent as a top-level key", () => {
+    // Regression guard. `public_land` appears only as a VALUE key in
+    // CATEGORY_COMPATIBILITY, so before the self-pair rule it scored 0 against
+    // itself via the `?? 0` default. That capped combined_confidence at 0.80
+    // even at 0m with an identical name, making auto-link impossible.
+    expect(lookupCompatibility("public_land", "public_land")).toBe(1.0);
+    expect(lookupCompatibility("land_status", "land_status")).toBe(1.0);
+    expect(lookupCompatibility("park_feature", "park_feature")).toBe(1.0);
+  });
+
+  it("the self-pair rule does not disturb explicit self-entries", () => {
+    expect(lookupCompatibility("campground", "campground")).toBe(1.0);
+    expect(lookupCompatibility("dispersed_camping", "dispersed_camping")).toBe(1.0);
+    expect(lookupCompatibility("viewpoint", "viewpoint")).toBe(1.0);
+  });
+
+  it("an identical-name, identical-category pair at 0m can now reach auto_link", () => {
+    // 0.4*1 + 0.4*1 + 0.2*compat — needs compat > 0.25 to clear the 0.85 bar.
+    const blended = 0.4 * 1.0 + 0.4 * 1.0 + 0.2 * lookupCompatibility("public_land", "public_land");
+    expect(blended).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it("viewpoint is compatible with recreation_area, clearing the name_dominant gate", () => {
+    // OR's "State Scenic Viewpoint" units are recreation_area in the GIS source.
+    expect(lookupCompatibility("viewpoint", "recreation_area")).toBe(0.8);
+    expect(lookupCompatibility("recreation_area", "viewpoint")).toBe(0.8); // symmetric
+    expect(lookupCompatibility("viewpoint", "recreation_area")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("viewpoint stays INCOMPATIBLE with park and park_feature — parent/child, not duplicate", () => {
+    // Deliberate. A park is generally the parent of a viewpoint, and merging
+    // those would destroy the distinction the dedup investigation relies on.
+    expect(lookupCompatibility("viewpoint", "park")).toBe(0);
+    expect(lookupCompatibility("viewpoint", "park_feature")).toBe(0);
+  });
+
+  it("unrelated categories still score 0 — the default is protective, not a bug", () => {
+    expect(lookupCompatibility("park", "ev_charging")).toBe(0);
+    expect(lookupCompatibility("park", "gas_station")).toBe(0);
+    expect(lookupCompatibility("recreation_area", "toilet")).toBe(0);
   });
 });
 
