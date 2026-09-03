@@ -1,3 +1,41 @@
+# STATE — branch `merge-executor-full-run-test` · 2026-09-03 (later 28) — executor run against full decidable set on TEST (106 merges). Two mid-run failures triggered v2 and v3 migrations; post-run scan surfaced 41 orphan `place_relationships` edges → v4. All applied to TEST. PROD untouched.
+
+(**newest truth: `execute-merge-groups.ts` ran against 106 TEST-mapped groups (of 113 PROD decidable non-blocked). 51 succeeded under v1, 25 under v2, 30 under v3. 92/92 checkable field-precedence assertions match across 20 sampled canonicals. Two merges reversed to close PR #381 §6 (one 2-way, one 4-way n-way — Fort Churchill NV). Reversal scope extended mid-review to include `place_match` after a self-review flagged silent re-merge risk. Full write-up: `docs/investigations/2026-09-03-merge-executor-full-run.md`.**
+
+**v2 (`20260903203500`) — n-way UNIQUE conflict fix.** When two absorbed rows share a `(source_record_id, mp_id)` / `(field_name, mp_id)` / `(image_url, mp_id)` tuple. Surfaced by group 55 (Ginkgo Petrified Forest 3-way, WA).
+
+**v3 (`20260903211000`) — absorbed↔absorbed self-ref fix.** An edge with BOTH endpoints as absorbed mps collapses to `(canonical, canonical)` after both column UPDATEs — CHECK violation. Surfaced by group 89 (Fort Churchill NV 4-way).
+
+**v4 (`20260903213500`) — post-recompute orphan cleanup.** Recompute's containment scan re-inserts `(child=absorbed, parent=canonical, contained_in)` edges after the merge's own delete/repoint passes ran. v4 sweeps those in a final pass. **This is a workaround, not a class fix** — any future recompute on an UNRELATED canonical whose polygon covers an OLD absorbed mp will keep re-inserting garbage. **Real fix (deferred): `recompute_master_place()` should skip soft-retired mps.**
+
+**Rollback invariant held on both failures:** no audit row for the failed group; mp states unchanged. `[literal, verified via row-count re-reads]`
+
+**Reversals as an instrument.** `reverse-merge.ts` preflight-asserts current mp state matches after-snapshot; refuses on drift. `sync-place-match-post-reversal.ts` fixes the two audits' place_match state after the mid-review scope extension. **Does NOT unwind `place_relationships`, `generated_content`, `photo_candidate`** — snapshot doesn't carry them.
+
+**Zero PROD writes.** Every `db:push-verify` used `-- --test`; every script hard-checks `SUPABASE_URL` against the TEST project ref. `data/.env` still on TEST.
+
+**Migration state:** TEST = v4. PROD = v1. **Before executing on PROD, apply v2+v3+v4 and — recommended — fix `recompute_master_place()` first.**
+
+**Next steps (Adam's call):** (a) design + apply the recompute-skip-soft-retired fix, then apply v2+v3+v4 to PROD; (b) resolve PR #379's 8 undecidable groups; (c) execute on PROD in batches.)
+
+---
+
+# STATE — branch `build-merge-executor` · 2026-09-03 (later 27) — merge executor built + validated on TEST. Migration on TEST only; no PROD writes this session.
+
+(**newest truth: the SAME-bucket merge writer is built and validated. `merge_master_place(canonical, absorbed[])` PL/pgSQL function + `merge_audit_log` table landed on TEST via `db:push-verify --test`. 5 merges executed on TEST as validation; 1 reversed via manual audit-trail rollback to prove the reversal path. Zero PROD writes.** See `docs/investigations/2026-09-03-merge-executor.md`.
+
+**Safety posture (5 gates, all tested):** `--confirm`, `--groups`, `--target=prod` + `--confirm-prod`, blocked-group refusal (groups 6, 83 per PR #379), canonical-drift refusal between input file and shared-lib rule.
+
+**FK re-enumeration confirmed 6 columns.** `source_record`, `place_match` (with UNIQUE), `place_relationships` × 2 (with PK + no-self-ref CHECK), `master_place_generated_content` (with UNIQUE), `master_place_photo_candidate` (with UNIQUE). All handled in the function. Non-FK references (function return types, views) checked and excluded.
+
+**Atomicity: Postgres transactional guarantee.** Function is one PL/pgSQL transaction; any `raise exception` rolls back all writes including the audit row. 3 precondition-fail tests confirm audit invariant holds.
+
+**Migration NOT yet on PROD.** Applying to PROD is a standard operator action per CLAUDE.md (relink + `.env` swap + `db:push-verify` without `--test`).
+
+**Next steps (Adam's call):** apply migration to PROD; decide whether to (a) execute against 113-or-so decidable non-blocked groups on TEST as fuller validation, or (b) go directly to PROD in small batches, or (c) resolve PR #379's 8 undecidable groups first.)
+
+---
+
 # STATE — branch `reverify-resolver-diagram` · 2026-09-03 (later 25) — **Re-verified the `resolvePlaces()` diagram against `main` @ `75207ba`. Thirteen claims held; one line citation was stale and is fixed.**
 
 (**newest truth: no code changed, nothing written to TEST or PROD. One investigation doc, two Paper text nodes, STATE + LOG.**
