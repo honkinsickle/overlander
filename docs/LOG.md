@@ -12,6 +12,7 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+
 ## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
 
 - **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
@@ -101,6 +102,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   stated rather than glossed: it proves nothing uses the *ambient* global
   `fetch`; a self-stubbing test would overwrite the thrower, and raw
   `node:http` was not covered.
+
 
 ## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
 
@@ -503,6 +505,18 @@ written; this entry corrects them.
   UI distinguishes a corpus-only tile from a live-backed one — relevant if the
   Google-dependency reduction proceeds, since those are precisely the tiles it
   would not affect.
+
+## 2026-09-02 (later 33) — CA state_parks "NP" suffix identified as Natural Preserve SubUnit; 4 sort-pass UNCLEAR pairs reclassified to DIFFERENT.
+
+Investigation only. Read-only queries against PROD and TEST; no writes, no schema changes, no code changes. Doc: `docs/investigations/2026-09-02-ca-np-designation.md`.
+
+- **Answer.** The " NP" suffix on 63 CA `state_parks` rows means CA DPR's *Natural Preserve* — a sub-unit classification alongside CP (Cultural Preserve) and SW (State Wilderness). All 63 rows have `SUBTYPE = SubUnit` in the `ParkBoundaries` layer. Same 63/24/12 NP/CP/SW split on TEST.
+- **The taxonomy is not encoded as a column.** No source-native field distinguishes NP from CP from SW *except* the trailing token on the name; the raw payload has only `{FID, GISID, GlobalID, SUBTYPE, Shape__Area, Shape__Length, UNITNAME, UNITNBR}`. A more robust reading would require pulling the source `SUBTYPE`+`UNITNAME` and classifying by regex on the suffix — the same thing the sort script already sees via the name.
+- **Sort-pass reclassification.** The 4 "SP/SB/SRA vs NP" pairs the prior sort pass (this-morning session, not committed) put in UNCLEAR are all parent unit ↔ Natural Preserve SubUnit — DIFFERENT. Updated sort-pass buckets: SAME 136 · DIFFERENT 246 · UNCLEAR 2. Confirms the prior sort's DIFFERENT reasoning for the 5 NP pairs already there (they had ad-hoc justifications; the real reason is uniform).
+- **PR self-contained by cherry-pick.** The referenced parent investigation doc `2026-09-02-cross-source-duplicates.md` and its script `data/scripts/crosssource-duplicate-investigation.ts` were on branch `investigate-crosssource-duplicates` (unpushed, previously). Cherry-picked both commits onto this branch so the NP doc's cross-reference is not a broken link on `main`. The unpushed sibling branch remains — nothing was moved off it, just copied on.
+- **Confidence limit.** NP = Natural Preserve is inferred (CP directly confirmed via a CA State Parks Foundation write-up; SW canonical; NP = the remaining classification). A CA DPR ParkBoundaries data-dictionary verification is `[unverified this session]` — two DPR PDFs I could reach returned only binary content through WebFetch. If a merge tool ever depends on this reading, verify against the ParkBoundaries schema before acting.
+- **Explicitly out of scope.** Writing `place_relationships (contained_in)` from NPs to parent units. Only 9 of the 62 NP master_places surface in the 384-pair sort set; a real relationship-build would need to walk all 62 (and to decide whether the model warrants the build at all — Natural Preserves as independent searchable rows may be the right product answer already).
+
 ## 2026-09-02 (later 32) — Rescued candidates routed straight to `manual_review`. **PROD sim: 17 → 30 surfaced, 26 → 13 unresolved.**
 
 Scoped narrowly to the rescue path, as instructed. The 100m distance clip, the
