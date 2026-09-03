@@ -85,7 +85,7 @@ no live complement."*
 | `trailhead` | 4,759 | Mapbox `trailhead`; FSQ (name-search only) | Mapbox **2/6 metro, 2/6 rural** — near-empty | **R1 CORPUS-PRIMARY** | **Yes**, corpus-first |
 | `viewpoint` + `peak`/`mountain_peak`/`scenic_spot` | 340 (`viewpoint`) | Mapbox `viewpoint` | Mapbox **4/6 metro, 0/6 rural** | **R1 CORPUS-PRIMARY** | Yes, corpus-first |
 | `park_feature` | 3,691 | none | — | **R1** | Yes, corpus-only |
-| `park` | 2,518 | Mapbox `park` (dense) | 6/6 metro, 6/6 rural | **R3 MERGE** | `[open]` — see §3.2 |
+| `park` | 2,518 | Mapbox `park` (dense) | 6/6 metro, 6/6 rural | **R3 MERGE** | **Yes — RESOLVED to `scenic`, §3.2** |
 | `recreation_area` | 1,572 | none | — | **R1** | Yes, corpus-only |
 | `lake`, `hiking_area`, `river`, and the rest | 0 | none | — | R4 in practice | no-op |
 
@@ -148,16 +148,22 @@ not a coverage gap.
 | **Culture** → Museums (`museum`) | 0 | Mapbox `museum`, Google, FSQ | 6/6 metro, 4/6 rural | **R2 LIVE-PRIMARY** | Yes, once §3.1 lands |
 | **Culture** → Galleries (`art_gallery`) | 0 | Mapbox `art_gallery`, Google, FSQ | 6/6 metro, 3/6 rural | **R2 LIVE-PRIMARY** | Yes, once §3.1 lands |
 | **Culture** → Historic Sites (`historic`, `landmark`, `historical_landmark`, `historical_place`, `monument`, `national_historic_site`) | 24 · 3 · 1 · 1 · 1 · 0 | Mapbox `historic_site`, `monument`; Google `historical_landmark`; FSQ | **6/6 metro, 6/6 rural** — the strongest coverage sampled | **R3 MERGE** | Yes, once claimed |
-| **Culture** → Theaters (`theater`) | **primary does not exist** `[literal]` | `[unverified]` — Mapbox not checked | — | **R4 until ingest exists** | No |
 
 **§3.1 RESOLVED 2026-09-03 — this category is now routable.** Culture sits under
 `attraction`; `LIVE_SLIDE_FOR_PRIMARY` moves `museum`/`art_gallery`/
 `historical_landmark` from `oddity` to `attraction`. Mapping doc §4.4, §4.7.
 
-**Three of Culture's four chips are empty or non-existent today.** Historic Sites
-is the only one with corpus behind it, and it also has the best-measured live
-coverage in the whole table (6/6 and 6/6). **Ship order should follow that**, not
-the order the chips are listed in.
+**Culture is THREE chips — Theaters was dropped 2026-09-03** once Adam clarified
+it means novelty/roadside theaters, which `foursquare.ts:84-89` already routes to
+`oddity` and which are the opposite of `attraction`'s "formal cultural set only"
+definition. Mapping doc §4.7.
+
+**Two of the three are empty in corpus — but both are `R2 LIVE-PRIMARY`, i.e.
+unwired rather than dead.** Museums and Galleries fill as soon as the §3.1 live
+route lands. **Historic Sites is the only chip that returns anything today**, and
+it also has the best-measured live coverage in the whole table (6/6 metro, 6/6
+rural) — so it ships first, and the other two follow the §3.1 fix rather than any
+ingest work.
 
 ### oddity
 
@@ -208,9 +214,10 @@ a laundry primary is ever ingested.
 
 **`urban` is structurally empty, not merely sparse** `[literal]` — both of its
 claimed primaries have zero corpus rows. `[cited #366]` Mapbox `park` is dense
-(6/6, 6/6) but *"is a different concept and maps more naturally to `scenic`.
-Flagged as an ambiguity for the decision; not resolved here."* **This design does
-not resolve it either** — see §3.2.
+(6/6, 6/6) but *"is a different concept and maps more naturally to `scenic`."*
+**RESOLVED 2026-09-03: `park` routes to `scenic`** (§3.2). **The consequence for
+`urban` is that it now has no live source and no corpus — nothing routes to it at
+all**, which is exactly the ADR's open decision and is now the whole of it.
 
 ---
 
@@ -230,15 +237,22 @@ Fix: move those three primaries from `oddity` to `attraction` in
 `LIVE_SLIDE_FOR_PRIMARY` (`resolve-places.ts:236`). One constant, three lines;
 no other file changes. Consequence for `oddity` is stated in §2.
 
-**One new blocking item takes its place — see §3.4 (Theaters).**
+~~One new blocking item takes its place — see §3.4 (Theaters).~~ **§3.4 is now closed too — see below. §3.1's fix has no remaining blocker.**
 
-### 3.2 Does Mapbox `park` route to `urban` or `scenic`? `[open]`
+### 3.2 ~~Does Mapbox `park` route to `urban` or `scenic`?~~ — **RESOLVED: `scenic`**
 
-Inherited from #366 unresolved. `scenic` already claims the `park` primary and
-holds 2,518 in-scope rows for it `[literal]`; `urban` claims `city_park`, which
-has none. Routing `park` to `scenic` is the smaller change and matches the
-existing corpus assignment — but it leaves `urban` with **no** live source and
-**no** corpus, which is precisely the ADR's open product decision.
+**Adam's decision, 2026-09-03.** It matches what the corpus already does
+`[literal]`: `scenic` claims the `park` primary and holds 2,518 in-scope rows for
+it, while `urban` claims `city_park`, which has none. So live Mapbox `park`
+results now join the same bucket as the corpus rows of the same name — no new
+divergence between the corpus and live paths, which is the failure mode §3.1
+existed to fix.
+
+**Fully resolved, including the consequence:** `urban` is left with **no live
+source and no corpus — nothing routes to it at all.** That is not a side effect
+to be discovered later; it collapses the ADR's open decision on `urban` to a
+single clean question — *keep an empty chip, or remove it* — with no remaining
+sourcing option behind it. Recorded in the ADR's open-decision section.
 
 ### 3.3 The R4 NONE set — `water`, `shower`, `dump_station`, and `urban`
 
@@ -255,29 +269,31 @@ that there is nothing to route.**
 
 ---
 
-### 3.4 Theaters conflicts with an existing deliberate Foursquare rule `[literal]`
+### 3.4 ~~Theaters conflicts with a Foursquare rule~~ — **CLOSED 2026-09-03: no conflict, no change**
 
-`[literal]` No `theater` / `theatre` `primary_category` exists — not among the 70
-distinct values in the TEST corpus, and nowhere in `web/src` or `data/` as a
-taxonomy constant. Adam's instruction is to add one.
+**Adam clarified that "Theaters" means novelty / roadside theaters** — precisely
+what `foursquare.ts:84-89` already classifies as `oddity` (*"Roadside-quirky
+entertainment stays oddity"*). **That rule is correct and stays untouched.**
 
-**The blocker is not that it is missing; it is that something else already claims
-it.** `foursquare.ts:84-89` matches
-`/\b(theater|theatre|artwork|public art|roadside)\b/` and returns **`oddity`**,
-under the comment *"Roadside-quirky entertainment stays oddity."* With Culture
-shipped and that rule unchanged, **Foursquare theater results land in `oddity`
-while the Theaters chip queries `attraction`** — recreating, for theaters
-specifically, exactly the split §3.1 just closed.
+The conflict this section described was real but it was a **scoping error in the
+design, not a defect in the code**: Theaters had been placed in Culture, which is
+scoped to `attraction`'s *"formal cultural set only"*, while the code had already
+classified novelty theaters as the opposite. **Culture drops to three chips**
+(Museums, Galleries, Historic Sites) and the disagreement disappears.
 
-Implementation must move `theater|theatre` out of the oddity regex into the
-attraction regex above it. **Flagged rather than assumed:** that rule may have
-been aimed at drive-in and novelty theaters, which genuinely are roadside-quirky,
-whereas Adam's "Theaters" reads as performing-arts and cinema venues. The regex
-cannot distinguish them. Worth one sentence of confirmation.
+Everything this section previously listed as required work is **withdrawn**:
 
-`[unverified]` Mapbox theater coverage was **not** checked — no stored Mapbox
-category-id list exists in the repo, so it needs a live vendor probe. Do not
-assume an id exists.
+- ~~add a `theater` `primary_category`~~ — no chip needs it.
+- ~~move `theater|theatre` out of the oddity regex~~ — it is already right.
+- ~~probe Mapbox for a theater id~~ — nothing depends on the answer.
+
+`[open, separate question]` **A novelty-theater chip under `oddity`** is not
+proposed here and was deliberately not added unprompted. If it is ever wanted:
+`[literal]` the Foursquare rule classifies **live FSQ results by name only** and
+does nothing for corpus rows, so a corpus-backed chip would still need a
+`theater` primary and an ingest mapping. The existing rule is not a substitute
+for one.
+
 
 ## 4. Implementation order this table implies `[proposed]`
 
@@ -297,13 +313,16 @@ is what the table says, for the follow-up pass to argue with.
    are unclaimed today `[literal]` and carry Culture's only real corpus. Historic
    Sites also has the best-measured live coverage in the table (6/6 metro, 6/6
    rural) — **this, not Museums, is the chip that makes Culture look alive.**
+   Museums and Galleries need no separate step: they fill from item 4's live-route
+   fix.
 5. **Do NOT wire Mapbox `trailhead`/`viewpoint`.** #366 measured them as
    near-empty. Route corpus-primary instead; test Foursquare's *category* API if
    the taxonomy ever becomes enumerable.
 6. **Decide the R4 set** (ADR open decision) before any UI work assumes it.
-7. **Theaters last.** It needs an ingest mapping, the `foursquare.ts` fix (§3.4),
-   and a Mapbox check that has not been done. Shipping the chip before those is
-   shipping a guaranteed-empty filter.
+7. ~~Theaters last.~~ **WITHDRAWN — Theaters is not part of Culture (§3.4).** No
+   ingest mapping, no `foursquare.ts` change and no Mapbox probe are required.
+   **This removes the only item in the list that was blocked on work outside the
+   routing layer.**
 
 **A caution on ordering by these numbers.** Items 1–3 rest on #366's 12-point,
 one-day sample. That is enough to justify trying them in the stated order — it is
