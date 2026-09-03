@@ -1,3 +1,31 @@
+# STATE — branch `wire-web-tests-into-ci` (pushed as `surface-pop2`) · 2026-09-03 (later 23) — **CI now runs the web test suite AND blocks on it. 714 tests that never executed automatically now gate every merge to `main`.**
+
+(**newest truth: no product code changed; nothing written to PROD. Two config lines, two test-file header corrections, doc updates.** *The local gate run included `npm run -w data test`, which routes at `SUPABASE_TEST_URL` exactly as CI's own `test` job does — the destructive `phase3a`/`phase3b` suites are excluded by `vitest.config.ts`, but "wrote nothing to TEST" is the config's stated intent, **not** something audited per-test here.*
+
+*Branch note: cut from `main` at `eeb66d6` (#373 merged). Scoped deliberately narrow — wiring only, per the brief.*
+
+**THE ROOT CAUSE OF THE ZERO-COLLECTION WAS THE GLOB, NOT THE FILE.** `node:test` treats a `--test` positional argument as a **glob pattern**, and `[tripId]` reads as a **character class** — so the literal path `src/app/api/trip-browse/[tripId]/[dayId]/route.test.ts` never matches itself and reports `tests 0 / pass 0` `[reproduced 2026-09-03]`. Escaping the brackets does not help (`Could not find …`). A **recursive wildcard that walks into the directory does** match it — so a recursive `src` glob collects those files normally. Verified two ways: the glob run collects them, and `fs.globSync` (node's own engine) returns **64** paths against **64** `*.test.ts` files on disk, with an empty set-difference.
+
+**`web/package.json` now has a `test` script**; `ci.yml` gained a **`test-web`** job. **Deliberately a separate job, not a step in `test`:** the existing `test` job is serialized on a shared TEST Supabase project via `concurrency: test-supabase` and carries its secrets. The web suite needs neither, so it should not queue behind other PRs' data runs or be hidden by a data-side failure. **The "needs no network/env" claim is measured, not assumed:** the whole suite passes **714/714 with `globalThis.fetch` replaced by a thrower**, zero network attempts, and it passes in CI with **no secrets wired**. Negative control run — the preload does apply inside the test child process, and a test that calls ambient `fetch` goes red — so the green is not vacuous. Scope: this proves nothing calls the **ambient global `fetch`**; a test that stubs `fetch` itself would overwrite the thrower, and raw `node:http`/`net` was not covered.
+
+**IT NOW BLOCKS — but that took a SECOND change, outside git.** The job alone did not gate anything. `main`'s protection is a **ruleset** (id `19629589`), not classic branch protection — `…/branches/main/protection` returns 404 "Branch not protected", which reads like no protection at all — and its `required_status_checks` named exactly **`typecheck`, `test`, `build`**. `test-web` was **not** among them, so a red web suite was visible and still mergeable. **Fixed 2026-09-03 11:51:07 -07:00** by `gh api --method PUT …/rulesets/19629589` (Adam-authorized): the list is now **`typecheck`, `test`, `build`, `test-web`**, verified by read-back with every other ruleset field byte-identical. **A settings change leaves no trace in `git log`** — recorded in `LOG.md` (later 6), pre-change JSON at `.context/ruleset-19629589-before-2026-09-03.json`.
+
+**⚠️ THE LESSON, which cost a full self-review to catch:** adding a CI job is only *half* of adding a gate. The first version of this masthead claimed enforcement without ever reading the enforcement layer — the same "a check that cannot fail is not evidence" class the STANDING RULES warn about, one layer up from the code. **Renaming the job would silently un-require it**, with no error anywhere.
+
+**Scope of the enforcement claim, stated rather than glossed:** `…/rules/branches/main` lists all four contexts and #376 targets `main`, so the rule applies `[literal]`. That a **red** `test-web` actually blocks the merge button is **strong inference from ruleset semantics** — all four checks are green, so `mergeStateStatus: CLEAN` reads the same either way. The real negative control (push a knowingly-failing test, confirm the block) was **not** run: it means committing a broken state to an open PR.
+
+**NO PRE-EXISTING WEB FAILURES WERE SURFACED.** The whole suite is **714 tests, 714 pass, 0 fail** `[executed 2026-09-03]`. The three counts the brief asked to confirm reproduce exactly: trip-browse `handler.test.ts` **8/8**, `search-area/handler.test.ts` **10/10**, trip-browse `route.test.ts` **9/9**.
+
+**Verified on CI's Node version, not just this machine.** Local Node is 24; CI pins **22**. `node --test` glob support is version-sensitive, and a version that did not glob would collect zero and pass **vacuously** — the exact failure this PR exists to remove. Re-ran the suite under a fetched **Node 22.11.0**: **714/714, exit 0**.
+
+**⚠️ RESIDUAL RISK, FLAGGED NOT FIXED:** a glob matching **zero** files exits **0** `[measured]`. A future test file placed outside `src/` would be silently uncollected and CI would stay green. Recorded in `BACKLOG.md`; a floor-count assertion is the cheap guard, and building it was outside this pass.
+
+**Gates — five local commands, each exit 0** `[executed 2026-09-03]`: `npm run -w web typecheck` · `npm run -w data typecheck` · `npm run -w data test` (34 files, 656 pass / 3 skip) · `npm run -w web test` (714 pass) · `cd web && npx next build`. (An earlier draft of this line said "all four" over a list of five — the four is the CI **job** count, the five is the local **command** count.) **On CI, all four jobs pass and `test-web`'s log reads `# tests 714 / # pass 714 / # fail 0`** — the collection is real on the runner, not just locally.
+
+**NEXT: Adam's review.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `fix-category-chip-errors` · 2026-09-03 (later 22) — **BUG FIX: the urban/interest chips no longer 400. The three amenity tiles already failed gracefully and were left alone.**
 
 (**newest truth: one real correctness bug fixed and guarded; one suspected bug confirmed as already-correct and NOT changed. Both were reproduced against the running route on TEST before any code changed.**

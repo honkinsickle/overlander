@@ -31,8 +31,9 @@
   `next typegen` first, which is exactly what makes it safe on a cold `.next`
   (verified both ways 2026-07-31; see the RUNBOOK gotcha on phantom `PageProps`
   errors). `data/` has its own gate that neither of these covers:
-  `npm run -w data typecheck`. CI runs `typecheck`, `test`, and `build` as three
-  separate jobs — matching them locally is the point.
+  `npm run -w data typecheck`. CI runs `typecheck`, `test`, `test-web`, and
+  `build` as four separate jobs `[verified against ci.yml 2026-09-03]` —
+  matching them locally is the point.
 
 ## END-OF-DAY DOC PASS
 The doc set and what each is for (this replaces/reconciles the old POINTERS list):
@@ -55,8 +56,13 @@ actually touched what they describe. The `/wrap` command runs this pass.
   day.
 
 ## RUNBOOK — how to run (stable reference)
-- **Tests:** `node:test` via tsx, NOT vitest. `cd web && npx tsx --test <files>`
-  (per lib-dir).
+- **Tests:** `node:test` via tsx, NOT vitest. **Whole web suite:
+  `npm run -w web test`** — this is what CI's `test-web` job runs. A single file
+  still works with `cd web && npx tsx --test <files>`, **except** for files under
+  a `[param]` directory: node:test treats the positional argument as a glob and
+  `[tripId]` reads as a character class, so the literal path matches nothing and
+  reports `tests 0 / pass 0`. Use a recursive-wildcard pattern (or the npm
+  script) for those `[measured 2026-09-03]`.
 - **Gate (BOTH, each exit 0):** `npm run -w web typecheck` **and**
   `cd web && npx next build`. The build alone is not sufficient — see
   §STANDING RULES. Never bare `npx tsc --noEmit`.

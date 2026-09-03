@@ -12,6 +12,96 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 6) — REPO SETTINGS CHANGE (not in git history): `test-web` is now a required status check on `main`.
+
+- **What changed, and by what mechanism.** At **2026-09-03 11:51:07 -07:00**,
+  ruleset **19629589** (`main`, `enforcement: active`) was updated via
+  **`gh api --method PUT repos/honkinsickle/overlander/rulesets/19629589`** —
+  authorized by Adam in-session. `required_status_checks` went from
+  **`typecheck`, `test`, `build`** to **`typecheck`, `test`, `build`,
+  `test-web`** (all `integration_id: 15368`, GitHub Actions).
+  **This closes the gap flagged in `BACKLOG.md` and PR #376: the `test-web` job
+  existed and reported, but could not block a merge.**
+- **Recorded here because a settings change leaves no trace in `git log`.** Same
+  reason `db:push-verify`-bypassing DDL is called out in CLAUDE.md — the ledger
+  only knows what went through it. The pre-change ruleset JSON is saved at
+  `.context/ruleset-19629589-before-2026-09-03.json` (gitignored) as the
+  rollback reference.
+- **Verified by read-back, not by trusting the write.** A fresh `GET` of the
+  ruleset shows `test-web` literally present, and a field-by-field comparison
+  against the pre-change JSON confirms **everything else is byte-identical** —
+  `enforcement`, `conditions`, `bypass_actors`, and the `deletion` /
+  `non_fast_forward` / `pull_request` rules all unchanged. The full ruleset was
+  re-sent on the PUT (the API replaces the `rules` array wholesale), so
+  "nothing else moved" needed proving rather than assuming.
+- **Scope of the verification, stated plainly.** `…/rules/branches/main` now
+  lists all four contexts, and #376 targets `main` — so the rule applies to it.
+  **An unplanned observation upgrades this past pure inference:** right after
+  the next push, #376 read **`mergeStateStatus: BLOCKED`** while its checks were
+  still pending, then flipped to **`CLEAN`** once all four passed `[both
+  literal]`. The required-check mechanism is demonstrably live on this PR. It
+  does **not isolate `test-web`**, though — any of the four pending produces the
+  same BLOCKED. The fully discriminating negative control — push a knowingly-
+  failing web test, confirm the block — was **not** run; it means committing a
+  broken state to an open PR, which is Adam's call to authorize.
+
+## 2026-09-03 (later 5) — Wired the web test suite into CI. The `[param]` zero-collection was a glob quirk, not a broken file.
+
+- **Closed the item #373 flagged and deliberately deferred.** `web/package.json`
+  gained a `test` script; `ci.yml` gained a `test-web` job. Nothing else in the
+  product changed — the brief scoped this as wiring only.
+- **The diagnosis in #373's header comment was half right and half wrong, and
+  the wrong half mattered.** It concluded the file must be executed *without*
+  `--test`. The real cause: `node:test` reads its positional argument as a
+  **glob**, and `[tripId]` is a **character class**, so the literal path cannot
+  match itself. Escaping the brackets fails too. But a **recursive wildcard
+  walking into the directory matches it fine** — so `--test` works, the path
+  form was the problem. Corrected both test-file headers.
+- **Verified the collection set rather than trusting the pass.** `fs.globSync`
+  (node's own glob engine) returns 64 paths against 64 `*.test.ts` on disk,
+  set-difference empty. A green run proves nothing if the glob quietly collects
+  a subset — that is the failure this whole pass exists to remove.
+- **Re-ran under CI's Node, not just this machine's.** Local Node is 24, CI pins
+  22, and `node --test` glob support is version-sensitive. Fetched Node 22.11.0
+  and re-ran: 714/714, exit 0. Had 22 not globbed, CI would have collected zero
+  and passed vacuously — a worse state than no job at all.
+- **Nothing was hiding.** Enforcing the suite surfaced **no** pre-existing web
+  failures: 714 tests, 714 pass. The three counts #373 reported by hand
+  reproduce exactly (8/8, 10/10, 9/9).
+- **Chose a separate job over a step in `test`.** The existing `test` job is
+  serialized on the shared TEST Supabase project and carries its secrets; the
+  web suite needs neither, and pairing them would queue web behind other PRs'
+  data runs and let either failure mask the other's signal.
+- **Flagged, not fixed:** a glob matching zero files exits 0, so a test file
+  placed outside `src/` would be silently uncollected. In `BACKLOG.md`.
+- **⚠️ SELF-CORRECTION, same session, after the PR was already open and green.**
+  I reported this as "CI now runs the web test suite" with an enforcement
+  framing, having never checked the enforcement layer. `main` is governed by a
+  **ruleset**, and its required checks are `typecheck`/`test`/`build` only —
+  **`test-web` is not required**, so a red web suite still permits merge. The
+  job reports; it does not block. Adding it is Adam's settings change.
+  *(Note `…/branches/main/protection` returns 404 "Branch not protected" — read
+  alone that suggests no protection at all; the rules live under `/rules/`.)*
+  **The lesson is the repo's own, applied one layer up: adding a CI job is only
+  half of adding a gate.** I built a guard and called it enforcement without
+  asking whether anything enforced it.
+- **Two more claims re-examined under challenge; one held, one was an
+  over-claim.** *Held:* "verified on Node 22" — a version probe inside the test
+  child process printed `v22.11.0`, so tsx did spawn the fetched binary rather
+  than falling back to local Node 24. *Over-claimed:* the masthead's "nothing
+  written to TEST" — the local gate run included `npm run -w data test`, which
+  routes at `SUPABASE_TEST_URL` exactly as CI does. Destructive suites are
+  excluded by `vitest.config.ts`, but that is the config's intent, not a
+  per-test audit I performed. Softened in STATE.
+- **"Needs no network/env" was upgraded from assertion to measurement.** It had
+  been written into `ci.yml`'s comment as a bare claim. Re-ran the suite with
+  `globalThis.fetch` replaced by a thrower: 714/714, zero network attempts —
+  **and a negative control first**, confirming the preload reaches the test
+  child process and that a test calling ambient `fetch` does go red. Scope
+  stated rather than glossed: it proves nothing uses the *ambient* global
+  `fetch`; a self-stubbing test would overwrite the thrower, and raw
+  `node:http` was not covered.
+
 ## 2026-09-03 (later 4) — Bug-fix pass: urban/interest chips fixed; the three amenity tiles were already correct.
 
 - **Reproduced both before touching code, as the brief required — and the two
