@@ -63,6 +63,183 @@ returns 200 on `/places/search`. The vocabulary is unenumerable, so the FSQ
 findings above rest on **free-text probing**, and FSQ text search matches
 **names, not categories**. Read every FSQ near-zero as *evidence of absence via
 the only reachable interface*, not proof of absence.
+## ⚠️ The 2026-08-25 `resolvePlaces()` findings — RE-VERIFIED 2026-09-03, four of six were stale on arrival
+
+Full detail: `docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`,
+verified against `main` @ **`0dae80c`**.
+
+**The Aug 25 session's headline — "`resolvePlaces()` is additive only, imported
+by nothing" — was already false when written.** All three flag-gated resolver
+cutovers merged **2026-08-23**, two days earlier: #260 (`d62f660`, Search +
+`SEARCH_AREA_USE_RESOLVER`), #266 (`a086cb8`, Date Detail), #269 (`b227e65`,
+day-scoped browse). The #255/#256/#259/#260 tiering chain merged the same day,
+all four inside ninety minutes.
+
+**The Paper diagram rendered from that session depicts a superseded
+architecture and should not be used as a current reference.**
+
+| Aug 25 finding | Verdict |
+|---|---|
+| imported by nothing | **CHANGED** — 3 importers in `src/app`; still 0 in `src/components` |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| shared client cache unbuilt | **UNCHANGED — genuinely still open** |
+| 4 enrichment columns unselected | **UNCHANGED but largely moot** (below) |
+| no polyline support | **UNCHANGED — genuinely still open** (see the `preComputeFacts` item) |
+| tiering swap unmerged | **CHANGED** — merged Aug 23; the branch still existing is what made it look open |
+
+**Still genuinely open and worth acting on — only two:**
+- **Shared client cache (ADR step 4).** No `swr`/`react-query`/`@tanstack`/
+  `apollo`/`urql` in `web/package.json`, no cache keyed by canonical id
+  anywhere. The only caches are three **per-route, server-side, in-process**
+  ones — the opposite of the ADR's shared client cache.
+- **Polyline scope** — see the `preComputeFacts` → `resolvePlaces()` item below;
+  its blocker 2 is now answered, blocker 1 is not.
+
+**⚠️ Correction to how finding #4 should be read.** The four enrichment columns
+(migration `20260821060000`) are indeed unselected — but measured on TEST
+2026-09-03, `rating`, `review_count` and `price_tier` are **0 non-null across
+161,431 rows**, and `backfill-master-place-enrichment.ts` *asserts* they must
+stay NULL ("no source carries one"). **Wiring those three up would return
+nothing.** Only `master_place.photo_url` has substance — **10,311** populated
+rows currently unread. Note the export view's `photo_url` is a **different
+value** (a `LEFT JOIN LATERAL` over `source_record`), so "photo_url is selected"
+in `hydrate.ts:87` does **not** mean the migration's column is read.
+
+**Process note worth keeping:** a finding about whether code is wired is only
+valid against a stated commit. Neither the Aug 25 report nor its diagram pins
+one. Pin the SHA.
+## Category × source gaps — MEASURED 2026-09-02, decision deferred
+
+Full data: `docs/investigations/2026-09-02-category-source-audit.md`. Corpus
+figures are **TEST only**; PROD was not measured. The routing-table decision was
+explicitly held out of that pass — this is the parked input to it.
+
+**Tier 1 — no corpus AND no compliant live source exists. Wiring cannot fix
+these.**
+- **Showers** (`shower`: 4 in-scope) and **Dump stations** (`dump_station`: 6
+  in-scope). Neither has a match in Mapbox Search Box's **482** canonical
+  category ids (probed `shower`, `dump`, `sanit`, `sewage`, `disposal`, `rv`).
+  Both are additionally dropped at `hydrate.ts:140` (suppressed), so they are
+  empty twice over — and both carry a NEW badge. Fix is a **sourcing** decision
+  (new provider, or an OSM-derived ingest), not a routing one.
+- **`urban`** — **0** corpus rows (`shopping_mall`, `city_park` both empty) and
+  no live source. A fully dead bucket that still occupies a chip on two
+  surfaces.
+
+**Tier 2 — no corpus, but a compliant live source EXISTS and is merely unwired.
+Cheap wiring decisions.**
+- **Auto / Repair** — **0** corpus rows, no live wiring, but Mapbox publishes
+  `auto_repair`, `repair_shop`, `car_wash`. Cheapest gap in the audit.
+- **Trailheads** (4,759 in-scope, corpus-only; Mapbox has `trailhead`) and
+  **Groceries** (546 in-scope, corpus-only; Mapbox has `grocery`,
+  `supermarket`). Not broken — just single-sourced.
+- **`ev_charging`** — 2,886 in-scope corpus rows, but **not** in
+  `LIVE_SLIDE_FOR_PRIMARY`, so it never reaches the live half. Mapbox publishes
+  `charging_station`, unwired. See the fuel inversion below.
+
+**Tier 3 — thin corpus, live wired. Live-dependent by design; the exposure is an
+outage, not a gap.**
+- **`overnight`/Hotels: 4 in-scope rows.** **Coffee: 2.** **`attraction`: 106**
+  — of its three Google fanout types, `museum` and `art_gallery` have 0 corpus
+  rows but `historical_landmark` has 2 total / 1 in-scope. The 106 is carried
+  almost entirely by `visitor_center` (102), which Google's fanout does not
+  request. *(Corrected 2026-09-03 — the original text said all three were
+  zero.)*
+
+**Cross-cutting — arguably ahead of all of the above:**
+- **Three competing category vocabularies.** DESIGN.md's 9 ↔
+  `BROWSE_CARD_CATEGORIES` ↔ `SlideCategoryKey` do match. But the day-browse
+  route accepts only **7** of the 9, and the 13 Find Nearby tiles are a third
+  vocabulary keyed on `primary_category` — **3** primaries are tile-claimed and
+  slide-unclaimed (`water`, `shower`, `dump_station`), **45** are slide-claimed
+  and tile-unclaimed, **40** are claimed by one or both with **zero** corpus
+  rows, and **22** corpus values are claimed by nothing (incl. `picnic_area`
+  1,223 in-scope, `public_land` 448). **A routing table has to pick one
+  vocabulary as canonical before it can be written.**
+- **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
+  sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
+  Surface 3 expands the same chip through `SLIDE_TO_PRIMARY_CATEGORY` and has no
+  allowlist. The `interest` chip is a working filter over **2,537** in-scope
+  rows on one surface and an error on the other.
+- **Fuel is inverted between corpus and live.** Corpus `gas_station` in-scope =
+  **1**; `ev_charging` = **2,886**. Live Mapbox serves `gas_station` only. The
+  corpus has EV and no gas; the live source has gas and no EV.
+- **⚠️ Stale rationale to correct when this is decided:** §"OSM fuel family
+  retired (#214)" below still justifies letting corpus `gas_station` lapse
+  because "gas_station is covered **live** by Google Places." Google's
+  `TYPES_BY_CATEGORY.fuel` was emptied 2026-08-25 and fuel moved to Mapbox. The
+  conclusion holds; the stated reason names a source that no longer serves fuel.
+
+**Two uncounted sourcing paths found while enumerating (Finding 4):**
+- **`resolveSuggestions` / `resolveOvernights`** (`web/src/lib/trips/`, used by
+  `alaska.ts`) run a **different source list**: `[overpassSource, recGovSource,
+  usfsSource, blmSource, foursquareSource]` — **OSM/Overpass instead of Google,
+  no Mapbox at all**. `overpassSource` is wired here and nowhere else. So
+  `camping`/`scenic`/`food`/`oddity` are Google-led on the browse surfaces and
+  Overpass-led on the reference-trip path. **Fuel is absent entirely** from
+  `resolveSuggestions`'s 4 categories.
+- **`FuelStopCard`** (`web/src/components/trip/fuel-stop-card.tsx`) calls
+  `/api/trip-browse/…?category=fuel` and **has no importer anywhere in the
+  repo** (scope: repo-root grep over `*.ts`/`*.tsx`, excluding `node_modules`).
+  Dead code; decide whether to delete it when the routing work lands.
+
+**Not measured, scope named:** Foursquare's amenity taxonomy. Its categories
+endpoint 404s on the pinned `x-places-api-version: 2025-06-17` at both
+`places-api.foursquare.com/places/{categories,taxonomy}` and legacy
+`api.foursquare.com/v3/places/categories`. So "no compliant live source exists"
+for showers/dump stations/water fill is established **against Mapbox's list
+only**, not against every provider.
+## Two apparent web-client defects — CODE-READING ONLY, NEITHER REPRODUCED (2026-09-02)
+
+Surfaced by the read-only surface trace,
+`docs/investigations/2026-09-02-three-surfaces-place-data-paths.md`. **Both are
+deductions from source, not observations. Confirm at runtime before acting** —
+either could be wrong for a reason the code doesn't show.
+
+- **1. `urban` / `interest` chips on the day-scoped browse panel look like they
+  return HTTP 400.** `browseCategoryToSlide` (`lib/trip-browse/palette.ts:58-63`)
+  is now **total** — it returns `"urban"` / `"interest"` rather than null — so
+  the panel's `.filter((k) => k !== null)`
+  (`components/trip/category-browse-panel.tsx:310`) can no longer drop anything,
+  and `?categories=urban` reaches the route. The route validates against
+  `SLIDE_CATEGORIES` (`app/api/trip-browse/[tripId]/[dayId]/route.ts:16-24`), a
+  7-key list that **deliberately excludes** both because their live query sets
+  are empty — so it takes the `bad` branch at `:133-141` and 400s. The panel
+  renders that as an `HTTP 400` error box, not the empty state its own comment
+  at `:302-305` predicts.
+  **Root shape:** one constant is doing two jobs — "what `all` expands to" and
+  "what is a legal request". Those want to differ for corpus-backed buckets.
+  **Fix sketch:** split the constant; keep `urban`/`interest` valid as requests
+  but out of the `all` expansion, so they fall through to the federated half.
+
+- **2. Find Nearby's Water fill / Showers / Dump stations tiles appear
+  structurally unable to return a result.** They target `water`, `shower` and
+  `dump_station` (`components/trip/find-nearby-panel.tsx:198, :212, :219`) —
+  all three in `SUPPRESSED_PRIMARY_CATEGORIES`
+  (`lib/trip-browse/federated.ts:72-75`), which `hydratePlacesByIds` drops at
+  `lib/trip-browse/hydrate.ts:140`. Their live half is unmapped in
+  `LIVE_SLIDE_FOR_PRIMARY` too, so it short-circuits to `[]`. **The resolver
+  flag does not change this** — both `SEARCH_AREA_USE_RESOLVER` states route the
+  bbox federated half through the same `hydratePlacesByIds`
+  (`app/api/search-area/handler.ts:194` legacy,
+  `lib/places/resolve-places.ts:497` resolver).
+  **Note the near-miss:** the tile list's comment
+  (`find-nearby-panel.tsx:80-83`) says the values were "verified against the
+  live Typesense `primary_category` facet". That is plausibly **true and still
+  compatible with an empty tile** — suppression happens downstream in
+  **hydration**, not in Typesense, so a facet-level check cannot see it.
+  **Fix is a product call, not obviously a code call:** drop the three tiles, or
+  narrow the suppression for the search-area path only (the suppression is
+  deliberate — `federated.ts:18-20` argues standalone amenities are "not cards
+  in their own right", which is a reasonable position for *browse* and a
+  debatable one for an explicit *search* for a dump station).
+
+**Related, no defect, worth a look if the Google-dependency reduction
+proceeds:** nothing in the Find Nearby UI distinguishes a corpus-only tile from
+a live-backed one, and the "NEW" badge does not correlate with the difference
+(it predates the data wiring entirely — see the report). **6 of the 8
+NEW-badged tiles issue no live call at all**, so they are precisely the tiles a
+Google reduction would not affect.
 
 ## AZ — Colorado River SHP / Yuma Quartermaster Depot SHP duplicate master_places (2026-09-02, TEST)
 
@@ -851,6 +1028,29 @@ shared substrate). Deferred, blocked on:
    the same suppression filter applies there — or whether
    `preComputeFacts`-via-resolver would let suppressed rows through —
    is unverified this session and needs confirming before any swap.
+
+   > ### ✅ ANSWERED 2026-09-03 — and the answer is the feared one.
+   > Verified against `main` @ `0dae80c`
+   > (`docs/investigations/2026-09-03-reverify-aug25-resolver-findings.md`).
+   > **`preComputeFacts`-via-resolver WOULD let suppressed rows through.**
+   > - `isSuppressedCategory` has exactly **two** call sites in `web/src`:
+   >   `hydrate.ts:140` (bbox/ids) and `bake-corridors.ts:134` (generation).
+   > - `fetchFederatedPois` applies only `isClosedPlace`
+   >   (`federated.ts:336-338`) — **no suppression filter**.
+   > - The RPC does not filter them either: `pois_along_corridor`'s `WHERE`
+   >   (migration `20260902050100`, lines 139-148) excludes `land_status`,
+   >   closed/decommissioned rows and template-only descriptions, but **not**
+   >   `dump_station`/`water`/`toilet`/`fire_pit`/`shower`/`picnic_area`/
+   >   `picnic_ground`.
+   >
+   > **⚠️ Not a live bug today, and the reason matters.** `fetchFederatedPois`
+   > always passes `p_categories = SLIDE_TO_PRIMARY_CATEGORY[slideKey]`, never
+   > `null` (`federated.ts:320-321`), and per #364 no slide bucket claims a
+   > suppressed value. **Safety comes from the category allowlist, not from a
+   > suppression filter** — so passing `null` categories, or adding an amenity
+   > to a slide bucket, would start leaking suppressed rows with nothing to
+   > catch them. Any swap should add the filter rather than rely on the
+   > allowlist. **Blocker 1 (polyline scope) remains open and unchanged.**
 
 Not in scope for the guarantee-selector build (spec §11 steps 5/6/7).
 `pickAnchorStop`, `pickGuaranteedStop`, and every pool-consuming
