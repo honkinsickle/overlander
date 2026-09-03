@@ -2,6 +2,36 @@
 
 
 
+
+## CA state_parks — `dissolveBoundaries` conflates features that share a `UNITNBR` value (2026-09-03, PROD)
+
+**Concrete instance (measured this session):** `state_parks:CA:park:622`,
+named `Agua Caliente County Park (ABDSP)`, carries a 250-part MultiPolygon
+whose bounding box (63 km × 102 km) spans all of Anza-Borrego. Cause:
+CA DPR's ParkBoundaries source has **two distinct features** sharing
+`UNITNBR = "622"` (`normalized_payload.provenance.dissolved_from` lists
+both GlobalIDs); the ingest's `dissolveBoundaries` in
+`data/ingestion/sources/state-parks.ts:208` groups by `UNITNBR` and keeps
+whichever `props` came first, merging both polygons under Agua Caliente CP's
+name.
+
+**Downstream damage:** any visitor SR whose Point sits inside the oversized
+polygon hits `spatial_containment` and links onto the corrupted mp. Verified
+on the CA state_parks ingest this session — the `california_state_parks:638`
+SR named `Anza-Borrego Desert State Park ®` linked onto the `Agua Caliente County
+Park (ABDSP)` master_place because its Point falls inside that polygon.
+
+**Not resolved this session.** The symptom-level fix (repoint the misplaced
+visitor SR to the existing NPS Anza-Borrego mp) is documented in
+`docs/investigations/2026-09-03-merge-preview-v2-nway.md` §5.3 and left for
+Adam's decision. This backlog item is for the upstream fix: either detect
+divergent features under a shared `UNITNBR` in the dissolve step, or
+require CA DPR data to have unique UNITNBR-per-unit before dissolving.
+
+**Follow-up scan not yet done:** search CA state_parks source_records for
+any other records whose `normalized_payload.provenance.dissolved_from`
+lists more than one GlobalID. Each is a candidate for the same bug.
+
 ## Live-source coverage — SAMPLED 2026-09-03; supersedes part of the #364 entry
 
 Full data: `docs/investigations/2026-09-03-live-source-coverage-sampling.md`.

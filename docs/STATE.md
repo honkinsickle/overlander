@@ -59,6 +59,16 @@ Read-only pass. No writes to TEST or PROD, no code/schema changes. New doc: `doc
 
 **PR #368, PR #369, and PR #370 remain open/unmerged.** This branch is cut from `main` and reads PR #370's on-disk `.context/merge-preview-136.json` artifact for the 38-pair filter. Nothing on those PRs is touched.)
 
+# STATE — branch `fix-agua-caliente-and-nway-preview` · 2026-09-03 (later 23) — merge preview v2: n-way clusters + Agua Caliente federation-bug plan (not executed).
+
+(**newest truth: `data/scripts/merge-preview-same-pairs.ts` v2 supersedes PR #370's v1. Adds n-way merge groups via union-find over all 135 SAME pairs (135 = 136 raw − 1 Agua Caliente exclusion per PR #372). Score-based canonical picker corrects a v1 bug that mis-ordered pairwise reduction. Read-only. Zero writes to either database — the Agua Caliente fix was scoped but not executed.**
+
+135 pairs consolidate into 123 merge groups: 113 size-2, 9 size-3, 1 size-4 (Fort Churchill NV). **10 n-way clusters (size > 2) — 8 more than the 2 named in the ask.** 9 decidable + 1 undecidable (Hat Rock OR).
+
+**Agua Caliente root cause identified: shared `UNITNBR = "622"` in CA state_parks source.** `dissolveBoundaries` groups by UNITNBR, so it merged Agua Caliente CP + ABDSP polygons under one name. The polygon (250-part MultiPolygon spanning 63 km × 102 km) covers all of Anza-Borrego, which is why `spatial_containment` fires for any visitor SR at ABDSP center. Fix plan documented in §5.3 of the new doc (2 UPDATEs + 2 recomputes). Not executed — first PROD write of the thread, fixes symptom not root cause, `field_precedence` outcome unverified. Question in §8.
+
+New doc: `docs/investigations/2026-09-03-merge-preview-v2-nway.md`. Confidence key in §7. All PRs #368–#372 remain open/unmerged; this branch is cut from `main` and reads their on-disk `.context/` artifacts.)
+
 ---
 
 # STATE — branch `mapbox-coverage-sampling` · 2026-09-03 (later 21) — **Live-source coverage SAMPLED. Two of #364's "just needs wiring" rows reverse. Decision still deferred.**
