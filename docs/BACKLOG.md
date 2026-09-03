@@ -12,11 +12,16 @@ now wrong for Trailheads.**
 
 - **Trailheads — DO NOT wire Mapbox.** `trailhead` returned hits at **2/6 metro
   and 2/6 rural points, 3 and 2 total features**, against a corpus of
-  **4,759**. **Foursquare** — already wired, mapped to `scenic` via its Outdoors
-  top-level — returned relevant hits at **10/12** points. If a live complement is
-  wanted here, FSQ is the candidate, not Mapbox.
+  **4,759**. That is a direct category measurement and stands.
+  **Foursquare — already wired, mapped to `scenic` via its Outdoors top-level —
+  returned relevant hits at 10/12 points, but that is a NAME TEXT-SEARCH against
+  Mapbox's CATEGORY FILTER and the two are not like-for-like.** Treat FSQ as the
+  candidate to *test first*, not as an established better source; confirming it
+  needs a like-for-like category probe, which the unreachable FSQ taxonomy
+  currently prevents. *(Softened 2026-09-03.)*
 - **Viewpoints — same reversal.** Mapbox `viewpoint`: **4/6 metro, 0/6 rural, 8
-  total metro features** against a corpus of 340. FSQ better (6/12 and 9/12).
+  total metro features** against a corpus of 340. Same FSQ caveat as above
+  (6/12 and 9/12, same non-comparable instrument).
 - **`rest_area` (inside `interest`) is thin too** — 5/6 metro but **1/6 rural**.
 
 **Confirmed genuinely just-needs-wiring (dense where sampled):**
@@ -38,13 +43,17 @@ unsuppression can:
 - **Dispersed camping** — no Mapbox id, 1 real FSQ hit, but corpus is **2,533**
   in-scope, so it is already well served and simply has no live complement.
 
-**⚠️ CARRY INTO THE ROUTING DECISION — Mapbox coverage tracks settlement, not
-geography.** At the two genuinely remote sample points (Ohanapecosh on Rainier,
-Cave Lake in eastern NV) Mapbox returned **0** for campground, gas, auto repair
-and most commercial categories. Every "4/6 rural" above means "all but the two
-wilderness points". **Live degrades exactly where overlanding happens; the
-corpus does not.** Argues for corpus-primary in the deep-corpus categories
-(campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed 2,533).
+**⚠️ CARRY INTO THE ROUTING DECISION AS A HYPOTHESIS, NOT A FINDING — Mapbox
+coverage may track settlement rather than geography.** At the **two** genuinely
+remote sample points (Ohanapecosh on Rainier, Cave Lake in eastern NV) Mapbox
+returned **0** for campground, gas, auto repair and most commercial categories.
+Every "4/6 rural" above means "all but the two wilderness points". **The sample
+contains exactly two remote points — enough to notice a pattern, not enough to
+establish one**; no further remote points were sampled and no other provider was
+compared there. If it holds it would argue for corpus-primary in the deep-corpus
+categories (campgrounds 6,114 · trailheads 4,759 · oddity 2,745 · dispersed
+2,533). More remote points are cheap to add to the instrument.
+*(Softened 2026-09-03; originally stated as an unqualified finding.)*
 
 **Foursquare taxonomy — no longer "unmeasured", now a bounded negative.**
 Retried across **24 combinations** (4 paths × 3 API versions × 2 auth styles),

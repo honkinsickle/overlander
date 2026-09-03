@@ -21,9 +21,12 @@ proposed here.
 behind it," and the answer **reverses the reading of two rows**:
 
 - **Trailheads** and **Viewpoints** were listed in #364 as *"id exists,
-  available, unwired"* — implying wiring would help. **Sampling shows Mapbox has
-  almost no data for either.** Wiring Mapbox for these would add close to
-  nothing. Foursquare — **already wired** — has visibly better data for both.
+  available, unwired"* — implying wiring would help. **Sampling shows Mapbox's
+  own `trailhead` and `viewpoint` categories return very little at these
+  points**, so wiring them would add close to nothing. Foursquare **may** be the
+  better live candidate for both, but that comparison is **not settled** — see
+  the caveat in the Foursquare section: it rests on a name-text-search
+  instrument measured against a category-filter instrument.
 - **Auto / Repair** was the same label, and it holds up completely: Mapbox
   saturates at every settled sample point against **zero** corpus rows.
 
@@ -202,14 +205,41 @@ probe**. A near-zero result is *evidence of absence via the only reachable
 interface* — it is **not** proof that Foursquare holds no such category. Stated
 that way deliberately.
 
-**The comparison rows are the surprise.** Trailheads returned relevant results
-at **10 of 12** points and viewpoints at 6/12 and 9/12 — visibly better than
-Mapbox's 2/6 and 0/6 rural. **Foursquare is already a wired source**, mapped to
-`scenic` via its Outdoors top-level id. So some of this data may already reach
-the `scenic` chip today — while the Trailheads and Viewpoints **tiles** miss it,
-because they query `primary_category` values that map to no live slide key.
-That is #364's Finding 0 (three vocabularies) showing up as lost data, not just
-inconsistency.
+**The comparison rows are suggestive, and the comparison is NOT settled.**
+Trailheads returned relevant results at **10 of 12** points and viewpoints at
+6/12 and 9/12, against Mapbox's 2/6 and 0/6 rural.
+
+⚠️ **These two numbers are not directly comparable, and it would be wrong to
+read them as "Foursquare beats Mapbox."** The Mapbox figure comes from a
+**category filter** (places Mapbox has *classified* as trailheads); the
+Foursquare figure comes from a **name text-search** (places with "trailhead" in
+the *name*). Those measure different things. A place can be a trailhead in
+Mapbox's data under some other category and never appear in the `trailhead`
+count.
+
+**What the evidence does support, at the confidence it earned:**
+1. Mapbox's own `trailhead` / `viewpoint` categories return very little at these
+   points — that part is a direct category measurement and stands.
+2. A **one-point** adjacent-category spot-check (run during this session's
+   self-audit, not in the original sampling run) at the Tumalo bbox found that
+   Mapbox's `park`, `outdoors` and `nature_reserve` categories surface no
+   trailhead-named place that `trailhead` itself misses — the single
+   trailhead-named result appears in both `trailhead` and `outdoors`. So at that
+   one point the sparsity is not obviously a mis-categorisation artifact.
+3. Foursquare's name-search surfaces trailhead-named places at more points than
+   Mapbox's category returns.
+
+Together those make Foursquare a **plausible** better live candidate for these
+two rows — enough to justify testing it before wiring Mapbox, **not** enough to
+call it established. Confirming it would need a like-for-like probe (Foursquare
+category ids), which the unreachable taxonomy currently prevents.
+
+**Foursquare is already a wired source**, mapped to `scenic` via its Outdoors
+top-level id, so some of this data may already reach the `scenic` chip today —
+while the Trailheads and Viewpoints **tiles** miss it, because they query
+`primary_category` values that map to no live slide key. That part is
+independent of the comparison above and is #364's Finding 0 (three
+vocabularies) showing up as lost data.
 
 ---
 
@@ -248,10 +278,13 @@ All three are additionally dropped at `hydrate.ts:140` and carry NEW badges.
 
 8. **Trailheads** — Mapbox `trailhead`: **2/6 metro, 2/6 rural, 3 and 2 total
    features.** Against a corpus of **4,759**. **Wiring Mapbox here would be
-   near-worthless.** Foursquare is the better live candidate and is already
-   wired for `scenic`.
+   near-worthless** — that part is a direct category measurement and stands.
+   Foursquare is a **candidate worth testing first**, not an established better
+   source: the evidence for it is a name-search compared against a category
+   filter (see the caveat above). It is already wired for `scenic`.
 9. **Viewpoints** — Mapbox `viewpoint`: **4/6 metro but 0/6 rural, 8 total
-   metro features.** Against a corpus of 340. Same conclusion.
+   metro features.** Against a corpus of 340. Same conclusion, same caveat on
+   the Foursquare comparison.
 10. **`rest_area`** (part of `interest`) — 5/6 metro but **1/6 rural**, 29 and 1
     features. Thin; a partial answer at best.
 
@@ -261,20 +294,27 @@ All three are additionally dropped at `hydrate.ts:140` and carry NEW badges.
     have no corpus and both saturate in metro. They work today because the live
     half carries them; the exposure is a live outage, not a gap.
 
-### The cross-cutting pattern worth carrying into the decision
+### A suggestive pattern worth weighing — on two data points
 
-**Mapbox coverage tracks settlement, not geography.** At the two genuinely
-remote points — Ohanapecosh (Mt Rainier) and Cave Lake (eastern Nevada) —
-Mapbox returned **0** for campground, gas, auto repair and most other
+**Mapbox coverage may track settlement rather than geography.** At the two
+genuinely remote points — Ohanapecosh (Mt Rainier) and Cave Lake (eastern
+Nevada) — Mapbox returned **0** for campground, gas, auto repair and most other
 commercial categories; Ohanapecosh returned 1 restaurant and 0 fuel. Every "4/6
 rural" in the table above is really "every rural point except the two
 wilderness ones."
 
-For a product whose users are specifically in those two kinds of place, that is
-the single most decision-relevant fact this pass produced: **live sources
-degrade exactly where overlanding happens, and the corpus is the only thing that
-does not.** The categories with deep corpora — campgrounds 6,114, trailheads
-4,759, dispersed 2,533, oddity 2,745 — are the ones that will still work off-grid.
+⚠️ **State this at the strength it has: the sample contains exactly TWO
+genuinely remote points.** Two points are enough to notice a pattern and not
+enough to establish one. The direction is consistent with how commercial POI
+datasets are generally built, but this pass did not test that — no additional
+remote points were sampled, and no other provider was compared at those points.
+
+**Weigh it as a hypothesis to test, not a finding to build on.** If it holds, it
+matters a great deal — it would mean live sources thin out exactly where
+overlanding happens while the corpus does not, which would argue for
+corpus-primary routing in the deep-corpus categories (campgrounds 6,114 ·
+trailheads 4,759 · oddity 2,745 · dispersed 2,533). Confirming it needs more
+remote points, which is cheap to add to this instrument.
 
 **Not sampled, and worth naming:** coverage was measured at 12 points on one
 day. It is a sample, not a population measurement, and no claim here describes
