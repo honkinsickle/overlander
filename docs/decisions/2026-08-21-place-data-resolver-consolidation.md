@@ -48,17 +48,20 @@ Step 1 (nullable columns + backfill on `master_place`) is the first implementati
 
 ## Update 2026-09-03 — read-surface cutovers made unconditional
 
-The three read surfaces were wired behind flags (default off) on 2026-08-23. Two
-are now **cut over unconditionally** — flags and legacy dual bodies removed after
-TEST parity verification:
+The three read surfaces were wired behind flags (default off) on 2026-08-23. **All
+three are now cut over unconditionally** — flags and legacy dual bodies removed
+after TEST parity verification:
 
 - **`GET /api/search-area`** — `SEARCH_AREA_USE_RESOLVER` + `viaLegacy` removed.
 - **`GET /api/trip-browse/:tripId/:dayId`** — `TRIP_BROWSE_USE_RESOLVER` removed;
   a live-only single-endpoint fallback is retained for the degenerate no-`dayStart`
   day (the resolver's day-corridor scope needs both endpoints).
-
-`POST /api/places/details` (`DATE_DETAIL_USE_RESOLVER`) remains flag-gated — it is
-by-id enrichment, not a category→source surface, and was out of scope for this step.
+- **`POST /api/places/details`** — `DATE_DETAIL_USE_RESOLVER` + the legacy inline
+  `placeDetails` loop removed; the route now delegates cache-misses to
+  `enrichByGoogleId()` unconditionally (#263 built that by-id capability). As
+  by-id enrichment (not category→source), it had no divergence risk — parity was
+  identical incl. the `category` field. The now-dead `chunk`/`BATCH_SIZE` batching
+  helpers were removed; the 40 fan-out ceiling is preserved via `ENRICH_BATCH`.
 
 **Still open (step 4):** the shared client cache. Each route still owns its own
 in-process LRU; consolidating to one client-side cache keyed by canonical id is

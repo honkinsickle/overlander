@@ -301,3 +301,38 @@ injected cache ops so both flag states are unit-testable without network:
 
 **Not done (intentionally):** the flag is NOT flipped on; no `web/src/components` change; the
 shared client cache (ADR step 4) is untouched — the route keeps its own 15-min cache.
+
+---
+
+## 8. SHIPPED — flag removed, unconditional enrichByGoogleId() (2026-09-03)
+
+The `DATE_DETAIL_USE_RESOLVER` flag and the `viaLegacy` inline `placeDetails` loop
+are **removed**. `fetchDetailsMap` now always does cache-first, then delegates
+misses to `enrichByGoogleId()`; the 15-min per-lambda cache stays at the route
+(that capability is cache-less — cutover-plan §6 option 1, not ADR step 4). The
+handler dependency seam shrank to `{ enrichByGoogleId }`.
+
+**Dead code removed:** `chunk` and `BATCH_SIZE` in `batch.ts` were only used by
+`viaLegacy`; they're gone (`parsePlaceIds`, still used by the route, stays). The
+40 fan-out ceiling is preserved — `enrichByGoogleId` batches at its own
+`ENRICH_BATCH = 40`, the same value.
+
+**Parity verified on TEST before removal** `[literal — computed 2026-09-03]`:
+legacy (`placeDetails` loop) vs resolver (`enrichByGoogleId`) run for the SAME
+Google `place_id`s with SEPARATE fresh caches, sourced live from Google
+`searchNearby` in CA/OR/UT. **24 ids, identical `{placeId: PlaceRich}` maps —
+same key sets and every field equal, including `category`** (the Auto/Repair-class
+check; §3 already argued category can't diverge here, this confirms it
+empirically). Because both paths are pure Google Place Details passthroughs, there
+was no output difference to reconcile and **no coverage gap** requiring a fallback
+(unlike trip-browse's degenerate no-`dayStart` day) — non-Google ids resolve to
+null in both and are omitted; empty input yields `{}` in both.
+
+Re-verified post-removal via `scripts/verify-places-details-wired.ts` (now a
+single-path health check): real enrichment for two real ids, garbage id omitted.
+
+**One concurrency nuance (within contract):** the old loop chunked over ALL ids
+(hits + misses), so a 40-wide batch could hold only a few real network calls; the
+new path chunks over MISSES only, so it can reach a fuller 40-wide fan-out. Both
+respect the documented ceiling of 40 — noted for anyone watching the Place
+Details QPS envelope.

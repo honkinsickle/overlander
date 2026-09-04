@@ -1,3 +1,35 @@
+# STATE — branch `migrate-date-detail-resolveplaces` · 2026-09-03 (later 37) — **Date Detail (`POST /api/places/details`) cut onto `enrichByGoogleId()`.** `DATE_DETAIL_USE_RESOLVER` + the legacy loop gone. With #398, ALL THREE read surfaces are now flag-free on the resolver. Parity verified on TEST. No data writes.
+
+(**newest truth: 5 files in `web/` (+3 docs). No data-layer/corpus/API-shape change; no writes to TEST or PROD (this endpoint is pure Google Place Details passthrough — no DB). Standing self-review pass run (code-reviewer subagent): verdict READY, 0 critical/important, fixes applied. All gates green + live TEST verification.**
+
+**By-id enrichment DOES fit `resolvePlaces` cleanly — verified, not assumed.** `[literal]` The task asked me to confirm whether the resolver supports by-id lookups or only category→source discovery. It supports by-id via the **`enrichByGoogleId()`** sibling capability (built as #263 specifically for this), which returns `Record<placeId, PlaceRich>` — the exact Date Detail contract — with the same include-`{}` / omit-and-negatively-cache-`null` semantics. So this was a clean flag+legacy removal, not a forced fit.
+
+**THE AUTO/REPAIR CLASS CANNOT OCCUR HERE, and I verified it anyway.** `[literal]` Date Detail has **no category→source mapping** — both the legacy loop and `enrichByGoogleId` call the identical `placeDetails(id)` (Google Place Details). So a category/source resolving differently is structurally impossible (design §D3, cutover-plan §3). The parity check confirmed it empirically incl. the `category` field.
+
+**PARITY CHECK on TEST, before removing anything** `[literal — computed this session, legacy vs resolver, SAME ids, SEPARATE fresh caches]`: 24 real Google `place_id`s sourced live from Google `searchNearby` across **CA/OR/UT**. **Identical `{placeId: PlaceRich}` maps in every cell — same key sets, every field equal including `category`. 0 mismatches.** Re-verified post-removal via `scripts/verify-places-details-wired.ts`.
+
+**NO COVERAGE GAP → no fallback needed** (unlike trip-browse's degenerate no-`dayStart` day in #398). `[literal]` Non-Google ids resolve to `null` in both paths (omitted); empty input → `{}` in both. The resolver fully covers the legacy behaviour, so retirement is clean.
+
+**What changed** `[literal — git diff]`:
+- `route.ts`: removed `DATE_DETAIL_USE_RESOLVER` + the `useResolver` arg; the 15-min per-lambda cache stays at the route.
+- `handler.ts`: removed `viaLegacy` + `useResolver`; `fetchDetailsMap` always delegates misses to `enrichByGoogleId`. Deps seam → `{enrichByGoogleId}`.
+- `batch.ts`: removed now-dead `chunk`/`BATCH_SIZE` (only `viaLegacy` used them); kept `parsePlaceIds`. **The 40 fan-out ceiling is preserved** via `enrichByGoogleId`'s `ENRICH_BATCH=40`.
+- Rewrote `handler.test.ts` (single path + interleaved-cache order test) and `batch.test.ts` (parsePlaceIds only). `verify-places-details-wired.ts` → post-cutover single-path health check.
+
+**Client unchanged** — `{ details: Record<placeId, PlaceRich> }` byte-for-byte; no `web/src/components` change.
+
+**One concurrency nuance (within contract):** the old loop batched over ALL ids (hits+misses); the new path batches over MISSES only, so it can reach a fuller 40-wide fan-out. Both cap at 40. Noted, not a defect.
+
+**Out of scope, flagged:** a comment in `trip-browse/[tripId]/[dayId]/route.ts` still names `DATE_DETAIL_USE_RESOLVER` as a sibling-pattern example — a stale reference now, but it's in a different subsystem; left untouched.
+
+**Gates** `[literal — this session]`: `npm run -w web typecheck` clean · `npm run -w web test` 706/706 · `cd web && npx next build` exit 0. Live TEST: `verify-places-details-wired.ts` PASS.
+
+**NOT done, deliberately:** the shared client cache (ADR step 4) remains the one open consolidation item — each route still owns its own in-process cache. No more cutover flags remain anywhere.
+
+**Next steps (Adam's call):** review + merge. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `migrate-surfaces-resolveplaces` · 2026-09-03 (later 36) — **search-area + trip-browse cut FULLY onto `resolvePlaces()`.** The two `*_USE_RESOLVER` flags and the legacy dual bodies are gone; parity verified on TEST first. TEST-only, no data writes.
 
 (**newest truth: 9 files in `web/`, net −350 lines. No data-layer/corpus/API-shape change; no writes to TEST or PROD. Standing self-review pass run (code-reviewer subagent): verdict READY, 4 minor items, 3 fixed. All gates green + live TEST verification.**
