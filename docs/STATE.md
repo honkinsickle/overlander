@@ -1,3 +1,30 @@
+# STATE — branch `reconcile-master-reference-diagram` · 2026-09-03 (later 36) — **The "Place Data — Master Reference" Paper diagram reconciled against current `main` (#380–#394).**
+
+(**newest truth: no code changed.** The master-reference diagram (in the
+"Card data model and ofrmation" Paper file, same artboard as before — not the
+`resolvePlaces()`-specific one) was read as it currently exists, diffed
+against `STATE.md`/`BACKLOG.md`/the decisions folder/the actual code, and
+reconciled — not appended to. Five real drifts found and fixed: **(1)** Live
+Mapbox now also serves Auto/Repair, primary-category-aware, `repair_shop`
+deliberately excluded (mechanic vs. appliance-repair mismatch); **(2)**
+Surface 3 (Find Nearby) no longer has its original 6 groups/13 tiles — Decision
+9 shipped in #392, down to 5/10; **(3)** the shared category filter row
+(Surfaces 2 and 3 both use it) now renders 8 chips, not 9 — `urban` dropped;
+**(4)** `BROWSE_CARD_CATEGORIES` stays at 9 (data contract: map layer, icons,
+API validity) while `BROWSE_FILTER_CHIP_CATEGORIES` is the new 8-member
+rendered subset — "taxonomy stays 9, UI renders 8"; **(5)** Auto/Repair moved
+from an open gap to LIVE (#394), with the fuel/auto slide-key collision
+carried forward as a caveat for the next category wired the same way.
+**Unchanged, re-verified fresh:** `resolvePlaces()`'s status (3 importers, no
+cache, 2-point corridor) and that Search + Day-scoped browse remain the two
+surfaces on legacy fetch logic — no route file has changed since #373.
+Full evidence + confidence levels per change:
+`docs/investigations/2026-09-03-master-reference-diagram-reconciliation.md`.
+Self-review pass skipped per Adam's instruction (docs-only, no code/PROD
+change). **NEXT: Adam's review.**)
+
+---
+
 # STATE — branch `wire-auto-repair-mapbox` · 2026-09-03 (later 35) — **Auto/Repair wired to live Mapbox.** `car_repair`→`auto_repair`, `car_wash`→`car_wash`, served in the `fuel` slide bucket. Live-verified CA/OR/UT/WA. TEST-only, no data writes.
 
 (**newest truth: six files in `web/src`, no data-layer/corpus/API-shape change. No writes to TEST or PROD — the source hits Mapbox live at request time. All web gates green + a live end-to-end probe of the wired source.**
