@@ -1,0 +1,77 @@
+[
+  {
+    "group_id": 3,
+    "size": 2,
+    "states": ["CA"],
+    "canonical_mp_id": "189782bc-2f28-489c-93d9-2e193556c3e3",
+    "canonical_reason": "human override — scoring rule ties at 1; NPS record picked",
+    "absorbed_mp_ids": ["9445b700-d4f9-4079-891a-7afe466d51fa"],
+    "canonical_override": {
+      "mp_id": "189782bc-2f28-489c-93d9-2e193556c3e3",
+      "decided_by": "adam",
+      "reason": "Old Town San Diego SHP — both members describe the same park; NPS carries the substantially fuller description and a photo. Confirms PR #379's suggested tiebreaker."
+    },
+    "member_sides": [
+      {
+        "id": "189782bc-2f28-489c-93d9-2e193556c3e3",
+        "canonical_name": "Old Town San Diego State Historic Park",
+        "source_ids": ["nps"],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "9445b700-d4f9-4079-891a-7afe466d51fa",
+        "canonical_name": "Old Town San Diego State Historic Park",
+        "source_ids": ["california_state_parks"],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "3 place_match rows on the absorbed row drop via CASCADE (carried from the dry-run tool's output)",
+      "no state_parks GIS record exists for this park — verified, so no third member is missing"
+    ],
+    "decision_note": "PR #379 left this undecidable because both members score 1 under scoreMember and neither has state_parks GIS backing. It suggested picking NPS. Adam confirmed. The scoring rule still ties, so this is expressed as an explicit canonical_override rather than a fabricated score. #379 flagged as UNVERIFIED whether the visitor row's hours survive an NPS-canonical merge; that is now verified to survive — see docs/investigations/2026-09-04-groups-3-95-and-77-78.md.",
+    "provenance": "PROD ids, measured 2026-09-04. Not present on TEST — TEST and PROD are independent corpora with independent UUIDs."
+  },
+  {
+    "group_id": 95,
+    "size": 2,
+    "states": ["AZ"],
+    "canonical_mp_id": "332c61c4-3f86-41cc-936b-2b214872a79f",
+    "canonical_reason": "human override — scoring rule ties at 1; NPS record picked",
+    "absorbed_mp_ids": ["1960c448-9d2d-4057-9dff-bcc6bdefaae3"],
+    "canonical_override": {
+      "mp_id": "332c61c4-3f86-41cc-936b-2b214872a79f",
+      "decided_by": "adam",
+      "reason": "Tubac Presidio SHP — both members describe the same park unit; NPS carries the longer description, a photo and higher prominence. Confirms PR #379's suggested tiebreaker."
+    },
+    "member_sides": [
+      {
+        "id": "332c61c4-3f86-41cc-936b-2b214872a79f",
+        "canonical_name": "Tubac Presidio State Historic Park",
+        "source_ids": ["nps"],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "1960c448-9d2d-4057-9dff-bcc6bdefaae3",
+        "canonical_name": "Tubac Presidio State Historic Park",
+        "source_ids": ["arizona_state_parks"],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "2 place_match rows on the absorbed row drop via CASCADE (carried from the dry-run tool's output)",
+      "no state_parks GIS record exists for this park — verified, so no third member is missing",
+      "closer contest than group 3 — the two descriptions are comparable in length, unlike group 3's 214 vs 3,499 chars"
+    ],
+    "decision_note": "Same shape and same reasoning as group 3. PR #379: 'Same park unit represented on both sides... identical names.' Both members' descriptions cover the ruins of San Ignacio de Tubac, established 1752. Adam confirmed NPS canonical.",
+    "provenance": "PROD ids, measured 2026-09-04. Not present on TEST — TEST and PROD are independent corpora with independent UUIDs."
+  }
+]

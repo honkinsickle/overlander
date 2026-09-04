@@ -16,7 +16,7 @@
  *      (deliberately two flags; --target=prod alone is not enough).
  *   3. Refuses without --groups <id,id,...> — no "run against everything"
  *      mode. Groups are explicit.
- *   4. Blocks known-ambiguous groups (6 and 83 today, per PR #379) unless
+ *   4. Blocks known-ambiguous groups (3, 6, 83, 95 and 5001 today) unless
  *      --force-blocked. The block list is a hardcoded constant here, not
  *      a runtime lookup, so it survives even if the dry-run tool's output
  *      is stale.
@@ -36,6 +36,13 @@
  *      never sent to merge_master_place(), so the row is left completely
  *      untouched — no absorb, no source_record move, no relationship edge.
  *      The canonical is re-picked over the MERGING members only.
+ *  10. Honours a group's optional `canonical_override` {mp_id, decided_by,
+ *      reason} — but ONLY when the scoring rule genuinely ties. If the rule
+ *      can decide, an override is REFUSED rather than applied: overriding a
+ *      working rule is how a mis-typed id becomes a wrong merge, and it would
+ *      also mask real canonical drift. The override must name a merging
+ *      member, must agree with `canonical_mp_id`, and must carry a non-empty
+ *      decided_by and reason, which are printed and written to the audit note.
  *
  * Usage:
  *   # Dry-run against a specific group (default target=test, no writes)
@@ -77,11 +84,28 @@ const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
  *        the park containing it, not an intra-NPS duplicate. A corrected
  *        definition lives in data/merge-groups/, but it still needs
  *        --force-blocked so that running it is always a deliberate act.
+ *   3, 95 — Old Town San Diego SHP (CA) and Tubac Presidio SHP (AZ). RESOLVED:
+ *        both are one park on both sides, the rule ties, and Adam picked the NPS
+ *        row. Definitions live in data/merge-groups/ and carry a
+ *        canonical_override. Kept blocked so every #379 group needs
+ *        --force-blocked as well as its override.
  *   5001 — Salton Sea SRA visitor + its state_parks row. NET-NEW pairing the
  *        classifier never produced, so it has none of the 106 groups' prior
  *        validation history. Blocked for the same reason.
+ *   41, 68 — DEFECTS found 2026-09-04, pulled OUT of the "already validated 106".
+ *        Each canonical carries a visitor source_record that belongs to a
+ *        DIFFERENT park which already has its own master_place, and in both
+ *        cases the correct record for the group's own park sits on the member
+ *        that would be absorbed INTO the defective canonical:
+ *          41 — "Bothe-Napa Valley SP" is described by california_state_parks:482,
+ *               Bale Grist Mill SHP (own mp 9754d424).
+ *          68 — "Harstine Island" is described by
+ *               washington_state_parks:mcmicken-island-marine, McMicken Island
+ *               Marine State Park (own mp ab568cc1) — a different island.
+ *        Merging would permanently fuse two distinct park units. Fix the
+ *        misfiled source_record first, then unblock.
  */
-const DEFAULT_BLOCKED_GROUPS = new Set<number>([6, 83, 5001]);
+const DEFAULT_BLOCKED_GROUPS = new Set<number>([3, 6, 41, 68, 83, 95, 5001]);
 
 interface CliArgs {
   groups: number[];
@@ -168,6 +192,18 @@ interface GroupIn {
    * merge_master_place(). Optional — absent means "merge every member".
    */
   excluded_ids?: string[];
+  /**
+   * A human's explicit canonical pick for a group the scoring rule cannot
+   * decide. merge-canonical.ts deliberately refuses to guess on a tie and
+   * says overrides "MUST be applied explicitly, not by adding heuristics
+   * here" — this is that explicit path.
+   *
+   * Only honoured when the rule genuinely ties. If the rule CAN decide, an
+   * override is refused: silently overriding a working rule is how a
+   * mis-typed id becomes a wrong merge, and it would also hide real canonical
+   * drift.
+   */
+  canonical_override?: { mp_id: string; decided_by: string; reason: string };
 }
 
 /**
@@ -241,22 +277,57 @@ function planGroup(g: GroupIn): GroupPlan {
 
   const split = resolveGroupMembers(g.member_sides.map((m) => ({ ...m, ...asCanonical(m) })), g.excluded_ids);
   const pick = pickCanonicalGroup(split.merging.map(asCanonical));
+  const ov = g.canonical_override;
+
+  let canonicalId: string;
+  let canonicalReason: string;
 
   if (pick.canonical == null) {
-    throw new Error(
-      `group ${g.group_id}: canonical is undecidable over the merging members ` +
-        `(${pick.reason}). Refusing to write.`,
-    );
-  }
-  if (pick.canonical.id !== g.canonical_mp_id) {
-    throw new Error(
-      `group ${g.group_id}: canonical drift — input file says ${g.canonical_mp_id ?? "null"}, ` +
-        `shared-lib says ${pick.canonical.id} over the ${split.merging.length} merging member(s). ` +
-        `Refusing to write against stale dry-run output.`,
-    );
+    // The rule ties. Only an explicit, attributed human decision proceeds.
+    if (!ov) {
+      throw new Error(
+        `group ${g.group_id}: canonical is undecidable over the merging members ` +
+          `(${pick.reason}). Supply canonical_override {mp_id, decided_by, reason} to resolve it. Refusing to write.`,
+      );
+    }
+    if (!ov.mp_id || !ov.decided_by?.trim() || !ov.reason?.trim()) {
+      throw new Error(`group ${g.group_id}: canonical_override requires non-empty mp_id, decided_by and reason.`);
+    }
+    if (!split.merging.some((m) => m.id === ov.mp_id)) {
+      throw new Error(
+        `group ${g.group_id}: canonical_override.mp_id ${ov.mp_id} is not a merging member ` +
+          `(it is absent, or excluded). Refusing to write.`,
+      );
+    }
+    if (ov.mp_id !== g.canonical_mp_id) {
+      throw new Error(
+        `group ${g.group_id}: canonical_override.mp_id ${ov.mp_id} disagrees with canonical_mp_id ` +
+          `${g.canonical_mp_id ?? "null"}. Make them the same so the file reads truthfully.`,
+      );
+    }
+    canonicalId = ov.mp_id;
+    canonicalReason = `HUMAN OVERRIDE by ${ov.decided_by} — ${ov.reason} (rule said: ${pick.reason})`;
+  } else {
+    // The rule decided. An override here would mask drift, so refuse it.
+    if (ov) {
+      throw new Error(
+        `group ${g.group_id}: canonical_override supplied but the rule is NOT tied — it picked ` +
+          `${pick.canonical.id} (${pick.reason}). Overriding a working rule is refused; ` +
+          `remove the override or fix the group.`,
+      );
+    }
+    if (pick.canonical.id !== g.canonical_mp_id) {
+      throw new Error(
+        `group ${g.group_id}: canonical drift — input file says ${g.canonical_mp_id ?? "null"}, ` +
+          `shared-lib says ${pick.canonical.id} over the ${split.merging.length} merging member(s). ` +
+          `Refusing to write against stale dry-run output.`,
+      );
+    }
+    canonicalId = pick.canonical.id;
+    canonicalReason = pick.reason;
   }
 
-  const absorbedIds = split.merging.map((m) => m.id).filter((id) => id !== pick.canonical!.id);
+  const absorbedIds = split.merging.map((m) => m.id).filter((id) => id !== canonicalId);
 
   // Belt-and-suspenders: an excluded id must never reach the RPC.
   const leaked = absorbedIds.filter((id) => (g.excluded_ids ?? []).includes(id));
@@ -282,12 +353,7 @@ function planGroup(g: GroupIn): GroupPlan {
     }
   }
 
-  return {
-    canonicalId: pick.canonical.id,
-    absorbedIds,
-    excluded: split.excluded,
-    canonicalReason: pick.reason,
-  };
+  return { canonicalId, absorbedIds, excluded: split.excluded, canonicalReason };
 }
 
 async function main(): Promise<void> {
@@ -317,7 +383,7 @@ async function main(): Promise<void> {
   }
 
   // Refuse any group that dry-run marked undecidable — they don't have a canonical
-  const undecidable = requested.filter((g) => !g.canonical_mp_id);
+  const undecidable = requested.filter((g) => !g.canonical_mp_id && !g.canonical_override);
   if (undecidable.length > 0) {
     throw new Error(`group(s) have no canonical pick in input: [${undecidable.map((g) => g.group_id).join(",")}]`);
   }
