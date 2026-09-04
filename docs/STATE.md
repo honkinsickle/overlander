@@ -1,3 +1,33 @@
+# STATE — branch `category-remove-dead-four` · 2026-09-03 (later 29) — **CHAIN CLOSED. `urban` + water fill + showers + dump stations REMOVED from the UI. No open items left across #380/#382/#384.**
+
+(**newest truth: design only, fourth and final amendment in the chain. No code, nothing in `web/src` touched, nothing written to TEST or PROD.**
+
+**Adam's final decision: all four are removed from the UI — not kept as empty-state subtypes.** `[cited #364, #366]` No live source and no corpus exists for any of them, measured twice. **Written into all three docs as a "removed until a real data source exists" decision, explicitly not an oversight**, so a future reader finding no `urban` chip and no water/shower/dump tiles knows it was intended and that re-adding requires *new data*, not a UI change.
+
+**⚠️ THE ONE THING MOST LIKELY TO BE MISREAD, SO IT IS STATED HEAD-ON: the taxonomy stays at 9, the UI renders 8 chips.** `urban` **remains canonical** — its `SlideCategoryKey` member, `BROWSE_CARD_CATEGORIES` entry, DESIGN.md §1.2 tokens and section label are all untouched. **It loses only its chip.** That is not a contradiction: it is the ADR's own Decision 5 (*"a data contract does not oblige a chip"*) applied to a parent, exactly as Decision 8 applied it to `interest`'s subtypes. **Anyone counting chips in the product and getting 8 against a 9-category ADR is looking at the intended outcome.**
+
+**Why keep `urban` in the taxonomy rather than dropping to 8** `[literal]`: the nine keys are a closed set other code switches on exhaustively, so removing a member is a code change with real blast radius — and this is a docs pass. **And nothing else has to change: `categories=all` already expands to seven buckets and already excludes `urban`** (verified by executing `resolveRequestedCategories` earlier in this chain), so the default feed is unaffected by removing the chip.
+
+**SCOPE IS WIDER THAN FIND NEARBY, and reading the brief narrowly would have missed it.** `[literal]` `urban` also renders a chip in the **browse filter row** — `BROWSE_CARD_CATEGORIES` holds all nine and the row renders every one. "Removed from the UI" means that chip too. The three amenities exist only as Find Nearby tiles, so for them it is Find Nearby alone.
+
+**STRUCTURE CHECK (asked for): the routing table row count is UNCHANGED, deliberately.** Rows are **struck through and marked *no UI surface*, not deleted.** A deleted row reads as an unasked question; a struck row reads as an answered one — and deleting them is precisely how a "removed until a source exists" decision gets rediscovered as a gap and re-litigated. **It still reads at 9 parents; surfaced chips: 8.**
+
+**A concern from the previous pass is now void:** #382/#384 warned that `fuel`/Services would hold the table's best live target beside four guaranteed-empty chips and would need per-subtype empty states. **With the four removed, no empty chip ships at all — no empty-state work is required.** Services becomes Auto/Repair + Rest areas, two chips, and may not warrant a heading; flagged for implementation.
+
+**Grepped the whole chain for orphans and cleaned every one** `[literal]`. One passage survived the first sweep — §4.3's *"assigning a parent is still not deciding their UI fate"* — and was caught by a second pass filtered to un-struck matches. **A single grep was not enough; the second pass is what made the sweep true.**
+
+**⚠️ ONE CATEGORY IN THE IDENTICAL POSITION THAT ADAM DID NOT NAME — flagged, not folded in.** `[literal]` **`toilet`** is suppressed, sourceless and R4, exactly like the three amenities, and this chain had *proposed* promoting it into Services. It has **no UI presence today** (an unclaimed corpus primary, never a tile), so there is nothing to remove — what lapses is the *proposal to surface it*. Recorded rather than silently swept in; one line if Adam wants it treated differently.
+
+**Nothing is deleted from the corpus.** `water` still holds 169 in-scope rows, still suppressed at `hydrate.ts:140`. Removal is a surface decision only.
+
+**NO UI CODE TOUCHED — and the temptation was real.** Fully resolving this would mean editing `find-nearby-panel.tsx` and the browse filter row. Per the brief that is follow-up implementation work; `git diff` on this branch is docs-only `[literal]`.
+
+**A self-inflicted scare worth recording:** the first attempt at this masthead collapsed `STATE.md` from 4,693 lines to 27 — a double-escaped newline joined the whole file into one line. Caught by checking the line count after writing rather than trusting the write, and restored from git. **Verify the file, not the command's exit code.**
+
+**NEXT: Adam's review. The design layer is complete; implementation has not begun.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `ci-fresh-migration-apply` · 2026-09-04 (later 30) — CI job that fresh-applies every migration from empty on every PR that touches `supabase/migrations/**`. Closes PR #385's docker-not-available gap.
 
 (**newest truth: `.github/workflows/migrations-fresh-apply.yml` added. Trigger: PRs (and main pushes) that add/modify any file under `supabase/migrations/**` or the workflow itself. Uses `supabase/setup-cli@v1` + `supabase db start` against a fresh local Postgres 17 container (ubuntu-latest runners have Docker natively). Post-apply cross-checks: (1) `supabase_migrations.schema_migrations` row count matches file count on disk; (2) six critical objects exist (`master_place`, `place_relationships`, `merge_audit_log`, `merge_master_place()`, `recompute_master_place()`, postgis extension); (3) `recompute_master_place` body contains v5's `v_self_has_active_sr` guard — GATED on the v5 file's presence so this workflow works across branches whose main-parent is pre-v5. Zero PROD writes; no touch of any real project.**

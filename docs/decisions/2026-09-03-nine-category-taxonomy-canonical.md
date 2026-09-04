@@ -1,6 +1,7 @@
 # 2026-09-03 — The 9-category taxonomy is canonical across the app
 
 **Status:** Proposed — awaiting Adam's review. Design only; no implementation.
+**All open items closed** as of the 2026-09-03 Decision 9 amendment.
 **Amended 2026-09-03** (Decisions 7-8) resolving the two questions #380 left
 open, and again the same day for Culture's scope, `park` → `scenic`, and the
 declined chip renames.
@@ -72,8 +73,8 @@ top-level buttons.** `[literal]` For 10 of the 13 this is not a new mapping —
 each tile's `primary_category` values already have a parent in
 `SLIDE_TO_PRIMARY_CATEGORY`. The hierarchy is already latent in the data model;
 only the UI fails to express it. The three exceptions are `water`, `shower` and
-`dump_station`, now assigned to `fuel`/Services by the amendment — their *UI
-fate* remains the open decision below.
+`dump_station` — **now REMOVED from the UI entirely (Decision 9)**, so the
+mapping question is moot for them.
 
 **5. Parent assignment is a data contract; it does not oblige a chip.** A
 primary having a parent does not mean the UI must render a subtype filter for it.
@@ -119,8 +120,9 @@ and rename it away from "POINT OF INTEREST." Full reasoning and the promotion
 table: mapping doc §4.6.
 
 **The largest consequence: `car_repair`/`car_wash` move to `fuel`**, into a new
-**Services** cluster alongside rest areas and — replacing this ADR's earlier
-weaker proposal — water fill, showers, dump stations and toilets. `[literal]` The
+**Services** cluster alongside rest areas. ~~and water fill, showers, dump
+stations and toilets~~ — **those four were subsequently REMOVED from the UI by
+Decision 9, so Services ships as Auto/Repair + Rest areas only.** `[literal]` The
 decisive argument is that **the UI already asserts this grouping and only the
 data model disagrees**: the Find Nearby group heading is literally *"FUEL &
 REPAIR."*
@@ -135,8 +137,9 @@ here because they are the parts most likely to be objected to.
 1. **The 13 tiles fold into 5 of the 9 parents** (camping, scenic, fuel, food,
    hotel) — **amended from 6**, since no tile lands in `interest` any more.
    `attraction` gains subtypes from the **Culture** cluster rather than from any
-   tile. `oddity` and `urban` still gain none, and `urban` remains structurally
-   empty — both its claimed primaries have zero corpus rows `[literal]`.
+   tile. `oddity` gains none. **`urban` is removed from the UI entirely
+   (Decision 9)** — both its claimed primaries have zero corpus rows `[literal]`
+   and nothing routes to it.
 2. ~~**`interest` becomes the app's dumping ground.**~~ **RESOLVED by Decision 8.**
    Mechanics, car washes, rest areas and the suppressed amenities move to
    `fuel`/Services; the rest keeps its parent chip but renders no subtypes and
@@ -174,49 +177,80 @@ here because they are the parts most likely to be objected to.
 
 ---
 
-## Open decision — NOT taken here (Adam's call)
+## Decision 9 (2026-09-03) — `urban`, water fill, showers and dump stations are REMOVED from the UI
 
-`[cited #364, #366]` Four categories have **no live source anywhere checked** and
-either no corpus or a suppressed one. Per the brief, their UI fate is explicitly
-not decided in this ADR:
+**Adam's final decision, and the last open item in the #380 → #382 → #384 chain.
+It is now closed.**
 
-| Category | Corpus (TEST in-scope) `[literal]` | Suppressed at `hydrate.ts:140`? | Live source |
+**This is a "removed until a real data source exists" decision, not an oversight
+and not a gap to rediscover.** Stated that way deliberately: every one of the
+four was measured, twice, and found to have no reachable source. A future reader
+finding no `urban` chip and no water/shower/dump tiles is looking at an intended
+outcome. **Re-adding any of them requires new data, not a UI change.**
+
+| Removed | Corpus (TEST in-scope) `[literal]` | Suppressed at `hydrate.ts:140`? | Live source |
 |---|--:|---|---|
-| `urban` (`shopping_mall`, `city_park`) | **0 and 0** | no | none as wired |
-| Water fill (`water`) | 169 | **yes** | none |
-| Showers (`shower`) | 4 | **yes** | none |
-| Dump stations (`dump_station`) | 6 | **yes** | none |
+| `urban` (`shopping_mall`, `city_park`) | **0 and 0** | no | **none** — and `park`, the one dense Mapbox candidate, went to `scenic` (routing §3.2) |
+| Water fill (`water`) | 169 | **yes** | **none anywhere checked** `[cited #364, #366]` |
+| Showers (`shower`) | 4 | **yes** | **none anywhere checked** |
+| Dump stations (`dump_station`) | 6 | **yes** | **none anywhere checked** |
 
-**The choice: keep them as empty-state subtypes, or remove them from the UI.**
+**Scope of "removed from the UI" — wider than Find Nearby.** `[literal]` `urban`
+renders a chip in the **browse filter row** as well (`BROWSE_CARD_CATEGORIES`
+contains all nine and the row renders every one). Removing it means removing that
+chip too, not only a Find Nearby tile. The three amenities exist **only** as Find
+Nearby tiles, so for them the removal is Find Nearby alone.
 
-**Still open after the 2026-09-03 amendment — and the amendment sharpened it.**
-The three amenities now have a *parent* (`fuel`/Services) rather than sitting in
-the residual bucket, but a parent is not a reprieve: they still have no source.
-**The amendment also raises the stakes**, because `fuel`/Services will contain
-the table's best-covered live target (`auto_repair`) sitting beside four
-guaranteed-empty chips. Whatever is decided, those subtypes need **per-chip**
-empty states, not one at the category level.
+### The taxonomy stays at 9. The UI renders 8 category chips.
 
-Facts that bear on it, and nothing more:
+**This is the one thing most likely to be mistaken for a mistake, so it is stated
+head-on.** `urban` **remains one of the nine canonical categories** — it keeps its
+`SlideCategoryKey` member, its `BROWSE_CARD_CATEGORIES` entry, its `DESIGN.md`
+§1.2 tokens and its section label. What it loses is its **chip**.
 
-- All three amenities currently carry **NEW** badges while being unable to return
-  a result — they are empty twice over (no source, *and* dropped at hydrate).
-- **`water` is the one with a real corpus behind it.** `[cited #366]`
-  *"unsuppressing [is] the more plausible lever than sourcing."* Removing it from
-  the UI would discard reachable data; removing showers/dump stations would not.
-- **`urban` is a different case from the other three.** It is structurally empty
-  — both claimed primaries have zero rows — but it is one of the canonical 9 and
-  carries design tokens and a section label. Removing it from Find Nearby is a
-  smaller decision than removing it from the taxonomy, and this ADR keeps it in
-  the 9 either way.
-- ~~A live-source question sits underneath `urban`~~ — **RESOLVED 2026-09-03:
-  Mapbox `park` routes to `scenic`** (routing table §3.2), matching what the
-  corpus already does. **This makes the `urban` decision simpler, not harder:**
-  with `park` gone to `scenic`, `urban` has **no live source and no corpus —
-  nothing routes to it at all.** There is no sourcing option left behind the
-  question, so it reduces to a clean binary: keep an empty chip, or remove it.
+That is not a contradiction; it is **Decision 5 applied to a parent instead of a
+subtype**: *"parent assignment is a data contract; it does not oblige a chip."*
+Decision 8 already did the same thing one level down for `interest`'s subtypes.
 
----
+**Why keep it in the taxonomy at all rather than dropping to 8?**
+
+1. `[literal]` `primaryCategoryToSlideKey` is total; the nine keys are a closed
+   set that other code switches on exhaustively. Removing a member is a code
+   change with a blast radius, and this is a docs pass.
+2. `[literal]` **Nothing else has to change.** `categories=all` already expands
+   to seven buckets and **already excludes `urban`** — verified by executing
+   `resolveRequestedCategories` earlier in this chain. So the default feed is
+   **unaffected** by removing the chip.
+3. If a live source for `shopping_mall`/`city_park` ever appears, restoring the
+   chip is a UI change against a category that never went away.
+
+**The honest cost:** "the 9-category taxonomy" and "the categories a user can
+see" are no longer the same list. Anyone reading the ADR's Decision 1 and then
+counting chips in the product will find eight. **That divergence is intended and
+is recorded here so the count is never read as a bug.**
+
+### What removal does NOT change
+
+- **No data is deleted.** `[literal]` `water` still has 169 in-scope rows and
+  they remain in the corpus, still suppressed at `hydrate.ts:140`. Removal is a
+  surface decision; the rows are untouched and available the day a source or an
+  unsuppression decision arrives.
+- **The routing table keeps its rows.** They are marked **R4 NONE / no UI
+  surface** rather than deleted — deleting them is how this gets rediscovered and
+  re-litigated. See routing table §3.3.
+- **`interest` is not affected.** It keeps its chip (Decision 8); only its
+  *subtypes* are unrendered.
+
+### One category in the same position that Adam did NOT name — flagged, not assumed
+
+`[literal]` **`toilet`** is suppressed, sourceless and R4 — identical to the
+three amenities — and this chain had *proposed* promoting it into
+`fuel`/Services. It was **not** in the removal decision. It has **no UI presence
+today** (it is an unclaimed corpus primary, never a tile), so there is nothing to
+remove; what lapses is the *proposal to surface it*, by the same reasoning that
+removed the other three. **Recorded rather than silently folded in** — if Adam
+wants it treated differently, it is one line.
+
 
 ## UI copy and labels this design changes — for sanity-check before implementation
 
@@ -227,7 +261,8 @@ parent. Flagged for review, not redesigned here.
 |---|---|---|
 | **Auto / Repair** (group "FUEL & REPAIR") | ~~subtype of interest~~ → **`fuel` / Services** | **RESOLVED by the amendment.** The mismatch is gone; the data model now agrees with the heading the UI already showed. |
 | **Groceries** (group "SUPPLY") | subtype of **food** | Defensible but lossy: "Food" reads *restaurants*; resupply is a distinct planning job. |
-| **Water fill / Showers / Dump stations** (groups "SUPPLY", "SERVICE") | ~~interest~~ → **`fuel` / Services** | **AMENDED.** These are the overlander "town stop" errand — same trip as fuel, laundry and a mechanic. `camping` was rejected: campground amenities are *attributes of a campground*, whereas a dump station you drive to is a destination. UI fate still open above. |
+| ~~**Water fill / Showers / Dump stations**~~ (groups "SUPPLY", "SERVICE") | **REMOVED — Decision 9** | No copy needed. The tiles and their group headings go. `[literal]` "SERVICE" disappears entirely (both its tiles were showers and dump stations); "SUPPLY" loses Water fill and keeps Groceries, which moves under `food`. |
+| ~~**`urban`** chip~~ (browse filter row) | **REMOVED — Decision 9** | Not a Find Nearby tile — this is the browse chip. The taxonomy keeps `urban`; the UI stops rendering it, so the filter row shows **8** chips. |
 | **Trailheads, Viewpoints** (group "CAMP & EXPLORE") | subtypes of **scenic** → "SCENIC" | Reasonable, but they move out of the camping-flavoured group they live in today. |
 | **Dispersed, Campgrounds** | subtypes of **camping** | Clean. |
 | Group headings **CAMP & EXPLORE / FUEL & REPAIR / FOOD / SUPPLY / SERVICE / STAY** | replaced by the 9 chips | Six headings disappear. Two of them (**FUEL & REPAIR**, **SUPPLY**) currently express groupings the 9 categories *cannot* — that expressiveness is lost, and the Auto/Repair row above is the sharpest instance. |
@@ -244,8 +279,8 @@ neither is: they determine whether a user can find a mechanic.
 ## Not decided here
 
 Deliberately out of scope: which subtype chips actually render; the "Services"
-cluster heading wording; unsuppressing `water`; and all implementation
-sequencing.
+cluster heading wording; and all implementation sequencing. (~~unsuppressing
+`water`~~ — moot for the UI under Decision 9; it stays a corpus question only.)
 
 **Closed across the 2026-09-03 amendments:** the `attraction`/`oddity`
 contradiction · whether `car_repair`/`car_wash` move to `fuel` · what "Theaters"
@@ -257,6 +292,11 @@ and deliberately not added unprompted. If wanted, it needs a `theater`
 `primary_category` and an ingest mapping — `[literal]` the Foursquare rule
 classifies live results by name only and does nothing for corpus rows.
 
-**The only substantive open item left is the original one:** `urban` / water fill
-/ showers / dump stations — keep as empty-state subtypes, or remove. The routing table §4 proposes an
-order; it is an argument, not an authorisation.
+~~**The only substantive open item left**~~ — **CLOSED by Decision 9: removed.**
+**No open items remain in the #380 → #382 → #384 chain.** The routing table §4
+proposes an implementation order; it is an argument, not an authorisation.
+
+**⚠️ Implementation is still not authorised, and this decision does not start
+it.** Removing these from the live Find Nearby component and the browse filter
+row is code work for the follow-up pass. Nothing in `web/src` was touched by this
+decision `[literal]`.
