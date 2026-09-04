@@ -1,3 +1,27 @@
+# STATE — branch `wrap-2026-09-03` · 2026-09-03 (later 32) — **WRAP. Everything this session did is merged. The node_modules cache is measured and works — within a PR, not across them.**
+
+(**newest truth: doc pass only. No code, nothing written to TEST or PROD. Every PR *opened* this session is merged.**
+
+*Precision, because the looser version was wrong:* **#371 is still open** — this session resolved its merge conflict but did not open or merge it, and it is not mine to close. 15 PRs are open repo-wide `[literal, `gh pr list`]`; none was opened by this session's work.
+
+**Merged this session** `[literal, from `gh pr list`]`: **#373** urban/interest chip 400 fix · **#376** web suite wired into CI · **#377** resolvePlaces diagram re-verified · **#380 / #382 / #384 / #386 / #389** the category design chain · **#390** the CI node_modules cache. Plus the **`test-web` required-status-check** added to ruleset `19629589` — a settings change with no git trace, recorded in LOG (later 6).
+
+**THE ONE NUMBER THIS SESSION LEFT OUTSTANDING IS NOW MEASURED, AND THE FIX IS REAL.** `[literal]` On a cache hit the install step is **skipped entirely** (0s, from 74–169s on the miss run). Job totals fall from **149/212/189/106s** on the miss run (`33822178024`) to **27/39/33/31s** (`33823277279`) and **23/47/33/26s** (`33823831065`). Cache restore costs 4–7s.
+
+**⚠️ THE SAME MEASUREMENT EXPOSED A LIMIT IN MY OWN FIX, AND IT MATTERS MORE THAN THE WIN.** `[literal]` An unrelated branch (`fix-recompute-skip-soft-retired`, run `33824183747`) ran the new workflow and **still missed** — install 23–424s. Cause: Actions caches written on a branch are visible only to that branch and its PRs, and **`ci.yml` triggers on `pull_request` only, with no `push` trigger**, so **no run ever executes on `main` to populate a default-branch cache.** Every *new* PR still pays a full install on its first run.
+
+**So the honest scope: it speeds up iterating on a PR, not starting one.** That is where this session's pain actually was — several PRs needed 3–5 pushes each — but it is **not** the blanket speedup a reader would assume. One-line follow-up in BACKLOG.
+
+**⚠️ AND THE PREMISE THAT STARTED THAT WORK WAS WRONG.** `[literal]` "test-web is ~7x slower" is not supported: medians over 12 runs were `test-web` 106s vs `typecheck` 70s · `test` 69s · `build` 78s, with the per-run ratio at **0.74x–1.16x in 11 of 12**. One outlier at 4.94x, caused by a **375s `npm install`**, not by the suite. **The web suite ran 12s in every run sampled** — which ruled out the glob, a concurrency flag and tsx overhead in a single number.
+
+**Two operational hazards recorded to BACKLOG, both bitten this session:** stacked PRs + squash merge produce **add/add** conflicts where keep-both would silently duplicate whole documents (#380 and #382 were both squash-merged); and a doc that **quotes conflict markers verbatim** is a landmine — `abc03f8` (#370) committed markers into `LOG.md`, then `e1c045d` (#379) ate the markers out of the `STATE.md` sentence documenting that very incident. Both repaired on `main`.
+
+**Doc set walked.** `decisions/` and `architecture/` were touched by this session and are already current on `main` (the ADR plus the two category docs, through #389). **`DATA_INVENTORY.md` deliberately unchanged** — the only corpus work this session was a **read-only** re-run of #364's TEST instrument, which wrote nothing and moved no data. **`CLAUDE.md`'s CI prose re-checked and still accurate** — `ci.yml` has exactly the four jobs it names.
+
+**NEXT: Adam's review of this doc pass.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `fix-recompute-skip-soft-retired` · 2026-09-04 (later 31) — v5 `recompute_master_place()` skips soft-retired mps at the root. Replaces PR #383's v4 workaround. Applied to TEST; PR #383 v4 still runs but is now a no-op with v5 in place.
 
 (**newest truth: `recompute_master_place()` v5 (`20260904120000`) redefines Step 7's containment scan to exclude master_places with 0 active `source_records`. Fixes at the root the class bug PR #383 papered over with v4's post-recompute delete sweep. Applied to TEST via `db:push-verify -- --test`. Zero PROD writes.**
