@@ -183,6 +183,13 @@ outage, not a gap.**
   rows, and **22** corpus values are claimed by nothing (incl. `picnic_area`
   1,223 in-scope, `public_land` 448). **A routing table has to pick one
   vocabulary as canonical before it can be written.**
+  **ADDRESSED IN DESIGN 2026-09-03 (not yet implemented):** the vocabulary is
+  picked — `docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md`
+  declares the 9 canonical; `docs/architecture/category-subtype-mapping.md`
+  enumerates all four mismatch sets (three of the four were **not** enumerated in
+  #364 and were re-derived); `docs/architecture/category-source-routing-table.md`
+  is the routing table. Also note the "accepts only 7 of the 9" clause is now
+  **stale** — PR #373 fixed it, so all four vocabularies agree on membership.
 - **The same 9 chips behave differently on Surface 2 vs Surface 3.** Surface 2
   sends slide keys to a 7-key allowlist (`urban`/`interest` → apparent 400);
   Surface 3 expands the same chip through `SLIDE_TO_PRIMARY_CATEGORY` and has no
@@ -249,6 +256,10 @@ only**, not against every provider.
 > to keep the "NEW" badges on tiles that cannot return results, and whether
 > `urban` should keep a chip at all given it has no corpus rows and no live
 > source. The original analysis for each is preserved verbatim below.
+> **CARRIED FORWARD 2026-09-03 — these are now the ADR's single open decision**
+> (`docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md` §Open
+> decision), which sets out the facts bearing on each and deliberately does not
+> take them. Still Adam's call; the design pass did not narrow it.
 >
 > ~~**ALSO FOUND, NOT FIXED (flagged):** no CI job runs the `web` test suite —
 > `.github/workflows/ci.yml`'s `test` job runs `npm run -w data test` only, and
