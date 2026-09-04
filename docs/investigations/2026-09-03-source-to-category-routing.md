@@ -621,9 +621,17 @@ Stated plainly so none of it is read in by implication:
 ## Visual reference — Paper board
 
 §11's table is also drawn as a scannable diagram:
-**`overlander_1` → page "Source→Category Routing — PR #400"**
-(https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0) ·
+**Paper file "Source → Category Routing — PR #400"**
+(https://app.paper.design/file/01M1NG6YRP0516FQEK3Y7K64DG) ·
 exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`.
+
+**It is its own top-level file, deliberately.** It was first built as a *page*
+inside `overlander_1`, which turned out to be the wrong call: Paper's file
+browser shows one thumbnail per file, so a page inside a 84-artboard file is
+invisible from the place people actually go looking. The two PR #361
+investigation boards are separate files for the same reason. Moved 2026-09-03;
+the old `overlander_1` page is emptied and carries a signpost (Paper's MCP has
+no delete-page call, so **the empty page needs deleting by hand**).
 
 **The board is a VIEW of this report, not a second source.** Every figure on it
 is carried from here; nothing was re-measured to draw it. Where the two ever

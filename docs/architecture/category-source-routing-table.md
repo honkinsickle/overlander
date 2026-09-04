@@ -42,8 +42,8 @@ are left in place with pointers rather than rewritten, so the change is legible:
 **Also: §3.1 is marked RESOLVED but is NOT implemented** — `resolve-places.ts:241`
 still routes museum/art_gallery/historical_landmark to `oddity`.
 
-**Drawn as a diagram:** `overlander_1` → page *"Source→Category Routing — PR #400"*
-(https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0), exported to
+**Drawn as a diagram:** Paper file *"Source → Category Routing — PR #400"*
+(https://app.paper.design/file/01M1NG6YRP0516FQEK3Y7K64DG), exported to
 `docs/assets/2026-09-03-source-category-routing-diagram.png`. It is a view of the
 investigation, not a second source — see that report's *Visual reference* section
 for what the board does differently from this table.
