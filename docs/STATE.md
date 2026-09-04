@@ -1,3 +1,33 @@
+# STATE — branch `docs/wrap-2026-09-04` · 2026-09-04 (later 38) — **THE MERGE CLEANUP IS EXECUTED ON PROD. 108 groups merged, 118 rows absorbed, zero failures, zero orphan edges.**
+
+(**newest truth: the first real PROD data write of the merge-cleanup thread. `merge_audit_log` went 0 → 108 under `executed_by = adam-prod-run-108-2026-09-04`. Nothing was applied to PROD schema; this is data only.**
+
+**What ran** `[literal — `merge_audit_log` on PROD, re-queried during this wrap]`: **108** groups between `13:34:03Z` and `13:34:15Z`, executor exit 0, **0** RPC failures. Aggregate moves: **118** absorbed soft-retired · **120** source_records repointed · **121** place_matches repointed · **37** self-references dropped · **13** child dedups · **5** parent repointed · **2** child repointed · everything else 0.
+
+**Counts before → after** `[literal]`: `merge_audit_log` **0 → 108** · `master_place` **28,506 → 28,506** · `source_record` **38,572 → 38,572** · `place_relationships` **6,304 → 6,251**.
+
+**⚠️ `master_place` NOT decreasing is correct, and the run plan expected otherwise.** `merge_master_place()` soft-retires by deactivating source_records and leaves the row in place — that is exactly what makes reversal possible. Anyone checking for a row-count drop as proof of success will read a correct run as a failed one.
+
+**Zero orphaned `place_relationships`** — the v5 bug class did not recur, re-verified during this wrap across the absorbed rows of **both** PROD runs (see below).
+
+**The four highest-stakes merges landed as decided** `[literal, spot-checked]`: group **83** Hat Rock — canonical now `wikipedia+oregon_state_parks+state_parks+nps`, and the excluded rock row `971799f0` is **byte-identical to its pre-run snapshot**, still owning its own NPS record; groups **3** and **95** — NPS canonical, and **`hours` survived**, attributed to `california_state_parks` / `arizona_state_parks`, settling #379's unverified caveat on real data; group **5001** Salton Sea SRA — gained a **2,404-char** description where it previously had none; group **6**'s atlas lake row untouched and still independent.
+
+**⚠️ A SECOND PROD MERGE RUN EXISTS AND IT IS NOT THIS SESSION'S.** `[literal]` `merge_audit_log` now holds **112** rows, not 108. Four were written at `19:05:30Z` — roughly five and a half hours after this session's run — under `executed_by = cc-prod-run-4groups-2026-09-04`, covering groups **79, 81, 120 and a net-new 5002**. Those are exactly the Phase 3 findings (Darlingtonia, Farewell Bend, Sumpter Valley Dredge, and a Face Rock pairing) that this session identified but deliberately did **not** execute. **Group-id overlap with this session's run: 0. master_places touched by both runs: 0. Orphan edges across both: 0.** Recorded as fact; this session has no visibility into that run's decision-making and does not vouch for it.
+
+**Scope was contained** `[literal]`: 108 planned, 108 ran, none outside the plan. Groups **6, 41, 68, 77, 78** confirmed not executed.
+
+**⚠️ THE RUN SET WAS NOT THE ONE THE BRIEF DESCRIBED, AND THE CHECKSUM IS WHY.** The brief said "123 minus {6, 41, 68, 78}, confirm 108". That derivation yields **116**. 108 is only reachable as *(106 TEST-validated − 41, 68) + (3, 83, 95, 5001)*. The two sets differ by the eight never-TEST-validated groups — **including group 77, a confirmed conflation the brief's exclusion list did not name.** Stopped on the checksum, reported, and ran the 108-set on Adam's explicit pick. **The checksum caught a real defect from being merged.**
+
+**PR #401 merged** as `ccfe382`: the `canonical_override` capability, groups 3/95 definitions, groups 41/68 blocked as defects, the group-78 fix built and TEST-validated but **not applied**, and two investigation docs.
+
+**A doc commit was stranded and is recovered here** `[literal]`: the BACKLOG entry recording the corpus audit was pushed **after** #401 merged, so it never reached `main`. Cherry-picked into this wrap.
+
+**Migration state unchanged** — PROD ledger 114, no migration applied this session.
+
+**NEXT:** groups 41/68 need their misfiled records repointed before they can merge; group 78's fix is built and validated but unapplied; groups 121 and the never-validated eight remain unrun. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `migrate-date-detail-resolveplaces` · 2026-09-03 (later 37) — **Date Detail (`POST /api/places/details`) cut onto `enrichByGoogleId()`.** `DATE_DETAIL_USE_RESOLVER` + the legacy loop gone. With #398, ALL THREE read surfaces are now flag-free on the resolver. Parity verified on TEST. No data writes.
 
 (**newest truth: 5 files in `web/` (+3 docs). No data-layer/corpus/API-shape change; no writes to TEST or PROD (this endpoint is pure Google Place Details passthrough — no DB). Standing self-review pass run (code-reviewer subagent): verdict READY, 0 critical/important, fixes applied. All gates green + live TEST verification.**
