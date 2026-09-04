@@ -1,3 +1,31 @@
+# STATE — branch `routing-diagram-paper` · 2026-09-03 (later 38) — **The PR #400 routing table is drawn in Paper.** New page in `overlander_1`, built on DESIGN.md tokens. Visualization only — no new measurement, no code, no writes.
+
+(**newest truth: one Paper page, one exported PNG, and pointer lines in two docs. Nothing was re-measured to draw it; every figure is carried from PR #400.**
+
+**Where it lives:** `overlander_1` → page **"Source→Category Routing — PR #400"** (https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0), exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`. **A NEW PAGE, not Page 1** — Page 1 already holds 84 artboards and 13,056 nodes, and CLAUDE.md forbids overwriting an existing frame. Precedent cut both ways (the App Flow / Data Sources / Product Map diagrams all sit on Page 1; the two PR #361 investigations got their own files), so a new page inside the existing file is the option that satisfies "existing file" with zero collision risk.
+
+**⚠ THERE IS NO PAPER FILE NAMED "YO TRIPPIN".** `[literal — `list_files`, 12 files]` The brief named one. `overlander_1` is the file the design system lives in (web/CLAUDE.md points DESIGN.md's tokens at its `7US-0` StyleGuide artboard) and the file that already holds every Overlander reference diagram, so it is the one used. Flagged rather than silently substituted.
+
+**THREE PLACES THE BOARD DELIBERATELY DOES NOT DO WHAT THE BRIEF SAID, each drawn anyway and flagged:**
+
+1. **`fuel` is drawn as FIVE sub-rows, not one.** The brief asked for 9 categories + Auto/Repair + EV. `fuel`'s subtypes carry **four different verdicts** — Gas wired · Auto/Repair wired · EV unwired *and* mis-mapped · Services no live source at all. One `fuel` row would have misreported three of the five. Auto/Repair and EV still appear as their own named rows, as asked.
+2. **BOTH confidence systems are carried, in separate columns.** The brief asked for literal / strong inference / estimated / unverified. §11 of the report uses that vocabulary for **measurements** and a separate **H/M/L** for the **routing call**. Flattening one into the other would have softened a documented label, so the board shows the evidence chip *and* the H/M/L.
+3. **"0/6 remote" is distinguished from "not probed remote."** `hotel` and `scenic`'s own ids were not in this pass's remote probe set — their remote behaviour is **unknown, not zero**. Leaving those cells blank would have read as an absence.
+
+**Design-system fidelity:** dark ground `--bg-base`, category rail colours straight from DESIGN.md §1.2 title role, Barlow Condensed 700 for category names, Space Grotesk for uppercase section labels, Space Mono for data, `--pin` `#FF8E05` for the five finding flags, `--success` / `--amber-300` / `--type-500` / `--error` for the four evidence steps. **No new tokens invented.** Paper's own guide says default to light mode and post a mood brief first; both were deliberately skipped — the brief specified an existing design system, and this app is dark-theme-only.
+
+**`camping` and `hotel` share `#6ECECE`** in DESIGN.md §1.2, so on the board they are told apart by label rather than colour. That is the system as written, not a drafting slip.
+
+**One instrument note:** the Mapbox sampling script prints "⚠ MISMATCH" on 6 of 18 points. That is a **comparator defect in the script**, not a bad point — it tests for a two-letter code against a returned full region name, and "ARIZONA" does not contain "AZ". All 18 states verify correctly by name. Already recorded in the report's §2; repeated here because the raw output is misleading on its face.
+
+**Gates:** not re-run — this commit touches only `docs/` and a PNG. PR #400's gates stand.
+
+**Self-review pass skipped per Adam's instruction** (visualization task, no PROD-affecting change).
+
+**⚠ STACKED ON PR #400.** This branch is cut from `sourcing`, which is unmerged, so a PR against `main` carries #400's commit too. Merge #400 first, or retarget. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `sourcing` · 2026-09-03 (later 37) — **Source-to-category routing measured across all five sources.** Overpass/OSM and Foursquare's category filter measured for the first time; a remote sample tier added. READ-ONLY, TEST-only, no writes.
 
 (**newest truth: one investigation report, four new read-only instruments, and a surgical amendment to the existing routing table. No code paths changed, no schema, no writes to TEST or PROD.**
