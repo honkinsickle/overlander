@@ -1,8 +1,12 @@
-# STATE — branch `routing-diagram-paper` · 2026-09-03 (later 38) — **The PR #400 routing table is drawn in Paper.** New page in `overlander_1`, built on DESIGN.md tokens. Visualization only — no new measurement, no code, no writes.
+# STATE — branch `routing-diagram-paper` · 2026-09-03 (later 38) — **The PR #400 routing table is drawn in Paper.** Its own file, built on DESIGN.md tokens. Visualization only — no new measurement, no code, no writes.
 
 (**newest truth: one Paper page, one exported PNG, and pointer lines in two docs. Nothing was re-measured to draw it; every figure is carried from PR #400.**
 
-**Where it lives:** `overlander_1` → page **"Source→Category Routing — PR #400"** (https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0), exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`. **A NEW PAGE, not Page 1** — Page 1 already holds 84 artboards and 13,056 nodes, and CLAUDE.md forbids overwriting an existing frame. Precedent cut both ways (the App Flow / Data Sources / Product Map diagrams all sit on Page 1; the two PR #361 investigations got their own files), so a new page inside the existing file is the option that satisfies "existing file" with zero collision risk.
+**Where it lives:** its own Paper file, **"Source → Category Routing — PR #400"** (https://app.paper.design/file/01M1NG6YRP0516FQEK3Y7K64DG), exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`.
+
+**⚠ IT WAS BUILT IN THE WRONG PLACE FIRST, AND THE CORRECTION IS THE USEFUL PART.** It was first a *page* inside `overlander_1` — which satisfied the brief's "existing file" and avoided touching Page 1's 84 artboards, but made it **unfindable**: Paper's file browser renders **one thumbnail per file**, showing Page 1, so a new page inside a big file does not appear in the place people actually look. Adam went looking and could not find it. **The precedent was already visible and was misread:** the two PR #361 investigation boards are separate *files*, not pages. Moved 2026-09-03.
+
+**Residue that needs one manual click:** the old `overlander_1` page is emptied and carries a signpost artboard pointing at the new file. **Paper's MCP has no delete-page call**, so the empty page has to be deleted by hand.
 
 **⚠ THERE IS NO PAPER FILE NAMED "YO TRIPPIN".** `[literal — `list_files`, 12 files]` The brief named one. `overlander_1` is the file the design system lives in (web/CLAUDE.md points DESIGN.md's tokens at its `7US-0` StyleGuide artboard) and the file that already holds every Overlander reference diagram, so it is the one used. Flagged rather than silently substituted.
 
