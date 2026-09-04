@@ -12,6 +12,39 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 — Decision 9 UI removal implemented (`urban` chip + water/showers/dump tiles)
+
+- First **code** against the #380→#389 category-taxonomy design chain; #389 was
+  design-only ("NO UI CODE TOUCHED"). Removed `urban`'s browse-filter chip and
+  the Water fill / Showers / Dump stations Find Nearby tiles. See the ADR
+  implementation note: `docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md`.
+- **Three files, no data-layer change.** `palette.ts` gains
+  `BROWSE_FILTER_CHIP_CATEGORIES` (8 chips = all 9 minus `urban`);
+  `BROWSE_CARD_CATEGORIES` stays at 9 so `urban` keeps its map layer / icons /
+  API validity / top-picks — the ADR's "keeps its data contract, loses its chip"
+  split, expressed as two constants rather than one. `category-filter-row.tsx`
+  iterates the new 8-chip list; `find-nearby-panel.tsx` loses the Water fill tile,
+  the whole SERVICE bucket, and three orphaned icon imports.
+- **Found while scoping — the filter row is shared by TWO surfaces**, not one:
+  Find Nearby (`find-nearby-panel.tsx`) *and* the day-scoped Add-Waypoints browse
+  (`category-browse-panel.tsx`) both mount `CategoryFilterRow`. Removing `urban`
+  from what the row iterates drops its chip from both at once — which is exactly
+  the ADR's "removed from the browse filter row" scope, and would have been easy
+  to under-scope to Find Nearby alone.
+- **Left `place-category-toggles.tsx` alone, deliberately.** It renders all 9 via
+  `BROWSE_CARD_CATEGORIES`, but it's an explicit throwaway test harness that
+  toggles the map's data-contract layer set (which still includes `urban`). Its
+  `urban` checkbox is correct there — flagged rather than "fixed."
+- **Scope held: did NOT do the 13→9 Find Nearby collapse** (ADR Decisions 3/4).
+  SUPPLY now holds just Groceries; folding it under `food` and building subtype
+  chips is separate, unstarted follow-up.
+- **Premise not re-measured.** The "no live source" basis for removing these four
+  was relied on from the ADR's twice-measured finding, not re-probed this session
+  `[cited #364/#366 via the ADR]`. No corpus rows deleted.
+- Gates: `npm run -w web typecheck` clean, `npm run -w web test` 714/714,
+  `cd web && npx next build` exit 0. Self-review skipped per Adam (routine UI
+  change). BACKLOG line updated from "not started" → implemented.
+
 ## 2026-09-04 — v5 recompute_master_place() skip-soft-retired (replaces v4 workaround)
 
 - `supabase/migrations/20260904120000_recompute_master_place_skip_soft_retired.sql`

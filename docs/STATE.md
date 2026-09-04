@@ -1,3 +1,28 @@
+# STATE — branch `category-decision-9-ui-removal` · 2026-09-03 (later 33) — **Decision 9 IMPLEMENTED. `urban` chip + Water fill / Showers / Dump stations tiles are gone from the UI.** First code against the #380→#389 design chain; #389 was design-only.
+
+(**newest truth: three files in `web/src`, no data-layer/corpus/API change. Nothing written to TEST or PROD. All four web gates green this session.**
+
+**What changed** `[literal — git diff]`:
+- `web/src/lib/trip-browse/palette.ts` — new `BROWSE_FILTER_CHIP_CATEGORIES` = the 8 rendered chips (`BROWSE_CARD_CATEGORIES` minus `urban`). `BROWSE_CARD_CATEGORIES` **stays at 9** — `urban` keeps its map layer, icons, API validity, top-picks. This is the ADR's "keeps its data contract, loses its chip" split, in code.
+- `web/src/components/trip/category-filter-row.tsx` — iterates the new 8-chip constant. This row is shared by **both** Find Nearby **and** the day-scoped Add-Waypoints browse panel (`category-browse-panel.tsx`), so the `urban` chip drops from both at once — which is the full scope of "removed from the browse filter row."
+- `web/src/components/trip/find-nearby-panel.tsx` — removed the Water fill tile from SUPPLY and the **entire** SERVICE bucket (Showers + Dump stations); dropped the now-orphaned `Droplet`/`ShowerHead`/`Trash2` icon imports.
+
+**⚠️ THE COUNT IS INTENTIONAL, STATED HEAD-ON: taxonomy is 9, the filter row renders 8.** `urban` is still one of the nine canonical categories (ADR Decision 1); it lost only its chip (ADR Decision 9 + Decision 5). Anyone counting chips in the product and getting 8 against a 9-category ADR is looking at the intended outcome, not a bug.
+
+**Deliberately NOT touched — flagged, not folded in:** `place-category-toggles.tsx` is an explicit throwaway test harness (its own docstring: *"NOT a proposed UI surface"*) that toggles the map's data-contract layer set — which still includes `urban`. Leaving `urban`'s checkbox there is correct: it exercises the still-existing `urban` map layer, not a user chip. `[literal — read the component]`
+
+**SCOPE LINE — what this does NOT do:** the broader Find Nearby 13→9 tile collapse (ADR Decisions 3/4 — folding all tiles into the 9 parents, moving Groceries under `food`, subtype chips) is a **separate, unstarted** follow-up. This PR removes the four dead entries only. SUPPLY now holds just Groceries; its move under `food` is part of that later collapse. `[literal]`
+
+**Premise re-check (asked for by the prompt): no new evidence of live data reaching any of the four.** Not independently re-measured this session — relied on the ADR's twice-measured finding (`urban` 0/0 corpus, no live source; water 169-but-suppressed / shower 4 / dump 6, all suppressed at `hydrate.ts:140`, no live source anywhere checked). `[cited #364/#366 via the ADR — NOT re-probed here]` No corpus rows were deleted; the data is untouched and available the day a source arrives.
+
+**Gates** `[literal — run this session]`: `npm run -w web typecheck` clean · `npm run -w web test` 714/714 · `cd web && npx next build` exit 0.
+
+**Self-review pass skipped per Adam's instruction** (routine, non-PROD UI change).
+
+**Next steps (Adam's call):** review + merge. The design chain stays closed; only the Find Nearby collapse remains as separate future work. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `wrap-2026-09-03` · 2026-09-03 (later 32) — **WRAP. Everything this session did is merged. The node_modules cache is measured and works — within a PR, not across them.**
 
 (**newest truth: doc pass only. No code, nothing written to TEST or PROD. Every PR *opened* this session is merged.**

@@ -2,14 +2,15 @@
 
 import {
   type BrowseCardCategory,
-  BROWSE_CARD_CATEGORIES,
+  BROWSE_FILTER_CHIP_CATEGORIES,
   browseCardPalette,
 } from "@/lib/trip-browse/palette";
 import { CategoryIconV2 } from "@/components/icons/category-icons-v2";
 
 /**
- * The compact category icon row (the 7 broad chips: camping / urban / scenic /
- * food / fuel / hotel / oddity). Shared between the Add-Waypoints panel
+ * The compact category icon row — the 8 broad chips (the 9 canonical categories
+ * minus `urban`, which was removed from the UI by Decision 9). Shared between
+ * the Add-Waypoints panel
  * (CategoryBrowsePanel) and the top-level Find Nearby results, so both render
  * the identical tiles, per-type colors, and selected state.
  *
@@ -39,7 +40,7 @@ export function CategoryFilterRow({
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
-      {BROWSE_CARD_CATEGORIES.map((c) => {
+      {BROWSE_FILTER_CHIP_CATEGORIES.map((c) => {
         const palette = browseCardPalette[c];
         const isActive = active.has(c);
         return (
