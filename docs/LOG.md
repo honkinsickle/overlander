@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 14) — CI speed: the "test-web is 7x slower" premise did not survive measurement. The real cost is `npm install`, in all four jobs.
+
+- **Measured before diagnosing, and the premise failed.** Across 12 successful
+  runs: medians — `test-web` 106s, `typecheck` 70s, `test` 69s, `build` 78s. The
+  per-run ratio of `test-web` to the median of the other three was **0.74x-1.16x
+  in 11 of 12 runs**. There is no 7x. There is **one** outlier at **4.94x**
+  (run 33818552787).
+- **The outlier was not the tests either.** Its `test-web` job spent **375s in
+  `npm install`** and **12s** running the suite. In the same run the `test` job
+  spent 60s installing — same phase, same variance, different magnitude.
+- **The step breakdown killed all three hypotheses in the brief at once.** The
+  web suite runs **12s in every run sampled**, fast or slow. So it is not the
+  glob serialising, not a missing concurrency flag, and not tsx transpile
+  overhead — none of those could be invisible at a constant 12s. `npm install`
+  ranged **27s -> 375s** over the same runs and moved in lockstep across all
+  four jobs.
+- **What was actually wrong:** `setup-node`'s `cache: npm` caches only the npm
+  *download* cache (`~/.npm`); node_modules was relinked from scratch every run,
+  in every job. Fixed by caching `node_modules` keyed on the lockfile hash, with
+  `npm ci` only on a miss.
+- **Verified the new install path rather than only dry-running it.** A real
+  `npm ci` from clean produced a tree passing `npm run -w web test` (714/714)
+  and both typechecks. Changing the install command for four *required* checks
+  without executing it once would have been reckless.
+- **Tradeoff stated rather than buried:** on a cache **miss**, `npm ci` is no
+  faster than `npm install` — both install from empty. The entire saving is on
+  hits, so it depends on the lockfile staying stable between runs.
+- **Cache scope matters for reading the result:** Actions caches written on a
+  branch are visible to that branch and to PRs targeting it, so **the first run
+  after this lands is a miss by definition.**
+- **Measured cache-miss run (33822178024):** install 74-169s per job; suite
+  steps unchanged (web 10s, data 14s, typecheck 11s+9s, build 25s). Hit-run
+  figures recorded in the PR.
+
 ## 2026-09-04 — CI: fresh-migration-apply workflow (closes PR #385 gap)
 
 - Added `.github/workflows/migrations-fresh-apply.yml`. Trigger: PRs
