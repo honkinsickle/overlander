@@ -618,6 +618,39 @@ Stated plainly so none of it is read in by implication:
 
 ---
 
+## Visual reference — Paper board
+
+§11's table is also drawn as a scannable diagram:
+**`overlander_1` → page "Source→Category Routing — PR #400"**
+(https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0) ·
+exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`.
+
+**The board is a VIEW of this report, not a second source.** Every figure on it
+is carried from here; nothing was re-measured to draw it. Where the two ever
+disagree, this document wins.
+
+**Three things the board does deliberately, worth knowing before reading it:**
+
+1. **It draws `fuel` split into five sub-rows** (Gas · Auto/Repair · EV ·
+   Services · Rest areas) rather than as one row. The brief asked for
+   nine categories plus Auto/Repair and EV; `fuel`'s subtypes carry **four
+   different verdicts** (wired · wired · unwired-and-mis-mapped · no live source
+   at all), so a single `fuel` row would have misreported three of the five.
+2. **It carries BOTH confidence systems, in separate columns**, because §11 uses
+   two and collapsing them would soften one. The colour chip is the *evidence*
+   label (`[literal]` / `[strong inference]` / `[estimated]` / `[unverified]`);
+   the `H` / `M` / `L` beside it is §11's *routing-call* confidence.
+3. **It distinguishes "0/6 remote" from "not probed remote."** `hotel` and
+   `scenic`'s own ids were not in this pass's remote probe set, so their remote
+   behaviour is **unknown, not zero** — the board says so rather than leaving a
+   blank that would read as an absence.
+
+`camping` and `hotel` share `#6ECECE` in DESIGN.md §1.2, so on the board they
+are told apart by label, not by colour. That is the design system as written,
+not a drafting slip.
+
+---
+
 ## Reproducing
 
 ```
