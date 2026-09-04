@@ -1,0 +1,202 @@
+[
+  {
+    "group_id": 79,
+    "size": 3,
+    "states": [
+      "OR"
+    ],
+    "canonical_mp_id": "c64205aa-020f-48bc-8ee2-d934ee0af3b9",
+    "canonical_reason": "state_parks-GIS-backed row wins (scoreMember 112 vs 1 — state_parks+wikipedia, has polygon; the two point rows score 1 each)",
+    "absorbed_mp_ids": [
+      "acfeeefe-00d4-4be3-8969-6893e8424d4a",
+      "cb880d19-7fde-41df-93a0-d8f4e0ab6f50"
+    ],
+    "member_sides": [
+      {
+        "id": "c64205aa-020f-48bc-8ee2-d934ee0af3b9",
+        "canonical_name": "Darlingtonia State Natural Site",
+        "source_ids": [
+          "state_parks",
+          "wikipedia"
+        ],
+        "source_count": 2,
+        "has_polygon": true
+      },
+      {
+        "id": "acfeeefe-00d4-4be3-8969-6893e8424d4a",
+        "canonical_name": "Darlingtonia State Natural Site",
+        "source_ids": [
+          "oregon_state_parks"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "cb880d19-7fde-41df-93a0-d8f4e0ab6f50",
+        "canonical_name": "Darlingtonia State Natural Site",
+        "source_ids": [
+          "atlas_oddities"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "MISSING-GIS-MEMBER correction: the classifier's group 79 was the 2-member visitor<->atlas pair (both score 1 -> undecidable). The state_parks GIS polygon row c64205aa exists in the corpus, was never in the classifier's pair, and is added here as canonical — same move as group 83 / 5001.",
+      "absorbed member cb880d19 (atlas) has a pre-existing contained_in -> canonical (c64205aa) edge. On merge it collapses to a self-ref and is dropped by the v2 pre-repoint delete (validated shape; same class as TEST groups 55/89).",
+      "should be ADDED to DEFAULT_BLOCKED_GROUPS before landing (currently NOT present; matches how group 83 is blocked). Not a correctness hole today: the auto-preview lists this group as undecidable/null-canonical, which the executor already refuses to auto-merge — but block it for consistency and to force a deliberate --input run."
+    ],
+    "decision_note": "SAME-entity, verified by a description read (docs: groups 79/81 investigation, this session). Both prose rows describe the identical 18-acre Darlingtonia State Natural Site and the carnivorous cobra-lily (Darlingtonia californica) it exists to protect; the atlas row explicitly names it 'an 18-acre botanical preserve and state park.' Fits the 37-of-38 precedent (2026-09-03-38-related-pairs-verdict.md): an eponymous atlas point contained_in its state_parks park polygon -> same entity, merge, drop the redundant edge. Not a Hat-Rock exception (no separate recreation park; the site IS the plant preserve) and not an Agua-Caliente exception (no upstream two-parks federation). Canonical = the GIS polygon row, absorbing the visitor + atlas points.",
+    "provenance": "PROD ids, measured read-only this session (2026-09-03/04). Not present on TEST — TEST and PROD are independent corpora with independent UUIDs; shape validated via synthetic fixtures."
+  },
+  {
+    "group_id": 81,
+    "size": 3,
+    "states": [
+      "OR"
+    ],
+    "canonical_mp_id": "ed97cb39-5614-4321-b97e-acfb351aa1d2",
+    "canonical_reason": "state_parks-GIS-backed row wins (scoreMember 112 vs 1 — state_parks+wikipedia, has polygon; the two point rows score 1 each)",
+    "absorbed_mp_ids": [
+      "6bad17a6-2109-4852-827b-7c011e46aa07",
+      "2ed2e12c-5609-494c-9e4d-2c6060e116a6"
+    ],
+    "member_sides": [
+      {
+        "id": "ed97cb39-5614-4321-b97e-acfb351aa1d2",
+        "canonical_name": "Farewell Bend State Recreation Area",
+        "source_ids": [
+          "state_parks",
+          "wikipedia"
+        ],
+        "source_count": 2,
+        "has_polygon": true
+      },
+      {
+        "id": "6bad17a6-2109-4852-827b-7c011e46aa07",
+        "canonical_name": "Farewell Bend State Recreation Area",
+        "source_ids": [
+          "oregon_state_parks"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "2ed2e12c-5609-494c-9e4d-2c6060e116a6",
+        "canonical_name": "Farewell Bend State Recreation Area",
+        "source_ids": [
+          "nps"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "MISSING-GIS-MEMBER correction: classifier group 81 was the 2-member visitor<->nps pair (both score 1 -> undecidable). GIS polygon ed97cb39 exists, was not in the pair, added as canonical.",
+      "absorbed member 2ed2e12c (nps) has a pre-existing contained_in -> canonical (ed97cb39) edge; collapses to self-ref and is dropped by v2 on merge (validated shape).",
+      "should be ADDED to DEFAULT_BLOCKED_GROUPS before landing (currently NOT present; matches how group 83 is blocked). Not a correctness hole today: the auto-preview lists this group as undecidable/null-canonical, which the executor already refuses to auto-merge — but block it for consistency and to force a deliberate --input run."
+    ],
+    "decision_note": "SAME-entity, verified by a description read (this session). Both prose rows describe the identical Farewell Bend State Recreation Area (Oregon Trail camp on the Snake River / Brownlee Reservoir; RV+tent camping, volleyball, boating). The nps row is categorized park_feature but its text describes the WHOLE recreation area, not a sub-feature — the exact difference from Hat Rock, where the nps 'Hat Rock' row described only the basalt formation and was excluded. Fits the 37-of-38 precedent (nps point contained_in its state_parks polygon -> same entity; cf. Lyons Ferry / Palouse Falls / Yakima Sportsman). Canonical = GIS polygon, absorbing the visitor + nps points.",
+    "provenance": "PROD ids, measured read-only this session. Not present on TEST; shape validated via synthetic fixtures."
+  },
+  {
+    "group_id": 120,
+    "size": 3,
+    "states": [
+      "OR"
+    ],
+    "canonical_mp_id": "e47debed-2ff6-44e6-906b-c06cda7fcdc4",
+    "canonical_reason": "state_parks-GIS-backed row wins (scoreMember 112 vs 1 — state_parks+wikipedia, has polygon; the two point rows score 1 each)",
+    "absorbed_mp_ids": [
+      "f85a6b84-c25c-4c35-8379-08aa94a8feea",
+      "22e2f773-51ef-4af7-b164-45c94a823349"
+    ],
+    "member_sides": [
+      {
+        "id": "e47debed-2ff6-44e6-906b-c06cda7fcdc4",
+        "canonical_name": "Sumpter Valley Dredge State Heritage Area",
+        "source_ids": [
+          "state_parks",
+          "wikipedia"
+        ],
+        "source_count": 2,
+        "has_polygon": true
+      },
+      {
+        "id": "f85a6b84-c25c-4c35-8379-08aa94a8feea",
+        "canonical_name": "Sumpter Valley Dredge State Heritage Area",
+        "source_ids": [
+          "oregon_state_parks"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "22e2f773-51ef-4af7-b164-45c94a823349",
+        "canonical_name": "Sumpter Valley Gold Dredge",
+        "source_ids": [
+          "atlas_oddities"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "MISSING-GIS-MEMBER correction: classifier group 120 was the 2-member visitor<->atlas pair (both score 1 -> undecidable). GIS polygon e47debed exists, was not in the pair, added as canonical.",
+      "absorbed member 22e2f773 (atlas dredge) has a pre-existing contained_in -> canonical (e47debed) edge; collapses to self-ref and is dropped by v2 on merge (validated shape).",
+      "the atlas member's canonical_name differs ('Sumpter Valley Gold Dredge' vs the SHA name) — this is Adam's decided ABSORB (not exclude); recompute re-derives the merged canonical_name/description from field_precedence over the union.",
+      "should be ADDED to DEFAULT_BLOCKED_GROUPS before landing (currently NOT present; matches how group 83 is blocked). Not a correctness hole today: the auto-preview lists this group as undecidable/null-canonical, which the executor already refuses to auto-merge — but block it for consistency and to force a deliberate --input run."
+    ],
+    "decision_note": "SAME-entity; Adam's decision is to ABSORB the dredge (not exclude), following the 37-of-38 precedent. A State Heritage Area that exists to preserve and display the dredge is the Bodie/Malakoff pattern (a historic site that IS its feature), not the Hat-Rock pattern (a recreation park that merely contains a formation among a pond/volleyball/trails). The visitor row's own text calls the dredge 'the centerpiece of this park'; the atlas row calls it 'now a State Heritage Area.' Canonical = GIS polygon, absorbing the visitor + atlas dredge points.",
+    "provenance": "PROD ids, measured read-only this session. Not present on TEST; shape validated via synthetic fixtures."
+  },
+  {
+    "group_id": 5002,
+    "size": 2,
+    "states": [
+      "OR"
+    ],
+    "canonical_mp_id": "eb8f9388-b8e2-4679-a2ce-79006c803eb7",
+    "canonical_reason": "state_parks-GIS-backed row wins (scoreMember 112 vs 1). NET-NEW pairing (viewpoint visitor <-> viewpoint GIS) — the classifier grouped visitor<->atlas-rock as group 121, never visitor<->GIS.",
+    "absorbed_mp_ids": [
+      "4119c926-39d4-41ce-8941-7ac98be1e75f"
+    ],
+    "member_sides": [
+      {
+        "id": "eb8f9388-b8e2-4679-a2ce-79006c803eb7",
+        "canonical_name": "Face Rock State Scenic Viewpoint",
+        "source_ids": [
+          "state_parks",
+          "wikipedia"
+        ],
+        "source_count": 2,
+        "has_polygon": true
+      },
+      {
+        "id": "4119c926-39d4-41ce-8941-7ac98be1e75f",
+        "canonical_name": "Face Rock State Scenic Viewpoint",
+        "source_ids": [
+          "oregon_state_parks"
+        ],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "NET-NEW pairing — never produced by the classifier; has none of the 106 groups' prior validation history. group_id 5002 is outside the classifier's 1..123 range so it cannot collide (mirrors 5001).",
+      "BYSTANDER: the atlas rock 3b75eb01 ('Face Rock') is DIFFERENT-entity and is deliberately NOT a member of this group (absent from every functional field). It retains its own source_record and its contained_in -> canonical (eb8f9388) edge. MECHANISM (corrected in self-review): the edge is NOT 'left untouched' — recompute_master_place(canonical) run inside the merge DELETEs every contained_in edge with parent=canonical and RE-INSERTS it only if st_covers(canonical.geometry_polygon, child.geometry) holds and the child has an active source_record. The bystander edge therefore re-derives and persists BECAUSE the rock point remains covered by the viewpoint polygon — verified live this session: the rock point [-124.433675, 43.105442] is inside the viewpoint MultiPolygon (JS point-in-polygon; corroborated by the edge already existing since 2026-08-28). The shape test seeds the bystander inside the polygon and confirms it survives byte-identical, keeps its SR, edge 1->1, never in audit. PREREQUISITE for the operator: confirm st_covers(eb8f9388.polygon, 3b75eb01.point)=TRUE live (the definitive predicate) before the PROD run.",
+      "The classifier's group 121 (viewpoint visitor <-> atlas rock) stays DIFFERENT and must be ADDED to DEFAULT_BLOCKED_GROUPS (like group 6) so its point pair is never auto-merged.",
+      "must be ADDED to DEFAULT_BLOCKED_GROUPS before landing (currently NOT present in the constant; 5001 is blocked — same class, so wire these in to match)."
+    ],
+    "decision_note": "NET-NEW group, NOT an edit to group 121. Group 121 (viewpoint visitor 4119c926 <-> atlas rock 3b75eb01) stays DIFFERENT: the atlas 'Face Rock' is the offshore sea-stack formation, protected as part of the U.S. FWS Oregon Islands National Wildlife Refuge (per the viewpoint's own description), while the viewpoint is a clifftop day-use lookout ONTO it — a distinct place, the Face-Rock exception to the 37-of-38 precedent. 3b75eb01 appears nowhere in this group's functional fields; it is named here only to record the decision. Its contained_in edge to eb8f9388 is the correct sub-unit modeling; during the merge recompute re-derives that edge (see the bystander risk note — it is not literally untouched, but persists because st_covers still holds, verified live). This group merges only the park's two records: viewpoint visitor absorbed into the viewpoint state_parks GIS canonical.",
+    "provenance": "PROD ids, measured read-only this session. Not present on TEST; shape validated via synthetic fixtures. The bystander atlas rock 3b75eb01 and the contained_in edge 3b75eb01->eb8f9388 measured live this session."
+  }
+]
