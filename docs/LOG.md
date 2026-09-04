@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later) — Auto/Repair wired to live Mapbox (`auto_repair` + `car_wash`)
+
+- Wired the Find Nearby **Auto/Repair** tile (`car_repair`/`car_wash` primaries)
+  to live Mapbox Search Box. Not the one-line routing add the audit implied.
+- **The real obstacle:** the live fanout keys on the coarse **slide key**, and
+  Auto/Repair's parent is `fuel` (Decision 8) — same as Gas. The Mapbox source
+  mapped `fuel`→`gas_station`, so routing `car_repair`→`fuel` naively would have
+  returned **gas stations** for Auto/Repair. Fix: made the Mapbox source
+  **primary-category-aware** — threaded the raw `primaryCategories` through
+  `discover()` (optional, other sources ignore it) so the source hits
+  `auto_repair`/`car_wash` for auto primaries and `gas_station` for gas, within
+  the one `fuel` slide bucket. No-primaries path (day-corridor) defaults to
+  `gas_station`, preserving fuel behaviour byte-for-byte.
+- **`repair_shop` excluded after live probing** — the audit (#364) listed it, but
+  it returns appliance/iPhone/TV/furniture repair (`poi_category: "repair shop"`),
+  not auto. `auto_repair` returns `poi_category: mechanic`. So the mapping is
+  `auto_repair` + `car_wash` only. This is the "Mapbox category mismatch" the
+  brief said to watch for — caught by sampling names, not trusting the id list.
+- **Invalid Mapbox category ids return HTTP 200 + 0 features**, not a 4xx — so
+  "returns relevant results" (not "resolves") is the validity signal. Recorded
+  because it means an id typo fails silent-empty, exactly like a real dead zone.
+- **Live-verified the wired source** (real `mapboxSearchBoxSource`, real token):
+  results in CA/OR/UT/WA metros; **0 in a rural NV point** — a Mapbox
+  data-density fact (matches #364's 4/6 rural), not a wiring defect. Gas control
+  unchanged; day-corridor fallback → gas.
+- **Why no source pollutes an auto request:** slide key `fuel` fans to all
+  sources, but Google/FSQ have empty fuel lists, rec-gov gates to camping, and
+  USFS/BLM map their own feature types — Mapbox is the only live `fuel` producer.
+  (Google/FSQ/rec-gov verified by code; USFS/BLM by code-reading, not live-run.)
+- Files: `discovery/types.ts`, `discovery/discovery.ts`,
+  `discovery/mapbox-search-box.ts`, `places/resolve-places.ts`,
+  `app/api/search-area/handler.ts`, + 5 new tests. Suite 714 → 719. Gates green,
+  build exit 0. No data-layer/corpus writes. Self-review skipped per Adam.
+
 ## 2026-09-03 (later 16) — PROD migration apply: `merge_master_place` v1–v4 + `recompute_master_place` v5. Schema only; no data, no executor run.
 
 - **Applied 5 migrations to PROD** (`nqzeywzcowujzyegxbsr`) via the documented

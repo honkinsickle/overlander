@@ -219,6 +219,96 @@ test("query handles an empty features[] response gracefully", async () => {
   assert.deepEqual(r, []);
 });
 
+// ── Auto/Repair: primary-category routing (2026-09-03) ─────────────
+
+/** Records every category id the source fetches, returning one feature each. */
+function recordingSource(catsHit: string[]) {
+  return createMapboxSearchBoxSource({
+    fetchImpl: async (input) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      // .../v1/category/<id>
+      const id = url.pathname.split("/").pop()!;
+      catsHit.push(id);
+      return new Response(
+        JSON.stringify({
+          type: "FeatureCollection",
+          features: [
+            fakeFeature({
+              properties: {
+                mapbox_id: `mb-${id}`,
+                name: `result-${id}`,
+                feature_type: "poi",
+                poi_category: [id],
+                poi_category_ids: [id],
+              },
+            }),
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+    tokenFn: () => TOKEN,
+  });
+}
+
+test("query with no primaryCategories falls back to gas_station (day-corridor behaviour preserved)", async () => {
+  const hits: string[] = [];
+  const r = await recordingSource(hits).query({ bbox: BBOX, categories: ["fuel"] });
+  assert.deepEqual(hits, ["gas_station"]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].category, "fuel");
+});
+
+test("query routes car_repair → auto_repair and car_wash → car_wash (NOT repair_shop)", async () => {
+  const hits: string[] = [];
+  const r = await recordingSource(hits).query({
+    bbox: BBOX,
+    categories: ["fuel"],
+    primaryCategories: ["car_repair", "car_wash"],
+  });
+  assert.deepEqual(hits.sort(), ["auto_repair", "car_wash"]);
+  assert.ok(!hits.includes("repair_shop"), "repair_shop must never be queried");
+  assert.ok(!hits.includes("gas_station"), "an auto request must not hit gas_station");
+  // Auto results carry the fuel parent category (no car_repair slide key).
+  assert.equal(r.length, 2);
+  assert.ok(r.every((p) => p.category === "fuel"));
+});
+
+test("query routes car_repair alone → auto_repair only", async () => {
+  const hits: string[] = [];
+  await recordingSource(hits).query({
+    bbox: BBOX,
+    categories: ["fuel"],
+    primaryCategories: ["car_repair"],
+  });
+  assert.deepEqual(hits, ["auto_repair"]);
+});
+
+test("query with gas primaries hits gas_station only (fuel behaviour unchanged)", async () => {
+  const hits: string[] = [];
+  await recordingSource(hits).query({
+    bbox: BBOX,
+    categories: ["fuel"],
+    primaryCategories: ["gas_station", "truck_stop", "ev_charging"],
+  });
+  assert.deepEqual(hits, ["gas_station"]);
+});
+
+test("query still returns [] for a non-fuel slide key even when primaries are auto", async () => {
+  const source = createMapboxSearchBoxSource({
+    fetchImpl: async () => {
+      throw new Error("fetch must NOT be called for a non-fuel slide key");
+    },
+    tokenFn: () => TOKEN,
+  });
+  const r = await source.query({
+    bbox: BBOX,
+    categories: ["food"],
+    primaryCategories: ["car_repair"],
+  });
+  assert.deepEqual(r, []);
+});
+
 // ── Default export ─────────────────────────────────────────────────
 
 test("mapboxSearchBoxSource: default export has id=mapbox and a query() method", () => {

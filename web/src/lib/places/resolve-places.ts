@@ -229,6 +229,11 @@ export const LIVE_SLIDE_FOR_PRIMARY: Record<string, SlideCategoryKey> = {
   steak_house: "food", sandwich_shop: "food", bar_and_grill: "food",
   gastropub: "food", brewpub: "food",
   gas_station: "fuel", truck_stop: "fuel",
+  // Auto/Repair (Find Nearby tile) rides the `fuel` slide bucket — its parent
+  // under Decision 8's Services cluster. The live half is served by the Mapbox
+  // source, which reads the raw primaries to hit `auto_repair`/`car_wash`
+  // instead of `gas_station`. Wired 2026-09-03.
+  car_repair: "fuel", car_wash: "fuel",
   campground: "camping", rv_park: "camping", camping_cabin: "camping",
   hotel: "overnight", motel: "overnight", resort_hotel: "overnight",
   viewpoint: "scenic", peak: "scenic", mountain_peak: "scenic",
@@ -442,6 +447,9 @@ async function resolveLive(
     return deps.discover({
       bboxes: [scope.bbox],
       categories: slideKeys,
+      // Raw primaries let the Mapbox source split Auto/Repair from Gas within
+      // the `fuel` slide bucket; other sources ignore this.
+      primaryCategories: scope.categories,
       sources,
       signal: input.signal,
       onSourceError: noteError,

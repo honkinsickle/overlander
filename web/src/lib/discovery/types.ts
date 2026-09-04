@@ -69,11 +69,19 @@ export interface WaypointSource {
    *  that supports text search (Google `searchText`) matches the text
    *  within `bbox` and ignores `categories`. Sources without text support
    *  ignore `textQuery` (and typically return [] when called on a text
-   *  query with no categories). */
+   *  query with no categories).
+   *
+   *  `primaryCategories` is the RAW corpus `primary_category` request (e.g.
+   *  `["car_repair", "car_wash"]`), threaded through unchanged when the caller
+   *  has it (the bbox/search-area path). Most sources ignore it and route on
+   *  the coarser slide `categories`; the Mapbox source reads it to distinguish
+   *  sub-buckets that collapse to one slide key — Auto/Repair vs Gas both live
+   *  under `fuel`. Absent on the day-corridor path (slide keys only). */
   query(args: {
     bbox: [west: number, south: number, east: number, north: number];
     categories: SlideCategoryKey[];
     signal?: AbortSignal;
     textQuery?: string;
+    primaryCategories?: string[];
   }): Promise<SourceResult[]>;
 }
