@@ -92,8 +92,20 @@ const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
  *   5001 — Salton Sea SRA visitor + its state_parks row. NET-NEW pairing the
  *        classifier never produced, so it has none of the 106 groups' prior
  *        validation history. Blocked for the same reason.
+ *   41, 68 — DEFECTS found 2026-09-04, pulled OUT of the "already validated 106".
+ *        Each canonical carries a visitor source_record that belongs to a
+ *        DIFFERENT park which already has its own master_place, and in both
+ *        cases the correct record for the group's own park sits on the member
+ *        that would be absorbed INTO the defective canonical:
+ *          41 — "Bothe-Napa Valley SP" is described by california_state_parks:482,
+ *               Bale Grist Mill SHP (own mp 9754d424).
+ *          68 — "Harstine Island" is described by
+ *               washington_state_parks:mcmicken-island-marine, McMicken Island
+ *               Marine State Park (own mp ab568cc1) — a different island.
+ *        Merging would permanently fuse two distinct park units. Fix the
+ *        misfiled source_record first, then unblock.
  */
-const DEFAULT_BLOCKED_GROUPS = new Set<number>([3, 6, 83, 95, 5001]);
+const DEFAULT_BLOCKED_GROUPS = new Set<number>([3, 6, 41, 68, 83, 95, 5001]);
 
 interface CliArgs {
   groups: number[];
