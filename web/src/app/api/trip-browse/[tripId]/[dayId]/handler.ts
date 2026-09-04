@@ -7,14 +7,23 @@
  * the "produce the ranked places" step, behind a dependency seam so all four
  * flag combinations can be unit-tested without network or DB.
  *
- * TWO independent, orthogonal flags (see the cutover plan §3):
- *   - `TRIP_BROWSE_USE_RESOLVER` (new, default off) selects the CODE PATH:
- *       OFF → `viaLegacy`: the pre-cutover discover-fanout body, verbatim.
- *       ON  → `viaResolver`: `resolvePlaces()` day-corridor scope.
- *   - `USE_FEDERATED_POIS` (existing, default off) selects the DATA: whether the
- *     federated `pois_along_corridor` rows are merged. It is wired into the
- *     resolver path via `include: { federated: useFederated }`, so both flags
- *     stay independent and all four combinations preserve today's behaviour.
+ * CUT OVER to `resolvePlaces()` (day-corridor scope) unconditionally 2026-09-03.
+ * The `TRIP_BROWSE_USE_RESOLVER` flag is removed; `produceBrowsePlaces` always
+ * runs `viaResolver`. Parity with the pre-cutover body was verified on TEST
+ * first: identical membership legacy-vs-resolver across CA/OR/UT corridors in
+ * both `USE_FEDERATED_POIS` states (the resolver additionally applies the
+ * verified-first tier sort — a no-op when federated is off, a reorder of
+ * mixed-tier rows when on; design §D2, cutover-plan §4).
+ *
+ * `USE_FEDERATED_POIS` (existing, default off) is a SEPARATE, orthogonal DATA
+ * flag — whether the federated `pois_along_corridor` rows are merged. It stays,
+ * wired into the resolver via `include: { federated: useFederated }` (the
+ * resolver reads no env).
+ *
+ * `viaLegacy` is RETAINED as the single-endpoint FALLBACK only: `resolvePlaces`
+ * day-corridor requires BOTH endpoints, and a degenerate day (no `dayStart`)
+ * cannot be expressed as a corridor — `viaResolver` delegates to `viaLegacy`
+ * for that edge rather than 500/empty. It is no longer a flag-selected path.
  *
  * See docs/architecture/resolve-places-day-scoped-browse-cutover-plan.md.
  */
@@ -26,17 +35,15 @@ import { recGovSource } from "@/lib/discovery/rec-gov";
 import { foursquareSource } from "@/lib/discovery/foursquare";
 import { usfsSource } from "@/lib/discovery/usfs";
 import { blmSource } from "@/lib/discovery/blm";
-import { fetchFederatedPois } from "@/lib/trip-browse/federated";
 import { resolvePlaces } from "@/lib/places/resolve-places";
 import { haversineMi, pointToPolylineMi } from "@/lib/routing/point-to-polyline";
 import type { BrowsePlace, SlideCategoryKey } from "@/lib/trip-browse/places";
 
-// ── Legacy constants — copied verbatim from the pre-cutover route so the
-// flag-OFF path is byte-for-byte unchanged. They mirror resolvePlaces()'s
-// day-corridor defaults (DEFAULT_RADIUS_KM_BY_CATEGORY / DEFAULT_CORRIDOR_MI /
-// DEFAULT_FEDERATED_BUFFER_M / DEFAULT_CORRIDOR_LIVE_SOURCES), verified
-// byte-identical in the cutover plan — kept local rather than folded so the
-// legacy path can never be perturbed by a resolver-side edit.
+// ── Fallback constants — used ONLY by the single-endpoint `viaLegacy` fallback
+// (the resolver owns the normal path's radii/corridor). Kept local so the
+// fallback can never be perturbed by a resolver-side edit; they mirror
+// resolvePlaces()'s DEFAULT_RADIUS_KM_BY_CATEGORY / DEFAULT_CORRIDOR_MI /
+// DEFAULT_CORRIDOR_LIVE_SOURCES.
 
 const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
   food: 5,
@@ -50,7 +57,6 @@ const RADIUS_KM_BY_CATEGORY: Record<SlideCategoryKey, number> = {
   urban: 10,
 };
 const CORRIDOR_MI = 10;
-const FEDERATED_BUFFER_M = 16000;
 // Mapbox Search Box heads the list as the fuel-only provider. Google's
 // TYPES_BY_CATEGORY.fuel was emptied 2026-08-25 so fuel comes only from
 // Mapbox; other categories still come from Google/FSQ/rec-gov/USFS/BLM. Head
@@ -64,14 +70,15 @@ const LIVE_SOURCES = [
   blmSource,
 ];
 
-/** Dependency seam for tests. Every entry defaults to the real module. */
+/** Dependency seam for tests. Every entry defaults to the real module.
+ *  `discover` is used only by the single-endpoint `viaLegacy` fallback; the
+ *  normal path goes entirely through `resolvePlaces`. */
 export type BrowseDeps = {
   discover: typeof discover;
-  fetchFederatedPois: typeof fetchFederatedPois;
   resolvePlaces: typeof resolvePlaces;
 };
 
-const REAL_DEPS: BrowseDeps = { discover, fetchFederatedPois, resolvePlaces };
+const REAL_DEPS: BrowseDeps = { discover, resolvePlaces };
 
 export type BrowseParams = {
   requested: SlideCategoryKey[];
@@ -80,11 +87,11 @@ export type BrowseParams = {
   /** This day's overnight coord. */
   dayEnd?: [number, number];
   /** Endpoints for the live discover bboxes — the route builds this the same
-   *  way the pre-cutover body did (this day's coord + previous day's / start). */
+   *  way the pre-cutover body did (this day's coord + previous day's / start).
+   *  Used only by the `viaLegacy` single-endpoint fallback. */
   points: [number, number][];
-  /** `TRIP_BROWSE_USE_RESOLVER`. false → legacy body; true → resolvePlaces(). */
-  useResolver: boolean;
-  /** `USE_FEDERATED_POIS`. Gates the federated merge in BOTH paths. */
+  /** `USE_FEDERATED_POIS`. Gates the federated merge (wired to
+   *  `include.federated` on the resolver path; the raw merge on the fallback). */
   useFederated: boolean;
   /** Present iff `useFederated` — created by the route (the anon+JWT client the
    *  corridor RPC runs through). Null otherwise. */
@@ -92,17 +99,17 @@ export type BrowseParams = {
   signal?: AbortSignal;
 };
 
-/** Produce the ranked `BrowsePlace[]` for the day's browse feed. */
+/** Produce the ranked `BrowsePlace[]` for the day's browse feed — always via
+ *  `resolvePlaces()` (day-corridor scope), which delegates to the single-endpoint
+ *  `viaLegacy` fallback only for a degenerate day with no `dayStart`. */
 export async function produceBrowsePlaces(
   params: BrowseParams,
   deps: BrowseDeps = REAL_DEPS,
 ): Promise<BrowsePlace[]> {
-  return params.useResolver
-    ? viaResolver(params, deps)
-    : viaLegacy(params, deps);
+  return viaResolver(params, deps);
 }
 
-// ── ON: resolvePlaces() day-corridor scope ──────────────────────────────
+// ── resolvePlaces() day-corridor scope ──────────────────────────────────
 
 async function viaResolver(
   params: BrowseParams,
@@ -135,14 +142,18 @@ async function viaResolver(
   return r.places;
 }
 
-// ── OFF: the pre-cutover discover-fanout body, verbatim (deps injected) ──
+// ── FALLBACK: single-endpoint live discover-fanout (deps injected) ──────
+// Reached ONLY from viaResolver when a day lacks `dayStart`/`dayEnd` — the
+// resolver's day-corridor scope needs both. This path is LIVE-ONLY: the
+// federated `pois_along_corridor` RPC also needs both endpoints, so it could
+// never run in this degenerate case (the pre-cutover body short-circuited past
+// it too). Not a flag-selected path — the TRIP_BROWSE_USE_RESOLVER flag is gone.
 
 async function viaLegacy(
   params: BrowseParams,
   deps: BrowseDeps,
 ): Promise<BrowsePlace[]> {
-  const { requested, points, dayStart, dayEnd, useFederated, supabase, signal } =
-    params;
+  const { requested, points, dayStart, dayEnd, useFederated, signal } = params;
 
   // Fan out one discover() per category in parallel.
   const perCategory = await Promise.all(
@@ -157,25 +168,11 @@ async function viaLegacy(
         signal,
       });
       const live = places.map<BrowsePlace>((p) => ({ ...p, category: slideKey }));
-
-      // Flag OFF: byte-for-byte the legacy path — untagged live results.
-      if (!useFederated) return live;
-
-      // Flag ON: tag live origin, then merge federated RPC rows alongside.
-      const liveTagged = live.map<BrowsePlace>((p) => ({
-        ...p,
-        source: "live" as const,
-      }));
-      if (!supabase || !dayStart || !dayEnd) return liveTagged;
-      const federated = await deps.fetchFederatedPois({
-        supabase,
-        slideKey,
-        start: dayStart,
-        end: dayEnd,
-        bufferMeters: FEDERATED_BUFFER_M,
-        signal,
-      });
-      return [...liveTagged, ...federated];
+      // Tag live iff USE_FEDERATED_POIS, matching the pre-cutover edge
+      // behaviour (federated rows themselves can't be fetched here — see above).
+      return useFederated
+        ? live.map<BrowsePlace>((p) => ({ ...p, source: "live" as const }))
+        : live;
     }),
   );
   const merged = perCategory.flat();

@@ -17,10 +17,10 @@
  * with none supplied (the day-corridor path passes slide keys only) it
  * defaults to `gas_station`, preserving the original fuel behaviour. Other
  * slide categories return `[]`. This source sits alongside `googlePlacesSource`
- * in both the legacy `LIVE_SOURCES` lists (`/api/trip-browse`,
- * `/api/search-area`) and `resolvePlaces()`'s `DEFAULT_*_LIVE_SOURCES`, so
- * fuel/auto come from Mapbox regardless of the `TRIP_BROWSE_USE_RESOLVER` /
- * `SEARCH_AREA_USE_RESOLVER` flag state.
+ * in `resolvePlaces()`'s `DEFAULT_*_LIVE_SOURCES` — which both `/api/search-area`
+ * and `/api/trip-browse` now go through unconditionally (the `*_USE_RESOLVER`
+ * cutover flags were removed 2026-09-03) — plus the single-endpoint trip-browse
+ * fallback's local source list, so fuel/auto come from Mapbox on every path.
  *
  * `repair_shop` is deliberately NOT mapped. Live-probed 2026-09-03, its
  * results are appliance / electronics / furniture repair (`poi_category:
