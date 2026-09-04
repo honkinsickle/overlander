@@ -2040,6 +2040,50 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   that directly — zero mock coupling, non-brittle. Deferred deliberately
   to avoid restructuring `matcher.ts` while the fix sits in an unmerged PR.
 
+## `ci.yml` has no `push` trigger, so the node_modules cache never warms for a NEW PR (2026-09-03)
+
+`[literal, measured]` The cache added in #390 works — on a hit the install step
+is skipped entirely and job totals drop from 149/212/189/106s to 23-47s. **But it
+only helps the branch that created it.** An unrelated branch
+(`fix-recompute-skip-soft-retired`, run `33824183747`) ran the new workflow and
+still missed, installing for 23-424s.
+
+Cause: Actions caches written on a branch are visible only to that branch and its
+PRs; caches on the **default** branch are visible everywhere. `ci.yml` triggers on
+`pull_request` and `workflow_dispatch` only — **there is no `push` trigger, so no
+run ever executes on `main`**, so no default-branch cache is ever written.
+
+**Fix is one line:** add `push: branches: [main]` to `ci.yml`'s `on:` block. Then
+each merge to main refreshes a cache every PR can restore. Not done here because
+it adds a run per merge and that is a cost worth agreeing to deliberately.
+
+**Read the current win accurately in the meantime:** it speeds up *iterating* on
+a PR (2nd push onward), not *opening* one.
+
+## Two conflict-resolution hazards that both bit this repo on 2026-09-03
+
+Recorded because each cost real time and both recur structurally.
+
+**1. Stacked PRs + squash merge produce add/add conflicts.** `[literal]` #380 and
+#382 were both squash-merged, putting their content on `main` under new commits
+while the branches below still carried it under the original lineage. Git then saw
+the three category design docs as **add/add**. The keep-both resolution used
+everywhere else in that chain would have **duplicated all three documents end to
+end**. Correct handling: resolve to *ours*, after verifying that every line
+present on main but absent from the branch is text the chain deliberately
+superseded. **Rule: in a stack, "keep both" is right for the append-only journals
+and wrong for the content files.**
+
+**2. A doc that quotes conflict markers verbatim is a landmine.** `[literal]`
+`abc03f8` (#370) committed literal markers into `docs/LOG.md`. Then `e1c045d`
+(#379) ate the markers out of the `docs/STATE.md` sentence that was *documenting
+that very incident*, truncating it mid-thought. Both are repaired on `main` and
+the sentence now uses shortened forms. **Rule: never write a full seven-character
+marker run in prose — use `<<<`/`===`/`>>>`.**
+
+**Cross-cutting:** both were caught by diffing the merged result against **both**
+parents rather than eyeballing it. A merge that reads fine is not evidence.
+
 ## CI dependency install dominates every job — node_modules now cached (2026-09-03)
 
 `[literal, measured over 12 successful runs]` The work each CI job actually does

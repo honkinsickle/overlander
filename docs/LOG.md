@@ -51,6 +51,42 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   v2 → v3 → v4 → v5.
 - Investigation doc: `docs/investigations/2026-09-04-recompute-skip-soft-retired.md`.
 
+## 2026-09-03 (later 15) — Wrap. The node_modules cache is measured and it works — but only within a PR, not across them.
+
+- **The number left outstanding in (later 14) is now measured, and the fix is
+  real.** On a cache hit the `Install dependencies` step is **skipped entirely**
+  (0s, down from 74-169s on the miss run), and job totals fall from
+  **149/212/189/106s** (miss, run `33822178024`) to **27/39/33/31s** (hit, run
+  `33823277279`) and **23/47/33/26s** (hit, run `33823831065`). Cache restore
+  costs 4-7s.
+- **⚠️ AND THE SAME MEASUREMENT EXPOSED A LIMIT IN MY OWN FIX, WHICH MATTERS
+  MORE THAN THE WIN.** An unrelated branch (`fix-recompute-skip-soft-retired`,
+  run `33824183747`) ran the new workflow and **still missed**: install 23-424s.
+  Cause `[literal]`: Actions caches written on a branch are visible only to that
+  branch and its PRs, and **`ci.yml` triggers on `pull_request` only — there is
+  no `push` trigger — so no run ever executes on `main` to populate a
+  default-branch cache.** Every *new* PR therefore still pays a full install on
+  its first run.
+- **So the honest scope of the win: it helps iterating on a PR, not starting
+  one.** That is still where this session's pain actually was — several PRs took
+  3-5 pushes each — but it is not the blanket speedup a reader would assume.
+  Follow-up recorded in BACKLOG: add `push: branches: [main]` to `ci.yml`.
+- **Stacked PRs + squash merge collide, twice over.** `[literal]` #380 and #382
+  were both squash-merged, putting their content on `main` under new commits
+  while the branches below still carried it under the original lineage. Git then
+  saw the three design docs as **add/add** conflicts. The keep-both resolution
+  used everywhere else in this chain would have **duplicated all three documents
+  end to end**; each file had to be resolved to *ours* after checking that every
+  main-only line was text the chain deliberately superseded.
+- **A doc that quotes conflict markers verbatim is a landmine, and it has now
+  bitten this repo twice.** `[literal]` `abc03f8` (#370) committed literal
+  markers into `LOG.md`; then `e1c045d` (#379) ate the markers out of a `STATE.md`
+  sentence that was *documenting* that very incident, truncating it mid-thought.
+  Both are repaired on `main`, and the sentence is now written with shortened
+  markers so a resolver cannot consume it.
+- **Not claimed, because not measured:** that the cache helps any PR other than
+  the one that created it — the one cross-branch data point says it does not.
+
 ## 2026-09-03 (later 14) — CI speed: the "test-web is 7x slower" premise did not survive measurement. The real cost is `npm install`, in all four jobs.
 
 - **Measured before diagnosing, and the premise failed.** Across 12 successful
