@@ -1,3 +1,32 @@
+# STATE — branch `wire-auto-repair-mapbox` · 2026-09-03 (later 35) — **Auto/Repair wired to live Mapbox.** `car_repair`→`auto_repair`, `car_wash`→`car_wash`, served in the `fuel` slide bucket. Live-verified CA/OR/UT/WA. TEST-only, no data writes.
+
+(**newest truth: six files in `web/src`, no data-layer/corpus/API-shape change. No writes to TEST or PROD — the source hits Mapbox live at request time. All web gates green + a live end-to-end probe of the wired source.**
+
+**IT WAS NOT A ONE-LINE ROUTING ADD, and that is the headline.** `[literal]` The audit framed Auto/Repair as "just needs wiring." It needed more: the live fanout keys on the coarse **slide key**, and Auto/Repair's parent slide key is **`fuel`** — the same as Gas (Decision 8). The Mapbox source mapped `fuel`→`gas_station`, so naively routing `car_repair`→`fuel` would have returned **gas stations** for the Auto/Repair tile. The fix makes the Mapbox source **primary-category-aware**: it reads the raw `primary_category` request threaded through `discover()` and hits `auto_repair`/`car_wash` for auto primaries, `gas_station` for gas — same slide bucket, split by primary.
+
+**`repair_shop` was EXCLUDED after live probing — the audit's third id doesn't hold up.** `[literal — probed this session]` `auto_repair` returns `poi_category: mechanic` (real auto shops); `repair_shop` returns appliance/iPhone/TV/furniture repair (`poi_category: "repair shop"`). Wiring it would pollute Auto/Repair with non-auto results. So the mapping is `car_repair`→`auto_repair`, `car_wash`→`car_wash`, and NOT `repair_shop`. This is the "Mapbox category mismatch you didn't expect" the brief anticipated — flagged, not shipped.
+
+**What changed** `[literal — git diff]`:
+- `discovery/types.ts` + `discovery/discovery.ts` — `WaypointSource.query` and `discover()` gain an optional `primaryCategories` passthrough. Other sources ignore it.
+- `discovery/mapbox-search-box.ts` — the source now maps raw primaries → Mapbox category ids (`MAPBOX_CATEGORY_FOR_PRIMARY`), fetches the needed set in parallel, and **defaults to `gas_station` when no primaries are supplied** (the day-corridor/trip-browse path), so fuel behaviour is byte-for-byte preserved.
+- `places/resolve-places.ts` — `car_repair`/`car_wash` → `fuel` in `LIVE_SLIDE_FOR_PRIMARY` (shared by both the legacy handler and the resolver), and the bbox path passes `primaryCategories` through.
+- `app/api/search-area/handler.ts` — the legacy live path passes `primaryCategories` through.
+- `discovery/mapbox-search-box.test.ts` — +5 tests (auto routing, exclusion of repair_shop, gas unchanged, day-corridor fallback, non-fuel guard). Suite 714 → **719**.
+
+**Why other fuel sources don't pollute an auto request** `[literal for Google/FSQ/rec-gov; strong inference for USFS/BLM]`: the auto request maps to slide key `fuel`, which fans out to all sources — but Google's `TYPES_BY_CATEGORY.fuel` and FSQ's `FSQ_TOP_LEVEL_IDS.fuel` are both `[]`, rec-gov gates to camping/overnight, and USFS/BLM map their own feature types (not fuel). So Mapbox is the only live producer under `fuel`. USFS/BLM verified by code-reading, not live-run.
+
+**Auto results carry `category: "fuel"`** — there is no `car_repair` slide key, and Auto/Repair is in the fuel/Services parent (Decision 8), so the card renders with fuel styling. Deliberate, noted as a consequence.
+
+**Live verification** `[literal — ran the real `mapboxSearchBoxSource` this session]`: Auto/Repair returned results in LA(CA)/Portland(OR)/SLC(UT)/Seattle(WA) metros (genuine auto shops, towing, oil-change, car washes), all stamped `fuel`; **0 in a rural NV point**. Gas control unchanged; no-primaries fallback → gas. **Rural coverage is partial — a Mapbox data-density fact (same for gas, and matching #364's 4/6 rural), not a wiring defect.**
+
+**Corpus half is 0** for `car_repair`/`car_wash` (confirmed by the audit; unchanged). All Auto/Repair results are live-only, by design.
+
+**Self-review pass skipped per Adam's instruction** (routine, TEST-only, no data writes).
+
+**Next steps (Adam's call):** review + merge. Follow-on unwired wins remain in the routing table (`charging_station` EV, `grocery`/`supermarket`). The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `docs/prod-migrate-v1-v5` · 2026-09-03 (later 34) — **PROD IS AT v5.** The merge-executor schema (v1–v4) and `recompute_master_place()` v5 are applied to production; PROD and TEST function bodies are now byte-identical.
 
 (**newest truth: an authorized PROD schema write, then this doc pass. 5 migrations applied to `nqzeywzcowujzyegxbsr`. NO application data touched — no executor run, no corpus mutation.**

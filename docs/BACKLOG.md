@@ -52,9 +52,14 @@ now wrong for Trailheads.**
 - **`rest_area` (inside `interest`) is thin too** — 5/6 metro but **1/6 rural**.
 
 **Confirmed genuinely just-needs-wiring (dense where sampled):**
-- **Auto / Repair** — **0** corpus rows vs Mapbox `auto_repair` saturating at
-  **all six** metro and **four of six** rural points; highest rural total of any
-  id sampled. Cleanest win available.
+- ~~**Auto / Repair**~~ — **WIRED 2026-09-03** (PR pending). `car_repair` →
+  Mapbox `auto_repair`, `car_wash` → Mapbox `car_wash`, served by the Mapbox
+  Search Box source within the `fuel` slide bucket. `repair_shop` was excluded:
+  live-probed as appliance/electronics repair, not auto. Live-verified in
+  CA/OR/UT/WA metros; rural coverage is partial (Mapbox data density — same as
+  gas), 0 in the rural NV point sampled. The wiring needed more than a routing
+  line — the Mapbox source had to become primary-category-aware because
+  Auto/Repair shares the `fuel` slide key with Gas. See the routing table §fuel.
 - **`charging_station`** — corpus holds **2,886** EV rows the live half cannot
   reach; Mapbox's EV id is dense wherever `gas_station` is. Closes #364's fuel
   inversion.
@@ -155,8 +160,9 @@ these.**
 
 **Tier 2 — no corpus, but a compliant live source EXISTS and is merely unwired.
 Cheap wiring decisions.**
-- **Auto / Repair** — **0** corpus rows, no live wiring, but Mapbox publishes
-  `auto_repair`, `repair_shop`, `car_wash`. Cheapest gap in the audit.
+- ~~**Auto / Repair**~~ — **WIRED 2026-09-03** (PR pending). `auto_repair` +
+  `car_wash` via the Mapbox source; `repair_shop` excluded (non-auto). See the
+  top of this file and the routing table §fuel.
 - **Trailheads** (4,759 in-scope, corpus-only; Mapbox has `trailhead`) and
   **Groceries** (546 in-scope, corpus-only; Mapbox has `grocery`,
   `supermarket`). Not broken — just single-sourced.

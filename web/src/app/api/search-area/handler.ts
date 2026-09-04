@@ -164,6 +164,10 @@ async function viaLegacy(
       return await deps.discover({
         bboxes: [bbox],
         categories: slideKeys,
+        // Raw primaries let the Mapbox source split Auto/Repair (car_repair /
+        // car_wash → auto_repair / car_wash) from Gas within the `fuel` slide
+        // bucket; every other source ignores this field.
+        primaryCategories: categories ?? undefined,
         sources: [
           mapboxSearchBoxSource,
           googlePlacesSource,

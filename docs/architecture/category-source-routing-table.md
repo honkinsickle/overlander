@@ -112,7 +112,7 @@ Foursquare is `[open]` as a *candidate to test*, not a source to wire.
 | `ev_charging` | 2,886 | Mapbox `charging_station` — **available, unwired** | 6/6 metro, 4/6 rural | **R3 MERGE** | **Yes — highest-value change in this table** |
 | `gas_station` | ~0 corpus; live-carried | Mapbox `gas_station` (the only wired Mapbox category) | 6/6 metro, 4/6 rural | **R2 LIVE-PRIMARY** | Yes — already does |
 | `truck_stop` | 0 | Mapbox `gas_station` loosely | — | R2 | Yes |
-| **Services** → Auto/Repair (`car_repair`, `car_wash`) | 0 | Mapbox `auto_repair`, `repair_shop`, `car_wash` — **unwired** | **6/6 metro, 4/6 rural; highest rural total of any id sampled** | **R2 LIVE-PRIMARY** | **Not today** — #366's *"cleanest wiring win"* |
+| **Services** → Auto/Repair (`car_repair`, `car_wash`) | 0 | Mapbox `auto_repair` + `car_wash` — **WIRED 2026-09-03**. `repair_shop` deliberately excluded (live-probed as appliance/electronics repair, not auto) | **live-verified this session: results in CA/OR/UT/WA metros; 0 in rural NV** | **R2 LIVE-PRIMARY** | **Yes — wired via the Mapbox source** |
 | **Services** → Rest areas (`rest_area`) | in `interest` today | Mapbox `rest_area` | 5/6 metro, **1/6 rural** — thin | R1/R3 | partial at best |
 | ~~Services → Water fill (`water`)~~ | 169 — suppressed | none anywhere checked | — | **R4 NONE** | **No UI surface — Decision 9** |
 | ~~Services → Showers (`shower`)~~ | 4 — suppressed | none anywhere checked | — | **R4 NONE** | **No UI surface — Decision 9** |
@@ -339,9 +339,13 @@ is what the table says, for the follow-up pass to argue with.
 
 1. **Wire Mapbox `charging_station` → `fuel`.** One id; makes ~2.9k existing
    corpus EV rows live-reachable and closes #364's worst-rated inconsistency.
-2. **Wire Mapbox `auto_repair`/`repair_shop`/`car_wash`.** #366's *"cleanest
-   wiring win"*; zero corpus against the densest rural coverage sampled. Blocked
-   on the §4.1 parent question in the mapping doc (`interest` vs `fuel`).
+2. ~~**Wire Mapbox `auto_repair`/`repair_shop`/`car_wash`.**~~ **DONE 2026-09-03.**
+   Wired `auto_repair` + `car_wash` only — `repair_shop` was live-probed and
+   returns appliance/electronics/furniture repair (`poi_category: "repair shop"`),
+   not auto, so it was excluded. The parent question resolved to `fuel` (Decision 8):
+   `car_repair`/`car_wash` → `fuel` in `LIVE_SLIDE_FOR_PRIMARY`, and the Mapbox
+   source reads the raw primaries to split Auto/Repair from Gas within that bucket
+   (both collapse to the `fuel` slide key). Live-verified in CA/OR/UT/WA metros.
 3. **Wire Mapbox `grocery`/`supermarket`.** Available, unwired, real corpus.
 4. ~~Resolve §3.1~~ **DONE.** Its implementation is now a 3-line change to
    `LIVE_SLIDE_FOR_PRIMARY`, and it should ship **with** the Culture cluster, not

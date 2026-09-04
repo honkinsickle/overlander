@@ -32,6 +32,11 @@ export async function discover(args: {
   /** Free-text path: when set, text-capable sources match this string
    *  within each bbox and ignore `categories`. */
   textQuery?: string;
+  /** Raw corpus `primary_category` request, passed to each source verbatim.
+   *  Sources that route only on slide `categories` ignore it; the Mapbox
+   *  source uses it to split Auto/Repair from Gas within the `fuel` slide
+   *  bucket. Absent on the day-corridor (slide-key-only) path. */
+  primaryCategories?: string[];
   /** Called with a source id AND the caught error when that source's query
    *  THROWS (network/DNS unreachable). NOT called when a source returns empty
    *  cleanly — an unconfigured source (missing API key) or an HTTP error is
@@ -48,6 +53,7 @@ export async function discover(args: {
           categories: args.categories,
           signal: args.signal,
           textQuery: args.textQuery,
+          primaryCategories: args.primaryCategories,
         })
         .catch((err) => {
           // A superseded request aborts the signal — normal, not a source
