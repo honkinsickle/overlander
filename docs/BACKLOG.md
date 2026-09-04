@@ -3,6 +3,57 @@
 
 
 
+## Corpus-wide misfiled-source_record + missed-duplicate audit (2026-09-04, PROD, read-only)
+
+**Not a merge-group problem — it lives inside single `master_place` rows**, which
+is why every audit in the merge-cleanup thread missed it. A visitor-content
+`source_record` for park X is attached to the `master_place` for park Y. Symptom:
+a row named *"Bothe-Napa Valley SP"* whose description is Bale Grist Mill's 1846
+water-powered grist mill. `merge_master_place()` cannot fix it — the offending
+record is inside one member, so `excluded_ids` has no purchase on it.
+
+**Detector** (`docs/investigations/2026-09-04-misfiled-source-record-bug.md`):
+names normalised to a designation-stripped core, then two parts — the record's
+name disagrees with its host's name, AND the true owner already exists as its own
+`master_place`. Both parts are load-bearing; without the second, every legitimate
+sub-area (Wanapum inside Ginkgo, Smith Creek Village inside Silver Falls) reads as
+a defect. Scope: 28,506 master_places / 30,282 active source_records.
+
+⚠️ **A trigram-similarity detector does NOT work — measured.** The first build used
+`similarity >= 0.70` and found **none** of the four known cases, defeated by the
+same abbreviation problem that defeated the original classifier (*"Bale Grist Mill
+SHP"* vs *"Bale Grist Mill State Historic Park"*). Anyone re-running this must keep
+the normalisation step.
+
+**Tier 1 (owner core equals record core): 124 records over 122 master_places, 26
+with a visible symptom.** It splits into two different bugs:
+
+- **93 records — MISSED DUPLICATES** (16 symptomatic). Host and owner are the
+  *same place under two names* (`Columbia Hills` / `Columbia Hills Historical State
+  Park`). **This is the bigger finding of the two**: a duplicate population sitting
+  entirely outside the 123 merge groups, which the classifier never grouped.
+- **31 records — TRUE MISFILINGS** (10 symptomatic), including the four already
+  handled: groups 77, 41, 68 and group 78's Fort Rock Cave. Others surfaced:
+  `Alameda-Tesla Expansion Area` ← *Carnegie SVRA*, `Colonel Bob Trailhead` ←
+  *Fletcher Canyon Trailhead*, `Warm Springs Picnic Area` ← *Warm Springs
+  Campground*, `Brian Booth State Park` ← *Beaver Creek*.
+
+**Tier 2 (owner core contained in record core): 316 records over 286 master_places
+— LOW PRECISION, do not treat as a defect count.** Dominated by RIDB naming
+variants (*"Magpie Campground"* vs *"Magpie Campground (Ut)"*). It is kept only
+because it is the tier that recovers group 77.
+
+**Stated limits:** 31 is an *upper bound* — the duplicate/misfiling split relies on
+core containment, so punctuation and unlisted abbreviations leak missed-duplicates
+into the misfiling bucket (`Torrey Pines SNR`, `Devil's Punch Bowl` are both really
+duplicates). Only the six flagged groups plus 77/78 were verified to description
+depth; everything else is unverified pending the same per-case read.
+
+**Concrete follow-up:** (1) triage the 31 to description depth and repoint the real
+misfilings with `data/scripts/reattach-misfiled-source-record.ts`; (2) treat the 93
+missed-duplicates as a separate investigation — they are candidate merge groups the
+classifier never produced. Nothing has been edited for either.
+
 ## CA state_parks — 13 remaining divergent-UNITNBR records on PROD (2026-09-03, PROD)
 
 **Status: partially resolved.** #375 landed the code fix
