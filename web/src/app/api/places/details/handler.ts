@@ -4,44 +4,40 @@
  * The route handler (route.ts) stays a thin wrapper: it parses/validates, owns
  * the 15-minute in-process cache, and shapes the `{ details }` response. This
  * module owns ONLY the "id → PlaceRich" production step, behind a dependency
- * seam + injected cache ops (mirroring the search-area cutover) so BOTH flag
- * states can be unit-tested without network.
+ * seam + injected cache ops so it is unit-testable without network.
  *
- * `DATE_DETAIL_USE_RESOLVER` (route-level, default off) selects the path:
- *   - OFF → `viaLegacy`: the exact pre-cutover inline batched fetch loop —
- *     byte-for-byte current production behaviour.
- *   - ON  → `viaResolver`: cache-misses are delegated to `enrichByGoogleId()`
- *     (the resolver capability from #263). The cache STAYS at the route because
- *     `enrichByGoogleId` is cache-less by design — this is option 1 of the
- *     cutover plan, NOT the ADR-step-4 shared-cache work.
+ * CUT OVER to resolvePlaces()'s `enrichByGoogleId()` capability (#263)
+ * unconditionally 2026-09-03. The `DATE_DETAIL_USE_RESOLVER` flag and the
+ * pre-cutover inline `placeDetails` batch loop are removed. Parity with the
+ * legacy loop was verified on TEST first: identical `{ placeId: PlaceRich }`
+ * maps (including the `category` field) for real Google place_ids across
+ * CA/OR/UT — both paths are pure Google Place Details passthroughs, so there is
+ * no category→source divergence possible here (design §D3, cutover-plan §3).
  *
- * Both paths produce the SAME `details` map and leave the cache in the SAME
- * state (verified by tests). See
- * docs/architecture/resolve-places-date-detail-cutover-plan.md.
+ * The cache STAYS at the route — `enrichByGoogleId` is cache-less by design
+ * (this is cutover-plan option 1, NOT ADR step 4's shared cache). The
+ * concurrency ceiling is preserved: `enrichByGoogleId` batches at its own
+ * `ENRICH_BATCH = 40`, the same value the old local `BATCH_SIZE` held.
  */
-import { placeDetails, type PlaceRich } from "@/lib/discovery/google-places";
 import { enrichByGoogleId } from "@/lib/places/resolve-places";
-import { BATCH_SIZE, chunk } from "./batch";
+import type { PlaceRich } from "@/lib/discovery/google-places";
 
-/** Dependency seam for tests. Every entry defaults to the real module. */
+/** Dependency seam for tests. Defaults to the real module. */
 export type PlaceDetailsDeps = {
-  placeDetails: typeof placeDetails;
   enrichByGoogleId: typeof enrichByGoogleId;
 };
 
-const REAL_DEPS: PlaceDetailsDeps = { placeDetails, enrichByGoogleId };
+const REAL_DEPS: PlaceDetailsDeps = { enrichByGoogleId };
 
-/** The route's per-id cache, injected so both branches share it and tests can
- *  drive it. `get` returns a hit envelope (value may be `null` — the negative
- *  cache) or `null` on miss; `set` stores `PlaceRich | null`. */
+/** The route's per-id cache, injected so the branch and tests can drive it.
+ *  `get` returns a hit envelope (value may be `null` — the negative cache) or
+ *  `null` on miss; `set` stores `PlaceRich | null`. */
 export type CacheOps = {
   get: (id: string) => { hit: true; value: PlaceRich | null } | null;
   set: (id: string, value: PlaceRich | null) => void;
 };
 
 export type FetchDetailsOpts = {
-  /** `DATE_DETAIL_USE_RESOLVER`. false → legacy loop; true → enrichByGoogleId(). */
-  useResolver: boolean;
   signal?: AbortSignal;
   cache: CacheOps;
 };
@@ -49,52 +45,15 @@ export type FetchDetailsOpts = {
 /**
  * Produce the `{ [placeId]: PlaceRich }` map the route returns. A resolved
  * entry — INCLUDING a resolved-empty `{}` — is present; a `null` (missing key /
- * network / non-OK) is omitted from the map but cached (negative cache). Both
- * flag states honour this identically.
+ * network / non-OK) is omitted from the map but cached (negative cache).
+ *
+ * Cache-misses are delegated to `enrichByGoogleId()`; the 15-min cache stays at
+ * the route (that capability is cache-less).
  */
 export async function fetchDetailsMap(
   placeIds: string[],
   opts: FetchDetailsOpts,
   deps: PlaceDetailsDeps = REAL_DEPS,
-): Promise<Record<string, PlaceRich>> {
-  return opts.useResolver
-    ? viaResolver(placeIds, opts, deps)
-    : viaLegacy(placeIds, opts, deps);
-}
-
-// ── OFF: the pre-cutover inline loop, verbatim (deps + cache injected) ───
-
-async function viaLegacy(
-  placeIds: string[],
-  opts: FetchDetailsOpts,
-  deps: PlaceDetailsDeps,
-): Promise<Record<string, PlaceRich>> {
-  const details: Record<string, PlaceRich> = {};
-  // Batches run SEQUENTIALLY; ids inside a batch run concurrently — holds the
-  // fan-out at BATCH_SIZE concurrent upstream calls while serving every id.
-  for (const batch of chunk(placeIds, BATCH_SIZE)) {
-    await Promise.all(
-      batch.map(async (id) => {
-        const cached = opts.cache.get(id);
-        const rich = cached
-          ? cached.value
-          : await deps.placeDetails(id, opts.signal);
-        if (!cached) opts.cache.set(id, rich);
-        // `{}` (resolved-empty) rides through; only `null` stays out. See the
-        // long note in route.ts / batch.ts on why `{}` must be surfaced.
-        if (rich) details[id] = rich;
-      }),
-    );
-  }
-  return details;
-}
-
-// ── ON: delegate cache-misses to the resolver's enrichByGoogleId() ──────
-
-async function viaResolver(
-  placeIds: string[],
-  opts: FetchDetailsOpts,
-  deps: PlaceDetailsDeps,
 ): Promise<Record<string, PlaceRich>> {
   // Cache first (the cache stays at the route — enrichByGoogleId is cache-less).
   const resolved = new Map<string, PlaceRich | null>();
@@ -110,7 +69,7 @@ async function viaResolver(
     for (const id of misses) {
       // enrichByGoogleId INCLUDES resolved-empty `{}` and OMITS `null`. So a
       // miss absent from `fetched` resolved to null → cache it as null to
-      // preserve the negative cache the legacy path also writes.
+      // preserve the negative cache the endpoint has always written.
       const value = Object.prototype.hasOwnProperty.call(fetched, id)
         ? fetched[id]
         : null;
@@ -119,8 +78,8 @@ async function viaResolver(
     }
   }
 
-  // Assemble in caller order: present iff the resolved value is truthy — the
-  // same `if (rich)` gate the legacy path applies.
+  // Assemble in caller order: present iff the resolved value is truthy — `{}`
+  // (resolved-empty) rides through; only `null` stays out.
   const details: Record<string, PlaceRich> = {};
   for (const id of placeIds) {
     const v = resolved.get(id);
