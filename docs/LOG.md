@@ -78,6 +78,91 @@ Follow-up on PR #379. Read-only pass in name, but includes **real TEST writes** 
 - **Manual reversal proven.** Group 901 (Fort Ross) merge reversed using ONLY the audit row: extract before-snapshot → repoint absorbed's original source_records back → restore is_searchable → recompute both mps. State matches before-snapshot exactly. Net TEST state now: 4 merges present, 1 reversed.
 - **Not verified:** whether the executor behaves identically on PROD (schema identical; not tested); whether `field_precedence` produces intended canonical values for every field after a real merge (spot-checked source_count and is_searchable only); whether Typesense's live search reflects merges after `search:sync` (not tested); reversal for n-way merges or merges with complex `place_relationships` edges (only 2-way with simple edges exercised).
 
+## 2026-09-03 (later 11) — Closed all three #382 items: Theaters out of Culture, `park` → `scenic`, renames declined.
+
+- **Theaters: #382 had the polarity backwards, and Adam's clarification exposed
+  it.** I had treated `foursquare.ts:84-89` ("Roadside-quirky entertainment stays
+  oddity") as a blocker to route around. It was a **signal that Culture's scope
+  was wrong** — `federated.ts:42` defines `attraction` as *"the formal cultural
+  set only"*, so a novelty theater is the `oddity` sense by the code's own words.
+  Culture drops to three chips and the rule stays untouched.
+- **Three items of "required work" from #382 withdrawn:** add a `theater`
+  primary, move the regex, probe Mapbox. None needed. That removed the only
+  Culture item blocked on work outside the routing layer — **the correction made
+  the plan smaller, not larger.**
+- **Caught a dependency the brief didn't mention:** `amphitheatre` was promoted
+  into Culture/Theaters in #382 on the sole justification "performance venue →
+  Theaters." With Theaters gone the justification lapses, so it returns to
+  `interest`. 0 corpus rows, so no practical change — but leaving it promoted
+  would have been an orphaned decision with no stated basis.
+- **The empty-chip re-check gave a non-obvious answer, which is why it was worth
+  running.** Culture is now 2-empty-of-3 rather than 2-empty-plus-1-nonexistent
+  of 4: *proportionally worse, absolutely better.* The decisive distinction is
+  that Museums and Galleries are R2 LIVE-PRIMARY — empty in corpus, filling the
+  moment the §3.1 live route lands — whereas Theaters was permanently blocked
+  without ingest. **#382 lumped all three together as "empty"; that was too
+  coarse.** Museums/Galleries need no separate ship step at all.
+- **`park` → `scenic`, and the consequence chased rather than left dangling.**
+  It matches the corpus (`scenic` already claims `park`, 2,518 in-scope; `urban`
+  claims `city_park`, zero), so live and corpus agree — the same failure mode
+  §3.1 exists to prevent. **It also simplifies the `urban` question:** nothing
+  routes to `urban` at all now, so it collapses to keep-or-remove with no
+  sourcing option behind it. Updated in three places so no stale "still open"
+  pointer survives.
+- **Renames declined, marked rather than deleted.** A silent removal would lose
+  that it was considered twice. Noted the display consequence: the Find Nearby
+  heading "FUEL & REPAIR" is closer to `fuel`'s real contents than the canonical
+  chip label — the two will read differently, deliberately.
+- **Kept a question separate instead of folding it in:** a novelty-theater chip
+  under `oddity` is *not* proposed. Flagged that the Foursquare rule classifies
+  live results by name only and does nothing for corpus rows, so it would still
+  need a `theater` primary — the rule is not a substitute.
+
+## 2026-09-03 (later 10) — Resolved both #380 open questions: Culture under `attraction`, and the `interest` bucket fix.
+
+- **Amendment to #380, not a rewrite.** Three deliverables updated in place;
+  untouched content left alone. Still 9 categories — the ADR ceiling was
+  explicitly checked and holds, and I said so as a non-event rather than
+  leaving the check invisible.
+- **Culture → `attraction`, decided by reading the code rather than by taste.**
+  `federated.ts:42` already says *"attraction: the formal cultural set only"*,
+  and the adjacent comment already exiles generic `tourist_attraction` to
+  `oddity`. The distinction Adam drew is the one the corpus taxonomy already
+  encodes, so Culture is that definition given a label — not a new concept.
+- **The #380 diagnosis got sharper, which is the part worth keeping.** #380 found
+  corpus-vs-live disagreement and rated it `[unverified]` whether deliberate.
+  A third encoding turned up — `foursquare.ts:76-82`, filing the same primaries
+  under `attraction` and *commented* as mirroring the corpus split. Three against
+  one makes `LIVE_SLIDE_FOR_PRIMARY` the outlier and the "slip, not decision"
+  reading strong. **Looking once more upgraded an unverified flag to a
+  three-line fix.**
+- **⚠️ Theaters: checked as instructed, and the check paid.** No
+  `theater`/`theatre` primary exists anywhere. But `foursquare.ts:84-89`
+  *deliberately* routes the word to `oddity` — *"Roadside-quirky entertainment
+  stays oddity."* Shipping Culture without touching it would recreate, for
+  theaters, precisely the split being closed. Flagged as a product question
+  (drive-ins vs performing arts), not silently overridden.
+- **`interest` fix — one proposal, per the brief.** Keep it in the 9, keep its
+  chip, drain it, render no subtypes, rename it. The reasoning that decided
+  Auto/Repair: **the UI already asserts the grouping and only the data model
+  disagrees** — the Find Nearby heading is literally "FUEL & REPAIR."
+- **Rejected `camping` for the amenities, with a reason rather than a
+  preference:** campground amenities are attributes of a campground; a dump
+  station you drive to is a service stop — the same errand as fuel and laundry.
+  That is what a Services cluster under `fuel` is for.
+- **Refused the tempting fix of splitting `interest` into finer chips.** Its mass
+  is `facility` (2,245 in-scope), which #364 calls a generic container spanning
+  campgrounds, day-use sites and offices. No taxonomy decision splits that; chips
+  over it would return arbitrary subsets. **Stated plainly that this makes
+  `interest` honest, not good.**
+- **Named the risk the amendment itself introduces:** two of Culture's four chips
+  are empty and a third has no primary. Only Historic Sites has corpus — and the
+  best live coverage in the table. A cluster of empty chips is worse than no
+  cluster, so ship order inside Culture matters.
+- **Also flagged a deliberate regression:** `oddity`'s live half drops to zero
+  once the fix lands, because Google emits nothing for it and Mapbox is
+  fuel-only. Correct, but better expected than discovered.
+
 ## 2026-09-03 (later 9) — Design pass: 9-category taxonomy declared canonical; subtype mapping and the long-deferred routing table written.
 
 - **Three artifacts, design only, no code.** ADR

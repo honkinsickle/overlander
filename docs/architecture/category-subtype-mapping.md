@@ -83,19 +83,20 @@ it.**
 | Trailheads | CAMP & EXPLORE | yes | `trailhead`, `hiking_area` | **scenic** | `[literal]` |
 | Viewpoints | CAMP & EXPLORE | yes | `viewpoint`, `peak`, `mountain_peak`, `scenic_spot` | **scenic** | `[literal]` |
 | Gas | FUEL & REPAIR | — | `gas_station`, `truck_stop`, `ev_charging` | **fuel** | `[literal]` |
-| Auto / Repair | FUEL & REPAIR | yes | `car_repair`, `car_wash` | **interest** ⚠️ | `[literal]` — residual bucket, see §4.1 |
+| Auto / Repair | FUEL & REPAIR | yes | `car_repair`, `car_wash` | **fuel** / Services | `[amended]` — was `interest`; see §4.1 |
 | Coffee | FOOD | — | `cafe` | **food** | `[literal]` |
 | Restaurants | FOOD | — | 22 cuisine primaries | **food** | `[literal]` |
 | Groceries | SUPPLY | — | `grocery`, `grocery_store` | **food** ⚠️ | `[literal]` — see §4.2 |
-| Water fill | SUPPLY | yes | `water` | **interest** | `[proposed]` — unclaimed today, see §4.3 |
-| Showers | SERVICE | yes | `shower` | **interest** | `[proposed]` — unclaimed today |
-| Dump stations | SERVICE | yes | `dump_station` | **interest** | `[proposed]` — unclaimed today |
+| Water fill | SUPPLY | yes | `water` | **fuel** / Services | `[amended]` — unclaimed today, see §4.3 |
+| Showers | SERVICE | yes | `shower` | **fuel** / Services | `[amended]` — unclaimed today |
+| Dump stations | SERVICE | yes | `dump_station` | **fuel** / Services | `[amended]` — unclaimed today |
 | Hotels | STAY | — | `hotel`, `motel`, `resort_hotel` | **hotel** (`overnight`) | `[literal]` |
 
-**Collapse summary:** the 13 tiles fold into **6** of the 9 parents — camping,
-scenic, fuel, food, hotel, interest. **No tile maps to `attraction`, `oddity`, or
-`urban`**, so under the collapse those three chips have no Find Nearby subtypes
-at all today. `[literal]` That is a UX consequence worth confirming, not a defect.
+**Collapse summary — AMENDED 2026-09-03.** After §4.1/§4.3 the 13 tiles fold
+into **5** of the 9 parents — camping, scenic, fuel, food, hotel. **No tile maps
+to `interest` any more**, which is the point of §4.6. `attraction` gains subtypes
+from the **Culture** cluster (§4.7) rather than from any existing tile;
+`oddity` and `urban` still gain none. `[literal]`
 
 ---
 
@@ -111,7 +112,7 @@ reach; `NONE` means corpus-only.
 |---|---|---|
 | **scenic** | `park`, `beach`, `lake`, `natural_feature`, `river`, `national_park`, `state_park`, `spring`, `park_feature`, `recreation_area` | all `NONE` |
 | **attraction** | `visitor_center`, `national_historic_site`, `landmark` | `NONE` |
-| | `museum`, `art_gallery`, `historical_landmark` | ⚠️ **`oddity`** — see §4.4 |
+| | `museum`, `art_gallery`, `historical_landmark` | **`oddity` today → `attraction`** once §4.4 lands |
 | **oddity** | `oddity`, `roadside_attraction`, `tourist_attraction` | all `NONE` |
 | **urban** | `shopping_mall`, `city_park` | all `NONE` |
 | **interest** | `rest_area`, `activity_pass`, `permit`, `tree_permit`, `timed_entry`, `ticket_facility`, `venue_reservations`, `hardware`, `outdoor_gear`, `marina`, `casino`, `library`, `atm`, `bus_stop`, `government_office`, `kiosk`, `amphitheatre`, `mobile_home_park`, `national_fish_hatchery`, `sports_activity_location`, `park_boundary`, `facility`, `point_of_interest`, `unknown` | all `NONE` |
@@ -122,75 +123,118 @@ Two structural observations, both `[literal]`:
   bbox half cannot reach any of them. Anything in this table is corpus-or-nothing
   regardless of how the UI presents it.
 - **`interest` holds 24 of the 45.** It is not a category; it is the residue of
-  one. §4.1 and §6 both follow from this.
+  one. §4.1 and §6 both follow from this. **AMENDED 2026-09-03:** §4.6 promotes
+  `car_repair`, `car_wash`, `rest_area`, `marina` and (weakly) `library` out of
+  it, and rules that what remains renders no subtype chips. (`amphitheatre` was
+  promoted in the previous revision and **returns here** — §4.7.)
 
 ---
 
 ## 4. Assignments that do not fit cleanly — flagged, not forced
 
-### 4.1 `car_repair` / `car_wash` → `interest` — the worst UX consequence of the collapse
+### 4.1 `car_repair` / `car_wash` → **RESOLVED 2026-09-03: moved to `fuel`**
 
-`[literal]` The Auto / Repair tile's primaries live in `interest`. Under a strict
-collapse, a user looking for a mechanic taps a chip labelled **"POINT OF
-INTEREST"**. `[cited]` #366 rates Auto/Repair "**the cleanest wiring win
-available**" — dense Mapbox coverage against zero corpus rows — so this is a
-category about to get *more* useful, filed under the app's least meaningful
-label.
+~~The Auto / Repair tile's primaries live in `interest`.~~ **Amended.** They move
+to **`fuel`**, into a new **Services** subtype cluster (§4.7).
 
-`[open]` Three ways out, none taken here: (a) accept it and fix the chip label;
-(b) move `car_repair`/`car_wash` into `fuel`, making that chip "fuel & repair" in
-substance if not in name; (c) admit a 10th category. **(b) is the smallest change
-that removes the absurdity** and matches the existing Find Nearby group heading
-"FUEL & REPAIR" — but it widens a canonical category, which is exactly the kind
-of decision this ADR exists to make deliberately rather than by drift.
+`[literal]` The decisive evidence is that **the UI already asserts this
+grouping and only the data model disagrees**: the Find Nearby group heading for
+these tiles is literally **"FUEL & REPAIR"**. Nobody has to be persuaded that a
+mechanic belongs next to a gas station — the product already says so, and
+`SLIDE_TO_PRIMARY_CATEGORY` is the outlier.
+
+Three further reasons: `[cited #366]` Auto/Repair is *"the cleanest wiring
+win available"* — dense Mapbox coverage against zero corpus rows — so this
+category is about to become genuinely useful and should not debut under the
+app's least meaningful label. `[literal]` `fuel` is a thin bucket (its corpus is
+`ev_charging` 2,886 in-scope and essentially nothing else), so absorbing repair
+dilutes nothing. And it removes the single worst artifact of the 13→9
+collapse — *a user looking for a mechanic tapping "POINT OF INTEREST."*
+
+**This does not add a category.** It reassigns two primaries between two of the
+existing 9.
 
 ### 4.2 `grocery` / `grocery_store` → `food`
 
 `[literal]` Already assigned to `food` in `SLIDE_TO_PRIMARY_CATEGORY`, while the
 tile sits under a **SUPPLY** heading. Groceries-as-food is defensible (it is
 consumables) but "Food" to an overlander reads *restaurants*, and resupply is a
-distinct trip-planning job. Flagged for §7; no change proposed.
+distinct trip-planning job. Flagged for §7; no change proposed. **Unaffected by
+the 2026-09-03 amendment.**
 
-### 4.3 `water` / `shower` / `dump_station` → `interest` `[proposed]`
+### 4.3 `water` / `shower` / `dump_station` → **AMENDED: `fuel` / Services, not `interest`**
 
-`[literal]` These three are the **entire** tile-only set: claimed by a tile,
-claimed by no slide bucket, and simultaneously members of
+`[literal]` These three are the entire tile-only set: claimed by a tile, claimed
+by no slide bucket, and simultaneously members of
 `SUPPRESSED_PRIMARY_CATEGORIES` — so they are dropped at `hydrate.ts:140` even
 when a corpus row exists.
 
-`[proposed]` Parent = `interest`, on the same residual logic that already holds
-`rest_area`. **The honest alternative is `camping`** — they are campsite
-services, and an overlander looks for them while choosing where to sleep, not
-while browsing points of interest. This document proposes `interest` only because
-it is the assignment that requires no change to a category's meaning; **it is the
-weaker of the two on user intent.**
+~~`[proposed]` Parent = `interest`.~~ **Amended to `fuel` → Services (§4.7).**
+The original assignment was made "only because it is the assignment that requires
+no change to a category's meaning," and was flagged in the same breath as *"the
+weaker of the two on user intent."* Once a Services cluster exists, that
+compromise is unnecessary.
 
-**Assigning a parent is not deciding their UI fate.** Whether they appear at all
-is ADR §Open decision, and is Adam's call.
+**Why Services and not `camping`** — the alternative this doc previously called
+stronger: campground amenities are *attributes of a campground*, surfaced on its
+card. A dump station or potable-water tap you **drive to** is a **service stop**,
+and it is the same errand as fuel, laundry and a mechanic — the overlander "town
+stop." Filing them under `camping` would make them compete with places to sleep.
 
-### 4.4 ⚠️ `museum` / `art_gallery` / `historical_landmark` — the corpus and live paths disagree
+**Assigning a parent is still not deciding their UI fate.** Whether they appear
+at all remains the ADR's open decision, and remains Adam's call.
 
-**A divergence found in this pass, not previously written down** `[literal]`:
+### 4.4 `museum` / `art_gallery` / `historical_landmark` — **RESOLVED: `attraction`, on both paths**
 
-| Path | Constant | Files these three under |
+**Adam's decision, 2026-09-03: introduce "Culture" as a subtype cluster under
+one of the 9.** Originally scoped as Museums, Galleries, Theaters and Historic
+Sites; **amended the same day to Museums, Galleries and Historic Sites** — see
+§4.7, "Theaters is out.
+
+**It goes under `attraction`, and the code already says so in prose** `[literal]`:
+
+> `// attraction: the formal cultural set only.` — `federated.ts:42`
+>
+> `// oddity: roadside / generic attractions. `tourist_attraction` (generic POI
+> attraction) lives here, NOT in the formal-cultural `attraction` bucket.`
+> — `federated.ts:48-49`
+
+The corpus taxonomy already draws exactly the distinction Adam is drawing, and
+already names `attraction` as the formal-cultural bucket. Culture is not a new
+concept being placed; it is **the existing definition of `attraction`, given a
+label and chips.** `oddity` was never a candidate: it holds the Atlas Obscura
+corpus (2,745 in-scope `[literal]`) under a deliberately different sense —
+*curious*, not *cultural*.
+
+#### The inconsistency is narrower than #380 reported — two of three encodings already agree
+
+`[literal]` #380 recorded a corpus-vs-live disagreement. Re-checking in this pass
+found a **third** encoding, and it changes the diagnosis:
+
+| Encoding | File | Files museums/galleries/historic under |
 |---|---|---|
-| Corpus / federated | `SLIDE_TO_PRIMARY_CATEGORY` (`federated.ts:43-46`) | **`attraction`** |
-| Live bbox | `LIVE_SLIDE_FOR_PRIMARY` (`resolve-places.ts:236`) | **`oddity`** |
-| Google fanout | `TYPES_BY_CATEGORY.attraction` (`google-places.ts`) | asked for under **`attraction`** |
+| Corpus / federated | `federated.ts:43-46` | **`attraction`** |
+| Live — Foursquare classifier | `foursquare.ts:76-82` | **`attraction`** — comment: *"Formal cultural → attraction (mirrors the federated corpus split)"* |
+| Live — bbox slide map | `resolve-places.ts:236` | **`oddity`** ⚠️ |
+| Google fanout | `google-places.ts` `TYPES_BY_CATEGORY.attraction` | asked for under **`attraction`** |
 
-So a request for `attraction` asks Google for museums and galleries, and the
-results are then filed into `oddity`. No comment in either file explains the
-split; `federated.ts` annotates its three as "forward-compat (0 rows today)".
+**`LIVE_SLIDE_FOR_PRIMARY` is the sole outlier of four.** #380 rated it
+`[unverified]` whether deliberate; three-against-one, with one of the three
+explicitly commented as mirroring the corpus split, is **strong inference that it
+is a slip, not a decision.**
 
-`[unverified]` Whether this is deliberate or a transcription slip is **not
-established** — no comment, commit message or ADR found in this pass explains it.
-`[cited]` #364 measured `museum` and `art_gallery` at zero corpus rows, which is
-why the split has had no visible effect: there are no corpus rows to misfile, and
-the live half only misfiles when the live path is on.
+**Resolution `[proposed]`, in the direction that changes least:** move
+`museum`, `art_gallery`, `historical_landmark` in `LIVE_SLIDE_FOR_PRIMARY` from
+`oddity` to `attraction`. One constant, three lines. `federated.ts`,
+`foursquare.ts` and the Google fanout need no change.
 
-**It must be resolved before the routing table is implemented**, because the
-routing table's whole premise is one answer per category. Recorded as an open
-item in the ADR.
+**A real consequence, stated because it is a behaviour change, not a no-op:**
+`oddity`'s live half currently receives these misfiled museum/gallery results
+and will stop. `[literal]` Google emits nothing for `oddity` by design
+(`TYPES_BY_CATEGORY.oddity = []`) and the Mapbox source is fuel-only, so after
+the change `oddity`'s bbox live half returns **nothing** via
+`LIVE_SLIDE_FOR_PRIMARY`. That is correct — `oddity` routes corpus-primary on a
+2,745-row corpus — but it should be expected rather than discovered.
 
 ### 4.5 Carried from #364 — ambiguities already named there, not re-litigated
 
@@ -205,16 +249,161 @@ category' across documents can land on either meaning."
 This design changes none of those. They are inherited, and they remain
 open.
 
-### 4.6 Primaries that arguably should not be a user-facing subtype at all
+### 4.6 **RESOLVED 2026-09-03 — the `interest` dumping-ground fix**
 
-`[proposed]` Within `interest`: `unknown`, `point_of_interest`, `park_boundary`,
-`facility`, `bus_stop`, `atm`, `government_office`, `kiosk`,
-`mobile_home_park`. These are ingestion artifacts or civic infrastructure, not
-things an overlander browses for. **The proposal is that a primary having a
-parent does not oblige the UI to render it as a chip** — subtype chips should be
-a curated subset, and the parent mapping is the data contract underneath.
+#380 called this the design's weakest point. Adam has no preference, so this is
+a single proposal with its reasoning, not a menu.
 
----
+**The proposal: keep `interest` as one of the 9 and keep its chip, but change
+what it means — from "a category" to "the fallback sink, drained of everything
+that has a better home, and rendering no subtype chips of its own."**
+
+Four parts.
+
+**(a) Promote every primary that has a better parent.** `[proposed]`
+
+| Primary | From | To | Why |
+|---|---|---|---|
+| `car_repair`, `car_wash` | `interest` | **`fuel`** / Services | §4.1 — the UI already says "Fuel & Repair" |
+| `rest_area` | `interest` | **`fuel`** / Services | a stop-service, same errand class |
+| `marina` | `interest` | **`scenic`** | a waterfront destination, not an errand |
+| `library` | `interest` | **`attraction`** / Culture | `[weakest of these]` — civic-cultural; if it reads wrong, leave it |
+| `hut` | *(unclaimed)* | **`overnight`** | shelter (§5.1) |
+| `picnic_area` | *(unclaimed)* | **`scenic`** | §5.1 |
+| `toilet` | *(unclaimed)* | **`fuel`** / Services | §4.7 |
+| `water`, `shower`, `dump_station` | tile-only | **`fuel`** / Services | §4.3 |
+
+**(b) `interest` renders NO subtype chips.** `[proposed]` What remains is
+`unknown`, `point_of_interest`, `facility`, `park_boundary`, `atm`, `bus_stop`,
+`government_office`, `kiosk`, `mobile_home_park`, `national_fish_hatchery`,
+`sports_activity_location`, `hardware`, `outdoor_gear`, `casino`, `permit`,
+`tree_permit`, `timed_entry`, `ticket_facility`, `activity_pass`,
+`venue_reservations` — plus, by the `primaryCategoryToSlideKey` fallback, every
+corpus primary nobody claims. **There is no honest chip label for that set**, and
+a filter whose contents a user cannot predict is worse than no filter.
+
+**(c) Keep the parent chip.** Deleting it would hide real data — `facility`
+alone is 2,245 in-scope rows `[literal]` — and would break the total fallback
+that makes `primaryCategoryToSlideKey` safe. The chip stays; only the promise of
+sub-navigation goes.
+
+**(d) Rename the chip.** "POINT OF INTEREST" claims curation this bucket does not
+have. `[proposed]` Something that names it as a remainder — "Everything else",
+"Other" — is more honest. Final wording is a copy decision (ADR §UI copy).
+
+**Reasoning — why this shape rather than the alternatives.**
+
+*Why not split `interest` into more specific subtypes?* Because its mass is not
+splittable by the data available. `[literal]` The single largest member is
+`facility` at 2,245 in-scope — `[cited #364]` *"a generic RIDB container that
+spans campgrounds, day-use sites and offices."* **No taxonomy decision can split
+it; only richer ingest can.** Inventing chips over an unsplittable container
+would produce filters that return arbitrary subsets — the same "cannot fail /
+cannot be reasoned about" problem in UI form.
+
+*Why not delete `interest` outright?* See (c) — it is load-bearing as a fallback,
+and it holds real rows.
+
+*Why does this stay within the ADR?* It moves primaries between existing parents
+and changes one label. **The count stays at 9.** `interest` remains a canonical
+category; it simply stops pretending to be a browsable one.
+
+**What this actually buys, stated plainly:** it does not make `interest` good. It
+makes it *honest*, and it removes the two genuinely absurd outcomes — a mechanic
+under "Point of Interest," and a subtype list a user cannot predict. **The
+residue is still a residue.** The real fix for `facility` is an ingest change and
+is out of this pass's scope; it is the item to watch.
+
+
+### 4.7 The **Culture** cluster, and the **Services** cluster `[proposed]`
+
+Two labelled subtype clusters. **Neither is a top-level category; the count stays
+at 9.** A cluster is a heading over a group of filter chips inside one parent.
+
+**Culture — under `attraction`**
+
+| Chip | Primaries | Corpus (TEST in-scope) `[literal]` | Status |
+|---|---|---|---|
+| Museums | `museum` | 0 | claimed, empty in corpus — **live-pending, not dead** |
+| Galleries | `art_gallery` | 0 | claimed, empty in corpus — **live-pending, not dead** |
+| Historic Sites | `historical_landmark`, `national_historic_site`, `landmark`, `historic`, `historical_place`, `monument` | 1 · 0 · 3 · 24 · 1 · 1 | `historic`, `historical_place`, `monument` are **unclaimed today** (§5.1) and must be claimed by `attraction` |
+| *(ungrouped)* | `visitor_center` | 102 `[cited #364]` | stays in `attraction`, outside Culture — it is wayfinding, not culture |
+
+#### ⚠️ AMENDED 2026-09-03 (third pass): Culture is THREE chips. Theaters is out.
+
+**Adam's clarification: "Theaters" means novelty / roadside theaters** — the same
+sense `foursquare.ts:84-89` already encodes (*"Roadside-quirky entertainment
+stays oddity"*). **That rule stays untouched.**
+
+**This removes Theaters from Culture on the cluster's own definition, not as a
+compromise.** `[literal]` Culture is scoped to `attraction`, which
+`federated.ts:42` defines as *"the formal cultural set only"*, and the adjacent
+comment puts roadside/generic attractions in `oddity`. **A novelty theater is
+the `oddity` sense by the code's own words** — putting it in Culture would have
+imported into the formal-cultural bucket exactly what that bucket is defined to
+exclude.
+
+**Three consequences, all simplifications:**
+
+1. **The `theater` primary is no longer needed.** The instruction to add one
+   (recorded in the previous revision of this section) is **withdrawn** — no
+   chip requires it.
+2. **The `foursquare.ts` blocker is gone.** The previous revision required moving
+   `theater|theatre` out of the oddity regex. It stays where it is, correctly.
+3. **`amphitheatre` returns to `interest`.** `[proposed]` Its promotion in the
+   previous revision was justified *only* by "performance venue → Theaters." With
+   Theaters gone from Culture that justification lapses, and it does not belong
+   in Museums, Galleries or Historic Sites. It has **0** corpus rows `[literal]`
+   so nothing changes in practice. `[strong inference]` In a corpus this
+   RIDB/USFS-heavy, `amphitheatre` most likely denotes a campground interpretive
+   amphitheatre — a facility, not a venue — which supports leaving it residual.
+
+**A novelty-theater chip under `oddity` is a separate open question.** Not
+proposed here, and deliberately not added unprompted. If it is ever wanted, note
+`[literal]` that the Foursquare rule classifies **live FSQ results by name only**
+— it does nothing for corpus rows — so a corpus-backed Theaters chip would still
+need a `theater` `primary_category` and an ingest mapping. The FSQ rule alone is
+not a substitute.
+
+#### Does dropping Theaters change the ship-order risk? Yes — and not in the obvious direction
+
+`[literal]` Culture now has **3** chips, **2** of which have zero corpus rows. The
+previous revision had 4 chips with 2 empty and 1 non-existent.
+
+- **Absolutely better:** the permanently-blocked chip is gone. Nothing in Culture
+  now depends on an ingest change that does not exist.
+- **Proportionally worse:** two of three chips are empty rather than two of four.
+  A smaller cluster makes each empty chip more conspicuous.
+- **But the two empties are not the same kind of empty as Theaters was, and this
+  is the part that actually changes the ordering advice.** `[cited #366]` Mapbox
+  `museum` measured 6/6 metro and 4/6 rural; `art_gallery` 6/6 and 3/6. Both are
+  **R2 LIVE-PRIMARY** rows — empty *in corpus*, and non-empty as soon as the
+  `attraction` live route lands (routing table §3.1). **Their emptiness is
+  conditional on wiring, not permanent.** Theaters' was permanent without ingest.
+
+**Revised ordering:** Historic Sites first — it is the only chip that returns
+anything from corpus today, and `[cited #366]` it also has the strongest measured
+live coverage in the routing table (6/6 metro, 6/6 rural). Museums and Galleries
+follow **the §3.1 live-route fix**, not an ingest project. **The #382 framing that
+lumped all three together as "empty" was too coarse: one was blocked, two were
+merely unwired.**
+
+
+**Services — under `fuel`**
+
+| Chip | Primaries | Corpus (TEST in-scope) `[literal]` | Live `[cited #366]` |
+|---|---|---|---|
+| Auto / Repair | `car_repair`, `car_wash` | 0, 0 | Mapbox dense; highest rural total sampled |
+| Water fill | `water` | 169 — **suppressed** | none |
+| Showers | `shower` | 4 — **suppressed** | none |
+| Dump stations | `dump_station` | 6 — **suppressed** | none |
+| Rest areas | `rest_area` | in the `interest` bucket | Mapbox `rest_area`: 5/6 metro, **1/6 rural** |
+| Toilets | `toilet` | 128 — **suppressed**, unclaimed today | none |
+
+`fuel`'s existing chips (`gas_station`, `ev_charging`, `truck_stop`) form the
+sibling **Fuel & Charging** cluster. The parent chip's label needs revisiting —
+"FUEL" no longer covers its contents (ADR §UI copy).
+
 
 ## 5. The corpus-derived sets — enumerated
 
@@ -304,16 +493,29 @@ against dense live coverage per #366 — §4.1).
 
 `[literal]` Consequences that follow arithmetically from §2 and §3:
 
-1. **Three of the nine chips gain no subtypes** — `attraction`, `oddity`,
-   `urban` have no Find Nearby tile mapping to them.
-2. **`interest` absorbs the most heterogeneous set** — 24 of the 45 slide-only
-   primaries plus, by fallback, every unclaimed corpus primary, plus (as
-   proposed) the three suppressed amenities and the Auto/Repair pair. A chip
-   labelled "POINT OF INTEREST" that contains mechanics, car washes, dump
-   stations, ATMs and bus stops is not a category a user can reason about.
+1. ~~**Three of the nine chips gain no subtypes**~~ — **AMENDED.** `attraction`
+   now carries the **Culture** cluster (§4.7). `oddity` and `urban` still gain
+   none, and `urban` remains structurally empty (§5.2).
+2. ~~**`interest` absorbs the most heterogeneous set**~~ — **RESOLVED by §4.6.**
+   The mechanics, car washes and suppressed amenities move to `fuel`/Services;
+   the rest stays but renders no subtype chips and gets an honest label.
+   **The residue is still a residue** — `facility` (2,245 in-scope `[literal]`)
+   is unsplittable without richer ingest, and that, not the label, is the real
+   remaining problem.
 3. **The 13→9 collapse is not a 13→9 collapse in information terms.** Ten tiles
    already sit inside a parent; the collapse *removes a level of navigation*
    rather than removing concepts — provided the subtype chips actually ship. If
    subtypes are deferred, this is a capability regression, not a simplification.
+4. **Empty chips at ship time — REVISED after Theaters was dropped.**
+   `[literal]` Culture is now **3** chips, **2** with zero corpus rows
+   (Museums, Galleries). **But those two are `R2 LIVE-PRIMARY` rows: empty in
+   corpus, non-empty as soon as the `attraction` live route lands** — their
+   emptiness is conditional on wiring, whereas Theaters' was permanent without an
+   ingest change. Dropping Theaters therefore removed the only *blocked* chip
+   while raising the *share* of empty ones. Historic Sites remains the only chip
+   that returns anything today (`historic` 24, `landmark` 3, one row each of
+   `historical_landmark`/`historical_place`/`monument`) and ships first.
+   Services is the genuinely hard case: Water fill / Showers / Dump stations are
+   suppressed **and** sourceless — R4, not merely unwired.
 
-Point 3 is the one worth the most scrutiny before implementation.
+Points 3 and 4 are the ones worth the most scrutiny before implementation.
