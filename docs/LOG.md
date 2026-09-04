@@ -12,6 +12,52 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-04 — PROD merge cleanup EXECUTED: 108 groups, 118 absorbed, zero failures
+
+- **First real PROD data write of the merge-cleanup thread.** 108 groups merged
+  between `13:34:03Z` and `13:34:15Z`, executor exit 0, 0 RPC failures,
+  `executed_by = adam-prod-run-108-2026-09-04`. `merge_audit_log` 0 → 108.
+  Aggregate: 118 absorbed soft-retired, 120 source_records repointed, 121
+  place_matches repointed, 37 self-references dropped, 13 child dedups.
+  `master_place` unchanged at 28,506; `place_relationships` 6,304 → 6,251.
+  **Zero orphan edges** — the v5 bug class did not recur.
+- **The 108-vs-116 checksum caught a real defect from shipping.** The brief said
+  "123 minus {6, 41, 68, 78}, confirm 108" — that derivation actually yields
+  **116**. 108 is only reachable as *(106 TEST-validated − 41, 68) + (3, 83, 95,
+  5001)*. The difference is the eight never-TEST-validated groups, **including
+  group 77**, a confirmed Rowena-Crest conflation the brief's exclusion list did
+  not name. Stopped on the mismatch rather than forcing the number; Adam picked
+  the 108-set. **Lesson: a checksum that disagrees with its own stated derivation
+  is a finding, not an arithmetic slip to reconcile.**
+- **`master_place` row count does NOT drop on a successful merge**, and the run
+  plan expected it to. `merge_master_place()` soft-retires by deactivating
+  source_records and leaves the row — which is precisely what makes reversal
+  possible. Checking for a row-count decrease as proof of success reads a correct
+  run as a failed one.
+- **#379's last unverified caveat is settled on real data.** Groups 3 and 95
+  merged to the NPS canonical and the visitor rows' `hours` **survived**,
+  attributed to `california_state_parks` / `arizona_state_parks`. Group 83's
+  exclusion held — the Hat Rock formation row is byte-identical to its pre-run
+  snapshot. Group 5001 gained a 2,404-char description where it had none.
+- **⚠️ A SECOND PROD RUN EXISTS THAT THIS SESSION DID NOT PERFORM.**
+  `merge_audit_log` now reads **112**, not 108. Four rows were written at
+  `19:05:30Z` under `executed_by = cc-prod-run-4groups-2026-09-04` for groups
+  **79, 81, 120 and a net-new 5002** — exactly the Phase 3 findings this session
+  surfaced but deliberately held. Verified during this wrap: **0 group-id
+  overlap, 0 master_places touched by both runs, 0 orphan edges across both.**
+  Recorded as fact; this session has no visibility into that run's reasoning.
+  **Anyone reconciling PROD against this session's report must expect 112.**
+- **A doc commit was stranded by merge timing.** The BACKLOG entry recording the
+  corpus audit was pushed at `06:32Z`, after PR #401 merged at `07:07Z`… in fact
+  after the squash was cut, so it was never included and never reached `main`.
+  Found during this wrap by diffing the merged squash against the feature branch,
+  and cherry-picked in. **A green "pushed" on a branch whose PR has already been
+  squash-merged means nothing — verify against `main`, not against the push.**
+- PR **#401** merged as `ccfe382`: `canonical_override` (honoured only on a
+  genuine tie), groups 3/95 definitions, groups 41/68 blocked as defects, the
+  group-78 reattach fix built and TEST-validated but **not applied**, and two
+  investigation docs.
+
 ## 2026-09-03 (later 2) — search-area + trip-browse cut fully onto resolvePlaces() (flags + legacy removed)
 
 - Migrated the two category→source discovery surfaces to call `resolvePlaces()`

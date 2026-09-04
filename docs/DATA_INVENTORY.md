@@ -15,6 +15,41 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ DATA changed 2026-09-04 `[authorized PROD write — merge cleanup executed]`.**
+> The cross-source duplicate merge cleanup ran against PROD for the first time.
+> **`merge_audit_log` 0 → 108** in this session's run (`13:34:03Z`–`13:34:15Z`,
+> `executed_by = adam-prod-run-108-2026-09-04`), executor exit 0, **0 RPC
+> failures**.
+> **Moves:** 118 absorbed soft-retired · 120 `source_record` repointed · 121
+> `place_match` repointed · 37 `place_relationships` self-references dropped ·
+> 13 child dedups · 5 parent repointed · 2 child repointed.
+> **Counts before → after:** `master_place` **28,506 → 28,506** ·
+> `source_record` **38,572 → 38,572** · `place_relationships` **6,304 → 6,251** ·
+> `merge_audit_log` **0 → 108**.
+> **`master_place` does NOT drop on a merge** — `merge_master_place()`
+> soft-retires by deactivating `source_record` rows and leaves the
+> `master_place` in place. That is what makes reversal possible. Do not read a
+> flat row count as a failed run.
+> **Zero orphaned `place_relationships`** — no edge references any absorbed row
+> (the v5 bug class). Re-verified during the 2026-09-04 wrap.
+>
+> **⚠️ A SECOND, SEPARATE PROD RUN ALSO LANDED THE SAME DAY.** `merge_audit_log`
+> currently reads **112**. Four rows were written at `19:05:30Z` under
+> `executed_by = cc-prod-run-4groups-2026-09-04` covering groups **79, 81, 120
+> and a net-new 5002**. Verified: **0 group-id overlap** with the 108-run, **0
+> `master_place` rows touched by both**, **0 orphan edges across both**. The
+> 108-run's report predates it — reconcile PROD against **112**, not 108.
+>
+> **Deliberately NOT merged:** group **6** (Salton Sea SRA vs the saline lake —
+> permanently different), groups **41** and **68** (misfiled `source_record`
+> defects, blocked pending repointing), group **77** (Rowena Crest conflation),
+> group **78** (fix built and TEST-validated, **not applied** — the Fort Rock
+> Cave record `oregon_state_parks:170` is still on the SNA row `18fcb124…`).
+> **Reversal path:** each `merge_audit_log` row carries the canonical and
+> absorbed ids; reversal off that trail was validated on TEST in #383. Not used.
+> Executor + definitions: `data/scripts/execute-merge-groups.ts`,
+> `data/merge-groups/`. Narrative: `docs/LOG.md` §2026-09-04.
+
 > **⚠️ Schema changed 2026-09-03 `[migrations applied to PROD; NO data changed]`.**
 > The five merge-executor / recompute migrations are now applied to PROD:
 > `20260903195200` `merge_master_place` **v1**, `20260903203500` **v2**,
