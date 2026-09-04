@@ -353,3 +353,27 @@ without network/DB:
 **Not done (intentionally):** the flag is NOT flipped on; no `web/src/components` change; the
 wider wired-route matrix (free-text, all-overland-only, live source-down) is left for the
 rollout step.
+
+---
+
+## 8. SHIPPED — flag removed, unconditional resolvePlaces() (2026-09-03)
+
+The `SEARCH_AREA_USE_RESOLVER` flag and the `viaLegacy` inline live/federated/merge
+body are **removed**. `resolveSearchArea` now delegates to `resolvePlaces()` bbox
+scope on every request; its dependency seam shrank to `{ resolvePlaces }`.
+
+**Parity was verified on TEST before removal** `[literal — computed 2026-09-03]`:
+legacy (`useResolver:false`) vs resolver (`useResolver:true`) run back-to-back for
+the same inputs across CA/OR/UT × {camping, scenic, food, fuel, auto/repair}.
+**Corpus (`mp:`) membership identical in all 15 cells**, live membership identical
+too (0 symmetric difference). The Auto/Repair `car_repair`/`car_wash` slide-key
+class was parity-clean (identical membership + order). Corpus **order** matched
+everywhere except `fuel`, where the resolver's verified-first tier sort reorders
+mixed-tier corpus rows — the one intended delta (§4). Live re-verified post-removal
+via `scripts/verify-search-area-wired.ts` (now a single-path health check): 200,
+all places source-stamped, federated tier-sorted, 0 violations.
+
+**A debug-only delta to note:** the legacy live *category* fanout recorded only the
+failed source id (no message) via `onSourceError`; the resolver records id + text.
+So `?debug=1` now surfaces per-source error strings for live category failures
+where legacy showed none — strictly more (gated) information, harmless.

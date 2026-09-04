@@ -327,6 +327,11 @@ export async function resolvePlaces(
     try {
       return await run();
     } catch (err) {
+      // Log the half-failure so it's grepable in server logs (restores the
+      // per-endpoint markers the pre-cutover routes emitted, now that both
+      // read surfaces go through here). The failure is also surfaced to the
+      // caller via failedSources/sourceErrors below.
+      console.warn(`[resolvePlaces] ${name} half failed:`, err);
       noteError(name, err);
       return [];
     }

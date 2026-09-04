@@ -1,16 +1,21 @@
 /**
- * trip-browse handler — all four flag combinations, through the dependency seam.
+ * trip-browse handler — the resolvePlaces() delegate + the single-endpoint
+ * fallback, through the dependency seam.
  *
- * No network, no DB: `discover` / `fetchFederatedPois` / `resolvePlaces` are all
- * faked. The route (route.ts) has no tests of its own because it is a thin
+ * No network, no DB: `discover` and `resolvePlaces` are faked via `deps`; the
+ * tier tests fake resolvePlaces' own internal deps (fetchFederatedPois/discover)
+ * through the real resolvePlaces. The route (route.ts) has no tests of its own
+ * because it is a thin
  * wrapper (validate + cache + fixture + `{ source, places }` shape); the
  * behaviour lives here.
  *
- * Two orthogonal flags → four combinations:
- *   (off, off) legacy live-only  ·  (off, on) legacy live+federated
- *   (on,  off) resolvePlaces federated-off  ·  (on, on) resolvePlaces federated-on
+ * The handler cut over to resolvePlaces() unconditionally 2026-09-03 — the
+ * TRIP_BROWSE_USE_RESOLVER flag is gone. `USE_FEDERATED_POIS` remains as the
+ * orthogonal DATA flag, wired to `include.federated`. `viaLegacy` is retained
+ * ONLY as the fallback for a degenerate day with no `dayStart` (resolvePlaces
+ * day-corridor needs both endpoints).
  *
- * The (on, on) case additionally drives the REAL resolvePlaces (with faked
+ * The (federated-on) tier test drives the REAL resolvePlaces (with faked
  * internal deps) to prove the Verified-before-Unverified sort end-to-end — the
  * one behaviour change the cutover plan flagged.
  *
@@ -63,7 +68,6 @@ function place(
 function deps(over: Partial<BrowseDeps> = {}): BrowseDeps {
   return {
     discover: async () => [],
-    fetchFederatedPois: async () => [],
     resolvePlaces: async () => ({
       places: [],
       counts: { live: 0, federated: 0, deduped: 0 },
@@ -79,63 +83,56 @@ function params(over: Partial<BrowseParams> = {}): BrowseParams {
     dayStart: START,
     dayEnd: END,
     points: POINTS,
-    useResolver: false,
     useFederated: false,
     supabase: null,
     ...over,
   };
 }
 
-// ── FLAG OFF (legacy body) ──────────────────────────────────────────────
+// ── FALLBACK: degenerate day with no dayStart → viaLegacy ────────────────
+// The only path that still reaches the pre-cutover body. Fixtures sit on END
+// (the one endpoint) so the single-point corridor filter keeps them.
 
-test("(off, off): legacy live-only, untagged, no federated / no resolver call", async () => {
-  let fedCalls = 0;
+test("fallback (no dayStart, federated off): live-only, untagged, off-corridor filtered; resolvePlaces NOT called", async () => {
   let resolverCalls = 0;
+  // FAR is ~34 mi from END (the sole endpoint) — beyond CORRIDOR_MI=10, so the
+  // fallback's corridor filter must drop it, keeping the filter honest.
+  const FAR: [number, number] = [-121.0, 45.5];
   const out = await produceBrowsePlaces(
-    params({ useResolver: false, useFederated: false }),
+    params({ dayStart: undefined, useFederated: false }),
     deps({
-      discover: async () => [place("L1", START)],
-      fetchFederatedPois: async () => {
-        fedCalls += 1;
-        return [];
-      },
+      discover: async () => [place("L1", END), place("FARP", FAR)],
       resolvePlaces: async () => {
         resolverCalls += 1;
         return { places: [], counts: { live: 0, federated: 0, deduped: 0 }, failedSources: [] };
       },
     }),
   );
-  assert.deepEqual(out.map((p) => p.id), ["L1"]);
-  assert.equal(out[0].source, undefined, "legacy off leaves live untagged");
-  assert.equal(fedCalls, 0);
-  assert.equal(resolverCalls, 0);
+  assert.deepEqual(out.map((p) => p.id), ["L1"], "off-corridor place filtered out");
+  assert.equal(out[0].source, undefined, "fallback leaves live untagged when federated off");
+  assert.equal(resolverCalls, 0, "resolvePlaces not called without both endpoints");
 });
 
-test("(off, on): legacy tags live source:'live' and merges federated", async () => {
-  let fedCalls = 0;
+test("fallback (no dayStart, federated on): tags live source:'live'; no federated merge (needs both endpoints)", async () => {
   const out = await produceBrowsePlaces(
-    params({ useResolver: false, useFederated: true, supabase: FAKE_SB }),
+    params({ dayStart: undefined, useFederated: true, supabase: FAKE_SB }),
     deps({
-      discover: async () => [place("L1", START)],
-      fetchFederatedPois: async () => {
-        fedCalls += 1;
-        return [place("mp:F1", END, { source: "master_place" })];
-      },
+      discover: async () => [place("L1", END)],
     }),
   );
-  assert.equal(fedCalls, 1, "federated merged when USE_FEDERATED_POIS on");
   const live = out.find((p) => p.id === "L1");
   assert.equal(live?.source, "live", "live tagged when federated on");
-  assert.ok(out.some((p) => p.id === "mp:F1"), "federated row present");
+  // The corridor RPC can't run without both endpoints, so no master_place rows.
+  assert.equal(out.filter((p) => p.source === "master_place").length, 0);
 });
 
-// ── FLAG ON (resolvePlaces) — routing + the include.federated wiring ─────
+// ── resolvePlaces() day-corridor — routing + the include.federated wiring ─
 
-test("(on, off): resolvePlaces day-corridor, include.federated=false, NO supabase in scope", async () => {
+test("federated off: resolvePlaces day-corridor, include.federated=false, NO supabase in scope", async () => {
   let input: ResolvePlacesInput | null = null;
   let liveCalls = 0;
   await produceBrowsePlaces(
-    params({ useResolver: true, useFederated: false, supabase: null }),
+    params({ useFederated: false, supabase: null }),
     deps({
       discover: async () => {
         liveCalls += 1;
@@ -163,10 +160,10 @@ test("(on, off): resolvePlaces day-corridor, include.federated=false, NO supabas
   assert.equal(liveCalls, 0, "resolver path must not call discover directly");
 });
 
-test("(on, on): include.federated=true AND the supabase client is in scope", async () => {
+test("federated on: include.federated=true AND the supabase client is in scope; enrich never opted in", async () => {
   let input: ResolvePlacesInput | null = null;
   await produceBrowsePlaces(
-    params({ useResolver: true, useFederated: true, supabase: FAKE_SB }),
+    params({ useFederated: true, supabase: FAKE_SB }),
     deps({
       resolvePlaces: async (i) => {
         input = i;
@@ -180,13 +177,13 @@ test("(on, on): include.federated=true AND the supabase client is in scope", asy
     got?.scope.kind === "day-corridor" ? got.scope.supabase : null,
     FAKE_SB,
   );
-  // Orthogonality proof: enrich is never opted into (day-scoped browse, like Search).
+  // enrich is never opted into (day-scoped browse, like Search).
   assert.equal(got?.enrich, undefined);
 });
 
-test("(on): returns resolvePlaces().places verbatim", async () => {
+test("returns resolvePlaces().places verbatim", async () => {
   const out = await produceBrowsePlaces(
-    params({ useResolver: true }),
+    params(),
     deps({
       resolvePlaces: async () => ({
         places: [place("A", START), place("B", END)],
@@ -198,29 +195,9 @@ test("(on): returns resolvePlaces().places verbatim", async () => {
   assert.deepEqual(out.map((p) => p.id), ["A", "B"]);
 });
 
-test("(on) with missing dayStart falls back to the legacy body", async () => {
-  let liveCalls = 0;
-  let resolverCalls = 0;
-  await produceBrowsePlaces(
-    params({ useResolver: true, dayStart: undefined }),
-    deps({
-      discover: async () => {
-        liveCalls += 1;
-        return [];
-      },
-      resolvePlaces: async () => {
-        resolverCalls += 1;
-        return { places: [], counts: { live: 0, federated: 0, deduped: 0 }, failedSources: [] };
-      },
-    }),
-  );
-  assert.equal(liveCalls, 1, "degrades to legacy discover when dayStart absent");
-  assert.equal(resolverCalls, 0, "resolvePlaces not called without both endpoints");
-});
+// ── the one behaviour change — Verified before Unverified ────────────────
 
-// ── (on, on): the one behaviour change — Verified before Unverified ──────
-
-test("(on, on): verified sorts before unverified end-to-end through REAL resolvePlaces", async () => {
+test("federated on: verified sorts before unverified end-to-end through REAL resolvePlaces", async () => {
   // deps.resolvePlaces delegates to the REAL resolvePlaces with faked internal
   // deps so the day-corridor merge + corridor filter + tier sort all run.
   // Unverified is CLOSER to start, verified is FARTHER — so if the tier sort
@@ -234,7 +211,7 @@ test("(on, on): verified sorts before unverified end-to-end through REAL resolve
     verified: "verified",
   });
   const out = await produceBrowsePlaces(
-    params({ useResolver: true, useFederated: true, supabase: FAKE_SB }),
+    params({ useFederated: true, supabase: FAKE_SB }),
     deps({
       resolvePlaces: (i) =>
         realResolvePlaces({
@@ -253,14 +230,14 @@ test("(on, on): verified sorts before unverified end-to-end through REAL resolve
   );
 });
 
-test("(on, on) contrast: with only VERIFIED rows, order is pure distance-from-start", async () => {
+test("federated on contrast: with only VERIFIED rows, order is pure distance-from-start", async () => {
   // Sanity/negative-control: when the tier is uniform the sort is the legacy
   // distance sort — near before far — so the tier sort above isn't a fluke of
   // some fixed ordering.
   const near = place("mp:N", [-122.0, 45.05], { source: "master_place", verified: "verified" });
   const far = place("mp:F", [-122.0, 45.45], { source: "master_place", verified: "verified" });
   const out = await produceBrowsePlaces(
-    params({ useResolver: true, useFederated: true, supabase: FAKE_SB }),
+    params({ useFederated: true, supabase: FAKE_SB }),
     deps({
       resolvePlaces: (i) =>
         realResolvePlaces({

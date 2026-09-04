@@ -273,3 +273,27 @@ combinations are unit-testable without network/DB:
 
 **Not done (intentionally):** neither flag flipped on; no `web/src/components` change; the
 write-path/baking consolidation (§7) remains out of scope.
+
+---
+
+## 9. SHIPPED — flag removed, unconditional resolvePlaces() (2026-09-03)
+
+The `TRIP_BROWSE_USE_RESOLVER` flag is **removed**; `produceBrowsePlaces` always
+runs `resolvePlaces()` day-corridor. `USE_FEDERATED_POIS` stays (the orthogonal
+DATA flag, wired to `include.federated`).
+
+**`viaLegacy` is retained ONLY as the single-endpoint fallback** — `resolvePlaces`
+day-corridor needs both endpoints, so a degenerate day with no `dayStart` still
+routes through it (§6.2). It was **simplified to live-only**: its federated-merge
+branch was guarded by `!supabase || !dayStart || !dayEnd`, i.e. it never ran under
+the exact condition (`!dayStart || !dayEnd`) that now reaches the fallback — so
+removing it (and `fetchFederatedPois` from the handler's deps) is a verified no-op.
+`BrowseDeps` shrank to `{ discover, resolvePlaces }`.
+
+**Parity verified on TEST before removal** `[literal — computed 2026-09-03]`:
+legacy vs resolver, same inputs, across CA/OR/UT corridors × {scenic, camping,
+food, fuel}, in **both** `USE_FEDERATED_POIS` states. **Membership identical in all
+6 cells; order identical too** (these corridors have uniform tiers, so the tier
+sort was a no-op — its reorder is covered by the unit test's mixed-tier case).
+Re-verified post-removal via `scripts/verify-trip-browse-wired.ts --federated-off`
+/ `--federated-on`: all places source-stamped, tier-sorted, 0 violations.

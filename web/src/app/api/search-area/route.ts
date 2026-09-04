@@ -22,17 +22,10 @@ import { resolveSearchArea } from "./handler";
  *
  * This handler is a THIN WRAPPER: it parses/validates, owns the LRU cache and
  * the debug gate, and shapes the response. The fanout/merge lives in
- * `./handler`, behind `SEARCH_AREA_USE_RESOLVER` (see below).
+ * `./handler`, which delegates to `resolvePlaces()` (cut over unconditionally
+ * 2026-09-03 — the `SEARCH_AREA_USE_RESOLVER` flag and the legacy inline body
+ * are gone; parity was verified on TEST first).
  */
-
-/** Cut the search-area fanout over to the consolidated `resolvePlaces()`
- *  service. Mirrors the `USE_FEDERATED_POIS` pattern: an env boolean, default
- *  OFF. OFF = the exact pre-cutover live/federated body (zero behaviour change).
- *  ON = `resolvePlaces()`. Flip to `true` in Vercel to roll out; a redeploy
- *  starts a fresh process, so the in-process cache below never serves a
- *  stale other-mode payload across a flip. See the cutover-plan doc. */
-const SEARCH_AREA_USE_RESOLVER =
-  process.env.SEARCH_AREA_USE_RESOLVER === "true";
 
 // ── in-process LRU cache (same pattern as the trip-browse route) ───────
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -124,7 +117,6 @@ export async function GET(req: Request) {
       categories,
       signal: req.signal,
       debug,
-      useResolver: SEARCH_AREA_USE_RESOLVER,
     },
   );
 

@@ -43,3 +43,23 @@ The JSONB persistence model (`trips.payload` read-modify-write) is a real, separ
 ## Sequencing
 
 Step 1 (nullable columns + backfill on `master_place`) is the first implementation step and does not by itself require any of steps 2–4. Steps 2–4 (resolver consolidation, canonical id migration, shared cache) are sequenced after step 1 lands and are not yet started as of this ADR's authoring.
+
+---
+
+## Update 2026-09-03 — read-surface cutovers made unconditional
+
+The three read surfaces were wired behind flags (default off) on 2026-08-23. Two
+are now **cut over unconditionally** — flags and legacy dual bodies removed after
+TEST parity verification:
+
+- **`GET /api/search-area`** — `SEARCH_AREA_USE_RESOLVER` + `viaLegacy` removed.
+- **`GET /api/trip-browse/:tripId/:dayId`** — `TRIP_BROWSE_USE_RESOLVER` removed;
+  a live-only single-endpoint fallback is retained for the degenerate no-`dayStart`
+  day (the resolver's day-corridor scope needs both endpoints).
+
+`POST /api/places/details` (`DATE_DETAIL_USE_RESOLVER`) remains flag-gated — it is
+by-id enrichment, not a category→source surface, and was out of scope for this step.
+
+**Still open (step 4):** the shared client cache. Each route still owns its own
+in-process LRU; consolidating to one client-side cache keyed by canonical id is
+unbuilt. See `docs/BACKLOG.md`.

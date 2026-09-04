@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 2) — search-area + trip-browse cut fully onto resolvePlaces() (flags + legacy removed)
+
+- Migrated the two category→source discovery surfaces to call `resolvePlaces()`
+  unconditionally; removed `SEARCH_AREA_USE_RESOLVER` / `TRIP_BROWSE_USE_RESOLVER`
+  and the legacy `viaLegacy` bodies. See the SHIPPED sections in the two
+  `docs/architecture/resolve-places-*-cutover-plan.md`.
+- **Verified WHICH two, didn't trust the brief.** The prompt said "two remain,"
+  but code had **three** flag-gated read surfaces (all default-off). Per the
+  2026-09-02 three-surfaces doc, the two category→source ones are search-area
+  (bbox) + trip-browse (day-corridor). The third, `POST /api/places/details`
+  (`DATE_DETAIL_USE_RESOLVER`), is by-id ENRICHMENT — different class, left out of
+  scope and flagged. ("Explore more" makes no fetch at all.)
+- **Ran a real before/after parity check on TEST first** (legacy vs resolver,
+  same inputs, back-to-back). search-area: 15 cells (CA/OR/UT × 5 category sets) —
+  corpus + live membership identical everywhere; **the Auto/Repair
+  car_repair/car_wash slide-key-collision class was parity-clean** (the exact
+  thing the brief flagged); order matched except `fuel` (verified-first tier sort
+  reorders mixed-tier corpus — intended). trip-browse: 6 cells × both
+  USE_FEDERATED_POIS states — membership + order identical.
+- **Only intended deltas:** D7 source-stamping (harmless — no consumer branches
+  on live's `source`) and the verified-first tier sort. Self-review surfaced a
+  third, debug-only delta: per-source error text now shows for live-category
+  failures under `?debug=1`.
+- **trip-browse fallback:** `resolvePlaces` day-corridor needs both endpoints, so
+  a degenerate day with no `dayStart` can't be a corridor. Kept `viaLegacy` as a
+  **live-only** single-endpoint fallback (flagged, not "just in case") — and
+  proved its federated branch was already unreachable under the fallback trigger
+  (`!dayStart||!dayEnd` was exactly that branch's skip guard), so removing it +
+  `fetchFederatedPois` from the handler is a no-op. `BrowseDeps` → `{discover,
+  resolvePlaces}`; `SearchAreaDeps` → `{resolvePlaces}`.
+- **Standing self-review pass** (full, per the brief) via a code-reviewer
+  subagent: verdict READY-to-merge, 0 critical/important, 4 minor. Fixed 3
+  (restored a half-failure log marker in `resolvePlaces`, an off-corridor test
+  fixture, a stale test docstring); the 4th (debug-error-text delta) is recorded,
+  not a defect.
+- Env note for the parity harness: the cascade `--env-file=.env.local
+  --env-file=.env.development.local` gives Typesense `places_test` + live keys
+  from `.env.local` while TEST Supabase (from `.env.development.local`) wins — a
+  clean TEST setup with no PROD crossing. `.env.development.local` alone has no
+  Typesense/live keys.
+- Gates: web typecheck clean, web test 714, next build exit 0. Live TEST verify
+  scripts pass (both surfaces, both federated states). No data-layer/corpus writes.
+- Still open (BACKLOG): shared client cache (ADR step 4), curving-route/polyline
+  support; Date Detail cutover.
+
 ## 2026-09-03 (later) — Auto/Repair wired to live Mapbox (`auto_repair` + `car_wash`)
 
 - Wired the Find Nearby **Auto/Repair** tile (`car_repair`/`car_wash` primaries)

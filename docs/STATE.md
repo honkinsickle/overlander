@@ -1,3 +1,30 @@
+# STATE — branch `migrate-surfaces-resolveplaces` · 2026-09-03 (later 36) — **search-area + trip-browse cut FULLY onto `resolvePlaces()`.** The two `*_USE_RESOLVER` flags and the legacy dual bodies are gone; parity verified on TEST first. TEST-only, no data writes.
+
+(**newest truth: 9 files in `web/`, net −350 lines. No data-layer/corpus/API-shape change; no writes to TEST or PROD. Standing self-review pass run (code-reviewer subagent): verdict READY, 4 minor items, 3 fixed. All gates green + live TEST verification.**
+
+**Which two surfaces — verified, not assumed.** `[literal]` The task said "most already call it; two remain," but code showed **three** flag-gated read surfaces, all default-OFF. Resolving against the 2026-09-02 three-surfaces investigation: the two category→source DISCOVERY surfaces are **`/api/search-area`** (bbox) and **`/api/trip-browse/[tripId]/[dayId]`** (day-corridor). The third flag-gated path, **`POST /api/places/details` (`DATE_DETAIL_USE_RESOLVER`), is by-id ENRICHMENT, not category→source — a different class, left OUT of scope and flagged.** ("Surface 1", the "Explore more" link, makes no data call at all.)
+
+**PARITY CHECK on TEST, before removing anything** `[literal — computed this session, legacy vs resolver back-to-back, same inputs]`:
+- **search-area:** 15 cells (CA/OR/UT × {camping, scenic, food, fuel, auto/repair}). **Corpus + live membership IDENTICAL in every cell.** The **Auto/Repair `car_repair`/`car_wash` slide-key-collision class was parity-clean** (the exact class the brief said to check). Order matched except **`fuel`**, where the resolver's verified-first tier sort reorders mixed-tier corpus rows.
+- **trip-browse:** 6 cells (CA/OR/UT corridors × {scenic, camping, food, fuel}) × both `USE_FEDERATED_POIS` states. **Membership AND order identical** (uniform tiers → tier sort a no-op here; the reorder is covered by the mixed-tier unit test).
+
+**The only intended deltas vs the legacy bodies** (neither breaks membership or the client contract): (1) **D7** — the resolver stamps `source` on every place; the legacy path left live untagged (no consumer branches on live's value; `isFederated = source==="master_place"` stays correct). (2) the **verified-first tier sort**. A third, **debug-only** delta surfaced in self-review: per-source error *text* now appears for live category failures under `?debug=1` (harmless, gated).
+
+**What changed** `[literal — git diff]`:
+- **search-area:** removed `SEARCH_AREA_USE_RESOLVER` + `viaLegacy`; handler delegates to `resolvePlaces()` bbox. Deps seam → `{resolvePlaces}`.
+- **trip-browse:** removed `TRIP_BROWSE_USE_RESOLVER`; `produceBrowsePlaces` always runs `resolvePlaces()` day-corridor. **`viaLegacy` retained ONLY as the single-endpoint fallback** (resolver day-corridor needs both endpoints) — **simplified to live-only** because its federated branch was unreachable in that degenerate case (verified: the fallback trigger `!dayStart||!dayEnd` is exactly the old federated-branch's skip guard). `USE_FEDERATED_POIS` kept (orthogonal DATA flag). Deps seam → `{discover, resolvePlaces}`.
+- Both handler test suites rewritten (flag matrix → single resolver path + fallback, incl. an off-corridor filter fixture and the end-to-end tier-sort test). `verify-*-wired.ts` → post-cutover single-path health checks. Stale flag comment in `mapbox-search-box.ts` updated. Self-review fix: `resolvePlaces` `half()` now logs half-failures (restores the `FEDERATED_DOWN`-class marker for all callers).
+
+**Route wrappers unchanged in behaviour** — each still owns its LRU cache, validation/400s, debug gate, and `{source,places}` / `{...,counts,failedSources}` response shape.
+
+**NOT done, deliberately:** the shared client cache (ADR step 4) and curving-route/polyline support both remain open (BACKLOG); Date Detail cutover is separate.
+
+**Gates** `[literal — this session]`: `npm run -w web typecheck` clean · `npm run -w web test` 714/714 · `cd web && npx next build` exit 0. Live TEST: `verify-search-area-wired.ts` + `verify-trip-browse-wired.ts` (both federated states) PASS.
+
+**Next steps (Adam's call):** review + merge. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `wire-auto-repair-mapbox` · 2026-09-03 (later 35) — **Auto/Repair wired to live Mapbox.** `car_repair`→`auto_repair`, `car_wash`→`car_wash`, served in the `fuel` slide bucket. Live-verified CA/OR/UT/WA. TEST-only, no data writes.
 
 (**newest truth: six files in `web/src`, no data-layer/corpus/API-shape change. No writes to TEST or PROD — the source hits Mapbox live at request time. All web gates green + a live end-to-end probe of the wired source.**

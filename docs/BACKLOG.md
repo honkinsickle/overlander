@@ -113,7 +113,7 @@ architecture and should not be used as a current reference.**
 | Aug 25 finding | Verdict |
 |---|---|
 | imported by nothing | **CHANGED** — 3 importers in `src/app`; still 0 in `src/components` |
-| `SEARCH_AREA_USE_RESOLVER` doc-only | **CHANGED** — all 3 flags real since Aug 23, all default OFF locally |
+| `SEARCH_AREA_USE_RESOLVER` doc-only | **SUPERSEDED 2026-09-03** — `SEARCH_AREA_USE_RESOLVER` and `TRIP_BROWSE_USE_RESOLVER` are **removed**; both surfaces call `resolvePlaces()` unconditionally (parity verified on TEST). Only `DATE_DETAIL_USE_RESOLVER` remains (default off). |
 | shared client cache unbuilt | **UNCHANGED — genuinely still open** |
 | 4 enrichment columns unselected | **UNCHANGED but largely moot** (below) |
 | no polyline support | **UNCHANGED — genuinely still open** (see the `preComputeFacts` item) |

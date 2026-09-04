@@ -1,26 +1,27 @@
 /**
  * verify-trip-browse-wired.ts — LIVE TEST proof that the wired day-scoped browse
- * cutover returns correct results end-to-end for the two combinations that
- * matter: (both off = today) and (both on = the new sorted-federated case).
+ * feed returns correct results end-to-end through resolvePlaces().
  *
- * Drives `produceBrowsePlaces` (the route's delegate — the whole cutover: the
- * flag branch, the include.federated wiring, resolvePlaces day-corridor, live
- * discover, the federated pois_along_corridor RPC). It loads the SAME trip/day
- * the route would (`getTrip`) and derives the geometry the SAME way, then calls
- * the handler with real deps.
+ * Post-cutover (2026-09-03): the TRIP_BROWSE_USE_RESOLVER flag and the legacy
+ * dual path are gone — `produceBrowsePlaces` ALWAYS runs resolvePlaces()
+ * day-corridor. `USE_FEDERATED_POIS` remains as the orthogonal DATA flag, so this
+ * checks BOTH of its states:
+ *   --federated-off : resolver live-only — every place source-stamped "live".
+ *   --federated-on  : resolver live + federated merge, tier-sorted.
  *
- * ⚠ WHY NOT the full GET() in-process: the route's `createSupabaseServerClient()`
- * calls `cookies()`, which throws outside a Next request scope — so the
- * federated path can't run under `tsx`. This substitutes a plain anon client
- * (the corridor RPC is anon-callable, SECURITY DEFINER) and drives the delegate,
- * covering the entire cutover surface except the thin GET wrapper
- * (validate/cache/fixture/shape). Flagged in the PR.
+ * Drives `produceBrowsePlaces` (the route's delegate). It loads the SAME trip/day
+ * the route would (`getTrip`) and derives the geometry the SAME way.
+ *
+ * ⚠ WHY NOT the full GET(): the route's `createSupabaseServerClient()` calls
+ * `cookies()`, which throws outside a Next request scope — so this substitutes a
+ * plain anon client (the corridor RPC is anon-callable, SECURITY DEFINER) and
+ * drives the delegate, covering the whole cutover except the thin GET wrapper.
  *
  * TEST project only — asserts the Supabase URL is TEST and refuses otherwise.
  *
- * Run (env cascade: .env.local for Google keys, .env.development.local wins for TEST Supabase):
- *   npx tsx --env-file=.env.local --env-file=.env.development.local scripts/verify-trip-browse-wired.ts --both-off
- *   npx tsx --env-file=.env.local --env-file=.env.development.local scripts/verify-trip-browse-wired.ts --both-on
+ * Run (env cascade: .env.local for keys, .env.development.local wins for TEST):
+ *   npx tsx --env-file=.env.local --env-file=.env.development.local scripts/verify-trip-browse-wired.ts --federated-off
+ *   npx tsx --env-file=.env.local --env-file=.env.development.local scripts/verify-trip-browse-wired.ts --federated-on
  */
 import { createClient } from "@supabase/supabase-js";
 import { getTrip } from "@/lib/trips/repository";
@@ -32,7 +33,8 @@ const TRIP = "la-to-deadhorse";
 const CATEGORIES: SlideCategoryKey[] = ["scenic", "camping"];
 
 async function main() {
-  const mode = process.argv.includes("--both-on") ? "both-on" : "both-off";
+  const useFederated = process.argv.includes("--federated-on");
+  const mode = useFederated ? "federated-on" : "federated-off";
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   if (!url.includes(TEST_REF)) {
@@ -54,8 +56,6 @@ async function main() {
   if (prev?.coords) points.push(prev.coords);
   else if (dayIndex === 0 && trip.startCoords) points.push(trip.startCoords);
 
-  const useFederated = mode === "both-on";
-  const useResolver = mode === "both-on";
   const supabase = useFederated ? createClient(url, anon) : null;
 
   const places = await produceBrowsePlaces({
@@ -63,7 +63,6 @@ async function main() {
     dayStart,
     dayEnd: day.coords,
     points,
-    useResolver,
     useFederated,
     supabase,
   });
@@ -73,7 +72,6 @@ async function main() {
   const untagged = places.filter((p) => p.source === undefined);
   const verifiedCount = places.filter((p) => p.verified === "verified").length;
   const unverifiedCount = places.filter((p) => p.verified === "unverified").length;
-  // tier-ordering violation: a verified appearing AFTER an unverified.
   let seenUnverified = false;
   let tierViolations = 0;
   for (const p of places) {
@@ -87,16 +85,13 @@ async function main() {
 
   const fail: string[] = [];
   if (places.length === 0) fail.push("no places returned");
-  if (mode === "both-off") {
-    // Legacy live-only: untagged live, NO federated rows.
-    if (federated.length > 0) fail.push(`${federated.length} federated rows leaked into legacy off`);
-    if (liveTagged.length > 0) fail.push(`${liveTagged.length} live rows tagged (legacy off must leave live untagged)`);
-    if (untagged.length === 0) fail.push("no untagged live rows (legacy off should leave live untagged)");
+  // resolvePlaces stamps every place (D7) on BOTH federated states — no untagged.
+  if (untagged.length > 0) fail.push(`${untagged.length} untagged places — resolver stamps all (D7)`);
+  if (tierViolations > 0) fail.push(`${tierViolations} tier-ordering violations — verified-first sort not applied`);
+  if (mode === "federated-off") {
+    if (federated.length > 0) fail.push(`${federated.length} federated rows with USE_FEDERATED_POIS off`);
   } else {
-    // both-on: federated merged, every place source-stamped, tier-ordered.
     if (federated.length === 0) fail.push("no federated rows — resolvePlaces federated merge did not run");
-    if (untagged.length > 0) fail.push(`${untagged.length} untagged places — resolver stamps all (D7); legacy leaked`);
-    if (tierViolations > 0) fail.push(`${tierViolations} tier-ordering violations — verified-first sort not applied`);
   }
 
   if (fail.length > 0) {
@@ -105,9 +100,9 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    mode === "both-off"
-      ? `\nPASS (both-off): legacy live-only — ${untagged.length} untagged live, 0 federated (matches today).`
-      : `\nPASS (both-on): resolvePlaces merged ${federated.length} federated rows, every place source-stamped, tier-sorted (0 violations).`,
+    mode === "federated-off"
+      ? `\nPASS (federated-off): resolver live-only — ${liveTagged.length} live (all source-stamped), 0 federated, 0 untagged.`
+      : `\nPASS (federated-on): resolver merged ${federated.length} federated rows, every place source-stamped, tier-sorted (0 violations).`,
   );
 }
 

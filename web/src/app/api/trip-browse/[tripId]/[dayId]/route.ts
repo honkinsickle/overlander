@@ -105,20 +105,10 @@ export function resolveRequestedCategories(
 }
 
 /** Server-side flag (default OFF). Gates whether federated `pois_along_corridor`
- *  rows are merged into the feed. Independent of the resolver flag below — see
- *  the cutover plan §3. */
+ *  rows are merged into the feed — a DATA flag, orthogonal to the resolver
+ *  cutover (which is now unconditional). Wired into `resolvePlaces` via
+ *  `include.federated` in the handler. See the cutover plan §3. */
 const USE_FEDERATED_POIS = process.env.USE_FEDERATED_POIS === "true";
-
-/** Cut the day-scoped browse feed over to the consolidated `resolvePlaces()`
- *  service (day-corridor scope). Mirrors `SEARCH_AREA_USE_RESOLVER` /
- *  `DATE_DETAIL_USE_RESOLVER`: an env boolean, default OFF. OFF = the exact
- *  pre-cutover discover-fanout body (zero behaviour change). ON = resolvePlaces()
- *  with `include.federated` wired to `USE_FEDERATED_POIS`, so the two flags stay
- *  orthogonal (all four combinations preserve today's behaviour). A flip is a
- *  redeploy → fresh process → fresh cache, so no stale other-mode payload
- *  survives a flip. See docs/architecture/resolve-places-day-scoped-browse-cutover-plan.md. */
-const TRIP_BROWSE_USE_RESOLVER =
-  process.env.TRIP_BROWSE_USE_RESOLVER === "true";
 
 /** In-process response cache. Browse data is expensive to compute
  *  (~7s single-category, ~13s all-fanout) but identical across requests
@@ -182,8 +172,8 @@ function cacheSet(key: string, payload: unknown): void {
  * THIN WRAPPER: this handler validates the category set, owns the LRU cache,
  * runs the fixture fast path, resolves the trip/day geometry, and shapes the
  * `{ source, places }` response. The "produce the ranked places" step lives in
- * `./handler`, behind `TRIP_BROWSE_USE_RESOLVER` (with `USE_FEDERATED_POIS`
- * wired through as the orthogonal data flag).
+ * `./handler`, which calls `resolvePlaces()` (day-corridor scope) with
+ * `USE_FEDERATED_POIS` wired through as the orthogonal data flag.
  *
  * Single-category responses preserve the legacy shape `{ source, places }`.
  * Multi-category responses use `{ source: "discovery", places }` where each
@@ -273,7 +263,6 @@ export async function GET(
     dayStart,
     dayEnd: day.coords,
     points,
-    useResolver: TRIP_BROWSE_USE_RESOLVER,
     useFederated: USE_FEDERATED_POIS,
     supabase: federatedClient,
     signal: req.signal,
