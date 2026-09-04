@@ -15,6 +15,39 @@ deleted.
 
 The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
+> **⚠️ Schema changed 2026-09-03 `[migrations applied to PROD; NO data changed]`.**
+> The five merge-executor / recompute migrations are now applied to PROD:
+> `20260903195200` `merge_master_place` **v1**, `20260903203500` **v2**,
+> `20260903211000` **v3**, `20260903213500` **v4**, and `20260904120000`
+> `recompute_master_place` **v5** (skip-soft-retired). Remote ledger
+> **109 → 114**, pending **5 → 0**, remote-only versions (schema pushed outside
+> `db push`) **0 before and after**.
+> **New on PROD:**
+> - `merge_master_place(uuid, uuid[], text, text, integer, text) returns jsonb` —
+>   `security definer`, `search_path = public`. Previously **absent** from PROD.
+> - `merge_audit_log` table — created, **0 rows**. The merge executor has **not**
+>   been run against PROD.
+> - `recompute_master_place(uuid)` redefined at **v5**; its `v_self_has_active_sr`
+>   guard went **0 → 1** occurrences.
+>
+> **Verified by function body, not by the ledger.** `db:push-verify` reported
+> "0 INSERT rows verified" on all five — every statement is DDL, which its v1
+> verifier reports as uncovered by design. Verification was an md5 of
+> `pg_proc.prosrc` on PROD against the dollar-quoted body extracted from each
+> source file:
+>
+> | function | source | `srclen` | md5 — source / PROD / TEST |
+> |---|---|--:|---|
+> | `merge_master_place` | v4 `20260903213500` | 9919 | `6aacad67…77fe22` — identical |
+> | `recompute_master_place` | v5 `20260904120000` | 8824 | `e103e33f…6b4cd` — identical |
+>
+> **PROD and TEST hold byte-identical definitions of both functions.** TEST was
+> queried as an independent third point.
+> **Zero data change:** `master_place` **28,506** before and after;
+> `merge_audit_log` 0 rows. `place_relationships` reads **6,304** post-apply —
+> a reading only, as no pre-apply baseline was taken for that table.
+> Narrative: `docs/LOG.md` §2026-09-03 (later 16).
+
 > **⚠️ Data changed 2026-09-01 `[authorized PROD write — regression repair]`.**
 > 2,716 `master_place` rows recomputed (the Aug-31 regression batch of 2,732
 > **minus 16** excluded to protect their `contact`/`access`). 0 failed.

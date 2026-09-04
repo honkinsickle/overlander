@@ -1,3 +1,36 @@
+# STATE — branch `docs/prod-migrate-v1-v5` · 2026-09-03 (later 34) — **PROD IS AT v5.** The merge-executor schema (v1–v4) and `recompute_master_place()` v5 are applied to production; PROD and TEST function bodies are now byte-identical.
+
+(**newest truth: an authorized PROD schema write, then this doc pass. 5 migrations applied to `nqzeywzcowujzyegxbsr`. NO application data touched — no executor run, no corpus mutation.**
+
+**What was applied** `[literal — `supabase migration list --linked`, read before and after]`: `20260903195200` `merge_master_place` v1 · `20260903203500` v2 · `20260903211000` v3 · `20260903213500` v4 · `20260904120000` `recompute_master_place` v5. Remote ledger **109 → 114**; pending **5 → 0**; remote-only rows (schema pushed outside `db push`) **0 both before and after**.
+
+**⚠️ `db:push-verify` GAVE ZERO POSITIVE ASSURANCE ON THIS APPLY — AND THAT IS THE DOCUMENTED v1 LIMIT, NOT A DEFECT.** `[literal]` Its summary across all five migrations was **"0 INSERT rows verified"**: every statement was DDL (`create function`, `drop`, `alter`), which the v1 verifier reports as *uncovered* by design. **The wrapper's contribution here was capturing the pending list and running the push — not verifying it.** Reading a green `db:push-verify` on a DDL-only migration as evidence the DDL is correct is a misreading, and this apply is the clean example.
+
+**So it was verified by comparing function bodies, not by trusting the ledger.** `[literal]` `pg_proc.prosrc` on PROD, md5'd against the dollar-quoted body extracted from each source file:
+
+| function | source file | `srclen` | md5 — source / PROD / TEST |
+|---|---|--:|---|
+| `merge_master_place` | v4 `20260903213500` | 9919 | `6aacad67…77fe22` — all three identical |
+| `recompute_master_place` | v5 `20260904120000` | 8824 | `e103e33f…6b4cd` — all three identical |
+
+**PROD and TEST now hold byte-identical definitions of both functions.** TEST was queried as an independent third point, not assumed to match.
+
+**Before/after markers on PROD** `[literal]`: `merge_master_place` **absent → present** · `recompute_master_place`'s v5 guard `v_self_has_active_sr` **0 → 1** · `merge_audit_log` table **absent → present, 0 rows**.
+
+*One methodological wrinkle, stated so it is not misread later:* the pre-apply capture measured `pg_get_functiondef` (length 11734) while the post-apply comparison measured `prosrc`. Those are different projections of the same object — **11734 → 8824 is NOT a shrink.** The real pre/post evidence is the guard flipping 0 → 1 and `merge_master_place` going from absent to present.
+
+**NO APPLICATION DATA MOVED.** `[literal]` `master_place` **28,506 before and after**. `merge_audit_log` holds **0** rows — **the merge executor has NOT been run against PROD.** `place_relationships` reads **6,304** post-apply, but **no pre-apply baseline was taken for that table**, so that is a reading and not a proof of no-change.
+
+**⚠️ DOCKER IS NOT INSTALLED ON THIS MACHINE** `[literal]`, so `supabase db dump`, `db diff` and `db start` are all unavailable locally and the CI `migrations-fresh-apply` workflow cannot be reproduced here. The function-body reads went through **`supabase db query --linked`**, which needs no container. Recorded because the obvious verification command fails with a Docker-daemon error that reads like a broken project link.
+
+**A pre-existing credential defect found in passing, deliberately NOT in this PR** `[literal]`: `data/.env`'s `SUPABASE_ANON_KEY` held a **PROD**-scoped key inside the TEST env file — 401 against TEST, 200 against PROD. It is inert (**zero** references to `SUPABASE_ANON_KEY` anywhere in `data/`), and it was fixed as a separate local env change. `data/.env` is untracked, so there is nothing to commit; this line is the only record.
+
+**Resting state** `[literal]`: `data/.env` restored byte-identical to its pre-swap TEST content (backup at `~/.config/overlander/env-backups/.env.test-preop-prod-migrate-v1v5-20260903-201647`), CLI re-linked to **TEST**. Both sides on TEST, so a bare `db:push-verify` now reaches TEST rather than PROD. The worktree was **unlinked** before this work; TEST was chosen over unlinked because `db:push-verify --test` asserts a TEST link and fails without one.
+
+**NEXT, unchanged and still Adam's call:** the 8 undecided merge groups (#379), then the executor's first real PROD run. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `category-decision-9-ui-removal` · 2026-09-03 (later 33) — **Decision 9 IMPLEMENTED. `urban` chip + Water fill / Showers / Dump stations tiles are gone from the UI.** First code against the #380→#389 design chain; #389 was design-only.
 
 (**newest truth: three files in `web/src`, no data-layer/corpus/API change. Nothing written to TEST or PROD. All four web gates green this session.**
