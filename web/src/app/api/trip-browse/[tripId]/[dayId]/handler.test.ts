@@ -2,8 +2,10 @@
  * trip-browse handler — the resolvePlaces() delegate + the single-endpoint
  * fallback, through the dependency seam.
  *
- * No network, no DB: `discover` / `fetchFederatedPois` / `resolvePlaces` are all
- * faked. The route (route.ts) has no tests of its own because it is a thin
+ * No network, no DB: `discover` and `resolvePlaces` are faked via `deps`; the
+ * tier tests fake resolvePlaces' own internal deps (fetchFederatedPois/discover)
+ * through the real resolvePlaces. The route (route.ts) has no tests of its own
+ * because it is a thin
  * wrapper (validate + cache + fixture + `{ source, places }` shape); the
  * behaviour lives here.
  *
@@ -91,19 +93,22 @@ function params(over: Partial<BrowseParams> = {}): BrowseParams {
 // The only path that still reaches the pre-cutover body. Fixtures sit on END
 // (the one endpoint) so the single-point corridor filter keeps them.
 
-test("fallback (no dayStart, federated off): live-only, untagged; resolvePlaces NOT called", async () => {
+test("fallback (no dayStart, federated off): live-only, untagged, off-corridor filtered; resolvePlaces NOT called", async () => {
   let resolverCalls = 0;
+  // FAR is ~34 mi from END (the sole endpoint) — beyond CORRIDOR_MI=10, so the
+  // fallback's corridor filter must drop it, keeping the filter honest.
+  const FAR: [number, number] = [-121.0, 45.5];
   const out = await produceBrowsePlaces(
     params({ dayStart: undefined, useFederated: false }),
     deps({
-      discover: async () => [place("L1", END)],
+      discover: async () => [place("L1", END), place("FARP", FAR)],
       resolvePlaces: async () => {
         resolverCalls += 1;
         return { places: [], counts: { live: 0, federated: 0, deduped: 0 }, failedSources: [] };
       },
     }),
   );
-  assert.deepEqual(out.map((p) => p.id), ["L1"]);
+  assert.deepEqual(out.map((p) => p.id), ["L1"], "off-corridor place filtered out");
   assert.equal(out[0].source, undefined, "fallback leaves live untagged when federated off");
   assert.equal(resolverCalls, 0, "resolvePlaces not called without both endpoints");
 });

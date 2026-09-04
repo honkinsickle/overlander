@@ -1,8 +1,18 @@
 # `resolvePlaces()` — design
 
-**Status:** Designed + built as an ADDITIVE service, 2026-08-22. **Nothing is cut over to it.**
-`/api/search-area`, `/api/trip-browse/:tripId/:dayId` and `POST /api/places/details` are
-untouched and remain the live paths.
+**Status:** Built 2026-08-22. **Cut over for two surfaces 2026-09-03.**
+`GET /api/search-area` and `GET /api/trip-browse/:tripId/:dayId` now call
+`resolvePlaces()` **unconditionally** — the `SEARCH_AREA_USE_RESOLVER` /
+`TRIP_BROWSE_USE_RESOLVER` flags and the legacy dual bodies are removed (parity
+verified on TEST first; trip-browse keeps a live-only single-endpoint fallback for
+the degenerate no-`dayStart` day). `POST /api/places/details` remains flag-gated
+(`DATE_DETAIL_USE_RESOLVER`, default off) — it is by-id enrichment, not
+category→source, and was out of scope. Two intended behaviour deltas vs the
+pre-cutover bodies: `source` is stamped on every place (D7) and the verified-first
+tier sort is applied (a no-op on uniform tiers; reorders mixed-tier corpus). A
+third, debug-only delta: per-source error *text* now appears for live category
+failures under `?debug=1` (the resolver records it consistently; the legacy live
+category path recorded only the source id).
 **Implements:** step 2 of `docs/decisions/2026-08-21-place-data-resolver-consolidation.md`
 (step 1 — the nullable `master_place` columns — merged as #247, `4f2a6af`).
 
