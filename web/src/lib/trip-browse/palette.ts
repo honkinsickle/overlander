@@ -12,8 +12,12 @@ import type { Category } from "@/components/primitives/detail-card";
  *  a subset. Kept as a named alias so the browse layer reads intentionally. */
 export type BrowseCardCategory = Category;
 
-/** The 9 browse-filter chips, in the order the filter row renders them:
- *  outdoors first, then services, then the `interest` catch-all last. */
+/** The 9 canonical browse categories — the data contract for map layers, icons,
+ *  API validation and top-picks. Order: outdoors first, then services, then the
+ *  `interest` catch-all last. `urban` remains a full member here even though it
+ *  no longer renders a user-facing chip (Decision 9, 2026-09-03): it keeps its
+ *  map layer, icons and API validity. The rendered chip set is
+ *  `BROWSE_FILTER_CHIP_CATEGORIES` below. */
 export const BROWSE_CARD_CATEGORIES: readonly BrowseCardCategory[] = [
   "camping",
   "scenic",
@@ -25,6 +29,14 @@ export const BROWSE_CARD_CATEGORIES: readonly BrowseCardCategory[] = [
   "urban",
   "interest",
 ];
+
+/** The categories that render a chip in the user-facing filter row
+ *  (`CategoryFilterRow`) — the 9 canonical categories minus `urban`, which was
+ *  removed from the UI by Decision 9 (2026-09-03: no live source and no corpus
+ *  rows for its `shopping_mall`/`city_park` primaries). `urban` stays canonical
+ *  in `BROWSE_CARD_CATEGORIES`; only its chip is dropped, so the row shows 8. */
+export const BROWSE_FILTER_CHIP_CATEGORIES: readonly BrowseCardCategory[] =
+  BROWSE_CARD_CATEGORIES.filter((c) => c !== "urban");
 
 export type BrowseCardPalette = {
   /** Uppercase label used in aria-labels and tooltips. */

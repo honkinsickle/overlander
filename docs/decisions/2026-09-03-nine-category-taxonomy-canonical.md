@@ -1,6 +1,8 @@
 # 2026-09-03 — The 9-category taxonomy is canonical across the app
 
-**Status:** Proposed — awaiting Adam's review. Design only; no implementation.
+**Status:** Decisions 1–9 accepted. **Decision 9's UI removal implemented
+2026-09-03** (see the implementation note at the foot of this doc); the broader
+Find Nearby 13→9 collapse (Decisions 3/4) is not yet implemented.
 **All open items closed** as of the 2026-09-03 Decision 9 amendment.
 **Amended 2026-09-03** (Decisions 7-8) resolving the two questions #380 left
 open, and again the same day for Culture's scope, `park` → `scenic`, and the
@@ -300,3 +302,31 @@ proposes an implementation order; it is an argument, not an authorisation.
 it.** Removing these from the live Find Nearby component and the browse filter
 row is code work for the follow-up pass. Nothing in `web/src` was touched by this
 decision `[literal]`.
+
+---
+
+## Implementation note — Decision 9's UI removal landed 2026-09-03
+
+The follow-up pass the note above anticipated is done. Three files changed, no
+data-layer or corpus change:
+
+- `web/src/lib/trip-browse/palette.ts` — added `BROWSE_FILTER_CHIP_CATEGORIES`
+  (the 8 rendered chips = `BROWSE_CARD_CATEGORIES` minus `urban`).
+  `BROWSE_CARD_CATEGORIES` stays at 9, so `urban`'s map layer, icons, API
+  validity and top-picks are untouched — exactly the "keeps its data contract,
+  loses its chip" split this decision specified.
+- `web/src/components/trip/category-filter-row.tsx` — the filter row (shared by
+  Find Nearby *and* the day-scoped Add-Waypoints browse panel) now iterates
+  `BROWSE_FILTER_CHIP_CATEGORIES`, so it renders 8 chips, not 9.
+- `web/src/components/trip/find-nearby-panel.tsx` — removed the Water fill tile
+  from SUPPLY and the whole SERVICE bucket (Showers + Dump stations); dropped the
+  now-unused `Droplet`/`ShowerHead`/`Trash2` icon imports.
+
+**Deliberately NOT touched:** `place-category-toggles.tsx` — an explicit
+throwaway test harness (its own docstring: *"NOT a proposed UI surface"*) that
+exercises the map's data-contract layer set, which still includes `urban`.
+Leaving `urban` in it is correct: it toggles the still-existing `urban` map
+layer, not a user-facing chip.
+
+Gates green: `npm run -w web typecheck`, `npm run -w web test` (714/714), and
+`cd web && npx next build` (exit 0). `[literal — run this session]`

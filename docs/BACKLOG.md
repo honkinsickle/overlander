@@ -202,8 +202,13 @@ outage, not a gap.**
   and does nothing for corpus rows.
   **CHAIN CLOSED 2026-09-03:** Decision 9 removed `urban` / water fill / showers
   / dump stations from the UI. **No open items remain across #380 / #382 / #384.**
-  The design layer is complete; the Find Nearby collapse and these removals are
-  implementation work for a follow-up pass and have **not** been started.
+  The design layer is complete. **Decision 9's UI removal is now IMPLEMENTED
+  (2026-09-03):** the `urban` chip is dropped from `CategoryFilterRow` (via a new
+  `BROWSE_FILTER_CHIP_CATEGORIES` in `palette.ts`, keeping `urban` canonical in
+  `BROWSE_CARD_CATEGORIES`), and the Water fill tile + the whole SERVICE bucket
+  (showers, dump stations) are gone from `find-nearby-panel.tsx`. **The broader
+  Find Nearby 13→9 collapse (Decisions 3/4) remains a separate follow-up and is
+  NOT started.**
   **Also resolved:** `park` → **`scenic`** (matching the corpus), which leaves
   `urban` with no live source and no corpus at all. And the `interest` / `fuel`
   chip renames are **declined** — both keep their names knowingly. Also note the "accepts only 7 of the 9" clause is now
