@@ -46,6 +46,35 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   steps unchanged (web 10s, data 14s, typecheck 11s+9s, build 25s). Hit-run
   figures recorded in the PR.
 
+## 2026-09-04 — CI: fresh-migration-apply workflow (closes PR #385 gap)
+
+- Added `.github/workflows/migrations-fresh-apply.yml`. Trigger: PRs
+  and main pushes that add/modify `supabase/migrations/**` or the
+  workflow file. Uses `supabase/setup-cli@v1` + `supabase db start`
+  on ubuntu-latest (Docker is available natively on the runner).
+- Generates a minimal `supabase/config.toml` inline in the workflow
+  because the repo doesn't ship one — migrations were only ever
+  applied via `db push --linked`. `major_version = 17` matches TEST's
+  `supabase/.temp/postgres-version`. All non-DB services disabled
+  (`[auth] enabled = false`, etc.) so only the DB container spins up.
+- Post-apply cross-checks: (1) row count in
+  `supabase_migrations.schema_migrations` matches file count on disk;
+  (2) six critical objects exist (master_place, place_relationships,
+  merge_audit_log, merge_master_place(), recompute_master_place(),
+  postgis extension); (3) recompute_master_place body contains v5's
+  `v_self_has_active_sr` — catches a chain that stopped at v0.5.
+- Not required-status yet. First run advisory; promotion to ruleset
+  19629589 is Adam's call after seeing the first green run.
+- Simulated the YAML heredoc → shell rendering to confirm the TOML
+  file lands flush-left (heredoc terminator resolves to column 0 in
+  the shell script). `[literal]`
+- Zero PROD writes; runs against an in-container Postgres only.
+  `project_id` in the generated config is local-only.
+- What this catches, what it doesn't: catches ordering, dependency,
+  syntax, and stopped-chain bugs. Doesn't catch runtime semantics or
+  RLS-role behavior (auth is disabled in the workflow). Incremental
+  `db push --test` + the existing test job + on-branch verify scripts
+  are still the right tools for those.
 
 ## 2026-09-03 — merge executor full run on TEST (v2/v3/v4)
 
