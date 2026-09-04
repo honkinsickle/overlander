@@ -12,6 +12,45 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later) — Reconciled the master-reference Paper diagram against `main` @ `d2aa785` (#380–#394)
+
+- Read the "Place Data — Master Reference" diagram as it currently exists in
+  Paper first, then diffed it against `STATE.md`, `BACKLOG.md`, the decisions
+  folder, and the actual code (`palette.ts`, `category-filter-row.tsx`,
+  `find-nearby-panel.tsx`, `mapbox-search-box.ts`, `resolve-places.ts`) rather
+  than trusting the diagram's existing content or the prompt's framing.
+- Kept the five-section structure — it still fits. Reconciled content in four
+  of the five sections rather than appending new facts onto stale ones.
+- **Five real drifts found and fixed**, each verified directly against
+  current code or merged docs (not carried forward from memory):
+  1. Live Mapbox now also serves Auto/Repair, primary-category-aware;
+     `repair_shop` deliberately excluded (resolves to appliance repair, not
+     auto shops) — quoted from the source module's own docstring.
+  2. Surface 3 (Find Nearby) no longer has its original 6 groups/13 tiles —
+     Decision 9 shipped in #392; down to 5 groups/10 tiles. The diagram's own
+     prior "zero files have changed" correction is now itself stale — updated
+     rather than left standing.
+  3. The shared `CategoryFilterRow` (confirmed via grep to be used by both
+     Surface 2 and Surface 3) now renders 8 chips, not 9 — `urban` dropped.
+  4. `BROWSE_CARD_CATEGORIES` stays at 9 (the data contract — map layer,
+     icons, API validity); `BROWSE_FILTER_CHIP_CATEGORIES` is a new,
+     separate 8-member export only the rendered chip row reads. Rewrote the
+     diagram's central category-structure callout from "OPEN — NOT DECIDED"
+     to "RESOLVED & SHIPPED," stating the "taxonomy stays 9, UI renders 8"
+     split explicitly.
+  5. Auto/Repair moved from an open gap to LIVE (#394) — repurposed that row
+     into a resolved item carrying the fuel/auto slide-key-collision lesson
+     forward for the next category wired under an existing slide key.
+- **Confirmed unchanged, re-verified fresh rather than assumed:**
+  `resolvePlaces()`'s importer count, cache-less state, and 2-point corridor
+  scope; and that Search + Day-scoped browse remain the two surfaces on
+  legacy fetch logic — no route file touched since #373, all three
+  `USE_RESOLVER` flags still real and default-off locally.
+- Self-review pass skipped per Adam's instruction (docs-only, no code/PROD
+  change).
+- Full evidence, per-change confidence levels:
+  `docs/investigations/2026-09-03-master-reference-diagram-reconciliation.md`.
+
 ## 2026-09-03 (later) — Auto/Repair wired to live Mapbox (`auto_repair` + `car_wash`)
 
 - Wired the Find Nearby **Auto/Repair** tile (`car_repair`/`car_wash` primaries)
