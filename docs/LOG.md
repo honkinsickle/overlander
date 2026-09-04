@@ -12,6 +12,52 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-03 (later 16) — PROD migration apply: `merge_master_place` v1–v4 + `recompute_master_place` v5. Schema only; no data, no executor run.
+
+- **Applied 5 migrations to PROD** (`nqzeywzcowujzyegxbsr`) via the documented
+  `.env`-swap runbook: `20260903195200` (merge v1), `20260903203500` (v2),
+  `20260903211000` (v3), `20260903213500` (v4), `20260904120000` (recompute v5).
+  Remote ledger **109 → 114**, pending **5 → 0**, drift (remote row with no local
+  file) **0 before and after**. PROD now matches TEST on both functions.
+- **The task brief said "v2→v5"; it was actually v1→v5.** PROD had **none** of the
+  merge-executor migrations, not "v1 already applied" as the running handoff had
+  it. Caught by reading `supabase migration list --linked` before the swap rather
+  than trusting the carried-forward claim. Five pending, not four.
+- **`db:push-verify` verified nothing on this apply, by design.** All five
+  migrations are DDL-only, and its v1 verifier covers literal `INSERT ... VALUES`
+  only — summary was "0 INSERT rows verified" five times. **The real verification
+  was an md5 of `pg_proc.prosrc` on PROD against the dollar-quoted body extracted
+  from each source file**: `merge_master_place` 9919 bytes / `6aacad67…77fe22`,
+  `recompute_master_place` 8824 bytes / `e103e33f…6b4cd`. Source, PROD and TEST
+  agree byte-for-byte on both. TEST was queried as an independent third point.
+  **Lesson: a green `db:push-verify` on a DDL migration is not evidence the DDL
+  landed correctly — it is evidence the verifier had nothing it could check.**
+- **Docker is not installed on this machine**, so `supabase db dump` / `db diff` /
+  `db start` all fail and the CI `migrations-fresh-apply` workflow cannot be run
+  locally. `supabase db query --linked` needs no container and is the tool to
+  reach for. The dump failure surfaces as a Docker-daemon error that reads like a
+  broken project link — it is not.
+- **No application data touched.** `master_place` 28,506 before and after;
+  `merge_audit_log` created and holding 0 rows, so the executor has still never
+  run against PROD. `place_relationships` reads 6,304 post-apply — recorded as a
+  reading only, since no pre-apply baseline was taken for that table.
+- **Found in passing: `data/.env`'s `SUPABASE_ANON_KEY` was a PROD-scoped key in
+  the TEST env file** — 401 against TEST, 200 against PROD. Pre-existing and
+  inert (zero references to `SUPABASE_ANON_KEY` anywhere in `data/`). Fixed
+  locally as a separate untracked-env change. It was noticed only because it was
+  the one key already *identical* between the TEST and PROD env files, which a
+  correct pair should never be.
+- **Corrected a prior session's claim: `~/.config/overlander/env-backups/` was
+  never empty.** A bare `ls` reported nothing because every file in it is a
+  dotfile; `ls -A` shows the real contents. Acting on the bad reading overwrote a
+  pre-existing `.env.production-backup` (born 2026-06-01). Recoverable from Time
+  Machine, which needs Full Disk Access. **Use `ls -A` on any dot-only directory,
+  and look at a file before truncating it.**
+- Resting state: `data/.env` restored byte-identical from
+  `~/.config/overlander/env-backups/.env.test-preop-prod-migrate-v1v5-20260903-201647`,
+  CLI re-linked to **TEST** (not left unlinked — `db:push-verify --test` asserts a
+  TEST link and fails without one).
+
 ## 2026-09-03 — Decision 9 UI removal implemented (`urban` chip + water/showers/dump tiles)
 
 - First **code** against the #380→#389 category-taxonomy design chain; #389 was
