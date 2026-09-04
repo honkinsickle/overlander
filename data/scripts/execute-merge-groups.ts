@@ -104,8 +104,16 @@ const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
  *               Marine State Park (own mp ab568cc1) — a different island.
  *        Merging would permanently fuse two distinct park units. Fix the
  *        misfiled source_record first, then unblock.
+ *   79, 81, 120, 5002 — Darlingtonia SNS, Farewell Bend SRA, Sumpter Valley
+ *        Dredge SHA (missing-GIS-member corrections, same move as 83) and Face
+ *        Rock viewpoint park-side (net-new like 5001; the atlas rock is a
+ *        different-entity bystander kept separate). RESOLVED and ALREADY
+ *        EXECUTED against PROD 2026-09-04 (merge_audit_log rows, executed_by
+ *        cc-prod-run-4groups-2026-09-04; verified post-execution). Definitions
+ *        in data/merge-groups/2026-09-04-darlingtonia-farewellbend-sumpter-facerock.json.
+ *        Blocked so any re-run stays a deliberate --force-blocked act.
  */
-const DEFAULT_BLOCKED_GROUPS = new Set<number>([3, 6, 41, 68, 83, 95, 5001]);
+const DEFAULT_BLOCKED_GROUPS = new Set<number>([3, 6, 41, 68, 79, 81, 83, 95, 120, 5001, 5002]);
 
 interface CliArgs {
   groups: number[];
