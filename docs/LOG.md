@@ -12,6 +12,51 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-04 (later) — 4-group PROD merge executed + verified (79/81/120/5002)
+
+- **This session IS `cc-prod-run-4groups-2026-09-04`** — the "second PROD run"
+  the 108-run wrap below (#404) recorded but explicitly did **not** vouch for.
+  This entry is that run's provenance. Merged on PROD at `19:05:30Z`: 79
+  Darlingtonia SNS, 81 Farewell Bend SRA, 120 Sumpter Valley Dredge SHA
+  (same-entity), and net-new 5002 = Face Rock viewpoint park-side. PR #403
+  (`e445897`) committed the definitions + block-list update + TEST-validation
+  script to main.
+- **Entity verdicts by description read** (full reasoning in the committed JSON's
+  `decision_notes`): 79/81/120 are the missing-GIS-member pattern — the
+  `state_parks` GIS polygon existed in the corpus but not in the classifier's
+  undecidable visitor↔atlas/nps pair, so it's added as canonical (same move as
+  group 83). 121 Face Rock = DIFFERENT: the atlas rock is the offshore sea-stack
+  in the *federal* Oregon Islands NWR, the viewpoint is a clifftop lookout onto
+  it — so only the park-side merges (5002); the rock stays separate.
+- **Nothing from the staging report was trusted.** The 108-run had drifted PROD
+  outside this thread hours earlier (`merge_audit_log` 0→108), so every
+  prerequisite was re-verified fresh: v4/v5 empirically (the 108-run's 118
+  absorbed all cleanly soft-retired, 0 lingering edges), 12 members intact + 0
+  overlap with the 108-run, `scoreMember` GIS=112 sole winner ×4, Face Rock
+  `st_covers` TRUE on live geometry, 0 orphans.
+- **The Face Rock bystander was the crux, and it held in practice.** recompute
+  deletes+re-derives every `parent=canonical` `contained_in` edge; the rock's
+  edge survives only if `st_covers` holds. Post-run: rock byte-preserved, own
+  `atlas_oddities` SR intact, edge re-derived (`computed_at` 19:05:30). The
+  self-review's mechanism confirmed against real data, not just "merge completed
+  without error."
+- **106-vs-113 reconciliation, closed from the PROD audit** (not more doc
+  arithmetic): the 106 auto-decidable groups executed as 98×2-way + 7×3-way +
+  1×4-way — so the old full-run doc's "106 executed" total was right and its
+  "103×2-way" was a mis-tabulation for 98 (that is the 111-vs-106 gap).
+  Decidable-non-blocked total = 115 (123 − 8 undecidable; the "113" double-counted
+  6/83).
+- **Pre-flight lesson:** my first edge-check false-FAILED because an unfiltered
+  PostgREST `select()` on `place_relationships` truncates at 1000 of 6251 rows; a
+  targeted `.eq(child).eq(parent)` query showed all 4 edges present. The failure
+  was in the check, not the data — use filtered existence probes on >1000-row
+  tables.
+- Full standing self-review run before (GO) and after (all-PASS) via subagents.
+  Gate: `npm run -w data typecheck` clean. `DATA_INVENTORY.md` already reflects
+  the 112-row state via #404 — no change needed. Chat-only investigation
+  write-ups were not committed to `docs/investigations/`; their conclusions
+  survive only where a repo artifact backs them (the `decision_notes`).
+
 ## 2026-09-04 — PROD merge cleanup EXECUTED: 108 groups, 118 absorbed, zero failures
 
 - **First real PROD data write of the merge-cleanup thread.** 108 groups merged

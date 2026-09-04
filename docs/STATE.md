@@ -1,3 +1,25 @@
+# STATE — branch `wrap-2026-09-04-4groups` · 2026-09-04 (later 39) — **This IS the "second PROD run" #404 flagged but couldn't vouch for.** Groups 79/81/120/5002 (`cc-prod-run-4groups`) — its entity verdicts, fresh pre-flight, and pre/post verification, recorded here.
+
+(**newest truth: this thread executed `cc-prod-run-4groups-2026-09-04` (the four rows #404's later-38 masthead recorded as fact but said it "does not vouch for"). Four Phase-3 findings merged on PROD at `19:05:30Z`: 79 Darlingtonia SNS, 81 Farewell Bend SRA, 120 Sumpter Valley Dredge SHA (all same-entity), and net-new 5002 = Face Rock viewpoint park-side. Definitions + block-list + TEST-validation committed via PR #403 (`e445897`, merged to main). Data only, no schema change.**
+
+**The entity question, settled by a description-level read** `[cited — decision_notes in `data/merge-groups/2026-09-04-darlingtonia-farewellbend-sumpter-facerock.json`, on main]`: 79/81/120 are the missing-GIS-member pattern — the classifier paired visitor↔atlas/nps (both score 1 → undecidable), but the `state_parks` GIS polygon existed in the corpus, unpaired. Canonical = that GIS polygon, absorbing the visitor + atlas/nps points (same move as group 83); each absorbed feature's `contained_in`→canonical edge self-ref-drops. **121 Face Rock is the exception:** the atlas "Face Rock" is the offshore sea-stack in the *federal* Oregon Islands NWR, the viewpoint is a clifftop lookout onto it — different entities. So only the park-side merges (net-new 5002 = viewpoint visitor + GIS); the rock stays a separate `oddity` with its `contained_in` edge.
+
+**Canonical picks verified against the real rule** `[literal — scoreMember on live PROD]`: every GIS row = `[state_parks, wikipedia]` → 112; every point → 1; GIS sole winner ×4. The executor's own PROD dry-run re-pick chose the same GIS canonical for all four, no drift.
+
+**Every prerequisite re-verified FRESH before the write** `[literal, this thread]` — nothing from the staging report was trusted, because the 108-run had already drifted PROD outside this thread: migration version = merge v4 + recompute v5 (STATE #393 + empirical: the 108-run's **118** absorbed mps all cleanly soft-retired, 0 lingering edges); all 12 member mps intact and **absent from the 108 audit rows** (0 overlap); Face Rock `st_covers` TRUE (rock point inside the viewpoint polygon, live geometry); 0 orphans. TEST shape-validation (synthetic fixtures + the real merge fn) passed: self-ref drop for 79/81/120, bystander survival for 5002.
+
+**Outcome — landed as decided** `[literal — `merge_audit_log` + post-run re-query]`: 4 RPCs at `19:05:30Z`, 0 failures, `self_refs_dropped` 1/1/1/0. 7 absorbed soft-retired; canonicals own the source-record union (4/4/4/3). **Face Rock bystander preserved in practice:** rock `3b75eb01` still live/searchable/`oddity`, keeps its own `atlas_oddities` source_record, and its `contained_in`→viewpoint edge **re-derived** (`computed_at` 19:05:30) — the delete-and-re-derive mechanism held because `st_covers` still holds. Never in the audit. 0 orphan edges. **Full standing self-review run before AND after** (subagent GO, then subagent all-PASS).
+
+**PROD counts** `[literal — re-queried this wrap]`: `master_place` **28,506** · `merge_audit_log` **112** (108 `adam-prod-run` + 4 this thread) · `place_relationships` **6,248** (my 4 dropped 3 self-refs from the 6,251 the 108-run left).
+
+**106-vs-113 reconciliation, closed from the actual PROD execution** `[literal — from `merge_audit_log`]`: the old full-run doc's "106 executed = 103×2-way + 7×3-way + 1×4-way" summed to 111. The real PROD run shows the 106 auto-decidable groups = **98×2-way + 7×3-way + 1×4-way** — so "106" was right and the two-way "103" was a mis-tabulation for 98. Decidable-non-blocked total = **115** (123 − 8 undecidable; the doc's "113" double-subtracted 6/83).
+
+**Dropped as unverifiable per the wrap rule:** the chat-only investigation write-ups (the 120/121 and 79/81 description reads, the reconciliation narrative) were not written to `docs/investigations/`; their *conclusions* survive only where a repo artifact backs them — the committed `decision_notes` and this masthead. No new investigation doc was created (out of wrap scope).
+
+**NEXT (Adam's call):** the ~9 TEST-un-validated decidable groups and the remaining conflations (77/78) stay pending — unchanged by this run. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `docs/wrap-2026-09-04` · 2026-09-04 (later 38) — **THE MERGE CLEANUP IS EXECUTED ON PROD. 108 groups merged, 118 rows absorbed, zero failures, zero orphan edges.**
 
 (**newest truth: the first real PROD data write of the merge-cleanup thread. `merge_audit_log` went 0 → 108 under `executed_by = adam-prod-run-108-2026-09-04`. Nothing was applied to PROD schema; this is data only.**
