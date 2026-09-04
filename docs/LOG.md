@@ -12,6 +12,45 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-04 — v5 recompute_master_place() skip-soft-retired (replaces v4 workaround)
+
+- `supabase/migrations/20260904120000_recompute_master_place_skip_soft_retired.sql`
+  redefines `recompute_master_place(uuid)`. Only Step 7 changes:
+  - Cached `v_self_has_active_sr` flag guards both role (a) and (b) INSERTs
+    (deletes still run unconditionally — a soft-retired mp's edges get
+    cleaned up but nothing is re-inserted).
+  - The JOINED mp in each role must satisfy
+    `EXISTS (SELECT 1 FROM source_record WHERE master_place_id = other.id AND is_active = true)`.
+- Steps 1-6 preserved byte-for-byte from v0.5 (`20260901000500`). Confirmed
+  by side-by-side diff.
+- **Design decision (chose "A + α"):** filter on `EXISTS(active SR)` — not
+  `is_searchable` (too broad; catches legit land_status mps) and not
+  `source_count > 0` (excludes generated-only mps unnecessarily). Applied
+  to both sides in both roles. No schema change.
+- **Corpus verification:** iterated recompute over 110 canonicals + 119
+  absorbed mps from PR #383's audit trail. Result: 0 orphan `place_relationships`
+  edges where either endpoint currently has 0 active source_records.
+  Pre-v5 this scenario reproduced the ~40-orphan pattern. Directly
+  distinguishing test — a pre-v5 function would fail here.
+- **Hermetic regression test** (`regression-recompute-skip-soft-retired.ts`):
+  seeded canonical (polygon + 1 SR) + soft-retired (point inside, 0 SRs)
+  + normal-other (point inside, 1 SR). Called recompute(canonical).
+  3/3 assertions: normal-other IS linked (positive control); soft-retired
+  NOT linked; recompute(soft-retired) inserts no edges.
+- **v4's post-recompute sweep in `merge_master_place()` unchanged.** With v5
+  in place, v4's DELETE runs but finds nothing to sweep. Kept as
+  belt-and-suspenders; will revisit after PROD proves out.
+- **Fresh-DB apply verification now closed by PR #387's workflow.** Docker
+  wasn't available in-session, so the design brief's fresh-apply gap
+  originally stayed open under a dependency-review substitute. PR #387
+  (merged) added a CI job that fresh-applies every migration on every PR
+  touching `supabase/migrations/**`, including this one — the gap is
+  closed at the PR level, not just at the workflow level.
+- **Migration state:** TEST recompute = v5, TEST merge = v4. PROD still on
+  original v0.5 recompute + v1 merge. PROD apply chain, when authorized:
+  v2 → v3 → v4 → v5.
+- Investigation doc: `docs/investigations/2026-09-04-recompute-skip-soft-retired.md`.
+
 ## 2026-09-03 (later 14) — CI speed: the "test-web is 7x slower" premise did not survive measurement. The real cost is `npm install`, in all four jobs.
 
 - **Measured before diagnosing, and the premise failed.** Across 12 successful
@@ -75,7 +114,6 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   RLS-role behavior (auth is disabled in the workflow). Incremental
   `db push --test` + the existing test job + on-branch verify scripts
   are still the right tools for those.
-
 ## 2026-09-03 — merge executor full run on TEST (v2/v3/v4)
 
 - Executed `execute-merge-groups.ts` against 106 TEST-mapped groups (of

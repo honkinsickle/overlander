@@ -494,6 +494,15 @@ Parks"`, `description_source = 'source'`, 2736-char description).
 `source_count` and `canonical_name` untouched. **The systemic fix is
 still outstanding.**
 
+**Note 2026-09-04:** the recent v5 recompute change
+(`20260904120000_recompute_master_place_skip_soft_retired.sql`) does
+**not** address this item. v5 touches only Step 7 (containment
+`place_relationships`); Step 6's `is_searchable = (primary_category is
+distinct from 'land_status')` is unchanged. The `primary_category`
+resolution that PADUS anchors here still needs to re-evaluate when a
+non-land_status source arrives; that's a separate resolve_field / step-3
+concern, orthogonal to the soft-retire filter.
+
 ## NV State Parks — `fees` scraper bug in upstream scrape (2026-09-02)
 
 The `/Users/adamwagner/nv-state-parks` scrape pipeline

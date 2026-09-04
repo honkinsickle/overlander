@@ -1,3 +1,29 @@
+# STATE — branch `fix-recompute-skip-soft-retired` · 2026-09-04 (later 31) — v5 `recompute_master_place()` skips soft-retired mps at the root. Replaces PR #383's v4 workaround. Applied to TEST; PR #383 v4 still runs but is now a no-op with v5 in place.
+
+(**newest truth: `recompute_master_place()` v5 (`20260904120000`) redefines Step 7's containment scan to exclude master_places with 0 active `source_records`. Fixes at the root the class bug PR #383 papered over with v4's post-recompute delete sweep. Applied to TEST via `db:push-verify -- --test`. Zero PROD writes.**
+
+**Filter design (A + α from the design brief):** the JOINED-side mp in both roles (a) and (b) must satisfy `EXISTS (SELECT 1 FROM source_record WHERE master_place_id = other.id AND is_active = true)`. Additionally, if the RECOMPUTED mp itself has no active source_records, Step 7 deletes its edges (cleanup) but skips the re-insert. Steps 1-6 unchanged byte-for-byte. `[literal — side-by-side diff]`
+
+**Why "EXISTS (active SR)" and not `is_searchable` or `source_count > 0`:** `is_searchable=false` catches BOTH soft-retired mps AND legitimate land_status places (PADUS boundaries etc.), so it's too broad. `source_count` excludes generated-only mps, which are geographically real and should still participate. The EXISTS check is precise. No schema change.
+
+**Verification, direct-repro of the original bug's failure mode:**
+- `verify-v5-recompute-skip-soft-retired.ts`: iterated recompute over 110 canonicals + 119 absorbed mps from PR #383's audit trail. After: **0 orphan edges** (edges where either endpoint currently has 0 active source_records; excludes reversed mps that are un-retired). Pre-v5, this scenario reproducibly generated ~40 orphan edges. `[literal]`
+- `regression-recompute-skip-soft-retired.ts` (hermetic): seeded canonical + polygon + 1 SR, soft-retired mp inside polygon with 0 SRs, normal-other with 1 SR. **3/3 assertions:** normal linked as child ✓, soft-retired NOT linked ✓, recompute on soft-retired inserts no edges ✓. `[literal]`
+
+**v4's post-recompute sweep still runs inside `merge_master_place()` and is kept as belt-and-suspenders.** With v5 in place, v4's DELETE is a no-op in the normal case (nothing to sweep). No plan to remove v4 until at least one PROD merge cycle post-v5 confirms the pattern doesn't reappear.
+
+**Fresh-DB apply verification, closed at PR level by PR #387's workflow:** the `migrations-fresh-apply` GitHub Action now runs on every PR touching `supabase/migrations/**`, applies the full chain from empty via `supabase db start`, and cross-checks the ledger + critical objects + v5 body (gated on the v5 file's presence). Landed as PR #387; also verified on this branch's PR run. `[strong — inferred green from PR run history rather than re-triggering here]`
+
+**Migration state:** TEST = v5 recompute. PROD still on v0.5 recompute + v1 merge_master_place. **PROD apply order (per PR #383 + this PR): apply v2 → v3 → v4 → v5 in a single explicitly-authorized step.**
+
+**Follow-ups filed:**
+- Enrich `merge_audit_log.before_snapshot` to include `place_relationships`, `generated_content`, `photo_candidate` for full-scope reversals (recorded in PR #383).
+- Once v5 is proven in PROD across one merge cycle, revisit whether v4's sweep can be removed for clarity.
+
+**Next steps (Adam's call):** review + merge; Adam decides PROD-apply order + timing.)
+
+---
+
 # STATE — branch `ci-speed-npm-cache` · 2026-09-03 (later 30) — **CI speed: the "test-web is 7x slower" premise is NOT supported by the data. `npm install` is the real cost, in all four jobs — now cached.**
 
 (**newest truth: one `ci.yml` change. No test file, test script or assertion touched. Nothing written to TEST or PROD.**
@@ -150,7 +176,6 @@
 **Deliberately not built on:** #366's "Mapbox tracks settlement not geography" hypothesis (two remote points — #366 says weigh it, don't build on it) and any "Foursquare beats Mapbox" reading (#366 walks that back — name-search vs category-filter are different instruments).
 
 **NEXT: Adam's review. Implementation is a separate pass and was not begun.** The masthead below is preserved verbatim per this file's convention.)
-
 ---
 
 # STATE — branch `merge-executor-full-run-test` · 2026-09-03 (later 28) — executor run against full decidable set on TEST (106 merges). Two mid-run failures triggered v2 and v3 migrations; post-run scan surfaced 41 orphan `place_relationships` edges → v4. All applied to TEST. PROD untouched.
