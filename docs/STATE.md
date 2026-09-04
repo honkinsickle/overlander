@@ -28,6 +28,26 @@
 
 ---
 
+# STATE — branch `ci-fresh-migration-apply` · 2026-09-04 (later 30) — CI job that fresh-applies every migration from empty on every PR that touches `supabase/migrations/**`. Closes PR #385's docker-not-available gap.
+
+(**newest truth: `.github/workflows/migrations-fresh-apply.yml` added. Trigger: PRs (and main pushes) that add/modify any file under `supabase/migrations/**` or the workflow itself. Uses `supabase/setup-cli@v1` + `supabase db start` against a fresh local Postgres 17 container (ubuntu-latest runners have Docker natively). Post-apply cross-checks: (1) `supabase_migrations.schema_migrations` row count matches file count on disk; (2) six critical objects exist (`master_place`, `place_relationships`, `merge_audit_log`, `merge_master_place()`, `recompute_master_place()`, postgis extension); (3) `recompute_master_place` body contains v5's `v_self_has_active_sr` guard — GATED on the v5 file's presence so this workflow works across branches whose main-parent is pre-v5. Zero PROD writes; no touch of any real project.**
+
+**FIRST RUN RESULT:** green after one iteration. Initial run failed at the v5-guard step because this branch's main-parent is at v0.5; fix pushed to gate the check on the v5 file's presence. Second run passed all 5 steps. **The other 4 checks all passed on the first run** — 113 migrations applied cleanly from empty, ledger count matched, all critical objects present. That IS the direct fresh-apply verification PR #385 flagged as its outstanding gap. `[literal — see run 33819816739]`
+
+**Bootstrap detail (worth surfacing).** The repo has no committed `supabase/config.toml` — migrations have always been applied via `db push` to the linked remote, never via a local stack. The workflow generates a minimal config.toml inline (major_version = 17, only `[db]` enabled, everything else disabled to skip auth/storage/studio/kong containers) so no repo file needs to be added or maintained. `[literal — verified by shell-render simulation of the YAML heredoc + confirmed by the green run]`
+
+**Scope of what this CI check catches vs. what it doesn't:**
+- CATCHES: forward-only ordering bugs (a migration referring to a symbol defined later); dependency gaps (a helper renamed but referenced by an old name); mid-migration syntax errors; DDL that silently no-ops on an existing schema but errors on empty; the specific bug PR #385's design brief called out (a chain that stops mid-way and leaves the recompute at an earlier version — the v5-file-gated check catches that class).
+- DOES NOT CATCH: runtime semantics (does the function do the right thing for real data); RLS policies against non-service-role users (`[auth]` is disabled in the workflow to keep the runtime fast — the DB is the only container). For those, incremental `db push --test` + the existing `test` job + on-branch verify scripts remain the tools.
+
+**Why the workflow isn't in the "gate" set on main yet.** New CI checks land as advisory-only for their first cycle. Once merged, promotion to `required` on ruleset 19629589 (alongside `typecheck`, `test`, `test-web`, `build`) is a one-line edit to the ruleset. Adam's call.
+
+**Migration state on TEST:** unchanged from PR #385 (v5 recompute + v4 merge_master_place). This branch is CI-only, adds zero SQL.
+
+**Next steps (Adam's call):** merge → decide whether to promote to `required` status check.)
+
+---
+
 # STATE — branch `category-resolve-theaters-park-renames` · 2026-09-03 (later 28) — **All three #382 items closed. Theaters leaves Culture, `park` → `scenic`, renames declined. One substantive open item left.**
 
 (**newest truth: design only, third amendment in the chain. No code, nothing written to TEST or PROD. Still 9 categories.**
@@ -79,7 +99,6 @@
 **Open decision still open** (`urban` / water fill / showers / dump stations). The amendment gave three of them a parent but not a source — a parent is not a reprieve.
 
 **NEXT: Adam's review. No implementation begun.** The masthead below is preserved verbatim per this file's convention.)
-
 ---
 
 # STATE — branch `category-taxonomy-design` · 2026-09-03 (later 26) — **DESIGN PASS: the 9-category taxonomy is declared canonical, every category is mapped to a parent, and the routing table #364 deferred now exists.**
