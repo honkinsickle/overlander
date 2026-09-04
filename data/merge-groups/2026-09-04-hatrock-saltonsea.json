@@ -1,0 +1,83 @@
+[
+  {
+    "group_id": 83,
+    "size": 4,
+    "states": ["OR"],
+    "canonical_mp_id": "efe59e93-f1da-467e-b678-726108440d78",
+    "canonical_reason": "state_parks-GIS-backed row wins (untagged GIS home)",
+    "absorbed_mp_ids": [
+      "d7ebf7be-b17e-4c2d-b3c7-ef7ace4daee0",
+      "0f13a10f-1c9a-4974-bc3a-51ccce029bb2"
+    ],
+    "excluded_ids": ["971799f0-a736-474a-b443-5bc84bb27085"],
+    "member_sides": [
+      {
+        "id": "efe59e93-f1da-467e-b678-726108440d78",
+        "canonical_name": "Hat Rock State Park",
+        "source_ids": ["state_parks", "wikipedia"],
+        "source_count": 1,
+        "has_polygon": true
+      },
+      {
+        "id": "d7ebf7be-b17e-4c2d-b3c7-ef7ace4daee0",
+        "canonical_name": "Hat Rock State Park",
+        "source_ids": ["oregon_state_parks"],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "0f13a10f-1c9a-4974-bc3a-51ccce029bb2",
+        "canonical_name": "Hat Rock State Park",
+        "source_ids": ["nps"],
+        "source_count": 1,
+        "has_polygon": false
+      },
+      {
+        "id": "971799f0-a736-474a-b443-5bc84bb27085",
+        "canonical_name": "Hat Rock",
+        "source_ids": ["nps"],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "excluded member 971799f0 is contained_in the canonical's polygon — containment is not identity"
+    ],
+    "decision_note": "CORRECTS PR #379's group 83. #379 read the two NPS rows as an intra-NPS duplicate and proposed a 3-way merge to the OR visitor row. Reading the descriptions reverses that: nps:place:84986DF5 ('Hat Rock') is the basalt formation and says so — 'a formation of exposed basalt that rises approximately 70 feet... It is located within the 719-acre Hat Rock State Park' — while nps:place:2E2CB476 ('Hat Rock State Park') describes the park's pond, boat access and volleyball court. The shared npmapId that suggested a duplicate is a Lewis-and-Clark-trail identifier, not a place id: 299 distinct NPS place records share it, and 4,555 NPS place records carry only 37 distinct npmapIds. efe59e93 (the state_parks polygon, never in #379's group) is added as canonical; the rock is excluded. See docs/investigations/2026-09-04-group-6-and-83.md.",
+    "provenance": "PROD ids, measured 2026-09-03. Not present on TEST — TEST and PROD are independent corpora with independent UUIDs."
+  },
+  {
+    "group_id": 5001,
+    "size": 2,
+    "states": ["CA"],
+    "canonical_mp_id": "5d448eb4-81c1-4d8a-90fb-d031d023cdab",
+    "canonical_reason": "state_parks-GIS-backed row wins (untagged GIS home)",
+    "absorbed_mp_ids": ["02106f71-f51c-4813-89e3-65daa6040bd6"],
+    "member_sides": [
+      {
+        "id": "5d448eb4-81c1-4d8a-90fb-d031d023cdab",
+        "canonical_name": "Salton Sea SRA",
+        "source_ids": ["state_parks"],
+        "source_count": 1,
+        "has_polygon": true
+      },
+      {
+        "id": "02106f71-f51c-4813-89e3-65daa6040bd6",
+        "canonical_name": "Salton Sea State Recreation Area",
+        "source_ids": ["california_state_parks"],
+        "source_count": 1,
+        "has_polygon": false
+      }
+    ],
+    "pair_keys": [],
+    "conflict_summary": [],
+    "risk_summary": [
+      "NET-NEW pairing — never produced by the classifier, so it has none of the 106 groups' prior validation history",
+      "group_id 5001 is outside the classifier's 1..123 range so it cannot collide if the preview tool is re-run"
+    ],
+    "decision_note": "NET-NEW group, not an edit to group 6. Group 6 (02106f71 SRA-visitor vs 79c97694 atlas 'Salton Sea') stays DIFFERENT and is NOT merged: the atlas row describes the saline lake ('about 15 miles wide and 35 miles long'), the visitor row describes a 15,000-acre park unit on its northeast shore. 79c97694 appears nowhere in this file. That atlas id is named here only to record the decision — it is deliberately absent from every functional field (canonical_mp_id, absorbed_mp_ids, excluded_ids, member_sides) of every group in this file. This group instead pairs the SRA visitor row with the SRA's own state_parks record, which the classifier never grouped: their names differ by abbreviation (trigram similarity 0.323 between 'Salton Sea State Recreation Area' and 'Salton Sea SRA') and their centroids are 13,078.4 m apart because the state_parks centroid is the centroid of a multi-part shoreline polygon. The visitor point sits 7.7 m outside that polygon. See docs/investigations/2026-09-04-group-6-and-83.md.",
+    "provenance": "PROD ids, measured 2026-09-03. Not present on TEST — TEST and PROD are independent corpora with independent UUIDs."
+  }
+]

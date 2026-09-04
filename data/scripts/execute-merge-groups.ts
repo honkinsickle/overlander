@@ -69,10 +69,19 @@ const TEST_HOST = "znldzjdatkogdktymtvi.supabase.co";
 /**
  * Groups blocked by default until Adam explicitly resolves them (PR #379).
  * These are the group_id values from the dry-run tool's output:
- *   6  — Salton Sea SRA vs "Salton Sea" (probably should move to DIFFERENT)
- *   83 — Hat Rock (OR), 3-way with intra-NPS duplicate
+ *   6  — Salton Sea SRA vs "Salton Sea". RESOLVED: not a duplicate. The atlas
+ *        row is the saline lake, the visitor row is a park unit on its shore.
+ *        Stays blocked because the resolution is "never merge this", and the
+ *        block is what enforces that.
+ *   83 — Hat Rock (OR). RESOLVED: the two NPS rows are the rock formation and
+ *        the park containing it, not an intra-NPS duplicate. A corrected
+ *        definition lives in data/merge-groups/, but it still needs
+ *        --force-blocked so that running it is always a deliberate act.
+ *   5001 — Salton Sea SRA visitor + its state_parks row. NET-NEW pairing the
+ *        classifier never produced, so it has none of the 106 groups' prior
+ *        validation history. Blocked for the same reason.
  */
-const DEFAULT_BLOCKED_GROUPS = new Set<number>([6, 83]);
+const DEFAULT_BLOCKED_GROUPS = new Set<number>([6, 83, 5001]);
 
 interface CliArgs {
   groups: number[];
