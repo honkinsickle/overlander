@@ -57,6 +57,42 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
 - Still open (BACKLOG): shared client cache (ADR step 4), curving-route/polyline
   support; Date Detail cutover.
 
+## 2026-09-03 (later 3) — Date Detail (`POST /api/places/details`) cut onto enrichByGoogleId()
+
+- Migrated the last flag-gated read surface. Removed `DATE_DETAIL_USE_RESOLVER`
+  + the legacy inline `placeDetails` loop; the route now delegates cache-misses
+  to `enrichByGoogleId()` unconditionally. With #398, **all three read surfaces
+  are now flag-free on the resolver**; no `*_USE_RESOLVER` flags remain.
+- **Confirmed by-id enrichment fits the resolver** (the task's core question):
+  `enrichByGoogleId()` (#263) returns `Record<placeId, PlaceRich>` — the exact
+  contract — with the same include-`{}` / omit+negatively-cache-`null` semantics.
+  Clean removal, not a forced fit.
+- **The Auto/Repair class can't occur here and I checked anyway.** No
+  category→source mapping — both paths call the identical `placeDetails` (Google
+  passthrough), so category can't diverge (design §D3). Parity check confirmed it
+  incl. the `category` field.
+- **Real before/after parity on TEST:** 24 real Google place_ids sourced live
+  from Google searchNearby across CA/OR/UT, legacy vs resolver with SEPARATE fresh
+  caches → identical `{placeId: PlaceRich}` maps, 0 mismatches (all fields incl.
+  category). Sourcing gotcha: live Google results carry the id as `gpl/<id>`, not
+  a `.placeId` field — extract via `googlePlaceIdOf(parsePlaceId(p.id))`.
+- **No coverage gap → no fallback** (unlike trip-browse's degenerate day):
+  non-Google ids → null in both (omitted); empty → `{}` in both.
+- **Dead code removed:** `chunk`/`BATCH_SIZE` in batch.ts (only viaLegacy used
+  them). The 40 fan-out ceiling is preserved via `enrichByGoogleId`'s
+  `ENRICH_BATCH=40`. Concurrency nuance: new path batches over misses-only, so it
+  can reach a fuller 40-wide fan-out; both cap at 40 (within contract).
+- **Full self-review** via code-reviewer subagent: verdict READY, 0
+  critical/important, 3 minor — fixed 2 (stale route comment, interleaved-cache
+  order test), 1 left (a stale `DATE_DETAIL_USE_RESOLVER` mention in trip-browse's
+  route comment — different subsystem, out of scope).
+- Files: `places/details/{route,handler,batch}.ts` + both test files + the verify
+  script. Client `{details}` unchanged; no `web/src/components` change; no
+  DB/corpus writes (pure Google passthrough). Gates: web typecheck clean, web test
+  706, next build exit 0; live TEST verify passes.
+- Still open (BACKLOG): shared client cache (ADR step 4) — the one remaining
+  consolidation item.
+
 ## 2026-09-03 (later) — Auto/Repair wired to live Mapbox (`auto_repair` + `car_wash`)
 
 - Wired the Find Nearby **Auto/Repair** tile (`car_repair`/`car_wash` primaries)
