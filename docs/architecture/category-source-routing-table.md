@@ -14,6 +14,41 @@ is the table.
 
 ---
 
+## ⚠ AMENDED 2026-09-03 by the five-source routing investigation
+
+`docs/investigations/2026-09-03-source-to-category-routing.md` re-measured this
+table's inputs across all five sources — including **Overpass/OSM** and
+**Foursquare's category filter**, neither of which #364 or #366 examined — and
+added a genuinely remote sample tier. **Five rows below are contradicted.** They
+are left in place with pointers rather than rewritten, so the change is legible:
+
+1. **`urban` is NOT R4 NONE.** Mapbox `shopping_mall` **exists** in the 482-id
+   canonical list and returns 6/6 metro, 4/6 rural. Only `city_park` is absent.
+   §2/`urban` and §3.3 overstate the finding — see the investigation §5.
+2. **Showers / dump stations / water fill are not sourceless.** OSM holds
+   **945 / 521 / 10,113** nodes across the six states, and `osm.ts` already maps
+   all three tags. §3.3's "no amount of wiring makes these work" is right about
+   *wiring* and wrong about *sourcing* — see the investigation §6.
+3. **The EV row's "one wired source id" is wrong.** `ev_charging` is absent from
+   `LIVE_SLIDE_FOR_PRIMARY` *and* mis-mapped to `gas_station` in
+   `MAPBOX_CATEGORY_FOR_PRIMARY`. Two lines, two files — see §4 item 1 below.
+4. **Do NOT wire `grocery`+`supermarket` or `historic_site`+`monument` as
+   pairs**, and do NOT wire `tourist_attraction` to `oddity` — measured
+   taxonomy overlaps, investigation §9.
+5. **Foursquare is not blocked.** Its *taxonomy enumeration* 404s (reproduced,
+   24/24); its *category filter* returns HTTP 200 and is what production already
+   calls. The §2 provenance note conflates the two.
+
+**Also: §3.1 is marked RESOLVED but is NOT implemented** — `resolve-places.ts:241`
+still routes museum/art_gallery/historical_landmark to `oddity`.
+
+**And upstream of most of the corpus depths in this table:** 82.3% of OSM's
+source_records are `is_active = false`, which is what holds 5,946 ingested gas
+stations and ~6,100 viewpoints out of the export view. Cause undetermined;
+investigation §7.
+
+---
+
 ## 0. Provenance and what may be read off this table
 
 - **Corpus depths** are `[literal]` — #364's read-only instrument re-run against
@@ -229,13 +264,29 @@ a laundry primary is ever ingested.
 
 | Subtype | Corpus `[literal]` | Live available | Coverage `[cited #366]` | Rule | resolvePlaces serves? |
 |---|--:|---|---|---|---|
-| `shopping_mall`, `city_park` | **0 and 0** | Mapbox has neither as wired | — | **R4 NONE** | **No** |
+| `shopping_mall` | **0** | ⚠ **CORRECTED 2026-09-03 — Mapbox `shopping_mall` EXISTS** (in the 482-id canonical list) and returns **6/6 metro, 4/6 rural, 0/6 remote**; FSQ has a Shopping Mall category too | see left | **R2 LIVE-PRIMARY, unwired** | **No — unwired, not unsourceable** |
+| `city_park` | **0** | **none** — absent from Mapbox's canonical list | — | **R4 NONE** | **No** |
 
 **`urban` is structurally empty, not merely sparse** `[literal]` — both of its
 claimed primaries have zero corpus rows. `[cited #366]` Mapbox `park` is dense
 (6/6, 6/6) but *"is a different concept and maps more naturally to `scenic`."*
 **RESOLVED 2026-09-03: `park` routes to `scenic`** (§3.2), leaving `urban` with
-no live source and no corpus — **nothing routes to it at all.**
+~~no live source and no corpus — **nothing routes to it at all.**~~
+
+⚠ **CORRECTED 2026-09-03 — the "no live source" half is FALSE.** `[literal, the
+five-source investigation]` Mapbox's canonical list was enumerated in full (482
+ids) rather than spot-checked, and **`shopping_mall` is in it**, returning
+**6/6 metro, 4/6 rural** across all six states (150 + 22 features); Foursquare
+carries a Shopping Mall category as well (6/6 metro, 204 features). **Only
+`city_park` is genuinely absent.** So `urban` is **unwired, not unsourceable**.
+
+The **corpus** half of the finding stands unchanged: 0 rows, both primaries.
+
+**This does not reopen Decision 9.** Whether an `urban` chip returns is Adam's
+call, and one live-sourceable primary that is `0/6` at remote points is a weak
+argument for a chip in an overlanding product. The correction is recorded
+because the decision cited "no live source" as a premise, and that premise was
+measured wrong.
 
 **FINAL, Decision 9: `urban` is REMOVED from the UI.** No chip in the browse
 filter row, no Find Nearby presence. **It remains one of the canonical nine in
@@ -337,8 +388,15 @@ for one.
 Ordered by measured value per unit of work. **Nothing here is authorised** — it
 is what the table says, for the follow-up pass to argue with.
 
-1. **Wire Mapbox `charging_station` → `fuel`.** One id; makes ~2.9k existing
-   corpus EV rows live-reachable and closes #364's worst-rated inconsistency.
+1. **Wire Mapbox `charging_station` → `fuel`.** ~~One id~~ — **CORRECTED
+   2026-09-03: TWO lines in TWO files, and doing only the obvious one is worse
+   than doing nothing.** `ev_charging` is absent from `LIVE_SLIDE_FOR_PRIMARY`
+   (so the request never reaches a source) *and* `MAPBOX_CATEGORY_FOR_PRIMARY`
+   maps `ev_charging → gas_station` (so closing only the first gap returns **gas
+   stations** under the EV tile — #394's exact failure mode). Add
+   `ev_charging: "fuel"` **and** repoint to `charging_station`. Still the
+   highest-value change here; makes ~2.9k existing corpus EV rows live-reachable
+   and closes #364's worst-rated inconsistency.
 2. ~~**Wire Mapbox `auto_repair`/`repair_shop`/`car_wash`.**~~ **DONE 2026-09-03.**
    Wired `auto_repair` + `car_wash` only — `repair_shop` was live-probed and
    returns appliance/electronics/furniture repair (`poi_category: "repair shop"`),
