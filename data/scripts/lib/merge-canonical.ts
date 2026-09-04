@@ -15,6 +15,12 @@
  * The "undecidable" outcome is a first-class value in the return type; the
  * executor MUST treat it as a hard stop for that group. See PR #379 for the
  * 8 undecidable groups this rule produces on the current SAME-bucket set.
+ *
+ * This module also owns `resolveGroupMembers()` — the split between members
+ * that actually merge and members deliberately excluded from the merge. It
+ * lives here rather than in the executor because the canonical pick must be
+ * computed over the MERGING members only: excluding a member can change who
+ * wins, so the two operations cannot be separated without introducing drift.
  */
 
 /** The six visitor-content source_ids (one per state, six-state promotion). */
@@ -90,4 +96,59 @@ export function pickCanonicalGroup<T extends MemberForCanonical>(
     canonical: null,
     reason: `${top.length} members tie at score ${max} — needs manual review`,
   };
+}
+
+export interface GroupMemberSplit<T extends MemberForCanonical> {
+  /** Members that participate in the merge (canonical + absorbed). */
+  merging: T[];
+  /** Members deliberately held out — the executor must not touch these. */
+  excluded: T[];
+}
+
+/**
+ * Split a group's members into the ones that merge and the ones deliberately
+ * excluded.
+ *
+ * Why this exists: the union-find grouping in the dry-run tool pulls in any
+ * master_place connected by a SAME pair, but "connected" is not always "the
+ * same real-world place". Group 83 (Hat Rock, OR) is the worked example — the
+ * NPS `Hat Rock` row is the rock formation *inside* Hat Rock State Park, not
+ * another copy of the park, so it must survive the merge untouched while its
+ * two group-mates collapse together.
+ *
+ * Excluding is deliberately NOT the same as deleting the member from the group
+ * file. Keeping it listed in `member_sides` with an `excluded_ids` entry
+ * preserves the record that the grouping saw it and that a human ruled on it.
+ *
+ * Throws rather than silently coercing on every malformed case — this feeds a
+ * write path, so an unrecognised id is a stop, not a no-op.
+ */
+export function resolveGroupMembers<T extends MemberForCanonical>(
+  members: T[],
+  excludedIds: readonly string[] | undefined,
+): GroupMemberSplit<T> {
+  const excludeSet = new Set(excludedIds ?? []);
+  if (excludeSet.size === 0) return { merging: members, excluded: [] };
+
+  const memberIds = new Set(members.map((m) => m.id));
+  const unknown = [...excludeSet].filter((id) => !memberIds.has(id));
+  if (unknown.length > 0) {
+    throw new Error(
+      `excluded_ids contains id(s) that are not members of this group: ${unknown.join(", ")}`,
+    );
+  }
+
+  const merging = members.filter((m) => !excludeSet.has(m.id));
+  const excluded = members.filter((m) => excludeSet.has(m.id));
+
+  // A merge needs a canonical plus at least one absorbed row. Excluding down
+  // to 0 or 1 member means the group should have been dropped, not merged.
+  if (merging.length < 2) {
+    throw new Error(
+      `excluding ${excludeSet.size} member(s) leaves ${merging.length} — a merge needs at least 2. ` +
+        `Drop the group instead of excluding into a no-op.`,
+    );
+  }
+
+  return { merging, excluded };
 }

@@ -31,6 +31,11 @@
  *      suspenders against loss of merge_audit_log rows (unlikely; a hedge).
  *   8. Prints canonical/absorbed IDs + moves per group so an operator can
  *      trace what happened in the terminal.
+ *   9. Honours a group's optional `excluded_ids`: members the grouping pulled
+ *      in that a human has ruled are NOT the same real-world place. They are
+ *      never sent to merge_master_place(), so the row is left completely
+ *      untouched — no absorb, no source_record move, no relationship edge.
+ *      The canonical is re-picked over the MERGING members only.
  *
  * Usage:
  *   # Dry-run against a specific group (default target=test, no writes)
@@ -50,7 +55,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pickCanonicalGroup, type MemberForCanonical } from "./lib/merge-canonical.ts";
+import {
+  pickCanonicalGroup,
+  resolveGroupMembers,
+  type MemberForCanonical,
+} from "./lib/merge-canonical.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
@@ -124,6 +133,14 @@ function parseArgs(): CliArgs {
   return args;
 }
 
+interface MemberSide {
+  id: string;
+  canonical_name: string;
+  source_ids: string[];
+  source_count: number;
+  has_polygon: boolean;
+}
+
 interface GroupIn {
   group_id: number;
   size: number;
@@ -131,10 +148,30 @@ interface GroupIn {
   canonical_mp_id: string | null;
   canonical_reason: string;
   absorbed_mp_ids: string[];
-  member_sides: Array<{ id: string; canonical_name: string; source_ids: string[]; source_count: number; has_polygon: boolean }>;
+  member_sides: MemberSide[];
   pair_keys: string[];
   conflict_summary: string[];
   risk_summary: string[];
+  /**
+   * Members that the grouping pulled in but that a human has ruled are NOT
+   * the same real-world place. They stay listed in `member_sides` (so the
+   * record of the decision survives) but are never sent to
+   * merge_master_place(). Optional — absent means "merge every member".
+   */
+  excluded_ids?: string[];
+}
+
+/**
+ * The concrete write plan for one group, after exclusions are applied.
+ * Everything downstream — the drift check, the printout and the RPC call —
+ * reads THIS, never `g.absorbed_mp_ids` directly, so an excluded member
+ * cannot leak into a write through a path that forgot to filter.
+ */
+interface GroupPlan {
+  canonicalId: string;
+  absorbedIds: string[];
+  excluded: MemberSide[];
+  canonicalReason: string;
 }
 
 function readGroups(path: string): GroupIn[] {
@@ -171,22 +208,77 @@ function parseEnvFile(path: string): Record<string, string> {
 }
 
 /**
- * Sanity-check that the dry-run's canonical pick matches what the shared
- * canonical rule says NOW. Guards against a stale input file where the
- * dry-run output was computed against a different member roster than the
- * tool would compute today.
+ * Build the write plan for one group and sanity-check it.
+ *
+ * Two things happen here, in this order, and the order matters:
+ *   1. Exclusions are applied, so the canonical is picked over the members
+ *      that will ACTUALLY merge. Picking first and excluding second could
+ *      elect a canonical that is then held out of its own merge.
+ *   2. The re-picked canonical is compared against the one recorded in the
+ *      input file. Guards against a stale input whose canonical was computed
+ *      against a different roster than the rule would produce today.
+ *
+ * Throws on any inconsistency — this feeds a write path.
  */
-function verifyCanonicalStillMatches(g: GroupIn): { ok: boolean; message: string } {
-  const members = g.member_sides.map<MemberForCanonical>((m) => ({ id: m.id, source_ids: m.source_ids }));
-  const pick = pickCanonicalGroup(members);
-  if (pick.canonical == null && g.canonical_mp_id == null) return { ok: true, message: "both undecidable (matches)" };
-  if (pick.canonical?.id !== g.canonical_mp_id) {
-    return {
-      ok: false,
-      message: `canonical drift: dry-run said ${g.canonical_mp_id ?? "null"}, shared-lib says ${pick.canonical?.id ?? "null"}`,
-    };
+function planGroup(g: GroupIn): GroupPlan {
+  const asCanonical = (m: MemberSide): MemberForCanonical => ({ id: m.id, source_ids: m.source_ids });
+
+  if (g.excluded_ids?.includes(g.canonical_mp_id ?? "")) {
+    throw new Error(
+      `group ${g.group_id}: canonical_mp_id ${g.canonical_mp_id} is also in excluded_ids. ` +
+        `Pick a different canonical or stop excluding it.`,
+    );
   }
-  return { ok: true, message: `matches (${pick.reason})` };
+
+  const split = resolveGroupMembers(g.member_sides.map((m) => ({ ...m, ...asCanonical(m) })), g.excluded_ids);
+  const pick = pickCanonicalGroup(split.merging.map(asCanonical));
+
+  if (pick.canonical == null) {
+    throw new Error(
+      `group ${g.group_id}: canonical is undecidable over the merging members ` +
+        `(${pick.reason}). Refusing to write.`,
+    );
+  }
+  if (pick.canonical.id !== g.canonical_mp_id) {
+    throw new Error(
+      `group ${g.group_id}: canonical drift — input file says ${g.canonical_mp_id ?? "null"}, ` +
+        `shared-lib says ${pick.canonical.id} over the ${split.merging.length} merging member(s). ` +
+        `Refusing to write against stale dry-run output.`,
+    );
+  }
+
+  const absorbedIds = split.merging.map((m) => m.id).filter((id) => id !== pick.canonical!.id);
+
+  // Belt-and-suspenders: an excluded id must never reach the RPC.
+  const leaked = absorbedIds.filter((id) => (g.excluded_ids ?? []).includes(id));
+  if (leaked.length > 0) {
+    throw new Error(`group ${g.group_id}: excluded id(s) leaked into absorbed set: ${leaked.join(",")}`);
+  }
+
+  // Regression guard for the 106 already-validated groups. The absorbed set is
+  // now DERIVED (members minus canonical, minus exclusions) rather than read
+  // verbatim from the file. That matches how the dry-run tool builds it
+  // (merge-preview-same-pairs.ts:553), so a group with no exclusions must come
+  // out byte-identical to before this capability existed. Assert it rather
+  // than trusting the two derivations to stay in step.
+  if (!g.excluded_ids || g.excluded_ids.length === 0) {
+    const fromFile = [...g.absorbed_mp_ids].sort();
+    const derived = [...absorbedIds].sort();
+    if (JSON.stringify(fromFile) !== JSON.stringify(derived)) {
+      throw new Error(
+        `group ${g.group_id}: derived absorbed set differs from the input file's and no exclusions are declared. ` +
+          `file=[${fromFile.join(",")}] derived=[${derived.join(",")}]. ` +
+          `Refusing to write — the group file and the executor disagree about who merges.`,
+      );
+    }
+  }
+
+  return {
+    canonicalId: pick.canonical.id,
+    absorbedIds,
+    excluded: split.excluded,
+    canonicalReason: pick.reason,
+  };
 }
 
 async function main(): Promise<void> {
@@ -221,16 +313,18 @@ async function main(): Promise<void> {
     throw new Error(`group(s) have no canonical pick in input: [${undecidable.map((g) => g.group_id).join(",")}]`);
   }
 
-  // Verify each still matches the shared-lib rule (guards against stale input)
+  // Build every plan up front. planGroup() applies exclusions, re-picks the
+  // canonical over the merging members and throws on drift, so a bad group
+  // aborts the whole run BEFORE any group is written.
+  const plans = new Map<number, GroupPlan>();
   for (const g of requested) {
-    const check = verifyCanonicalStillMatches(g);
-    if (!check.ok) throw new Error(`group ${g.group_id}: ${check.message}. Refusing to write against stale dry-run output.`);
+    plans.set(g.group_id, planGroup(g));
   }
 
   if (args.dryRun) {
     console.log("\n=== DRY-RUN — no writes ===");
     for (const g of requested) {
-      printGroupPlan(g);
+      printGroupPlan(g, plans.get(g.group_id)!);
     }
     return;
   }
@@ -243,15 +337,19 @@ async function main(): Promise<void> {
 
   console.log(`\n=== EXECUTING against ${args.target.toUpperCase()} — ${requested.length} group(s) ===`);
   for (const g of requested) {
-    printGroupPlan(g);
+    const plan = plans.get(g.group_id)!;
+    printGroupPlan(g, plan);
     console.log(`\n> calling merge_master_place() for group ${g.group_id} ...`);
     const rpc = await db.rpc("merge_master_place", {
-      p_canonical_mp_id: g.canonical_mp_id,
-      p_absorbed_mp_ids: g.absorbed_mp_ids,
+      p_canonical_mp_id: plan.canonicalId,
+      p_absorbed_mp_ids: plan.absorbedIds,
       p_executed_by: args.executedBy,
       p_target_env: args.target,
       p_group_id: g.group_id,
-      p_notes: args.notes ?? `merge-groups-executor group=${g.group_id}`,
+      p_notes:
+        args.notes ??
+        `merge-groups-executor group=${g.group_id}` +
+          (plan.excluded.length > 0 ? ` excluded=${plan.excluded.map((m) => m.id).join("+")}` : ""),
     });
     if (rpc.error) {
       console.error(`\n✗ RPC FAILED for group ${g.group_id}:`, rpc.error);
@@ -272,14 +370,17 @@ async function main(): Promise<void> {
   console.log(`Audit rows in public.merge_audit_log. Local copies in .context/execute-merge-audit-${runStamp}-*.json.`);
 }
 
-function printGroupPlan(g: GroupIn): void {
+function printGroupPlan(g: GroupIn, plan: GroupPlan): void {
   console.log(`\n--- group ${g.group_id} (size ${g.size}, states ${g.states.join("+")}) ---`);
-  const canonicalMember = g.member_sides.find((m) => m.id === g.canonical_mp_id);
-  console.log(`  canonical: ${canonicalMember?.canonical_name} [${canonicalMember?.source_ids.join("+")}] id=${g.canonical_mp_id}`);
-  console.log(`  canonical reason: ${g.canonical_reason}`);
-  for (const absorbed_id of g.absorbed_mp_ids) {
+  const canonicalMember = g.member_sides.find((m) => m.id === plan.canonicalId);
+  console.log(`  canonical: ${canonicalMember?.canonical_name} [${canonicalMember?.source_ids.join("+")}] id=${plan.canonicalId}`);
+  console.log(`  canonical reason: ${plan.canonicalReason}`);
+  for (const absorbed_id of plan.absorbedIds) {
     const m = g.member_sides.find((x) => x.id === absorbed_id);
     console.log(`  absorbed:  ${m?.canonical_name} [${m?.source_ids.join("+")}] id=${absorbed_id}`);
+  }
+  for (const m of plan.excluded) {
+    console.log(`  EXCLUDED:  ${m.canonical_name} [${m.source_ids.join("+")}] id=${m.id} — left untouched, not merged`);
   }
   if (g.risk_summary.length > 0) {
     console.log(`  risks (${g.risk_summary.length}):`);
