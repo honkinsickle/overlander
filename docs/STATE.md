@@ -1,3 +1,29 @@
+# STATE — branch `ci-speed-npm-cache` · 2026-09-03 (later 30) — **CI speed: the "test-web is 7x slower" premise is NOT supported by the data. `npm install` is the real cost, in all four jobs — now cached.**
+
+(**newest truth: one `ci.yml` change. No test file, test script or assertion touched. Nothing written to TEST or PROD.**
+
+**⚠️ THE PREMISE FAILED UNDER MEASUREMENT, AND THAT IS THE HEADLINE.** `[literal]` Across **12** successful runs the medians are **`test-web` 106s · `typecheck` 70s · `test` 69s · `build` 78s**, and the per-run ratio of `test-web` to the median of the other three sits at **0.74x–1.16x in 11 of the 12**. **There is no 7x.** There is exactly **one** outlier — run `33818552787` at **4.94x**.
+
+**And the outlier was not the tests either.** `[literal]` In that run `test-web` spent **375s in `npm install`** and **12s** running the suite. The `test` job in the same run spent 60s installing. Same phase, same variance, different magnitude — it was a slow install, not a slow suite.
+
+**ALL THREE HYPOTHESES IN THE BRIEF ARE RULED OUT BY ONE NUMBER.** `[literal]` **The web suite runs 12s in every run sampled**, fast or slow. It cannot be the glob serialising, a missing node concurrency flag, or tsx transpile overhead — none of those could hide behind a constant 12s. Meanwhile `npm install` ranged **27s → 375s** across the same runs and moved **in lockstep across all four jobs**.
+
+**The actual defect:** `setup-node`'s `cache: npm` caches only the npm **download** cache (`~/.npm`) — node_modules was relinked from scratch on every run, in every job. **Fixed by caching `node_modules` keyed on the `package-lock.json` hash, with `npm ci` only on a miss.** Any lockfile change busts the key, so a stale tree cannot survive a dependency change.
+
+**Verified the new install path, not just dry-run.** `[literal]` A real `npm ci` from clean produced a tree passing `npm run -w web test` (**714/714**), `npm run -w web typecheck` and `npm run -w data typecheck`. Changing the install command for **four required checks** without executing it once would have been reckless.
+
+**⚠️ TRADEOFF, STATED NOT BURIED: on a cache MISS this is not faster.** `npm ci` and `npm install` both install from empty. **The entire saving is on hits**, so it depends on the lockfile staying stable between runs — `[strong inference]` likely in this repo, where most recent work is docs, but **not measured**.
+
+**Cache scope changes how the result reads:** Actions caches written on a branch are visible to that branch and to PRs targeting it, so **the first run after this lands is a miss by definition** and shows no saving.
+
+**Measured cache-miss run** (`33822178024`) `[literal]`: install **74–169s** per job; the work steps unchanged — web suite 10s, data suite 14s, typecheck 11s+9s, build 25s. **Cache-hit figures are recorded in the PR.**
+
+**NOT DONE, deliberately:** `web/package.json`'s `test` script is untouched. The measurement says the suite is not the bottleneck, so changing the glob or adding a concurrency flag would be a speculative rewrite against evidence.
+
+**NEXT: Adam's review — not self-merged, because this changes required CI behaviour.** The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `category-resolve-theaters-park-renames` · 2026-09-03 (later 28) — **All three #382 items closed. Theaters leaves Culture, `park` → `scenic`, renames declined. One substantive open item left.**
 
 (**newest truth: design only, third amendment in the chain. No code, nothing written to TEST or PROD. Still 9 categories.**

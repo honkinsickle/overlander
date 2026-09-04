@@ -2022,6 +2022,28 @@ Found during a read-only merge-quality audit of the (then) 623 corpus-wide
   that directly — zero mock coupling, non-brittle. Deferred deliberately
   to avoid restructuring `matcher.ts` while the fix sits in an unmerged PR.
 
+## CI dependency install dominates every job — node_modules now cached (2026-09-03)
+
+`[literal, measured over 12 successful runs]` The work each CI job actually does
+is small and stable — web suite **12s** in every run sampled, data suite 9-14s,
+typecheck ~20s, build ~25s — while `npm install` ranged **27s to 375s** and moved
+in lockstep across all four jobs. `setup-node`'s `cache: npm` caches only
+`~/.npm`, so node_modules was relinked every run.
+
+Fixed by caching `node_modules` on the lockfile hash (`npm ci` on miss only).
+**Open follow-ups, none blocking:**
+
+- **Hit rate is unmeasured.** The saving exists only on cache hits; on a miss
+  `npm ci` is no faster than `npm install` was. If the lockfile churns more than
+  expected this could be neutral or slightly negative. Worth re-checking the
+  job medians after a week of real PRs.
+- **The "7x test-web" belief that prompted this work was not supported** — the
+  measured ratio was 0.74x-1.16x in 11 of 12 runs, with one 4.94x outlier caused
+  by a 375s install. Recorded so the belief is not re-formed from memory.
+- **Runner congestion is a separate, larger effect.** Several runs had *every*
+  job at 150-455s. Caching does not address that and nothing here should be read
+  as fixing it.
+
 ## Doc hygiene — check CLAUDE.md's CI description against `.github/workflows/ci.yml` (2026-08-16)
 
 CLAUDE.md describes the CI gates in prose ("CI runs `typecheck`, `test`,
