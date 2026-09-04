@@ -49,21 +49,29 @@ Four independent reproductions of #364's counts is the reason this design treats
 `[literal]` Names exactly as they exist today. The display/fetch split is the one
 documented divergence.
 
-| # | Display key (`Category`, DESIGN.md §1.2) | Fetch key (`SlideCategoryKey`) | Chip label (`browseCardPalette`) | Section label (`browse-day-section.tsx`) |
-|---|---|---|---|---|
-| 1 | `camping` | `camping` | CAMPING | Camping & Overnights |
-| 2 | `scenic` | `scenic` | SCENIC | Sights & Landmarks |
-| 3 | `attraction` | `attraction` | ATTRACTION | Attractions |
-| 4 | `oddity` | `oddity` | ODDITY | Oddities |
-| 5 | `food` | `food` | FOOD | Food |
-| 6 | `fuel` | `fuel` | FUEL | Fuel |
-| 7 | **`hotel`** | **`overnight`** | HOTEL | Overnights |
-| 8 | `urban` | `urban` | URBAN | Urban |
-| 9 | `interest` | `interest` | POINT OF INTEREST | Points of Interest |
+| # | Display key (`Category`, DESIGN.md §1.2) | Fetch key (`SlideCategoryKey`) | Chip label (`browseCardPalette`) | Section label (`browse-day-section.tsx`) | Surfaced? |
+|---|---|---|---|---|---|
+| 1 | `camping` | `camping` | CAMPING | Camping & Overnights | yes |
+| 2 | `scenic` | `scenic` | SCENIC | Sights & Landmarks | yes |
+| 3 | `attraction` | `attraction` | ATTRACTION | Attractions | yes |
+| 4 | `oddity` | `oddity` | ODDITY | Oddities | yes |
+| 5 | `food` | `food` | FOOD | Food | yes |
+| 6 | `fuel` | `fuel` | FUEL | Fuel | yes |
+| 7 | **`hotel`** | **`overnight`** | HOTEL | Overnights | yes |
+| 8 | `urban` | `urban` | URBAN | Urban | ⚠️ **canonical, but renders NO chip — Decision 9** |
+| 9 | `interest` | `interest` | POINT OF INTEREST | Points of Interest | chip yes, **no subtypes** (§4.6) |
 
 Row 7 is the only non-identity mapping, bridged by `browseCategoryToSlide` /
 `slideCategoryToBrowseCategory` (`palette.ts`) and `TRIP_CATEGORY_TO_SLIDE`
 (`places.ts`). **This ADR does not rename either side** — see ADR §Consequences.
+
+**⚠️ Row 8 is the one to read carefully. The taxonomy is 9; the UI renders 8
+chips.** `urban` stays canonical — its `SlideCategoryKey` member, its
+`BROWSE_CARD_CATEGORIES` entry, its DESIGN.md §1.2 tokens and its section label
+all remain — but **Decision 9 removes its chip**, because nothing routes to it.
+That is the ADR's Decision 5 ("a data contract does not oblige a chip") applied
+to a parent. **Counting chips in the product and getting 8 is the intended
+outcome, not a bug.**
 
 ---
 
@@ -87,16 +95,19 @@ it.**
 | Coffee | FOOD | — | `cafe` | **food** | `[literal]` |
 | Restaurants | FOOD | — | 22 cuisine primaries | **food** | `[literal]` |
 | Groceries | SUPPLY | — | `grocery`, `grocery_store` | **food** ⚠️ | `[literal]` — see §4.2 |
-| Water fill | SUPPLY | yes | `water` | **fuel** / Services | `[amended]` — unclaimed today, see §4.3 |
-| Showers | SERVICE | yes | `shower` | **fuel** / Services | `[amended]` — unclaimed today |
-| Dump stations | SERVICE | yes | `dump_station` | **fuel** / Services | `[amended]` — unclaimed today |
+| ~~Water fill~~ | SUPPLY | yes | `water` | **REMOVED from UI** | Decision 9 — no source exists |
+| ~~Showers~~ | SERVICE | yes | `shower` | **REMOVED from UI** | Decision 9 — no source exists |
+| ~~Dump stations~~ | SERVICE | yes | `dump_station` | **REMOVED from UI** | Decision 9 — no source exists |
 | Hotels | STAY | — | `hotel`, `motel`, `resort_hotel` | **hotel** (`overnight`) | `[literal]` |
 
-**Collapse summary — AMENDED 2026-09-03.** After §4.1/§4.3 the 13 tiles fold
-into **5** of the 9 parents — camping, scenic, fuel, food, hotel. **No tile maps
-to `interest` any more**, which is the point of §4.6. `attraction` gains subtypes
-from the **Culture** cluster (§4.7) rather than from any existing tile;
-`oddity` and `urban` still gain none. `[literal]`
+**Collapse summary — AMENDED AGAIN 2026-09-03 (Decision 9).** Three tiles are
+**removed outright**, so **10** surviving tiles fold into **5** parents — camping,
+scenic, fuel, food, hotel. `[literal]` The surviving tiles are Dispersed, Campgrounds
+(→ camping) · Trailheads, Viewpoints (→ scenic) · Gas, Auto/Repair (→ fuel) ·
+Coffee, Restaurants, Groceries (→ food) · Hotels (→ hotel). **No tile maps to
+`interest`** (§4.6) and **none to `urban`, which loses its chip entirely**
+(Decision 9). `attraction` gains subtypes from the **Culture** cluster (§4.7)
+rather than from any tile; `oddity` gains none.
 
 ---
 
@@ -114,7 +125,7 @@ reach; `NONE` means corpus-only.
 | **attraction** | `visitor_center`, `national_historic_site`, `landmark` | `NONE` |
 | | `museum`, `art_gallery`, `historical_landmark` | **`oddity` today → `attraction`** once §4.4 lands |
 | **oddity** | `oddity`, `roadside_attraction`, `tourist_attraction` | all `NONE` |
-| **urban** | `shopping_mall`, `city_park` | all `NONE` |
+| **urban** *(no chip — Decision 9)* | `shopping_mall`, `city_park` | all `NONE` |
 | **interest** | `rest_area`, `activity_pass`, `permit`, `tree_permit`, `timed_entry`, `ticket_facility`, `venue_reservations`, `hardware`, `outdoor_gear`, `marina`, `casino`, `library`, `atm`, `bus_stop`, `government_office`, `kiosk`, `amphitheatre`, `mobile_home_park`, `national_fish_hatchery`, `sports_activity_location`, `park_boundary`, `facility`, `point_of_interest`, `unknown` | all `NONE` |
 
 Two structural observations, both `[literal]`:
@@ -162,7 +173,20 @@ consumables) but "Food" to an overlander reads *restaurants*, and resupply is a
 distinct trip-planning job. Flagged for §7; no change proposed. **Unaffected by
 the 2026-09-03 amendment.**
 
-### 4.3 `water` / `shower` / `dump_station` → **AMENDED: `fuel` / Services, not `interest`**
+### 4.3 `water` / `shower` / `dump_station` → **SUPERSEDED: REMOVED from the UI (Decision 9)**
+
+**Final, 2026-09-03.** All three are **removed from the UI entirely** — not kept
+as empty-state subtypes. `[cited #364, #366]` No live source exists in anything
+checked, and all three are additionally dropped at `hydrate.ts:140`. **This is a
+"removed until a real data source exists" decision, not an oversight.** The
+corpus rows are untouched and remain available if a source or an unsuppression
+decision ever arrives.
+
+The parent-assignment reasoning below is **retained as history**, because it
+explains *why* `fuel`/Services was the right home if they were ever to return —
+but it no longer describes anything shipping.
+
+#### (historical) The Services assignment, superseded
 
 `[literal]` These three are the entire tile-only set: claimed by a tile, claimed
 by no slide bucket, and simultaneously members of
@@ -181,8 +205,10 @@ card. A dump station or potable-water tap you **drive to** is a **service stop**
 and it is the same errand as fuel, laundry and a mechanic — the overlander "town
 stop." Filing them under `camping` would make them compete with places to sleep.
 
-**Assigning a parent is still not deciding their UI fate.** Whether they appear
-at all remains the ADR's open decision, and remains Adam's call.
+~~**Assigning a parent is still not deciding their UI fate.**~~ **Their UI fate
+was decided: removed (Decision 9).** The distinction still held right up to that
+point — the parent question and the surface question were genuinely separate, and
+they were answered separately.
 
 ### 4.4 `museum` / `art_gallery` / `historical_landmark` — **RESOLVED: `attraction`, on both paths**
 
@@ -271,7 +297,7 @@ Four parts.
 | `hut` | *(unclaimed)* | **`overnight`** | shelter (§5.1) |
 | `picnic_area` | *(unclaimed)* | **`scenic`** | §5.1 |
 | `toilet` | *(unclaimed)* | **`fuel`** / Services | §4.7 |
-| `water`, `shower`, `dump_station` | tile-only | **`fuel`** / Services | §4.3 |
+| `water`, `shower`, `dump_station` | tile-only | **removed from UI** | Decision 9 (§4.3) |
 
 **(b) `interest` renders NO subtype chips.** `[proposed]` What remains is
 `unknown`, `point_of_interest`, `facility`, `park_boundary`, `atm`, `bus_stop`,
@@ -394,11 +420,15 @@ merely unwired.**
 | Chip | Primaries | Corpus (TEST in-scope) `[literal]` | Live `[cited #366]` |
 |---|---|---|---|
 | Auto / Repair | `car_repair`, `car_wash` | 0, 0 | Mapbox dense; highest rural total sampled |
-| Water fill | `water` | 169 — **suppressed** | none |
-| Showers | `shower` | 4 — **suppressed** | none |
-| Dump stations | `dump_station` | 6 — **suppressed** | none |
 | Rest areas | `rest_area` | in the `interest` bucket | Mapbox `rest_area`: 5/6 metro, **1/6 rural** |
-| Toilets | `toilet` | 128 — **suppressed**, unclaimed today | none |
+| ~~Water fill / Showers / Dump stations~~ | `water`, `shower`, `dump_station` | 169 / 4 / 6 — suppressed | **REMOVED from UI — Decision 9** |
+| ~~Toilets~~ | `toilet` | 128 — suppressed, unclaimed | **proposal stands down** — same R4 position, not named in Decision 9 (ADR) |
+
+**⚠️ Services ships as TWO chips, not six: Auto/Repair and Rest areas.**
+`[literal]` Decision 9 removed four of the six proposed members. The cluster is
+still worth having — Auto/Repair is the routing table's best-covered unwired
+target — but it is much smaller than §4.1 first envisaged, and a two-chip cluster
+may not warrant a heading at all. **Flagged for the implementation pass.**
 
 `fuel`'s existing chips (`gas_station`, `ev_charging`, `truck_stop`) form the
 sibling **Fuel & Charging** cluster. The parent chip's label needs revisiting —
@@ -427,10 +457,10 @@ reproduces #364's 22, and contains all four members #364 named as its sample.
 |---|--:|--:|---|---|---|
 | `picnic_area` | 4,668 | 1,223 | — | **yes** | → `scenic` subtype. Unsuppression is a precondition. |
 | `public_land` | 1,327 | 448 | — | — | leave in `interest` fallback — land tenure, not a POI (#364) |
-| `toilet` | 630 | 128 | — | **yes** | → `camping` services, with §4.3 |
-| `water` | 963 | 169 | **yes** | **yes** | see §4.3 — open |
-| `dump_station` | 99 | 6 | **yes** | **yes** | see §4.3 — open |
-| `shower` | 25 | 4 | **yes** | **yes** | see §4.3 — open |
+| `toilet` | 630 | 128 | — | **yes** | ~~→ services~~ — proposal stands down with Decision 9; stays unpromoted |
+| `water` | 963 | 169 | **yes** | **yes** | **removed from UI — Decision 9.** Rows retained in corpus |
+| `dump_station` | 99 | 6 | **yes** | **yes** | **removed from UI — Decision 9** |
+| `shower` | 25 | 4 | **yes** | **yes** | **removed from UI — Decision 9** |
 | `hut` | 56 | 52 | — | — | → `hotel`/`overnight`. Shelter, not a point of interest. |
 | `historic` | 26 | 24 | — | — | → `attraction`. Blocked on §4.4. |
 | `land_status` | 35,966 | **0** | — | — | none — polygon layer, contributes nothing |
@@ -493,9 +523,11 @@ against dense live coverage per #366 — §4.1).
 
 `[literal]` Consequences that follow arithmetically from §2 and §3:
 
-1. ~~**Three of the nine chips gain no subtypes**~~ — **AMENDED.** `attraction`
-   now carries the **Culture** cluster (§4.7). `oddity` and `urban` still gain
-   none, and `urban` remains structurally empty (§5.2).
+1. ~~**Three of the nine chips gain no subtypes**~~ — **AMENDED TWICE.**
+   `attraction` now carries the **Culture** cluster (§4.7). `oddity` gains none.
+   **`urban` no longer renders a chip at all (Decision 9)**, so the question does
+   not arise for it — the browse filter row shows **8** chips against a
+   **9**-member taxonomy.
 2. ~~**`interest` absorbs the most heterogeneous set**~~ — **RESOLVED by §4.6.**
    The mechanics, car washes and suppressed amenities move to `fuel`/Services;
    the rest stays but renders no subtype chips and gets an honest label.
@@ -515,7 +547,10 @@ against dense live coverage per #366 — §4.1).
    while raising the *share* of empty ones. Historic Sites remains the only chip
    that returns anything today (`historic` 24, `landmark` 3, one row each of
    `historical_landmark`/`historical_place`/`monument`) and ships first.
-   Services is the genuinely hard case: Water fill / Showers / Dump stations are
-   suppressed **and** sourceless — R4, not merely unwired.
+   ~~Services is the genuinely hard case~~ — **resolved by Decision 9:** Water
+   fill / Showers / Dump stations are **removed from the UI**, so no empty chip
+   ships. Services is now Auto/Repair + Rest areas, and **every chip in the
+   design either returns data today or fills from a named wiring step.** The
+   empty-chip risk this list opened with is closed.
 
 Points 3 and 4 are the ones worth the most scrutiny before implementation.

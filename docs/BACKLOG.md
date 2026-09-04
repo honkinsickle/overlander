@@ -200,6 +200,10 @@ outage, not a gap.**
   `oddity` at all — not proposed, and it would need a `theater` primary plus an
   ingest mapping, since the Foursquare rule classifies live results by name only
   and does nothing for corpus rows.
+  **CHAIN CLOSED 2026-09-03:** Decision 9 removed `urban` / water fill / showers
+  / dump stations from the UI. **No open items remain across #380 / #382 / #384.**
+  The design layer is complete; the Find Nearby collapse and these removals are
+  implementation work for a follow-up pass and have **not** been started.
   **Also resolved:** `park` → **`scenic`** (matching the corpus), which leaves
   `urban` with no live source and no corpus at all. And the `interest` / `fuel`
   chip renames are **declined** — both keep their names knowingly. Also note the "accepts only 7 of the 9" clause is now
@@ -264,22 +268,27 @@ only**, not against every provider.
 >   filters". `urban` behaves the same way. **No live source was sourced and no
 >   tile was removed — those remain open product decisions, below.**
 >
-> **STILL OPEN — product decisions, deliberately not taken in the bug-fix pass:**
-> whether to drop the Water fill / Showers / Dump stations tiles, whether to
-> narrow `SUPPRESSED_PRIMARY_CATEGORIES` for the search-area path only, whether
-> to keep the "NEW" badges on tiles that cannot return results, and whether
-> `urban` should keep a chip at all given it has no corpus rows and no live
-> source. The original analysis for each is preserved verbatim below.
-> **AMENDED 2026-09-03 (second design pass):** water fill / showers / dump
-> stations now have a *parent* — `fuel` → Services, not `interest` — but **a
-> parent is not a source.** Their keep-or-remove fate is still open and still
-> Adam's. New adjacent item: `fuel`/Services will hold the routing table's
-> best-covered live target (`auto_repair`) beside four guaranteed-empty chips,
-> so it needs per-chip empty states rather than one at category level.
-> **Narrowed 2026-09-03:** with `park` routed to `scenic`, `urban` has **no live
-> source and no corpus — nothing routes to it at all**, so its half of this
-> decision is now a clean binary (keep an empty chip or remove it) with no
-> sourcing option behind it.
+> ~~**STILL OPEN — product decisions, deliberately not taken in the bug-fix
+> pass:**~~ **RESOLVED 2026-09-03 — see the ADR's Decision 9
+> (`docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md`).**
+> **The Water fill / Showers / Dump stations tiles and the `urban` chip are
+> REMOVED from the UI** — no live source and no corpus exists for any of them,
+> measured across #364 and #366. **This is a "removed until a real data source
+> exists" decision, not an oversight**; the corpus rows are untouched and the
+> routing-table rows are struck through rather than deleted so the measurement
+> and the decision stay together.
+> The two sub-questions that rode along resolve as follows: the **"NEW" badges**
+> go with the tiles they were on, and **narrowing `SUPPRESSED_PRIMARY_CATEGORIES`
+> for the search-area path** is now a corpus-only question with no UI consumer —
+> still open, but no longer blocking anything. The original analysis for each is
+> preserved verbatim below.
+> *(Trail of how it got there, kept for the reasoning: the second design pass
+> gave the three amenities a parent — `fuel` → Services — while noting a parent
+> is not a source; `park` → `scenic` then left `urban` with nothing routing to it
+> at all, reducing its half to a clean binary. Decision 9 took that binary.)*
+> **The "per-chip empty states" concern raised in that pass is void** — with the
+> four removed, no empty chip ships, so `fuel`/Services needs no special
+> empty-state handling.
 > **CARRIED FORWARD 2026-09-03 — these are now the ADR's single open decision**
 > (`docs/decisions/2026-09-03-nine-category-taxonomy-canonical.md` §Open
 > decision), which sets out the facts bearing on each and deliberately does not
