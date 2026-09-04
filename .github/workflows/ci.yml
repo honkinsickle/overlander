@@ -3,6 +3,22 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+# DEPENDENCY INSTALL IS THE DOMINANT COST OF EVERY JOB HERE — measured
+# 2026-09-03 over 12 successful runs. Per-step timings: the actual work each
+# job does is small and stable (web suite 12s in every run sampled, data suite
+# 9-14s), while `npm install` ranged 27s -> 375s across the same runs and moved
+# in lockstep across all four jobs. `setup-node`'s `cache: npm` only caches the
+# npm download cache (~/.npm); it still relinks node_modules every run.
+#
+# So node_modules itself is cached, keyed on the lockfile hash, and `npm ci`
+# runs only on a miss. Any package-lock.json change busts the key, so a stale
+# tree cannot survive a dependency change.
+#
+# NOTE ON CACHE SCOPE: Actions caches written on a branch are visible to that
+# branch and to PRs targeting it; caches written on the default branch are
+# visible everywhere. So the first run after this lands is a miss by
+# definition, and the saving shows from the second run onward.
 jobs:
   typecheck:
     runs-on: ubuntu-latest
@@ -13,7 +29,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm install
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            web/node_modules
+            data/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Typecheck web
         run: npm run -w web typecheck
       - name: Typecheck data
@@ -33,7 +60,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm install
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            web/node_modules
+            data/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Run data test suite (against isolated test project)
         env:
           # GitHub repo secrets — populate with the values from
@@ -68,7 +106,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm install
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            web/node_modules
+            data/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Run web test suite
         run: npm run -w web test
 
@@ -84,7 +133,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm install
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            web/node_modules
+            data/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
       # No env vars: a clean production build with every .env* absent exits 0.
       # All env access is lazy/runtime-guarded and static generation falls back
       # (e.g. the getAlaskaTrip snapshot). Do NOT stub env here — if a future
