@@ -1,3 +1,69 @@
+# STATE — branch `routing-diagram-paper` · 2026-09-03 (later 38) — **The PR #400 routing table is drawn in Paper.** New page in `overlander_1`, built on DESIGN.md tokens. Visualization only — no new measurement, no code, no writes.
+
+(**newest truth: one Paper page, one exported PNG, and pointer lines in two docs. Nothing was re-measured to draw it; every figure is carried from PR #400.**
+
+**Where it lives:** `overlander_1` → page **"Source→Category Routing — PR #400"** (https://app.paper.design/file/01KNTTXWMR13F0Y99G08SQM12D/8-0), exported to `docs/assets/2026-09-03-source-category-routing-diagram.png`. **A NEW PAGE, not Page 1** — Page 1 already holds 84 artboards and 13,056 nodes, and CLAUDE.md forbids overwriting an existing frame. Precedent cut both ways (the App Flow / Data Sources / Product Map diagrams all sit on Page 1; the two PR #361 investigations got their own files), so a new page inside the existing file is the option that satisfies "existing file" with zero collision risk.
+
+**⚠ THERE IS NO PAPER FILE NAMED "YO TRIPPIN".** `[literal — `list_files`, 12 files]` The brief named one. `overlander_1` is the file the design system lives in (web/CLAUDE.md points DESIGN.md's tokens at its `7US-0` StyleGuide artboard) and the file that already holds every Overlander reference diagram, so it is the one used. Flagged rather than silently substituted.
+
+**THREE PLACES THE BOARD DELIBERATELY DOES NOT DO WHAT THE BRIEF SAID, each drawn anyway and flagged:**
+
+1. **`fuel` is drawn as FIVE sub-rows, not one.** The brief asked for 9 categories + Auto/Repair + EV. `fuel`'s subtypes carry **four different verdicts** — Gas wired · Auto/Repair wired · EV unwired *and* mis-mapped · Services no live source at all. One `fuel` row would have misreported three of the five. Auto/Repair and EV still appear as their own named rows, as asked.
+2. **BOTH confidence systems are carried, in separate columns.** The brief asked for literal / strong inference / estimated / unverified. §11 of the report uses that vocabulary for **measurements** and a separate **H/M/L** for the **routing call**. Flattening one into the other would have softened a documented label, so the board shows the evidence chip *and* the H/M/L.
+3. **"0/6 remote" is distinguished from "not probed remote."** `hotel` and `scenic`'s own ids were not in this pass's remote probe set — their remote behaviour is **unknown, not zero**. Leaving those cells blank would have read as an absence.
+
+**Design-system fidelity:** dark ground `--bg-base`, category rail colours straight from DESIGN.md §1.2 title role, Barlow Condensed 700 for category names, Space Grotesk for uppercase section labels, Space Mono for data, `--pin` `#FF8E05` for the five finding flags, `--success` / `--amber-300` / `--type-500` / `--error` for the four evidence steps. **No new tokens invented.** Paper's own guide says default to light mode and post a mood brief first; both were deliberately skipped — the brief specified an existing design system, and this app is dark-theme-only.
+
+**`camping` and `hotel` share `#6ECECE`** in DESIGN.md §1.2, so on the board they are told apart by label rather than colour. That is the system as written, not a drafting slip.
+
+**One instrument note:** the Mapbox sampling script prints "⚠ MISMATCH" on 6 of 18 points. That is a **comparator defect in the script**, not a bad point — it tests for a two-letter code against a returned full region name, and "ARIZONA" does not contain "AZ". All 18 states verify correctly by name. Already recorded in the report's §2; repeated here because the raw output is misleading on its face.
+
+**Gates:** not re-run — this commit touches only `docs/` and a PNG. PR #400's gates stand.
+
+**Self-review pass skipped per Adam's instruction** (visualization task, no PROD-affecting change).
+
+**⚠ STACKED ON PR #400.** This branch is cut from `sourcing`, which is unmerged, so a PR against `main` carries #400's commit too. Merge #400 first, or retarget. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
+# STATE — branch `sourcing` · 2026-09-03 (later 37) — **Source-to-category routing measured across all five sources.** Overpass/OSM and Foursquare's category filter measured for the first time; a remote sample tier added. READ-ONLY, TEST-only, no writes.
+
+(**newest truth: one investigation report, four new read-only instruments, and a surgical amendment to the existing routing table. No code paths changed, no schema, no writes to TEST or PROD.**
+
+**Report:** `docs/investigations/2026-09-03-source-to-category-routing.md` — the full routing table (category → live source → corpus source → confidence) plus 7 taxonomy-mismatch risks. Extends #364/#366 across the two sources neither examined.
+
+**FIVE FINDINGS THAT CHANGE THE ANSWER** `[all literal — computed this session]`:
+
+1. **`urban` is REFUTED as "no viable source exists."** Mapbox's canonical list was enumerated in FULL (**482 ids**) rather than spot-checked, and **`shopping_mall` is in it** — 6/6 metro, 4/6 rural across all six states; Foursquare has one too. Only `city_park` is genuinely absent. `urban` is **unwired, not unsourceable**. The corpus half (0 rows, both primaries) stands. **This does not reopen Decision 9** — it corrects a premise that decision cited.
+
+2. **Showers / dump stations / water fill: CONFIRMED absent from Mapbox and Foursquare, ABUNDANT in OSM — the source nobody checked.** Overpass `out count;` over the six-state box: **945** `amenity=shower`, **521** `sanitary_dump_station`, **10,113** `drinking_water`. Corpus holds **4 / 6 / 167**. `osm.ts` already maps all three tags and `water_san` is in `DEFAULT_FAMILIES`. **The gap is ingest, not sourcing.**
+
+3. **⚠ 82.3% OF OSM's SOURCE_RECORDS ARE `is_active = false`** — 90,081 of 109,492, against ~0% for every other source. That is what holds **5,946 ingested gas stations** and ~6,100 viewpoints out of the export view (`gas_station`: 5,947 master_place rows → **1** in-scope). Sampled rows have exactly one OSM source_record, inactive, including named ones. **CAUSE NOT DETERMINED — measured and stopped.** Ranked ahead of every wiring item.
+
+4. **Every commercial live category returns ZERO at genuinely remote points, on BOTH vendors.** Six new remote anchors (one per state, each state reverse-geocode-verified): Mapbox **0/6** for gas, auto repair, car wash, EV, grocery, museums, malls — *and for `campground` and `restaurant`, the dense controls*. Foursquare **0/2** on all twelve. #366 raised this on two points and said not to build on it; it now rests on **six points and two independent providers**. OSM was the only source returning anything remote (18 camp sites at Hart's Pass) — and even it returned 0 fuel and 0 charging at all six.
+
+5. **EV cannot reach the live half at all, and the half-wiring is worse than none.** `ev_charging` is absent from `LIVE_SLIDE_FOR_PRIMARY` (so `resolveLive()` returns `[]` before any source is called) **and** `MAPBOX_CATEGORY_FOR_PRIMARY` maps it to **`gas_station`**. The routing table called this "one wired source id"; it is **two lines in two files**, and closing only the obvious one returns gas stations under the EV tile — #394's exact failure mode.
+
+**FOUR PREMISES IN THE BRIEF DID NOT SURVIVE CONTACT** `[literal]`: Auto/Repair is **already wired** (#394); the Foursquare 404 is the **taxonomy-enumeration** endpoint, not category search (`/places/search` with `fsq_category_ids=` returns **200** and is what production already calls); FuelStopCard's `?category=fuel` is a **real trip-browse route**, not a mystery; and a routing table **already existed**.
+
+**#366's FOURSQUARE BLOCKER IS PARTLY DISSOLVED.** The 404 reproduces exactly (24/24 combinations), but category ids can be **recovered from search data** — 315 harvested from 12 seeds — then fed back as `fsq_category_ids=` filters. That is the like-for-like category-filter instrument #366 said was unavailable. FSQ *Hiking Trail*: **6/6 metro, 218 features** vs Mapbox `trailhead`'s 2/6 and 3.
+
+**SEVEN TAXONOMY RISKS, of the `repair_shop` class.** `repair_shop`'s exclusion is now population-confirmed (**zero** `mechanic` stamps vs `auto_repair`'s 250 — disjoint). New: `historic_site` ≈ `monument` (178 features each, near-identical profiles); `grocery` ⊃ `supermarket`; and **`tourist_attraction` is a SUPERSET containing museum(72)/historic site(52)/monument(42)** — wiring it to `oddity` as the table proposes would re-pollute `oddity` with exactly what §3.1 exists to remove.
+
+**A matcher bug is recorded rather than buried:** the first Foursquare run matched dump stations on `/dump/` and selected **"Dumpling Restaurant"**, which would have been printed as dump-station coverage. Re-anchored to whole category names and re-run. Same class as #366's abort artifact.
+
+**Corpus × source measured for the first time** (#364 gave depth but not provenance): **33,103** in-scope on TEST; **osm 15,692** — more than the next three real sources combined, and the **sole** source for `ev_charging`, `grocery`, `water`, `toilet`, `rest_area`, `dump_station`, `shower`. ⚠ `generated_template` (5,059) and `generated_llm` (4,597) rank 2nd/4th and are **description generators, not place sources**.
+
+**Also found by reading code:** the routing table's §3.1 is marked RESOLVED but is **not implemented** — `resolve-places.ts:241` still routes museum/art_gallery/historical_landmark to `oddity`, where Google contributes nothing by design, so museums are live-unreachable today.
+
+**Scope:** READ-ONLY throughout. No PROD number appears anywhere in the report; every corpus figure is TEST. Mapbox/FSQ figures are an 18-point and 8-point sample on one day and say so; only the Overpass `out count;` figures are population counts.
+
+**Self-review pass skipped per Adam's instruction** (routine investigation, no PROD-affecting change).
+
+**Next steps (Adam's call):** review + merge. Recommended order in the report §12 — diagnose the 82.3% first, then the two-line EV fix, then the 3-line Culture fix. The masthead below is preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `migrate-surfaces-resolveplaces` · 2026-09-03 (later 36) — **search-area + trip-browse cut FULLY onto `resolvePlaces()`.** The two `*_USE_RESOLVER` flags and the legacy dual bodies are gone; parity verified on TEST first. TEST-only, no data writes.
 
 (**newest truth: 9 files in `web/`, net −350 lines. No data-layer/corpus/API-shape change; no writes to TEST or PROD. Standing self-review pass run (code-reviewer subagent): verdict READY, 4 minor items, 3 fixed. All gates green + live TEST verification.**
