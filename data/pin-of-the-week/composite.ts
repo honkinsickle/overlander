@@ -26,15 +26,17 @@ import type { ImagePromptSpec } from "./image-prompt.ts";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const FONT_DIR = join(MODULE_DIR, "fonts");
+// The REAL brand header asset (yellow + coral bands + "yoTrippin!" wordmark),
+// bundled from assets/socailmedia/branding.png. Composited directly — its colors
+// and wordmark are the actual brand asset, not approximations.
+const HEADER_PATH = join(MODULE_DIR, "brand", "header.png");
 
 let fontsRegistered = false;
 function registerFonts(): void {
   if (fontsRegistered) return;
-  GlobalFonts.registerFromPath(join(FONT_DIR, "SpaceMono-Regular.ttf"), "Space Mono");
   GlobalFonts.registerFromPath(join(FONT_DIR, "BarlowCondensed-Bold.ttf"), "Barlow Condensed");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-Regular.ttf"), "Barlow");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-SemiBold.ttf"), "Barlow SemiBold");
-  GlobalFonts.registerFromPath(join(FONT_DIR, "Baloo2-VF.ttf"), "Baloo 2");
   fontsRegistered = true;
 }
 
@@ -97,8 +99,8 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 
   const { colors } = BRAND;
 
-  // 3. Striped brand header (replaces the old kicker + top-right logo).
-  drawHeader(ctx, W, H, PAD);
+  // 3. Real brand header asset, full-width across the top.
+  await drawHeader(ctx, W);
 
   // 4. Caption block — bottom-anchored: wrapped title, subline + verified.
   const titleSize = Math.round(W * 0.066);
@@ -141,39 +143,19 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 }
 
 /**
- * Striped brand header: full-width yellow strip + coral band (with the
- * "yoTrippin!" wordmark) + a thin dark divider, drawn opaque over the top of
- * the photo. Built from scratch as solid rectangles to match the reference
- * mockup. Band colors are approximate (see style-guide BRAND.header).
+ * Draw the REAL brand header asset (brand/header.png — the actual yellow/coral
+ * bands + "yoTrippin!" wordmark) full-width across the top, preserving its
+ * aspect ratio. This uses the true brand colors and wordmark, not a recreation.
+ * Skipped gracefully if the asset is missing.
  */
-function drawHeader(ctx: SKRSContext2D, W: number, H: number, pad: number): void {
-  const { header, fonts } = BRAND;
-  const yellowH = Math.round(H * 0.026);
-  const coralH = Math.round(H * 0.058);
-  const dividerH = Math.round(H * 0.009);
-
-  ctx.fillStyle = header.yellow;
-  ctx.fillRect(0, 0, W, yellowH);
-  ctx.fillStyle = header.coral;
-  ctx.fillRect(0, yellowH, W, coralH);
-  ctx.fillStyle = header.divider;
-  ctx.fillRect(0, yellowH + coralH, W, dividerH);
-
-  // Wordmark — left-aligned, vertically centered in the coral band. Baloo 2 is
-  // an approximation of the custom face; a light stroke fakes the heavier weight.
-  const size = Math.round(coralH * 0.62);
-  const cy = yellowH + coralH / 2;
-  ctx.save();
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.font = `400 ${size}px "${fonts.wordmark}"`;
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(1, size * 0.045);
-  ctx.strokeText(header.wordmarkText, pad, cy);
-  ctx.fillText(header.wordmarkText, pad, cy);
-  ctx.restore();
+async function drawHeader(ctx: SKRSContext2D, W: number): Promise<void> {
+  try {
+    const header = await loadImage(HEADER_PATH);
+    const h = Math.round(header.height * (W / header.width));
+    ctx.drawImage(header, 0, 0, W, h);
+  } catch {
+    // header asset absent — leave the composite without a header
+  }
 }
 
 /** Small vector checkmark (avoids missing-glyph boxes for ✓). */

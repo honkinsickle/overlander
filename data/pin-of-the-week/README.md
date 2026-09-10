@@ -29,17 +29,20 @@ npm run -w data potw:generate -- --id <uuid> --llm --render
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
 | `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
 | `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; dry-runs without a key) |
-| `composite.ts` | step 2 — deterministic striped header + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
-| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed, Baloo 2 for the wordmark) |
+| `composite.ts` | step 2 — composites the real header asset + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
+| `brand/header.png` | the REAL brand header asset (yellow/coral bands + "yoTrippin!" wordmark), drawn full-width |
+| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) |
 | `generate.ts` | GENERATE CLI — writes `base.png` (treatment) + `image.png` (final) to `output/<slug>/` |
 
 **Two-step image pipeline:** Nano Banana renders the graded hero photo with **no
-text**, then the striped brand header (yellow/coral bands + "yoTrippin!" wordmark)
-and the black caption bar are composited deterministically with the real place
-name from SELECT — so the name is always spelled exactly and the typography is
-the real brand fonts (fixes the model-rendered-text garbling from PR #407).
-Header band colors + the wordmark font are approximate — see
-`docs/content/pin-of-the-week.md`.
+text**, then the **real brand header asset** (`brand/header.png`) and the black
+caption bar are composited deterministically with the real place name from
+SELECT — so the name is spelled exactly, the header colors/wordmark are the true
+brand asset (not approximated), and the caption typography is the real brand
+fonts. See `docs/content/pin-of-the-week.md`.
+
+⚠️ Known issue: the Nano Banana photo treatment is underexposed (base output, not
+the scrim) — flagged for a separate pass.
 
 Requires the `featured_at` column:
 `supabase/migrations/20260910140000_master_place_featured_at.sql`

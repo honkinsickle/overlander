@@ -32,21 +32,10 @@ export const BRAND = {
     title: "Barlow Condensed", // 700, place titles
     body: "Barlow",
     data: "Space Mono", // labels, coordinates
-    // Rounded display face for the top wordmark. Baloo 2 is the closest rounded
-    // bold font available (OFL); the real yoTrippin! custom face is unavailable,
-    // so this is an APPROXIMATION (rendered with a light stroke to fake weight).
-    wordmark: "Baloo 2",
   },
-  // Striped brand header (top of the composite). Built from scratch as solid
-  // bands to match the reference mockup. ⚠ Yellow/coral/divider hexes are
-  // APPROXIMATE — sampled to a warm yellow/coral pairing, to be corrected
-  // against the real brand colors later.
-  header: {
-    yellow: "#f9c22e", // approx warm yellow
-    coral: "#e5431e", // approx coral / orange-red
-    divider: "#2a2426", // approx thin dark divider strip
-    wordmarkText: "yoTrippin!",
-  },
+  // The brand header is the REAL asset composited from brand/header.png (yellow
+  // + coral bands + "yoTrippin!" wordmark) — see composite.ts drawHeader. No
+  // colors/font are recreated here, so there is nothing to approximate.
 } as const;
 
 /**

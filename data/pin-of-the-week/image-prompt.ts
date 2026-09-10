@@ -53,7 +53,7 @@ export function composeImagePrompt(candidate: EvaluatedCandidate): ImagePromptSp
 
   // Text carried to the deterministic compositor — NOT sent to the model.
   // The title is the real place name straight from the SELECT row. (The brand
-  // wordmark lives in the striped header, drawn from BRAND.header — not here.)
+  // wordmark lives in the real header asset composited on top — not here.)
   const overlayText = {
     title: candidate.canonical_name,
     subline,

@@ -143,11 +143,11 @@ not reliably render exact long text or hit specific fonts.
    the portrait shape (without it the model inherits the landscape reference's
    aspect — verified 2026-09-10).
 2. **Deterministic chrome (`composite.ts`)** — `@napi-rs/canvas` draws the brand
-   chrome over the treatment at exactly `1080×1350`: a **striped brand header**
-   at the top (see below) and the **black caption bar** at the bottom, which uses
-   the **real place name straight from the SELECT row** (never model text) in the
-   bundled fonts (Barlow Condensed 700 title, Barlow subline) with the amber
-   `#c8a96e` accent on the "Verified" mark. Fonts are bundled under
+   chrome over the treatment at exactly `1080×1350`: the **real brand header
+   asset** full-width at the top (see below) and the **black caption bar** at the
+   bottom, which uses the **real place name straight from the SELECT row** (never
+   model text) in the bundled fonts (Barlow Condensed 700 title, Barlow subline)
+   with the amber `#c8a96e` accent on the "Verified" mark. Fonts are bundled under
    `pin-of-the-week/fonts/` (OFL) so rendering is identical on any machine.
 
 Renders only when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise the
@@ -172,35 +172,42 @@ stages were **visually inspected** against `DESIGN.md`. Samples:
 - **Bottom caption bar unchanged** — near-black scrim, caption in the lower
   third, 4:5 portrait (1080×1350). *Literal / visually verified.*
 
-#### Striped brand header (2026-09-10 — replaces the top kicker/logo)
+#### Brand header — the REAL asset (2026-09-10, corrected)
 
-The top of the composite is a **striped brand header** built from scratch as
-solid bands (`drawHeader` in `composite.ts`), matching a reference mockup:
+The header is the **actual brand asset**, composited directly — not a
+recreation. Earlier passes approximated the bands with hex guesses and a
+stand-in rounded font (Baloo 2); that has been **removed entirely**.
 
-- a full-width **yellow** strip, then a taller full-width **coral** band carrying
-  the **"yoTrippin!"** wordmark (bold white, left-aligned), then a thin dark
-  divider, above the photo.
-- This **replaced** the old "PIN OF THE WEEK" kicker AND the earlier top-right
-  PNG wordmark (from an interim version). The PNG-extraction path
-  (`extract-wordmark.ts` + `brand/`) and its source banner
-  (`assets/socailmedia/branding.png` — note the misspelled folder) were removed:
-  they used a *diagonal*-striped banner that doesn't match this horizontal-band
-  reference, and the wordmark is now rendered as text.
+- **Source asset** `assets/socailmedia/branding.png` (folder misspelled
+  "socailmedia"; the `assets/social media/` path does **not** exist). The file
+  was **replaced by the operator** with a **1080×138 horizontal header strip**
+  (the earlier version was a 2160×544 diagonal banner). Its real content, sampled
+  directly: a **yellow** band (`#fdc930`) on top, a **coral/brick-red** band
+  (`#cf3c2a`) with the white **"yoTrippin!"** wordmark left-aligned, and a **dark**
+  strip (`#42363c`) at the bottom. *Confidence: literal / pixel-sampled.*
+- It is bundled at `brand/header.png` and drawn full-width across the top
+  (`drawHeader` in `composite.ts`), preserving aspect (1080-wide → 138 tall).
+  Because it is the real image, the **colors and wordmark/font are exact, not
+  approximated**. *Confidence: literal / visually verified.*
+- This replaced the old "PIN OF THE WEEK" kicker and every prior approximated
+  header. The removed pieces: the from-scratch `drawHeader` bands + `BRAND.header`
+  hexes, the Baloo 2 font (`Baloo2-VF.ttf`), and the interim PNG-extraction path
+  (`extract-wordmark.ts`).
+- The **"Yo Trippin" brand label was removed from the bottom caption bar** (brand
+  now lives only in the header; the reference omits it). *Flagged deviation from
+  a literal "bottom stays as-is".*
 
-⚠️ **Approximations (flagged for correction against the real brand):**
-- **Band colors** are guesses at a warm yellow/coral pairing —
-  `yellow #f9c22e`, `coral #e5431e`, `divider #2a2426` (in `BRAND.header`).
-  *Confidence: unverified / estimated — no brand hex was provided.*
-- **Wordmark font** is **Baloo 2** (the closest available rounded bold, OFL),
-  rendered with a light stroke to fake the heavier weight, since the real
-  yoTrippin! custom face is unavailable. *Confidence: strong inference on
-  "closest available"; the exact face is unmatched.*
-- A **thin dark divider** under the coral band was added to match the reference
-  (the spec text described only two bands). *Flagged addition.*
-- The **"Yo Trippin" brand label was removed from the bottom caption bar** — the
-  reference and the spec's bottom-content list both omit it, and keeping it would
-  duplicate the brand that now lives in the header. *Deviation from a literal
-  reading of "bottom stays as-is"; flagged.*
+#### ⚠️ Known issue — the photo treatment is underexposed (flagged, not fixed)
+
+The Nano Banana base treatment renders **too dark**. Attributed by pixel
+measurement (2026-09-10): the darkness is the **base output, not the composite
+scrim** — mean luminance of `base.png` (before any scrim) is **57/255** in the
+upper sky, **20/255** mid-photo, **13/255** foreground; the composite's bottom
+scrim removes only ~1–4 further points. Root cause: `PHOTO_TREATMENT_BRIEF` asks
+for a "dark, cinematic, moody" grade and to "darken the lower third," and the
+model obeys. *Confidence: literal / directly verified (pixel-measured).* **Fix
+deferred to a separate pass** — it needs prompt softening + iterative re-rendering
+to tune exposure, which is not a trivial one-line change.
 
 ---
 
@@ -223,7 +230,9 @@ solid bands (`drawHeader` in `composite.ts`), matching a reference mockup:
 - The adapter is a separate, net-new implementation (no prior Yo Trippin Nano
   Banana adapter exists): **strong inference** — comprehensive negative grep
   across the repo (only Mapbox map-pin icon helpers matched).
-- The striped header renders per the reference (yellow + coral + wordmark +
-  divider, kicker/PNG-logo removed): **literal / visually verified** (rendered +
-  inspected 2026-09-10). Its band colors and wordmark font are **estimated /
-  approximate** — no brand hex or font was provided.
+- The header is the **real brand asset** (`brand/header.png`, from the operator's
+  1080×138 `branding.png`) composited full-width — colors and wordmark are exact,
+  not approximated: **literal / visually verified + pixel-sampled** (2026-09-10).
+- The photo treatment is underexposed and the cause is the Nano Banana base (not
+  the scrim): **literal / directly verified** (base upper-sky 57/255; scrim adds
+  ≤4). Deferred to a separate pass.
