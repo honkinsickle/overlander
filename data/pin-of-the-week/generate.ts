@@ -34,6 +34,7 @@ import {
 import { composeCaption, composeCaptionLLM } from "./caption.ts";
 import { composeImagePrompt } from "./image-prompt.ts";
 import { renderNanoBanana } from "./nano-banana.ts";
+import { compositePost } from "./composite.ts";
 
 interface Args {
   id: string | null;
@@ -124,11 +125,19 @@ async function main(): Promise<void> {
 
   let renderNote = "skipped (pass --render to render)";
   if (args.render) {
+    // Step 1: Nano Banana renders the graded hero photo (NO text).
     const result = await renderNanoBanana(imagePrompt);
     if (result.rendered && result.bytes) {
-      const ext = result.mimeType?.includes("png") ? "png" : "jpg";
-      await writeFile(join(dir, `image.${ext}`), result.bytes);
-      renderNote = `rendered image.${ext} (${result.bytes.length} bytes)`;
+      const baseExt = result.mimeType?.includes("png") ? "png" : "jpg";
+      await writeFile(join(dir, `base.${baseExt}`), result.bytes);
+      // Step 2: composite the caption bar deterministically (real name + fonts).
+      const composited = await compositePost({
+        baseImage: result.bytes,
+        overlayText: imagePrompt.overlayText,
+        dimensions: imagePrompt.dimensions,
+      });
+      await writeFile(join(dir, "image.png"), composited);
+      renderNote = `treatment base.${baseExt} + composited image.png (${composited.length} bytes)`;
     } else {
       renderNote = `dry run — ${result.reason}`;
     }

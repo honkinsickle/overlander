@@ -31,27 +31,32 @@ export const BRAND = {
   fonts: {
     title: "Barlow Condensed", // 700, place titles
     body: "Barlow",
-    data: "Space Mono", // labels, coordinates, the "PIN OF THE WEEK" kicker
+    data: "Space Mono", // labels, coordinates
   },
+  // The brand header is the REAL asset composited from brand/header.png (yellow
+  // + coral bands + "yoTrippin!" wordmark) — see composite.ts drawHeader. No
+  // colors/font are recreated here, so there is nothing to approximate.
 } as const;
 
 /**
- * The reusable framing instruction for every Pin of the Week image. Kept
- * separate from the per-place prompt so the brand system stays consistent
- * across posts. Amber is accent-only (per DESIGN.md: "never links or pins").
+ * PHOTO TREATMENT ONLY. The model renders the graded hero photo — NO text.
+ *
+ * All text (kicker, title, subline, verified mark) is composited
+ * deterministically afterward (see composite.ts) so the place name is spelled
+ * exactly and the typography is the real DESIGN.md fonts. Image models garble
+ * long text and can't hit exact fonts (verified in PR #407: "Cameground"),
+ * which is why text is deliberately kept OUT of the prompt.
  */
-export const IMAGE_STYLE_BRIEF = [
-  `A branded Instagram post for the overlanding brand "${BRAND.name}".`,
+export const PHOTO_TREATMENT_BRIEF = [
+  `Lightly enhance the provided reference photo of a real place for a social post.`,
   `Portrait ${BRAND.aspectRatio} (${BRAND.dimensions.width}x${BRAND.dimensions.height}).`,
-  `Dark, cinematic, moody outdoor aesthetic on a near-black base (${BRAND.colors.baseBackground}).`,
-  `The provided reference photo of the real place is the hero image, filling the upper ~two-thirds`,
-  `edge to edge, with a subtle dark gradient scrim along the bottom for text legibility.`,
-  `A small top-left kicker label reads "PIN OF THE WEEK" in an uppercase monospace typeface`,
-  `(${BRAND.fonts.data}), tinted warm amber (${BRAND.colors.amber}), with generous letter-spacing.`,
-  `Lower third is a clean dark caption bar: the place name as a bold condensed sans headline`,
-  `(${BRAND.fonts.title}) in off-white (${BRAND.colors.textPrimary}), a smaller muted subline`,
-  `(${BRAND.fonts.body}) for category and state.`,
-  `Amber is an ACCENT ONLY — kicker, a thin rule, and the verified mark; never large fills.`,
-  `Do NOT invent text, ratings, logos, or details beyond what the caption bar specifies.`,
-  `No people, no watermark, no stock-photo look, no lens flare.`,
+  `Keep it BRIGHT and NATURAL: preserve the true daylight exposure and real colors,`,
+  `with clean contrast and a crisp, vibrant look. Do NOT darken, dim, add vignettes,`,
+  `or apply a moody/cinematic grade — the whole frame, and especially the top half,`,
+  `must read at full, natural brightness. (Legibility of the bottom caption is`,
+  `handled separately by an overlay, so do not darken the photo for it.)`,
+  `Keep the real place clearly recognizable — do not change its content or geography.`,
+  `ABSOLUTELY NO text, letters, words, numbers, logos, watermarks, badges, captions,`,
+  `frames, or graphic overlays of any kind. No people added. No lens flare, no stock-photo look.`,
+  `Output the photograph only.`,
 ].join(" ");

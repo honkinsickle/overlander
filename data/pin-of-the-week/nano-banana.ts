@@ -53,7 +53,13 @@ export async function renderNanoBanana(spec: ImagePromptSpec): Promise<RenderRes
   const res = await fetch(`${ENDPOINT}?key=${apiKey}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts }] }),
+    // imageConfig.aspectRatio forces the output shape. Without it the model
+    // inherits the (landscape) reference photo's aspect and ignores the
+    // "Portrait 4:5" prompt text — verified 2026-09-10 (got 1184x864).
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: { imageConfig: { aspectRatio: spec.aspectRatio } },
+    }),
   });
   if (!res.ok) {
     const body = await res.text();

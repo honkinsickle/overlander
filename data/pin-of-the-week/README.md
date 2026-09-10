@@ -26,10 +26,23 @@ npm run -w data potw:generate -- --id <uuid> --llm --render
 | `eligibility.ts` | read-only eligibility model + full-corpus scan |
 | `select.ts` | SELECT CLI (`--count` / `--commit` / `--recent N` / `--json`) |
 | `caption.ts` | caption composer (hook → payoff → CTA); optional Anthropic hook rewrite |
-| `style-guide.ts` | brand tokens (from `DESIGN.md`) + reusable image brief |
-| `image-prompt.ts` | per-place Nano Banana prompt/spec composer |
-| `nano-banana.ts` | Gemini `gemini-2.5-flash-image` render adapter (dry-runs without a key) |
-| `generate.ts` | GENERATE CLI — writes artifacts to `output/<slug>/` |
+| `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
+| `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
+| `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; dry-runs without a key) |
+| `composite.ts` | step 2 — composites the real header asset + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
+| `brand/header.png` | the REAL brand header asset (yellow/coral bands + "yoTrippin!" wordmark), drawn full-width |
+| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) |
+| `generate.ts` | GENERATE CLI — writes `base.png` (treatment) + `image.png` (final) to `output/<slug>/` |
+
+**Two-step image pipeline:** Nano Banana renders the graded hero photo with **no
+text**, then the **real brand header asset** (`brand/header.png`) and the black
+caption bar are composited deterministically with the real place name from
+SELECT — so the name is spelled exactly, the header colors/wordmark are the true
+brand asset (not approximated), and the caption typography is the real brand
+fonts. See `docs/content/pin-of-the-week.md`.
+
+Exposure: `PHOTO_TREATMENT_BRIEF` renders the photo **bright/natural** (the earlier
+dark grade was dropped); the bottom scrim darkens only the caption area.
 
 Requires the `featured_at` column:
 `supabase/migrations/20260910140000_master_place_featured_at.sql`
