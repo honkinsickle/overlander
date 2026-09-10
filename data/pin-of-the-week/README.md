@@ -29,16 +29,17 @@ npm run -w data potw:generate -- --id <uuid> --llm --render
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
 | `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
 | `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; dry-runs without a key) |
-| `composite.ts` | step 2 — deterministic caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts + brand wordmark |
-| `extract-wordmark.ts` | one-time tool: isolate the white "yoTrippin!" wordmark from the branding banner |
-| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) for reproducible text |
-| `brand/` | `branding-source.png` (bundled source) + `yotrippin-wordmark.png` (extracted, transparent) |
+| `composite.ts` | step 2 — deterministic striped header + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
+| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed, Baloo 2 for the wordmark) |
 | `generate.ts` | GENERATE CLI — writes `base.png` (treatment) + `image.png` (final) to `output/<slug>/` |
 
 **Two-step image pipeline:** Nano Banana renders the graded hero photo with **no
-text**, then the caption bar is composited deterministically with the real place
+text**, then the striped brand header (yellow/coral bands + "yoTrippin!" wordmark)
+and the black caption bar are composited deterministically with the real place
 name from SELECT — so the name is always spelled exactly and the typography is
 the real brand fonts (fixes the model-rendered-text garbling from PR #407).
+Header band colors + the wordmark font are approximate — see
+`docs/content/pin-of-the-week.md`.
 
 Requires the `featured_at` column:
 `supabase/migrations/20260910140000_master_place_featured_at.sql`

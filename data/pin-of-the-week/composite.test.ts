@@ -1,11 +1,6 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas } from "@napi-rs/canvas";
 import { compositePost, coverRect, wrapText } from "./composite.ts";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe("coverRect", () => {
   it("scales to cover and centers a wider source in a portrait box", () => {
@@ -41,8 +36,6 @@ describe("compositePost", () => {
       baseImage: base,
       dimensions: { width: 1080, height: 1350 },
       overlayText: {
-        kicker: "PIN OF THE WEEK",
-        brand: "Yo Trippin",
         title: "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park",
         subline: "Campground · CA",
         verified: "✓ Yo Trippin Verified",
@@ -55,19 +48,11 @@ describe("compositePost", () => {
     expect(out.readUInt32BE(20)).toBe(1350);
   });
 
-  it("the extracted yoTrippin! wordmark asset is present and transparent", async () => {
-    const p = join(HERE, "brand", "yotrippin-wordmark.png");
-    expect(existsSync(p)).toBe(true);
-    const img = await loadImage(p);
-    expect(img.width).toBeGreaterThan(100);
-    expect(img.height).toBeGreaterThan(20);
-  });
-
   it("falls back to the base color when the base image cannot decode", async () => {
     const out = await compositePost({
       baseImage: Buffer.from("not an image"),
       dimensions: { width: 200, height: 250 },
-      overlayText: { kicker: "K", brand: "B", title: "T", subline: "S", verified: "V" },
+      overlayText: { title: "T", subline: "S", verified: "V" },
     });
     expect(out.readUInt32BE(16)).toBe(200);
     expect(out.readUInt32BE(20)).toBe(250);

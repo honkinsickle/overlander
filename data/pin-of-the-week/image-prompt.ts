@@ -18,8 +18,6 @@ export interface ImagePromptSpec {
   dimensions: { width: number; height: number };
   /** The exact text the compositor draws (never the model), so nothing is invented. */
   overlayText: {
-    kicker: string;
-    brand: string;
     title: string;
     subline: string;
     verified: string;
@@ -54,10 +52,9 @@ export function composeImagePrompt(candidate: EvaluatedCandidate): ImagePromptSp
   const verified = candidate.signals.hasOfficialSource ? "✓ Yo Trippin Verified" : "Yo Trippin Pick";
 
   // Text carried to the deterministic compositor — NOT sent to the model.
-  // The title is the real place name straight from the SELECT row.
+  // The title is the real place name straight from the SELECT row. (The brand
+  // wordmark lives in the striped header, drawn from BRAND.header — not here.)
   const overlayText = {
-    kicker: "PIN OF THE WEEK",
-    brand: BRAND.name,
     title: candidate.canonical_name,
     subline,
     verified,

@@ -142,11 +142,12 @@ not reliably render exact long text or hit specific fonts.
    graded photo (`base.png`). `generationConfig.imageConfig.aspectRatio` forces
    the portrait shape (without it the model inherits the landscape reference's
    aspect — verified 2026-09-10).
-2. **Deterministic caption bar (`composite.ts`)** — `@napi-rs/canvas` draws the
-   caption bar over the treatment using the **real place name straight from the
-   SELECT row** (never model text) in the bundled `DESIGN.md` fonts (Space Mono
-   kicker, Barlow Condensed 700 title, Barlow subline) and the amber `#c8a96e`
-   accent, at exactly `1080×1350`. Fonts are bundled under
+2. **Deterministic chrome (`composite.ts`)** — `@napi-rs/canvas` draws the brand
+   chrome over the treatment at exactly `1080×1350`: a **striped brand header**
+   at the top (see below) and the **black caption bar** at the bottom, which uses
+   the **real place name straight from the SELECT row** (never model text) in the
+   bundled fonts (Barlow Condensed 700 title, Barlow subline) with the amber
+   `#c8a96e` accent on the "Verified" mark. Fonts are bundled under
    `pin-of-the-week/fonts/` (OFL) so rendering is identical on any machine.
 
 Renders only when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise the
@@ -165,33 +166,41 @@ stages were **visually inspected** against `DESIGN.md`. Samples:
   "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park" spelled
   **exactly** as the source row — the PR #407 garbling is gone. *Literal /
   visually verified.*
-- **Typography now exact** — Space Mono tracked kicker, Barlow Condensed 700
-  title (wrapped to two lines), Barlow subline, amber accent used *accent-only*
-  (kicker + vector check + "Verified"). *Literal / visually verified.*
-- **Palette + composition match** — near-black base, hero photo with bottom
-  scrim, kicker top-left, caption bar lower third, 4:5 portrait (1080×1350).
+- **Title typography exact** — Barlow Condensed 700 title (wrapped to two lines),
+  Barlow subline, amber accent used *accent-only* (vector check + "Verified").
   *Literal / visually verified.*
+- **Bottom caption bar unchanged** — near-black scrim, caption in the lower
+  third, 4:5 portrait (1080×1350). *Literal / visually verified.*
 
-#### Brand wordmark (2026-09-10)
+#### Striped brand header (2026-09-10 — replaces the top kicker/logo)
 
-The "yoTrippin!" wordmark is composited as a small watermark-scale mark in the
-**top-right** corner (balances the top-left kicker; top-right stays clear of the
-long wrapped title, which the bottom corners do not). It is a separate brand
-asset layered on top — the DESIGN.md dark/amber system, caption bar, and
-typography are unchanged.
+The top of the composite is a **striped brand header** built from scratch as
+solid bands (`drawHeader` in `composite.ts`), matching a reference mockup:
 
-- **Source:** provided at `assets/socailmedia/branding.png` — note the folder is
-  misspelled **"socailmedia"** (not the "social media" path originally given).
-  A copy is bundled at `brand/branding-source.png` so extraction is reproducible.
-- **Extraction (`extract-wordmark.ts`):** the source is a striped banner with the
-  white wordmark on a black speckled blob (not transparent). The wordmark is
-  isolated by near-white thresholding within the upper-right region + a
-  connected-component speckle filter → `brand/yotrippin-wordmark.png` (744×166,
-  transparent). *Extraction quality: clean — visually verified on dark and grey
-  backgrounds, no residual box/stripe/speckle. One honest caveat: the isolation
-  is a binary threshold, so glyph edges are hard (not anti-aliased); negligible
-  at watermark scale, but it is not a vector-perfect cut.*
-- Skipped gracefully if the asset is absent (composite proceeds without it).
+- a full-width **yellow** strip, then a taller full-width **coral** band carrying
+  the **"yoTrippin!"** wordmark (bold white, left-aligned), then a thin dark
+  divider, above the photo.
+- This **replaced** the old "PIN OF THE WEEK" kicker AND the earlier top-right
+  PNG wordmark (from an interim version). The PNG-extraction path
+  (`extract-wordmark.ts` + `brand/`) and its source banner
+  (`assets/socailmedia/branding.png` — note the misspelled folder) were removed:
+  they used a *diagonal*-striped banner that doesn't match this horizontal-band
+  reference, and the wordmark is now rendered as text.
+
+⚠️ **Approximations (flagged for correction against the real brand):**
+- **Band colors** are guesses at a warm yellow/coral pairing —
+  `yellow #f9c22e`, `coral #e5431e`, `divider #2a2426` (in `BRAND.header`).
+  *Confidence: unverified / estimated — no brand hex was provided.*
+- **Wordmark font** is **Baloo 2** (the closest available rounded bold, OFL),
+  rendered with a light stroke to fake the heavier weight, since the real
+  yoTrippin! custom face is unavailable. *Confidence: strong inference on
+  "closest available"; the exact face is unmatched.*
+- A **thin dark divider** under the coral band was added to match the reference
+  (the spec text described only two bands). *Flagged addition.*
+- The **"Yo Trippin" brand label was removed from the bottom caption bar** — the
+  reference and the spec's bottom-content list both omit it, and keeping it would
+  duplicate the brand that now lives in the header. *Deviation from a literal
+  reading of "bottom stays as-is"; flagged.*
 
 ---
 
@@ -214,3 +223,7 @@ typography are unchanged.
 - The adapter is a separate, net-new implementation (no prior Yo Trippin Nano
   Banana adapter exists): **strong inference** — comprehensive negative grep
   across the repo (only Mapbox map-pin icon helpers matched).
+- The striped header renders per the reference (yellow + coral + wordmark +
+  divider, kicker/PNG-logo removed): **literal / visually verified** (rendered +
+  inspected 2026-09-10). Its band colors and wordmark font are **estimated /
+  approximate** — no brand hex or font was provided.
