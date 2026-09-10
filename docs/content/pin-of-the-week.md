@@ -126,45 +126,51 @@ An optional `--llm` mode rewrites only the hook/body into brand voice via the
 Anthropic SDK, **constrained to add no new facts**, and falls back to the
 deterministic template when no `ANTHROPIC_API_KEY` is set.
 
-### Image (Nano Banana)
+### Image — two-step pipeline (photo treatment → deterministic composite)
 
-"Nano Banana" is Google's Gemini image model (`gemini-2.5-flash-image`). No image
-pipeline existed, so `nano-banana.ts` is the net-new adapter: an **image-to-image**
-render that sends the place's real `photo_url` as the hero reference plus the
-brand prompt composed from `DESIGN.md` tokens (base `#0a0b0c`, amber accent
-`#c8a96e`, Space Mono / Barlow / Barlow Condensed, 4:5 portrait). It renders only
-when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise it dry-runs so the
-rest of the pipeline still produces reviewable artifacts.
+The image is built in **two steps** so the place name is always spelled exactly
+and the typography is the real `DESIGN.md` fonts. This replaced the earlier
+single-step "let the model draw the text" approach, which garbled the name
+(PR #407: "Cameground"/"Prairre"; a retry gave "Camprgound") — image models do
+not reliably render exact long text or hit specific fonts.
 
-The adapter passes `generationConfig.imageConfig.aspectRatio` to force the output
-shape — without it the model inherits the (landscape) reference photo's aspect
-and produces a landscape image despite the "Portrait 4:5" prompt text (verified
-2026-09-10: first render came out 1184×864; with `imageConfig.aspectRatio` it is
-896×1152 portrait).
+1. **Nano Banana photo treatment (`nano-banana.ts`)** — "Nano Banana" is Google's
+   Gemini image model (`gemini-2.5-flash-image`). It performs an **image-to-image**
+   grade of the place's real `photo_url` into the dark, warm-shadowed brand look.
+   The prompt (`PHOTO_TREATMENT_BRIEF`) contains **NO text instructions** — it
+   explicitly forbids any letters/logos/overlays, so the model only produces the
+   graded photo (`base.png`). `generationConfig.imageConfig.aspectRatio` forces
+   the portrait shape (without it the model inherits the landscape reference's
+   aspect — verified 2026-09-10).
+2. **Deterministic caption bar (`composite.ts`)** — `@napi-rs/canvas` draws the
+   caption bar over the treatment using the **real place name straight from the
+   SELECT row** (never model text) in the bundled `DESIGN.md` fonts (Space Mono
+   kicker, Barlow Condensed 700 title, Barlow subline) and the amber `#c8a96e`
+   accent, at exactly `1080×1350`. Fonts are bundled under
+   `pin-of-the-week/fonts/` (OFL) so rendering is identical on any machine.
 
-#### Verified render (2026-09-10, billed key)
+Renders only when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise the
+render step dry-runs and the caption/prompt/spec artifacts are still written.
 
-A real render of *Gold Bluffs Beach Campground* succeeded and was visually
-inspected against `DESIGN.md`. Sample: `output/gold-bluffs-…/image.png`.
+#### Verified render (2026-09-10, billed key) — blocker resolved
 
-- **Matches** — palette (near-black base, amber accent used *accent-only* on the
-  kicker + verified mark, off-white title, muted subline), composition (hero
-  photo top ⅔ + dark scrim, kicker top-left, caption bar lower third), and 4:5
-  portrait. *Confidence: literal / visually verified.*
-- **⚠️ Does NOT match, and it's a blocker for publishing — garbled text.** The
-  image model renders the place-name overlay with spelling errors
-  ("Cameground"/"Prairre" for "Campground"/"Prairie"; a landscape retry produced
-  "Camprgound"). Image models do not reliably render exact long text. **A brand
-  post cannot ship misspelled.** *Confidence: literal / visually verified.*
-- **⚠️ Typography approximated, not exact.** DESIGN.md calls for Space Mono
-  (kicker) and Barlow Condensed 700 (title); the model produced a spaced sans
-  kicker and a non-condensed bold title. *Confidence: literal / visually
-  verified.*
-- **Fix / follow-up (flagged, not built):** stop rendering text through the
-  model. Use Nano Banana only for the photo grade/background, then composite the
-  caption bar deterministically (SVG/canvas) with the real fonts, exact colors,
-  and correct text. That guarantees spelling + typography and is the only
-  publish-safe path.
+A real two-step render of *Gold Bluffs Beach Campground* succeeded and both
+stages were **visually inspected** against `DESIGN.md`. Samples:
+`output/gold-bluffs-…/base.png` (treatment) and `.../image.png` (final).
+
+- **Step 1 `base.png`** — clean graded photo of the real campsite, **zero text /
+  logos / graphics**. Confirms text is kept out of the model. *Literal /
+  visually verified.*
+- **Step 2 `image.png` — place name pixel-correct.** Renders
+  "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park" spelled
+  **exactly** as the source row — the PR #407 garbling is gone. *Literal /
+  visually verified.*
+- **Typography now exact** — Space Mono tracked kicker, Barlow Condensed 700
+  title (wrapped to two lines), Barlow subline, amber accent used *accent-only*
+  (kicker + vector check + "Verified"). *Literal / visually verified.*
+- **Palette + composition match** — near-black base, hero photo with bottom
+  scrim, kicker top-left, caption bar lower third, 4:5 portrait (1080×1350).
+  *Literal / visually verified.*
 
 ---
 
@@ -176,12 +182,14 @@ inspected against `DESIGN.md`. Sample: `output/gold-bluffs-…/image.png`.
   semantics: **directly verified** in the migrations + a live query.
 - The caption format and image style guide: **authored this session** (no prior
   standard existed) — first drafts, flagged as such.
-- The Nano Banana render succeeds end-to-end with a billed key, is 4:5 portrait,
-  and matches the palette/composition: **literal / directly verified** (rendered
-  + visually inspected 2026-09-10).
-- The render's text is misspelled and typography is approximate: **literal /
-  visually verified** — the reason to composite text deterministically rather
-  than render it through the model.
+- The two-step render succeeds end-to-end with a billed key, is 4:5 portrait
+  (1080×1350), the place name is spelled exactly, and the typography/palette
+  match `DESIGN.md`: **literal / directly verified** (rendered + both stages
+  visually inspected 2026-09-10).
+- Text is now composited deterministically (not model-rendered), which is what
+  guarantees exact spelling + fonts: **literal / directly verified** — `base.png`
+  carries no text; `composite.ts` draws the SELECT row's name in the bundled
+  fonts.
 - The adapter is a separate, net-new implementation (no prior Yo Trippin Nano
   Banana adapter exists): **strong inference** — comprehensive negative grep
   across the repo (only Mapbox map-pin icon helpers matched).

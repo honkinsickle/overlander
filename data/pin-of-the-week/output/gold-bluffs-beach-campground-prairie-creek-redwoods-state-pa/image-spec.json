@@ -1,5 +1,5 @@
 {
-  "prompt": "A branded Instagram post for the overlanding brand \"Yo Trippin\". Portrait 4:5 (1080x1350). Dark, cinematic, moody outdoor aesthetic on a near-black base (#0a0b0c). The provided reference photo of the real place is the hero image, filling the upper ~two-thirds edge to edge, with a subtle dark gradient scrim along the bottom for text legibility. A small top-left kicker label reads \"PIN OF THE WEEK\" in an uppercase monospace typeface (Space Mono), tinted warm amber (#c8a96e), with generous letter-spacing. Lower third is a clean dark caption bar: the place name as a bold condensed sans headline (Barlow Condensed) in off-white (#eceae4), a smaller muted subline (Barlow) for category and state. Amber is an ACCENT ONLY — kicker, a thin rule, and the verified mark; never large fills. Do NOT invent text, ratings, logos, or details beyond what the caption bar specifies. No people, no watermark, no stock-photo look, no lens flare.\n\nRender this exact text and nothing else:\n- Top-left kicker: \"PIN OF THE WEEK\" (uppercase mono, amber #c8a96e).\n- Headline in the lower caption bar: \"Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park\" (bold Barlow Condensed, off-white).\n- Subline under the headline: \"Campground · CA\" (Barlow, muted grey).\n- A small verified mark near the subline: \"✓ Yo Trippin Verified\" (amber #c8a96e).\nThe hero reference photo IS the real place — keep it recognizable; color-grade it to a\ncohesive dark, warm-shadowed look. Portrait 4:5.",
+  "prompt": "Color-grade and lightly retouch the provided reference photo of a real place. Portrait 4:5 (1080x1350). Dark, cinematic, moody outdoor aesthetic with warm shadows on a near-black base (#0a0b0c); gently darken the lower third so an overlay reads cleanly. Keep the real place clearly recognizable — do not change its content or geography. ABSOLUTELY NO text, letters, words, numbers, logos, watermarks, badges, captions, frames, or graphic overlays of any kind. No people added. No lens flare, no stock-photo look. Output the photograph only.",
   "referenceImageUrls": [
     "https://www.nps.gov/common/uploads/structured_data/7E763C66-C8C9-61C1-77FA47D7EE1D3920.jpg"
   ],
@@ -10,6 +10,7 @@
   },
   "overlayText": {
     "kicker": "PIN OF THE WEEK",
+    "brand": "Yo Trippin",
     "title": "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park",
     "subline": "Campground · CA",
     "verified": "✓ Yo Trippin Verified"

@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.9",
     "@supabase/supabase-js": "^2.105.4",
     "@turf/turf": "^7.2.0",
     "commander": "^12.1.0",

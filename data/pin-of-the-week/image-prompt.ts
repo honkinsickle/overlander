@@ -8,7 +8,7 @@
  */
 
 import type { EvaluatedCandidate } from "./eligibility.ts";
-import { BRAND, IMAGE_STYLE_BRIEF } from "./style-guide.ts";
+import { BRAND, PHOTO_TREATMENT_BRIEF } from "./style-guide.ts";
 
 export interface ImagePromptSpec {
   prompt: string;
@@ -16,9 +16,10 @@ export interface ImagePromptSpec {
   referenceImageUrls: string[];
   aspectRatio: string;
   dimensions: { width: number; height: number };
-  /** The exact text the image must render, so nothing is invented. */
+  /** The exact text the compositor draws (never the model), so nothing is invented. */
   overlayText: {
     kicker: string;
+    brand: string;
     title: string;
     subline: string;
     verified: string;
@@ -52,27 +53,18 @@ export function composeImagePrompt(candidate: EvaluatedCandidate): ImagePromptSp
   const subline = candidate.state ? `${label} · ${candidate.state}` : label;
   const verified = candidate.signals.hasOfficialSource ? "✓ Yo Trippin Verified" : "Yo Trippin Pick";
 
+  // Text carried to the deterministic compositor — NOT sent to the model.
+  // The title is the real place name straight from the SELECT row.
   const overlayText = {
     kicker: "PIN OF THE WEEK",
+    brand: BRAND.name,
     title: candidate.canonical_name,
     subline,
     verified,
   };
 
-  const prompt = [
-    IMAGE_STYLE_BRIEF,
-    ``,
-    `Render this exact text and nothing else:`,
-    `- Top-left kicker: "${overlayText.kicker}" (uppercase mono, amber ${BRAND.colors.amber}).`,
-    `- Headline in the lower caption bar: "${overlayText.title}" (bold ${BRAND.fonts.title}, off-white).`,
-    `- Subline under the headline: "${overlayText.subline}" (${BRAND.fonts.body}, muted grey).`,
-    `- A small verified mark near the subline: "${overlayText.verified}" (amber ${BRAND.colors.amber}).`,
-    `The hero reference photo IS the real place — keep it recognizable; color-grade it to a`,
-    `cohesive dark, warm-shadowed look. Portrait ${BRAND.aspectRatio}.`,
-  ].join("\n");
-
   return {
-    prompt,
+    prompt: PHOTO_TREATMENT_BRIEF,
     referenceImageUrls: candidate.photo_url ? [candidate.photo_url] : [],
     aspectRatio: BRAND.aspectRatio,
     dimensions: { ...BRAND.dimensions },
