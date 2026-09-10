@@ -89,13 +89,15 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // 2. Bottom scrim for the caption bar (existing dark styling — unchanged).
-  const bottom = ctx.createLinearGradient(0, H * 0.4, 0, H);
+  // 2. Bottom scrim for the caption bar — the gradient ends 33% up from the
+  // bottom (i.e. it covers only the bottom third and fades out at that line).
+  const scrimTop = H * (1 - 0.33);
+  const bottom = ctx.createLinearGradient(0, scrimTop, 0, H);
   bottom.addColorStop(0, "rgba(10,11,12,0)");
   bottom.addColorStop(0.55, "rgba(10,11,12,0.72)");
   bottom.addColorStop(1, "rgba(10,11,12,0.95)");
   ctx.fillStyle = bottom;
-  ctx.fillRect(0, H * 0.4, W, H * 0.6);
+  ctx.fillRect(0, scrimTop, W, H - scrimTop);
 
   const { colors } = BRAND;
 

@@ -168,10 +168,11 @@ stages were **visually inspected** against `DESIGN.md`. Samples:
   visually verified.*
 - **Title typography exact** — Barlow Condensed 700 title (wrapped to two lines),
   Barlow subline. *Literal / visually verified.*
-- **Bottom caption bar** — near-black scrim, caption in the lower third, 4:5
-  portrait (1080×1350). Order is **subline ("Category, State") ABOVE the title**;
-  the standalone "Verified" line was removed (verification is in the header
-  badge now). *Literal / visually verified.*
+- **Bottom caption bar** — near-black scrim whose gradient **ends 33% up from the
+  bottom** (covers only the bottom third, fading out at that line), caption in the
+  lower third, 4:5 portrait (1080×1350). Order is **subline ("Category, State")
+  ABOVE the title**; the standalone "Verified" line was removed (verification is
+  in the header badge now). *Literal / visually verified.*
 
 #### Brand header — the REAL asset (2026-09-10, corrected)
 
