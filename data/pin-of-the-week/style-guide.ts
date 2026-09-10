@@ -48,10 +48,13 @@ export const BRAND = {
  * which is why text is deliberately kept OUT of the prompt.
  */
 export const PHOTO_TREATMENT_BRIEF = [
-  `Color-grade and lightly retouch the provided reference photo of a real place.`,
+  `Lightly enhance the provided reference photo of a real place for a social post.`,
   `Portrait ${BRAND.aspectRatio} (${BRAND.dimensions.width}x${BRAND.dimensions.height}).`,
-  `Dark, cinematic, moody outdoor aesthetic with warm shadows on a near-black base`,
-  `(${BRAND.colors.baseBackground}); gently darken the lower third so an overlay reads cleanly.`,
+  `Keep it BRIGHT and NATURAL: preserve the true daylight exposure and real colors,`,
+  `with clean contrast and a crisp, vibrant look. Do NOT darken, dim, add vignettes,`,
+  `or apply a moody/cinematic grade — the whole frame, and especially the top half,`,
+  `must read at full, natural brightness. (Legibility of the bottom caption is`,
+  `handled separately by an overlay, so do not darken the photo for it.)`,
   `Keep the real place clearly recognizable — do not change its content or geography.`,
   `ABSOLUTELY NO text, letters, words, numbers, logos, watermarks, badges, captions,`,
   `frames, or graphic overlays of any kind. No people added. No lens flare, no stock-photo look.`,

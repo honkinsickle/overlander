@@ -136,7 +136,9 @@ not reliably render exact long text or hit specific fonts.
 
 1. **Nano Banana photo treatment (`nano-banana.ts`)** — "Nano Banana" is Google's
    Gemini image model (`gemini-2.5-flash-image`). It performs an **image-to-image**
-   grade of the place's real `photo_url` into the dark, warm-shadowed brand look.
+   enhancement of the place's real `photo_url` into a **bright, natural** look
+   (preserving true daylight exposure — no darkening; the earlier dark/moody grade
+   was dropped so the top of the frame reads at full brightness).
    The prompt (`PHOTO_TREATMENT_BRIEF`) contains **NO text instructions** — it
    explicitly forbids any letters/logos/overlays, so the model only produces the
    graded photo (`base.png`). `generationConfig.imageConfig.aspectRatio` forces
@@ -204,17 +206,16 @@ stand-in rounded font (Baloo 2); that has been **removed entirely**.
   now lives only in the header; the reference omits it). *Flagged deviation from
   a literal "bottom stays as-is".*
 
-#### ⚠️ Known issue — the photo treatment is underexposed (flagged, not fixed)
+#### Exposure — fixed (2026-09-10)
 
-The Nano Banana base treatment renders **too dark**. Attributed by pixel
-measurement (2026-09-10): the darkness is the **base output, not the composite
-scrim** — mean luminance of `base.png` (before any scrim) is **57/255** in the
-upper sky, **20/255** mid-photo, **13/255** foreground; the composite's bottom
-scrim removes only ~1–4 further points. Root cause: `PHOTO_TREATMENT_BRIEF` asks
-for a "dark, cinematic, moody" grade and to "darken the lower third," and the
-model obeys. *Confidence: literal / directly verified (pixel-measured).* **Fix
-deferred to a separate pass** — it needs prompt softening + iterative re-rendering
-to tune exposure, which is not a trivial one-line change.
+Earlier renders were underexposed because `PHOTO_TREATMENT_BRIEF` asked for a
+"dark, cinematic, moody" grade (measured: `base.png` upper sky **57/255**, mid
+**20/255**, foreground **13/255** — the darkness was the base output, not the
+scrim). The brief was rewritten to **bright/natural, no darkening**. Re-measured
+after the change: `base.png` upper sky **226/255**, mid **196/255**, foreground
+**96/255** — the top of the frame now reads at full brightness, matching the
+reference. *Confidence: literal / directly verified (pixel-measured before &
+after).* The bottom scrim still darkens only the caption area (bottom third).
 
 ---
 
@@ -238,8 +239,9 @@ to tune exposure, which is not a trivial one-line change.
   Banana adapter exists): **strong inference** — comprehensive negative grep
   across the repo (only Mapbox map-pin icon helpers matched).
 - The header is the **real brand asset** (`brand/header.png`, from the operator's
-  1080×138 `branding.png`) composited full-width — colors and wordmark are exact,
-  not approximated: **literal / visually verified + pixel-sampled** (2026-09-10).
-- The photo treatment is underexposed and the cause is the Nano Banana base (not
-  the scrim): **literal / directly verified** (base upper-sky 57/255; scrim adds
-  ≤4). Deferred to a separate pass.
+  `branding.png`, now 1080×148 with the verified badge) composited full-width —
+  colors, wordmark, and badge are exact, not approximated: **literal / visually
+  verified + pixel-sampled** (2026-09-10).
+- The photo exposure was fixed by rewriting `PHOTO_TREATMENT_BRIEF` to bright/
+  natural: **literal / directly verified** — `base.png` upper-sky 57→**226**/255
+  after the change; the scrim still darkens only the bottom third.

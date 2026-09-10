@@ -41,8 +41,8 @@ SELECT — so the name is spelled exactly, the header colors/wordmark are the tr
 brand asset (not approximated), and the caption typography is the real brand
 fonts. See `docs/content/pin-of-the-week.md`.
 
-⚠️ Known issue: the Nano Banana photo treatment is underexposed (base output, not
-the scrim) — flagged for a separate pass.
+Exposure: `PHOTO_TREATMENT_BRIEF` renders the photo **bright/natural** (the earlier
+dark grade was dropped); the bottom scrim darkens only the caption area.
 
 Requires the `featured_at` column:
 `supabase/migrations/20260910140000_master_place_featured_at.sql`
