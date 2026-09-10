@@ -136,12 +136,35 @@ brand prompt composed from `DESIGN.md` tokens (base `#0a0b0c`, amber accent
 when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise it dry-runs so the
 rest of the pipeline still produces reviewable artifacts.
 
-> In the build session no valid render credential was available (Viewmax needs a
-> paid plan; the repo's `GOOGLE_PLACES_API_KEY` is service-restricted and
-> returns `API_KEY_SERVICE_BLOCKED`). The adapter was verified end-to-end up to
-> the API call — it fetched the real reference photo, built the multimodal
-> request, and surfaced the live 403. A properly-scoped key renders the image
-> with no code change.
+The adapter passes `generationConfig.imageConfig.aspectRatio` to force the output
+shape — without it the model inherits the (landscape) reference photo's aspect
+and produces a landscape image despite the "Portrait 4:5" prompt text (verified
+2026-09-10: first render came out 1184×864; with `imageConfig.aspectRatio` it is
+896×1152 portrait).
+
+#### Verified render (2026-09-10, billed key)
+
+A real render of *Gold Bluffs Beach Campground* succeeded and was visually
+inspected against `DESIGN.md`. Sample: `output/gold-bluffs-…/image.png`.
+
+- **Matches** — palette (near-black base, amber accent used *accent-only* on the
+  kicker + verified mark, off-white title, muted subline), composition (hero
+  photo top ⅔ + dark scrim, kicker top-left, caption bar lower third), and 4:5
+  portrait. *Confidence: literal / visually verified.*
+- **⚠️ Does NOT match, and it's a blocker for publishing — garbled text.** The
+  image model renders the place-name overlay with spelling errors
+  ("Cameground"/"Prairre" for "Campground"/"Prairie"; a landscape retry produced
+  "Camprgound"). Image models do not reliably render exact long text. **A brand
+  post cannot ship misspelled.** *Confidence: literal / visually verified.*
+- **⚠️ Typography approximated, not exact.** DESIGN.md calls for Space Mono
+  (kicker) and Barlow Condensed 700 (title); the model produced a spaced sans
+  kicker and a non-condensed bold title. *Confidence: literal / visually
+  verified.*
+- **Fix / follow-up (flagged, not built):** stop rendering text through the
+  model. Use Nano Banana only for the photo grade/background, then composite the
+  caption bar deterministically (SVG/canvas) with the real fonts, exact colors,
+  and correct text. That guarantees spelling + typography and is the only
+  publish-safe path.
 
 ---
 
@@ -153,6 +176,12 @@ rest of the pipeline still produces reviewable artifacts.
   semantics: **directly verified** in the migrations + a live query.
 - The caption format and image style guide: **authored this session** (no prior
   standard existed) — first drafts, flagged as such.
-- That a properly-scoped Gemini key renders the image cleanly: **strong
-  inference** — the request path is verified to the point of the auth failure,
-  but a successful render was not observed.
+- The Nano Banana render succeeds end-to-end with a billed key, is 4:5 portrait,
+  and matches the palette/composition: **literal / directly verified** (rendered
+  + visually inspected 2026-09-10).
+- The render's text is misspelled and typography is approximate: **literal /
+  visually verified** — the reason to composite text deterministically rather
+  than render it through the model.
+- The adapter is a separate, net-new implementation (no prior Yo Trippin Nano
+  Banana adapter exists): **strong inference** — comprehensive negative grep
+  across the repo (only Mapbox map-pin icon helpers matched).
