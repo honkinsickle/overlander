@@ -42,8 +42,7 @@ describe("compositePost", () => {
       dimensions: { width: 1080, height: 1350 },
       overlayText: {
         title: "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park",
-        subline: "Campground · CA",
-        verified: "✓ Yo Trippin Verified",
+        subline: "Campground, CA",
       },
     });
     // PNG signature
@@ -65,7 +64,7 @@ describe("compositePost", () => {
     const out = await compositePost({
       baseImage: Buffer.from("not an image"),
       dimensions: { width: 200, height: 250 },
-      overlayText: { title: "T", subline: "S", verified: "V" },
+      overlayText: { title: "T", subline: "S" },
     });
     expect(out.readUInt32BE(16)).toBe(200);
     expect(out.readUInt32BE(20)).toBe(250);

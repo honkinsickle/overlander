@@ -20,7 +20,6 @@ export interface ImagePromptSpec {
   overlayText: {
     title: string;
     subline: string;
-    verified: string;
   };
 }
 
@@ -48,16 +47,17 @@ function categoryLabel(cat: string): string {
 
 export function composeImagePrompt(candidate: EvaluatedCandidate): ImagePromptSpec {
   const label = categoryLabel(candidate.primary_category);
-  const subline = candidate.state ? `${label} · ${candidate.state}` : label;
-  const verified = candidate.signals.hasOfficialSource ? "✓ Yo Trippin Verified" : "Yo Trippin Pick";
+  // "Category, State" (comma) to match the reference mockup + the task's own
+  // phrasing. The verification signal is no longer shown here — it lives in the
+  // header badge — so hasOfficialSource is not needed for a caption line.
+  const subline = candidate.state ? `${label}, ${candidate.state}` : label;
 
   // Text carried to the deterministic compositor — NOT sent to the model.
   // The title is the real place name straight from the SELECT row. (The brand
-  // wordmark lives in the real header asset composited on top — not here.)
+  // wordmark + verified badge live in the real header asset composited on top.)
   const overlayText = {
     title: candidate.canonical_name,
     subline,
-    verified,
   };
 
   return {

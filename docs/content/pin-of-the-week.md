@@ -167,10 +167,11 @@ stages were **visually inspected** against `DESIGN.md`. Samples:
   **exactly** as the source row — the PR #407 garbling is gone. *Literal /
   visually verified.*
 - **Title typography exact** — Barlow Condensed 700 title (wrapped to two lines),
-  Barlow subline, amber accent used *accent-only* (vector check + "Verified").
-  *Literal / visually verified.*
-- **Bottom caption bar unchanged** — near-black scrim, caption in the lower
-  third, 4:5 portrait (1080×1350). *Literal / visually verified.*
+  Barlow subline. *Literal / visually verified.*
+- **Bottom caption bar** — near-black scrim, caption in the lower third, 4:5
+  portrait (1080×1350). Order is **subline ("Category, State") ABOVE the title**;
+  the standalone "Verified" line was removed (verification is in the header
+  badge now). *Literal / visually verified.*
 
 #### Brand header — the REAL asset (2026-09-10, corrected)
 
@@ -179,16 +180,21 @@ recreation. Earlier passes approximated the bands with hex guesses and a
 stand-in rounded font (Baloo 2); that has been **removed entirely**.
 
 - **Source asset** `assets/socailmedia/branding.png` (folder misspelled
-  "socailmedia"; the `assets/social media/` path does **not** exist). The file
-  was **replaced by the operator** with a **1080×138 horizontal header strip**
-  (the earlier version was a 2160×544 diagonal banner). Its real content, sampled
-  directly: a **yellow** band (`#fdc930`) on top, a **coral/brick-red** band
-  (`#cf3c2a`) with the white **"yoTrippin!"** wordmark left-aligned, and a **dark**
-  strip (`#42363c`) at the bottom. *Confidence: literal / pixel-sampled.*
+  "socailmedia"; the `assets/social media/` path does **not** exist). The operator
+  has iterated on it; the current version is a **1080×148 horizontal header
+  strip** that now includes the **verified badge** — a **green filled circle with
+  a white checkmark** left of the **"yoTrippin!"** wordmark, followed by
+  **"verified"** in a lighter weight. Bands: **yellow** (`#fdc930`),
+  **coral/brick-red** (`#cf3c2a`), **dark** strip (`#42363c`). *Confidence:
+  literal / pixel-sampled + visually verified.*
+- **The badge + "verified" are part of the real asset — NOT built as fresh UI.**
+  The checkmark circle and "verified" text are baked into `branding.png`, so they
+  match the reference exactly (they are the reference asset). *Confidence: literal
+  / visually verified.*
 - It is bundled at `brand/header.png` and drawn full-width across the top
-  (`drawHeader` in `composite.ts`), preserving aspect (1080-wide → 138 tall).
-  Because it is the real image, the **colors and wordmark/font are exact, not
-  approximated**. *Confidence: literal / visually verified.*
+  (`drawHeader` in `composite.ts`), preserving aspect (1080-wide → 148 tall).
+  Because it is the real image, the **colors, wordmark, badge, and font are exact,
+  not approximated**. *Confidence: literal / visually verified.*
 - This replaced the old "PIN OF THE WEEK" kicker and every prior approximated
   header. The removed pieces: the from-scratch `drawHeader` bands + `BRAND.header`
   hexes, the Baloo 2 font (`Baloo2-VF.ttf`), and the interim PNG-extraction path

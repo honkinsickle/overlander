@@ -102,7 +102,9 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // 3. Real brand header asset, full-width across the top.
   await drawHeader(ctx, W);
 
-  // 4. Caption block — bottom-anchored: wrapped title, subline + verified.
+  // 4. Caption block — bottom-anchored. Order (top→bottom): subline, then title.
+  // (The "Verified" line was removed — verification now lives in the header
+  // badge; and the subline sits ABOVE the title, per the reference mockup.)
   const titleSize = Math.round(W * 0.066);
   const titleLine = Math.round(titleSize * 1.04);
   const subSize = Math.round(W * 0.028);
@@ -115,8 +117,14 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   ctx.font = `700 ${titleSize}px "Barlow Condensed"`;
   const titleLines = wrapText(ctx, opts.overlayText.title, maxTextWidth);
 
-  const blockH = titleLines.length * titleLine + gapSub + subSize;
+  const blockH = subSize + gapSub + titleLines.length * titleLine;
   let y = H - bottomPad - blockH;
+
+  // subline (ABOVE the title): muted "Category, ST"
+  ctx.font = `400 ${subSize}px "Barlow"`;
+  ctx.fillStyle = colors.textMuted;
+  ctx.fillText(opts.overlayText.subline, PAD, y);
+  y += subSize + gapSub;
 
   // title
   ctx.fillStyle = colors.textPrimary;
@@ -125,19 +133,6 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
     ctx.fillText(line, PAD, y);
     y += titleLine;
   }
-  y += gapSub - (titleLine - titleSize);
-
-  // subline: muted "Category · ST", then amber check + "Yo Trippin Verified"
-  ctx.font = `400 ${subSize}px "Barlow"`;
-  ctx.fillStyle = colors.textMuted;
-  ctx.fillText(opts.overlayText.subline, PAD, y);
-  const subW = ctx.measureText(opts.overlayText.subline).width;
-
-  const markX = PAD + subW + Math.round(W * 0.02);
-  drawCheck(ctx, markX, y + subSize * 0.55, subSize * 0.5, colors.amber);
-  ctx.fillStyle = colors.amber;
-  ctx.font = `600 ${subSize}px "Barlow SemiBold"`;
-  ctx.fillText(opts.overlayText.verified.replace(/^✓\s*/, ""), markX + subSize * 0.75, y);
 
   return canvas.toBuffer("image/png");
 }
@@ -156,19 +151,4 @@ async function drawHeader(ctx: SKRSContext2D, W: number): Promise<void> {
   } catch {
     // header asset absent — leave the composite without a header
   }
-}
-
-/** Small vector checkmark (avoids missing-glyph boxes for ✓). */
-function drawCheck(ctx: SKRSContext2D, x: number, cy: number, size: number, color: string): void {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(2, size * 0.22);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(x, cy);
-  ctx.lineTo(x + size * 0.38, cy + size * 0.42);
-  ctx.lineTo(x + size, cy - size * 0.5);
-  ctx.stroke();
-  ctx.restore();
 }
