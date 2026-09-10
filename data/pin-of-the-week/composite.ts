@@ -94,7 +94,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   const scrimTop = H * (1 - 0.33);
   const bottom = ctx.createLinearGradient(0, scrimTop, 0, H);
   bottom.addColorStop(0, "rgba(10,11,12,0)");
-  bottom.addColorStop(0.55, "rgba(10,11,12,0.72)");
+  bottom.addColorStop(0.55, "rgba(10,11,12,0)");
   bottom.addColorStop(1, "rgba(10,11,12,0.95)");
   ctx.fillStyle = bottom;
   ctx.fillRect(0, scrimTop, W, H - scrimTop);
