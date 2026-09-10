@@ -29,8 +29,10 @@ npm run -w data potw:generate -- --id <uuid> --llm --render
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
 | `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
 | `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; dry-runs without a key) |
-| `composite.ts` | step 2 — deterministic caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
+| `composite.ts` | step 2 — deterministic caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts + brand wordmark |
+| `extract-wordmark.ts` | one-time tool: isolate the white "yoTrippin!" wordmark from the branding banner |
 | `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) for reproducible text |
+| `brand/` | `branding-source.png` (bundled source) + `yotrippin-wordmark.png` (extracted, transparent) |
 | `generate.ts` | GENERATE CLI — writes `base.png` (treatment) + `image.png` (final) to `output/<slug>/` |
 
 **Two-step image pipeline:** Nano Banana renders the graded hero photo with **no

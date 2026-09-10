@@ -1,6 +1,11 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { compositePost, coverRect, wrapText } from "./composite.ts";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe("coverRect", () => {
   it("scales to cover and centers a wider source in a portrait box", () => {
@@ -48,6 +53,14 @@ describe("compositePost", () => {
     // IHDR width/height (big-endian at bytes 16..24)
     expect(out.readUInt32BE(16)).toBe(1080);
     expect(out.readUInt32BE(20)).toBe(1350);
+  });
+
+  it("the extracted yoTrippin! wordmark asset is present and transparent", async () => {
+    const p = join(HERE, "brand", "yotrippin-wordmark.png");
+    expect(existsSync(p)).toBe(true);
+    const img = await loadImage(p);
+    expect(img.width).toBeGreaterThan(100);
+    expect(img.height).toBeGreaterThan(20);
   });
 
   it("falls back to the base color when the base image cannot decode", async () => {

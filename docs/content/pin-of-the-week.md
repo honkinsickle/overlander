@@ -172,6 +172,27 @@ stages were **visually inspected** against `DESIGN.md`. Samples:
   scrim, kicker top-left, caption bar lower third, 4:5 portrait (1080×1350).
   *Literal / visually verified.*
 
+#### Brand wordmark (2026-09-10)
+
+The "yoTrippin!" wordmark is composited as a small watermark-scale mark in the
+**top-right** corner (balances the top-left kicker; top-right stays clear of the
+long wrapped title, which the bottom corners do not). It is a separate brand
+asset layered on top — the DESIGN.md dark/amber system, caption bar, and
+typography are unchanged.
+
+- **Source:** provided at `assets/socailmedia/branding.png` — note the folder is
+  misspelled **"socailmedia"** (not the "social media" path originally given).
+  A copy is bundled at `brand/branding-source.png` so extraction is reproducible.
+- **Extraction (`extract-wordmark.ts`):** the source is a striped banner with the
+  white wordmark on a black speckled blob (not transparent). The wordmark is
+  isolated by near-white thresholding within the upper-right region + a
+  connected-component speckle filter → `brand/yotrippin-wordmark.png` (744×166,
+  transparent). *Extraction quality: clean — visually verified on dark and grey
+  backgrounds, no residual box/stripe/speckle. One honest caveat: the isolation
+  is a binary threshold, so glyph edges are hard (not anti-aliased); negligible
+  at watermark scale, but it is not a vector-perfect cut.*
+- Skipped gracefully if the asset is absent (composite proceeds without it).
+
 ---
 
 ## Confidence notes (per the task's request)

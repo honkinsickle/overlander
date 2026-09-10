@@ -20,7 +20,10 @@ import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-
 import { BRAND } from "./style-guide.ts";
 import type { ImagePromptSpec } from "./image-prompt.ts";
 
-const FONT_DIR = join(dirname(fileURLToPath(import.meta.url)), "fonts");
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const FONT_DIR = join(MODULE_DIR, "fonts");
+// Pre-extracted transparent "yoTrippin!" wordmark (see extract-wordmark.ts).
+const WORDMARK_PATH = join(MODULE_DIR, "brand", "yotrippin-wordmark.png");
 
 let fontsRegistered = false;
 function registerFonts(): void {
@@ -111,8 +114,24 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillStyle = colors.amber;
-  ctx.font = `400 ${Math.round(W * 0.024)}px "Space Mono"`;
+  const kickerSize = Math.round(W * 0.024);
+  ctx.font = `400 ${kickerSize}px "Space Mono"`;
   drawTracked(ctx, opts.overlayText.kicker.toUpperCase(), PAD, PAD, Math.round(W * 0.006));
+
+  // 3b. Brand wordmark — small watermark-scale mark, top-right (balances the
+  // kicker; top-right stays clear of the long wrapped title in the bottom bar).
+  // Separate brand asset from the DESIGN.md dark/amber system — added on top,
+  // nothing else changes. Skipped gracefully if the asset is missing.
+  try {
+    const mark = await loadImage(WORDMARK_PATH);
+    const markW = Math.round(W * 0.17);
+    const markH = Math.round(markW * (mark.height / mark.width));
+    // Vertically center the mark on the kicker's cap height.
+    const markY = PAD + Math.round((kickerSize - markH) / 2);
+    ctx.drawImage(mark, W - PAD - markW, markY, markW, markH);
+  } catch {
+    // asset absent — leave the composite unchanged
+  }
 
   // 4. Caption block — bottom-anchored: brand, wrapped title, subline + verified.
   const brandSize = Math.round(W * 0.028);
