@@ -1,0 +1,14 @@
+{
+  "id": "037035fd-6fa6-41d8-a93e-71513d8789f7",
+  "canonical_name": "Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park",
+  "primary_category": "campground",
+  "state": "CA",
+  "photo_url": "https://www.nps.gov/common/uploads/structured_data/7E763C66-C8C9-61C1-77FA47D7EE1D3920.jpg",
+  "prominence_score": 11,
+  "official_sources": [
+    "nps",
+    "ridb"
+  ],
+  "eligible": true,
+  "rejections": []
+}
