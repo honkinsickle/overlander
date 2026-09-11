@@ -3,9 +3,15 @@
   "canonical_name": "Boulder Basin",
   "primary_category": "campground",
   "state": "CA",
-  "photo_url": "https://cdn.recreation.gov/public/images/63682_700.webp",
-  "photo_source": "corpus",
-  "override": null,
+  "photo_url": "manual-override://image/png",
+  "photo_source": "override:file",
+  "override": {
+    "source": "Adam",
+    "license": "owned/manual",
+    "attribution": null,
+    "image_url": null,
+    "mime_type": "image/png"
+  },
   "prominence_score": 7,
   "official_sources": [
     "ridb"
