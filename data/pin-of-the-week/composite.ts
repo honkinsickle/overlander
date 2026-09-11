@@ -90,28 +90,20 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // 2. Bottom scrim for the caption bar — the gradient ends 33% up from the
-  // bottom (i.e. it covers only the bottom third and fades out at that line).
-  const scrimTop = H * (1 - 0.33);
-  const bottom = ctx.createLinearGradient(0, scrimTop, 0, H);
-  bottom.addColorStop(0, "rgba(10,11,12,0)");
-  bottom.addColorStop(0.5, "rgba(10,11,12,0.95)");
-  bottom.addColorStop(1, "rgba(10,11,12,0.95)");
-  ctx.fillStyle = bottom;
-  ctx.fillRect(0, scrimTop, W, H - scrimTop);
-
   const { colors } = BRAND;
 
-  // 3. Real brand header asset, full-width across the top.
-  await drawHeader(ctx, W);
+  // 2. The full-frame brand asset (branding.png), composited over the photo.
+  // As of the 2026-09-11 full-frame swap the ASSET owns all the chrome — header,
+  // the bottom scrim, the category label + divider, and the route decoration —
+  // so the code no longer draws its own scrim or category subline. Code supplies
+  // only the photo (above) and the place name (below).
+  await drawFrame(ctx, W);
 
-  // 4. Caption block — bottom-anchored. Order (top→bottom): subline, then title.
-  // (The "Verified" line was removed — verification now lives in the header
-  // badge; and the subline sits ABOVE the title, per the reference mockup.)
+  // 3. Place name (title) — drawn in the asset's name slot below the divider,
+  // bottom-anchored. Same Barlow Condensed styling as before; the subline
+  // (category) is intentionally gone (the frame carries the category label).
   const titleSize = Math.round(W * 0.066);
   const titleLine = Math.round(titleSize * 1.04);
-  const subSize = Math.round(W * 0.028);
-  const gapSub = Math.round(H * 0.014);
   const bottomPad = Math.round(H * 0.055);
   const maxTextWidth = W - PAD * 2;
 
@@ -120,18 +112,10 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   ctx.font = `700 ${titleSize}px "Barlow Condensed"`;
   const titleLines = wrapText(ctx, opts.overlayText.title, maxTextWidth);
 
-  const blockH = subSize + gapSub + titleLines.length * titleLine;
+  const blockH = titleLines.length * titleLine;
   let y = H - bottomPad - blockH;
 
-  // subline (ABOVE the title): muted "Category, ST"
-  ctx.font = `400 ${subSize}px "Barlow"`;
-  ctx.fillStyle = colors.textMuted;
-  ctx.fillText(opts.overlayText.subline, PAD, y);
-  y += subSize + gapSub;
-
-  // title
   ctx.fillStyle = colors.textPrimary;
-  ctx.font = `700 ${titleSize}px "Barlow Condensed"`;
   for (const line of titleLines) {
     ctx.fillText(line, PAD, y);
     y += titleLine;
@@ -141,17 +125,18 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 }
 
 /**
- * Draw the REAL brand header asset (brand/header.png — the actual yellow/coral
- * bands + "yoTrippin!" wordmark) full-width across the top, preserving its
- * aspect ratio. This uses the true brand colors and wordmark, not a recreation.
- * Skipped gracefully if the asset is missing.
+ * Draw the REAL full-frame brand asset (brand/header.png = branding.png — the
+ * yoTrippin! header band + transparent body + baked scrim, category label,
+ * divider and route decoration) full-width from the top, preserving its aspect
+ * ratio (a 1080x1348 asset covers ~the whole 1080x1350 canvas). Uses the true
+ * brand art, not a recreation. Skipped gracefully if the asset is missing.
  */
-async function drawHeader(ctx: SKRSContext2D, W: number): Promise<void> {
+async function drawFrame(ctx: SKRSContext2D, W: number): Promise<void> {
   try {
-    const header = await loadImage(HEADER_PATH);
-    const h = Math.round(header.height * (W / header.width));
-    ctx.drawImage(header, 0, 0, W, h);
+    const frame = await loadImage(HEADER_PATH);
+    const h = Math.round(frame.height * (W / frame.width));
+    ctx.drawImage(frame, 0, 0, W, h);
   } catch {
-    // header asset absent — leave the composite without a header
+    // brand asset absent — leave the composite without the frame
   }
 }
