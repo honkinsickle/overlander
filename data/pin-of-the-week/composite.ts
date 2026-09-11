@@ -26,9 +26,10 @@ import type { ImagePromptSpec } from "./image-prompt.ts";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const FONT_DIR = join(MODULE_DIR, "fonts");
-// The REAL brand header asset (yellow + coral bands + "yoTrippin!" wordmark),
-// bundled from assets/socailmedia/branding.png. Composited directly — its colors
-// and wordmark are the actual brand asset, not approximations.
+// The REAL brand asset, bundled from assets/socialmedia/branding.png. As of the
+// 2026-09-11 asset swap this is a FULL-FRAME 1080x1348 template (opaque header +
+// transparent body + a baked-in footer), not the old 1080x148 header strip; see
+// drawHeader for placement.
 const HEADER_PATH = join(MODULE_DIR, "brand", "header.png");
 
 let fontsRegistered = false;
