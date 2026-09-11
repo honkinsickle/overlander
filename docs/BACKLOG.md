@@ -3,6 +3,22 @@
 
 
 
+## "Pin of the Day" interactive skill — DESIGNED, not built (2026-09-11)
+
+The Pin of the Week pipeline is on `main`; the interactive wrapper is designed
+and agreed with Adam but unbuilt. Full design + decisions:
+`docs/decisions/2026-09-11-pin-of-the-day-skill.md`. To build:
+1. `pin_of_the_day_post` history table (metadata) + committed image archive +
+   a `potw:posts --list`/`--reuse` CLI.
+2. `SKILL.md` at `.claude/skills/pin-of-the-day/` orchestrating
+   `select --search` → optional `override-photo` → `generate --render` →
+   approve (`select --commit` marks used) → save post.
+
+Also parked: **close the stale open PRs #407–#415 (image-iteration stack,
+superseded by #416's squash) and #421 (throwaway preview)** — their content is
+already on `main`.
+
+
 ## Corpus-wide misfiled-source_record + missed-duplicate audit (2026-09-04, PROD, read-only)
 
 **Not a merge-group problem — it lives inside single `master_place` rows**, which

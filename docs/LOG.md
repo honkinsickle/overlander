@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-11 — Pin of the Week pipeline built + merged; Pin of the Day skill designed
+
+- **Built an Instagram "Pin of the Week" content pipeline end-to-end** (net-new
+  `data/pin-of-the-week/`, TEST-only) and merged it to `main` across seven PRs:
+  #406 (SELECT + GENERATE), #416 (bright/natural photo treatment — the squash
+  that also carried the whole image-composite iteration stack), #417 (manual
+  `--search`/`--place-id` selection), #418 (webp/octet-stream mime fix), #419
+  (persistent per-place photo override), #420 (8 fixed caption templates with LRU
+  rotation), #422 (composite the REAL corpus/override photo by default; Gemini
+  now opt-in via `--treat`). Feature docs: `docs/content/pin-of-the-week.md`.
+- **The branded image is a deterministic canvas composite of the REAL photo, not
+  AI-drawn.** Early attempts had Gemini render the text → it garbled the place
+  name ("Cameground" for "Campground", #407). Fix: composite the caption/header
+  deterministically (`composite.ts`, real DESIGN.md fonts + real `brand/header.png`).
+  Then realised Gemini's remaining job (re-grade/reframe) was redundant — the
+  compositor already cover-fits to 4:5 — so #422 made it optional. Default path
+  needs **no API key** and shows the *actual* photo (more honest for "verified").
+- **Grounding:** `master_place.rating` is NULL corpus-wide (measured `0` via
+  `potw:select --count`), so "verified" uses an official-source/prominence proxy,
+  not a fabricated star rating.
+- **3 TEST-only migrations applied + independently verified** (the v1 verifier
+  can't check DDL, so each table was confirmed by direct query): `featured_at` +
+  RPC, `master_place_photo_override`, `pin_of_week_caption_history`. **Zero PROD
+  writes all session.**
+- **Recurring gotcha — stacked squash-merged PRs re-conflict when a parent
+  lands.** Resolved ~4× with `git rebase --onto origin/main <old-parent-tip>`
+  (drops the parent's duplicated commit). Also: a new migration must be authored
+  on top of TEST's current ledger or `db push` refuses ("remote migration
+  versions not found locally").
+- **⚠️ Ten stale OPEN PRs remain (#407–#415 image-iteration stack, #421 preview)**
+  — their content is already on `main` via #416's squash; they should be closed.
+  Flagged, not closed (awaiting Adam's say-so; he OK'd #421).
+- **Designed the "Pin of the Day" interactive skill with Adam** (decisions:
+  interactive to start; mark-as-used on approve; a reusable post history). NOT
+  built. Recorded in `docs/decisions/2026-09-11-pin-of-the-day-skill.md`; next
+  session builds the `pin_of_the_day_post` history + `potw:posts` + the `SKILL.md`.
+
 ## 2026-09-04 (later) — 4-group PROD merge executed + verified (79/81/120/5002)
 
 - **This session IS `cc-prod-run-4groups-2026-09-04`** — the "second PROD run"

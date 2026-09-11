@@ -1,3 +1,23 @@
+# STATE — branch `wrap-2026-09-11-pin-of-the-week` · 2026-09-11 — **The Pin of the Week content pipeline is BUILT and fully on `main`. The "Pin of the Day" interactive skill is DESIGNED (agreed with Adam) but NOT built.** A separate work-stream from the merge-cleanup mastheads below.
+
+(**newest truth: a net-new subsystem in `data/pin-of-the-week/`, TEST-only, merged to `main` across seven PRs. `main` head `5ed1846` (#422).**
+
+**What's on `main`** `[literal — merged PRs + files]`: an Instagram "Pin of the Week" content pipeline — `potw:select` (ranked *or* manual `--search`/`--place-id`; eligibility gate; `--commit` stamps `featured_at` so a place never repeats), `potw:override-photo` (per-place photo override, url or local file, `source`+`license` required), and `potw:generate` (one of 8 rotating caption templates + a branded **1080×1350** image). Merged: #406 (SELECT+GENERATE), #416 (bright/natural treatment — its squash also carried the whole image-composite iteration stack), #417 (manual selection), #418 (webp mime fix), #419 (photo override), #420 (8 caption templates), #422 (composite the REAL corpus/override photo by default; Gemini optional via `--treat`). Feature docs: `docs/content/pin-of-the-week.md`.
+
+**Image architecture** `[literal — composite.ts / generate.ts on main]`: the branded post is a **deterministic `@napi-rs/canvas` composite** of the **real** corpus (or override) photo, cover-fit to 4:5, under the real brand header asset + a caption bar drawn in the DESIGN.md fonts. Text is composited (never model-drawn — image models garble it, #407). **No AI/API key by default** — Gemini (`gemini-2.5-flash-image`) only ever did an optional photo re-grade/reframe (`--treat`), which #422 made opt-in because the compositor already handles the reframe.
+
+**Grounding call** `[literal — `potw:select --count`]`: `master_place.rating` is NULL corpus-wide (0 rows), so "Yo Trippin Verified" uses an official-source (`nps`/`ridb`) + `prominence_score` proxy, not a star rating.
+
+**TEST schema added (3 migrations, applied + verified on TEST, NO PROD)** `[literal — migrations on main + direct table queries]`: `master_place.featured_at` + `set_master_place_featured_at()` RPC (`20260910140000`); `master_place_photo_override` (`20260911000000`); `pin_of_week_caption_history` (`20260911010000`). See DATA_INVENTORY §TEST.
+
+**⚠️ TEN stale OPEN PRs to CLOSE** `[literal — `gh pr view`]`: **#407–#415** (the image-composite iteration stack — each superseded the last; their content landed on `main` via #416's squash) and **#421** (a throwaway "do not merge" preview). All redundant with `main`; leaving them open only breeds rebase conflicts. Adam OK'd closing #421; the rest await his say-so.
+
+**NEXT — the "Pin of the Day" skill (DESIGNED, agreed, NOT built).** Interactive `/pin-of-the-day`: ask which campsite → Adam names it → confirm the match + show its photo → keep or override → `generate --render` (real photo, no AI) → show → approve → **mark used** (`featured_at`) → **save to a reusable post history**. To build: a `pin_of_the_day_post` history table (metadata in DB + composited image on disk), a `potw:posts` list/reuse CLI, and the `SKILL.md`. Full design + decisions: `docs/decisions/2026-09-11-pin-of-the-day-skill.md`.
+
+The mastheads below are the (unrelated) PROD merge-cleanup stream, preserved verbatim per this file's convention.)
+
+---
+
 # STATE — branch `wrap-2026-09-04-4groups` · 2026-09-04 (later 39) — **This IS the "second PROD run" #404 flagged but couldn't vouch for.** Groups 79/81/120/5002 (`cc-prod-run-4groups`) — its entity verdicts, fresh pre-flight, and pre/post verification, recorded here.
 
 (**newest truth: this thread executed `cc-prod-run-4groups-2026-09-04` (the four rows #404's later-38 masthead recorded as fact but said it "does not vouch for"). Four Phase-3 findings merged on PROD at `19:05:30Z`: 79 Darlingtonia SNS, 81 Farewell Bend SRA, 120 Sumpter Valley Dredge SHA (all same-entity), and net-new 5002 = Face Rock viewpoint park-side. Definitions + block-list + TEST-validation committed via PR #403 (`e445897`, merged to main). Data only, no schema change.**
