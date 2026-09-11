@@ -39,6 +39,7 @@ import {
   VERIFICATION_NOTE,
   type EvaluatedCandidate,
 } from "./eligibility.ts";
+import { applyPhotoOverride } from "./photo-override.ts";
 
 const DIVERSITY_STATE_BONUS = 100;
 const DIVERSITY_CATEGORY_BONUS = 50;
@@ -231,6 +232,12 @@ async function runManual(
     }
     candidate = matches[0];
   }
+
+  // A manual photo override rescues a place whose ONLY corpus gap is a missing
+  // photo (the primary reason overrides exist). Apply it and re-evaluate BEFORE
+  // the eligibility gate — otherwise --commit refuses an override-rescued place,
+  // exactly as generate applies it before building the image.
+  ({ candidate } = await applyPhotoOverride(db, candidate));
 
   // Same eligibility gate as everywhere else — never silently proceed.
   if (!candidate.eligible) {

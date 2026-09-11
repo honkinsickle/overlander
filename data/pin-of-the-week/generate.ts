@@ -29,7 +29,6 @@ import { join } from "node:path";
 import { getDb } from "../ingestion/lib/db.ts";
 import {
   assertTestProject,
-  evaluate,
   fetchEvaluatedById,
   fetchEvaluatedCandidates,
   type EvaluatedCandidate,
@@ -39,7 +38,7 @@ import { logTemplateUse, recentTemplateUses } from "./caption-history.ts";
 import { composeImagePrompt } from "./image-prompt.ts";
 import { renderNanoBanana } from "./nano-banana.ts";
 import { compositePost } from "./composite.ts";
-import { fetchPhotoOverride, type PhotoOverride } from "./photo-override.ts";
+import { applyPhotoOverride, type PhotoOverride } from "./photo-override.ts";
 
 interface Args {
   id: string | null;
@@ -125,14 +124,11 @@ async function main(): Promise<void> {
   // corpus-resolved photo. Re-evaluate so the "has photo" eligibility check
   // passes even when the corpus photo is missing (a common reason to override);
   // all other eligibility rules (description, publishable, …) still apply.
-  const override = await fetchPhotoOverride(db, candidate.id);
+  const { candidate: withOverride, override } = await applyPhotoOverride(db, candidate);
+  candidate = withOverride;
   let inlineReferences: Array<{ mimeType: string; base64: string }> | undefined;
-  if (override) {
-    candidate.photo_url = override.image_url ?? `manual-override://${override.mime_type ?? "image"}`;
-    candidate = evaluate(candidate);
-    if (override.image_data) {
-      inlineReferences = [{ mimeType: override.mime_type ?? "image/jpeg", base64: override.image_data }];
-    }
+  if (override?.image_data) {
+    inlineReferences = [{ mimeType: override.mime_type ?? "image/jpeg", base64: override.image_data }];
   }
 
   if (!candidate.eligible && !args.force) {
