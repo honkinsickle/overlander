@@ -25,11 +25,33 @@ export interface RenderResult {
   reason?: string;
 }
 
+/**
+ * Detect image type from magic bytes. Needed because some CDNs (e.g.
+ * recreation.gov) serve real images with a generic `application/octet-stream`
+ * content-type, which the Gemini API rejects. Sniffing the bytes is
+ * authoritative regardless of the header or URL extension.
+ */
+export function sniffImageMime(buf: Buffer): string | null {
+  if (buf.length >= 8 && buf.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") return "image/png";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buf.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  if (buf.length >= 4 && buf.subarray(0, 4).toString("ascii") === "GIF8") return "image/gif";
+  return null;
+}
+
 async function fetchImageAsInlineData(url: string): Promise<{ mimeType: string; data: string }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`reference image fetch failed (${res.status}) for ${url}`);
-  const mimeType = res.headers.get("content-type") ?? "image/jpeg";
   const buf = Buffer.from(await res.arrayBuffer());
+  const header = res.headers.get("content-type") ?? "";
+  // Prefer sniffed type; fall back to a real image/* header; last resort jpeg.
+  const mimeType = sniffImageMime(buf) ?? (header.startsWith("image/") ? header : "image/jpeg");
   return { mimeType, data: buf.toString("base64") };
 }
 

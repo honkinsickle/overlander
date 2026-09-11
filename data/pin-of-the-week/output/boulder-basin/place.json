@@ -1,0 +1,13 @@
+{
+  "id": "42d677aa-d9c0-45bc-bf34-4c49b83399ba",
+  "canonical_name": "Boulder Basin",
+  "primary_category": "campground",
+  "state": "CA",
+  "photo_url": "https://cdn.recreation.gov/public/images/63682_700.webp",
+  "prominence_score": 7,
+  "official_sources": [
+    "ridb"
+  ],
+  "eligible": true,
+  "rejections": []
+}
