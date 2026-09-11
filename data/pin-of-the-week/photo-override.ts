@@ -8,6 +8,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { evaluate, type EvaluatedCandidate } from "./eligibility.ts";
 
 export interface PhotoOverride {
   master_place_id: string;
@@ -70,6 +71,26 @@ export async function setPhotoOverride(db: SupabaseClient, input: SetPhotoOverri
   };
   const r = await db.from("master_place_photo_override").upsert(row, { onConflict: "master_place_id" });
   if (r.error) throw new Error(`set photo override failed: ${JSON.stringify(r.error)}`);
+}
+
+/**
+ * Apply a place's photo override (if any) and RE-EVALUATE eligibility, then
+ * return the (possibly re-evaluated) candidate plus the override row.
+ *
+ * Shared by `generate` (build the image) and `select --commit` (mark used) so
+ * the two cannot diverge on whether an override counts. A place whose ONLY
+ * corpus gap is a missing photo — the primary reason overrides exist — becomes
+ * eligible once an override supplies one; without this, `select` evaluates the
+ * corpus row alone and refuses to commit an override-rescued place.
+ */
+export async function applyPhotoOverride(
+  db: SupabaseClient,
+  candidate: EvaluatedCandidate,
+): Promise<{ candidate: EvaluatedCandidate; override: PhotoOverride | null }> {
+  const override = await fetchPhotoOverride(db, candidate.id);
+  if (!override) return { candidate, override: null };
+  const photo_url = override.image_url ?? `manual-override://${override.mime_type ?? "image"}`;
+  return { candidate: evaluate({ ...candidate, photo_url }), override };
 }
 
 /** Delete the override for a place. Returns true if a row was removed. */
