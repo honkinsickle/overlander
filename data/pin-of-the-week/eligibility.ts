@@ -159,6 +159,39 @@ export async function fetchEvaluatedCandidates(db: SupabaseClient): Promise<Eval
   return out;
 }
 
+/** Fetch and evaluate one place by id. Returns null if no such row. */
+export async function fetchEvaluatedById(
+  db: SupabaseClient,
+  id: string,
+): Promise<EvaluatedCandidate | null> {
+  const res = await db.from("master_place").select(CANDIDATE_COLUMNS).eq("id", id).limit(1);
+  if (res.error || res.data == null) throw new Error(`fetch by id failed: ${JSON.stringify(res)}`);
+  if (res.data.length === 0) return null;
+  return evaluate(res.data[0] as unknown as CandidateRow);
+}
+
+/**
+ * Name lookup for manual selection: case-insensitive substring match on
+ * canonical_name. This is an UNINDEXED sequential scan over master_place (no
+ * trigram index exists), so it is fine for occasional manual/CLI use but is NOT
+ * suitable for a hot path. Capped with a small limit.
+ */
+export async function searchEvaluatedByName(
+  db: SupabaseClient,
+  name: string,
+  limit = 12,
+): Promise<EvaluatedCandidate[]> {
+  const pattern = `%${name.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+  const res = await db
+    .from("master_place")
+    .select(CANDIDATE_COLUMNS)
+    .ilike("canonical_name", pattern)
+    .order("prominence_score", { ascending: false })
+    .limit(limit);
+  if (res.error || res.data == null) throw new Error(`name search failed: ${JSON.stringify(res)}`);
+  return (res.data as unknown as CandidateRow[]).map(evaluate);
+}
+
 /** Guard: refuse to run against anything but the TEST project. */
 export function assertTestProject(): void {
   const url = process.env.SUPABASE_URL ?? "";
