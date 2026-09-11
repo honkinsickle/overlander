@@ -27,9 +27,8 @@ import { getDb } from "../ingestion/lib/db.ts";
 import {
   assertTestProject,
   evaluate,
+  fetchEvaluatedById,
   fetchEvaluatedCandidates,
-  CANDIDATE_COLUMNS,
-  type CandidateRow,
   type EvaluatedCandidate,
 } from "./eligibility.ts";
 import { buildCaption, pickLruTemplate, TEMPLATE_COUNT } from "./caption.ts";
@@ -69,13 +68,6 @@ function parseArgs(argv: string[]): Args {
   };
 }
 
-async function fetchById(db: ReturnType<typeof getDb>, id: string): Promise<EvaluatedCandidate> {
-  const res = await db.from("master_place").select(CANDIDATE_COLUMNS).eq("id", id).limit(1);
-  if (res.error || res.data == null) throw new Error(`fetch by id failed: ${JSON.stringify(res)}`);
-  if (res.data.length === 0) throw new Error(`no master_place with id ${id}`);
-  return evaluate(res.data[0] as unknown as CandidateRow);
-}
-
 /** Reuse the selector's ranking to get the current top pick. */
 async function topPick(db: ReturnType<typeof getDb>): Promise<EvaluatedCandidate> {
   const evaluated = await fetchEvaluatedCandidates(db);
@@ -97,7 +89,16 @@ async function main(): Promise<void> {
 
   if (!args.id && !args.fromSelect) throw new Error("pass --id <uuid> or --from-select");
 
-  let candidate = args.id ? await fetchById(db, args.id) : await topPick(db);
+  // #417: fetch a manually-selected place by id via the shared helper (or the
+  // ranked top pick). #419: then apply any manual photo override.
+  let candidate: EvaluatedCandidate;
+  if (args.id) {
+    const found = await fetchEvaluatedById(db, args.id);
+    if (!found) throw new Error(`no master_place with id ${args.id}`);
+    candidate = found;
+  } else {
+    candidate = await topPick(db);
+  }
 
   // Manual photo override: if one exists for this place, it replaces the
   // corpus-resolved photo. Re-evaluate so the "has photo" eligibility check

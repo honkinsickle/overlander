@@ -12,9 +12,13 @@ TEST-only. Guarded to the TEST Supabase ref; the only write is `--commit`.
 # how many candidates are eligible right now, and why the rest aren't
 npm run -w data potw:select -- --count
 
-# pick one eligible place (diversity-weighted vs the last N featured picks)
+# pick one eligible place (ranked: diversity-weighted vs the last N featured picks)
 npm run -w data potw:select
 npm run -w data potw:select -- --commit        # also stamp featured_at
+
+# MANUAL selection by id or name (same eligibility checks; ineligible picks reported + exit 1)
+npm run -w data potw:select -- --place-id <uuid> [--json] [--commit]
+npm run -w data potw:select -- --search "gold bluffs"    # one match selects; several are listed
 
 # manual photo override (persistent; generate uses it in place of the corpus photo)
 npm run -w data potw:override-photo -- --place-id <uuid> --url <url> --source "..." --license "..."
@@ -24,9 +28,15 @@ npm run -w data potw:override-photo -- --place-id <uuid> --clear
 
 # generate caption + image prompt/spec (+ image if a Gemini key is set)
 npm run -w data potw:generate -- --from-select
-npm run -w data potw:generate -- --id <uuid> --render               # uses a photo override if one is set
+npm run -w data potw:generate -- --id <uuid> --render               # a manual pick; uses a photo override if set
 npm run -w data potw:generate -- --id <uuid> --caption-template 3   # force caption template 1-8 (default rotates)
 ```
+
+Manual and ranked picks share the same eligibility gate and the same
+`set_master_place_featured_at` commit path; `generate --id <uuid>` feeds a manual
+pick into the photo-treatment + composite pipeline. `--search` is a
+case-insensitive substring match on `canonical_name` — an **unindexed sequential
+scan**, fine for occasional CLI use, not a hot path.
 
 A **photo override** (table `master_place_photo_override`, one row per place)
 swaps in your own photo for a place; `generate` uses it in place of the
@@ -36,8 +46,8 @@ URL or a local `--file` (stored inline as base64). See `docs/content/pin-of-the-
 
 | File | Role |
 |---|---|
-| `eligibility.ts` | read-only eligibility model + full-corpus scan |
-| `select.ts` | SELECT CLI (`--count` / `--commit` / `--recent N` / `--json`) |
+| `eligibility.ts` | read-only eligibility model + full-corpus scan + by-id / by-name lookups |
+| `select.ts` | SELECT CLI — ranked or manual (`--place-id` / `--search` / `--count` / `--commit` / `--json`) |
 | `caption.ts` | 8 fixed caption templates + interpolation + LRU rotation (pure) |
 | `caption-history.ts` | template-use log read/write (`pin_of_week_caption_history`) |
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |

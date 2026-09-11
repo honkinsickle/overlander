@@ -81,6 +81,32 @@ built):** truly maximizing spatial spread (e.g. PostGIS distance from recent
 pins) would be a richer approach than the state/category set-difference used
 here.
 
+### Manual selection (alongside the ranked flow)
+
+Two manual modes sit next to the ranked selector (which is unchanged):
+
+- `--place-id <uuid>` — select that exact place.
+- `--search "<name>"` — case-insensitive substring match on `canonical_name`.
+  One match selects it; several are **listed with their eligibility status** so
+  you can re-run with `--place-id`. This is an **unindexed sequential scan** (no
+  trigram index on `canonical_name`) — fine for occasional CLI use, not a hot
+  path. *(Verified working, not built slow/fragile — flagged as unindexed.)*
+
+Manual picks go through the **same eligibility gate** (`evaluate()`), the **same**
+`--commit` / `set_master_place_featured_at` write, and feed `generate --id <uuid>`
+into the **unchanged** photo-treatment + composite pipeline. A manually-chosen
+place that fails eligibility is reported with its reasons and the command **exits
+non-zero** — it never silently generates.
+
+Verified end-to-end on TEST (2026-09-10, all *literal / directly verified*):
+- `--search "lighthouse"` listed matches with per-row eligibility.
+- ineligible `--place-id` (Trinidad Head Lighthouse — no photo) → printed the
+  reason and **exit code 1**.
+- eligible `--place-id` (Point Bonita Lighthouse, `park_feature` — a different
+  category than the campground/recreation-area used earlier) → selected with
+  `source: "manual"`; `generate --id` rendered a correct 1080×1350 post; and
+  `--commit` stamped `featured_at` (featured rows 1 → 2, row re-queried).
+
 ### featured_at column
 
 `featured_at timestamptz` is added as a **curation snapshot column**, the same
