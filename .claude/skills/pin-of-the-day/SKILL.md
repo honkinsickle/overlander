@@ -42,8 +42,13 @@ npm run -w data potw:select -- --search "<name>" --json
 - **Several matches** → the CLI prints a shortlist (id · name · category ·
   eligible/INELIGIBLE). Show it and ask which id they want, then re-run with
   `--place-id <uuid> --json` to select that one.
-- **No match, or the chosen place is INELIGIBLE** → report exactly why
-  (the CLI prints the rejection reasons) and STOP. Do not force it.
+- **No match** → report and STOP.
+- **INELIGIBLE** → report exactly why (the CLI prints the rejection reasons).
+  **If the ONLY rejection is `no resolved photo`, it's recoverable** — the place
+  becomes eligible once a photo override supplies one, so go to step 4's override
+  branch (ask for a file/URL + source + license), then continue. If there are
+  ANY other rejections (description, verification signal, publishable state),
+  STOP — an override won't fix those. Never force a genuinely ineligible place.
 
 ### 3. Show its photo
 `Read` cannot open a URL, so download the corpus photo to a scratch file, then
@@ -95,6 +100,9 @@ Stamp `featured_at` so the place never recurs:
 ```
 npm run -w data potw:select -- --place-id <uuid> --commit
 ```
+
+This works for override-rescued places too — `select` applies the photo override
+and re-evaluates before the eligibility gate, exactly as `generate` does.
 
 ### 8. Save to the post history
 Record the approved post — inserts the DB row and copies the image + a manifest

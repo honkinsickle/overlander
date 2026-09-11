@@ -17,6 +17,23 @@
 >   verbatim — the real URL for corpus/override:url, the marker for a file
 >   override. No filename is invented.
 >
+> **Follow-up fix (separate PR — see note below — found by dogfooding the skill
+> on Cape Blanco State Park):** `potw:select --commit` evaluated eligibility from corpus data alone
+> and never consulted the photo override, so it **refused to mark used any place
+> eligible only via an override** — i.e. every no-corpus-photo place, the primary
+> reason overrides exist. Only `generate` applied the override. Fixed by
+> extracting the override-apply-and-re-evaluate logic into a shared
+> `applyPhotoOverride()` (in `photo-override.ts`) that BOTH `generate` and
+> `select`'s manual path call, so they cannot drift again. Verified: the same
+> `select --place-id --commit` that failed twice on Cape Blanco now returns
+> `committed: true`.
+>
+> **Merge note:** the build (`potw:posts` + skill + migration) squash-merged as
+> **PR #424** (`main` `37985a0`), but the squash raced and captured only the first
+> commit — the build — so this fix did **not** land with it and reaches `main` via
+> a **separate follow-up PR** (branch `fix-potw-select-override`). Until that
+> merges, `main` carries the override-commit bug.
+>
 > The design below is the original agreed record, preserved.
 
 ## Context

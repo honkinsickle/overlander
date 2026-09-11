@@ -80,6 +80,33 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   wasn't linked (`supabase link --project-ref znldzjdatkogdktymtvi` worked
   non-interactively here — already authed). `.env`-file tsx scripts placed outside
   `data/` hit "top-level await … cjs" — wrap in `main()` and use absolute paths.
+- **Conductor renamed the branch `louisville` → `build-pin-of-the-day-skill`**
+  (reflog: a rename event I did not perform, before my commit) — same branch,
+  same commits. Pushed under the new name; **PR #424** opened against `main`.
+- **Dogfooding the skill immediately caught a real defect.** Making the first
+  real post — Cape Blanco State Park (OR), a **no-corpus-photo** place rescued by
+  a `--file` override — step 7 (`select --commit`) **failed twice**: `select`
+  evaluated corpus eligibility and never consulted the override, so it refused to
+  mark used any place eligible only via an override (i.e. every no-corpus-photo
+  place — the primary reason overrides exist). Only `generate` applied the
+  override. Completed the post by stamping `featured_at` via the RPC directly
+  (the exact write `--commit` performs), then **fixed the root cause:** extracted
+  a shared `applyPhotoOverride()` in `photo-override.ts` that BOTH `generate` and
+  `select`'s manual path call, so they can't drift again; 4 unit tests. The same
+  CLI that failed now returns `committed: true`. **52 POTW tests pass; typecheck
+  clean.** Lesson reinforced: two code paths that must agree on a rule will drift
+  unless they share the code — and dogfooding the real flow found it where the
+  unit tests (which never exercised an override-only place through `select`) did
+  not.
+- **The fix missed the #424 merge — a squash/push race.** #424 squash-merged to
+  `main` (`37985a0`) but captured only the FIRST commit (the build); the fix
+  commit `d9f6424` was not in the squash (confirmed: `git grep applyPhotoOverride
+  origin/main` returns nothing). So `main` briefly carried the override-commit
+  bug. Re-landed the fix via a **separate follow-up PR** from branch
+  `fix-potw-select-override` (cherry-pick of `d9f6424` onto `origin/main`, applied
+  clean, gates green). Lesson: after a merge, **verify the intended changes are
+  actually on `main`** (grep the real ref) rather than trusting the PR's merged
+  status — a late push can miss the squash.
 
 ## 2026-09-04 (later) — 4-group PROD merge executed + verified (79/81/120/5002)
 
