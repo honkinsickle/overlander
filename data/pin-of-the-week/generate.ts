@@ -35,6 +35,7 @@ import { composeCaption, composeCaptionLLM } from "./caption.ts";
 import { composeImagePrompt } from "./image-prompt.ts";
 import { renderNanoBanana } from "./nano-banana.ts";
 import { compositePost } from "./composite.ts";
+import { fetchPhotoOverride } from "./photo-override.ts";
 
 interface Args {
   id: string | null;
@@ -86,7 +87,22 @@ async function main(): Promise<void> {
 
   if (!args.id && !args.fromSelect) throw new Error("pass --id <uuid> or --from-select");
 
-  const candidate = args.id ? await fetchById(db, args.id) : await topPick(db);
+  let candidate = args.id ? await fetchById(db, args.id) : await topPick(db);
+
+  // Manual photo override: if one exists for this place, it replaces the
+  // corpus-resolved photo. Re-evaluate so the "has photo" eligibility check
+  // passes even when the corpus photo is missing (a common reason to override);
+  // all other eligibility rules (description, publishable, …) still apply.
+  const override = await fetchPhotoOverride(db, candidate.id);
+  let inlineReferences: Array<{ mimeType: string; base64: string }> | undefined;
+  if (override) {
+    candidate.photo_url = override.image_url ?? `manual-override://${override.mime_type ?? "image"}`;
+    candidate = evaluate(candidate);
+    if (override.image_data) {
+      inlineReferences = [{ mimeType: override.mime_type ?? "image/jpeg", base64: override.image_data }];
+    }
+  }
+
   if (!candidate.eligible && !args.force) {
     throw new Error(
       `place ${candidate.id} is not eligible: ${candidate.rejections.join("; ")}. Pass --force to override.`,
@@ -94,7 +110,10 @@ async function main(): Promise<void> {
   }
 
   const caption = args.llm ? await composeCaptionLLM(candidate) : composeCaption(candidate);
-  const imagePrompt = composeImagePrompt(candidate);
+  let imagePrompt = composeImagePrompt(candidate);
+  // For an inline (local-file) override there's no URL to fetch — drop the
+  // marker URL from the spec; the bytes are passed to the renderer directly.
+  if (override?.image_data) imagePrompt = { ...imagePrompt, referenceImageUrls: [] };
 
   const slug = slugify(candidate.canonical_name);
   const dir = join(args.out, slug);
@@ -113,6 +132,16 @@ async function main(): Promise<void> {
         primary_category: candidate.primary_category,
         state: candidate.state,
         photo_url: candidate.photo_url,
+        photo_source: override ? (override.image_url ? "override:url" : "override:file") : "corpus",
+        override: override
+          ? {
+              source: override.source,
+              license: override.license,
+              attribution: override.attribution,
+              image_url: override.image_url,
+              mime_type: override.mime_type,
+            }
+          : null,
         prominence_score: candidate.prominence_score,
         official_sources: candidate.signals.officialSources,
         eligible: candidate.eligible,
@@ -126,7 +155,7 @@ async function main(): Promise<void> {
   let renderNote = "skipped (pass --render to render)";
   if (args.render) {
     // Step 1: Nano Banana renders the graded hero photo (NO text).
-    const result = await renderNanoBanana(imagePrompt);
+    const result = await renderNanoBanana(imagePrompt, { inlineReferences });
     if (result.rendered && result.bytes) {
       const baseExt = result.mimeType?.includes("png") ? "png" : "jpg";
       await writeFile(join(dir, `base.${baseExt}`), result.bytes);
@@ -146,6 +175,9 @@ async function main(): Promise<void> {
   console.log(`\n📌 Pin of the Week — GENERATE\n`);
   console.log(`  ${candidate.canonical_name} [${candidate.primary_category}${candidate.state ? ` · ${candidate.state}` : ""}]`);
   console.log(`  caption source: ${caption.meta.generatedBy}  (payoff basis: ${caption.meta.verificationBasis})`);
+  console.log(
+    `  photo: ${override ? `MANUAL OVERRIDE (${override.image_url ? "url" : "file"}) — source: ${override.source}` : "corpus-resolved"}`,
+  );
   console.log(`  image: ${renderNote}`);
   console.log(`  artifacts → ${dir}/`);
   console.log(`\n──── caption ────\n${caption.text}\n─────────────────\n`);

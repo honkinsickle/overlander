@@ -217,6 +217,48 @@ after the change: `base.png` upper sky **226/255**, mid **196/255**, foreground
 reference. *Confidence: literal / directly verified (pixel-measured before &
 after).* The bottom scrim still darkens only the caption area (bottom third).
 
+### Manual photo override
+
+`potw:override-photo` lets you pin your own photo to a place; `generate` uses it
+in place of the corpus-resolved photo and falls back to the corpus photo when
+none exists.
+
+- **Storage — a dedicated table `master_place_photo_override`** (migration
+  `20260911000000`), one row per place (PK = `master_place_id`). *Why a table,
+  not a column on `master_place`:* `master_place` is written only by
+  `recompute_master_place()` and its columns are precedence-resolved
+  source-of-truth; a hand-picked override is neither. This mirrors the
+  `master_place_photo_candidate` precedent (20260901000600). Unlike
+  photo_candidate (never read by a live path), this table **is** read — but only
+  by the Pin of the Week generator, **not** by the corpus read paths, so the
+  corpus boundary is unchanged.
+- **Provenance required:** `source` + `license` are `NOT NULL` (free text);
+  `attribution` optional — the same discipline as the photo-backfill pilot,
+  applied to manual overrides too.
+- **Image:** a URL (`--url`) or a local file (`--file`, stored inline as base64
+  in `image_data` + `mime_type`). A CHECK enforces exactly one. *Why inline bytes
+  for `--file`:* the existing photo patterns are URL-only because they come from
+  web sources; a local file has no URL, so rather than stand up a Supabase
+  Storage bucket (new infra), the bytes are stored inline — self-contained and
+  durable. **Flagged scale-up path:** move `--file` uploads to Storage (URL-only)
+  if overrides become large or numerous.
+- **Eligibility:** an override makes the "has photo" check pass (generate
+  re-evaluates with the override photo), so a place whose only problem was a
+  missing photo becomes featurable; all other eligibility rules still apply.
+- **CLI:** `--place-id` + (`--url` | `--file`) + `--source` + `--license`
+  [+ `--attribution`] to set; `--list` to show; `--clear` to remove.
+
+Verified end-to-end on TEST (2026-09-11, all *literal / directly verified*):
+- migration applied via `db:push-verify -- --test`; table existence + the
+  one-source CHECK confirmed by direct query (DDL is "not verified" by the v1
+  migration verifier, so this was checked independently).
+- `--url` override on **Boulder Basin** → `generate --render` produced a post
+  showing the override photo (a lighthouse) under the "Boulder Basin" caption;
+  `--clear` → `generate` fell back to the corpus campground photo.
+- `--file` override on **Point Bonita** (local image, stored inline) →
+  `generate --render` used the uploaded bytes; then cleared. 0 override rows
+  remain on TEST.
+
 ---
 
 ## Confidence notes (per the task's request)
