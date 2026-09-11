@@ -4,6 +4,8 @@
   "primary_category": "campground",
   "state": "CA",
   "photo_url": "https://cdn.recreation.gov/public/images/63682_700.webp",
+  "photo_source": "corpus",
+  "override": null,
   "prominence_score": 7,
   "official_sources": [
     "ridb"

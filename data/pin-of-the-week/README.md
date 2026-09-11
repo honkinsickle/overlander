@@ -16,10 +16,23 @@ npm run -w data potw:select -- --count
 npm run -w data potw:select
 npm run -w data potw:select -- --commit        # also stamp featured_at
 
+# manual photo override (persistent; generate uses it in place of the corpus photo)
+npm run -w data potw:override-photo -- --place-id <uuid> --url <url> --source "..." --license "..."
+npm run -w data potw:override-photo -- --place-id <uuid> --file <path> --source "..." --license "..."
+npm run -w data potw:override-photo -- --place-id <uuid> --list
+npm run -w data potw:override-photo -- --place-id <uuid> --clear
+
 # generate caption + image prompt/spec (+ image if a Gemini key is set)
 npm run -w data potw:generate -- --from-select
+npm run -w data potw:generate -- --id <uuid> --render      # uses a photo override if one is set
 npm run -w data potw:generate -- --id <uuid> --llm --render
 ```
+
+A **photo override** (table `master_place_photo_override`, one row per place)
+swaps in your own photo for a place; `generate` uses it in place of the
+corpus-resolved photo and falls back to the corpus photo when none exists.
+`--source` + `--license` are **required** (provenance discipline). The image is a
+URL or a local `--file` (stored inline as base64). See `docs/content/pin-of-the-week.md`.
 
 | File | Role |
 |---|---|
@@ -28,11 +41,13 @@ npm run -w data potw:generate -- --id <uuid> --llm --render
 | `caption.ts` | caption composer (hook → payoff → CTA); optional Anthropic hook rewrite |
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
 | `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
-| `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; dry-runs without a key) |
+| `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; magic-byte mime detect; dry-runs without a key) |
 | `composite.ts` | step 2 — composites the real header asset + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
+| `photo-override.ts` | manual per-place photo override read/write (`master_place_photo_override`) |
+| `override-photo.ts` | override CLI (`--url` / `--file` / `--source` / `--license` / `--list` / `--clear`) |
 | `brand/header.png` | the REAL brand header asset (yellow/coral bands + "yoTrippin!" wordmark), drawn full-width |
 | `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) |
-| `generate.ts` | GENERATE CLI — writes `base.png` (treatment) + `image.png` (final) to `output/<slug>/` |
+| `generate.ts` | GENERATE CLI — checks for a photo override, writes `base.png` + `image.png` to `output/<slug>/` |
 
 **Two-step image pipeline:** Nano Banana renders the graded hero photo with **no
 text**, then the **real brand header asset** (`brand/header.png`) and the black

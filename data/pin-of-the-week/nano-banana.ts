@@ -55,7 +55,13 @@ async function fetchImageAsInlineData(url: string): Promise<{ mimeType: string; 
   return { mimeType, data: buf.toString("base64") };
 }
 
-export async function renderNanoBanana(spec: ImagePromptSpec): Promise<RenderResult> {
+export interface RenderOptions {
+  /** Use these raw base64 image(s) as the reference INSTEAD of fetching URLs.
+   *  Used by the manual photo override when the photo is a local --file. */
+  inlineReferences?: Array<{ mimeType: string; base64: string }>;
+}
+
+export async function renderNanoBanana(spec: ImagePromptSpec, opts: RenderOptions = {}): Promise<RenderResult> {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return {
@@ -67,9 +73,15 @@ export async function renderNanoBanana(spec: ImagePromptSpec): Promise<RenderRes
   }
 
   const parts: Array<Record<string, unknown>> = [{ text: spec.prompt }];
-  for (const url of spec.referenceImageUrls) {
-    const inline = await fetchImageAsInlineData(url);
-    parts.push({ inline_data: { mime_type: inline.mimeType, data: inline.data } });
+  if (opts.inlineReferences && opts.inlineReferences.length > 0) {
+    for (const ref of opts.inlineReferences) {
+      parts.push({ inline_data: { mime_type: ref.mimeType, data: ref.base64 } });
+    }
+  } else {
+    for (const url of spec.referenceImageUrls) {
+      const inline = await fetchImageAsInlineData(url);
+      parts.push({ inline_data: { mime_type: inline.mimeType, data: inline.data } });
+    }
   }
 
   const res = await fetch(`${ENDPOINT}?key=${apiKey}`, {
