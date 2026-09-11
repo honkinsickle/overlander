@@ -49,6 +49,38 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   built. Recorded in `docs/decisions/2026-09-11-pin-of-the-day-skill.md`; next
   session builds the `pin_of_the_day_post` history + `potw:posts` + the `SKILL.md`.
 
+### later session (branch `louisville`) — Pin of the Day skill BUILT
+
+- **Built the Pin of the Day skill end-to-end** on branch `louisville` (TEST-only,
+  not yet on `main`): migration `20260911020000_pin_of_the_day_post.sql`,
+  `post-history.ts` helper, `potw:posts` CLI (`--record`/`--list`/`--reuse`),
+  `.claude/skills/pin-of-the-day/SKILL.md`, and 12 new vitest tests. Gates green
+  (typecheck clean; **48** POTW tests pass). Design doc marked BUILT.
+- **Three settled sub-decisions before coding** (all `(A)`): recording lives in
+  `potw:posts --record` (DB insert **and** archive copy in one CLI, not split);
+  keep the `status` column (default `'created'`, for future lifecycle); `--reuse`
+  is **show-only** (the archive already holds the finished post — no re-render).
+- **Verified point-by-point that `--record` needs no reconstruction** — the
+  generator's `place.json`+`caption.json` already carry every DB field. **One
+  honest gap:** a **file** override has no persisted filename (the override table
+  stores base64 bytes), so `photo_ref` = `place.json.photo_url` verbatim (the
+  `manual-override://<mime>` marker for a file override). Flagged, not invented.
+- **Added `archive_dir` beyond the design's column list** — `--reuse` must locate
+  the archived image from a DB row; date+slug reconstruction is fragile.
+- **End-to-end on TEST** (Point Bonita Lighthouse `9002d676`): search → generate
+  `--render` → `posts --record` (post #1 + archive) → `--list` → `--reuse 1` →
+  `select --commit`. **Then restored TEST to baseline** (deleted the post row,
+  reset `featured_at`) — the 1 remaining featured place pre-existed this run.
+- **Gotcha caught mid-session:** `rm -rf output/` deleted *committed* example
+  render dirs (`boulder-basin`, `gold-bluffs`) — `output/` is NOT gitignored and
+  holds curated examples on `main`. Restored with `git checkout`. Lesson: `output/`
+  is scratch-by-convention, not by `.gitignore`; stage the PR explicitly, never
+  `git add -A`.
+- **Fresh-workspace friction:** no `node_modules` (ran `npm install`); Supabase CLI
+  wasn't linked (`supabase link --project-ref znldzjdatkogdktymtvi` worked
+  non-interactively here — already authed). `.env`-file tsx scripts placed outside
+  `data/` hit "top-level await … cjs" — wrap in `main()` and use absolute paths.
+
 ## 2026-09-04 (later) — 4-group PROD merge executed + verified (79/81/120/5002)
 
 - **This session IS `cc-prod-run-4groups-2026-09-04`** — the "second PROD run"

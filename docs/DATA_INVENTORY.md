@@ -306,6 +306,12 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 >   only by the generator. RLS-on, no policies (service-role only).
 > - `pin_of_week_caption_history` (`20260911010000`) — append-only log of which
 >   caption template each generate used, for LRU rotation.
+> - `pin_of_the_day_post` (`20260911020000`) — reusable post history for the Pin
+>   of the Day skill; one row per **approved** post (metadata only — the image
+>   lives on disk in the committed `data/pin-of-the-week/posts/<date>-<slug>/`
+>   archive via `archive_dir`). `canonical_name` is a snapshot; `master_place_id`
+>   is a soft ref (`on delete set null`). RLS-on, no policies. Confirmed by direct
+>   query: 0 rows, 10 columns selectable.
 >
 > **Test data left on TEST** (from build/verification, not production content): a
 > handful of `featured_at` stamps (Gold Bluffs `037035fd`, Point Bonita
