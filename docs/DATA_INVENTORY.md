@@ -293,6 +293,26 @@ The full LA→Deadhorse corridor corpus. **This is the real corpus.**
 
 ## TEST — `znldzjdatkogdktymtvi` ("overlander-test")
 
+> **📌 Pin of the Week tables added 2026-09-11 `[TEST only — migrations on `main`,
+> tables confirmed by direct query]`.** Three schema objects for the Pin of the
+> Week pipeline (`data/pin-of-the-week/`), applied to TEST via
+> `db:push-verify -- --test`. **None are read by the corpus paths** (recompute /
+> pois_along_corridor / master_place_search_export / field_precedence):
+> - `master_place.featured_at timestamptz` + `set_master_place_featured_at()` RPC
+>   (`20260910140000`) — the "already featured" marker; a **curation snapshot
+>   column**, NOT recompute-maintained (same posture as `state`/`photo_url`).
+> - `master_place_photo_override` (`20260911000000`) — one row per place; a manual
+>   photo override (url OR inline base64 + mime; `source`+`license` NOT NULL). Read
+>   only by the generator. RLS-on, no policies (service-role only).
+> - `pin_of_week_caption_history` (`20260911010000`) — append-only log of which
+>   caption template each generate used, for LRU rotation.
+>
+> **Test data left on TEST** (from build/verification, not production content): a
+> handful of `featured_at` stamps (Gold Bluffs `037035fd`, Point Bonita
+> `9002d676`, Boulder Basin `42d677aa`); a `BB.png` photo override on Boulder
+> Basin; and a few `pin_of_week_caption_history` rows. Harmless; clear if a clean
+> slate is wanted.
+
 > **📊 Per-category composition measured 2026-09-02 `[TEST only]` —
 > `docs/investigations/2026-09-02-category-source-audit.md`.**
 > Full 70-row `primary_category` breakdown (total → in-scope, plus
