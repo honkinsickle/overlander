@@ -41,7 +41,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   picnic_area: "Picnic Area",
 };
 
-function categoryLabel(cat: string): string {
+export function categoryLabel(cat: string): string {
   return CATEGORY_LABELS[cat] ?? cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

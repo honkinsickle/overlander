@@ -2,22 +2,23 @@
  * Pin of the Week — GENERATE stage (TEST-only).
  *
  * Given a selected place, produce:
- *   (1) a hook + caption (HOOK → payoff → CTA), and
+ *   (1) an IG caption from one of 8 fixed templates (interpolating place/
+ *       category/state), written to caption.txt / caption.json, and
  *   (2) a branded Nano Banana image prompt/spec (+ the rendered image if a
  *       GEMINI_API_KEY / GOOGLE_API_KEY is configured).
  *
  * Run:
  *   npm run -w data potw:generate -- --id <uuid>
- *   npm run -w data potw:generate -- --from-select      # use the current top pick
- *   npm run -w data potw:generate -- --from-select --llm --render
+ *   npm run -w data potw:generate -- --from-select               # current top pick
+ *   npm run -w data potw:generate -- --id <uuid> --caption-template 3 --render
  *
  * Flags:
- *   --id <uuid>     master_place id to feature
- *   --from-select   pick the current top candidate via the selector's ranking
- *   --llm           rewrite hook/body via Anthropic (falls back if no key)
- *   --render        attempt the Nano Banana render (dry-run without a key)
- *   --out <dir>     output directory (default: data/pin-of-the-week/output)
- *   --force         generate even if the place is not eligible
+ *   --id <uuid>            master_place id to feature
+ *   --from-select         pick the current top candidate via the selector's ranking
+ *   --caption-template N   force caption template N (1-8); default rotates (LRU)
+ *   --render              attempt the Nano Banana render (dry-run without a key)
+ *   --out <dir>           output directory (default: data/pin-of-the-week/output)
+ *   --force               generate even if the place is not eligible
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -31,7 +32,8 @@ import {
   type CandidateRow,
   type EvaluatedCandidate,
 } from "./eligibility.ts";
-import { composeCaption, composeCaptionLLM } from "./caption.ts";
+import { buildCaption, pickLruTemplate, TEMPLATE_COUNT } from "./caption.ts";
+import { logTemplateUse, recentTemplateUses } from "./caption-history.ts";
 import { composeImagePrompt } from "./image-prompt.ts";
 import { renderNanoBanana } from "./nano-banana.ts";
 import { compositePost } from "./composite.ts";
@@ -40,22 +42,30 @@ import { fetchPhotoOverride } from "./photo-override.ts";
 interface Args {
   id: string | null;
   fromSelect: boolean;
-  llm: boolean;
   render: boolean;
   out: string;
   force: boolean;
+  captionTemplate: number | null;
 }
 
 function parseArgs(argv: string[]): Args {
   const idIdx = argv.indexOf("--id");
   const outIdx = argv.indexOf("--out");
+  const tplIdx = argv.indexOf("--caption-template");
+  let captionTemplate: number | null = null;
+  if (tplIdx >= 0) {
+    captionTemplate = Number(argv[tplIdx + 1]);
+    if (!Number.isInteger(captionTemplate) || captionTemplate < 1 || captionTemplate > TEMPLATE_COUNT) {
+      throw new Error(`--caption-template must be an integer 1-${TEMPLATE_COUNT}`);
+    }
+  }
   return {
     id: idIdx >= 0 ? argv[idIdx + 1] : null,
     fromSelect: argv.includes("--from-select"),
-    llm: argv.includes("--llm"),
     render: argv.includes("--render"),
     out: outIdx >= 0 ? argv[outIdx + 1] : join("pin-of-the-week", "output"),
     force: argv.includes("--force"),
+    captionTemplate,
   };
 }
 
@@ -109,7 +119,16 @@ async function main(): Promise<void> {
     );
   }
 
-  const caption = args.llm ? await composeCaptionLLM(candidate) : composeCaption(candidate);
+  // Caption template: forced via --caption-template, else least-recently-used
+  // rotation from the durable history. Forced picks are NOT logged (they are a
+  // manual/test override); auto picks are logged so rotation advances.
+  const forcedTemplate = args.captionTemplate != null;
+  const templateNumber = forcedTemplate
+    ? (args.captionTemplate as number)
+    : pickLruTemplate(await recentTemplateUses(db, TEMPLATE_COUNT));
+  const caption = buildCaption(candidate, templateNumber);
+  if (!forcedTemplate) await logTemplateUse(db, templateNumber, candidate.id);
+
   let imagePrompt = composeImagePrompt(candidate);
   // For an inline (local-file) override there's no URL to fetch — drop the
   // marker URL from the spec; the bytes are passed to the renderer directly.
@@ -174,7 +193,7 @@ async function main(): Promise<void> {
 
   console.log(`\n📌 Pin of the Week — GENERATE\n`);
   console.log(`  ${candidate.canonical_name} [${candidate.primary_category}${candidate.state ? ` · ${candidate.state}` : ""}]`);
-  console.log(`  caption source: ${caption.meta.generatedBy}  (payoff basis: ${caption.meta.verificationBasis})`);
+  console.log(`  caption template: #${caption.templateNumber}${forcedTemplate ? " (forced)" : " (auto / LRU rotation)"}`);
   console.log(
     `  photo: ${override ? `MANUAL OVERRIDE (${override.image_url ? "url" : "file"}) — source: ${override.source}` : "corpus-resolved"}`,
   );
