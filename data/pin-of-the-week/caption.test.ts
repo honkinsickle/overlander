@@ -46,6 +46,37 @@ describe("interpolate", () => {
   });
 });
 
+describe("null state", () => {
+  it("drops the state segment cleanly for ALL 8 templates (no dangling separator)", () => {
+    for (let n = 1; n <= TEMPLATE_COUNT; n++) {
+      const c = buildCaption(candidate({ state: null }), n);
+      // no leftover token, no dangling separators, no doubled spaces/periods
+      expect(c.text).not.toContain("{state}");
+      expect(c.text).not.toMatch(/·\s*\./); // "· ."
+      expect(c.text).not.toMatch(/\bin\s+\./); // "in ."
+      expect(c.text).not.toMatch(/,\s*\./); // ", ."
+      expect(c.text).not.toMatch(/ {2}/); // double space
+      expect(c.text).not.toMatch(/·\s*—/); // "· —" (template 3)
+      expect(c.text).not.toMatch(/,\s*,/); // ", ,"
+    }
+  });
+
+  it("produces the exact expected strings for a couple of templates", () => {
+    const c1 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 1);
+    expect(c1.text).toBe(
+      "We verified Broom Spring so you don't have to guess. Campground. Want the full route notes before you go? Link in bio to get every verified spot straight to your inbox.",
+    );
+    const c6 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 6);
+    expect(c6.text).toBe(
+      "Here's what 'verified' actually means: Broom Spring. Campground, checked before it made the feed. Want these before everyone else? Get on the list — link in bio.",
+    );
+  });
+
+  it("still includes the state when present", () => {
+    expect(buildCaption(candidate({ state: "CA" }), 4).text).toContain("Campground, CA.");
+  });
+});
+
 describe("buildCaption", () => {
   it("uses the humanized category label", () => {
     const c = buildCaption(candidate({ primary_category: "park_feature" }), 4);

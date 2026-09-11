@@ -131,20 +131,29 @@ composer and the `--llm` rewrite.
 - The history table tolerates being absent (migration not applied) — generate
   still runs, just without rotation/persistence.
 
-#### ⚠️ Edge cases flagged (real, from testing 2026-09-11)
+#### Edge cases
 
-- **Category/name redundancy:** when a place name already contains a
-  category-like word, the separate `{category}` label reads redundantly — e.g.
-  *Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park* (name ends
-  "State Park") + category "Campground" → "…State Park. Campground · CA". Not
-  wrong, but repetitive. *Literal / observed.*
-- **Long place names** make some templates wordy (that same 63-char name in
-  template 1 is a mouthful before the first period) — grammatical, but long.
-  *Literal / observed.*
-- **Null state:** places with `state = null` (≈788 eligible) would interpolate
-  `{state}` as empty → "Campground · ." / "in .". The test places all have a
-  state; flagged as an unhandled edge case (substituted with empty string, not
-  silently "nice" output). *Strong inference (not hit in the test set).*
+- **Null state — FIXED (2026-09-11).** When `state` is null (~788 eligible
+  places), `interpolate()` drops the `{state}` token *together with its leading
+  separator* (" · " / " in " / ", "), so there is no dangling "· ." / "in ." /
+  ", .". Verified on a real null-state place (*Beaverhead Rock State Park*,
+  `park_feature`) across all three separator styles:
+  - #1 → "…so you don't have to guess. Park Feature. Want the full route notes…"
+  - #4 → "…verified stop: Beaverhead Rock State Park. Park Feature. We're building…"
+  - #6 → "…Beaverhead Rock State Park. Park Feature, checked before it made the feed…"
+  *Confidence: literal / directly verified (real place, tests cover all 8).*
+- **Category/name redundancy — LEFT (awkward-but-readable, not broken).** When a
+  place name already contains a category-like word, the separate `{category}`
+  label repeats it — e.g. *Beaverhead Rock State **Park*** + category "**Park**
+  Feature" → "…State Park. Park Feature." Softening reliably would require either
+  dropping `{category}` (breaks the fixed template sentence structure) or
+  rewording the verbatim templates — both worse than the mild repetition, and
+  detecting "close overlap" is a fragile heuristic. Left as-is per the task's
+  judgment call; confirmed it produces readable (not broken) output.
+  *Confidence: literal / observed.*
+- **Long place names** make some templates wordy (a 63-char name in template 1 is
+  a mouthful before the first period) — grammatical, but long. *Literal /
+  observed.*
 
 ### Image — two-step pipeline (photo treatment → deterministic composite)
 

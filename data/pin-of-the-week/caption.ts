@@ -40,9 +40,21 @@ export interface Caption {
   fields: CaptionFields;
 }
 
-/** Interpolate {place}/{category}/{state}. Only these three tokens are replaced. */
+/**
+ * Interpolate {place}/{category}/{state}. Only these three tokens are replaced.
+ *
+ * When state is missing, the {state} segment is dropped together with its
+ * leading separator so the caption never renders a dangling "· ." / "in ." /
+ * ", .". Across the 8 templates {state} is always preceded by one of " · ",
+ * " in ", or ", " — this removes that unit, leaving clean prose (e.g.
+ * "Campground · CA" → "Campground", "pick in CA." → "pick.").
+ */
 export function interpolate(template: string, f: CaptionFields): string {
-  return template
+  let t = template;
+  if (f.state.trim() === "") {
+    t = t.replace(/(?: · | in |, )\{state\}/g, "");
+  }
+  return t
     .replace(/\{place\}/g, f.place)
     .replace(/\{category\}/g, f.category)
     .replace(/\{state\}/g, f.state);
