@@ -1,75 +1,91 @@
 import { describe, it, expect } from "vitest";
-import { composeCaption, excerptDescription, payoffLine } from "./caption.ts";
+import {
+  CAPTION_TEMPLATES,
+  TEMPLATE_COUNT,
+  buildCaption,
+  interpolate,
+  pickLruTemplate,
+} from "./caption.ts";
 import { evaluate, type CandidateRow } from "./eligibility.ts";
 
 function candidate(overrides: Partial<CandidateRow> = {}) {
   return evaluate({
     id: "00000000-0000-0000-0000-000000000001",
-    canonical_name: "Gold Bluffs Beach Campground",
+    canonical_name: "Boulder Basin",
     primary_category: "campground",
     secondary_categories: null,
     state: "CA",
-    description:
-      "Experience the wild Pacific coastline and grazing Roosevelt elk. Located within Prairie Creek Redwoods State Park. Access is via a narrow dirt road.",
+    description: "Real description.",
     photo_url: "https://example.com/p.jpg",
     rating: null,
     review_count: null,
-    prominence_score: 11,
-    source_count: 4,
-    attribution: { description: "nps", access: "ridb" },
+    prominence_score: 7,
+    source_count: 2,
+    attribution: { description: "ridb" },
     operational_status: null,
     is_searchable: true,
     ...overrides,
   });
 }
 
-describe("excerptDescription", () => {
-  it("keeps whole sentences within the length budget", () => {
-    const out = excerptDescription("One sentence here. Two sentence here. Three is too long.", 25);
-    expect(out).toBe("One sentence here.");
-  });
-  it("hard-truncates a single over-long sentence with an ellipsis", () => {
-    const out = excerptDescription("a".repeat(50), 20);
-    expect(out.endsWith("…")).toBe(true);
-    expect(out.length).toBeLessThanOrEqual(20);
+describe("templates", () => {
+  it("there are exactly 8", () => {
+    expect(TEMPLATE_COUNT).toBe(8);
+    expect(CAPTION_TEMPLATES).toHaveLength(8);
   });
 });
 
-describe("payoffLine", () => {
-  it("uses official sources when present", () => {
-    const { line, basis } = payoffLine(candidate());
-    expect(line).toContain("National Park Service");
-    expect(line).toContain("Recreation.gov");
-    expect(basis).toContain("nps");
-  });
-  it("falls back to prominence when no official source", () => {
-    const { line, basis } = payoffLine(candidate({ attribution: { description: "osm" }, prominence_score: 6 }));
-    expect(line).toContain("prominence");
-    expect(basis).toContain("6");
-  });
-  it("never fabricates a numeric star rating", () => {
-    expect(payoffLine(candidate()).line).not.toMatch(/\b[0-5](\.\d)?\s*(stars?|★|\/\s*5)/i);
+describe("interpolate", () => {
+  it("replaces every {place}/{category}/{state} occurrence and nothing else", () => {
+    const out = interpolate("{place} is a {category} in {state}. {place}!", {
+      place: "X",
+      category: "Campground",
+      state: "CA",
+    });
+    expect(out).toBe("X is a Campground in CA. X!");
   });
 });
 
-describe("composeCaption", () => {
-  it("orders hook → body → payoff → cta → hashtags", () => {
-    const cap = candidate();
-    const c = composeCaption(cap);
-    const idx = (s: string) => c.text.indexOf(s);
-    expect(idx(c.hook)).toBeGreaterThanOrEqual(0);
-    expect(idx(c.hook)).toBeLessThan(idx(c.body));
-    expect(idx(c.body)).toBeLessThan(idx(c.payoff));
-    expect(idx(c.payoff)).toBeLessThan(idx(c.cta));
-    expect(idx(c.cta)).toBeLessThan(idx(c.hashtags.join(" ")));
+describe("buildCaption", () => {
+  it("uses the humanized category label", () => {
+    const c = buildCaption(candidate({ primary_category: "park_feature" }), 4);
+    expect(c.text).toContain("Park Feature"); // not "park_feature"
+    expect(c.text).not.toContain("park_feature");
   });
-  it("body is drawn verbatim from the real description (no invented facts)", () => {
-    const cap = candidate();
-    expect(cap.description).toContain(composeCaption(cap).body.replace(/…$/, "").trim().split(".")[0]);
+
+  it("template 4 interpolates place/category/state exactly", () => {
+    const c = buildCaption(candidate(), 4);
+    expect(c.templateNumber).toBe(4);
+    expect(c.text).toBe(
+      "This week's verified stop: Boulder Basin. Campground, CA. We're building a list of every spot we've verified — sign up at the link in bio to get it as it grows.",
+    );
   });
-  it("includes category and state hashtags", () => {
-    const c = composeCaption(candidate());
-    expect(c.hashtags).toContain("#camping");
-    expect(c.hashtags).toContain("#california");
+
+  it("rejects out-of-range template numbers", () => {
+    expect(() => buildCaption(candidate(), 0)).toThrow(/1-8/);
+    expect(() => buildCaption(candidate(), 9)).toThrow(/1-8/);
+  });
+});
+
+describe("pickLruTemplate", () => {
+  it("picks template 1 when there is no history", () => {
+    expect(pickLruTemplate([])).toBe(1);
+  });
+  it("never repeats the most recent template", () => {
+    for (let last = 1; last <= 8; last++) {
+      expect(pickLruTemplate([last])).not.toBe(last);
+    }
+  });
+  it("round-robins through all 8 then cycles (LRU)", () => {
+    const history: number[] = []; // most-recent first
+    const order: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const t = pickLruTemplate(history);
+      order.push(t);
+      history.unshift(t);
+    }
+    expect(order).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    // next pick is the least-recently-used again → 1
+    expect(pickLruTemplate(history)).toBe(1);
   });
 });

@@ -107,24 +107,44 @@ recomputed field is a product decision reserved for Adam — deliberately not do
 - `place.json`
 - `image.png` (only when a render key is present — see below)
 
-### Caption format (hook → payoff → CTA)
+### Caption — 8 fixed templates (rotated)
 
-```
-<HOOK>            category-flavored opener + place name
+The IG caption is one of **8 fixed templates** (`caption.ts`, `CAPTION_TEMPLATES`),
+each interpolating `{place}` / `{category}` / `{state}` from the selected place.
+The caption text goes to `caption.txt` / `caption.json` — it is **NOT** burned
+into the composited image (the image shows only the place name + "Category ·
+State"; verified in `composite.ts`). This replaced the earlier hook→payoff→CTA
+composer and the `--llm` rewrite.
 
-<BODY>            verbatim excerpt of the real description (no invented facts)
+- **`{category}`** uses the humanized label ("Campground", "Park Feature") — the
+  same one on the image subline — because the raw enum (`park_feature`) reads
+  unnaturally in the sentences.
+- **Rotation:** by default the generator picks the **least-recently-used**
+  template (`pickLruTemplate`) from a durable history table
+  (`pin_of_week_caption_history`, migration `20260911010000`), then logs the
+  pick. This is the caption-level analog of how `featured_at` tracks place
+  history — but because a template is chosen *per generate* and the rotation is
+  *global*, it is a small append-only log table, not a per-place column. LRU
+  guarantees no immediate repeat and cycles evenly through all 8.
+- **Force a template:** `--caption-template N` (1–8). Forced picks are **not**
+  logged (they are a manual/test override), so they don't perturb the rotation.
+- The history table tolerates being absent (migration not applied) — generate
+  still runs, just without rotation/persistence.
 
-<PAYOFF>          ✅ Yo Trippin Verified — cross-checked against <official sources>
-                  (the "rating" slot, grounded in verification, NOT a star rating)
+#### ⚠️ Edge cases flagged (real, from testing 2026-09-11)
 
-<CTA>             save-this-pin + plan-with-Yo-Trippin + engagement question
-
-<HASHTAGS>        overlanding + category + state
-```
-
-An optional `--llm` mode rewrites only the hook/body into brand voice via the
-Anthropic SDK, **constrained to add no new facts**, and falls back to the
-deterministic template when no `ANTHROPIC_API_KEY` is set.
+- **Category/name redundancy:** when a place name already contains a
+  category-like word, the separate `{category}` label reads redundantly — e.g.
+  *Gold Bluffs Beach Campground - Prairie Creek Redwoods State Park* (name ends
+  "State Park") + category "Campground" → "…State Park. Campground · CA". Not
+  wrong, but repetitive. *Literal / observed.*
+- **Long place names** make some templates wordy (that same 63-char name in
+  template 1 is a mouthful before the first period) — grammatical, but long.
+  *Literal / observed.*
+- **Null state:** places with `state = null` (≈788 eligible) would interpolate
+  `{state}` as empty → "Campground · ." / "in .". The test places all have a
+  state; flagged as an unhandled edge case (substituted with empty string, not
+  silently "nice" output). *Strong inference (not hit in the test set).*
 
 ### Image — two-step pipeline (photo treatment → deterministic composite)
 

@@ -24,8 +24,8 @@ npm run -w data potw:override-photo -- --place-id <uuid> --clear
 
 # generate caption + image prompt/spec (+ image if a Gemini key is set)
 npm run -w data potw:generate -- --from-select
-npm run -w data potw:generate -- --id <uuid> --render      # uses a photo override if one is set
-npm run -w data potw:generate -- --id <uuid> --llm --render
+npm run -w data potw:generate -- --id <uuid> --render               # uses a photo override if one is set
+npm run -w data potw:generate -- --id <uuid> --caption-template 3   # force caption template 1-8 (default rotates)
 ```
 
 A **photo override** (table `master_place_photo_override`, one row per place)
@@ -38,7 +38,8 @@ URL or a local `--file` (stored inline as base64). See `docs/content/pin-of-the-
 |---|---|
 | `eligibility.ts` | read-only eligibility model + full-corpus scan |
 | `select.ts` | SELECT CLI (`--count` / `--commit` / `--recent N` / `--json`) |
-| `caption.ts` | caption composer (hook → payoff → CTA); optional Anthropic hook rewrite |
+| `caption.ts` | 8 fixed caption templates + interpolation + LRU rotation (pure) |
+| `caption-history.ts` | template-use log read/write (`pin_of_week_caption_history`) |
 | `style-guide.ts` | brand tokens (from `DESIGN.md`) + photo-treatment brief |
 | `image-prompt.ts` | per-place treatment prompt + overlay-text spec |
 | `nano-banana.ts` | step 1 — Gemini `gemini-2.5-flash-image` photo treatment (no text; magic-byte mime detect; dry-runs without a key) |
