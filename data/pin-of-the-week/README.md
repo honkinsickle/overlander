@@ -31,7 +31,21 @@ npm run -w data potw:generate -- --id <uuid>                        # caption + 
 npm run -w data potw:generate -- --id <uuid> --render               # + image from the REAL photo (no key needed)
 npm run -w data potw:generate -- --id <uuid> --treat                # + AI-graded image (optional; needs Gemini key)
 npm run -w data potw:generate -- --id <uuid> --render --caption-template 3
+
+# POST HISTORY — record an approved post, then browse / re-open past ones
+npm run -w data potw:posts -- --record --from pin-of-the-week/output/<slug>  # DB row + committed archive
+npm run -w data potw:posts -- --list [--json]                       # recorded posts, newest first
+npm run -w data potw:posts -- --reuse <id> [--json]                 # show a past post (metadata + archive paths)
 ```
+
+The interactive **`/pin-of-the-day`** skill (`.claude/skills/pin-of-the-day/`)
+orchestrates SELECT → (override) → GENERATE → mark-used → record over these
+CLIs, one post at a time. `potw:posts --record` reads the generator's own
+`place.json` + `caption.json` from `--from`, inserts a `pin_of_the_day_post`
+row, and copies `image.png` + a self-contained `manifest.json` into the
+**committed** archive `pin-of-the-week/posts/<date>-<slug>/` (unlike the scratch
+`output/` dir). Only metadata lives in the DB; the image lives on disk.
+`--reuse` is show-only (no re-render, no writes).
 
 Manual and ranked picks share the same eligibility gate and the same
 `set_master_place_featured_at` commit path; `generate --id <uuid>` feeds a manual
@@ -61,6 +75,8 @@ URL or a local `--file` (stored inline as base64). See `docs/content/pin-of-the-
 | `composite.ts` | composites the real photo + header asset + caption bar via `@napi-rs/canvas`, real name + `DESIGN.md` fonts |
 | `photo-override.ts` | manual per-place photo override read/write (`master_place_photo_override`) |
 | `override-photo.ts` | override CLI (`--url` / `--file` / `--source` / `--license` / `--list` / `--clear`) |
+| `post-history.ts` | post-history read/write + artifact→row mapping (`pin_of_the_day_post`) |
+| `posts.ts` | POST CLI — `--record --from <dir>` / `--list` / `--reuse <id>` (Pin of the Day) |
 | `brand/header.png` | the REAL brand header asset (yellow/coral bands + "yoTrippin!" wordmark), drawn full-width |
 | `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) |
 | `generate.ts` | GENERATE CLI — checks for a photo override, writes `base.png` + `image.png` to `output/<slug>/` |

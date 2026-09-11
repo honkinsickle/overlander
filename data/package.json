@@ -18,6 +18,7 @@
     "potw:select": "tsx --env-file=.env pin-of-the-week/select.ts",
     "potw:generate": "tsx --env-file=.env pin-of-the-week/generate.ts",
     "potw:override-photo": "tsx --env-file=.env pin-of-the-week/override-photo.ts",
+    "potw:posts": "tsx --env-file=.env pin-of-the-week/posts.ts",
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",
     "materialize": "tsx --env-file=.env pipeline/materialize.ts",
     "backfill:polygon-containment": "tsx --env-file=.env scripts/backfill-polygon-containment.ts",

@@ -1,8 +1,23 @@
 # 2026-09-11 — "Pin of the Day" interactive skill (design record)
 
-> In-progress feature design record. The skill is **agreed but NOT built** as of
-> this date. The Pin of the Week *pipeline* it wraps is built and on `main`
-> (STATE 2026-09-11).
+> **BUILT 2026-09-11** (same day, later session). Migration + `post-history.ts`
+> helper + `potw:posts` CLI + `.claude/skills/pin-of-the-day/SKILL.md` +
+> vitest tests, TEST-only. Applied + table-verified on TEST
+> `znldzjdatkogdktymtvi`; end-to-end run passed (Point Bonita Lighthouse:
+> select → generate --render → record → list → reuse → commit), then TEST
+> restored to baseline. Two deviations from the column list below, both flagged
+> and agreed during the build:
+>
+> - **Added `archive_dir` column** (not in the original list) — `--reuse` needs
+>   to locate the archived image from a DB row; reconstructing it from date+slug
+>   is fragile, so the archive path is stored.
+> - **`photo_ref` for `override:file` is the `manual-override://<mime>` marker,
+>   not a filename.** The original filename is never persisted anywhere (the
+>   override table stores base64 bytes), so `photo_ref = place.json.photo_url`
+>   verbatim — the real URL for corpus/override:url, the marker for a file
+>   override. No filename is invented.
+>
+> The design below is the original agreed record, preserved.
 
 ## Context
 

@@ -1,3 +1,23 @@
+# STATE — branch `louisville` · 2026-09-11 (later) — **The "Pin of the Day" interactive skill is BUILT** (was DESIGNED-not-built in the masthead below). Migration + helper + `potw:posts` CLI + `SKILL.md` + tests, TEST-only. Not yet on `main` — PR pending Adam's review/merge.
+
+(**newest truth: a net-new post-history layer + interactive skill on top of the Pin of the Week pipeline, TEST-only, on branch `louisville`. `main` head unchanged (`48a2a3a` #423).**
+
+**What was built** `[literal — new files, this session]`:
+- **Migration `20260911020000_pin_of_the_day_post.sql`** — new TEST table `pin_of_the_day_post` (metadata only, one row per APPROVED post). Applied to TEST via `db:push-verify -- --test`; **table confirmed by direct query** (0 rows, 10 columns selectable — the v1 verifier can't check DDL). RLS-on, no policies. See DATA_INVENTORY §TEST.
+- **`data/pin-of-the-week/post-history.ts`** — read/write helpers (`recordPost`/`listPosts`/`getPost`) + pure artifact→row mapping + manifest builder; guard-first (tested via the `noDb` stub), tolerates the table being absent.
+- **`data/pin-of-the-week/posts.ts` → `potw:posts`** — `--record --from <dir>` (reads the generator's `place.json`+`caption.json`, inserts the row, copies `image.png`+`manifest.json`+`caption.txt` into the **committed** archive `pin-of-the-week/posts/<date>-<slug>/`), `--list [--json]`, `--reuse <id> [--json]` (show-only).
+- **`.claude/skills/pin-of-the-day/SKILL.md`** — interactive `/pin-of-the-day` orchestrating SELECT → (photo override) → GENERATE `--render` → mark-used (`--commit`) → record, one post at a time; shows images via `Read` (downloads `photo_url` to `.context/` scratch first, since `Read` can't open a URL).
+
+**Two agreed deviations from the design doc's column list** `[literal — decision record updated]`: added `archive_dir` (so `--reuse` can locate the archived image); `photo_ref` for a **file** override is the `manual-override://<mime>` marker, not a filename (no filename is persisted anywhere — set `= place.json.photo_url` verbatim, never invented).
+
+**Verified** `[literal, this session]`: both gates green — `npm run -w data typecheck` clean, `NODE_ENV=production npx vitest run data/pin-of-the-week/` **48 passed** (36 prior + 12 new). End-to-end on TEST with Point Bonita Lighthouse (`9002d676`): search → generate `--render` → `posts --record` (post #1, archive written) → `--list` → `--reuse 1` → `select --commit` (`committed: true`). **TEST then restored to baseline** — deleted post row #1, reset the `featured_at` stamp; confirmed 0 post rows and the 1 remaining featured place pre-existed this run.
+
+**NOT DONE / NEXT:** branch `louisville` → push → PR against `main` (Adam merges after CI). No PROD anything. The design record `docs/decisions/2026-09-11-pin-of-the-day-skill.md` is marked BUILT.
+
+The masthead below is the (now-superseded) DESIGNED-not-built state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `wrap-2026-09-11-pin-of-the-week` · 2026-09-11 — **The Pin of the Week content pipeline is BUILT and fully on `main`. The "Pin of the Day" interactive skill is DESIGNED (agreed with Adam) but NOT built.** A separate work-stream from the merge-cleanup mastheads below.
 
 (**newest truth: a net-new subsystem in `data/pin-of-the-week/`, TEST-only, merged to `main` across seven PRs. `main` head `5ed1846` (#422).**
