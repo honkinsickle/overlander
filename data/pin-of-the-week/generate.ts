@@ -4,19 +4,22 @@
  * Given a selected place, produce:
  *   (1) an IG caption from one of 8 fixed templates (interpolating place/
  *       category/state), written to caption.txt / caption.json, and
- *   (2) a branded Nano Banana image prompt/spec (+ the rendered image if a
- *       GEMINI_API_KEY / GOOGLE_API_KEY is configured).
+ *   (2) a branded post image: the REAL corpus (or override) photo composited
+ *       under the brand header + caption bar. No AI/API key needed by default —
+ *       the compositor cover-fits the photo to 4:5. `--treat` optionally runs a
+ *       Gemini (Nano Banana) re-grade/reframe of the photo first (needs a key).
  *
  * Run:
- *   npm run -w data potw:generate -- --id <uuid>
- *   npm run -w data potw:generate -- --from-select               # current top pick
- *   npm run -w data potw:generate -- --id <uuid> --caption-template 3 --render
+ *   npm run -w data potw:generate -- --id <uuid>                 # caption + spec only
+ *   npm run -w data potw:generate -- --id <uuid> --render        # + image (corpus photo, no key)
+ *   npm run -w data potw:generate -- --id <uuid> --treat         # + AI-graded image (needs Gemini key)
  *
  * Flags:
  *   --id <uuid>            master_place id to feature
  *   --from-select         pick the current top candidate via the selector's ranking
  *   --caption-template N   force caption template N (1-8); default rotates (LRU)
- *   --render              attempt the Nano Banana render (dry-run without a key)
+ *   --render              build the image from the real photo (deterministic, no key)
+ *   --treat               build the image via a Gemini photo treatment (implies image; needs a key)
  *   --out <dir>           output directory (default: data/pin-of-the-week/output)
  *   --force               generate even if the place is not eligible
  */
@@ -36,12 +39,13 @@ import { logTemplateUse, recentTemplateUses } from "./caption-history.ts";
 import { composeImagePrompt } from "./image-prompt.ts";
 import { renderNanoBanana } from "./nano-banana.ts";
 import { compositePost } from "./composite.ts";
-import { fetchPhotoOverride } from "./photo-override.ts";
+import { fetchPhotoOverride, type PhotoOverride } from "./photo-override.ts";
 
 interface Args {
   id: string | null;
   fromSelect: boolean;
   render: boolean;
+  treat: boolean;
   out: string;
   force: boolean;
   captionTemplate: number | null;
@@ -62,10 +66,27 @@ function parseArgs(argv: string[]): Args {
     id: idIdx >= 0 ? argv[idIdx + 1] : null,
     fromSelect: argv.includes("--from-select"),
     render: argv.includes("--render"),
+    treat: argv.includes("--treat"),
     out: outIdx >= 0 ? argv[outIdx + 1] : join("pin-of-the-week", "output"),
     force: argv.includes("--force"),
     captionTemplate,
   };
+}
+
+/**
+ * The hero photo bytes for the composite: the override's inline bytes, else the
+ * override URL, else the corpus photo_url — fetched directly (the compositor
+ * cover-fits it to 4:5). No AI involved.
+ */
+async function resolveHeroBytes(candidate: EvaluatedCandidate, override: PhotoOverride | null): Promise<Buffer> {
+  if (override?.image_data) return Buffer.from(override.image_data, "base64");
+  const url = override?.image_url ?? candidate.photo_url;
+  if (!url || url.startsWith("manual-override://")) {
+    throw new Error(`no source photo available to build the image for ${candidate.canonical_name}`);
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`hero photo fetch failed (${res.status}) for ${url}`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 /** Reuse the selector's ranking to get the current top pick. */
@@ -172,24 +193,33 @@ async function main(): Promise<void> {
     ) + "\n",
   );
 
-  let renderNote = "skipped (pass --render to render)";
-  if (args.render) {
-    // Step 1: Nano Banana renders the graded hero photo (NO text).
-    const result = await renderNanoBanana(imagePrompt, { inlineReferences });
-    if (result.rendered && result.bytes) {
-      const baseExt = result.mimeType?.includes("png") ? "png" : "jpg";
-      await writeFile(join(dir, `base.${baseExt}`), result.bytes);
-      // Step 2: composite the caption bar deterministically (real name + fonts).
-      const composited = await compositePost({
-        baseImage: result.bytes,
-        overlayText: imagePrompt.overlayText,
-        dimensions: imagePrompt.dimensions,
-      });
-      await writeFile(join(dir, "image.png"), composited);
-      renderNote = `treatment base.${baseExt} + composited image.png (${composited.length} bytes)`;
-    } else {
-      renderNote = `dry run — ${result.reason}`;
+  let renderNote = "skipped (pass --render to build the image)";
+  if (args.render || args.treat) {
+    // The hero photo is the REAL corpus (or override) photo. The compositor
+    // cover-fits it to 4:5 and draws the header + caption bar — no AI needed.
+    // --treat is an OPTIONAL Gemini pass that re-grades/reframes the photo first
+    // (needs a key); without it we composite the actual photo directly.
+    let heroBytes = await resolveHeroBytes(candidate, override);
+    let heroNote = "corpus photo (composited directly, no AI)";
+
+    if (args.treat) {
+      const result = await renderNanoBanana(imagePrompt, { inlineReferences });
+      if (result.rendered && result.bytes) {
+        heroBytes = result.bytes;
+        heroNote = "Nano Banana treatment (--treat)";
+      } else {
+        heroNote = `--treat skipped, using corpus photo — ${result.reason}`;
+      }
     }
+
+    await writeFile(join(dir, "base.png"), heroBytes);
+    const composited = await compositePost({
+      baseImage: heroBytes,
+      overlayText: imagePrompt.overlayText,
+      dimensions: imagePrompt.dimensions,
+    });
+    await writeFile(join(dir, "image.png"), composited);
+    renderNote = `${heroNote} → composited image.png (${composited.length} bytes)`;
   }
 
   console.log(`\n📌 Pin of the Week — GENERATE\n`);

@@ -181,34 +181,31 @@ composer and the `--llm` rewrite.
   a mouthful before the first period) — grammatical, but long. *Literal /
   observed.*
 
-### Image — two-step pipeline (photo treatment → deterministic composite)
+### Image — real photo composited under the brand chrome (Gemini optional)
 
-The image is built in **two steps** so the place name is always spelled exactly
-and the typography is the real `DESIGN.md` fonts. This replaced the earlier
-single-step "let the model draw the text" approach, which garbled the name
-(PR #407: "Cameground"/"Prairre"; a retry gave "Camprgound") — image models do
-not reliably render exact long text or hit specific fonts.
+The image is the **real corpus (or override) photo** composited under the brand
+header + caption bar. **No AI / API key is needed by default** — Gemini only ever
+did a photo *treatment* (re-grade + reframe), which is optional.
 
-1. **Nano Banana photo treatment (`nano-banana.ts`)** — "Nano Banana" is Google's
-   Gemini image model (`gemini-2.5-flash-image`). It performs an **image-to-image**
-   enhancement of the place's real `photo_url` into a **bright, natural** look
-   (preserving true daylight exposure — no darkening; the earlier dark/moody grade
-   was dropped so the top of the frame reads at full brightness).
-   The prompt (`PHOTO_TREATMENT_BRIEF`) contains **NO text instructions** — it
-   explicitly forbids any letters/logos/overlays, so the model only produces the
-   graded photo (`base.png`). `generationConfig.imageConfig.aspectRatio` forces
-   the portrait shape (without it the model inherits the landscape reference's
-   aspect — verified 2026-09-10).
+1. **Hero photo (default: no AI).** The place's real `photo_url` (or a manual
+   override) is fetched and passed straight to the compositor, which **cover-fits
+   it to 4:5** (`coverRect`). This is free, instant, deterministic, needs no key,
+   and shows the **actual** photo — a better fit for a "verified" brand than an AI
+   re-render. (`--render` builds the image this way.)
+   - **Optional `--treat`** runs a Nano Banana (`gemini-2.5-flash-image`)
+     image-to-image re-grade/reframe of the photo first (bright/natural,
+     `PHOTO_TREATMENT_BRIEF`, no text) — useful to rescue an awkward-aspect or
+     low-exposure photo. Needs `GEMINI_API_KEY` / `GOOGLE_API_KEY`; falls back to
+     the raw photo if the key is absent.
 2. **Deterministic chrome (`composite.ts`)** — `@napi-rs/canvas` draws the brand
-   chrome over the treatment at exactly `1080×1350`: the **real brand header
-   asset** full-width at the top (see below) and the **black caption bar** at the
-   bottom, which uses the **real place name straight from the SELECT row** (never
-   model text) in the bundled fonts (Barlow Condensed 700 title, Barlow subline)
-   with the amber `#c8a96e` accent on the "Verified" mark. Fonts are bundled under
-   `pin-of-the-week/fonts/` (OFL) so rendering is identical on any machine.
-
-Renders only when `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set; otherwise the
-render step dry-runs and the caption/prompt/spec artifacts are still written.
+   chrome over the hero photo at exactly `1080×1350`: the **real brand header
+   asset** full-width at the top and the **black caption bar** at the bottom,
+   using the **real place name straight from the SELECT row** (never model text)
+   in the bundled fonts (Barlow Condensed 700 title, Barlow subline) with the
+   amber `#c8a96e` accent on the "Verified" mark. Fonts are bundled under
+   `pin-of-the-week/fonts/` (OFL) so rendering is identical on any machine. Text
+   is composited (not model-drawn) so the place name is always spelled exactly —
+   image models garble long text (PR #407: "Cameground").
 
 #### Verified render (2026-09-10, billed key) — blocker resolved
 
