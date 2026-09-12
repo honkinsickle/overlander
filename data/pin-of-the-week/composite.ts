@@ -120,17 +120,28 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // 3. Name (title) + "State, Country" second line — drawn in the asset's name
   // slot below the divider, bottom-anchored. The category lives in the frame's
   // label; here the code draws the place name and then its region.
-  const titleSize = Math.round(W * 0.066);
-  const titleLine = Math.round(titleSize * 1.04);
-  const subSize = Math.round(W * 0.036);
+  const MAX_TITLE_SIZE = 75; // px — place name target; shrinks to fit one line
+  const MIN_TITLE_SIZE = 56; // px — floor before allowing a wrap
+  const subSize = 57; // px — "State, USA" line
   const gapSub = Math.round(H * 0.012);
   const bottomPad = Math.round(H * 0.05);
   const maxTextWidth = W - PAD * 2;
 
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
-  // Title = Brother 1816 Printed Bold (falls back to Barlow Condensed).
-  ctx.font = `${titleSize}px "Brother 1816 Printed Bold", "Barlow Condensed"`;
+  // Auto-fit the title: shrink from MAX toward MIN until the name fits on ONE
+  // line, so a long name doesn't wrap up into the frame's divider/label slot.
+  // (Title = Brother 1816 Printed Bold, falling back to Barlow Condensed.)
+  let titleSize = MAX_TITLE_SIZE;
+  const setTitleFont = () => {
+    ctx.font = `${titleSize}px "Brother 1816 Printed Bold", "Barlow Condensed"`;
+  };
+  setTitleFont();
+  while (titleSize > MIN_TITLE_SIZE && ctx.measureText(opts.overlayText.title).width > maxTextWidth) {
+    titleSize -= 1;
+    setTitleFont();
+  }
+  const titleLine = Math.round(titleSize * 1.04);
   const titleLines = wrapText(ctx, opts.overlayText.title, maxTextWidth);
   const hasSub = opts.overlayText.subline.length > 0;
 
