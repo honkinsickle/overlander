@@ -78,7 +78,7 @@ URL or a local `--file` (stored inline as base64). See `docs/content/pin-of-the-
 | `post-history.ts` | post-history read/write + artifact→row mapping (`pin_of_the_day_post`) |
 | `posts.ts` | POST CLI — `--record --from <dir>` / `--list` / `--reuse <id>` (Pin of the Day) |
 | `brand/header.png` | the REAL brand header asset (yellow/coral bands + "yoTrippin!" wordmark), drawn full-width |
-| `fonts/` | bundled OFL fonts (Space Mono, Barlow, Barlow Condensed) |
+| `fonts/` | bundled fonts — Space Mono / Barlow / Barlow Condensed (OFL) + Brother 1816 Printed (commercial display font, licensed) |
 | `generate.ts` | GENERATE CLI — checks for a photo override, writes `base.png` + `image.png` to `output/<slug>/` |
 
 **Image pipeline:** the real corpus (or override) photo is composited under the

@@ -14,10 +14,13 @@
  *   - the photo treatment (unchanged)
  *   - the black caption bar: title + "Category · State" + amber "Verified"
  *
- * Fonts are bundled under ./fonts (all OFL) and registered from those paths so
- * rendering is identical on any machine (no reliance on system fonts).
+ * Fonts are bundled under ./fonts and registered from those paths so rendering
+ * is identical on any machine (no reliance on system fonts). Barlow / Barlow
+ * Condensed / Space Mono are OFL; the Brother 1816 Printed display font is
+ * commercial (licensed) and bundled under that license.
  */
 
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
@@ -38,7 +41,22 @@ function registerFonts(): void {
   GlobalFonts.registerFromPath(join(FONT_DIR, "BarlowCondensed-Bold.ttf"), "Barlow Condensed");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-Regular.ttf"), "Barlow");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-SemiBold.ttf"), "Barlow SemiBold");
+  // Brand display font: Brother 1816 Printed (commercial). Registered
+  // defensively — if the files aren't present the ctx.font fallback (Barlow)
+  // is used, so rendering never crashes on a machine without them.
+  tryRegisterFont(join(FONT_DIR, "Brother-1816-Printed-Bold.otf"), "Brother 1816 Printed Bold");
+  tryRegisterFont(join(FONT_DIR, "Brother-1816-Printed-Book.otf"), "Brother 1816 Printed Book");
   fontsRegistered = true;
+}
+
+/** Register a font family from a path, skipping silently if the file is absent. */
+function tryRegisterFont(path: string, family: string): void {
+  if (!existsSync(path)) return;
+  try {
+    GlobalFonts.registerFromPath(path, family);
+  } catch {
+    // registration failed — the ctx.font fallback family will be used
+  }
 }
 
 /** Greedy word-wrap against the current ctx.font, to a max pixel width. */
@@ -99,26 +117,39 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // only the photo (above) and the place name (below).
   await drawFrame(ctx, W);
 
-  // 3. Place name (title) — drawn in the asset's name slot below the divider,
-  // bottom-anchored. Same Barlow Condensed styling as before; the subline
-  // (category) is intentionally gone (the frame carries the category label).
+  // 3. Name (title) + "State, Country" second line — drawn in the asset's name
+  // slot below the divider, bottom-anchored. The category lives in the frame's
+  // label; here the code draws the place name and then its region.
   const titleSize = Math.round(W * 0.066);
   const titleLine = Math.round(titleSize * 1.04);
-  const bottomPad = Math.round(H * 0.055);
+  const subSize = Math.round(W * 0.036);
+  const gapSub = Math.round(H * 0.012);
+  const bottomPad = Math.round(H * 0.05);
   const maxTextWidth = W - PAD * 2;
 
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
-  ctx.font = `700 ${titleSize}px "Barlow Condensed"`;
+  // Title = Brother 1816 Printed Bold (falls back to Barlow Condensed).
+  ctx.font = `${titleSize}px "Brother 1816 Printed Bold", "Barlow Condensed"`;
   const titleLines = wrapText(ctx, opts.overlayText.title, maxTextWidth);
+  const hasSub = opts.overlayText.subline.length > 0;
 
-  const blockH = titleLines.length * titleLine;
+  const blockH = titleLines.length * titleLine + (hasSub ? gapSub + subSize : 0);
   let y = H - bottomPad - blockH;
 
+  // title
   ctx.fillStyle = colors.textPrimary;
   for (const line of titleLines) {
     ctx.fillText(line, PAD, y);
     y += titleLine;
+  }
+
+  // second line: "State, USA" — Brother 1816 Printed Book (falls back to Barlow).
+  if (hasSub) {
+    y += gapSub;
+    ctx.font = `${subSize}px "Brother 1816 Printed Book", "Barlow"`;
+    ctx.fillStyle = colors.textPrimary;
+    ctx.fillText(opts.overlayText.subline, PAD, y);
   }
 
   return canvas.toBuffer("image/png");
