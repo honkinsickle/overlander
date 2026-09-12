@@ -125,7 +125,11 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   const subSize = 57; // px — "State, USA" line
   const gapSub = Math.round(H * 0.012);
   const bottomPad = Math.round(H * 0.05);
-  const maxTextWidth = W - PAD * 2;
+  // Text left inset aligned to the FRAME's left margin — the left end of the
+  // divider hairline / the "Campground" icon (measured at x=48 in the 1080-wide
+  // asset), so the name + region line line up under the hairline's left end.
+  const captionLeft = 48;
+  const maxTextWidth = W - captionLeft - PAD;
 
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
@@ -151,7 +155,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // title
   ctx.fillStyle = colors.textPrimary;
   for (const line of titleLines) {
-    ctx.fillText(line, PAD, y);
+    ctx.fillText(line, captionLeft, y);
     y += titleLine;
   }
 
@@ -160,7 +164,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
     y += gapSub;
     ctx.font = `${subSize}px "Brother 1816 Printed Book", "Barlow"`;
     ctx.fillStyle = colors.textPrimary;
-    ctx.fillText(opts.overlayText.subline, PAD, y);
+    ctx.fillText(opts.overlayText.subline, captionLeft, y);
   }
 
   return canvas.toBuffer("image/png");
