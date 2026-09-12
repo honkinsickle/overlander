@@ -169,9 +169,9 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 /**
  * Draw the REAL full-frame brand asset (brand/header.png = branding.png — the
  * yoTrippin! header band + transparent body + baked scrim, category label,
- * divider and route decoration) to fill the ENTIRE canvas. The asset is sized
- * for the full 1080x1350 post (it's ~1080x1348), so it's drawn edge-to-edge to
- * cover the bottom too — otherwise a few px of the photo peek out below it.
+ * divider and route decoration) to fill the ENTIRE canvas. The asset is a full
+ * 1080x1350 post frame, drawn edge-to-edge (0,0,W,H) — a slightly-short asset
+ * would otherwise let a few px of the photo peek out below it.
  * Uses the true brand art, not a recreation. Skipped gracefully if absent.
  */
 async function drawFrame(ctx: SKRSContext2D, W: number, H: number): Promise<void> {
