@@ -115,7 +115,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // the bottom scrim, the category label + divider, and the route decoration —
   // so the code no longer draws its own scrim or category subline. Code supplies
   // only the photo (above) and the place name (below).
-  await drawFrame(ctx, W);
+  await drawFrame(ctx, W, H);
 
   // 3. Name (title) + "State, Country" second line — drawn in the asset's name
   // slot below the divider, bottom-anchored. The category lives in the frame's
@@ -169,15 +169,15 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 /**
  * Draw the REAL full-frame brand asset (brand/header.png = branding.png — the
  * yoTrippin! header band + transparent body + baked scrim, category label,
- * divider and route decoration) full-width from the top, preserving its aspect
- * ratio (a 1080x1348 asset covers ~the whole 1080x1350 canvas). Uses the true
- * brand art, not a recreation. Skipped gracefully if the asset is missing.
+ * divider and route decoration) to fill the ENTIRE canvas. The asset is sized
+ * for the full 1080x1350 post (it's ~1080x1348), so it's drawn edge-to-edge to
+ * cover the bottom too — otherwise a few px of the photo peek out below it.
+ * Uses the true brand art, not a recreation. Skipped gracefully if absent.
  */
-async function drawFrame(ctx: SKRSContext2D, W: number): Promise<void> {
+async function drawFrame(ctx: SKRSContext2D, W: number, H: number): Promise<void> {
   try {
     const frame = await loadImage(HEADER_PATH);
-    const h = Math.round(frame.height * (W / frame.width));
-    ctx.drawImage(frame, 0, 0, W, h);
+    ctx.drawImage(frame, 0, 0, W, H);
   } catch {
     // brand asset absent — leave the composite without the frame
   }
