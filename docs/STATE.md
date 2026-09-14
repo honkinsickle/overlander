@@ -1,10 +1,10 @@
-# STATE — branch `landing-mobile-card-top-10px` · 2026-09-13 — **Mobile-only: the space above the signup card is 10px (was `4vh`).** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
+# STATE — branch `landing-mobile-card-top-10px` · 2026-09-13 — **Mobile-only: the space above the signup card is 5px (was `4vh`).** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge. (Branch name says 10px: first pass was 10px, Adam then asked for 5px on the same PR.)
 
-(**newest truth: one value changed inside the existing `@media (max-width: 720px)` block of `landing/index.html`: `.hero { padding-top: 10px; padding-bottom: 40px; }` (was `4vh`). `main` head `b43ea9e` (#431). Desktop has no hero top padding (card is `position: absolute; top: 24%`) and is unaffected.**
+(**newest truth: one value changed inside the existing `@media (max-width: 720px)` block of `landing/index.html`: `.hero { padding-top: 5px; padding-bottom: 40px; }` (was `4vh`). `main` head `b43ea9e` (#431). Desktop has no hero top padding (card is `position: absolute; top: 24%`) and is unaffected.**
 
 **Why `4vh` was ~30px, not ~28.6px** `[measured 2026-09-13, iOS 26.3 Safari simulator, 402×714 visible]`: card top measured 30.16px at scrollY 0 = 4% of 754px — Safari resolves `vh` against the large (toolbar-collapsed) viewport; `100lvh` also measured 754px. So the old gap varied with screen height; the new one is fixed.
 
-**Verified** `[measured 2026-09-13]`: branch file in the simulator — card top `10` at scrollY 0, max scroll 155 (was 175, page 20px shorter). Chromium 402px — `.hero` padding-top `10px`, card top `10`. Chromium 1024px — media query false, padding-top `0px`, `.card-wrap` `absolute` (desktop unchanged). Not verified on a physical iPhone.
+**Verified** `[measured 2026-09-13]`: branch file in the simulator — card top `5` at scrollY 0, max scroll 150 (was 175, page 25px shorter). Chromium 402px — `.hero` padding-top `5px`, card top `5`. Chromium 1024px — media query false, padding-top `0px`, `.card-wrap` `absolute`, card top `184.31` (same as before the change). Not verified on a physical iPhone.
 
 **NOT DONE / NEXT:** merge PR after CI, then Adam uploads to cPanel.
 
