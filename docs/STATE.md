@@ -1,29 +1,31 @@
-# STATE — branch `potd-caption-copy-rewrite` · 2026-09-14 — **All 8 fixed Instagram caption templates are rewritten in the yoTrippin! voice.** Copy only — the pipeline, rotation, and token contract are unchanged.
+# STATE — branch `potd-caption-copy-rewrite` · 2026-09-14 — **The Instagram caption templates are replaced AND the set grows 8 → 12.** Copy + a range migration. **The migration is NOT applied to any database yet.**
 
-(**newest truth: `data/pin-of-the-week/caption.ts` (the 8 `CAPTION_TEMPLATES` string literals) + the 3 pinned exact-string assertions in `caption.test.ts`, off `main` `e5f941b` (#433). No schema, CLI, or behavior change.**
+(**newest truth: `data/pin-of-the-week/caption.ts` (now 12 `CAPTION_TEMPLATES`), the range guards in `post-history.ts`, four test files' worth of assertions, `SKILL.md`'s `--caption-template` range, and a NEW migration `20260914230000_caption_templates_1_to_12.sql`. Off `main` `e5f941b` (#433).**
 
-**Why:** the captions are static copy committed to the repo, not generated per post — every post drawing template *n* ships the same sentences with only `{place}`/`{category}/{state}` swapped. Adam read template 8 on a staged post and asked for all 8 to be rewritten. **The copy that landed is Adam's own final set, supplied verbatim** — an earlier draft pass against `~/.claude/skills/yotrippin-copy` was superseded before merge and exists only in this branch's history.
+**This stopped being copy-only when the count changed.** 8 was pinned in the DATABASE, not just the code: both `pin_of_week_caption_history.template_number` and `pin_of_the_day_post.template_number` carry `check (template_number between 1 and 12)` — formerly `1 and 8` `[literal]`. The new migration drops and re-adds both constraints by their Postgres-generated names.
 
-**Shape of the final copy** `[literal]`: all 8 share one identical tail, from `"so you don't have to guess"` through `"link in bio."` — verified by comparing the sliced tails. Only the opening clause differs per slot (e.g. `"Some pins lie."`, `"Can't fix your flat. But…"`, `"Skip the fourteen tabs."`). Slot 1 has no opener. **Consequence worth knowing: LRU rotation now varies only the first sentence** — the rotation machinery still works, but two consecutive posts read as near-identical. That is a deliberate copy decision, not a bug.
+⚠️ **ACTION REQUIRED BEFORE THE NEW TEMPLATES CAN BE USED** — the migration is written but **NOT applied**. Until it is applied to TEST (`npm run -w data db:push-verify -- --test`):
+- `potw:generate` whose LRU rotation lands on templates **9-12** will fail its `pin_of_week_caption_history` insert.
+- `potw:posts --record` for a post built from templates **9-12** will fail its insert.
+Templates 1-8 keep working throughout, so the failure is intermittent and will look like a random generate error. Applying needs an interactively-linked Supabase CLI, which this fresh workspace does not have — it is an operator step, deliberately left to Adam.
 
-**What did NOT change** `[literal]`: `interpolate()`, `buildCaption()`, `pickLruTemplate()`, LRU rotation, the `pin_of_week_caption_history` log, and `--caption-template N`. Still exactly 8 templates, still only three tokens substituted.
+**What did NOT change** `[literal]`: `interpolate()`, `buildCaption()`, `pickLruTemplate()` and the LRU algorithm, the caption-history log's shape, and the three-token contract. `TEMPLATE_COUNT` is derived from the array length, so the code scaled on its own; every hardcoded `8` found by grep was updated.
 
-**Four constraints the new copy had to satisfy** `[all literal, read from the code]`:
-1. **`{state}` must be preceded by exactly `" · "`, `" in "`, or `", "`** — `interpolate()`'s drop-regex matches only those three. Any other lead-in leaves dangling punctuation on a place with no state. All 8 use `" · "`.
-2. **A null-state test exercises all 8** and forbids `· .`, `in .`, `, .`, `· —`, `, ,`, and double spaces. **Directly verified** — the suite passes, and both variants were rendered and read by eye. Note the `· —` guard does NOT trip here: with a state the text reads `"Campground · CA — one less gamble"` (the `·` and `—` are separated by the state), and with no state the `·` is removed entirely, leaving `"Campground — one less gamble"`.
-3. **The count must stay 8.** Not just `TEMPLATE_COUNT`: `caption.test.ts` asserts it AND both migrations (`pin_of_week_caption_history`, `pin_of_the_day_post`) carry `check (template_number between 1 and 8)`. Changing the number needs a migration.
-4. **FOUR tests needed updating, not three.** Three pin literal template text (slots 1, 4, 6). The fourth asserted template 4 renders `"Campground, CA."` — the final copy uses `" · "` in **every** slot, so no template produces that comma form any more and the assertion had to change to `"Campground · CA —"`. An earlier draft preserved the comma shape in slot 4 specifically to keep that test true; the final copy does not, so the test moved instead.
+**Null-state behaviour, verified for all 12** `[measured 2026-09-14]`: every `{state}` is preceded by `" · "` or `" in "`, both of which `interpolate()`'s drop-regex handles, and the all-templates null-state test passes. Both variants were rendered and read.
 
-**Typo carried through deliberately** `[literal]`: slot 5 reads `"yoTrippin! Found {place}"` with a capital **F**, where the other seven use lowercase `"found"`. Transcribed exactly as supplied and flagged to Adam rather than silently corrected — his copy, his call.
+**THREE TYPOS IN THE SUPPLIED COPY, TRANSCRIBED VERBATIM AND FLAGGED — NOT corrected** `[literal, visible in the rendered output]`:
+1. **Template 1 has two missing spaces**: `"a coin flip.Not this time."` and `"is on your list.{category}"` — renders as `flip.Not` and `list.Recreation Area`.
+2. **Template 9 has no period after `{state}`**: renders `"Recreation Area · OR Get the ones…"`.
+3. **Template 11 has no period after `{state}`**: renders `"… · OR Checked before you roll in."`
+Adam supplied this copy as final, so it was entered exactly as given rather than silently fixed. Each is a one-character change if he wants them.
 
-**Gates run** `[measured 2026-09-14]`: `npm run -w data typecheck` exit 0; full `data` vitest suite 41 files, 722 passed / 3 skipped. This workspace had no `node_modules` — `npm install` was run first, which is why the gate was runnable at all.
+**Also worth knowing:** template 11 renders `{place} · {category} · {state}`, so a stateless place gives `"Broom Spring · Campground Checked…"` — grammatical but unusual. Template 8 and 12 use `" in {state}"`, the rest use `" · "`.
 
-**Note for the next session:** `data/` is NOT covered by `cd web && npx next build`. Its gates are `npm run -w data typecheck` + vitest, per §STANDING RULES.
+**Gates run** `[measured 2026-09-14]`: `npm run -w data typecheck` exit 0; full `data` vitest suite 41 files, 722 passed / 3 skipped. The migration is NOT covered by these — `db:push-verify`'s v1 verifier reports DDL as uncovered, so its correctness rests on review, not on a green check.
 
-**NOT DONE / NEXT:** PR open against `main`; Adam reviews and merges. **No caption has been regenerated or re-posted with the new copy** — the two archived posts under `data/pin-of-the-week/posts/` still carry the OLD template text, and are left alone deliberately (the archive is a record of what was actually made). Anything regenerated from now on picks up the new copy.
+**NOT DONE / NEXT:** apply the migration to TEST, then PROD when ready; PR against `main` for Adam to review and merge. No caption regenerated or posted with the new copy; the archived posts keep their original text.
 
 The masthead below is the previous state, preserved per this file's convention.)
-
 ---
 
 # STATE — branch `find-paper-mcp` · 2026-09-14 — **The landing-page invite card is redesigned to Figma "Frame 2".** PR #433 OPEN. Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.

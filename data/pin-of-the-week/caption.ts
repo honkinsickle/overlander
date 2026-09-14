@@ -1,7 +1,7 @@
 /**
  * Pin of the Week — caption templates (pure).
  *
- * The IG caption is one of 8 fixed templates, interpolating {place},
+ * The IG caption is one of 12 fixed templates, interpolating {place},
  * {category}, {state} from the selected place. The caption text goes into the
  * caption output (caption.txt / caption.json) — it is NOT burned into the
  * composited image (the image shows only the place name + "Category · State").
@@ -14,16 +14,20 @@
 import type { EvaluatedCandidate } from "./eligibility.ts";
 import { categoryLabel } from "./image-prompt.ts";
 
-/** The 8 templates, verbatim; index i == template number i+1. */
+/** The 12 templates, verbatim; index i == template number i+1. */
 export const CAPTION_TEMPLATES: readonly string[] = [
-  "yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "Some pins lie. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "Can't fix your flat. But yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "No countdown, no fanfare — yoTrippin! just found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "The other guy's still refreshing a map. yoTrippin! Found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "Skip the fourteen tabs. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "One more for the list. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
-  "Plenty don't make it. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "Three hours out. The next stop is a coin flip.Not this time. {place} is on your list.{category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+  "Some pins lie. You've pulled up to a \"campsite\" with a locked gate. We've all been there. {place} won't do that to you. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
+  "Can't fix your flat. You've got that handled. We handle the next stop. {place} is a good one. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
+  "Most \"hidden gems\" are a parking lot with a sign. This one isn't. {place}. {category} · {state}. Worth the stop. Get the next one in your inbox. Link in bio.",
+  "The other guy's still refreshing a map. You're already parked at {place}. {category} · {state}. Checked before you rolled in. Get every verified spot in your inbox. Link in bio.",
+  "You're pulling into {place}. The other guy's still refreshing a map. {category} · {state}. Be the one who already knows. Link in bio for every verified spot.",
+  "Skip the fourteen tabs. No stale forum posts. No two-star reviews from 2019. Just {place}. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
+  "Your road trip list just got one stop longer. {place}. {category} in {state}. Get every verified spot in your inbox. Link in bio.",
+  "Most spots don't make our list. {place} did. {category} · {state} Get the ones that make it in your inbox. Link in bio.",
+  "One bar left. Then none. Good thing you already know about {place}. {category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+  "Dusk is no time to guess. {place} · {category} · {state} Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+  "The kind of spot you only hear around a campfire. {place}. {category} in {state}. Now you don't need the campfire. Get every verified spot in your inbox. Link in bio.",
 ] as const;
 
 export const TEMPLATE_COUNT = CAPTION_TEMPLATES.length;
@@ -35,7 +39,7 @@ export interface CaptionFields {
 }
 
 export interface Caption {
-  templateNumber: number; // 1..8
+  templateNumber: number; // 1..12
   text: string;
   fields: CaptionFields;
 }
@@ -45,7 +49,7 @@ export interface Caption {
  *
  * When state is missing, the {state} segment is dropped together with its
  * leading separator so the caption never renders a dangling "· ." / "in ." /
- * ", .". Across the 8 templates {state} is always preceded by one of " · ",
+ * ", .". Across the 12 templates {state} is always preceded by one of " · ",
  * " in ", or ", " — this removes that unit, leaving clean prose (e.g.
  * "Campground · CA" → "Campground", "pick in CA." → "pick.").
  */
@@ -68,7 +72,7 @@ export function captionFields(candidate: EvaluatedCandidate): CaptionFields {
   };
 }
 
-/** Build the caption for a place using template `templateNumber` (1..8). */
+/** Build the caption for a place using template `templateNumber` (1..12). */
 export function buildCaption(candidate: EvaluatedCandidate, templateNumber: number): Caption {
   if (!Number.isInteger(templateNumber) || templateNumber < 1 || templateNumber > TEMPLATE_COUNT) {
     throw new Error(`caption template must be an integer 1-${TEMPLATE_COUNT}`);

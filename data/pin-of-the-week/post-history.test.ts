@@ -41,9 +41,9 @@ describe("validatePostInput guards", () => {
     expect(() => validatePostInput({ ...valid, captionText: "" })).toThrow(/captionText/);
   });
 
-  it("rejects a templateNumber outside 1-8", () => {
+  it("rejects a templateNumber outside 1-12", () => {
     expect(() => validatePostInput({ ...valid, templateNumber: 0 })).toThrow(/templateNumber/);
-    expect(() => validatePostInput({ ...valid, templateNumber: 9 })).toThrow(/templateNumber/);
+    expect(() => validatePostInput({ ...valid, templateNumber: 13 })).toThrow(/templateNumber/);
     expect(() => validatePostInput({ ...valid, templateNumber: 2.5 })).toThrow(/templateNumber/);
   });
 

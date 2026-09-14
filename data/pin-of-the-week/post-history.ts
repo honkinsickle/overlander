@@ -63,8 +63,8 @@ export interface CaptionArtifact {
 export function validatePostInput(input: PostInput): void {
   if (!input.canonicalName) throw new Error("canonicalName is required");
   if (!input.captionText) throw new Error("captionText is required");
-  if (!Number.isInteger(input.templateNumber) || input.templateNumber < 1 || input.templateNumber > 8) {
-    throw new Error("templateNumber must be an integer 1-8");
+  if (!Number.isInteger(input.templateNumber) || input.templateNumber < 1 || input.templateNumber > 12) {
+    throw new Error("templateNumber must be an integer 1-12");
   }
   if (!PHOTO_SOURCES.includes(input.photoSource)) {
     throw new Error(`photoSource must be one of ${PHOTO_SOURCES.join(", ")}`);
