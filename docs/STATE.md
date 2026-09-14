@@ -1,3 +1,19 @@
+# STATE — branch `landing-mobile-no-card-shadow` · 2026-09-13 — **Mobile-only: the signup card's drop shadow is removed.** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
+
+(**newest truth: one line added inside the existing `@media (max-width: 720px)` block of `landing/index.html`: `.card { box-shadow: none; }`. `main` head `650d2ae` (#430). Desktop keeps `0 24px 50px rgba(0,0,0,0.35)`.**
+
+**Why** `[measured 2026-09-13, iOS 26.3 Safari simulator, scrolled to bottom]`: Adam saw a darker band under the card that moved with it. Removing only the shadow in a scratch copy made the strip between card and toolbar flat (`#554D42`→`#584F45`, the collage's own bottom band + #429 fade) instead of `#3C372F`→`#4D453D` — the shadow darkened it by up to 23 luminance levels; everything else pixel-identical. It predates today but was invisible on the old `#2A2A2A` background. `[UNVERIFIED]` whether Adam was instead seeing Safari's overscroll bounce (canvas `html` bg below the document) — that gesture could not be driven in the simulator.
+
+**Verified** `[measured 2026-09-13]`: branch file in the simulator at 402px — strip under the card matches the no-shadow scratch test exactly (max channel diff 0 over 13,065 samples; up to 28 vs the old shadow). Chromium 1024px — media query false, `.card` shadow `rgba(0, 0, 0, 0.35) 0px 24px 50px 0px`, original photo. Chromium 402px — shadow `none`, collage. Not verified on a physical iPhone.
+
+**Known, NOT changed:** the live file (1,820,763 bytes) = `main` + a second copy of GoDaddy's injected `tccl.min.js` analytics snippet. The host injects it on serve, and the repo copy was taken from a served page, so every upload adds one. Harmless; left as-is pending Adam's call.
+
+**NOT DONE / NEXT:** merge PR after CI, then Adam uploads to cPanel.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `landing-mobile-collage-bg` · 2026-09-13 — **Mobile-only: the landing-page background is now Adam's collage image (arch, bridge, dunes, etc.); desktop keeps the original photo.** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
 
 (**newest truth: one line added inside the existing `@media (max-width: 720px)` block of `landing/index.html`. `main` head `0234c10` (#429).**
