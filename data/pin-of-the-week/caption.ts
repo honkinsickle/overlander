@@ -16,14 +16,14 @@ import { categoryLabel } from "./image-prompt.ts";
 
 /** The 8 templates, verbatim; index i == template number i+1. */
 export const CAPTION_TEMPLATES: readonly string[] = [
-  "We verified {place} so you don't have to guess. {category} · {state}. Want the full route notes before you go? Link in bio to get every verified spot straight to your inbox.",
-  "{place} almost didn't make the list — here's why it did. Verified {category} pick in {state}. We send the ones that actually make the cut to our mailing list first. Join up via the link in bio.",
-  "Not every spot with a pin on a map is actually worth the drive. {place} is. {category} · {state} — Yo Trippin verified. Get next week's pick before it's posted — sign up at the link in bio.",
-  "This week's verified stop: {place}. {category}, {state}. We're building a list of every spot we've verified — sign up at the link in bio to get it as it grows.",
-  "{place} — checked, confirmed, worth it. {category} · {state}. Skip the guesswork on your next trip. Join the mailing list (link in bio) for verified stops delivered straight to you.",
-  "Here's what 'verified' actually means: {place}. {category} in {state}, checked before it made the feed. Want these before everyone else? Get on the list — link in bio.",
-  "Adding {place} to the verified list. {category} · {state}. We're building the definitive verified-spot database for overlanders — get early access via the mailing list, link in bio.",
-  "{place}: one of the ones that made the cut. {category}, {state}. Not every submission gets verified. The ones that do go straight to our mailing list first — link in bio to join.",
+  "We verified {place} so you don't have to guess. {category} · {state}. One less gamble on your next run. Get every verified spot in your inbox — link in bio.",
+  "Some pins lie. {place} isn't one of them. {category} in {state}. We check before a spot earns a pin. Get the next one first — link in bio.",
+  "We won't fix your flat. We will tell you {place} has room to change it. {category} · {state}. Verified spots, straight to your inbox — link in bio.",
+  "This week's verified stop: {place}. {category}, {state}. We check every spot before it hits this feed. Get the list as it grows — link in bio.",
+  "You're parked at {place} by dusk. The other guy is still refreshing a map. {category} · {state}. Get the verified list — link in bio.",
+  "Fourteen tabs. Three dead forum posts. One gated lot. Or {place}. {category} in {state}. Join the list and skip the tabs — link in bio.",
+  "Adding {place} to the verified list. {category} · {state}. We build this one checked spot at a time. Ride along — link in bio.",
+  "{place} made the cut. Plenty don't. {category}, {state}. We verify before we post. The list gets them first — link in bio.",
 ] as const;
 
 export const TEMPLATE_COUNT = CAPTION_TEMPLATES.length;

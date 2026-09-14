@@ -64,11 +64,11 @@ describe("null state", () => {
   it("produces the exact expected strings for a couple of templates", () => {
     const c1 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 1);
     expect(c1.text).toBe(
-      "We verified Broom Spring so you don't have to guess. Campground. Want the full route notes before you go? Link in bio to get every verified spot straight to your inbox.",
+      "We verified Broom Spring so you don't have to guess. Campground. One less gamble on your next run. Get every verified spot in your inbox — link in bio.",
     );
     const c6 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 6);
     expect(c6.text).toBe(
-      "Here's what 'verified' actually means: Broom Spring. Campground, checked before it made the feed. Want these before everyone else? Get on the list — link in bio.",
+      "Fourteen tabs. Three dead forum posts. One gated lot. Or Broom Spring. Campground. Join the list and skip the tabs — link in bio.",
     );
   });
 
@@ -88,7 +88,7 @@ describe("buildCaption", () => {
     const c = buildCaption(candidate(), 4);
     expect(c.templateNumber).toBe(4);
     expect(c.text).toBe(
-      "This week's verified stop: Boulder Basin. Campground, CA. We're building a list of every spot we've verified — sign up at the link in bio to get it as it grows.",
+      "This week's verified stop: Boulder Basin. Campground, CA. We check every spot before it hits this feed. Get the list as it grows — link in bio.",
     );
   });
 
