@@ -1,3 +1,33 @@
+# STATE — branch `potd-caption-copy-rewrite` · 2026-09-14 — **The Instagram caption templates are replaced AND the set grows 8 → 12.** Copy + a range migration. **The migration is NOT applied to any database yet.**
+
+(**newest truth: `data/pin-of-the-week/caption.ts` (now 12 `CAPTION_TEMPLATES`), the range guards in `post-history.ts`, four test files' worth of assertions, `SKILL.md`'s `--caption-template` range, and a NEW migration `20260914230000_caption_templates_1_to_12.sql`. Off `main` `e5f941b` (#433).**
+
+**This stopped being copy-only when the count changed.** 8 was pinned in the DATABASE, not just the code: both `pin_of_week_caption_history.template_number` and `pin_of_the_day_post.template_number` carry `check (template_number between 1 and 12)` — formerly `1 and 8` `[literal]`. The new migration drops and re-adds both constraints by their Postgres-generated names.
+
+⚠️ **ACTION REQUIRED BEFORE THE NEW TEMPLATES CAN BE USED** — the migration is written but **NOT applied**. Until it is applied to TEST (`npm run -w data db:push-verify -- --test`):
+- `potw:generate` whose LRU rotation lands on templates **9-12** will fail its `pin_of_week_caption_history` insert.
+- `potw:posts --record` for a post built from templates **9-12** will fail its insert.
+Templates 1-8 keep working throughout, so the failure is intermittent and will look like a random generate error. Applying needs an interactively-linked Supabase CLI, which this fresh workspace does not have — it is an operator step, deliberately left to Adam.
+
+**What did NOT change** `[literal]`: `interpolate()`, `buildCaption()`, `pickLruTemplate()` and the LRU algorithm, the caption-history log's shape, and the three-token contract. `TEMPLATE_COUNT` is derived from the array length, so the code scaled on its own; every hardcoded `8` found by grep was updated.
+
+**Null-state behaviour, verified for all 12** `[measured 2026-09-14]`: every `{state}` is preceded by `" · "` or `" in "`, both of which `interpolate()`'s drop-regex handles, and the all-templates null-state test passes. Both variants were rendered and read.
+
+**THREE TYPOS IN THE SUPPLIED COPY, TRANSCRIBED VERBATIM AND FLAGGED — NOT corrected** `[literal, visible in the rendered output]`:
+1. **Template 1 has two missing spaces**: `"a coin flip.Not this time."` and `"is on your list.{category}"` — renders as `flip.Not` and `list.Recreation Area`.
+2. **Template 9 has no period after `{state}`**: renders `"Recreation Area · OR Get the ones…"`.
+3. **Template 11 has no period after `{state}`**: renders `"… · OR Checked before you roll in."`
+Adam supplied this copy as final, so it was entered exactly as given rather than silently fixed. Each is a one-character change if he wants them.
+
+**Also worth knowing:** template 11 renders `{place} · {category} · {state}`, so a stateless place gives `"Broom Spring · Campground Checked…"` — grammatical but unusual. Template 8 and 12 use `" in {state}"`, the rest use `" · "`.
+
+**Gates run** `[measured 2026-09-14]`: `npm run -w data typecheck` exit 0; full `data` vitest suite 41 files, 722 passed / 3 skipped. The migration is NOT covered by these — `db:push-verify`'s v1 verifier reports DDL as uncovered, so its correctness rests on review, not on a green check.
+
+**NOT DONE / NEXT:** apply the migration to TEST, then PROD when ready; PR against `main` for Adam to review and merge. No caption regenerated or posted with the new copy; the archived posts keep their original text.
+
+The masthead below is the previous state, preserved per this file's convention.)
+---
+
 # STATE — branch `find-paper-mcp` · 2026-09-14 — **The landing-page invite card is redesigned to Figma "Frame 2".** PR #433 OPEN. Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
 
 (**newest truth: the card in `landing/index.html` was reworked to the `the23forty` Frame 2 design (file key `vGp7w2K7Ns2yEGRhUyMV4J`, node `2482:821`). One commit `b975185` on top of `main` `feba05b` (#432); `landing/index.html` is the only file changed (+162/−143). PR #433 → `main`, OPEN.**

@@ -17,7 +17,7 @@
  * Flags:
  *   --id <uuid>            master_place id to feature
  *   --from-select         pick the current top candidate via the selector's ranking
- *   --caption-template N   force caption template N (1-8); default rotates (LRU)
+ *   --caption-template N   force caption template N (1-12); default rotates (LRU)
  *   --render              build the image from the real photo (deterministic, no key)
  *   --treat               build the image via a Gemini photo treatment (implies image; needs a key)
  *   --out <dir>           output directory (default: data/pin-of-the-week/output)

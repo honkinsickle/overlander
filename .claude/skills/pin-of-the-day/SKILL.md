@@ -100,7 +100,7 @@ the exact output dir from the `artifacts → …` line. Then show the result:
 > "Approve this post?"
 
 Only on an explicit yes do you run steps 7–8. If they want a different caption,
-re-run step 5 with `--caption-template <1-8>`; if they want a different photo,
+re-run step 5 with `--caption-template <1-12>`; if they want a different photo,
 go back to step 4.
 
 ### 7. Mark it used
@@ -182,7 +182,7 @@ needs one) — the archived copies, not the scratch `output/` dir:
 - **No / wants changes** → do NOT publish, and do NOT edit the caption or image
   in the browser. Leave the draft alone, say what you're doing, and go back
   through the existing flow: a different caption is step 5 re-run with
-  `--caption-template <1-8>`; a different photo is step 4. The post is remade
+  `--caption-template <1-12>`; a different photo is step 4. The post is remade
   properly and re-approved, not patched in Instagram.
 
 ## Browsing / reusing past posts
