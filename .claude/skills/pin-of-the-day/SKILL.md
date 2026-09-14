@@ -8,7 +8,7 @@ description: Make one Instagram "Pin of the Day" post interactively — pick a c
 Interactive wrapper around the Pin of the Week pipeline (`data/pin-of-the-week/`).
 You drive it one post at a time: the user names a campsite, you confirm it, they
 pick the photo, you generate the branded post, and on their approval you mark the
-place used and archive the post. If Claude in Chrome is available you can then
+place used and archive the post. If browser automation is available you can then
 stage it on Instagram — but publishing always needs a second, explicit yes
 (step 9). Design record:
 `docs/decisions/2026-09-11-pin-of-the-day-skill.md`.
@@ -126,15 +126,20 @@ Report the post number and archive path it prints. The archive under
 scratch `output/` dir) — tell the user it's ready to commit if they want to keep
 it.
 
-### 9. Post it to Instagram — ONLY with Claude in Chrome, and NEVER without a final yes
+### 9. Post it to Instagram — ONLY with browser automation, and NEVER without a final yes
 
-This step is **optional and conditional**. It runs only if browser automation
-(Claude in Chrome) is available in the current session.
+This step is **optional and conditional**. It runs only if browser automation is
+available in the current session.
 
 **9a. Check availability first.** Look at the tools actually available to you
-this session for a Chrome/browser-control family (Claude in Chrome — navigate,
-click, type, screenshot the live browser). Don't assume: if you cannot name the
-tool you'd call to navigate a page, it isn't available.
+this session for anything that can navigate, click, type into, and screenshot a
+live browser — Claude in Chrome, a browser MCP, or a raw CDP connection to a
+Chrome started with `--remote-debugging-port`. Don't assume: if you cannot name
+the tool you'd call to navigate a page, it isn't available.
+
+The upload in 9b needs one specific capability — **setting a file on an
+`<input type="file">` directly** (CDP `DOM.setFileInputFiles` or your tool's
+equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
 
 - **Not available** → say so plainly and stop the skill here:
   > "Browser automation isn't available in this session, so I can't post it for
@@ -156,24 +161,61 @@ tool you'd call to navigate a page, it isn't available.
 (`data/pin-of-the-week/posts/<date>-<slug>/`, absolute path when the browser
 needs one) — the archived copies, not the scratch `output/` dir:
 
-1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post
-   (the **Create** / **+** control). Instagram web only allows this on a
-   logged-in session — if it lands on a login wall, stop and tell the user to
-   sign in themselves. Never type credentials, and never ask for them.
-2. Upload `image.png` from the archive dir. The upload control opens the OS file
-   picker, which browser automation generally CANNOT drive — if you can't set the
-   file programmatically, say so and ask the user to pick the file in the dialog
-   themselves, then carry on once it's loaded. Advance through Instagram's crop
-   and edit screens without changing anything: the image is already composited at
-   1080×1350 and needs no cropping or filters.
-3. Paste the caption. Read `caption.txt` from the archive dir and put its text,
+1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post.
+   **Create is a two-step control:** click **Create** / **+**, then **Post** in
+   the submenu that opens. Instagram web only allows this on a logged-in session
+   — if it lands on a login wall, or if clicking Create pops a re-auth login
+   modal (this happens when a login was started but 2FA never completed), stop
+   and tell the user to sign in themselves. Never type credentials, never enter a
+   2FA code, and never ask for either.
+   **Confirm which account is signed in before staging anything** — the sidebar
+   shows it. A Pin of the Day staged on the wrong account is the wrong post on
+   the wrong audience.
+2. Upload `image.png` — **attach it directly to the file input; do NOT click
+   "Select from computer."** That button opens a native OS file dialog which
+   browser automation cannot drive. The create dialog also contains a hidden
+   `<input type="file">` (`display: none`) that CAN be targeted directly:
+
+   ```
+   selector: [role="dialog"] input[type="file"]
+   then:     CDP DOM.setFileInputFiles  (or your tool's set-file-on-input action)
+   ```
+
+   Instagram advances to the Crop screen on its own once the file is attached —
+   no native dialog ever opens. `[verified live 2026-09-14, twice]`
+   If your tooling genuinely cannot set a file on an input, say so and ask the
+   user to pick the file in the native dialog themselves, then carry on once it's
+   loaded. That is the fallback, not the primary path.
+3. **Set the crop to "Original" — do not accept whatever the crop screen opens
+   with.** The posts are composited at 1080×1350 (4:5) and any other ratio slices
+   the brand frame: a 1:1 crop cuts the yoTrippin! header off the top and the
+   title block off the bottom. Open the **Select crop** control and choose
+   **Original** (options are Original / 1:1 / 4:5 / 16:9).
+   **The crop screen does NOT reliably open at the source ratio.** One live run
+   opened square at 1:1; a second run in the same session opened already at 4:5
+   `[both measured 2026-09-14]`. Whether that's a cold-session default versus a
+   persisted last-used ratio is **unconfirmed** — which is exactly why you set it
+   explicitly every time instead of eyeballing it. Then advance through the
+   remaining screens (**Next**, then **Next** again) without applying filters or
+   edits.
+4. Paste the caption. Read `caption.txt` from the archive dir and put its text,
    verbatim, into the caption field. Don't rewrite, trim, re-wrap, or "improve"
    it — it's the text the user approved in step 6.
-4. Screenshot the composed post so the user can see exactly what's staged.
+5. **Check the "Share to" toggles on the Share screen before you go near the
+   gate.** Instagram cross-posts to a linked Facebook account, and the toggle was
+   **ON by default in both live test runs** `[measured 2026-09-14]` — so sharing
+   would publish to Facebook as well as Instagram. Read its current state off the
+   screen (never assume it's off) and tell the user explicitly what it says as
+   part of 9c, naming the Facebook target. If they only want Instagram, turn it
+   off before sharing.
+6. Screenshot the composed post so the user can see exactly what's staged.
 
-**9c. STOP. Ask before publishing.** This is a hard gate, not a formality:
+**9c. STOP. Ask before publishing.** This is a hard gate, not a formality. State
+the cross-post state in the question itself — it is part of what they're
+approving:
 
-> "Image and caption are in place, nothing is published yet. Share this post?"
+> "Image and caption are in place, nothing is published yet. Cross-post to
+> Facebook is currently **<on/off, naming the target>**. Share this post?"
 
 - **Wait for an explicit yes.** Silence, "looks good", or a question is not a yes
   — ask again. Do not click Share/Post because the flow seems finished, because
