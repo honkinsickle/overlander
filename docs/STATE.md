@@ -1,3 +1,21 @@
+# STATE — branch `landing-page-bg-fix` · 2026-09-13 — **The yotrippin.app landing page is now under version control (`landing/index.html`) with the gray-band bug fixed.** Not yet deployed — Adam uploads to cPanel after review/merge.
+
+(**newest truth: a standalone static page, outside both workspaces — CI does not touch it. `main` head unchanged (`0f2515c` #427).**
+
+**What it is** `[literal]`: the landing page served at https://yotrippin.app from cPanel `public_html/index.html` (NOT Vercel — do not move it into `web/public/`). Single self-contained HTML file, ~1.1 MB because the photos are inline base64. First commit is a byte-for-byte copy of the live file (ETag `18800c0-112df0-65b67ea263769`, 1,126,326 bytes `[measured 2026-09-13]`); second commit is the fix, so the diff is one line.
+
+**Bug + root cause** `[measured 2026-09-13, iOS 26.3 Mobile Safari in the iPhone 17 Pro simulator, instrumented copy]`: a flat `#2A2A2A` band showed between the signup card and Safari's bottom toolbar. Cause: `body` was `position: relative` with `background-color: #2A2A2A`, which paints ABOVE the `position: fixed; z-index: -1` `.page-bg` photo layer — `elementsFromPoint` returned `BODY` over `DIV.page-bg` at every sampled point. The photo was hidden on the whole page, not just the band; the unmodified page also renders flat gray in Chromium at 402×714 `[measured 2026-09-13]`. Earlier Chromium-only debugging measured box heights (which were correct) rather than paint, so it never caught this.
+
+**Fix** `[measured 2026-09-13, same simulator]`: removed `background-color` from `body` (`html` keeps `#2A2A2A` as the fallback). Photo now visible around and below the card.
+
+**Not a bug — the strip BEHIND Safari's toolbar stays gray** `[measured 2026-09-13]`: extending `.page-bg` (`100lvh` = 754px, or `bottom: -200px` = 914px tall) did not change it; setting `html { background: red }` turned the toolbar and status-bar strips red. Safari tints its own chrome from the `html` background. Changing that color is a design call, left as-is.
+
+**NOT DONE / NEXT:** Adam reviews, pushes, opens PR, merges, and uploads `landing/index.html` to cPanel. Not verified on a physical iPhone. No PROD/TEST data touched.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `louisville` · 2026-09-11 (later) — **The "Pin of the Day" interactive skill is BUILT** (was DESIGNED-not-built in the masthead below). Migration + helper + `potw:posts` CLI + `SKILL.md` + tests, TEST-only. Not yet on `main` — PR pending Adam's review/merge.
 
 (**newest truth: a net-new post-history layer + interactive skill on top of the Pin of the Week pipeline, TEST-only, on branch `louisville`. `main` head unchanged (`48a2a3a` #423).**
