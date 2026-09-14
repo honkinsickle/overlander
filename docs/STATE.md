@@ -1,3 +1,19 @@
+# STATE — branch `landing-mobile-collage-bg` · 2026-09-13 — **Mobile-only: the landing-page background is now Adam's collage image (arch, bridge, dunes, etc.); desktop keeps the original photo.** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
+
+(**newest truth: one line added inside the existing `@media (max-width: 720px)` block of `landing/index.html`. `main` head `0234c10` (#429).**
+
+**What changed** `[literal]`: on ≤720px viewports, `.page-bg { background-image: url(data:image/jpeg;base64,…) !important; }`. `!important` is required because the desktop photo is an inline `style` on `.page-bg`; a stylesheet `!important` beats a non-important inline declaration. The 25% `::after` fade and `html { background: #584F45 }` from #429 are KEPT (Adam chose "A" over fade-off "B").
+
+**Source image** `[measured 2026-09-13]`: `Group 9-1.png` from Adam's Dropbox Desktop, 1206×2142 (3× of 402×714), fully opaque (min alpha 255). Embedded as a quality-82 JPEG, 520,196 bytes (base64 ≈ 694 KB). It has built-in solid `#584F45` bands — top ≈ rows 0–76, bottom from ≈ row 2086 — the same color as the #429 toolbar tint. Page grows from 1,126,293 → 1,820,309 bytes, because desktop still needs the original photo and both live in the one file.
+
+**Verified** `[measured 2026-09-13]`: branch file is byte-identical to the tested scratch page. iOS 26.3 Safari simulator at 402px — collage shows, `html` bg `rgb(88, 79, 69)`. Chromium at 1024px — media query false, `.page-bg` computed image length 948,226 = inline photo, `::after` `none`, `html` `rgb(42, 42, 42)` (desktop unchanged). Chromium at 402px — computed image length 693,626 (the collage), `::after` present — confirms the desktop check can go the other way. A vs B compared by pixel column: identical at the toolbar (both reach `#584F45`); the fade lightens only the margin beside the card. Not verified on a physical iPhone, and not on phones whose aspect ratio differs from 402×714 (cover will crop slightly).
+
+**NOT DONE / NEXT:** merge PR after CI, then Adam uploads to cPanel.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `landing-mobile-toolbar-tint` · 2026-09-13 — **Mobile-only: Safari's toolbar now matches the landing-page photo, with a 25% fade into it.** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
 
 (**newest truth: one CSS addition inside the existing `@media (max-width: 720px)` block of `landing/index.html`. `main` head `e3cf5a7` (#428).**
