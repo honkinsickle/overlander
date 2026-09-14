@@ -8,7 +8,9 @@ description: Make one Instagram "Pin of the Day" post interactively — pick a c
 Interactive wrapper around the Pin of the Week pipeline (`data/pin-of-the-week/`).
 You drive it one post at a time: the user names a campsite, you confirm it, they
 pick the photo, you generate the branded post, and on their approval you mark the
-place used and archive the post. Design record:
+place used and archive the post. If Claude in Chrome is available you can then
+stage it on Instagram — but publishing always needs a second, explicit yes
+(step 9). Design record:
 `docs/decisions/2026-09-11-pin-of-the-day-skill.md`.
 
 ## Non-negotiables
@@ -18,6 +20,13 @@ place used and archive the post. Design record:
 - **Interactive.** Ask, wait, confirm. Never auto-pick a campsite, never approve
   on the user's behalf. The two writes — `--commit` (mark used) and `--record`
   (save post) — happen ONLY after the user explicitly approves in step 6.
+- **NEVER PUBLISH WITHOUT A SECOND, EXPLICIT CONFIRMATION.** Step 6's approval
+  authorizes generating and archiving the post — it does NOT authorize posting
+  it. In the step 9 Instagram flow you may drive the browser all the way up to a
+  loaded image + filled caption, then you STOP and ask. Clicking Share/Post
+  requires a fresh yes in answer to that question. Publishing is irreversible and
+  public; no amount of prior approval, momentum, or automation carries past this
+  gate.
 - **No AI/API key** in the default path. `generate --render` composites the real
   photo; `--treat` (Gemini) is not part of this flow.
 - Run every command from the repo root as `npm run -w data potw:<cmd> -- <flags>`.
@@ -116,6 +125,65 @@ Report the post number and archive path it prints. The archive under
 `data/pin-of-the-week/posts/` is meant to be committed to git (unlike the
 scratch `output/` dir) — tell the user it's ready to commit if they want to keep
 it.
+
+### 9. Post it to Instagram — ONLY with Claude in Chrome, and NEVER without a final yes
+
+This step is **optional and conditional**. It runs only if browser automation
+(Claude in Chrome) is available in the current session.
+
+**9a. Check availability first.** Look at the tools actually available to you
+this session for a Chrome/browser-control family (Claude in Chrome — navigate,
+click, type, screenshot the live browser). Don't assume: if you cannot name the
+tool you'd call to navigate a page, it isn't available.
+
+- **Not available** → say so plainly and stop the skill here:
+  > "Browser automation isn't available in this session, so I can't post it for
+  > you. The post is ready at `data/pin-of-the-week/posts/<date>-<slug>/` —
+  > `image.png` to upload and `caption.txt` to paste. Post it manually when
+  > you're ready."
+
+  That is a clean, successful end to the skill. Steps 1–8 already did the real
+  work; do NOT treat a missing browser as a failure, and do NOT try to substitute
+  some other automation (curl, the Instagram API, a script) — manual posting is
+  the fallback.
+- **Available** → ask before driving anything:
+  > "Want me to open Instagram and set the post up? I'll stop for your OK before
+  > anything gets published."
+
+  No → stop here, same as above. Yes → continue.
+
+**9b. Set the post up.** Work from the archive dir printed in step 8
+(`data/pin-of-the-week/posts/<date>-<slug>/`, absolute path when the browser
+needs one) — the archived copies, not the scratch `output/` dir:
+
+1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post
+   (the **Create** / **+** control). Instagram web only allows this on a
+   logged-in session — if it lands on a login wall, stop and tell the user to
+   sign in themselves. Never type credentials, and never ask for them.
+2. Upload `image.png` from the archive dir. The upload control opens the OS file
+   picker, which browser automation generally CANNOT drive — if you can't set the
+   file programmatically, say so and ask the user to pick the file in the dialog
+   themselves, then carry on once it's loaded. Advance through Instagram's crop
+   and edit screens without changing anything: the image is already composited at
+   1080×1350 and needs no cropping or filters.
+3. Paste the caption. Read `caption.txt` from the archive dir and put its text,
+   verbatim, into the caption field. Don't rewrite, trim, re-wrap, or "improve"
+   it — it's the text the user approved in step 6.
+4. Screenshot the composed post so the user can see exactly what's staged.
+
+**9c. STOP. Ask before publishing.** This is a hard gate, not a formality:
+
+> "Image and caption are in place, nothing is published yet. Share this post?"
+
+- **Wait for an explicit yes.** Silence, "looks good", or a question is not a yes
+  — ask again. Do not click Share/Post because the flow seems finished, because
+  the user approved in step 6, or because you're mid-automation.
+- **Yes** → click Share/Post, confirm it published, and report the result.
+- **No / wants changes** → do NOT publish, and do NOT edit the caption or image
+  in the browser. Leave the draft alone, say what you're doing, and go back
+  through the existing flow: a different caption is step 5 re-run with
+  `--caption-template <1-8>`; a different photo is step 4. The post is remade
+  properly and re-approved, not patched in Instagram.
 
 ## Browsing / reusing past posts
 
