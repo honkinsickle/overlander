@@ -2,15 +2,19 @@
 
 (**newest truth: `data/pin-of-the-week/caption.ts` (the 8 `CAPTION_TEMPLATES` string literals) + the 3 pinned exact-string assertions in `caption.test.ts`, off `main` `e5f941b` (#433). No schema, CLI, or behavior change.**
 
-**Why:** the captions are static copy committed to the repo, not generated per post — every post drawing template *n* ships the same sentences with only `{place}`/`{category}/{state}` swapped. Adam read template 8 on a staged post and asked for all 8 to be rewritten. Drafted against `~/.claude/skills/yotrippin-copy` (reader is the hero, app is the sidekick; short sentences, one comma or fewer; show don't claim; one CTA).
+**Why:** the captions are static copy committed to the repo, not generated per post — every post drawing template *n* ships the same sentences with only `{place}`/`{category}/{state}` swapped. Adam read template 8 on a staged post and asked for all 8 to be rewritten. **The copy that landed is Adam's own final set, supplied verbatim** — an earlier draft pass against `~/.claude/skills/yotrippin-copy` was superseded before merge and exists only in this branch's history.
+
+**Shape of the final copy** `[literal]`: all 8 share one identical tail, from `"so you don't have to guess"` through `"link in bio."` — verified by comparing the sliced tails. Only the opening clause differs per slot (e.g. `"Some pins lie."`, `"Can't fix your flat. But…"`, `"Skip the fourteen tabs."`). Slot 1 has no opener. **Consequence worth knowing: LRU rotation now varies only the first sentence** — the rotation machinery still works, but two consecutive posts read as near-identical. That is a deliberate copy decision, not a bug.
 
 **What did NOT change** `[literal]`: `interpolate()`, `buildCaption()`, `pickLruTemplate()`, LRU rotation, the `pin_of_week_caption_history` log, and `--caption-template N`. Still exactly 8 templates, still only three tokens substituted.
 
 **Four constraints the new copy had to satisfy** `[all literal, read from the code]`:
-1. **`{state}` must be preceded by exactly `" · "`, `" in "`, or `", "`** — `interpolate()`'s drop-regex matches only those three. Any other lead-in leaves dangling punctuation on a place with no state.
-2. **A null-state test exercises all 8** and forbids `· .`, `in .`, `, .`, `· —`, `, ,`, and double spaces. **Now directly verified, not inferred** — the suite passes, and both variants were rendered and read by eye.
+1. **`{state}` must be preceded by exactly `" · "`, `" in "`, or `", "`** — `interpolate()`'s drop-regex matches only those three. Any other lead-in leaves dangling punctuation on a place with no state. All 8 use `" · "`.
+2. **A null-state test exercises all 8** and forbids `· .`, `in .`, `, .`, `· —`, `, ,`, and double spaces. **Directly verified** — the suite passes, and both variants were rendered and read by eye. Note the `· —` guard does NOT trip here: with a state the text reads `"Campground · CA — one less gamble"` (the `·` and `—` are separated by the state), and with no state the `·` is removed entirely, leaving `"Campground — one less gamble"`.
 3. **The count must stay 8.** Not just `TEMPLATE_COUNT`: `caption.test.ts` asserts it AND both migrations (`pin_of_week_caption_history`, `pin_of_the_day_post`) carry `check (template_number between 1 and 8)`. Changing the number needs a migration.
-4. **Three tests pin literal template text** (templates 1, 4, 6) plus one asserting template 4 renders `"Campground, CA."`. Template 4 kept its `{category}, {state}.` shape so that structural assertion still holds; the three literals were updated.
+4. **FOUR tests needed updating, not three.** Three pin literal template text (slots 1, 4, 6). The fourth asserted template 4 renders `"Campground, CA."` — the final copy uses `" · "` in **every** slot, so no template produces that comma form any more and the assertion had to change to `"Campground · CA —"`. An earlier draft preserved the comma shape in slot 4 specifically to keep that test true; the final copy does not, so the test moved instead.
+
+**Typo carried through deliberately** `[literal]`: slot 5 reads `"yoTrippin! Found {place}"` with a capital **F**, where the other seven use lowercase `"found"`. Transcribed exactly as supplied and flagged to Adam rather than silently corrected — his copy, his call.
 
 **Gates run** `[measured 2026-09-14]`: `npm run -w data typecheck` exit 0; full `data` vitest suite 41 files, 722 passed / 3 skipped. This workspace had no `node_modules` — `npm install` was run first, which is why the gate was runnable at all.
 

@@ -16,14 +16,14 @@ import { categoryLabel } from "./image-prompt.ts";
 
 /** The 8 templates, verbatim; index i == template number i+1. */
 export const CAPTION_TEMPLATES: readonly string[] = [
-  "We verified {place} so you don't have to guess. {category} · {state}. One less gamble on your next run. Get every verified spot in your inbox — link in bio.",
-  "Some pins lie. {place} isn't one of them. {category} in {state}. We check before a spot earns a pin. Get the next one first — link in bio.",
-  "We won't fix your flat. We will tell you {place} has room to change it. {category} · {state}. Verified spots, straight to your inbox — link in bio.",
-  "This week's verified stop: {place}. {category}, {state}. We check every spot before it hits this feed. Get the list as it grows — link in bio.",
-  "You're parked at {place} by dusk. The other guy is still refreshing a map. {category} · {state}. Get the verified list — link in bio.",
-  "Fourteen tabs. Three dead forum posts. One gated lot. Or {place}. {category} in {state}. Join the list and skip the tabs — link in bio.",
-  "Adding {place} to the verified list. {category} · {state}. We build this one checked spot at a time. Ride along — link in bio.",
-  "{place} made the cut. Plenty don't. {category}, {state}. We verify before we post. The list gets them first — link in bio.",
+  "yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "Some pins lie. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "Can't fix your flat. But yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "No countdown, no fanfare — yoTrippin! just found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "The other guy's still refreshing a map. yoTrippin! Found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "Skip the fourteen tabs. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "One more for the list. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
+  "Plenty don't make it. yoTrippin! found {place} so you don't have to guess. {category} · {state} — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
 ] as const;
 
 export const TEMPLATE_COUNT = CAPTION_TEMPLATES.length;

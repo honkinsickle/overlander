@@ -64,16 +64,16 @@ describe("null state", () => {
   it("produces the exact expected strings for a couple of templates", () => {
     const c1 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 1);
     expect(c1.text).toBe(
-      "We verified Broom Spring so you don't have to guess. Campground. One less gamble on your next run. Get every verified spot in your inbox — link in bio.",
+      "yoTrippin! found Broom Spring so you don't have to guess. Campground — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
     );
     const c6 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 6);
     expect(c6.text).toBe(
-      "Fourteen tabs. Three dead forum posts. One gated lot. Or Broom Spring. Campground. Join the list and skip the tabs — link in bio.",
+      "Skip the fourteen tabs. yoTrippin! found Broom Spring so you don't have to guess. Campground — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
     );
   });
 
   it("still includes the state when present", () => {
-    expect(buildCaption(candidate({ state: "CA" }), 4).text).toContain("Campground, CA.");
+    expect(buildCaption(candidate({ state: "CA" }), 4).text).toContain("Campground · CA —");
   });
 });
 
@@ -88,7 +88,7 @@ describe("buildCaption", () => {
     const c = buildCaption(candidate(), 4);
     expect(c.templateNumber).toBe(4);
     expect(c.text).toBe(
-      "This week's verified stop: Boulder Basin. Campground, CA. We check every spot before it hits this feed. Get the list as it grows — link in bio.",
+      "No countdown, no fanfare — yoTrippin! just found Boulder Basin so you don't have to guess. Campground · CA — one less gamble on your next run. Didn't ask where you were headed, just knew you'd need this. Snack stop, bathroom break, good spot — covered. Pin it, and maybe tell people about it later. Every verified spot, straight to your inbox — link in bio.",
     );
   });
 
