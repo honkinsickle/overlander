@@ -1,3 +1,28 @@
+# STATE — branch `find-paper-mcp` · 2026-09-14 — **The landing-page invite card is redesigned to Figma "Frame 2".** PR #433 OPEN. Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
+
+(**newest truth: the card in `landing/index.html` was reworked to the `the23forty` Frame 2 design (file key `vGp7w2K7Ns2yEGRhUyMV4J`, node `2482:821`). One commit `b975185` on top of `main` `feba05b` (#432); `landing/index.html` is the only file changed (+162/−143). PR #433 → `main`, OPEN.**
+
+**What changed** `[literal, in b975185]`: the two-panel cream card became a single dark unit matching Frame 2 — the yoTrippin! banner + a `Launching 2027` span, a photo body at 35% opacity over `#232222`, left copy (H1 / subhead / divider / yoTrippin! blurb), and a translucent bordered form box (`rgba(29,27,27,0.5)`, `#5e5b5b` border) with `#d9d9d9` fields and a red `#cf3c2a` **Enter** button. Frame 2 copy adopted verbatim ("Plan your escape without fighting five different apps.", "You're an adventurer, not a travel agent.", "Claim your invite below to our 2027 pre-launch…"); "dirt" dropped from the blurb ("map the roads in between").
+
+**Form functionality unchanged** `[verified via headless CDP]`: same Formspree endpoint (`formspree.io/f/mppzgozg`, line 299), required email, submit handler, and `.card-form.joined` success-state swap (form + intro hide, success shows).
+
+**Type/asset choices**: kept Poppins + Work Sans (Frame 2's Brother 1816 Printed is not licensed here — closest match, Adam's call). Reused the existing embedded photo/banner base64 — no new/duplicated assets.
+
+**Fit-and-finish** `[all in b975185]`:
+- Desktop: modal vertically centered (`.card-wrap top:50%; transform: translate(-50%,-50%)`); H1 `line-height:1.38`; left column `max-width:90%` + `translateY(-15px)`; column `gap:24px`; `Launching 2027` `top:15.25px` (baseline-aligned to the wordmark, then nudged up 3px).
+- Mobile only (`@media max-width:720px`): H1 `font-size:32px`; card-body `padding:16px 22px 34px` (content pulled up); banner `margin-left:-13px` (wordmark left-aligned to body text); `Launching 2027` `top:18.25px`; `.page-bg::before`/`::after` black↔transparent fades top and bottom; `html { background:#000 }`.
+- `<meta name="theme-color" content="#000000">` added (iOS Safari chrome).
+
+**Verified** `[measured 2026-09-14, headless Chrome + CDP, dsf=1 for pixel work]`: desktop (1100px) H1 36px, card-body padding-top 46px (unchanged by the mobile block); mobile (402px) H1 32px, padding-top 16px, wordmark 'y' left = 34.0px vs body 'P' 34.06px; page-bg samples pure black (`#010101`) at the top and side slivers. Form success swap confirmed by applying `.joined` in the DOM. NOT verified on a physical iPhone; iOS Safari toolbar chrome is not reproducible in headless Chrome.
+
+**Open, NOT changed**: a `#42363c` grey-purple band is baked into `branding.png` under the red banner stripe (from the Frame 2 design) — flagged to Adam, not covered/clipped pending his call. The `theme-color` tag was included pending Adam's OK on the "grey" question.
+
+**NOT DONE / NEXT:** Adam reviews/merges PR #433 after CI, then uploads `landing/index.html` to cPanel. Static page outside `web/` and `data/` — the CI job gates (typecheck/test/build) do not cover it.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `landing-mobile-card-top-10px` · 2026-09-13 — **Mobile-only: the space above the signup card is 5px (was `4vh`).** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge. (Branch name says 10px: first pass was 10px, Adam then asked for 5px on the same PR.)
 
 (**newest truth: one value changed inside the existing `@media (max-width: 720px)` block of `landing/index.html`: `.hero { padding-top: 5px; padding-bottom: 40px; }` (was `4vh`). `main` head `b43ea9e` (#431). Desktop has no hero top padding (card is `position: absolute; top: 24%`) and is unaffected.**

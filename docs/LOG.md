@@ -12,6 +12,43 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-14 — Landing invite card redesigned to Figma "Frame 2" (PR #433)
+
+- **Reworked the `landing/index.html` invite card to the Figma `the23forty` Frame 2
+  design** (file key `vGp7w2K7Ns2yEGRhUyMV4J`, node `2482:821`): the two-panel cream
+  card became a single dark unit — yoTrippin! banner + `Launching 2027`, photo body at
+  35% over `#232222`, left copy, translucent bordered form box with a red `#cf3c2a`
+  **Enter** button. One commit `b975185` on `main` `feba05b` (#432); `landing/index.html`
+  the only file changed (+162/−143). PR #433 → `main`, OPEN. Not deployed (Adam uploads
+  to cPanel after merge, like the #428–#432 landing PRs).
+- **Kept the Formspree signup working unchanged** (endpoint `mppzgozg`, required email,
+  `.card-form.joined` success swap) — verified by applying `.joined` in the DOM via
+  headless CDP.
+- **Adam's four up-front calls (`A/A/A/A`):** keep Poppins + Work Sans (Frame 2's
+  Brother 1816 Printed is unlicensed here); responsive, not a fixed 900×533; adopt Frame 2
+  copy verbatim; edit the repo `landing/index.html` + reuse the existing photo, open a PR.
+- **~10 fit-and-finish iterations, most mobile-scoped:** desktop vertical-center, H1
+  line-height 1.38, left column −10% width / up 15px, gap 24px, `Launching 2027`
+  baseline-aligned to the wordmark then up 3px; mobile-only H1 32px, content padding-top
+  16px, wordmark left-aligned to body via a −13px banner shift, black↔transparent
+  top/bottom fades, `theme-color #000000`.
+- **Apparatus lesson (again): `--force-device-scale-factor=2` with a plain `--screenshot`
+  doubled the CSS viewport to ~780px**, so a "390px" mobile shot rendered the desktop
+  2-column layout clipped and read as broken — and a bad clip-scale in a pixel script
+  reported a "46px" wordmark gap that was really ~13px. Re-measured at dsf=1 (1px = 1css
+  px) via CDP `Emulation.setDeviceMetricsOverride` → correct numbers, clean shift.
+- **Shifting the shaped banner PNG left is safe; right is not.** Left tucks the frame's
+  transparent rounded corner off-card (corner stays clean); an earlier over-shoot (−46px)
+  clipped the "y" and exposed a black wedge. So aligning the wordmark to the body is
+  mobile-only (−13px → 34.0px vs body 34.06px); on desktop the wordmark already sits 22px
+  LEFT of the body, and Adam chose to leave desktop as-is (option A).
+- **Open / flagged, not changed:** a `#42363c` grey-purple band is baked into
+  `branding.png` under the red stripe (Frame 2 design) — offered to cover/clip it with
+  black; Adam hasn't confirmed which "grey" he meant. `theme-color` left in pending his OK.
+- **Dropped from these docs (not repo-backed):** this session also confirmed the Paper and
+  Figma MCPs were live (Figma authed as adam@acwcreative.com, Pro tier) — ephemeral
+  session state with no repo artifact, so not recorded as fact here.
+
 ## 2026-09-11 — Pin of the Week pipeline built + merged; Pin of the Day skill designed
 
 - **Built an Instagram "Pin of the Week" content pipeline end-to-end** (net-new
