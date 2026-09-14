@@ -1,3 +1,19 @@
+# STATE — branch `landing-mobile-toolbar-tint` · 2026-09-13 — **Mobile-only: Safari's toolbar now matches the landing-page photo, with a 25% fade into it.** Not yet deployed — Adam uploads `landing/index.html` to cPanel after merge.
+
+(**newest truth: one CSS addition inside the existing `@media (max-width: 720px)` block of `landing/index.html`. `main` head `e3cf5a7` (#428).**
+
+**What changed** `[literal]`: on ≤720px viewports, `html { background: #584F45 }` (was `#2A2A2A`) and a `.page-bg::after` layer — bottom-pinned, `height: 25%`, `linear-gradient(to bottom, rgba(88,79,69,0), #584F45)`. `::after` is used because the photo is an inline `style` on `.page-bg`, which a stylesheet `background` would be overridden by. The gradient's transparent end is written as `rgba(88,79,69,0)` rather than `transparent` to avoid a gray midpoint `[UNVERIFIED on current Safari — precaution only]`.
+
+**Why** `[measured 2026-09-13]`: Safari tints its toolbar/status-bar strip from the `html` background (setting it red turned both red); extending `.page-bg` past the screen did not put the photo there. `#584F45` = average of the photo's bottom 1% over the columns visible at 402×714 (2400×2024 source, cover-scaled). Without the fade, pixels just above the toolbar went `#272014` → `#584F45` (hard edge); with 25% they go `#4F473E` → `#584F45`. 15/20/25% compared side by side in the simulator; Adam chose 25%.
+
+**Verified** `[measured 2026-09-13]`: iOS 26.3 Mobile Safari simulator at 402px — `html` bg `rgb(88, 79, 69)`, fade visible. Chromium at 402px — `::after` content `""`, height `178.5px` (25% of 714), gradient present. Chromium at 1024px — media query false, `html` bg `rgb(42, 42, 42)`, `::after` content `none` (desktop unchanged). Tablets in portrait (≥768px) are outside the query and keep the gray toolbar — deliberate, per Adam's "mobile viewport only". Not verified on a physical iPhone.
+
+**NOT DONE / NEXT:** merge PR after CI, then Adam uploads to cPanel.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `landing-page-bg-fix` · 2026-09-13 — **The yotrippin.app landing page is now under version control (`landing/index.html`) with the gray-band bug fixed.** Not yet deployed — Adam uploads to cPanel after review/merge.
 
 (**newest truth: a standalone static page, outside both workspaces — CI does not touch it. `main` head unchanged (`0f2515c` #427).**
