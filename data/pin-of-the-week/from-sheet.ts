@@ -1,23 +1,27 @@
 /**
  * Pin of the Day — build posts from a Google Sheet (no database).
  *
- * One sheet row per post: photo_url | place | category | state | country.
- * Each row gets the branded 1080x1350 composite (same compositor as
- * `potw:generate --render`) and a caption from the 12 templates, rotated by row
- * order. Everything lands in one folder with a review.html to check and copy
- * from. Nothing is read from or written to Supabase, and nothing is marked used.
+ * One run builds ONE category from its own pair of tabs: `<category>` carries
+ * that category's overlay art url and its caption templates, and
+ * `<category> posts` is its queue (photo_url | place | state | country |
+ * posted). Each unposted row gets the branded 1080x1350 composite (same
+ * compositor as `potw:generate --render`, with this category's art as the
+ * overlay) and a caption from that category's templates, rotated by row order.
+ * Everything lands in one folder with a review.html to check and copy from.
+ * Nothing is read from or written to Supabase, and nothing is marked posted.
  *
  * Usage (from repo root):
- *   npm run -w data potw:sheet -- --sheet <google sheet url> [--out <dir>]
+ *   npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]
  *
- * The sheet must be shared "anyone with the link can view". photo_url may be a
- * local file path (shell-style "\ " escapes are accepted) or an http(s) URL.
+ * The sheet must be shared "anyone with the link can view". photo_url and
+ * art_url may be a local file path (shell-style "\ " escapes are accepted) or
+ * an http(s) URL.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { CAPTION_TEMPLATES, TEMPLATE_COUNT, interpolate } from "./caption.ts";
+import { TEMPLATE_COUNT, interpolate } from "./caption.ts";
 import { compositePost } from "./composite.ts";
 import { categoryLabel, regionLine } from "./image-prompt.ts";
 
@@ -241,6 +245,43 @@ export function templateForRow(index: number): number {
   return (index % TEMPLATE_COUNT) + 1;
 }
 
+/** Rotation is per category, by row order within that category's queue. */
+export function templateForCategoryRow(index: number, count: number): number {
+  if (count <= 0) throw new Error("category has no templates");
+  return (index % count) + 1;
+}
+
+export interface PostMeta {
+  category: string;
+  place: string;
+  state: string;
+  country: string;
+  templateNumber: number;
+  /** Recorded because art lives behind a url that can change. */
+  artUrl: string;
+  sourceRow: number;
+  caption: string;
+}
+
+export function buildMeta(
+  category: string,
+  row: PostRow,
+  templateNumber: number,
+  artUrl: string,
+  caption: string,
+): PostMeta {
+  return {
+    category,
+    place: row.place,
+    state: row.state,
+    country: row.country,
+    templateNumber,
+    artUrl,
+    sourceRow: row.rowNumber,
+    caption,
+  };
+}
+
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
@@ -259,7 +300,7 @@ async function loadPhoto(photo: string): Promise<Buffer> {
 }
 
 interface Built {
-  row: SheetRow;
+  row: PostRow;
   slug: string;
   templateNumber: number;
   caption: string;
@@ -297,6 +338,10 @@ ${cards}
 `;
 }
 
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const flag = (name: string) => {
@@ -304,50 +349,85 @@ async function main(): Promise<void> {
     return i === -1 ? undefined : argv[i + 1];
   };
   const sheet = flag("--sheet");
-  if (!sheet) throw new Error("usage: potw:sheet -- --sheet <google sheet url> [--out <dir>]");
-  const out = resolve(flag("--out") ?? "pin-of-the-week/output/sheet");
+  const category = flag("--category")?.trim();
+  if (!sheet || !category) {
+    throw new Error("usage: potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]");
+  }
+  const nextOnly = argv.includes("--next-only");
+  const out = resolve(flag("--out") ?? join("pin-of-the-week/output/sheet", category));
 
-  const res = await fetch(csvExportUrl(sheet));
-  if (!res.ok) throw new Error(`sheet fetch failed: HTTP ${res.status} (is it shared "anyone with the link"?)`);
-  const rows = toSheetRows(parseCsv(await res.text()));
+  // Learn what a MISSING tab returns, so every later read can be checked against it.
+  const fallback = await fetchTabRows(sheet, BOGUS_TAB, null).catch(() => null);
 
-  const built: Built[] = [];
-  const failures: string[] = [];
-  for (const [i, row] of rows.entries()) {
-    const label = `row ${i + 2} (${row.place || "no place"})`;
-    if (!row.place || !row.photo) {
-      failures.push(`${label}: place and photo_url are required`);
+  const cat = parseCategoryTab(await fetchTabRows(sheet, category, fallback), category);
+  const postsTab = `${category} posts`;
+  const queue = parsePostsTab(await fetchTabRows(sheet, postsTab, fallback), postsTab);
+
+  const pending = queue.filter((r) => r.posted === "");
+  const next = nextUnposted(queue);
+  const chosen = nextOnly ? (next ? [next] : []) : pending;
+  if (chosen.length === 0) {
+    console.log(`nothing to build — every row in "${postsTab}" is already posted`);
+    return;
+  }
+
+  // VALIDATE EVERYTHING FIRST — one bad row means zero output. Photos are read
+  // here, not in the render loop, so a broken photo cannot leave a half batch on
+  // disk; the render loop below reuses these buffers.
+  const problems: string[] = [];
+  const photos = new Map<number, Buffer>();
+  for (const r of chosen) {
+    if (!r.place || !r.photo) {
+      problems.push(`${postsTab} row ${r.rowNumber}: place and photo_url are required`);
       continue;
     }
     try {
-      const templateNumber = templateForRow(i);
-      const caption = interpolate(CAPTION_TEMPLATES[templateNumber - 1], {
-        place: row.place,
-        category: categoryLabel(row.category.toLowerCase()),
-        state: row.state,
-      });
-      const image = await compositePost({
-        baseImage: await loadPhoto(row.photo),
-        overlayText: { title: row.place, subline: regionLine(row.state || null, row.country) },
-        dimensions: { width: 1080, height: 1350 },
-      });
-      const slug = slugify(row.place);
-      const dir = join(out, slug);
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, "image.png"), image);
-      await writeFile(join(dir, "caption.txt"), caption + "\n");
-      built.push({ row, slug, templateNumber, caption, image });
-      console.log(`✓ ${label} → template ${templateNumber}`);
-    } catch (err) {
-      failures.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+      photos.set(r.rowNumber, await loadPhoto(r.photo));
+    } catch (e) {
+      problems.push(`${postsTab} row ${r.rowNumber}: photo could not be read — ${errText(e)}`);
     }
+  }
+  const overlay = await loadPhoto(cat.artUrl).catch((e) => {
+    problems.push(`tab "${category}": art_url could not be read — ${errText(e)}`);
+    return null;
+  });
+  if (problems.length > 0) {
+    console.log(`✗ nothing built — ${problems.length} problem(s):`);
+    for (const p of problems) console.log(`  ${p}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const built: Built[] = [];
+  for (const [i, row] of chosen.entries()) {
+    const templateNumber = templateForCategoryRow(i, cat.templates.length);
+    const caption = interpolate(cat.templates[templateNumber - 1], {
+      place: row.place,
+      category: categoryLabel(category.toLowerCase()),
+      state: row.state,
+    });
+    const image = await compositePost({
+      baseImage: photos.get(row.rowNumber)!,
+      overlayImage: overlay!,
+      overlayText: { title: row.place, subline: regionLine(row.state || null, row.country) },
+      dimensions: { width: 1080, height: 1350 },
+    });
+    const slug = slugify(row.place);
+    const dir = join(out, slug);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "image.png"), image);
+    await writeFile(join(dir, "caption.txt"), caption + "\n");
+    await writeFile(
+      join(dir, "meta.json"),
+      JSON.stringify(buildMeta(category, row, templateNumber, cat.artUrl, caption), null, 2) + "\n",
+    );
+    built.push({ row, slug, templateNumber, caption, image });
+    console.log(`✓ ${row.place} → ${category} template ${templateNumber}`);
   }
 
   await mkdir(out, { recursive: true });
   await writeFile(join(out, "review.html"), reviewHtml(built));
-  console.log(`\n${built.length} built, ${failures.length} failed → ${join(out, "review.html")}`);
-  for (const f of failures) console.log(`✗ ${f}`);
-  if (failures.length > 0) process.exitCode = 1;
+  console.log(`\n${built.length} built → ${join(out, "review.html")}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

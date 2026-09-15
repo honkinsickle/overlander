@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { homedir } from "node:os";
 import {
+  buildMeta,
   cleanLocalPath,
   csvExportUrl,
   fetchTabRows,
@@ -10,9 +11,11 @@ import {
   parsePostsTab,
   sameGrid,
   tabCsvUrl,
+  templateForCategoryRow,
   templateForRow,
   toSheetRows,
 } from "./from-sheet.ts";
+import type { PostRow } from "./from-sheet.ts";
 import { regionLine } from "./image-prompt.ts";
 
 describe("parseCsv", () => {
@@ -105,6 +108,41 @@ describe("tabCsvUrl", () => {
 describe("templateForRow", () => {
   it("cycles 1..12 in row order", () => {
     expect([0, 1, 11, 12, 13].map(templateForRow)).toEqual([1, 2, 12, 1, 2]);
+  });
+});
+
+describe("templateForCategoryRow", () => {
+  it("is row order, 1-based, wrapping at the category's template count", () => {
+    expect(templateForCategoryRow(0, 12)).toBe(1);
+    expect(templateForCategoryRow(11, 12)).toBe(12);
+    expect(templateForCategoryRow(12, 12)).toBe(1);
+  });
+
+  it("wraps at four when a category only has four templates", () => {
+    expect(templateForCategoryRow(4, 4)).toBe(1);
+    expect(templateForCategoryRow(5, 4)).toBe(2);
+  });
+
+  it("throws when the category has no templates", () => {
+    expect(() => templateForCategoryRow(0, 0)).toThrow(/no templates/);
+  });
+});
+
+describe("buildMeta", () => {
+  it("records the category, template number, art_url and source row", () => {
+    const row: PostRow = {
+      photo: "p.jpg", place: "Beta", state: "OR", country: "USA", posted: "", rowNumber: 3,
+    };
+    expect(buildMeta("scenic", row, 7, "/tmp/o.png", "Beta caption")).toEqual({
+      category: "scenic",
+      place: "Beta",
+      state: "OR",
+      country: "USA",
+      templateNumber: 7,
+      artUrl: "/tmp/o.png",
+      sourceRow: 3,
+      caption: "Beta caption",
+    });
   });
 });
 
