@@ -15,8 +15,11 @@ stage it on Instagram — but publishing always needs a second, explicit yes
 
 ## Non-negotiables
 
-- **TEST-only.** Every CLI here is guarded by `assertTestProject()` and reads
-  `data/.env` (TEST `znldzjdatkogdktymtvi`). Never point it at PROD.
+- **TEST-only, for the database CLIs.** `potw:select`, `potw:generate`,
+  `potw:posts`, and `potw:override-photo` are each guarded by
+  `assertTestProject()` and read `data/.env` (TEST `znldzjdatkogdktymtvi`).
+  Never point them at PROD. `potw:sheet` (the Sheet flow below) touches no
+  database at all — nothing to guard, nothing to point at PROD.
 - **Interactive.** Ask, wait, confirm. Never auto-pick a campsite, never approve
   on the user's behalf. The two writes — `--commit` (mark used) and `--record`
   (save post) — happen ONLY after the user explicitly approves in step 6.
@@ -157,9 +160,14 @@ equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
 
   No → stop here, same as above. Yes → continue.
 
-**9b. Set the post up.** Work from the archive dir printed in step 8
-(`data/pin-of-the-week/posts/<date>-<slug>/`, absolute path when the browser
-needs one) — the archived copies, not the scratch `output/` dir:
+**9b. Set the post up.** Work from the directory holding the approved
+`image.png` + `caption.txt` (absolute path when the browser needs one):
+
+- **Database flow (steps 1–8):** the archive dir printed in step 8,
+  `data/pin-of-the-week/posts/<date>-<slug>/` — the archived copies, not the
+  scratch `output/` dir.
+- **Sheet flow:** there is no step-8 archive step — stage directly from the
+  dir the build printed, `data/pin-of-the-week/output/sheet/<category>/<slug>/`.
 
 1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post.
    **Create is a two-step control:** click **Create** / **+**, then **Post** in
@@ -220,10 +228,11 @@ approving:
 - **Wait for an explicit yes.** Silence, "looks good", or a question is not a yes
   — ask again. Do not click Share/Post because the flow seems finished, because
   the user approved in step 6, or because you're mid-automation.
-- **Yes** → click Share/Post, confirm it published, report the result, then
-  write today's date into that row's `posted` cell in the sheet. If the
-  browser cannot write it, say which row to tick rather than leaving the
-  queue wrong.
+- **Yes** → click Share/Post, confirm it published, and report the result.
+  **For a Sheet-built post only:** also write today's date into that row's
+  `posted` cell in the sheet. If the browser cannot write it, say which row
+  to tick rather than leaving the queue wrong. (A database-flow post from
+  steps 1–8 has no sheet row — nothing to write back.)
 - **No / wants changes** → do NOT publish, and do NOT edit the caption or image
   in the browser. Leave the draft alone, say what you're doing, and go back
   through the existing flow: a different caption is step 5 re-run with
@@ -249,8 +258,9 @@ column and no registry.
   order is the queue. Without it, every unposted row in the queue is built in
   one run.
 - Output per post: `image.png`, `caption.txt`, `meta.json`, landing in
-  `pin-of-the-week/output/sheet/<category>/<slug>/` (or under `--out <dir>` if
-  given), plus one `review.html` index over the whole batch.
+  `data/pin-of-the-week/output/sheet/<category>/<slug>/` (or under `--out <dir>`
+  if given), plus one `review.html` index over the whole batch. There is no
+  step-8 archive for these — step 9 stages directly from this dir (see 9b).
 - Adding a category is three spreadsheet actions and no code: duplicate both
   tabs, set the new `art_url` and captions, add rows.
 - A tab name that doesn't exist does NOT error on its own — Google returns
