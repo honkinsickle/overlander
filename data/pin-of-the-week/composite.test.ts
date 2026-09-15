@@ -78,15 +78,50 @@ describe("compositePost overlay source", () => {
     "base64",
   );
 
-  it("accepts an explicit overlay buffer and still returns a png of the right size", async () => {
-    const overlay = photo;
-    const out = await compositePost({
+  /** A full-size solid-color PNG, so two overlays are visibly, pixel-wise different. */
+  function solidOverlay(color: string): Buffer {
+    const c = createCanvas(base.width, base.height);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, base.width, base.height);
+    return c.toBuffer("image/png");
+  }
+
+  const overlayA = solidOverlay("#ff0000");
+  const overlayB = solidOverlay("#0000ff");
+
+  it("actually draws the passed-in overlay: two different overlays produce different output", async () => {
+    const outA = await compositePost({
       baseImage: photo,
-      overlayImage: overlay,
+      overlayImage: overlayA,
       overlayText: { title: "X", subline: "Y" },
       dimensions: base,
     });
-    expect(out.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const outB = await compositePost({
+      baseImage: photo,
+      overlayImage: overlayB,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    // still a valid PNG
+    expect(outA.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    // and the overlay choice actually changed the pixels
+    expect(outA.equals(outB)).toBe(false);
+  });
+
+  it("the default path (no overlayImage) is distinct from an explicit overlay", async () => {
+    const outDefault = await compositePost({
+      baseImage: photo,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    const outA = await compositePost({
+      baseImage: photo,
+      overlayImage: overlayA,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    expect(outDefault.equals(outA)).toBe(false);
   });
 
   it("still works with no overlayImage (falls back to the bundled brand asset)", async () => {
