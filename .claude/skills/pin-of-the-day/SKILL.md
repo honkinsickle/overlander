@@ -15,8 +15,11 @@ stage it on Instagram — but publishing always needs a second, explicit yes
 
 ## Non-negotiables
 
-- **TEST-only.** Every CLI here is guarded by `assertTestProject()` and reads
-  `data/.env` (TEST `znldzjdatkogdktymtvi`). Never point it at PROD.
+- **TEST-only, for the database CLIs.** `potw:select`, `potw:generate`,
+  `potw:posts`, and `potw:override-photo` are each guarded by
+  `assertTestProject()` and read `data/.env` (TEST `znldzjdatkogdktymtvi`).
+  Never point them at PROD. `potw:sheet` (the Sheet flow below) touches no
+  database at all — nothing to guard, nothing to point at PROD.
 - **Interactive.** Ask, wait, confirm. Never auto-pick a campsite, never approve
   on the user's behalf. The two writes — `--commit` (mark used) and `--record`
   (save post) — happen ONLY after the user explicitly approves in step 6.
@@ -141,25 +144,42 @@ The upload in 9b needs one specific capability — **setting a file on an
 `<input type="file">` directly** (CDP `DOM.setFileInputFiles` or your tool's
 equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
 
-- **Not available** → say so plainly and stop the skill here:
-  > "Browser automation isn't available in this session, so I can't post it for
-  > you. The post is ready at `data/pin-of-the-week/posts/<date>-<slug>/` —
-  > `image.png` to upload and `caption.txt` to paste. Post it manually when
-  > you're ready."
+- **Not available** → say so plainly and stop the skill here, naming whichever
+  dir this run actually produced:
+  - **Database flow:**
+    > "Browser automation isn't available in this session, so I can't post it
+    > for you. The post is ready at `data/pin-of-the-week/posts/<date>-<slug>/`
+    > — `image.png` to upload and `caption.txt` to paste. Post it manually
+    > when you're ready."
+  - **Sheet flow:**
+    > "Browser automation isn't available in this session, so I can't post it
+    > for you. The post is ready at
+    > `data/pin-of-the-week/output/sheet/<category>/<slug>/` — `image.png` to
+    > upload and `caption.txt` to paste. Post it manually when you're ready."
 
-  That is a clean, successful end to the skill. Steps 1–8 already did the real
-  work; do NOT treat a missing browser as a failure, and do NOT try to substitute
-  some other automation (curl, the Instagram API, a script) — manual posting is
-  the fallback.
+  That is a clean, successful end to the skill. The post is already built and
+  saved; do NOT treat a missing browser as a failure, and do NOT try to
+  substitute some other automation (curl, the Instagram API, a script) —
+  manual posting is the fallback.
 - **Available** → ask before driving anything:
   > "Want me to open Instagram and set the post up? I'll stop for your OK before
   > anything gets published."
 
   No → stop here, same as above. Yes → continue.
 
-**9b. Set the post up.** Work from the archive dir printed in step 8
-(`data/pin-of-the-week/posts/<date>-<slug>/`, absolute path when the browser
-needs one) — the archived copies, not the scratch `output/` dir:
+**9b. Set the post up.** Work from the directory holding the approved
+`image.png` + `caption.txt` — call it **the post dir** for the rest of this
+step (absolute path when the browser needs one):
+
+- **Database flow (steps 1–8):** the post dir is the archive dir printed in
+  step 8, `data/pin-of-the-week/posts/<date>-<slug>/` — the archived copies,
+  not the scratch `output/` dir.
+- **Sheet flow:** there is no step-8 archive step — the post dir is the exact
+  dir the build printed on that post's `✓` line (shape:
+  `data/pin-of-the-week/output/sheet/<category>/<slug>/`). Do not glob for it;
+  stale dirs from earlier runs are still on disk. The post must already have
+  passed the Sheet section's "Approve this post?" gate — if it hasn't, go do
+  that first.
 
 1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post.
    **Create is a two-step control:** click **Create** / **+**, then **Post** in
@@ -198,9 +218,10 @@ needs one) — the archived copies, not the scratch `output/` dir:
    explicitly every time instead of eyeballing it. Then advance through the
    remaining screens (**Next**, then **Next** again) without applying filters or
    edits.
-4. Paste the caption. Read `caption.txt` from the archive dir and put its text,
-   verbatim, into the caption field. Don't rewrite, trim, re-wrap, or "improve"
-   it — it's the text the user approved in step 6.
+4. Paste the caption. Read `caption.txt` from the post dir (established in
+   9b's intro) and put its text, verbatim, into the caption field. Don't
+   rewrite, trim, re-wrap, or "improve" it — it's the already-approved
+   caption text.
 5. **Check the "Share to" toggles on the Share screen before you go near the
    gate.** Instagram cross-posts to a linked Facebook account, and the toggle was
    **ON by default in both live test runs** `[measured 2026-09-14]` — so sharing
@@ -221,11 +242,86 @@ approving:
   — ask again. Do not click Share/Post because the flow seems finished, because
   the user approved in step 6, or because you're mid-automation.
 - **Yes** → click Share/Post, confirm it published, and report the result.
+  **For a Sheet-built post only:** also write today's date into that row's
+  `posted` cell in the sheet. If the browser cannot write it, say which row
+  to tick rather than leaving the queue wrong. (A database-flow post from
+  steps 1–8 has no sheet row — nothing to write back.)
 - **No / wants changes** → do NOT publish, and do NOT edit the caption or image
   in the browser. Leave the draft alone, say what you're doing, and go back
-  through the existing flow: a different caption is step 5 re-run with
-  `--caption-template <1-12>`; a different photo is step 4. The post is remade
-  properly and re-approved, not patched in Instagram.
+  through whichever flow built it. The post is remade properly and re-approved,
+  never patched in Instagram.
+  - **Database flow:** a different caption is step 5 re-run with
+    `--caption-template <1-12>`; a different photo is step 4.
+  - **Sheet flow:** there is no caption-template flag and no step 4 — the sheet
+    is the input. Edit it, then re-run `potw:sheet` for that category: the
+    caption comes from that category's numbered templates (and which one is
+    fixed by the row's position), the art from its `art_url`, the photo from
+    that row's `photo_url`. Re-approve the rebuilt post.
+
+### Building from the Google Sheet
+
+An alternative to steps 1–8 for batch-building posts from a queue instead of
+picking one campsite at a time — nothing is read from or written to the
+database, and nothing is marked used:
+
+```
+npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]
+```
+
+`--category` names a PAIR of tabs: `<name>` (its `art_url` + numbered caption
+templates) and `<name> posts` (its queue: `photo_url` · `place` · `state` ·
+`country` · `posted`). The tab name IS the category — there is no category
+column and no registry.
+
+- `--next-only` builds just the next row whose `posted` cell is empty. Row
+  order is the queue. Without it, every unposted row in the queue is built in
+  one run.
+- Output per post: `image.png`, `caption.txt`, `meta.json`, landing in
+  `data/pin-of-the-week/output/sheet/<category>/<slug>/` (or under `--out <dir>`
+  if given), plus one `review.html` index over the whole batch. There is no
+  step-8 archive for these — step 9 stages directly from this dir (see 9b).
+- Adding a category is three spreadsheet actions and no code: duplicate both
+  tabs, set the new `art_url` and captions, add rows.
+- A tab name that doesn't exist does NOT error on its own — Google returns
+  HTTP 200 with the *first tab's* data for a missing name. The build guards
+  this with a probe fetch and reports `no tab named "<x>"` when it catches the
+  mismatch. Two different situations produce that error, and the endpoint
+  cannot tell them apart:
+  - **The name really doesn't match a tab.** Watch for a stray leading or
+    trailing space in the tab name itself (`"campground "` and `campground` are
+    different tabs to Google); the CLI trims what *you* pass, so it cannot match
+    a tab whose own name carries the space. Rename the tab.
+  - **The named tab IS the workbook's first tab.** Its payload is byte-identical
+    to what a missing tab returns, so the guard fires on a perfectly correct
+    name. The fix is to drag any throwaway tab into position 1 ahead of it, then
+    re-run. Don't go hunting for a typo before ruling this one out.
+- If the probe fetch itself fails, the build prints a warning that the guard
+  is OFF. Treat a run that prints that warning with suspicion — a mistyped
+  `--category` could be silently building another category's posts.
+- Each built post prints its own absolute dir on its `✓` line. Use that exact
+  path — earlier runs leave their own dirs behind, so globbing for the folder
+  can land on a stale post from a previous build.
+
+**Approve each post before step 9 — this flow has no other check on the
+image.** Steps 5–6 above belong to the database flow; a Sheet build renders
+straight from the queue, so nothing has looked at the composite. The overlay art
+and the photos come from whatever `art_url`/`photo_url` hold, and the pipeline
+does not inspect them. Human eyes are the only thing standing between a broken
+asset and a public post. So for each post you intend to stage:
+
+1. `Read <post dir>/image.png` — the actual 1080×1350 composite, shown inline.
+2. Show the caption from `<post dir>/caption.txt`, verbatim.
+3. Ask:
+   > "Approve this post?"
+
+Check the image really carries the yoTrippin! branding and the place photo, not
+just that a file exists. **No explicit yes → do not go on to step 9 with that
+post.** If they want changes, the answer is to edit the sheet (its `art_url`,
+its caption templates, or that row's `photo_url`) and re-run the build — you do
+not patch the output files by hand.
+
+(The batch `review.html` is a convenience for eyeballing a whole run at once; it
+does not replace this gate for the post being staged.)
 
 ## Browsing / reusing past posts
 

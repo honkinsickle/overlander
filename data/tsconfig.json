@@ -25,7 +25,8 @@
   "include": [
     "ingestion/**/*.ts",
     "entity-resolution/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "pin-of-the-week/**/*.ts"
   ],
   "exclude": [
     "node_modules",

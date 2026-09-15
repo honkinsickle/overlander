@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { compositePost, coverRect, wrapText } from "./composite.ts";
 
@@ -68,5 +68,113 @@ describe("compositePost", () => {
     });
     expect(out.readUInt32BE(16)).toBe(200);
     expect(out.readUInt32BE(20)).toBe(250);
+  });
+});
+
+describe("compositePost overlay source", () => {
+  const base = { width: 1080, height: 1350 };
+  const photo = /* a 1x1 png */ Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  /** A full-size solid-color PNG, so two overlays are visibly, pixel-wise different. */
+  function solidOverlay(color: string): Buffer {
+    const c = createCanvas(base.width, base.height);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, base.width, base.height);
+    return c.toBuffer("image/png");
+  }
+
+  const overlayA = solidOverlay("#ff0000");
+  const overlayB = solidOverlay("#0000ff");
+
+  it("actually draws the passed-in overlay: two different overlays produce different output", async () => {
+    const outA = await compositePost({
+      baseImage: photo,
+      overlayImage: overlayA,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    const outB = await compositePost({
+      baseImage: photo,
+      overlayImage: overlayB,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    // still a valid PNG
+    expect(outA.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    // and the overlay choice actually changed the pixels
+    expect(outA.equals(outB)).toBe(false);
+  });
+
+  it("the default path (no overlayImage) is distinct from an explicit overlay", async () => {
+    const outDefault = await compositePost({
+      baseImage: photo,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    const outA = await compositePost({
+      baseImage: photo,
+      overlayImage: overlayA,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    expect(outDefault.equals(outA)).toBe(false);
+  });
+
+  it("still works with no overlayImage (falls back to the bundled brand asset)", async () => {
+    const out = await compositePost({
+      baseImage: photo,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("THROWS when an explicitly supplied overlay cannot be decoded", async () => {
+    // Measured before the fix: passing an HTML page as overlayImage returned a
+    // valid 1080x1350 PNG with no branding at all, no error, and the run printed
+    // ✓. An art_url that 404s to an HTML error page is exactly that case, so the
+    // decode failure has to reach the caller.
+    await expect(
+      compositePost({
+        baseImage: photo,
+        overlayImage: Buffer.from("<!doctype html><html><body>404 Not Found</body></html>"),
+        overlayText: { title: "X", subline: "Y" },
+        dimensions: base,
+      }),
+    ).rejects.toThrow(/overlayImage could not be decoded/);
+  });
+
+  it("but the NO-overlay path still degrades silently when the bundled asset can't be read", async () => {
+    // The paired negative: the graceful skip is kept for the bundled
+    // brand/header.png, where the caller asked for no overlay in particular.
+    // loadImage is stubbed to fail on the path form (the bundled asset) only.
+    vi.resetModules();
+    vi.doMock("@napi-rs/canvas", async () => {
+      const actual = await vi.importActual<typeof import("@napi-rs/canvas")>("@napi-rs/canvas");
+      return {
+        ...actual,
+        loadImage: (src: unknown) =>
+          typeof src === "string"
+            ? Promise.reject(new Error("ENOENT: brand asset absent"))
+            : actual.loadImage(src as Buffer),
+      };
+    });
+    try {
+      const { compositePost: fresh } = await import("./composite.ts");
+      const out = await fresh({
+        baseImage: photo,
+        overlayText: { title: "X", subline: "Y" },
+        dimensions: base,
+      });
+      expect(out.readUInt32BE(16)).toBe(base.width);
+      expect(out.readUInt32BE(20)).toBe(base.height);
+    } finally {
+      vi.doUnmock("@napi-rs/canvas");
+      vi.resetModules();
+    }
   });
 });
