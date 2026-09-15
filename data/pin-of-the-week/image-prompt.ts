@@ -64,10 +64,18 @@ const US_STATES: Record<string, string> = {
  * The post's second line: "Full State Name, USA" (e.g. "California, USA").
  * Grounded — if the state is absent it returns ""; if the code is unmapped it
  * returns the raw value rather than inventing a name/country.
+ *
+ * When `country` is supplied (the sheet path), it is used as given instead of
+ * assuming USA: "CA" + "USA" → "California, USA"; "British Columbia" + "Canada"
+ * → "British Columbia, Canada".
  */
-export function regionLine(state: string | null): string {
-  if (!state) return "";
+export function regionLine(state: string | null, country?: string): string {
+  if (!state) return country?.trim() ?? "";
   const code = state.trim().toUpperCase();
+  if (country !== undefined) {
+    const name = US_STATES[code] ?? state.trim();
+    return country.trim() ? `${name}, ${country.trim()}` : name;
+  }
   if (US_STATES[code]) return `${US_STATES[code]}, USA`;
   return state.trim();
 }
