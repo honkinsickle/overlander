@@ -34,6 +34,45 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   export "$key=$val"
 done < web/.env.local
 
+# Read a SINGLE key out of an env file, using the same parsing rules as the
+# loader above (skip blanks/comments, strip optional wrapping quotes). Used for
+# credentials that belong to a workspace other than web/.
+read_env_key() {
+  local file="$1" want="$2" line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "${line// /}" ]] && continue
+    [[ "${line#"${line%%[![:space:]]*}"}" == \#* ]] && continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    [[ "$key" =~ ^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*$ ]] || continue
+    key="${key// /}"
+    [[ "$key" == "$want" ]] || continue
+    case "$val" in
+      \"*\") val="${val#\"}"; val="${val%\"}" ;;
+      \'*\') val="${val#\'}"; val="${val%\'}" ;;
+    esac
+    printf '%s' "$val"
+    return 0
+  done < "$file"
+  return 1
+}
+
+# RIDB_API_KEY is a data/-workspace credential. Its only consumers are
+# data/ingestion/sources/ridb.ts and the data/scripts/* photo tools, all of
+# which load data/.env. web/.env.local carries a second copy that NOTHING under
+# web/ reads — so that copy is free to rot, and it did: it went stale on
+# 2026-07-23 and this check reported a false 401 against a live API for weeks.
+# (Spotted but not root-caused in
+# docs/measurements/2026-08-21-ridb-facilityaddress-investigation.md.)
+# Read the key from the file its consumers actually use, and read ONLY that key
+# — sourcing data/.env wholesale would pull its TEST SUPABASE_URL /
+# SUPABASE_SERVICE_ROLE_KEY into this shell alongside web/.env.local's
+# PROD-facing ones, which is exactly the TEST/PROD mixing the project forbids.
+RIDB_API_KEY=""
+if [[ -f data/.env ]]; then
+  RIDB_API_KEY="$(read_env_key data/.env RIDB_API_KEY || true)"
+fi
+
 check() {
   local name="$1" code="$2"
   if [[ "$code" == "200" ]]; then
@@ -56,9 +95,15 @@ check WIKIPEDIA "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
 check MAPILLARY "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
   "https://graph.mapillary.com/images?limit=1&access_token=${MAPILLARY_TOKEN-}")"
 
-check RIDB      "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
-  -H "apikey: ${RIDB_API_KEY-}" \
-  'https://ridb.recreation.gov/api/v1/facilities?limit=1')"
+if [[ ! -f data/.env ]]; then
+  printf "  ✗ RIDB (no data/.env — the key lives there, not in web/.env.local)\n"
+elif [[ -z "$RIDB_API_KEY" ]]; then
+  printf "  ✗ RIDB (RIDB_API_KEY absent from data/.env)\n"
+else
+  check RIDB    "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+    -H "apikey: $RIDB_API_KEY" \
+    'https://ridb.recreation.gov/api/v1/facilities?limit=1')"
+fi
 
 check FOURSQUARE "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
   -H "Authorization: Bearer ${FSQ_API_KEY-}" \
