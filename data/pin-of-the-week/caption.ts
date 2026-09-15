@@ -16,7 +16,7 @@ import { categoryLabel } from "./image-prompt.ts";
 
 /** The 12 templates, verbatim; index i == template number i+1. */
 export const CAPTION_TEMPLATES: readonly string[] = [
-  "Three hours out. The next stop is a coin flip.Not this time. {place} is on your list.{category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+  "Three hours out. The next stop is a coin flip. Not this time. {place} is on your list. {category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
   "Some pins lie. You've pulled up to a \"campsite\" with a locked gate. We've all been there. {place} won't do that to you. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
   "Can't fix your flat. You've got that handled. We handle the next stop. {place} is a good one. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
   "Most \"hidden gems\" are a parking lot with a sign. This one isn't. {place}. {category} · {state}. Worth the stop. Get the next one in your inbox. Link in bio.",
@@ -24,9 +24,9 @@ export const CAPTION_TEMPLATES: readonly string[] = [
   "You're pulling into {place}. The other guy's still refreshing a map. {category} · {state}. Be the one who already knows. Link in bio for every verified spot.",
   "Skip the fourteen tabs. No stale forum posts. No two-star reviews from 2019. Just {place}. {category} · {state}. Get every verified spot in your inbox. Link in bio.",
   "Your road trip list just got one stop longer. {place}. {category} in {state}. Get every verified spot in your inbox. Link in bio.",
-  "Most spots don't make our list. {place} did. {category} · {state} Get the ones that make it in your inbox. Link in bio.",
+  "Most spots don't make our list. {place} did. {category} · {state}. Get the ones that make it in your inbox. Link in bio.",
   "One bar left. Then none. Good thing you already know about {place}. {category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
-  "Dusk is no time to guess. {place} · {category} · {state} Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+  "Dusk is no time to guess. {place} · {category} · {state}. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
   "The kind of spot you only hear around a campfire. {place}. {category} in {state}. Now you don't need the campfire. Get every verified spot in your inbox. Link in bio.",
 ] as const;
 

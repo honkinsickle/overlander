@@ -64,12 +64,22 @@ describe("null state", () => {
   it("produces the exact expected strings for a couple of templates", () => {
     const c1 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 1);
     expect(c1.text).toBe(
-      "Three hours out. The next stop is a coin flip.Not this time. Broom Spring is on your list.Campground. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
+      "Three hours out. The next stop is a coin flip. Not this time. Broom Spring is on your list. Campground. Checked before you roll in. Get every verified spot in your inbox. Link in bio.",
     );
     const c6 = buildCaption(candidate({ state: null, canonical_name: "Broom Spring" }), 6);
     expect(c6.text).toBe(
       "You're pulling into Broom Spring. The other guy's still refreshing a map. Campground. Be the one who already knows. Link in bio for every verified spot.",
     );
+  });
+
+  it("never runs sentences together, with or without a state", () => {
+    for (let n = 1; n <= TEMPLATE_COUNT; n++) {
+      for (const state of ["CA", null]) {
+        const text = buildCaption(candidate({ state }), n).text;
+        expect(text, `template ${n}, state ${state}`).not.toMatch(/\.[A-Za-z]/); // "flip.Not"
+        expect(text, `template ${n}, state ${state}`).not.toMatch(/\bCA [A-Z]/); // "· CA Get"
+      }
+    }
   });
 
   it("still includes the state when present", () => {
