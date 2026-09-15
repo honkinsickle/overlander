@@ -1,3 +1,25 @@
+# STATE — branch `spec-category-driven-potd` · 2026-09-15 — **DESIGN ONLY: a spec for category-driven Pin of the Day posts (Sheet-only).** Nothing implemented. The Google Sheet that will drive it is built and verified.
+
+(**newest truth: one new file, `docs/superpowers/specs/2026-09-15-category-driven-pin-of-the-day-design.md`, off `main` `b07c1f7` (#438). No code touched.**
+
+**What it designs:** a category is a PAIR OF TABS and the tab name IS the category — `scenic posts` (the queue) + `scenic` (its `art_url` and its 12 captions). No registry, no enum, no category column. Adding a category is three spreadsheet actions and zero repo changes.
+
+**Scope decision that de-risked it:** Sheet-only. `caption.ts` and the DB flow (`potw:select`/`potw:generate`) are NOT touched, which removes any change to the shared `CAPTION_TEMPLATES` interface and any need for a per-category rotation migration. **Accepted consequence: the DB flow keeps the wrong-chip bug** — the category label is painted into `brand/header.png` artwork, so a trailhead generated that way still reads "Campground".
+
+**THE SHEET EXISTS AND IS VERIFIED** — `Pin of the Day — posts + categories`, id `10d_Ho3FupLTldBpNIfnjappcOqNyAoZU0YksPYIa89U`, four tabs (`campground posts`, `scenic posts`, `campground`, `scenic`). Campground's 12 templates are seeded from the repo; its `art_url` is set to a LOCAL PATH, so the build will not be portable off Adam's machine (accepted).
+
+**Two traps measured 2026-09-15, both load-bearing:**
+1. **A missing tab does NOT error.** `?sheet=nosuchtab` returns **HTTP 200 with the FIRST tab's data** — reproduced twice. A typo'd tab name yields plausible wrong content, not a failure. Guard designed (probe a bogus name, reject payloads matching it) but **`[UNVERIFIED]`**.
+2. **gviz invents headers.** Without `headers=0` it fused rows 1 and 3 into `"art_url n"` — `headers=0` is mandatory on every fetch.
+
+**Also measured:** fetch-by-tab-name works including names with spaces; the sheet must be link-shared (everything was HTTP 401 before sharing); and for write-back, **`Input.insertText` does NOT reach the Sheets canvas grid** — a synthetic `paste` event carrying TSV does, filling a whole range in one dispatch (three methods compared).
+
+**NOT DONE / NEXT:** Adam reviews the spec; then an implementation plan; then code. Still needed from him: `scenic`'s `art_url` and its 12 captions. Note the Chrome profile is signed in as `acwcreative@gmail.com` while Drive created the sheet as `adam@acwcreative.com` — the gmail account was granted writer access so the browser could edit it.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `fix-caption-template-typos` · 2026-09-14 (later) — **The three caption typos flagged in #436 are fixed.** Template 1 `flip.Not` / `list.{category}` get their spaces; templates 9 and 11 get the missing period after `{state}`. Off `main` `f2ba57e`.
 
 (**newest truth: `data/pin-of-the-week/caption.ts` (3 template strings) + `caption.test.ts` (updated template-1 literal, plus a new guard across all 12 templates, with and without a state, rejecting `.X` run-ons and a state followed directly by a capital).** The guard was confirmed to FAIL against `main`'s template copy before the fix `[literal — ran this session]`. `npm run -w data typecheck` exit 0; `data` suite 42 files, 729 passed / 3 skipped. No migration, CLI, or LRU change. The #436 range migration is still unapplied unless Adam has since run it.
