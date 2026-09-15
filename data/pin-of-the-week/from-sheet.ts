@@ -112,6 +112,41 @@ export function tabCsvUrl(sheetUrl: string, tab: string): string {
   return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&headers=0&sheet=${name}`;
 }
 
+/** A tab name that cannot exist. Fetching it tells us what Google returns for a
+ *  MISSING tab — which is the first tab's data, with HTTP 200. */
+export const BOGUS_TAB = "__potw_missing_tab_probe__";
+
+/** Deep equality for parsed CSV grids. */
+export function sameGrid(a: string[][], b: string[][]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((row, i) => row.length === b[i].length && row.every((c, j) => c === b[i][j]));
+}
+
+/** Fetch one tab by name. `fallback` is the grid returned for a known-missing
+ *  tab; if this tab's payload matches it, the tab does not exist and Google
+ *  silently served the first tab instead. */
+export async function fetchTabRows(
+  sheetUrl: string,
+  tab: string,
+  fallback: string[][] | null,
+): Promise<string[][]> {
+  const res = await fetch(tabCsvUrl(sheetUrl, tab));
+  if (!res.ok) {
+    throw new Error(
+      `sheet fetch failed for tab "${tab}": HTTP ${res.status} ` +
+        `(is it shared "anyone with the link can view"?)`,
+    );
+  }
+  const rows = parseCsv(await res.text());
+  if (fallback && sameGrid(rows, fallback)) {
+    throw new Error(
+      `no tab named "${tab}" — Google returned the first tab instead. ` +
+        `Check the tab name for typos or a trailing space.`,
+    );
+  }
+  return rows;
+}
+
 /** Undo shell-style escaping a pasted path may carry ("McArthur\ Falls") and expand "~". */
 export function cleanLocalPath(p: string): string {
   const unescaped = p.trim().replace(/\\(.)/g, "$1");

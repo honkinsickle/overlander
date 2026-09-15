@@ -1,6 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { homedir } from "node:os";
-import { cleanLocalPath, csvExportUrl, parseCsv, tabCsvUrl, templateForRow, toSheetRows } from "./from-sheet.ts";
+import {
+  cleanLocalPath,
+  csvExportUrl,
+  fetchTabRows,
+  parseCsv,
+  sameGrid,
+  tabCsvUrl,
+  templateForRow,
+  toSheetRows,
+} from "./from-sheet.ts";
 import { regionLine } from "./image-prompt.ts";
 
 describe("parseCsv", () => {
@@ -110,5 +119,42 @@ describe("regionLine with a country", () => {
   it("falls back to whichever of state/country exists", () => {
     expect(regionLine(null, "Mexico")).toBe("Mexico");
     expect(regionLine("CA", "")).toBe("California");
+  });
+});
+
+describe("sameGrid", () => {
+  it("is true for identical grids", () => {
+    expect(sameGrid([["a", "b"], ["1"]], [["a", "b"], ["1"]])).toBe(true);
+  });
+  it("is false when a cell differs", () => {
+    expect(sameGrid([["a"]], [["b"]])).toBe(false);
+  });
+  it("is false when the shape differs", () => {
+    expect(sameGrid([["a"]], [["a"], ["b"]])).toBe(false);
+  });
+});
+
+describe("fetchTabRows", () => {
+  const SHEET = "https://docs.google.com/spreadsheets/d/ABC123/edit";
+  const FIRST_TAB = [["photo_url", "place"], ["p.jpg", "Somewhere"]];
+
+  it("returns the tab's rows when they differ from the fallback", async () => {
+    const stub = vi.fn(async () => new Response("art_url,x\n"));
+    vi.stubGlobal("fetch", stub);
+    await expect(fetchTabRows(SHEET, "scenic", FIRST_TAB)).resolves.toEqual([["art_url", "x"]]);
+    vi.unstubAllGlobals();
+  });
+
+  it("throws when the payload is identical to the bogus-tab fallback", async () => {
+    const body = FIRST_TAB.map((r) => r.join(",")).join("\n");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+    await expect(fetchTabRows(SHEET, "scenic", FIRST_TAB)).rejects.toThrow(/no tab named "scenic"/);
+    vi.unstubAllGlobals();
+  });
+
+  it("throws on a non-200 response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 401 })));
+    await expect(fetchTabRows(SHEET, "scenic", null)).rejects.toThrow(/HTTP 401/);
+    vi.unstubAllGlobals();
   });
 });
