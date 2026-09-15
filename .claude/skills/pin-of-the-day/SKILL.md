@@ -220,12 +220,47 @@ approving:
 - **Wait for an explicit yes.** Silence, "looks good", or a question is not a yes
   — ask again. Do not click Share/Post because the flow seems finished, because
   the user approved in step 6, or because you're mid-automation.
-- **Yes** → click Share/Post, confirm it published, and report the result.
+- **Yes** → click Share/Post, confirm it published, report the result, then
+  write today's date into that row's `posted` cell in the sheet. If the
+  browser cannot write it, say which row to tick rather than leaving the
+  queue wrong.
 - **No / wants changes** → do NOT publish, and do NOT edit the caption or image
   in the browser. Leave the draft alone, say what you're doing, and go back
   through the existing flow: a different caption is step 5 re-run with
   `--caption-template <1-12>`; a different photo is step 4. The post is remade
   properly and re-approved, not patched in Instagram.
+
+### Building from the Google Sheet
+
+An alternative to steps 1–8 for batch-building posts from a queue instead of
+picking one campsite at a time — nothing is read from or written to the
+database, and nothing is marked used:
+
+```
+npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]
+```
+
+`--category` names a PAIR of tabs: `<name>` (its `art_url` + numbered caption
+templates) and `<name> posts` (its queue: `photo_url` · `place` · `state` ·
+`country` · `posted`). The tab name IS the category — there is no category
+column and no registry.
+
+- `--next-only` builds just the next row whose `posted` cell is empty. Row
+  order is the queue. Without it, every unposted row in the queue is built in
+  one run.
+- Output per post: `image.png`, `caption.txt`, `meta.json`, landing in
+  `pin-of-the-week/output/sheet/<category>/<slug>/` (or under `--out <dir>` if
+  given), plus one `review.html` index over the whole batch.
+- Adding a category is three spreadsheet actions and no code: duplicate both
+  tabs, set the new `art_url` and captions, add rows.
+- A tab name that doesn't exist does NOT error on its own — Google returns
+  HTTP 200 with the *first tab's* data for a missing name. The build guards
+  this with a probe fetch and reports `no tab named "<x>"` when it catches the
+  mismatch. This is a real trap, not a hypothetical: the live sheet has a tab
+  named `"campground "` with a trailing space, which triggers exactly this.
+- If the probe fetch itself fails, the build prints a warning that the guard
+  is OFF. Treat a run that prints that warning with suspicion — a mistyped
+  `--category` could be silently building another category's posts.
 
 ## Browsing / reusing past posts
 
