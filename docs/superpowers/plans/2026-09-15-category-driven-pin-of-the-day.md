@@ -460,7 +460,7 @@ git commit -m "feat(data): parse posts tabs with a posted column"
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `CompositeOptions` gains `overlayImage?: Buffer`. When absent, behaviour is unchanged (loads `brand/header.png`), so `generate.ts` keeps working untouched. Also exports `imageSize(buf: Buffer): Promise<{ width: number; height: number }>`, used by Task 6's validation gate.
+- Produces: `CompositeOptions` gains `overlayImage?: Buffer`. When absent, behaviour is unchanged (loads `brand/header.png`), so `generate.ts` keeps working untouched.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -537,34 +537,9 @@ async function drawFrame(ctx: SKRSContext2D, W: number, H: number, overlay?: Buf
 }
 ```
 
-Also export a size probe, so the validation gate can reject art that is not a
-real image or not 1080×1350. **This matters more than it looks:** a Google Drive
-*share* link returns an HTML page with HTTP 200, which would otherwise reach the
-compositor and be silently skipped by `drawFrame`'s `catch`, producing a post
-with no branding at all.
-
-```ts
-/** Decode just enough to report an image's dimensions. Throws if the buffer is
- *  not a decodable image (e.g. a Drive share page's HTML). */
-export async function imageSize(buf: Buffer): Promise<{ width: number; height: number }> {
-  const img = await loadImage(buf);
-  return { width: img.width, height: img.height };
-}
-```
-
-Add a test for it alongside the others in `composite.test.ts`:
-
-```ts
-describe("imageSize", () => {
-  it("reports the dimensions of a real image", async () => {
-    await expect(imageSize(photo)).resolves.toEqual({ width: 1, height: 1 });
-  });
-
-  it("rejects a buffer that is not an image (e.g. an HTML error page)", async () => {
-    await expect(imageSize(Buffer.from("<html>nope</html>"))).rejects.toThrow();
-  });
-});
-```
+That is the whole change. No size or content-type probe: the overlay is trusted
+to be a real 1080×1350 image. `drawFrame` already swallows an unreadable overlay
+and renders the photo without a frame, which is the accepted failure mode.
 
 - [ ] **Step 4: Run it and watch it pass**
 
@@ -587,7 +562,7 @@ git commit -m "feat(data): allow a per-call overlay image in compositePost"
 - Test: `data/pin-of-the-week/from-sheet.test.ts`
 
 **Interfaces:**
-- Consumes: `tabCsvUrl`, `fetchTabRows`, `BOGUS_TAB`, `parseCategoryTab`, `parsePostsTab`, `nextUnposted`, `CategoryTab`, `PostRow`, `imageSize` (Task 5), existing `loadPhoto`/`slugify`/`interpolate`/`categoryLabel`/`regionLine`/`compositePost`.
+- Consumes: `tabCsvUrl`, `fetchTabRows`, `BOGUS_TAB`, `parseCategoryTab`, `parsePostsTab`, `nextUnposted`, `CategoryTab`, `PostRow`, existing `loadPhoto`/`slugify`/`interpolate`/`categoryLabel`/`regionLine`/`compositePost`.
 - Produces: `templateForCategoryRow(index: number, count: number): number`, `buildMeta(...)`.
 
 **CLI contract:** `npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]`
@@ -726,22 +701,6 @@ async function main(): Promise<void> {
     problems.push(`tab "${category}": art_url could not be read — ${e instanceof Error ? e.message : String(e)}`);
     return null;
   });
-  if (overlay) {
-    // A Drive SHARE link returns an HTML page with HTTP 200. Without this it
-    // would reach the compositor, be swallowed by drawFrame's catch, and ship a
-    // post with no branding at all.
-    try {
-      const { width, height } = await imageSize(overlay);
-      if (width !== 1080 || height !== 1350) {
-        problems.push(`tab "${category}": art_url is ${width}x${height}, expected 1080x1350`);
-      }
-    } catch {
-      problems.push(
-        `tab "${category}": art_url did not decode as an image — ` +
-          `is it a direct image link rather than a Drive/Dropbox share page?`,
-      );
-    }
-  }
   if (problems.length > 0) {
     console.log(`✗ nothing built — ${problems.length} problem(s):`);
     for (const p of problems) console.log(`  ${p}`);
