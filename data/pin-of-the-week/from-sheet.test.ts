@@ -173,6 +173,21 @@ describe("parseCategoryTab", () => {
     const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{nope\}/);
   });
+
+  it("throws on a token with stray spaces inside the braces", () => {
+    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello { place }"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{ place \}/);
+  });
+
+  it("throws on a token with punctuation inside the braces", () => {
+    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place,}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{place,\}/);
+  });
+
+  it("throws on an unpaired brace", () => {
+    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/unmatched brace/);
+  });
 });
 
 describe("fetchTabRows", () => {

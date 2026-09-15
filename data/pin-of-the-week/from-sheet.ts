@@ -176,10 +176,15 @@ export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
 
   const templates = numbered.map(([, t]) => t);
   for (const [i, t] of templates.entries()) {
-    for (const m of t.matchAll(/\{(\w+)\}/g)) {
-      if (!ALLOWED_TOKENS.has(m[1])) {
-        throw new Error(`tab "${tab}" template ${i + 1}: unknown token {${m[1]}} — only {place} {category} {state}`);
+    for (const m of t.match(/\{[^{}]*\}/g) ?? []) {
+      const token = m.slice(1, -1);
+      if (!ALLOWED_TOKENS.has(token)) {
+        throw new Error(`tab "${tab}" template ${i + 1}: unknown token ${m} — only {place} {category} {state}`);
       }
+    }
+    const stripped = t.replace(/\{[^{}]*\}/g, "");
+    if (stripped.includes("{") || stripped.includes("}")) {
+      throw new Error(`tab "${tab}" template ${i + 1}: unmatched brace in "${t}" — only {place} {category} {state}`);
     }
   }
   return { artUrl, templates };
