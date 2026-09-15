@@ -190,6 +190,46 @@ export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
   return { artUrl, templates };
 }
 
+export interface PostRow {
+  photo: string;
+  place: string;
+  state: string;
+  country: string;
+  /** Empty means not yet posted. */
+  posted: string;
+  /** 1-based row number in the sheet, for error messages. */
+  rowNumber: number;
+}
+
+/** Parse a `<category> posts` tab. No category column — the tab name carries it. */
+export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
+  const [header, ...body] = rows;
+  if (!header) throw new Error(`tab "${tab}": empty`);
+  const names = header.map((h) => h.trim().toLowerCase());
+  const col = (want: string) => names.findIndex((n) => n === want);
+  const photo = names.findIndex((n) => n.includes("url"));
+  const missing = [
+    photo === -1 ? "photo_url" : null,
+    ...["place", "state", "country", "posted"].filter((n) => col(n) === -1),
+  ].filter(Boolean);
+  if (missing.length > 0) throw new Error(`tab "${tab}": missing column(s): ${missing.join(", ")}`);
+
+  const get = (r: string[], i: number) => (r[i] ?? "").trim();
+  return body.map((r, i) => ({
+    photo: get(r, photo),
+    place: get(r, col("place")),
+    state: get(r, col("state")),
+    country: get(r, col("country")),
+    posted: get(r, col("posted")),
+    rowNumber: i + 2,
+  }));
+}
+
+/** The queue is row order. The next post is the first row with an empty `posted`. */
+export function nextUnposted(rows: PostRow[]): PostRow | null {
+  return rows.find((r) => r.posted === "") ?? null;
+}
+
 /** Undo shell-style escaping a pasted path may carry ("McArthur\ Falls") and expand "~". */
 export function cleanLocalPath(p: string): string {
   const unescaped = p.trim().replace(/\\(.)/g, "$1");

@@ -4,8 +4,10 @@ import {
   cleanLocalPath,
   csvExportUrl,
   fetchTabRows,
+  nextUnposted,
   parseCategoryTab,
   parseCsv,
+  parsePostsTab,
   sameGrid,
   tabCsvUrl,
   templateForRow,
@@ -187,6 +189,46 @@ describe("parseCategoryTab", () => {
   it("throws on an unpaired brace", () => {
     const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/unmatched brace/);
+  });
+});
+
+describe("parsePostsTab", () => {
+  const rows = [
+    ["photo_url", "place", "state", "country", "posted"],
+    ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"],
+    ["b.jpg", "Beta", "OR", "USA", ""],
+  ];
+
+  it("maps columns by header name and records the sheet row number", () => {
+    const out = parsePostsTab(rows, "scenic posts");
+    expect(out).toHaveLength(2);
+    expect(out[1]).toEqual({
+      photo: "b.jpg", place: "Beta", state: "OR", country: "USA", posted: "", rowNumber: 3,
+    });
+  });
+
+  it("throws when a required header is missing", () => {
+    expect(() => parsePostsTab([["place", "state"]], "scenic posts")).toThrow(/photo_url/);
+  });
+});
+
+describe("nextUnposted", () => {
+  it("returns the first row whose posted cell is empty", () => {
+    const rows = parsePostsTab([
+      ["photo_url", "place", "state", "country", "posted"],
+      ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"],
+      ["b.jpg", "Beta", "OR", "USA", ""],
+      ["c.jpg", "Gamma", "WA", "USA", ""],
+    ], "scenic posts");
+    expect(nextUnposted(rows)?.place).toBe("Beta");
+  });
+
+  it("returns null when every row is posted", () => {
+    const rows = parsePostsTab([
+      ["photo_url", "place", "state", "country", "posted"],
+      ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"],
+    ], "scenic posts");
+    expect(nextUnposted(rows)).toBeNull();
   });
 });
 
