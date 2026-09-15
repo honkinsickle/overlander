@@ -179,11 +179,32 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
  * divider and route decoration) to fill the ENTIRE canvas. The asset is a full
  * 1080x1350 post frame, drawn edge-to-edge (0,0,W,H) — a slightly-short asset
  * would otherwise let a few px of the photo peek out below it.
- * Uses the true brand art, not a recreation. Skipped gracefully if absent.
+ * Uses the true brand art, not a recreation.
+ *
+ * Two different failure modes, deliberately handled differently:
+ *   - the BUNDLED asset is missing/unreadable → skipped gracefully, as before;
+ *     the caller asked for no particular overlay, so a frameless composite is a
+ *     degraded result rather than a wrong one.
+ *   - a CALLER-SUPPLIED `overlay` fails to decode → THROW. Swallowing it returns
+ *     a clean, valid, completely unbranded PNG and the run reports success, so
+ *     e.g. an `art_url` that actually points at an HTML page ships silently.
  */
 async function drawFrame(ctx: SKRSContext2D, W: number, H: number, overlay?: Buffer): Promise<void> {
+  if (overlay) {
+    let frame;
+    try {
+      frame = await loadImage(overlay);
+    } catch (e) {
+      throw new Error(
+        `overlayImage could not be decoded as an image — ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      );
+    }
+    ctx.drawImage(frame, 0, 0, W, H);
+    return;
+  }
   try {
-    const frame = await loadImage(overlay ?? HEADER_PATH);
+    const frame = await loadImage(HEADER_PATH);
     ctx.drawImage(frame, 0, 0, W, H);
   } catch {
     // brand asset absent — leave the composite without the frame

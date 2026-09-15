@@ -15,7 +15,7 @@
 - **Sheet-only.** Do NOT modify `caption.ts`, `generate.ts`, `select.ts`, or `posts.ts`. The database flow keeps its own templates and its wrong-chip bug.
 - **Every fetch uses `headers=0`.** Without it gviz invents a header row and fuses separate cells into one field (measured: `art_url` and `template` merged into `"art_url n"`).
 - **A missing tab does not error.** `?sheet=nosuchtab` returns HTTP 200 with the *first tab's* data (measured, reproduced twice). Every tab read must be guarded.
-- **Tab names are trimmed before use.** A real tab in the live sheet is named `"campground "` with a trailing space; untrimmed matching silently returns the wrong tab.
+- **Tab names are trimmed before use.** A tab name carrying a stray leading/trailing space (`"campground "`) does not resolve, and because a missing tab returns the first tab's data the failure is silent rather than loud — so the CLI trims what it is given before building the url. (No such tab is present in the live sheet: `?sheet=campground` returns the real tab `[measured 2026-09-15]`. This is a hazard to guard against, not an observed condition of this sheet.)
 - **Validate all rows before rendering any.** One failure → zero output and a row-referenced error list. Never a partial batch, never a silent fallback to another category's art.
 - **Caption text is transported verbatim.** Nothing in this pipeline rewrites, trims or re-wraps a caption after interpolation.
 - Gate for every task: `npm run -w data typecheck` (exit 0) and `cd data && npx vitest run` (all pass).

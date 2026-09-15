@@ -174,8 +174,12 @@ step (absolute path when the browser needs one):
 - **Database flow (steps 1–8):** the post dir is the archive dir printed in
   step 8, `data/pin-of-the-week/posts/<date>-<slug>/` — the archived copies,
   not the scratch `output/` dir.
-- **Sheet flow:** there is no step-8 archive step — the post dir is the dir
-  the build printed, `data/pin-of-the-week/output/sheet/<category>/<slug>/`.
+- **Sheet flow:** there is no step-8 archive step — the post dir is the exact
+  dir the build printed on that post's `✓` line (shape:
+  `data/pin-of-the-week/output/sheet/<category>/<slug>/`). Do not glob for it;
+  stale dirs from earlier runs are still on disk. The post must already have
+  passed the Sheet section's "Approve this post?" gate — if it hasn't, go do
+  that first.
 
 1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post.
    **Create is a two-step control:** click **Create** / **+**, then **Post** in
@@ -244,9 +248,15 @@ approving:
   steps 1–8 has no sheet row — nothing to write back.)
 - **No / wants changes** → do NOT publish, and do NOT edit the caption or image
   in the browser. Leave the draft alone, say what you're doing, and go back
-  through the existing flow: a different caption is step 5 re-run with
-  `--caption-template <1-12>`; a different photo is step 4. The post is remade
-  properly and re-approved, not patched in Instagram.
+  through whichever flow built it. The post is remade properly and re-approved,
+  never patched in Instagram.
+  - **Database flow:** a different caption is step 5 re-run with
+    `--caption-template <1-12>`; a different photo is step 4.
+  - **Sheet flow:** there is no caption-template flag and no step 4 — the sheet
+    is the input. Edit it, then re-run `potw:sheet` for that category: the
+    caption comes from that category's numbered templates (and which one is
+    fixed by the row's position), the art from its `art_url`, the photo from
+    that row's `photo_url`. Re-approve the rebuilt post.
 
 ### Building from the Google Sheet
 
@@ -275,11 +285,43 @@ column and no registry.
 - A tab name that doesn't exist does NOT error on its own — Google returns
   HTTP 200 with the *first tab's* data for a missing name. The build guards
   this with a probe fetch and reports `no tab named "<x>"` when it catches the
-  mismatch. This is a real trap, not a hypothetical: the live sheet has a tab
-  named `"campground "` with a trailing space, which triggers exactly this.
+  mismatch. Two different situations produce that error, and the endpoint
+  cannot tell them apart:
+  - **The name really doesn't match a tab.** Watch for a stray leading or
+    trailing space in the tab name itself (`"campground "` and `campground` are
+    different tabs to Google); the CLI trims what *you* pass, so it cannot match
+    a tab whose own name carries the space. Rename the tab.
+  - **The named tab IS the workbook's first tab.** Its payload is byte-identical
+    to what a missing tab returns, so the guard fires on a perfectly correct
+    name. The fix is to drag any throwaway tab into position 1 ahead of it, then
+    re-run. Don't go hunting for a typo before ruling this one out.
 - If the probe fetch itself fails, the build prints a warning that the guard
   is OFF. Treat a run that prints that warning with suspicion — a mistyped
   `--category` could be silently building another category's posts.
+- Each built post prints its own absolute dir on its `✓` line. Use that exact
+  path — earlier runs leave their own dirs behind, so globbing for the folder
+  can land on a stale post from a previous build.
+
+**Approve each post before step 9 — this flow has no other check on the
+image.** Steps 5–6 above belong to the database flow; a Sheet build renders
+straight from the queue, so nothing has looked at the composite. The overlay art
+and the photos come from whatever `art_url`/`photo_url` hold, and the pipeline
+does not inspect them. Human eyes are the only thing standing between a broken
+asset and a public post. So for each post you intend to stage:
+
+1. `Read <post dir>/image.png` — the actual 1080×1350 composite, shown inline.
+2. Show the caption from `<post dir>/caption.txt`, verbatim.
+3. Ask:
+   > "Approve this post?"
+
+Check the image really carries the yoTrippin! branding and the place photo, not
+just that a file exists. **No explicit yes → do not go on to step 9 with that
+post.** If they want changes, the answer is to edit the sheet (its `art_url`,
+its caption templates, or that row's `photo_url`) and re-run the build — you do
+not patch the output files by hand.
+
+(The batch `review.html` is a convenience for eyeballing a whole run at once; it
+does not replace this gate for the post being staged.)
 
 ## Browsing / reusing past posts
 

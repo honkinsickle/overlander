@@ -8,6 +8,7 @@ import {
   nextUnposted,
   parseCategoryTab,
   parseCsv,
+  parseCsvRows,
   parsePostsTab,
   queueIndexOf,
   sameGrid,
@@ -30,6 +31,18 @@ describe("parseCsv", () => {
   it("drops blank rows", () => {
     expect(parseCsv("a,b\n,\n1,2")).toEqual([
       ["a", "b"],
+      ["1", "2"],
+    ]);
+  });
+});
+
+describe("parseCsvRows", () => {
+  it("KEEPS blank rows, so an index is a sheet position", () => {
+    // The row-number contract: with the spacer kept, "1,2" is index 2 = sheet
+    // row 3, which is where it actually sits in the sheet.
+    expect(parseCsvRows("a,b\n,\n1,2")).toEqual([
+      ["a", "b"],
+      ["", ""],
       ["1", "2"],
     ]);
   });
@@ -264,6 +277,53 @@ describe("parseCategoryTab", () => {
   });
 });
 
+describe("parseCategoryTab against the shape the LIVE endpoint really returns", () => {
+  // Measured, not invented. gviz types a column once for the whole column: A
+  // holds template numbers 1..12, so it is typed `number`
+  // (cols: [("A","","number"), ("B","","string")]) and every TEXT cell in A —
+  // the `art_url` label in A1 and the `n` label in A3 — comes back null/empty.
+  // The literal string "art_url" is therefore NEVER present in the payload.
+  const LIVE_CSV =
+    ',/Users/adam/Desktop/potd/scenic_overlay.png \n' +
+    ",\n" +
+    ",template\n" +
+    '1,"A {place} in {state}."\n' +
+    '2,"B {place} — {category}."\n';
+
+  it("finds and trims the art url from column B of row 1 (no label row present)", () => {
+    const rows = parseCsvRows(LIVE_CSV);
+    expect(rows[0]).toEqual(["", "/Users/adam/Desktop/potd/scenic_overlay.png "]);
+    expect(rows.some((r) => (r[0] ?? "").trim().toLowerCase() === "art_url")).toBe(false);
+
+    const cat = parseCategoryTab(rows, "scenic");
+    expect(cat.artUrl).toBe("/Users/adam/Desktop/potd/scenic_overlay.png");
+    expect(cat.templates).toEqual(["A {place} in {state}.", "B {place} — {category}."]);
+  });
+
+  it("finds it in the blank-filtered form of the same grid", () => {
+    // The same payload with the spacer row removed — the reviewer's measured
+    // grid verbatim. The art url must be found either way.
+    const grid = [
+      ["", "/Users/adam/Desktop/potd/scenic_overlay.png"],
+      ["", "template"],
+      ["1", "A {place} in {state}."],
+    ];
+    expect(parseCategoryTab(grid, "scenic").artUrl).toBe("/Users/adam/Desktop/potd/scenic_overlay.png");
+  });
+
+  it("still prefers an explicit art_url label row when the column IS typed as text", () => {
+    // A tab whose column A gviz types `string` does carry the label; the label
+    // row wins over row 1 so a labelled tab is read from its label, not by
+    // position.
+    const grid = [
+      ["n", "template"],
+      ["art_url", " /tmp/labelled.png "],
+      ["1", "A {place}"],
+    ];
+    expect(parseCategoryTab(grid, "scenic").artUrl).toBe("/tmp/labelled.png");
+  });
+});
+
 describe("parsePostsTab", () => {
   const rows = [
     ["photo_url", "place", "state", "country", "posted"],
@@ -281,6 +341,42 @@ describe("parsePostsTab", () => {
 
   it("throws when a required header is missing", () => {
     expect(() => parsePostsTab([["place", "state"]], "scenic posts")).toThrow(/photo_url/);
+  });
+
+  it("numbers rows by their TRUE sheet position across an interior blank row", () => {
+    // rowNumber is the sheet write-back target: after publishing, today's date
+    // is typed into THIS row's `posted` cell. Numbering after the blanks were
+    // filtered out reported Gamma as row 4 — so the date would land on Beta's
+    // row (already posted), Gamma would stay unposted, and the next run would
+    // publish Gamma a second time.
+    const out = parsePostsTab(
+      [
+        ["photo_url", "place", "state", "country", "posted"], // sheet row 1
+        ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"], //          sheet row 2
+        ["", "", "", "", ""], //                                   sheet row 3 (spacer)
+        ["b.jpg", "Beta", "OR", "USA", ""], //                     sheet row 4
+        ["c.jpg", "Gamma", "WA", "USA", ""], //                    sheet row 5
+      ],
+      "scenic posts",
+    );
+    expect(out.map((r) => r.place)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(out.map((r) => r.rowNumber)).toEqual([2, 4, 5]);
+    // …and the template derived from those rows survives the blank too: Gamma
+    // is queue index 3 → template 4, not index 2 → template 3.
+    expect(out.map((r) => templateForCategoryRow(queueIndexOf(r), 4))).toEqual([1, 3, 4]);
+  });
+
+  it("carries the true sheet row all the way through a fetched tab", async () => {
+    const body =
+      "photo_url,place,state,country,posted\n" +
+      "a.jpg,Alpha,CA,USA,2026-09-01\n" +
+      ",,,,\n" +
+      "c.jpg,Gamma,WA,USA,\n";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+    const rows = await fetchTabRows("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", null);
+    vi.unstubAllGlobals();
+    const queue = parsePostsTab(rows, "scenic posts");
+    expect(nextUnposted(queue)).toMatchObject({ place: "Gamma", rowNumber: 4 });
   });
 });
 
@@ -320,6 +416,23 @@ describe("fetchTabRows", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
     await expect(fetchTabRows(SHEET, "scenic", FIRST_TAB)).rejects.toThrow(/no tab named "scenic"/);
     vi.unstubAllGlobals();
+  });
+
+  it("names the first-tab case, which is indistinguishable from a missing tab", async () => {
+    // The guard cannot tell "no such tab" from "this IS tab 1" — both return the
+    // first tab's bytes. Sending the operator hunting for a typo that does not
+    // exist is the whole defect, so the message must offer both readings and the
+    // fix for the second.
+    const body = FIRST_TAB.map((r) => r.join(",")).join("\n");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+    const err: unknown = await fetchTabRows(SHEET, "campground posts", FIRST_TAB).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    vi.unstubAllGlobals();
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/FIRST tab/);
+    expect((err as Error).message).toMatch(/throwaway tab/);
   });
 
   it("throws on a non-200 response", async () => {

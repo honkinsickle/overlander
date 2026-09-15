@@ -33,8 +33,13 @@ export interface SheetRow {
   country: string;
 }
 
-/** Minimal RFC 4180 CSV parse: quoted fields, "" escapes, CRLF, newlines in quotes. */
-export function parseCsv(text: string): string[][] {
+/**
+ * Minimal RFC 4180 CSV parse, keeping EVERY row — blank ones included, so a
+ * row's index is its position in the sheet (row i is sheet row i+1). Blank rows
+ * must survive the parse: `parsePostsTab` numbers rows for the sheet write-back,
+ * and dropping a spacer row here would shift every row below it.
+ */
+export function parseCsvRows(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -69,7 +74,17 @@ export function parseCsv(text: string): string[][] {
     row.push(field);
     rows.push(row);
   }
-  return rows.filter((r) => r.some((f) => f.trim() !== ""));
+  return rows;
+}
+
+/** True when every cell in the row is empty or whitespace. */
+export function isBlankRow(row: string[]): boolean {
+  return row.every((f) => f.trim() === "");
+}
+
+/** `parseCsvRows` with blank rows removed. For callers that do not number rows. */
+export function parseCsv(text: string): string[][] {
+  return parseCsvRows(text).filter((r) => !isBlankRow(r));
 }
 
 /**
@@ -141,11 +156,16 @@ export async function fetchTabRows(
         `(is it shared "anyone with the link can view"?)`,
     );
   }
-  const rows = parseCsv(await res.text());
+  const rows = parseCsvRows(await res.text());
   if (fallback && sameGrid(rows, fallback)) {
     throw new Error(
       `no tab named "${tab}" — Google returned the first tab instead. ` +
-        `Check the tab name for typos or a trailing space.`,
+        `Two different things look identical here, because this endpoint cannot ` +
+        `tell them apart: either (a) there really is no such tab — check the name ` +
+        `for typos or a stray leading/trailing space — or (b) "${tab}" IS the ` +
+        `workbook's FIRST tab, whose data is byte-for-byte what a missing tab ` +
+        `returns. If it is the first tab, add any throwaway tab ahead of it in the ` +
+        `sheet (drag it to position 1) and re-run.`,
     );
   }
   return rows;
@@ -160,10 +180,21 @@ export interface CategoryTab {
 
 const ALLOWED_TOKENS = new Set(["place", "category", "state"]);
 
-/** Parse a `<category>` tab: `art_url` in row 1, then `n | template` rows. */
+/**
+ * Parse a `<category>` tab: `art_url` in row 1, then `n | template` rows.
+ *
+ * The `art_url` LABEL is usually not in the payload at all. gviz types a column
+ * ONCE for the whole column, and column A of a category tab holds the template
+ * numbers 1..12 — so gviz calls column A a `number` column and returns every
+ * TEXT cell in it (the `art_url` label in A1, the `n` label in A3) as null.
+ * Measured against the live sheet: `cols: [("A","","number"), ("B","","string")]`
+ * and row 1 = `[None, "/…/scenic_overlay.png"]`, i.e. the grid arrives as
+ * `[["", "<path>"], ["", "template"], ["1", "…"], …]`. So when no label row is
+ * found, the art url is simply column B of the first row.
+ */
 export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
   const artRow = rows.find((r) => (r[0] ?? "").trim().toLowerCase() === "art_url");
-  const artUrl = (artRow?.[1] ?? "").trim();
+  const artUrl = (artRow ? (artRow[1] ?? "") : (rows[0]?.[1] ?? "")).trim();
   if (!artUrl) throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
 
   const numbered = rows
@@ -201,7 +232,14 @@ export interface PostRow {
   country: string;
   /** Empty means not yet posted. */
   posted: string;
-  /** 1-based row number in the sheet, for error messages. */
+  /**
+   * The row's TRUE 1-based position in the sheet (header is row 1, so the first
+   * body row is 2), counting blank rows. Not just an error-message label: it
+   * drives the caption-template rotation (`queueIndexOf`) AND it is the cell the
+   * operator ticks `posted` in after publishing. Numbering rows AFTER dropping
+   * blanks would point both of those at the wrong row — a wrong template plus a
+   * date written into an innocent row, leaving the real one to republish.
+   */
   rowNumber: number;
 }
 
@@ -219,14 +257,20 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
   if (missing.length > 0) throw new Error(`tab "${tab}": missing column(s): ${missing.join(", ")}`);
 
   const get = (r: string[], i: number) => (r[i] ?? "").trim();
-  return body.map((r, i) => ({
-    photo: get(r, photo),
-    place: get(r, col("place")),
-    state: get(r, col("state")),
-    country: get(r, col("country")),
-    posted: get(r, col("posted")),
-    rowNumber: i + 2,
-  }));
+  // Number FIRST, drop blanks AFTER — a spacer row must not shift the rows below
+  // it (see PostRow.rowNumber). `rows` arrives from parseCsvRows, which keeps
+  // blank rows for exactly this reason.
+  return body
+    .map((r, i) => ({ cells: r, rowNumber: i + 2 }))
+    .filter(({ cells }) => !isBlankRow(cells))
+    .map(({ cells, rowNumber }) => ({
+      photo: get(cells, photo),
+      place: get(cells, col("place")),
+      state: get(cells, col("state")),
+      country: get(cells, col("country")),
+      posted: get(cells, col("posted")),
+      rowNumber,
+    }));
 }
 
 /** The queue is row order. The next post is the first row with an empty `posted`. */
@@ -254,7 +298,9 @@ export function templateForCategoryRow(index: number, count: number): number {
 /**
  * A row's 0-based position in its category's FULL queue — the index the template
  * rotation must use. `parsePostsTab` numbers rows from the sheet (row 2 is the
- * first body row), so this inverts that.
+ * first body row), so this inverts that. It is keyed to the SHEET row, so a
+ * row's template is fixed by where it sits in the sheet and cannot drift when
+ * rows above it are ticked posted or when a blank spacer row is added.
  *
  * Never index the rotation off a filtered array: the unposted subset shrinks as
  * rows are ticked `posted`, so a row's template would drift, and `--next-only`
@@ -449,7 +495,10 @@ async function main(): Promise<void> {
       join(dir, "meta.json"),
       JSON.stringify(buildMeta(category, b.row, b.templateNumber, cat.artUrl, b.caption), null, 2) + "\n",
     );
-    console.log(`✓ ${b.row.place} → ${category} template ${b.templateNumber}`);
+    // The dir is printed in full (it is absolute — `out` is resolved above)
+    // because it is what the operator stages from: earlier runs leave their own
+    // dirs on disk, so "find the folder" by globbing can land on a stale post.
+    console.log(`✓ ${b.row.place} → ${category} template ${b.templateNumber} → ${dir}`);
   }
 
   await mkdir(out, { recursive: true });

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { compositePost, coverRect, wrapText } from "./composite.ts";
 
@@ -131,5 +131,50 @@ describe("compositePost overlay source", () => {
       dimensions: base,
     });
     expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("THROWS when an explicitly supplied overlay cannot be decoded", async () => {
+    // Measured before the fix: passing an HTML page as overlayImage returned a
+    // valid 1080x1350 PNG with no branding at all, no error, and the run printed
+    // ✓. An art_url that 404s to an HTML error page is exactly that case, so the
+    // decode failure has to reach the caller.
+    await expect(
+      compositePost({
+        baseImage: photo,
+        overlayImage: Buffer.from("<!doctype html><html><body>404 Not Found</body></html>"),
+        overlayText: { title: "X", subline: "Y" },
+        dimensions: base,
+      }),
+    ).rejects.toThrow(/overlayImage could not be decoded/);
+  });
+
+  it("but the NO-overlay path still degrades silently when the bundled asset can't be read", async () => {
+    // The paired negative: the graceful skip is kept for the bundled
+    // brand/header.png, where the caller asked for no overlay in particular.
+    // loadImage is stubbed to fail on the path form (the bundled asset) only.
+    vi.resetModules();
+    vi.doMock("@napi-rs/canvas", async () => {
+      const actual = await vi.importActual<typeof import("@napi-rs/canvas")>("@napi-rs/canvas");
+      return {
+        ...actual,
+        loadImage: (src: unknown) =>
+          typeof src === "string"
+            ? Promise.reject(new Error("ENOENT: brand asset absent"))
+            : actual.loadImage(src as Buffer),
+      };
+    });
+    try {
+      const { compositePost: fresh } = await import("./composite.ts");
+      const out = await fresh({
+        baseImage: photo,
+        overlayText: { title: "X", subline: "Y" },
+        dimensions: base,
+      });
+      expect(out.readUInt32BE(16)).toBe(base.width);
+      expect(out.readUInt32BE(20)).toBe(base.height);
+    } finally {
+      vi.doUnmock("@napi-rs/canvas");
+      vi.resetModules();
+    }
   });
 });
