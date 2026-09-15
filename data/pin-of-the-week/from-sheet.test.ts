@@ -380,6 +380,110 @@ describe("parsePostsTab", () => {
   });
 });
 
+describe("parsePostsTab against the shape the LIVE endpoint returns AFTER a publish", () => {
+  // Measured, not invented. gviz types a column ONCE for the whole column. The
+  // moment a real post is published and today's date is written into `posted`,
+  // gviz types column E as `date` — so the TEXT cell in that column, the
+  // `posted` HEADER in E1, comes back null. Measured after the first real
+  // Instagram publish: cols [(A,string)…(D,string),(E,date)] and
+  // rows[0].c[4] == {v: None}. The raw /export?format=csv of the same tab still
+  // shows `photo_url,place,state,country,posted`, so the header IS there — only
+  // this endpoint blanks it.
+  const AFTER_PUBLISH = [
+    ["photo_url", "place", "state", "country", ""],
+    ["/Users/adam/Desktop/potd/devils_post_pile.png ", "Devils Post Pile", "CA", "USA", "2026-09-15"],
+  ];
+
+  it("parses a tab whose `posted` header gviz blanked, reading posted from column E", () => {
+    const out = parsePostsTab(AFTER_PUBLISH, "scenic posts");
+    expect(out).toEqual([
+      {
+        photo: "/Users/adam/Desktop/potd/devils_post_pile.png",
+        place: "Devils Post Pile",
+        state: "CA",
+        country: "USA",
+        posted: "2026-09-15",
+        rowNumber: 2,
+      },
+    ]);
+  });
+
+  it("sees that row as POSTED — a blank-read `posted` would republish it forever", () => {
+    // The failure this guards is worse than the crash: if the fallback picked
+    // the wrong column (or read nothing), `posted` would be "" and the queue
+    // would re-publish an already-published post on every run.
+    expect(nextUnposted(parsePostsTab(AFTER_PUBLISH, "scenic posts"))).toBeNull();
+  });
+
+  it("carries the blanked header through a fetched tab", async () => {
+    const body =
+      "photo_url,place,state,country,\n" +
+      "/Users/adam/Desktop/potd/devils_post_pile.png ,Devils Post Pile,CA,USA,2026-09-15\n" +
+      "b.jpg,Beta,OR,USA,\n";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+    const fetched = await fetchTabRows("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", null);
+    vi.unstubAllGlobals();
+    const queue = parsePostsTab(fetched, "scenic posts");
+    expect(queue.map((r) => r.posted)).toEqual(["2026-09-15", ""]);
+    expect(nextUnposted(queue)).toMatchObject({ place: "Beta", rowNumber: 3 });
+  });
+
+  it("still parses the PRE-publish shape, where the header is present and posted is empty", () => {
+    // Campground before its first post: no date anywhere, so column E is still
+    // typed `string` and the header survives. This is the path that works today
+    // and must keep working.
+    const out = parsePostsTab(
+      [
+        ["photo_url", "place", "state", "country", "posted"],
+        ["a.jpg", "Alpha", "CA", "USA", ""],
+      ],
+      "campground posts",
+    );
+    expect(out[0]).toEqual({
+      photo: "a.jpg", place: "Alpha", state: "CA", country: "USA", posted: "", rowNumber: 2,
+    });
+  });
+
+  it("tolerates a blanked photo_url header too, since any column can be typed", () => {
+    const out = parsePostsTab(
+      [
+        ["", "place", "state", "country", "posted"],
+        ["a.jpg", "Alpha", "CA", "USA", ""],
+      ],
+      "scenic posts",
+    );
+    expect(out[0]).toMatchObject({ photo: "a.jpg", place: "Alpha" });
+  });
+
+  it("still throws when the fifth header is a DIFFERENT name — that is malformed, not blanked", () => {
+    // The tolerance must be narrow: only an EMPTY header cell is evidence of
+    // gviz column typing. A header that says something else is a real mistake
+    // and must still fail loudly, or a `notes` column would be read as `posted`
+    // and the queue would silently skip or republish rows.
+    expect(() =>
+      parsePostsTab(
+        [
+          ["photo_url", "place", "state", "country", "notes"],
+          ["a.jpg", "Alpha", "CA", "USA", "hello"],
+        ],
+        "scenic posts",
+      ),
+    ).toThrow(/missing column\(s\): posted/);
+  });
+
+  it("still throws when the posted column is absent entirely (header row of four)", () => {
+    expect(() =>
+      parsePostsTab([["photo_url", "place", "state", "country"], ["a.jpg", "Alpha", "CA", "USA"]], "scenic posts"),
+    ).toThrow(/missing column\(s\): posted/);
+  });
+
+  it("still names every genuinely missing column", () => {
+    expect(() => parsePostsTab([["place", "state"]], "scenic posts")).toThrow(
+      /missing column\(s\): photo_url, country, posted/,
+    );
+  });
+});
+
 describe("nextUnposted", () => {
   it("returns the first row whose posted cell is empty", () => {
     const rows = parsePostsTab([

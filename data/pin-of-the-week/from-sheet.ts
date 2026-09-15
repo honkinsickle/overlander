@@ -243,18 +243,52 @@ export interface PostRow {
   rowNumber: number;
 }
 
-/** Parse a `<category> posts` tab. No category column — the tab name carries it. */
+/** The documented, fixed column order of a `<category> posts` tab. This ORDER is
+ *  the trustworthy signal; the header TEXT is not, for any column gviz has
+ *  typed (see `parsePostsTab`). */
+const POSTS_COLUMNS = ["photo_url", "place", "state", "country", "posted"] as const;
+
+/**
+ * Parse a `<category> posts` tab. No category column — the tab name carries it.
+ *
+ * Columns resolve by header NAME first (`photo_url` loosely, as the first header
+ * containing "url", so a misspelled "pohoto_url" still works; the rest exactly).
+ *
+ * A name that does not resolve then falls back to its fixed position — but ONLY
+ * when the header cell AT that position is empty. gviz types a column ONCE for
+ * the whole column, so publishing one post (writing a date into `posted`) makes
+ * column E a `date` column, and the TEXT cell in it — the `posted` header in E1 —
+ * comes back null. Measured after the first real publish: `cols` = [(A,string),
+ * (B,string),(C,string),(D,string),(E,date)] with `rows[0].c[4] == {v: None}`,
+ * while the raw `/export?format=csv` of the same tab still shows
+ * `photo_url,place,state,country,posted`. The header IS there; this endpoint
+ * blanks it. Same root cause as the blanked `art_url` label in
+ * `parseCategoryTab`. Without the fallback, publishing one post broke the NEXT
+ * build of that category, for every category, forever.
+ *
+ * The blank test is what keeps this narrow: an EMPTY header cell is the evidence
+ * of column typing, so only that is tolerated. A header holding some OTHER name
+ * is a genuinely malformed tab and still fails loudly — reading a `notes` column
+ * as `posted` would silently skip or republish rows, which is worse than the
+ * crash. A header row too short to have the position at all fails the same way.
+ */
 export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
   const [header, ...body] = rows;
   if (!header) throw new Error(`tab "${tab}": empty`);
   const names = header.map((h) => h.trim().toLowerCase());
-  const col = (want: string) => names.findIndex((n) => n === want);
-  const photo = names.findIndex((n) => n.includes("url"));
-  const missing = [
-    photo === -1 ? "photo_url" : null,
-    ...["place", "state", "country", "posted"].filter((n) => col(n) === -1),
-  ].filter(Boolean);
+  const byName = (want: string) =>
+    want === "photo_url" ? names.findIndex((n) => n.includes("url")) : names.indexOf(want);
+
+  const missing: string[] = [];
+  const at = POSTS_COLUMNS.map((want, position) => {
+    const named = byName(want);
+    if (named !== -1) return named;
+    if (names[position] === "") return position;
+    missing.push(want);
+    return -1;
+  });
   if (missing.length > 0) throw new Error(`tab "${tab}": missing column(s): ${missing.join(", ")}`);
+  const [photo, place, state, country, posted] = at;
 
   const get = (r: string[], i: number) => (r[i] ?? "").trim();
   // Number FIRST, drop blanks AFTER — a spacer row must not shift the rows below
@@ -265,10 +299,10 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
     .filter(({ cells }) => !isBlankRow(cells))
     .map(({ cells, rowNumber }) => ({
       photo: get(cells, photo),
-      place: get(cells, col("place")),
-      state: get(cells, col("state")),
-      country: get(cells, col("country")),
-      posted: get(cells, col("posted")),
+      place: get(cells, place),
+      state: get(cells, state),
+      country: get(cells, country),
+      posted: get(cells, posted),
       rowNumber,
     }));
 }
