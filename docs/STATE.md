@@ -1,3 +1,27 @@
+# STATE — branch `restore-potd-region-line` · 2026-09-14 — **Recovers five Pin-of-the-Day compositor commits that were orphaned when PR #426 merged mid-branch.** The "State, USA" region line, Brother 1816 typography, title auto-fit, and the edge-to-edge full-height frame are back.
+
+(**newest truth: cherry-picked onto `main` `2a58999` (#436). Touches `composite.ts`, `image-prompt.ts` + a new `image-prompt.test.ts`, the brand asset (`brand/header.png` + `assets/socialmedia/branding.png`), two Brother 1816 OTFs, and the pipeline README.**
+
+**ROOT CAUSE — work continued on a branch after its PR had already merged** `[literal — commit times vs merge time]`. PR #426 squash-merged at **16:57 PDT** on 2026-09-11 as `69e1756`. Three commits predated it and landed. **Five did not**, all pushed 18:33-19:02 PDT, after the merge: `e378351` (Brother 1816 + "State, USA" line), `f6fb8cd` (auto-fit title + 57px region line), `6b0b06b` (frame edge-to-edge), `64f7d92` (full-height 1080x1350 asset), `15d477f` (left-align name + region line). The PR title still advertises "Brother 1816 typography + State/USA line", which is why this looked shipped. **This is the SECOND time this pipeline lost work to a mid-branch merge** — the design record notes PR #424 squash-raced the same way. Worth a process note: after a squash-merge, check whether the branch has commits newer than the merge.
+
+**Why it surfaced:** a Pin of the Day run on 2026-09-14 rendered Blind Island with no region line under the title, while the archived Collier post from 09-12 has "Oregon, USA". `main`'s `composite.ts` draws only the place name — its own comment says the subline "is intentionally gone".
+
+**CHERRY-PICK, NOT MERGE** `[literal]`: `swap-brand-header` is **9 commits behind** `main`. Merging it would have reverted `SKILL.md`, `docs/`, `landing/index.html`, and the Collier archive entry. All five picked cleanly with **zero conflicts**; the resulting `composite.ts` and `header.png` are byte-identical to the branch tip.
+
+**Adam's calls** `[decided 2026-09-14]`: (A) Brother 1816 Printed IS licensed — the two OTFs are committed. The code registers them defensively and falls back to Barlow if absent, so a machine without them still renders. (B) Took the branch's **full-height 1080x1350** asset (305292 bytes, replacing main's 305909). (C) The baked-in "Campground" chip is explicitly OUT of scope.
+
+**PROOF, not inference** `[measured 2026-09-14]`: re-rendering Collier on this branch produces an image **byte-identical** to the archived 2026-09-12 post (sha256 `7318c881ad2ada70…`, 1909334 bytes). That confirms outright — not by timeline inference — that the archived post was generated from this exact code. Blind Island now renders "Washington, USA"; a long name (Collier) auto-fits on one line; the frame reaches the bottom edge with no photo peeking below.
+
+**Gates** `[measured 2026-09-14]`: `npm run -w data typecheck` exit 0; full `data` vitest **42 files, 728 passed / 3 skipped** — up from 41/722 on `main`, because `image-prompt.test.ts` arrives with the cherry-pick.
+
+**STILL BROKEN, deliberately not fixed:** the category chip ("Campground") is painted into `brand/header.png` artwork, so EVERY post shows it regardless of the real category — Blind Island is a `facility`. Adam's call to leave it.
+
+**NOT DONE / NEXT:** PR against `main` for review. The #436 caption migration is still unapplied to any database. PR #435 (step 9 corrections) has conflicts and needs a rebase.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `potd-caption-copy-rewrite` · 2026-09-14 — **The Instagram caption templates are replaced AND the set grows 8 → 12.** Copy + a range migration. **The migration is NOT applied to any database yet.**
 
 (**newest truth: `data/pin-of-the-week/caption.ts` (now 12 `CAPTION_TEMPLATES`), the range guards in `post-history.ts`, four test files' worth of assertions, `SKILL.md`'s `--caption-template` range, and a NEW migration `20260914230000_caption_templates_1_to_12.sql`. Off `main` `e5f941b` (#433).**

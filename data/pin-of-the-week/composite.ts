@@ -14,10 +14,13 @@
  *   - the photo treatment (unchanged)
  *   - the black caption bar: title + "Category · State" + amber "Verified"
  *
- * Fonts are bundled under ./fonts (all OFL) and registered from those paths so
- * rendering is identical on any machine (no reliance on system fonts).
+ * Fonts are bundled under ./fonts and registered from those paths so rendering
+ * is identical on any machine (no reliance on system fonts). Barlow / Barlow
+ * Condensed / Space Mono are OFL; the Brother 1816 Printed display font is
+ * commercial (licensed) and bundled under that license.
  */
 
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
@@ -38,7 +41,22 @@ function registerFonts(): void {
   GlobalFonts.registerFromPath(join(FONT_DIR, "BarlowCondensed-Bold.ttf"), "Barlow Condensed");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-Regular.ttf"), "Barlow");
   GlobalFonts.registerFromPath(join(FONT_DIR, "Barlow-SemiBold.ttf"), "Barlow SemiBold");
+  // Brand display font: Brother 1816 Printed (commercial). Registered
+  // defensively — if the files aren't present the ctx.font fallback (Barlow)
+  // is used, so rendering never crashes on a machine without them.
+  tryRegisterFont(join(FONT_DIR, "Brother-1816-Printed-Bold.otf"), "Brother 1816 Printed Bold");
+  tryRegisterFont(join(FONT_DIR, "Brother-1816-Printed-Book.otf"), "Brother 1816 Printed Book");
   fontsRegistered = true;
+}
+
+/** Register a font family from a path, skipping silently if the file is absent. */
+function tryRegisterFont(path: string, family: string): void {
+  if (!existsSync(path)) return;
+  try {
+    GlobalFonts.registerFromPath(path, family);
+  } catch {
+    // registration failed — the ctx.font fallback family will be used
+  }
 }
 
 /** Greedy word-wrap against the current ctx.font, to a max pixel width. */
@@ -97,28 +115,56 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // the bottom scrim, the category label + divider, and the route decoration —
   // so the code no longer draws its own scrim or category subline. Code supplies
   // only the photo (above) and the place name (below).
-  await drawFrame(ctx, W);
+  await drawFrame(ctx, W, H);
 
-  // 3. Place name (title) — drawn in the asset's name slot below the divider,
-  // bottom-anchored. Same Barlow Condensed styling as before; the subline
-  // (category) is intentionally gone (the frame carries the category label).
-  const titleSize = Math.round(W * 0.066);
-  const titleLine = Math.round(titleSize * 1.04);
-  const bottomPad = Math.round(H * 0.055);
-  const maxTextWidth = W - PAD * 2;
+  // 3. Name (title) + "State, Country" second line — drawn in the asset's name
+  // slot below the divider, bottom-anchored. The category lives in the frame's
+  // label; here the code draws the place name and then its region.
+  const MAX_TITLE_SIZE = 75; // px — place name target; shrinks to fit one line
+  const MIN_TITLE_SIZE = 56; // px — floor before allowing a wrap
+  const subSize = 57; // px — "State, USA" line
+  const gapSub = Math.round(H * 0.012);
+  const bottomPad = Math.round(H * 0.05);
+  // Text left inset aligned to the FRAME's left margin — the left end of the
+  // divider hairline / the "Campground" icon (measured at x=48 in the 1080-wide
+  // asset), so the name + region line line up under the hairline's left end.
+  const captionLeft = 48;
+  const maxTextWidth = W - captionLeft - PAD;
 
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
-  ctx.font = `700 ${titleSize}px "Barlow Condensed"`;
+  // Auto-fit the title: shrink from MAX toward MIN until the name fits on ONE
+  // line, so a long name doesn't wrap up into the frame's divider/label slot.
+  // (Title = Brother 1816 Printed Bold, falling back to Barlow Condensed.)
+  let titleSize = MAX_TITLE_SIZE;
+  const setTitleFont = () => {
+    ctx.font = `${titleSize}px "Brother 1816 Printed Bold", "Barlow Condensed"`;
+  };
+  setTitleFont();
+  while (titleSize > MIN_TITLE_SIZE && ctx.measureText(opts.overlayText.title).width > maxTextWidth) {
+    titleSize -= 1;
+    setTitleFont();
+  }
+  const titleLine = Math.round(titleSize * 1.04);
   const titleLines = wrapText(ctx, opts.overlayText.title, maxTextWidth);
+  const hasSub = opts.overlayText.subline.length > 0;
 
-  const blockH = titleLines.length * titleLine;
+  const blockH = titleLines.length * titleLine + (hasSub ? gapSub + subSize : 0);
   let y = H - bottomPad - blockH;
 
+  // title
   ctx.fillStyle = colors.textPrimary;
   for (const line of titleLines) {
-    ctx.fillText(line, PAD, y);
+    ctx.fillText(line, captionLeft, y);
     y += titleLine;
+  }
+
+  // second line: "State, USA" — Brother 1816 Printed Book (falls back to Barlow).
+  if (hasSub) {
+    y += gapSub;
+    ctx.font = `${subSize}px "Brother 1816 Printed Book", "Barlow"`;
+    ctx.fillStyle = colors.textPrimary;
+    ctx.fillText(opts.overlayText.subline, captionLeft, y);
   }
 
   return canvas.toBuffer("image/png");
@@ -127,15 +173,15 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 /**
  * Draw the REAL full-frame brand asset (brand/header.png = branding.png — the
  * yoTrippin! header band + transparent body + baked scrim, category label,
- * divider and route decoration) full-width from the top, preserving its aspect
- * ratio (a 1080x1348 asset covers ~the whole 1080x1350 canvas). Uses the true
- * brand art, not a recreation. Skipped gracefully if the asset is missing.
+ * divider and route decoration) to fill the ENTIRE canvas. The asset is a full
+ * 1080x1350 post frame, drawn edge-to-edge (0,0,W,H) — a slightly-short asset
+ * would otherwise let a few px of the photo peek out below it.
+ * Uses the true brand art, not a recreation. Skipped gracefully if absent.
  */
-async function drawFrame(ctx: SKRSContext2D, W: number): Promise<void> {
+async function drawFrame(ctx: SKRSContext2D, W: number, H: number): Promise<void> {
   try {
     const frame = await loadImage(HEADER_PATH);
-    const h = Math.round(frame.height * (W / frame.width));
-    ctx.drawImage(frame, 0, 0, W, h);
+    ctx.drawImage(frame, 0, 0, W, H);
   } catch {
     // brand asset absent — leave the composite without the frame
   }
