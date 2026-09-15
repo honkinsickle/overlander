@@ -144,16 +144,23 @@ The upload in 9b needs one specific capability — **setting a file on an
 `<input type="file">` directly** (CDP `DOM.setFileInputFiles` or your tool's
 equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
 
-- **Not available** → say so plainly and stop the skill here:
-  > "Browser automation isn't available in this session, so I can't post it for
-  > you. The post is ready at `data/pin-of-the-week/posts/<date>-<slug>/` —
-  > `image.png` to upload and `caption.txt` to paste. Post it manually when
-  > you're ready."
+- **Not available** → say so plainly and stop the skill here, naming whichever
+  dir this run actually produced:
+  - **Database flow:**
+    > "Browser automation isn't available in this session, so I can't post it
+    > for you. The post is ready at `data/pin-of-the-week/posts/<date>-<slug>/`
+    > — `image.png` to upload and `caption.txt` to paste. Post it manually
+    > when you're ready."
+  - **Sheet flow:**
+    > "Browser automation isn't available in this session, so I can't post it
+    > for you. The post is ready at
+    > `data/pin-of-the-week/output/sheet/<category>/<slug>/` — `image.png` to
+    > upload and `caption.txt` to paste. Post it manually when you're ready."
 
-  That is a clean, successful end to the skill. Steps 1–8 already did the real
-  work; do NOT treat a missing browser as a failure, and do NOT try to substitute
-  some other automation (curl, the Instagram API, a script) — manual posting is
-  the fallback.
+  That is a clean, successful end to the skill. The post is already built and
+  saved; do NOT treat a missing browser as a failure, and do NOT try to
+  substitute some other automation (curl, the Instagram API, a script) —
+  manual posting is the fallback.
 - **Available** → ask before driving anything:
   > "Want me to open Instagram and set the post up? I'll stop for your OK before
   > anything gets published."
@@ -161,13 +168,14 @@ equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
   No → stop here, same as above. Yes → continue.
 
 **9b. Set the post up.** Work from the directory holding the approved
-`image.png` + `caption.txt` (absolute path when the browser needs one):
+`image.png` + `caption.txt` — call it **the post dir** for the rest of this
+step (absolute path when the browser needs one):
 
-- **Database flow (steps 1–8):** the archive dir printed in step 8,
-  `data/pin-of-the-week/posts/<date>-<slug>/` — the archived copies, not the
-  scratch `output/` dir.
-- **Sheet flow:** there is no step-8 archive step — stage directly from the
-  dir the build printed, `data/pin-of-the-week/output/sheet/<category>/<slug>/`.
+- **Database flow (steps 1–8):** the post dir is the archive dir printed in
+  step 8, `data/pin-of-the-week/posts/<date>-<slug>/` — the archived copies,
+  not the scratch `output/` dir.
+- **Sheet flow:** there is no step-8 archive step — the post dir is the dir
+  the build printed, `data/pin-of-the-week/output/sheet/<category>/<slug>/`.
 
 1. Navigate to Instagram (`https://www.instagram.com/`) and start a new post.
    **Create is a two-step control:** click **Create** / **+**, then **Post** in
@@ -206,9 +214,10 @@ equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
    explicitly every time instead of eyeballing it. Then advance through the
    remaining screens (**Next**, then **Next** again) without applying filters or
    edits.
-4. Paste the caption. Read `caption.txt` from the archive dir and put its text,
-   verbatim, into the caption field. Don't rewrite, trim, re-wrap, or "improve"
-   it — it's the text the user approved in step 6.
+4. Paste the caption. Read `caption.txt` from the post dir (established in
+   9b's intro) and put its text, verbatim, into the caption field. Don't
+   rewrite, trim, re-wrap, or "improve" it — it's the already-approved
+   caption text.
 5. **Check the "Share to" toggles on the Share screen before you go near the
    gate.** Instagram cross-posts to a linked Facebook account, and the toggle was
    **ON by default in both live test runs** `[measured 2026-09-14]` — so sharing
