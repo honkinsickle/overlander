@@ -271,23 +271,82 @@ const POSTS_COLUMNS = ["photo_url", "place", "state", "country", "posted"] as co
  * is a genuinely malformed tab and still fails loudly — reading a `notes` column
  * as `posted` would silently skip or republish rows, which is worse than the
  * crash. A header row too short to have the position at all fails the same way.
+ *
+ * THREE THINGS BOUND THE REPAIR, because a blank header cell proves "the column
+ * at this position was typed" — NOT "the column at this position is the one I
+ * want":
+ *
+ *  1. **Width.** Position 4 is `posted` only if the tab has exactly five
+ *     columns. Add a `scheduled` date column before `posted` and gviz blanks
+ *     BOTH headers by the same mechanism, so position 4 is now `scheduled`:
+ *     every scheduled row would read as already-published and never build,
+ *     while a genuinely published row with an empty `scheduled` cell would be
+ *     republished. So the repair is refused outright on a grid wider than the
+ *     contract. Extra columns are not themselves an error — a wide tab with
+ *     intact header TEXT still parses; only the positional fallback is unsafe
+ *     on it. Measured before tightening: gviz returns exactly five fields per
+ *     row for both live tabs, so this cannot reach the working path.
+ *  2. **A blank row 1 is not a header.** All five headers cannot blank at once —
+ *     photo_url/place/state/country hold text, so gviz types them `string`.
+ *     An all-blank row 1 is a spacer, and repairing it positionally would make
+ *     the REAL header a data row (`photo: "photo_url"`, then a baffling "photo
+ *     could not be read").
+ *  3. **Blank-position evidence outranks the FUZZY url match.** `includes("url")`
+ *     is weak — it would hand `photo` to any other url-ish column and render the
+ *     wrong image with no error at all. Exact name wins first, then a blank at
+ *     the contract position, then the fuzzy match — and the fuzzy match refuses
+ *     to guess between two candidates.
  */
 export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
   const [header, ...body] = rows;
   if (!header) throw new Error(`tab "${tab}": empty`);
   const names = header.map((h) => h.trim().toLowerCase());
-  const byName = (want: string) =>
-    want === "photo_url" ? names.findIndex((n) => n.includes("url")) : names.indexOf(want);
+  if (names.every((n) => n === "")) {
+    throw new Error(
+      `tab "${tab}": row 1 is blank, but it must be the header row ` +
+        `(${POSTS_COLUMNS.join(" · ")}) — delete the spacer row above the header`,
+    );
+  }
 
+  // Bound 1. Measure the grid, not just the header: a header row could be the
+  // short one. Nothing is repaired by position unless every row fits the contract.
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const repairable = width <= POSTS_COLUMNS.length;
+  const tooWide =
+    ` — this tab is ${width} columns wide, more than the ${POSTS_COLUMNS.length} of ` +
+    `${POSTS_COLUMNS.join(" · ")}, so a header that gviz blanked cannot be repaired by ` +
+    `position (the blank proves the column was TYPED, not which column it is). Remove ` +
+    `the extra column(s), or spell the header exactly.`;
+
+  const urlish = names.filter((n) => n.includes("url"));
   const missing: string[] = [];
   const at = POSTS_COLUMNS.map((want, position) => {
-    const named = byName(want);
-    if (named !== -1) return named;
+    const exact = names.indexOf(want);
+    if (exact !== -1) return exact;
+    if (!repairable) {
+      missing.push(want);
+      return -1;
+    }
     if (names[position] === "") return position;
+    // Bound 3: the fuzzy match is last, and only when it is unambiguous. It is a
+    // repair too, so bound 1 gates it as well — on a wide tab it would otherwise
+    // hand `photo` to a `source_url` column and render the wrong image silently.
+    if (want === "photo_url" && urlish.length === 1) return names.indexOf(urlish[0]);
+    if (want === "photo_url" && urlish.length > 1) {
+      throw new Error(
+        `tab "${tab}": no exact photo_url header, and ${urlish.length} headers look ` +
+          `url-ish (${urlish.join(", ")}) — rename the photo column to photo_url rather ` +
+          `than leaving the choice to a guess`,
+      );
+    }
     missing.push(want);
     return -1;
   });
-  if (missing.length > 0) throw new Error(`tab "${tab}": missing column(s): ${missing.join(", ")}`);
+  if (missing.length > 0) {
+    throw new Error(
+      `tab "${tab}": missing column(s): ${missing.join(", ")}${repairable ? "" : tooWide}`,
+    );
+  }
   const [photo, place, state, country, posted] = at;
 
   const get = (r: string[], i: number) => (r[i] ?? "").trim();
