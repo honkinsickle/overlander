@@ -1010,6 +1010,18 @@ Doc: `docs/investigations/2026-09-03-merge-preview-136-same-pairs.md`. Confidenc
 **Gates: all three exit 0** — `npm run -w data typecheck`, `npm run -w web typecheck`, `cd web && npx next build`. The web typecheck caught a real error first: `web/` does not set `allowImportingTsExtensions` while `data/` does, so a `.ts` import suffix that is fine in one workspace fails the other. Fixed.
 
 **NEXT: Adam's review, then the routing-table decision — explicitly out of scope here.** The masthead below is preserved verbatim per this file's convention.)
+# STATE — branch `paper-diagram-surface2-flow` · 2026-09-02 (later 19) — **Flowchart of Surface 2's data flow built in Paper.**
+
+(**newest truth: no code changed.** A second, dedicated Paper diagram — this one a flowchart of Surface 2 alone (day-scoped browse) rather than the three-surface overview — [Surface 2 Data Flow](https://app.paper.design/file/01M1J899REAQ46Z068V3W9Z1ZW) — was built via `paper-desktop` code-to-design in a fresh file (58 tokens re-seeded from `web/src/app/globals.css`; Paper's token registry is per-file). Walks chip tap → `GET /api/trip-browse/:tripId/:dayId` → the `TRIP_BROWSE_USE_RESOLVER` fork (active-today `viaLegacy()` vs. built-but-dormant `viaResolver()`) → the per-category Mapbox(fuel)/Google(everything else) split → the deduced-not-reproduced urban/interest 400 risk, styled dashed-red and visually distinct from the confirmed chains → render. A separate dashed box below the main flow covers the unrelated, also-OFF `USE_FEDERATED_POIS` flag. Every named element in the request traced cleanly to the (later 17) investigation doc — no mismatches to flag. Linked from the investigation doc's Surface 2 section. **NEXT: Adam's review.**)
+
+---
+
+# STATE — branch `paper-diagram-three-surfaces` · 2026-09-02 (later 18) — **Diagram of the three-surface investigation built in Paper.**
+
+(**newest truth: no code changed.** A Paper diagram of the (later 17) investigation below — [Three-Surface Place-Data Investigation](https://app.paper.design/file/01M1J6KY3S5MNZM3P2ZF7WJG3A) — was built via `paper-desktop` code-to-design, styled from `web/src/app/globals.css` tokens (a fresh Paper file was seeded with 58 tokens mirroring globals.css; the existing "Design Tokens" Paper file had none registered). Three columns (one per surface), a flag-state strip, and an out-of-scope band for paths A/E. Both deduced-not-reproduced defects from (later 17) carry their own dashed-red annotation boxes, kept distinct from the confirmed call chains. Linked from the investigation doc's header. **NEXT: Adam's review.**)
+
+---
+
 # STATE — branch `surface-population` · 2026-09-02 (later 17) — **READ-ONLY investigation. Three UI surfaces traced to their real data paths; two defects flagged, neither reproduced.**
 
 *Branch note: this workspace opened on `port-louis` and the branch was renamed twice mid-session by Conductor (`port-louis` → `trace-place-data-paths` → `surface-population`). The work is unaffected — one commit, `8658a29`, off `9d936af`.*
