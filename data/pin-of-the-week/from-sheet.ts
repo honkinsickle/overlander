@@ -102,6 +102,16 @@ export function csvExportUrl(sheetUrl: string): string {
   return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? `&gid=${gid}` : ""}`;
 }
 
+/** "https://docs.google.com/spreadsheets/d/<id>/edit..." + a tab name → that
+ *  tab's CSV url. `headers=0` is REQUIRED: without it gviz guesses a header row
+ *  and fuses separate cells into one field. */
+export function tabCsvUrl(sheetUrl: string, tab: string): string {
+  const m = sheetUrl.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (!m) throw new Error(`no spreadsheet id in url: ${sheetUrl}`);
+  const name = encodeURIComponent(tab.trim());
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&headers=0&sheet=${name}`;
+}
+
 /** Undo shell-style escaping a pasted path may carry ("McArthur\ Falls") and expand "~". */
 export function cleanLocalPath(p: string): string {
   const unescaped = p.trim().replace(/\\(.)/g, "$1");

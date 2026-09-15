@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { homedir } from "node:os";
-import { cleanLocalPath, csvExportUrl, parseCsv, templateForRow, toSheetRows } from "./from-sheet.ts";
+import { cleanLocalPath, csvExportUrl, parseCsv, tabCsvUrl, templateForRow, toSheetRows } from "./from-sheet.ts";
 import { regionLine } from "./image-prompt.ts";
 
 describe("parseCsv", () => {
@@ -64,6 +64,29 @@ describe("csvExportUrl", () => {
     expect(csvExportUrl("https://docs.google.com/spreadsheets/d/ABC123/edit#gid=42")).toBe(
       "https://docs.google.com/spreadsheets/d/ABC123/export?format=csv&gid=42",
     );
+  });
+});
+
+describe("tabCsvUrl", () => {
+  const SHEET = "https://docs.google.com/spreadsheets/d/ABC123/edit#gid=0";
+
+  it("builds a gviz CSV url for a named tab with headers disabled", () => {
+    expect(tabCsvUrl(SHEET, "scenic")).toBe(
+      "https://docs.google.com/spreadsheets/d/ABC123/gviz/tq?tqx=out:csv&headers=0&sheet=scenic",
+    );
+  });
+
+  it("url-encodes tab names containing spaces", () => {
+    expect(tabCsvUrl(SHEET, "scenic posts")).toContain("sheet=scenic%20posts");
+  });
+
+  it("trims the tab name before encoding", () => {
+    expect(tabCsvUrl(SHEET, "campground ")).toContain("sheet=campground");
+    expect(tabCsvUrl(SHEET, "campground ")).not.toContain("%20");
+  });
+
+  it("throws on a url with no spreadsheet id", () => {
+    expect(() => tabCsvUrl("https://example.com/nope", "scenic")).toThrow(/spreadsheet id/i);
   });
 });
 
