@@ -4,6 +4,7 @@ import {
   cleanLocalPath,
   csvExportUrl,
   fetchTabRows,
+  parseCategoryTab,
   parseCsv,
   sameGrid,
   tabCsvUrl,
@@ -131,6 +132,46 @@ describe("sameGrid", () => {
   });
   it("is false when the shape differs", () => {
     expect(sameGrid([["a"]], [["a"], ["b"]])).toBe(false);
+  });
+});
+
+describe("parseCategoryTab", () => {
+  const good = [
+    ["art_url", " /tmp/overlay.png "],
+    ["", ""],
+    ["n", "template"],
+    ["1", "A {place} in {state}."],
+    ["2", "B {place} — {category}."],
+  ];
+
+  it("reads art_url and trims it", () => {
+    expect(parseCategoryTab(good, "scenic").artUrl).toBe("/tmp/overlay.png");
+  });
+
+  it("reads templates in n order", () => {
+    expect(parseCategoryTab(good, "scenic").templates).toEqual([
+      "A {place} in {state}.",
+      "B {place} — {category}.",
+    ]);
+  });
+
+  it("throws when art_url is empty", () => {
+    const rows = [["art_url", "  "], ["", ""], ["n", "template"], ["1", "x {place}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/art_url is empty/);
+  });
+
+  it("throws when there are no templates", () => {
+    expect(() => parseCategoryTab([["art_url", "/tmp/o.png"]], "scenic")).toThrow(/no caption templates/);
+  });
+
+  it("throws when template numbers are not contiguous from 1", () => {
+    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "a {place}"], ["3", "c {place}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/contiguous/);
+  });
+
+  it("throws on an unknown token", () => {
+    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{nope\}/);
   });
 });
 

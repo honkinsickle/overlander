@@ -147,6 +147,44 @@ export async function fetchTabRows(
   return rows;
 }
 
+export interface CategoryTab {
+  /** Direct image url or local path to this category's 1080x1350 overlay. */
+  artUrl: string;
+  /** Caption templates in n order. Index 0 is template 1. */
+  templates: string[];
+}
+
+const ALLOWED_TOKENS = new Set(["place", "category", "state"]);
+
+/** Parse a `<category>` tab: `art_url` in row 1, then `n | template` rows. */
+export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
+  const artRow = rows.find((r) => (r[0] ?? "").trim().toLowerCase() === "art_url");
+  const artUrl = (artRow?.[1] ?? "").trim();
+  if (!artUrl) throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
+
+  const numbered = rows
+    .map((r) => [(r[0] ?? "").trim(), (r[1] ?? "").trim()] as const)
+    .filter(([n, t]) => /^\d+$/.test(n) && t !== "");
+  if (numbered.length === 0) throw new Error(`tab "${tab}": no caption templates found`);
+
+  numbered.sort((a, b) => Number(a[0]) - Number(b[0]));
+  numbered.forEach(([n], i) => {
+    if (Number(n) !== i + 1) {
+      throw new Error(`tab "${tab}": template numbers must be contiguous from 1 — saw ${n} at position ${i + 1}`);
+    }
+  });
+
+  const templates = numbered.map(([, t]) => t);
+  for (const [i, t] of templates.entries()) {
+    for (const m of t.matchAll(/\{(\w+)\}/g)) {
+      if (!ALLOWED_TOKENS.has(m[1])) {
+        throw new Error(`tab "${tab}" template ${i + 1}: unknown token {${m[1]}} — only {place} {category} {state}`);
+      }
+    }
+  }
+  return { artUrl, templates };
+}
+
 /** Undo shell-style escaping a pasted path may carry ("McArthur\ Falls") and expand "~". */
 export function cleanLocalPath(p: string): string {
   const unescaped = p.trim().replace(/\\(.)/g, "$1");
