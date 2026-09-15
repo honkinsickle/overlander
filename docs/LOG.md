@@ -2846,6 +2846,63 @@ PROD data; each needs its own promotion decision. WA is next if Adam wants it.
 - **No new master_places created** (0) — all 46 parks matched existing entries. The investigation's prediction of ~4 unmatched (Echo, Rail Trail, This Is The Place, Utahraptor) was wrong: all 4 had GIS parks with master_places.
 - **9 pending triage items, all recommended as LINK** — awaiting Adam's confirmation.
 
+## 2026-09-02 (later 8) — NV session wrap: PR #349 merged, doc pass on `main`
+- **PR #349 (`nevada_state_parks`) squash-merged to `main` as `1b1a912`**
+  at 2026-09-02T07:02:35Z. All three of the branch's pre-squash commits
+  (`eeb12a0` ingest, `9caf2f6` triage, `e333476` LV Mormon Fort
+  workaround) are now collapsed into that single commit; local branch
+  `nv-state-parks-investigation` still holds them as
+  `e333476..origin/main` — safe to delete at Adam's discretion.
+- **One rebase-conflict resolved before merge:** #348 (docs-only wrap
+  for PR #346) landed on `main` after PR #349 was opened, editing
+  `docs/STATE.md` and `docs/LOG.md` — the exact two files this session
+  had also modified. Rebased atop `d8130c7`, kept BOTH sides in each
+  file (my NV mastheads/entries above #348's OR-merge masthead/entry
+  since NV work was chronologically later), re-ran the full gate (data
+  typecheck 0 / web typecheck 0 / next build 0) on the rebased tree,
+  force-pushed with `--force-with-lease`. Merged shortly after.
+- **AZ PRs #350 (`ef4d065`) and #351 (`ee517b5`) landed on `main` after
+  #349 — NOT this session's work.** Recorded here so the LOG chronology
+  reads cleanly: the AZ entries above (later 5/6/7) were written by
+  that session between this session's merge and this wrap. My session
+  ended at 07:02Z when #349 merged; the AZ session took over from
+  there. This entry is on top because it was WRITTEN last, not because
+  the event happened last.
+- **Two prior mastheads/claims from this session that turned
+  factually-stale post-merge (called out here rather than edited in
+  place, per file convention):**
+  - STATE.md `2026-09-02 (later-2)` masthead ends with "PR to be opened
+    next; TEST-only, PROD promotion requires explicit sign-off" — the
+    PR was opened as #349, merged as `1b1a912`. PROD line still valid.
+  - STATE.md `2026-09-02 (later-4)` masthead ends with "PR #349 remains
+    open, TEST-only, awaiting Adam's review + merge — do NOT
+    self-merge" — merged.
+- **Two follow-ups remain open in BACKLOG.md, unchanged by the
+  merge/wrap:**
+  - Upstream `sp_extract.py` scraper bug — captures the site nav-menu
+    for `fees` instead of real amounts on all 28 NV rows. Raw text
+    parked in `provenance.fees_raw`; never surfaced. Needs upstream
+    fix + re-scrape + re-ingest.
+  - `recompute_master_place` doesn't re-evaluate
+    `is_searchable`/`primary_category` when a non-`land_status`
+    source_record is added to a PADUS-anchored mp. One-shot workaround
+    applied to Old LV Mormon Fort only (`d331abb7…`); systemic gap
+    still open. BACKLOG entry includes the proactive audit query
+    pattern to enumerate other stranded rows across the six-state
+    corpus before the search cutover.
+- **No new decision doc filed this session.** The two documented
+  divergences from CA/WA/OR precedent (fees deferral, photo-license
+  risk-acceptance for "Nevada State Parks" vs "— government
+  publication") live in the PR body + BACKLOG.md + the ingester
+  file-header comment. Considered whether to promote either to
+  `docs/decisions/` — deferred until Adam signals it's worth the
+  formal record, since both are one-off state-specific calls rather
+  than architectural choices with future-reader implications.
+- **No PROD work this session.** All 28 NV source_records, 4 new
+  master_places, 28 place_matches, and 3 migrations
+  (`20260902003000/003100/003200`) are TEST-only. PROD promotion
+  requires Adam's explicit sign-off per standing rules.
+
 ## 2026-09-02 (later 8) — UT State Parks visitor-website ingestion (utah_state_parks, TEST)
 
 - **Utah State Parks visitor-website source `utah_state_parks` ingested on TEST.** 46/46 parks from stateparks.utah.gov (scraped 2026-09-01). Sixth and final state in the visitor-content set (CA/WA/OR/NV/AZ/UT). JSON-driven ingester at `data/ingestion/sources/utah-state-parks.ts`.
