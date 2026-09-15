@@ -1,3 +1,11 @@
+# STATE — branch `fix-caption-template-typos` · 2026-09-14 (later) — **The three caption typos flagged in #436 are fixed.** Template 1 `flip.Not` / `list.{category}` get their spaces; templates 9 and 11 get the missing period after `{state}`. Off `main` `f2ba57e`.
+
+(**newest truth: `data/pin-of-the-week/caption.ts` (3 template strings) + `caption.test.ts` (updated template-1 literal, plus a new guard across all 12 templates, with and without a state, rejecting `.X` run-ons and a state followed directly by a capital).** The guard was confirmed to FAIL against `main`'s template copy before the fix `[literal — ran this session]`. `npm run -w data typecheck` exit 0; `data` suite 42 files, 729 passed / 3 skipped. No migration, CLI, or LRU change. The #436 range migration is still unapplied unless Adam has since run it.
+
+**Direction change (Adam, this session):** Pin posts will be compiled from a Google Sheet (`photo_url`, `place`, `category`, `state`) into a review page of photo + caption, auto-rotating the 12 templates — bypassing the database, which is judged a long way from running unattended. Not built yet; waiting on the sheet link.
+
+The masthead below is the previous state, preserved per this file's convention.
+
 # STATE — branch `fix-potd-step9-upload` · 2026-09-14 — **The `/pin-of-the-day` skill's Instagram step (9) is corrected against a live run — direct file-input attach, mandatory "Original" crop, and a Facebook cross-post check.** Docs-only. Follows PR #434 (merged `79f86a9`), which added step 9 untested.
 
 (**newest truth: one file, `.claude/skills/pin-of-the-day/SKILL.md`, off `main` `e5f941b` (#433). No code, CLI, schema, or migration change. The publish gate from #434 is unchanged and still absolute.**
