@@ -251,6 +251,19 @@ export function templateForCategoryRow(index: number, count: number): number {
   return (index % count) + 1;
 }
 
+/**
+ * A row's 0-based position in its category's FULL queue — the index the template
+ * rotation must use. `parsePostsTab` numbers rows from the sheet (row 2 is the
+ * first body row), so this inverts that.
+ *
+ * Never index the rotation off a filtered array: the unposted subset shrinks as
+ * rows are ticked `posted`, so a row's template would drift, and `--next-only`
+ * (always a one-element batch) would render template 1 on every run forever.
+ */
+export function queueIndexOf(row: PostRow): number {
+  return row.rowNumber - 2;
+}
+
 export interface PostMeta {
   category: string;
   place: string;
@@ -358,6 +371,14 @@ async function main(): Promise<void> {
 
   // Learn what a MISSING tab returns, so every later read can be checked against it.
   const fallback = await fetchTabRows(sheet, BOGUS_TAB, null).catch(() => null);
+  if (!fallback) {
+    // Degrade open, but never silently: with no probe grid to compare against,
+    // fetchTabRows cannot tell a real tab from Google's first-tab fallback.
+    console.log(
+      `⚠ tab-existence guard is OFF (the probe fetch failed) — ` +
+        `a mistyped --category may silently build another category's posts`,
+    );
+  }
 
   const cat = parseCategoryTab(await fetchTabRows(sheet, category, fallback), category);
   const postsTab = `${category} posts`;
@@ -398,9 +419,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  // RENDER EVERYTHING, WRITE NOTHING. Template rotation is indexed off the row's
+  // position in the FULL queue, not in this batch — see queueIndexOf.
   const built: Built[] = [];
-  for (const [i, row] of chosen.entries()) {
-    const templateNumber = templateForCategoryRow(i, cat.templates.length);
+  for (const row of chosen) {
+    const templateNumber = templateForCategoryRow(queueIndexOf(row), cat.templates.length);
     const caption = interpolate(cat.templates[templateNumber - 1], {
       place: row.place,
       category: categoryLabel(category.toLowerCase()),
@@ -412,17 +435,21 @@ async function main(): Promise<void> {
       overlayText: { title: row.place, subline: regionLine(row.state || null, row.country) },
       dimensions: { width: 1080, height: 1350 },
     });
-    const slug = slugify(row.place);
-    const dir = join(out, slug);
+    built.push({ row, slug: slugify(row.place), templateNumber, caption, image });
+  }
+
+  // ONLY NOW touch the disk — every composite has already succeeded, so an I/O
+  // failure here cannot leave a half-written batch behind.
+  for (const b of built) {
+    const dir = join(out, b.slug);
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "image.png"), image);
-    await writeFile(join(dir, "caption.txt"), caption + "\n");
+    await writeFile(join(dir, "image.png"), b.image);
+    await writeFile(join(dir, "caption.txt"), b.caption + "\n");
     await writeFile(
       join(dir, "meta.json"),
-      JSON.stringify(buildMeta(category, row, templateNumber, cat.artUrl, caption), null, 2) + "\n",
+      JSON.stringify(buildMeta(category, b.row, b.templateNumber, cat.artUrl, b.caption), null, 2) + "\n",
     );
-    built.push({ row, slug, templateNumber, caption, image });
-    console.log(`✓ ${row.place} → ${category} template ${templateNumber}`);
+    console.log(`✓ ${b.row.place} → ${category} template ${b.templateNumber}`);
   }
 
   await mkdir(out, { recursive: true });

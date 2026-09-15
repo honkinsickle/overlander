@@ -9,6 +9,7 @@ import {
   parseCategoryTab,
   parseCsv,
   parsePostsTab,
+  queueIndexOf,
   sameGrid,
   tabCsvUrl,
   templateForCategoryRow,
@@ -125,6 +126,39 @@ describe("templateForCategoryRow", () => {
 
   it("throws when the category has no templates", () => {
     expect(() => templateForCategoryRow(0, 0)).toThrow(/no templates/);
+  });
+});
+
+describe("queueIndexOf", () => {
+  const queue = parsePostsTab([
+    ["photo_url", "place", "state", "country", "posted"],
+    ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"],
+    ["b.jpg", "Beta", "OR", "USA", "2026-09-02"],
+    ["c.jpg", "Gamma", "WA", "USA", ""],
+    ["d.jpg", "Delta", "NV", "USA", ""],
+  ], "scenic posts");
+
+  it("maps a sheet row number back to its 0-based queue position", () => {
+    expect(queueIndexOf({ photo: "p.jpg", place: "P", state: "OR", country: "USA", posted: "", rowNumber: 5 })).toBe(3);
+    expect(queue.map(queueIndexOf)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("keeps the original queue position after the posted rows are filtered out", () => {
+    // The bug this guards: indexing the rotation off the FILTERED array would
+    // give Gamma 0 and Delta 1 instead of their true queue positions 2 and 3.
+    const pending = queue.filter((r) => r.posted === "");
+    expect(pending.map((r) => r.place)).toEqual(["Gamma", "Delta"]);
+    expect(pending.map(queueIndexOf)).toEqual([2, 3]);
+    expect(pending.map((r) => templateForCategoryRow(queueIndexOf(r), 4))).toEqual([3, 4]);
+  });
+
+  it("gives --next-only a template that advances as rows are ticked posted", () => {
+    // A one-element batch always has batch index 0; only the queue index moves.
+    const first = nextUnposted(queue)!;
+    expect(templateForCategoryRow(queueIndexOf(first), 4)).toBe(3);
+    const afterTick = queue.map((r) => (r.place === "Gamma" ? { ...r, posted: "2026-09-03" } : r));
+    const second = nextUnposted(afterTick)!;
+    expect(templateForCategoryRow(queueIndexOf(second), 4)).toBe(4);
   });
 });
 
