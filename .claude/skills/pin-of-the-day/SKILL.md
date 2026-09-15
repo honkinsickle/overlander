@@ -23,13 +23,25 @@ stage it on Instagram — but publishing always needs a second, explicit yes
 - **Interactive.** Ask, wait, confirm. Never auto-pick a campsite, never approve
   on the user's behalf. The two writes — `--commit` (mark used) and `--record`
   (save post) — happen ONLY after the user explicitly approves in step 6.
-- **NEVER PUBLISH WITHOUT A SECOND, EXPLICIT CONFIRMATION.** Step 6's approval
-  authorizes generating and archiving the post — it does NOT authorize posting
-  it. In the step 9 Instagram flow you may drive the browser all the way up to a
-  loaded image + filled caption, then you STOP and ask. Clicking Share/Post
-  requires a fresh yes in answer to that question. Publishing is irreversible and
-  public; no amount of prior approval, momentum, or automation carries past this
-  gate.
+- **NEVER PUBLISH WITHOUT A SECOND, EXPLICIT CONFIRMATION — except via the
+  autonomous command, below.** Step 6's approval authorizes generating and
+  archiving the post — it does NOT authorize posting it. In the step 9 Instagram
+  flow you may drive the browser all the way up to a loaded image + filled
+  caption, then you STOP and ask. Clicking Share/Post requires a fresh yes in
+  answer to that question. Publishing is irreversible and public; no amount of
+  prior approval, momentum, or automation carries past this gate.
+
+  **The ONE exception, authorized by Adam 2026-09-15:** `post <category>`
+  (§Autonomous posting). There, **the queued sheet row IS the approval** — he
+  chose the photo, wrote the caption, set the art and put the row in the queue,
+  so the sign-off happened at his desk rather than at publish time. The gate did
+  not disappear; it moved earlier.
+
+  **This exception is narrow and does not generalize.** It covers a row the
+  operator queued in `<category> posts` and nothing else. The database flow
+  (steps 1–8), any post built from a place you selected, any post whose caption
+  or photo did not come from a queued row — all still require the step 9c stop.
+  If you are ever unsure whether a post is covered, it is not: STOP and ask.
 - **No AI/API key** in the default path. `generate --render` composites the real
   photo; `--treat` (Gemini) is not part of this flow.
 - Run every command from the repo root as `npm run -w data potw:<cmd> -- <flags>`.
@@ -322,6 +334,61 @@ not patch the output files by hand.
 
 (The batch `review.html` is a convenience for eyeballing a whole run at once; it
 does not replace this gate for the post being staged.)
+
+## Autonomous posting — `post <category>`
+
+When Adam says **`post camping`**, **`post scenic`**, or `post <any category>`,
+run the whole thing end to end and publish. **Do not stop to confirm.** The
+queued sheet row is the approval (see §Non-negotiables) — asking again is asking
+him to approve the same thing twice.
+
+Map the word he uses to the tab name: `camping` → the `campground` tab pair.
+If the word matches no tab pair, say which categories exist and stop.
+
+**Run these in order. Any failure before step 5 means nothing was published —
+report it and stop; the row stays queued and will be retried next time.**
+
+1. **Build it.**
+   ```
+   npm run -w data potw:sheet -- --sheet <sheet url> --category <name> --next-only
+   ```
+   This validates everything before writing anything. If it reports problems,
+   relay them verbatim — they name the sheet row — and stop.
+   **Empty queue** → say the queue is empty and stop. NEVER wrap around and
+   republish an old row.
+
+2. **Check browser automation is available** (§9a). Not available → say the post
+   is built and where it is, and stop. Do not treat that as a failure.
+
+3. **Stage it** exactly as §9b: Create → Post, attach `image.png` to the hidden
+   `[role="dialog"] input[type="file"]`, set crop to **Original**, paste
+   `caption.txt` **verbatim**.
+
+4. **Turn the Facebook cross-post toggle OFF.** Adam's standing decision
+   (2026-09-15) is **Instagram only**. Instagram defaults it ON, so this is an
+   action you take every time, not a state you can assume. Read it back and
+   confirm it is off before sharing.
+
+5. **Share.**
+
+6. **Wait for Instagram's own confirmation** — the dialog reads
+   *"Post shared / Your post has been shared."* Do not infer success from the
+   click.
+
+7. **Only then, write today's date into that row's `posted` cell.**
+   **Order is load-bearing:** confirmation first, write-back second. If Share
+   fails, the row must stay unposted so it retries. Writing first would silently
+   drop a post from the queue. If the write-back itself fails, say plainly which
+   tab and row need ticking by hand — never leave the queue wrong and silent.
+
+8. **Report what went out** — show the image, the caption, the category, and the
+   sheet row. He approved the row, not the render; this is how he sees what it
+   became.
+
+**One row per invocation. Never a batch.** `post camping` means one post.
+
+**This command is the only path that publishes without asking.** Everything in
+§Non-negotiables still applies to every other route.
 
 ## Browsing / reusing past posts
 
