@@ -87,6 +87,9 @@ export function coverRect(sw: number, sh: number, tw: number, th: number) {
 
 export interface CompositeOptions {
   baseImage: Buffer;
+  /** This post's overlay. When omitted the bundled brand/header.png is used, so
+   *  existing callers (generate.ts) are unaffected. */
+  overlayImage?: Buffer;
   overlayText: ImagePromptSpec["overlayText"];
   dimensions: { width: number; height: number };
 }
@@ -115,7 +118,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   // the bottom scrim, the category label + divider, and the route decoration —
   // so the code no longer draws its own scrim or category subline. Code supplies
   // only the photo (above) and the place name (below).
-  await drawFrame(ctx, W, H);
+  await drawFrame(ctx, W, H, opts.overlayImage);
 
   // 3. Name (title) + "State, Country" second line — drawn in the asset's name
   // slot below the divider, bottom-anchored. The category lives in the frame's
@@ -178,9 +181,9 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
  * would otherwise let a few px of the photo peek out below it.
  * Uses the true brand art, not a recreation. Skipped gracefully if absent.
  */
-async function drawFrame(ctx: SKRSContext2D, W: number, H: number): Promise<void> {
+async function drawFrame(ctx: SKRSContext2D, W: number, H: number, overlay?: Buffer): Promise<void> {
   try {
-    const frame = await loadImage(HEADER_PATH);
+    const frame = await loadImage(overlay ?? HEADER_PATH);
     ctx.drawImage(frame, 0, 0, W, H);
   } catch {
     // brand asset absent — leave the composite without the frame

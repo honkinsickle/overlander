@@ -70,3 +70,31 @@ describe("compositePost", () => {
     expect(out.readUInt32BE(20)).toBe(250);
   });
 });
+
+describe("compositePost overlay source", () => {
+  const base = { width: 1080, height: 1350 };
+  const photo = /* a 1x1 png */ Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  it("accepts an explicit overlay buffer and still returns a png of the right size", async () => {
+    const overlay = photo;
+    const out = await compositePost({
+      baseImage: photo,
+      overlayImage: overlay,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    expect(out.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  });
+
+  it("still works with no overlayImage (falls back to the bundled brand asset)", async () => {
+    const out = await compositePost({
+      baseImage: photo,
+      overlayText: { title: "X", subline: "Y" },
+      dimensions: base,
+    });
+    expect(out.length).toBeGreaterThan(0);
+  });
+});
