@@ -1,3 +1,29 @@
+# STATE — branch `fix-potd-step9-upload` · 2026-09-14 — **The `/pin-of-the-day` skill's Instagram step (9) is corrected against a live run — direct file-input attach, mandatory "Original" crop, and a Facebook cross-post check.** Docs-only. Follows PR #434 (merged `79f86a9`), which added step 9 untested.
+
+(**newest truth: one file, `.claude/skills/pin-of-the-day/SKILL.md`, off `main` `e5f941b` (#433). No code, CLI, schema, or migration change. The publish gate from #434 is unchanged and still absolute.**
+
+**Why it changed:** #434's step 9 was written without a browser and got three things wrong. All three were measured 2026-09-14 by driving Chrome over raw CDP (no browser MCP is configured — `~/.claude.json` has `stitch`, `paper`, `notebooklm` only), signed into `yotrippin.app`, staging real archived posts and stopping before Share. Nothing was published.
+
+**1. The upload works automated — the "native picker" claim was wrong** `[measured, twice]`. Instagram's create dialog holds one hidden `<input type="file">` (`display: none`, inside `[role="dialog"]`). CDP `DOM.setFileInputFiles` attaches straight to it; the dialog advances to Crop on its own. "Select from computer" is never clicked and no OS dialog opens. Manual selection is demoted from primary path to fallback.
+
+**2. The crop screen is NOT safe to leave alone** `[measured]`. First run opened square — viewport 813×813, ratio 1.000 — against a 1080×1350 source, slicing the yoTrippin! header and title block. Choosing **Original** gave 650×813, ratio 0.800, matching 1080/1350. A second run in the same session opened already at 0.800 before anything was touched. **Cause of the difference is `[UNVERIFIED]`** — cold-session default vs. persisted last-used ratio was not isolated. The skill now sets Original explicitly every time, which is correct under either explanation.
+
+**3. A Facebook cross-post toggle is ON by default** `[measured, both runs]`. The Share screen's "Share to" section had a linked Facebook target enabled, so sharing would publish to Facebook too. #434 never mentioned it. Step 9 now reads its state off the screen and names it inside the 9c confirmation question.
+
+Also corrected: **Create is a two-step control** (Create → **Post** submenu) `[measured]`; step 9 now says to confirm which account is signed in before staging (a run began on an unrelated account before switching to `yotrippin.app`); and 9a is generalized from "Claude in Chrome" to any browser automation that can set a file on an input, since raw CDP works and Claude in Chrome was never the only route.
+
+**Caption paste verified verbatim** `[measured]`: `Input.insertText` into the contenteditable field reproduced `caption.txt` exactly — 196 chars (Cape Blanco), 198 chars (Collier), both matching Instagram's own counter.
+
+**Incidental, not a defect:** the archived `2026-09-11-cape-blanco-state-park/image.png` carries the **pre-#426 brand treatment** — its `created_at` (`2026-09-11T18:38:37Z`) precedes #426's full-frame brand asset (`2026-09-11T23:57:25Z`) by about five hours `[both timestamps read]`. Archived PNGs are frozen at generation time, so the oldest archived post is the only one that doesn't show the current frame. Nothing to fix; noted so it isn't re-diagnosed as a render bug.
+
+**NOT DONE / NEXT:** PR open against `main`; Adam reviews and merges. Step 9's end-to-end path has never been run through an actual **publish** — every live run stopped at the gate by design, so the Share click itself is `[UNVERIFIED]`.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+
+
+---
+
 # STATE — branch `restore-potd-region-line` · 2026-09-14 — **Recovers five Pin-of-the-Day compositor commits that were orphaned when PR #426 merged mid-branch.** The "State, USA" region line, Brother 1816 typography, title auto-fit, and the edge-to-edge full-height frame are back.
 
 (**newest truth: cherry-picked onto `main` `2a58999` (#436). Touches `composite.ts`, `image-prompt.ts` + a new `image-prompt.test.ts`, the brand asset (`brand/header.png` + `assets/socialmedia/branding.png`), two Brother 1816 OTFs, and the pipeline README.**
