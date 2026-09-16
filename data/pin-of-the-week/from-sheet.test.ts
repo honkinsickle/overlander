@@ -152,7 +152,7 @@ describe("queueIndexOf", () => {
   ], "scenic posts");
 
   it("maps a sheet row number back to its 0-based queue position", () => {
-    expect(queueIndexOf({ photo: "p.jpg", place: "P", state: "OR", country: "USA", posted: "", rowNumber: 5 })).toBe(3);
+    expect(queueIndexOf({ photo: "p.jpg", place: "P", state: "OR", country: "USA", posted: "", storyPhoto: "", rowNumber: 5 })).toBe(3);
     expect(queue.map(queueIndexOf)).toEqual([0, 1, 2, 3]);
   });
 
@@ -178,7 +178,7 @@ describe("queueIndexOf", () => {
 describe("buildMeta", () => {
   it("records the category, template number, art_url and source row", () => {
     const row: PostRow = {
-      photo: "p.jpg", place: "Beta", state: "OR", country: "USA", posted: "", rowNumber: 3,
+      photo: "p.jpg", place: "Beta", state: "OR", country: "USA", posted: "", storyPhoto: "", rowNumber: 3,
     };
     expect(buildMeta("scenic", row, 7, "/tmp/o.png", "Beta caption")).toEqual({
       category: "scenic",
@@ -335,7 +335,7 @@ describe("parsePostsTab", () => {
     const out = parsePostsTab(rows, "scenic posts");
     expect(out).toHaveLength(2);
     expect(out[1]).toEqual({
-      photo: "b.jpg", place: "Beta", state: "OR", country: "USA", posted: "", rowNumber: 3,
+      photo: "b.jpg", place: "Beta", state: "OR", country: "USA", posted: "", storyPhoto: "", rowNumber: 3,
     });
   });
 
@@ -403,6 +403,7 @@ describe("parsePostsTab against the shape the LIVE endpoint returns AFTER a publ
         state: "CA",
         country: "USA",
         posted: "2026-09-15",
+        storyPhoto: "",
         rowNumber: 2,
       },
     ]);
@@ -440,7 +441,7 @@ describe("parsePostsTab against the shape the LIVE endpoint returns AFTER a publ
       "campground posts",
     );
     expect(out[0]).toEqual({
-      photo: "a.jpg", place: "Alpha", state: "CA", country: "USA", posted: "", rowNumber: 2,
+      photo: "a.jpg", place: "Alpha", state: "CA", country: "USA", posted: "", storyPhoto: "", rowNumber: 2,
     });
   });
 
@@ -544,6 +545,80 @@ describe("parsePostsTab refuses to repair by position when the tab is WIDER than
       "scenic posts",
     );
     expect(out[0]).toMatchObject({ place: "Beta", posted: "" });
+  });
+});
+
+describe("parsePostsTab reads the optional story_photo_url column", () => {
+  // The story render needs its own photo: the post is 4:5 and a story is 9:16, so
+  // reusing the post photo crops the subject. The column is OPTIONAL — every tab
+  // that predates it must keep parsing untouched.
+  it("is absent on a five-wide tab, and storyPhoto is empty", () => {
+    const out = parsePostsTab(
+      [
+        ["photo_url", "place", "state", "country", "posted"],
+        ["a.jpg", "Alpha", "CA", "USA", ""],
+      ],
+      "scenic posts",
+    );
+    expect(out[0]).toMatchObject({ place: "Alpha", photo: "a.jpg", storyPhoto: "" });
+  });
+
+  it("reads the story photo when the column is present", () => {
+    const out = parsePostsTab(
+      [
+        ["photo_url", "place", "state", "country", "posted", "story_photo_url"],
+        ["a.jpg", "Alpha", "CA", "USA", "", "a-story.jpg"],
+      ],
+      "scenic posts",
+    );
+    expect(out[0]).toMatchObject({ photo: "a.jpg", storyPhoto: "a-story.jpg" });
+  });
+
+  it("leaves storyPhoto empty for a row that has no story photo yet", () => {
+    const out = parsePostsTab(
+      [
+        ["photo_url", "place", "state", "country", "posted", "story_photo_url"],
+        ["a.jpg", "Alpha", "CA", "USA", "", ""],
+      ],
+      "scenic posts",
+    );
+    expect(out[0].storyPhoto).toBe("");
+  });
+
+  it("still repairs a gviz-blanked `posted` header at six wide — the LIVE shape", () => {
+    // This is the whole point of widening the contract. Publishing one scenic post
+    // types column E as a date, so gviz blanks the `posted` header; the tab then
+    // depends on positional repair. Adding story_photo_url made it six wide, which
+    // the old bound refused outright — measured against the live sheet 2026-09-16,
+    // it broke `scenic posts` immediately and would have broken `campground posts`
+    // at its next publish.
+    const out = parsePostsTab(
+      [
+        //                                        posted blanked by gviz ↓
+        ["photo_url", "place", "state", "country", "", "story_photo_url"],
+        ["a.jpg", "Alpha", "CA", "USA", "2026-09-15", "a-story.jpg"],
+        ["b.jpg", "Beta", "OR", "USA", "", "b-story.jpg"],
+      ],
+      "scenic posts",
+    );
+    expect(out[0]).toMatchObject({ place: "Alpha", posted: "2026-09-15", storyPhoto: "a-story.jpg" });
+    expect(out[1]).toMatchObject({ place: "Beta", posted: "", storyPhoto: "b-story.jpg" });
+    expect(nextUnposted(out)?.place).toBe("Beta");
+  });
+
+  it("widens the contract ONLY for story_photo_url — any other sixth column still refuses", () => {
+    // The `scheduled` hazard is unchanged: widening for one NAMED optional column
+    // must not hand position 4 to some other typed column. Same fixture as the
+    // width-refusal suite, which must stay red.
+    expect(() =>
+      parsePostsTab(
+        [
+          ["photo_url", "place", "state", "country", "", ""],
+          ["b.jpg", "Beta", "OR", "USA", "2026-10-02", ""],
+        ],
+        "scenic posts",
+      ),
+    ).toThrow(/missing column\(s\): posted/);
   });
 });
 

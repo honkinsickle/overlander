@@ -233,6 +233,12 @@ export interface PostRow {
   /** Empty means not yet posted. */
   posted: string;
   /**
+   * The row's 9:16 story photo. Empty when the tab has no `story_photo_url`
+   * column, or the row leaves it blank. Separate from `photo` because a story is
+   * 9:16 and the post is 4:5 — reusing the post photo crops the subject.
+   */
+  storyPhoto: string;
+  /**
    * The row's TRUE 1-based position in the sheet (header is row 1, so the first
    * body row is 2), counting blank rows. Not just an error-message label: it
    * drives the caption-template rotation (`queueIndexOf`) AND it is the cell the
@@ -247,6 +253,19 @@ export interface PostRow {
  *  the trustworthy signal; the header TEXT is not, for any column gviz has
  *  typed (see `parsePostsTab`). */
 const POSTS_COLUMNS = ["photo_url", "place", "state", "country", "posted"] as const;
+
+/**
+ * The ONE optional column, and the only name that may widen the contract past
+ * POSTS_COLUMNS. It sits after `posted`, holds the row's 9:16 story photo, and is
+ * resolved by EXACT header name only — never by position.
+ *
+ * Widening is deliberately narrow. Any other sixth column still refuses the
+ * positional repair, because the `scheduled` hazard is unchanged: a typed column
+ * inserted BEFORE `posted` shifts position 4 onto it and inverts every row's
+ * published state. Only a sixth column named exactly this one is known to sit
+ * AFTER `posted`, which is what makes positions 0-4 still trustworthy.
+ */
+const STORY_PHOTO_COLUMN = "story_photo_url";
 
 /**
  * Parse a `<category> posts` tab. No category column — the tab name carries it.
@@ -311,7 +330,12 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
   // Bound 1. Measure the grid, not just the header: a header row could be the
   // short one. Nothing is repaired by position unless every row fits the contract.
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
-  const repairable = width <= POSTS_COLUMNS.length;
+  // The optional story column extends the contract by one, and ONLY when it is
+  // named exactly and sits at its own position (after `posted`). Anything else at
+  // that width still refuses to repair — see STORY_PHOTO_COLUMN.
+  const storyAt = names.indexOf(STORY_PHOTO_COLUMN);
+  const contractWidth = POSTS_COLUMNS.length + (storyAt === POSTS_COLUMNS.length ? 1 : 0);
+  const repairable = width <= contractWidth;
   const tooWide =
     ` — this tab is ${width} columns wide, more than the ${POSTS_COLUMNS.length} of ` +
     `${POSTS_COLUMNS.join(" · ")}, so a header that gviz blanked cannot be repaired by ` +
@@ -362,6 +386,8 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
       state: get(cells, state),
       country: get(cells, country),
       posted: get(cells, posted),
+      // Optional: absent column resolves to -1, which `get` reads as empty.
+      storyPhoto: storyAt === -1 ? "" : get(cells, storyAt),
       rowNumber,
     }));
 }

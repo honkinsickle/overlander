@@ -1,3 +1,29 @@
+# STATE — branch `add-story-graphic-to-doc` · 2026-09-16 — **Groundwork for an Instagram STORY alongside each Pin of the Day post.** The sheet reader now accepts an optional per-row `story_photo_url` column, and the sheet has slots for both the story artwork and the story photo. **The story render itself is NOT built** — it is blocked on Adam's 1080x1920 overlay art.
+
+(**newest truth: `data/pin-of-the-week/from-sheet.ts` + `from-sheet.test.ts` only. `PostRow` gains `storyPhoto`; a new `STORY_PHOTO_COLUMN` widens the posts-tab contract from 5 to 6 columns — but ONLY when the sixth header is exactly `story_photo_url`. No compositor change, no CLI flag, no migration. `composite.ts`, `caption.ts` and the DB flow are untouched.**
+
+**WHY THE WIDENING IS NARROW — a break measured live this session.** Adding a sixth column to the posts tabs **broke `scenic posts` immediately**: gviz types a column once for the whole column, so the published date in column E makes E a `date` column and blanks the `posted` HEADER, and that tab therefore depends on the positional repair — which `width <= POSTS_COLUMNS.length` refused outright at width 6. `campground posts` still built (its `posted` header is intact TEXT, so exact-match wins) and was therefore a **time bomb**: the next `post camping` writes a date into `posted`, blanks that header too, and breaks it the same way. The fix widens the contract by exactly one, and only when the sixth header is spelled `story_photo_url` and sits AFTER `posted`, so the `scheduled`-column hazard (position 4 sliding onto a typed column and inverting every row's published state) is unchanged. The column is OPTIONAL — a five-wide tab parses exactly as before.
+
+**Gates** `[measured 2026-09-16]`: `npm run -w data typecheck` clean (it caught two hand-built `PostRow` fixtures that the test run did not); `npm run -w data test` **43 files, 806 passed / 3 skipped**. Then the real proof, against the LIVE six-wide sheet: `--category scenic` reports its queue empty, `--category campground` builds Boulder Basin.
+
+**SHEET SCHEMA — two new slots, both empty and both harmless when empty:**
+- Category tab (`campground`, `scenic`): **C1 = `story_art_url`** label, **D1 = the 1080x1920 overlay path**. C1 is machine-readable where A1's `art_url` is not — column A is typed `number` by the template digits, column C holds only text.
+- Posts tab (`campground posts`, `scenic posts`): **column F = `story_photo_url`**, one 9:16 photo per row. A story is 9:16 and the post is 4:5, so reusing the post photo crops the subject.
+
+**INSTAGRAM STORY POSTING — reachable on web, but only in one bundle** `[measured 2026-09-16]`. Story creation is **absent** from the session Chrome normally serves: desktop Create menu is `Post / Live video / Ad / Note`, the post Share dialog has no "Add to story", `/create/story/` redirects to `/`, and under an iPhone UA the bottom-nav **+** offers only `Post / Live video / Ad`. It **is** present in the consumer bundle served to a **fresh incognito mobile sign-in**, via the **top-right +** → `Post / Story`. Attaching a file to the first hidden `input[type=file]` drives it straight to `/create/story/` — no click needed, same technique as the feed-post path. **Whether the normal profile session can reach that bundle is `[UNVERIFIED]`** and decides whether story publishing can ever be dependable.
+
+**TWO BLOCKERS ON PUBLISHING, both measured, neither fixed:**
+1. **The composer center-crops to fill 9:16.** A 1080x1350 post asset loses both edges — `yoTrippin! verified` → `…Trippin! verified`, `Campground` → `…mpground`, the title and the region line both sliced. There is no "Original" escape as there is on the feed-post crop screen. This is why the story needs its own 1080x1920 asset rather than a re-use.
+2. **`Auto crosspost to Facebook`** is present on the Share story button as a 12px SVG **indicator with no toggle in the composer** — against the Instagram-only standing decision in #454. Probably lives in account settings.
+
+**SHEETS WRITE TECHNIQUE (hard-won, belongs in the runbook):** the synthetic-`paste` method recorded in the previous handoff did **not** work — it dispatched cleanly and wrote nothing. What works: select via `#t-name-box`, `F2` to open the editor, type with `Input.dispatchKeyEvent {type:'char'}`, then **Enter carrying `text:'\r'`** — a plain Enter leaves the cell in edit mode with the text visible in the formula bar and **nothing committed**, which reads exactly like a successful write. Also: **`F2` appends to existing content** (it doubled a cell to `story_art_urlstory_art_url` this session, caught on verification and repaired), and a DOM `.click()` on a sheet tab **silently fails** — switch tabs with a real mouse event and assert the `gid` changed before typing.
+
+**NOT DONE / NEXT:** the 1080x1920 story render (needs the art; plan agreed: read `story_art_url` by label, render a second composite, write `story.png`, degrade to a warning so a story failure can never block the post); the SKILL.md publish step; the Facebook crosspost question; the bundle-reachability question. PR #454 (autonomous `post <category>`) is still open and unmerged.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `spec-category-driven-potd` · 2026-09-15 — **DESIGN ONLY: a spec for category-driven Pin of the Day posts (Sheet-only).** Nothing implemented. The Google Sheet that will drive it is built and verified.
 
 (**newest truth: one new file, `docs/superpowers/specs/2026-09-15-category-driven-pin-of-the-day-design.md`, off `main` `b07c1f7` (#438). No code touched.**
