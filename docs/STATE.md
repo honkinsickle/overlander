@@ -1,3 +1,25 @@
+# STATE — branch `add-story-graphic-to-doc` · 2026-09-16 (later) — **`potw:sheet` now renders a 9:16 `story.png` beside every post.** Both categories have real 1080x1920 art and story photos in the sheet, and Boulder Basin builds post + story from the live sheet. **Nothing publishes a story yet** — the SKILL.md step is not written.
+
+(**newest truth: `from-sheet.ts` + `from-sheet.test.ts` only, on top of the `story_photo_url` commit below. `CategoryTab` gains `storyArtUrl`, read BY LABEL from the cell right of `story_art_url` in row 1; `main()` renders a second composite at 1080x1920 and writes `story.png`; `PostMeta` records `storyArtUrl`; `review.html` shows both images. `composite.ts` is UNTOUCHED.**
+
+**THE COMPOSITOR NEEDED NO CHANGE — the planned "layout seam" was dropped.** The design record had a step to make the text anchor configurable, on the assumption that constants tuned to 1080x1350 would misplace the name on a 1920-tall canvas. Measured instead: `bottomPad = H*0.05` puts the block at y=1666, which lands just under the divider in Adam's story art, and `captionLeft = 48` still aligns because the WIDTH is unchanged. Rendered and read by eye for both categories — header, photo, baked caption, category chip, place name and region line all correct, nothing cropped. So no `layout` parameter was added. YAGNI, confirmed by measurement rather than assumed either way.
+
+**A STORY CAN NEVER BLOCK A POST — verified by breaking it on purpose** `[measured 2026-09-16]`. Story failures are collected as `warnings`, never as `problems` (which abort the batch before any write). Proof: the story overlay was renamed away on disk and the run re-executed — the post still built, the `✓` line read `(no story)`, a `⚠` named the exact ENOENT path, and no `story.png` was written. The file was restored and the clean run re-verified. Rationale: a missing `story.png` publishes nothing, whereas a failed batch means today's post does not exist.
+
+**Both halves are required and both are optional:** a story renders only when the CATEGORY has `story_art_url` art AND the ROW has a `story_photo_url` photo. Either absent = no story, no error. The `✓` line always says which happened (`+ story` / `(no story)`) — silence would read as "there is one" and send the operator looking for a file that is not there.
+
+**SHEET IS NOW FULLY POPULATED** (Adam supplied the art this session; the Boulder Basin story photo existed on disk but was not in the sheet, and was filled in): `campground` D1 + `scenic` D1 both hold 1080x1920 overlays; `campground posts` F2 = `boulderbasin_story.png`, `scenic posts` F2 = `devils_post_pile_story.png`. All four assets measured 1080x1920.
+
+**Incidental: the wrong-chip bug does not exist on the story path.** Each category has its OWN story art, so scenic renders a mountain icon + "Scenic" and campground a tent + "Campground". The baked-in "Campground on everything" defect is a property of the single shared 4:5 frame in the DB flow, which is still untouched.
+
+**Gates** `[measured 2026-09-16]`: `npm run -w data typecheck` clean; `npm run -w data test` **43 files, 812 passed / 3 skipped**. Live-sheet runs: campground builds `image.png` (1080x1350) + `story.png` (1080x1920) + `caption.txt` + `meta.json`; scenic reports its queue empty.
+
+**NOT DONE / NEXT:** the SKILL.md publish step for stories; the `Auto crosspost to Facebook` indicator (no toggle in the composer); whether the normal profile session can reach the Instagram bundle that exposes story creation at all. PR #454 still open.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `add-story-graphic-to-doc` · 2026-09-16 — **Groundwork for an Instagram STORY alongside each Pin of the Day post.** The sheet reader now accepts an optional per-row `story_photo_url` column, and the sheet has slots for both the story artwork and the story photo. **The story render itself is NOT built** — it is blocked on Adam's 1080x1920 overlay art.
 
 (**newest truth: `data/pin-of-the-week/from-sheet.ts` + `from-sheet.test.ts` only. `PostRow` gains `storyPhoto`; a new `STORY_PHOTO_COLUMN` widens the posts-tab contract from 5 to 6 columns — but ONLY when the sixth header is exactly `story_photo_url`. No compositor change, no CLI flag, no migration. `composite.ts`, `caption.ts` and the DB flow are untouched.**

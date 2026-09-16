@@ -187,8 +187,21 @@ describe("buildMeta", () => {
       country: "USA",
       templateNumber: 7,
       artUrl: "/tmp/o.png",
+      storyArtUrl: "",
       sourceRow: 3,
       caption: "Beta caption",
+    });
+  });
+
+  it("records the story art when the category has some", () => {
+    // Same provenance argument as artUrl: the art sits behind a path that can
+    // change, so which one produced this story.png is worth keeping.
+    const row: PostRow = {
+      photo: "p.jpg", place: "Beta", state: "OR", country: "USA", posted: "", storyPhoto: "p-story.jpg", rowNumber: 3,
+    };
+    expect(buildMeta("scenic", row, 7, "/tmp/o.png", "Beta caption", "/tmp/o_story.png")).toMatchObject({
+      artUrl: "/tmp/o.png",
+      storyArtUrl: "/tmp/o_story.png",
     });
   });
 });
@@ -240,6 +253,48 @@ describe("parseCategoryTab", () => {
       "A {place} in {state}.",
       "B {place} — {category}.",
     ]);
+  });
+
+  describe("story_art_url", () => {
+    // Unlike `art_url`, this label IS machine-readable. gviz types a column once
+    // for the whole column: column A holds the template digits so it is typed
+    // `number` and blanks the `art_url` label, but the story columns hold only
+    // text, so both the label and its value come through. That is why this one is
+    // found BY LABEL and `art_url` cannot be — measured on the live sheet
+    // 2026-09-16: row 1 = ["", "<post art>", "story_art_url", "<story art>"].
+    const withStory = [
+      ["", " /tmp/overlay.png ", "story_art_url", " /tmp/overlay_story.png "],
+      ["", "template"],
+      ["1", "A {place} in {state}."],
+    ];
+
+    it("is empty when the category has no story art", () => {
+      expect(parseCategoryTab(good, "scenic").storyArtUrl).toBe("");
+    });
+
+    it("reads the value from the column AFTER the label, and trims it", () => {
+      expect(parseCategoryTab(withStory, "scenic").storyArtUrl).toBe("/tmp/overlay_story.png");
+    });
+
+    it("still reads the post art_url positionally alongside it", () => {
+      // The post path must keep working exactly as before — the story columns sit
+      // to the right of it and must not disturb the column-B fallback.
+      expect(parseCategoryTab(withStory, "scenic").artUrl).toBe("/tmp/overlay.png");
+    });
+
+    it("is empty when the label is present but its cell is blank", () => {
+      const rows = [
+        ["", "/tmp/overlay.png", "story_art_url", "   "],
+        ["", "template"],
+        ["1", "A {place}"],
+      ];
+      expect(parseCategoryTab(rows, "scenic").storyArtUrl).toBe("");
+    });
+
+    it("is empty when the label is the last column, with nothing after it", () => {
+      const rows = [["", "/tmp/overlay.png", "story_art_url"], ["", "template"], ["1", "A {place}"]];
+      expect(parseCategoryTab(rows, "scenic").storyArtUrl).toBe("");
+    });
   });
 
   it("throws when art_url is empty", () => {
