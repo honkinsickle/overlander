@@ -174,6 +174,14 @@ export async function fetchTabRows(
 export interface CategoryTab {
   /** Direct image url or local path to this category's 1080x1350 overlay. */
   artUrl: string;
+  /**
+   * This category's 1080x1920 STORY overlay. Empty when the category has none,
+   * which simply means no story is rendered for it. Separate art rather than a
+   * re-crop of `artUrl`: Instagram's story composer center-crops a 4:5 asset to
+   * fill 9:16 and slices the header, the category chip and the title
+   * `[measured 2026-09-16]`.
+   */
+  storyArtUrl: string;
   /** Caption templates in n order. Index 0 is template 1. */
   templates: string[];
 }
@@ -196,6 +204,15 @@ export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
   const artRow = rows.find((r) => (r[0] ?? "").trim().toLowerCase() === "art_url");
   const artUrl = (artRow ? (artRow[1] ?? "") : (rows[0]?.[1] ?? "")).trim();
   if (!artUrl) throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
+
+  // The story art IS findable by label, where `art_url` is not: its columns hold
+  // only text, so gviz types them `string` and the label survives. Read the cell
+  // to its RIGHT. Optional throughout — absent means this category renders no
+  // story, which is not an error.
+  const storyLabelAt = (rows[0] ?? []).findIndex(
+    (c) => (c ?? "").trim().toLowerCase() === "story_art_url",
+  );
+  const storyArtUrl = storyLabelAt === -1 ? "" : (rows[0]?.[storyLabelAt + 1] ?? "").trim();
 
   const numbered = rows
     .map((r) => [(r[0] ?? "").trim(), (r[1] ?? "").trim()] as const)
@@ -222,7 +239,7 @@ export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
       throw new Error(`tab "${tab}" template ${i + 1}: unmatched brace in "${t}" — only {place} {category} {state}`);
     }
   }
-  return { artUrl, templates };
+  return { artUrl, storyArtUrl, templates };
 }
 
 export interface PostRow {
@@ -232,6 +249,12 @@ export interface PostRow {
   country: string;
   /** Empty means not yet posted. */
   posted: string;
+  /**
+   * The row's 9:16 story photo. Empty when the tab has no `story_photo_url`
+   * column, or the row leaves it blank. Separate from `photo` because a story is
+   * 9:16 and the post is 4:5 — reusing the post photo crops the subject.
+   */
+  storyPhoto: string;
   /**
    * The row's TRUE 1-based position in the sheet (header is row 1, so the first
    * body row is 2), counting blank rows. Not just an error-message label: it
@@ -247,6 +270,19 @@ export interface PostRow {
  *  the trustworthy signal; the header TEXT is not, for any column gviz has
  *  typed (see `parsePostsTab`). */
 const POSTS_COLUMNS = ["photo_url", "place", "state", "country", "posted"] as const;
+
+/**
+ * The ONE optional column, and the only name that may widen the contract past
+ * POSTS_COLUMNS. It sits after `posted`, holds the row's 9:16 story photo, and is
+ * resolved by EXACT header name only — never by position.
+ *
+ * Widening is deliberately narrow. Any other sixth column still refuses the
+ * positional repair, because the `scheduled` hazard is unchanged: a typed column
+ * inserted BEFORE `posted` shifts position 4 onto it and inverts every row's
+ * published state. Only a sixth column named exactly this one is known to sit
+ * AFTER `posted`, which is what makes positions 0-4 still trustworthy.
+ */
+const STORY_PHOTO_COLUMN = "story_photo_url";
 
 /**
  * Parse a `<category> posts` tab. No category column — the tab name carries it.
@@ -311,7 +347,12 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
   // Bound 1. Measure the grid, not just the header: a header row could be the
   // short one. Nothing is repaired by position unless every row fits the contract.
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
-  const repairable = width <= POSTS_COLUMNS.length;
+  // The optional story column extends the contract by one, and ONLY when it is
+  // named exactly and sits at its own position (after `posted`). Anything else at
+  // that width still refuses to repair — see STORY_PHOTO_COLUMN.
+  const storyAt = names.indexOf(STORY_PHOTO_COLUMN);
+  const contractWidth = POSTS_COLUMNS.length + (storyAt === POSTS_COLUMNS.length ? 1 : 0);
+  const repairable = width <= contractWidth;
   const tooWide =
     ` — this tab is ${width} columns wide, more than the ${POSTS_COLUMNS.length} of ` +
     `${POSTS_COLUMNS.join(" · ")}, so a header that gviz blanked cannot be repaired by ` +
@@ -362,6 +403,8 @@ export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
       state: get(cells, state),
       country: get(cells, country),
       posted: get(cells, posted),
+      // Optional: absent column resolves to -1, which `get` reads as empty.
+      storyPhoto: storyAt === -1 ? "" : get(cells, storyAt),
       rowNumber,
     }));
 }
@@ -411,6 +454,8 @@ export interface PostMeta {
   templateNumber: number;
   /** Recorded because art lives behind a url that can change. */
   artUrl: string;
+  /** Empty when this category has no story art, i.e. no story was rendered. */
+  storyArtUrl: string;
   sourceRow: number;
   caption: string;
 }
@@ -421,6 +466,7 @@ export function buildMeta(
   templateNumber: number,
   artUrl: string,
   caption: string,
+  storyArtUrl = "",
 ): PostMeta {
   return {
     category,
@@ -429,6 +475,7 @@ export function buildMeta(
     country: row.country,
     templateNumber,
     artUrl,
+    storyArtUrl,
     sourceRow: row.rowNumber,
     caption,
   };
@@ -457,16 +504,22 @@ interface Built {
   templateNumber: number;
   caption: string;
   image: Buffer;
+  /** The 9:16 story, when this category AND this row both supply story art. */
+  story?: Buffer;
 }
+
+/** The Instagram story canvas. The post is 1080x1350; a story is 9:16. */
+const STORY_DIMENSIONS = { width: 1080, height: 1920 } as const;
 
 function reviewHtml(built: Built[]): string {
   const cards = built
     .map(
       (b, i) => `<section>
   <img src="data:image/png;base64,${b.image.toString("base64")}" alt="${escapeHtml(b.row.place)}">
+  ${b.story ? `<img class="story" src="data:image/png;base64,${b.story.toString("base64")}" alt="${escapeHtml(b.row.place)} story">` : ""}
   <div class="meta">
     <h2>${escapeHtml(b.row.place)}</h2>
-    <p class="sub">Template ${b.templateNumber}</p>
+    <p class="sub">Template ${b.templateNumber}${b.story ? " · post + story" : ""}</p>
     <pre id="c${i}">${escapeHtml(b.caption)}</pre>
     <button onclick="navigator.clipboard.writeText(document.getElementById('c${i}').textContent);this.textContent='Copied'">Copy caption</button>
   </div>
@@ -480,6 +533,7 @@ function reviewHtml(built: Built[]): string {
   body { margin: 0; padding: 24px 16px; background: #0a0b0c; color: #eee; font: 15px/1.5 Barlow, system-ui, sans-serif; }
   section { display: flex; flex-wrap: wrap; gap: 24px; max-width: 1000px; margin: 0 auto 48px; }
   img { width: 360px; max-width: 100%; border-radius: 6px; }
+  img.story { width: 260px; }
   .meta { flex: 1; min-width: 260px; }
   h2 { margin: 0; }
   .sub { color: #c8a96e; margin: 4px 0 12px; }
@@ -558,6 +612,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  // The STORY is strictly additive and must never be able to block the post.
+  // Every story failure is a WARNING, not a `problem`: a missing story.png
+  // publishes nothing, whereas a failed batch means today's post does not exist
+  // at all. The post is the thing that must not break.
+  const warnings: string[] = [];
+  const storyOverlay = cat.storyArtUrl
+    ? await loadPhoto(cat.storyArtUrl).catch((e) => {
+        warnings.push(`tab "${category}": story_art_url could not be read — ${errText(e)}`);
+        return null;
+      })
+    : null;
+
   // RENDER EVERYTHING, WRITE NOTHING. Template rotation is indexed off the row's
   // position in the FULL queue, not in this batch — see queueIndexOf.
   const built: Built[] = [];
@@ -568,13 +634,29 @@ async function main(): Promise<void> {
       category: categoryLabel(category.toLowerCase()),
       state: row.state,
     });
+    const overlayText = { title: row.place, subline: regionLine(row.state || null, row.country) };
     const image = await compositePost({
       baseImage: photos.get(row.rowNumber)!,
       overlayImage: overlay!,
-      overlayText: { title: row.place, subline: regionLine(row.state || null, row.country) },
+      overlayText,
       dimensions: { width: 1080, height: 1350 },
     });
-    built.push({ row, slug: slugify(row.place), templateNumber, caption, image });
+    // Needs BOTH halves: the category's 9:16 art and this row's 9:16 photo.
+    // Either one absent simply means no story for this post.
+    let story: Buffer | undefined;
+    if (storyOverlay && row.storyPhoto) {
+      try {
+        story = await compositePost({
+          baseImage: await loadPhoto(row.storyPhoto),
+          overlayImage: storyOverlay,
+          overlayText,
+          dimensions: STORY_DIMENSIONS,
+        });
+      } catch (e) {
+        warnings.push(`${postsTab} row ${row.rowNumber}: story not rendered — ${errText(e)}`);
+      }
+    }
+    built.push({ row, slug: slugify(row.place), templateNumber, caption, image, story });
   }
 
   // ONLY NOW touch the disk — every composite has already succeeded, so an I/O
@@ -584,19 +666,30 @@ async function main(): Promise<void> {
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "image.png"), b.image);
     await writeFile(join(dir, "caption.txt"), b.caption + "\n");
+    if (b.story) await writeFile(join(dir, "story.png"), b.story);
     await writeFile(
       join(dir, "meta.json"),
-      JSON.stringify(buildMeta(category, b.row, b.templateNumber, cat.artUrl, b.caption), null, 2) + "\n",
+      JSON.stringify(
+        buildMeta(category, b.row, b.templateNumber, cat.artUrl, b.caption, cat.storyArtUrl),
+        null,
+        2,
+      ) + "\n",
     );
     // The dir is printed in full (it is absolute — `out` is resolved above)
     // because it is what the operator stages from: earlier runs leave their own
     // dirs on disk, so "find the folder" by globbing can land on a stale post.
-    console.log(`✓ ${b.row.place} → ${category} template ${b.templateNumber} → ${dir}`);
+    // Whether a story was rendered is called out: silence would read as "there
+    // is one" and the operator would go looking for a file that is not there.
+    const storyNote = b.story ? " + story" : " (no story)";
+    console.log(`✓ ${b.row.place} → ${category} template ${b.templateNumber}${storyNote} → ${dir}`);
   }
 
   await mkdir(out, { recursive: true });
   await writeFile(join(out, "review.html"), reviewHtml(built));
   console.log(`\n${built.length} built → ${join(out, "review.html")}`);
+  // Printed AFTER the ✓ lines so they are the last thing on screen. The post
+  // still succeeded; these say only that its story did not.
+  for (const w of warnings) console.log(`⚠ ${w}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
