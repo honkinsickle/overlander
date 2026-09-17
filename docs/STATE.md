@@ -1,3 +1,29 @@
+# STATE — branch `story-web-padding` · 2026-09-17 (evening) — **The story pipeline ran end to end for real: `oddities` was added as a category with NO code change, and Boulder Basin's post + story were published back to back.** Off `main` `070c5d1` (#457).
+
+(**newest truth: one knob — `padStoryForWeb` takes an optional `topPad`, and `from-sheet.ts` passes `STORY_WEB_TOP_PAD_PX` (shipped at 210 = centred). Plus 2 tests. Nothing else changed.**
+
+**WHY THE KNOB EXISTS — measured on a real phone, not in a browser** `[2026-09-17]`. Instagram draws its OWN chrome over the top of a story: progress bar, poster avatar, "Your story · 3m", menu and close. On an actual handset that furniture landed squarely across the yoTrippin! header band — invisible in every desktop and emulated check, because those do not draw the app's overlay. Screenshots from Adam's phone are what surfaced it.
+
+**RESOLVED IN THE ARTWORK, NOT THE CODE.** The knob was briefly set to 300 to push the art down, and that worked — but Adam then rebuilt the story overlays with the clearance baked in (and resized `oddity_overlay_story.png` from 1080x1747 to a correct 1080x1920). So `STORY_WEB_TOP_PAD_PX` went back to **210, dead centre, adding nothing of its own**. Combined with the art's own band that is ~375px of clear space above the header. Raise it only for a category whose art does not carry that space.
+
+**A NEW CATEGORY WITH ZERO CODE CHANGE — the design claim, now demonstrated** `[2026-09-17]`. `oddities` was created as a pair of tabs (`oddities` + `oddities posts`), Adam supplied art and 12 templates, and **Trees of Mystery built and published on the first run**. Its own purple-eye "Oddity" chip renders correctly, which is the wrong-chip bug being structurally absent on the Sheet path.
+
+**PUBLISHED THIS SESSION, all via the merged §Autonomous posting flow** (crop Original, caption verbatim, Facebook cross-post turned OFF per post, Instagram's own "Post shared" confirmation awaited, sheet ticked only afterwards): Trees of Mystery post + story; Boulder Basin post + story. All four rows now read posted; every category queue is empty.
+
+**TRAPS HIT AND RECORDED:**
+- **A transparent band is not a black band.** `trees_mystery_story.png` was fully transparent for its top 265px; the composite therefore came out semi-transparent under the header and read as a pale/dull block. Diagnosed by sampling pixels, not by eye.
+- **An opaque overlay hides the photo entirely and the run still prints ✓.** A `campground_overlay_story.png` export at 100% opacity produced a story with no photo at all.
+- **Sheet cells pointed at the wrong files twice** — both story cells initially referenced the POST photo. The build cannot detect this; it renders happily.
+- **The `_index` tab now documents the tab contract** (column order, the six-column cap, why header text vanishes from a typed column, the see-through-body requirement, and which of the three output files goes where).
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **43 files, 822 passed / 3 skipped** (+2).
+
+**STILL NOT AUTOMATED:** `SKILL.md` has no story step — every story publish today was hand-driven through a browser. Story creation still appears only in the Instagram bundle served to a fresh incognito mobile sign-in.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `story-web-padding` · 2026-09-17 — **The padding step is in the pipeline: `potw:sheet` now writes `story-web.png` (1080x2340) beside `story.png`, and the repo can finally reproduce a published story.** Off `main` `ca71a20` (#456).
 
 (**newest truth: `composite.ts` exports `WEB_STORY_DIMENSIONS` + `padStoryForWeb`; `from-sheet.ts` writes the padded variant; 5 new tests. Nothing else — no CLI flag, no schema change, `story.png` byte-identical to before.**
