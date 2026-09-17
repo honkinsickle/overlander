@@ -71,6 +71,54 @@ describe("compositePost", () => {
   });
 });
 
+describe("compositePost layout override", () => {
+  // The story frame's name slot sits at a different height from the post frame's,
+  // and both flows share this compositor — so the story needs to move its name
+  // block WITHOUT moving the post's.
+  const base = createCanvas(1080, 1920).toBuffer("image/png");
+  const text = { title: "Boulder Basin", subline: "California, USA" };
+
+  it("leaves the output byte-identical when no layout is passed", async () => {
+    // The guarantee the option exists to protect: the post path must not move.
+    const a = await compositePost({
+      baseImage: base, dimensions: { width: 1080, height: 1350 }, overlayText: text,
+    });
+    const b = await compositePost({
+      baseImage: base, dimensions: { width: 1080, height: 1350 }, overlayText: text, layout: {},
+    });
+    expect(a.equals(b)).toBe(true);
+  });
+
+  it("an explicit bottomPad equal to the default is also byte-identical", async () => {
+    // Pins the default itself: H * 0.05, so a caller can reproduce it exactly.
+    const auto = await compositePost({
+      baseImage: base, dimensions: { width: 1080, height: 1920 }, overlayText: text,
+    });
+    const explicit = await compositePost({
+      baseImage: base,
+      dimensions: { width: 1080, height: 1920 },
+      overlayText: text,
+      layout: { bottomPad: Math.round(1920 * 0.05) },
+    });
+    expect(auto.equals(explicit)).toBe(true);
+  });
+
+  it("a different bottomPad actually moves the block", async () => {
+    const auto = await compositePost({
+      baseImage: base, dimensions: { width: 1080, height: 1920 }, overlayText: text,
+    });
+    const moved = await compositePost({
+      baseImage: base,
+      dimensions: { width: 1080, height: 1920 },
+      overlayText: text,
+      layout: { bottomPad: Math.round(1920 * 0.05) + 10 }, // 10px UP, as shipped
+    });
+    expect(moved.equals(auto)).toBe(false);
+    expect(moved.readUInt32BE(16)).toBe(1080);
+    expect(moved.readUInt32BE(20)).toBe(1920);
+  });
+});
+
 describe("compositePost overlay source", () => {
   const base = { width: 1080, height: 1350 };
   const photo = /* a 1x1 png */ Buffer.from(
