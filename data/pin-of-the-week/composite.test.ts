@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { compositePost, coverRect, wrapText } from "./composite.ts";
+import { compositePost, coverRect, padStoryForWeb, WEB_STORY_DIMENSIONS, wrapText } from "./composite.ts";
+import { BRAND } from "./style-guide.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -224,5 +225,73 @@ describe("compositePost overlay source", () => {
       vi.doUnmock("@napi-rs/canvas");
       vi.resetModules();
     }
+  });
+});
+
+describe("padStoryForWeb", () => {
+  /**
+   * WHY THIS EXISTS — measured against the live composer 2026-09-16.
+   * Instagram's WEB story composer sizes the image to the BROWSER WINDOW and
+   * bakes that shape into what it publishes. A 1080x1920 (9:16) story is
+   * therefore side-cropped on every window Instagram will accept: the published
+   * asset came back 786x1704 with the yoTrippin! header gone, "Boulder Basin"
+   * truncated to "oulder Basin" and the region line missing entirely.
+   * Padding to a phone-shaped canvas removes the thing it would crop.
+   */
+  const RED = "#ff0000";
+  const solid = (w: number, h: number, color: string) => {
+    const c = createCanvas(w, h);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, w, h);
+    return c.toBuffer("image/png");
+  };
+  const pixelAt = async (png: Buffer, x: number, y: number) => {
+    const img = await loadImage(png);
+    const c = createCanvas(img.width, img.height);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+  };
+
+  it("returns the phone-shaped canvas, not 9:16", async () => {
+    const out = await padStoryForWeb(solid(1080, 1920, RED));
+    expect(out.readUInt32BE(16)).toBe(WEB_STORY_DIMENSIONS.width);
+    expect(out.readUInt32BE(20)).toBe(WEB_STORY_DIMENSIONS.height);
+    expect(WEB_STORY_DIMENSIONS.height).toBeGreaterThan(1920);
+  });
+
+  it("centers the artwork, so equal bands sit above and below", async () => {
+    const out = await padStoryForWeb(solid(1080, 1920, RED));
+    const inset = (WEB_STORY_DIMENSIONS.height - 1920) / 2;
+    // just inside the art, top and bottom
+    expect(await pixelAt(out, 540, inset + 5)).toBe(RED);
+    expect(await pixelAt(out, 540, WEB_STORY_DIMENSIONS.height - inset - 5)).toBe(RED);
+    // just outside it, top and bottom
+    expect(await pixelAt(out, 540, inset - 5)).not.toBe(RED);
+    expect(await pixelAt(out, 540, WEB_STORY_DIMENSIONS.height - inset + 5)).not.toBe(RED);
+  });
+
+  it("fills the bands with the brand base, not white or transparent", async () => {
+    const out = await padStoryForWeb(solid(1080, 1920, RED));
+    expect(await pixelAt(out, 540, 10)).toBe(BRAND.colors.baseBackground.toLowerCase());
+  });
+
+  it("does not scale the artwork — every edge pixel survives", async () => {
+    // The whole point: nothing may be cropped or resized, or the logo and the
+    // place name lose their edges exactly as they did when published.
+    const out = await padStoryForWeb(solid(1080, 1920, RED));
+    const inset = (WEB_STORY_DIMENSIONS.height - 1920) / 2;
+    expect(await pixelAt(out, 0, inset)).toBe(RED);                                   // top-left
+    expect(await pixelAt(out, 1079, inset)).toBe(RED);                                // top-right
+    expect(await pixelAt(out, 0, inset + 1919)).toBe(RED);                            // bottom-left
+    expect(await pixelAt(out, 1079, inset + 1919)).toBe(RED);                         // bottom-right
+  });
+
+  it("throws on input it cannot decode rather than emitting a blank canvas", async () => {
+    // A silent blank would publish an unbranded story — the same failure mode
+    // drawFrame already refuses for a caller-supplied overlay.
+    await expect(padStoryForWeb(Buffer.from("not an image"))).rejects.toThrow();
   });
 });

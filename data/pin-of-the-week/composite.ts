@@ -182,6 +182,53 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
 }
 
 /**
+ * The canvas a story must be on to survive Instagram's WEB composer: 1080x2340,
+ * the shape of a modern phone screen (19.5:9), NOT the 9:16 of the story itself.
+ */
+export const WEB_STORY_DIMENSIONS = { width: 1080, height: 2340 } as const;
+
+/**
+ * Centre a finished 9:16 story on the phone-shaped canvas, unscaled, on the
+ * brand base colour.
+ *
+ * WHY — measured against the live composer 2026-09-16. Instagram's web story
+ * screen sizes the image to the BROWSER WINDOW and bakes that shape into what it
+ * publishes; it also refuses to share at all unless the image fully covers that
+ * window. Every window it accepts is taller than 9:16, so a 1080x1920 story is
+ * always side-cropped. Published from a 393x852 window, the result came back
+ * 786x1704 with the yoTrippin! header gone, "Boulder Basin" truncated to
+ * "oulder Basin" and the region line missing entirely.
+ *
+ * Padding removes the thing it would crop: the art already matches the window,
+ * so nothing is cut. Driven at a 539x1170 window (same ratio, larger) the same
+ * asset published at the full 1080x2340 `[verified live 2026-09-16]`.
+ *
+ * The art is drawn at its natural size — never scaled — because scaling is what
+ * costs the logo and the place name their edges. A source WIDER than 1080 would
+ * overflow; the pipeline only ever passes it a 1080-wide story.
+ */
+export async function padStoryForWeb(story: Buffer): Promise<Buffer> {
+  const { width: W, height: H } = WEB_STORY_DIMENSIONS;
+  let img;
+  try {
+    img = await loadImage(story);
+  } catch (e) {
+    // Blank-canvas-on-failure would publish an unbranded story, the same silent
+    // failure drawFrame already refuses for a caller-supplied overlay.
+    throw new Error(
+      `story image could not be decoded for web padding — ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    );
+  }
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = BRAND.colors.baseBackground;
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, Math.round((W - img.width) / 2), Math.round((H - img.height) / 2));
+  return canvas.toBuffer("image/png");
+}
+
+/**
  * Draw the REAL full-frame brand asset (brand/header.png = branding.png — the
  * yoTrippin! header band + transparent body + baked scrim, category label,
  * divider and route decoration) to fill the ENTIRE canvas. The asset is a full
