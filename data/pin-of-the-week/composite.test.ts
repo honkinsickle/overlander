@@ -289,6 +289,26 @@ describe("padStoryForWeb", () => {
     expect(await pixelAt(out, 1079, inset + 1919)).toBe(RED);                         // bottom-right
   });
 
+  it("topPad places the art instead of centring it", async () => {
+    // Instagram draws its own chrome over the TOP of a story — progress bar,
+    // avatar, "Your story · 3m", menu, close — and on a real phone it lands on
+    // the yoTrippin! header band `[measured 2026-09-17]`. Pushing the art down
+    // gives that chrome somewhere empty to sit.
+    const TOP = 300;
+    const out = await padStoryForWeb(solid(1080, 1920, RED), { topPad: TOP });
+    expect(await pixelAt(out, 540, TOP + 5)).toBe(RED);        // art starts where asked
+    expect(await pixelAt(out, 540, TOP - 5)).not.toBe(RED);    // and not before it
+    expect(out.readUInt32BE(20)).toBe(WEB_STORY_DIMENSIONS.height);
+  });
+
+  it("an explicit topPad equal to centre is identical to omitting it", async () => {
+    // Pins the default, so a caller can reproduce centring exactly.
+    const art = solid(1080, 1920, RED);
+    const auto = await padStoryForWeb(art);
+    const explicit = await padStoryForWeb(art, { topPad: (WEB_STORY_DIMENSIONS.height - 1920) / 2 });
+    expect(auto.equals(explicit)).toBe(true);
+  });
+
   it("throws on input it cannot decode rather than emitting a blank canvas", async () => {
     // A silent blank would publish an unbranded story — the same failure mode
     // drawFrame already refuses for a caller-supplied overlay.
