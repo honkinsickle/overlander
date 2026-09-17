@@ -511,6 +511,17 @@ interface Built {
 /** The Instagram story canvas. The post is 1080x1350; a story is 9:16. */
 const STORY_DIMENSIONS = { width: 1080, height: 1920 } as const;
 
+/**
+ * Vertical nudge for the story's place name + region line, in px against the
+ * proportional default (`H * 0.05` = 96 at 1920). POSITIVE moves the block DOWN,
+ * negative moves it UP. This is the one number to tune when the story art's name
+ * slot moves; story-only, so the post's placement is never affected.
+ */
+const STORY_NAME_OFFSET_PX = -10;
+const STORY_LAYOUT = {
+  bottomPad: Math.round(STORY_DIMENSIONS.height * 0.05) - STORY_NAME_OFFSET_PX,
+} as const;
+
 function reviewHtml(built: Built[]): string {
   const cards = built
     .map(
@@ -651,6 +662,7 @@ async function main(): Promise<void> {
           overlayImage: storyOverlay,
           overlayText,
           dimensions: STORY_DIMENSIONS,
+          layout: STORY_LAYOUT,
         });
       } catch (e) {
         warnings.push(`${postsTab} row ${row.rowNumber}: story not rendered — ${errText(e)}`);

@@ -92,6 +92,14 @@ export interface CompositeOptions {
   overlayImage?: Buffer;
   overlayText: ImagePromptSpec["overlayText"];
   dimensions: { width: number; height: number };
+  /**
+   * Optional text-block placement overrides. Omitted = the post's values, so the
+   * 1080x1350 output is unchanged. `bottomPad` is the gap from the bottom edge to
+   * the BOTTOM of the name block, so a SMALLER value moves the name and region
+   * line DOWN. Exists because the story frame's name slot sits lower than the
+   * post frame's, and the two share this compositor.
+   */
+  layout?: { bottomPad?: number };
 }
 
 export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
@@ -127,7 +135,7 @@ export async function compositePost(opts: CompositeOptions): Promise<Buffer> {
   const MIN_TITLE_SIZE = 56; // px — floor before allowing a wrap
   const subSize = 57; // px — "State, USA" line
   const gapSub = Math.round(H * 0.012);
-  const bottomPad = Math.round(H * 0.05);
+  const bottomPad = opts.layout?.bottomPad ?? Math.round(H * 0.05);
   // Text left inset aligned to the FRAME's left margin — the left end of the
   // divider hairline / the "Campground" icon (measured at x=48 in the 1080-wide
   // asset), so the name + region line line up under the hairline's left end.

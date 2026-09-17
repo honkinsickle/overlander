@@ -1,3 +1,23 @@
+# STATE — branch `story-name-offset` · 2026-09-16 (evening) — **The story's place-name block is positioned independently of the post's, and the masthead below is CORRECTED: the layout seam was NOT dropped.** Off `main` `71d948e` (#455).
+
+(**newest truth: `composite.ts` gains an optional `layout?: { bottomPad?: number }`; `from-sheet.ts` gains `STORY_NAME_OFFSET_PX` (shipped at `-10`, i.e. 10px UP) and passes it only on the story render. Plus three tests. Nothing else.**
+
+**~~THE COMPOSITOR NEEDED NO CHANGE — the planned "layout seam" was dropped.~~ WRONG, and merged while wrong** `[corrected 2026-09-16 evening]`. That claim was true when written and false within the hour: Adam asked for the story's name + region line to move (down 15, then up 15, then up 10), and the post and story SHARE `compositePost`, so moving one without the other is exactly what the dropped seam was for. The parameter now exists. **The paragraph below asserting "no `layout` parameter was added" describes a state that has not been true since it merged** — read this masthead, not that one.
+
+**HOW IT SLIPPED: the same mid-branch pattern the runbook already warns about.** PR #455 was opened, then work continued against it, and the follow-up edits were never committed — so the squash at `71d948e` shipped without them and `main` could not reproduce the story that was live on Instagram. The merge itself was clean (verified: `git diff origin/main add-story-graphic-to-doc` shows no `data/` or `docs/` difference); the loss was uncommitted work, not a bad squash. **After opening a PR, re-check the working tree before it merges, not just the branch.**
+
+**Guarantee pinned by test:** omitting `layout` leaves the 1080x1350 post output **byte-identical**, and an explicit `bottomPad` equal to the default (`H * 0.05`) is byte-identical too — so the default is reproducible by a caller. A different value is asserted to actually move the block. Gates: `npm run -w data typecheck` clean; `npm run -w data test` **43 files, 812 passed / 3 skipped** (+3 new).
+
+**NOT IN THE REPO, and needed to repeat what was published** `[2026-09-16]`: the **padding step**. Instagram's web story composer sizes the image to the BROWSER WINDOW and bakes that shape in, so a 1080x1920 asset is always side-cropped — the logo, place name and region line all lose their edges. The fix used live: pad the render onto a **1080x2340** canvas (phone shape, brand-base fill, art centred at y=210) and drive the composer at a **539x1170** window, which publishes at the full 1080x2340. Both live only in throwaway `.context/` scripts, which are gitignored. **Nobody can reproduce today's story from the repo alone.**
+
+**Also live and undocumented in code:** the campground story art is at `camping/**images**/campground_overlay_story.png` — every other overlay lives in `camping/overlay/`. The sheet's D1 points at where the file actually is. Worth moving the file and repointing D1.
+
+**Still unresolved:** stories **auto-crosspost to Facebook**; the composer shows only a 12px indicator and the real setting is in **Accounts Center**. And story creation appears only in the Instagram bundle served to a fresh incognito mobile sign-in, not the normal session — so autonomous story publishing is NOT dependable yet.
+
+The masthead below is the previous state, preserved per this file's convention — but see the correction above before trusting its compositor paragraph.)
+
+---
+
 # STATE — branch `add-story-graphic-to-doc` · 2026-09-16 (later) — **`potw:sheet` now renders a 9:16 `story.png` beside every post.** Both categories have real 1080x1920 art and story photos in the sheet, and Boulder Basin builds post + story from the live sheet. **Nothing publishes a story yet** — the SKILL.md step is not written.
 
 (**newest truth: `from-sheet.ts` + `from-sheet.test.ts` only, on top of the `story_photo_url` commit below. `CategoryTab` gains `storyArtUrl`, read BY LABEL from the cell right of `story_art_url` in row 1; `main()` renders a second composite at 1080x1920 and writes `story.png`; `PostMeta` records `storyArtUrl`; `review.html` shows both images. `composite.ts` is UNTOUCHED.**
