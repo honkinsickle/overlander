@@ -525,6 +525,19 @@ const STORY_LAYOUT = {
   bottomPad: Math.round(STORY_DIMENSIONS.height * 0.05) - STORY_NAME_OFFSET_PX,
 } as const;
 
+/**
+ * Space above the story art on the 1080x2340 web canvas; the remainder becomes
+ * the bottom band. 210 is dead centre for 1920-tall art.
+ *
+ * Instagram draws its own chrome (progress bar, avatar, "Your story · 3m", menu,
+ * close) over the TOP of a story, and it will sit on the yoTrippin! header unless
+ * something clears it `[measured on a real phone 2026-09-17]`. That clearance now
+ * lives in the ARTWORK — the story overlays carry their own top band — so this
+ * stays centred and adds none of its own. Raise it only if a category's art does
+ * not carry that space.
+ */
+const STORY_WEB_TOP_PAD_PX = 210;
+
 function reviewHtml(built: Built[]): string {
   const cards = built
     .map(
@@ -676,7 +689,7 @@ async function main(): Promise<void> {
     let storyWeb: Buffer | undefined;
     if (story) {
       try {
-        storyWeb = await padStoryForWeb(story);
+        storyWeb = await padStoryForWeb(story, { topPad: STORY_WEB_TOP_PAD_PX });
       } catch (e) {
         warnings.push(`${postsTab} row ${row.rowNumber}: story-web not rendered — ${errText(e)}`);
       }

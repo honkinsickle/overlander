@@ -206,8 +206,14 @@ export const WEB_STORY_DIMENSIONS = { width: 1080, height: 2340 } as const;
  * The art is drawn at its natural size — never scaled — because scaling is what
  * costs the logo and the place name their edges. A source WIDER than 1080 would
  * overflow; the pipeline only ever passes it a 1080-wide story.
+ *
+ * `topPad` places the art rather than centring it. Instagram's OWN story chrome —
+ * the progress bar, the poster's avatar, "Your story · 3m", the menu and close
+ * buttons — is drawn over the TOP of a story, and on a real phone it lands
+ * squarely on the yoTrippin! header band `[measured 2026-09-17]`. Pushing the art
+ * down leaves that chrome somewhere empty to sit. Omitted = centred.
  */
-export async function padStoryForWeb(story: Buffer): Promise<Buffer> {
+export async function padStoryForWeb(story: Buffer, opts?: { topPad?: number }): Promise<Buffer> {
   const { width: W, height: H } = WEB_STORY_DIMENSIONS;
   let img;
   try {
@@ -224,7 +230,8 @@ export async function padStoryForWeb(story: Buffer): Promise<Buffer> {
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = BRAND.colors.baseBackground;
   ctx.fillRect(0, 0, W, H);
-  ctx.drawImage(img, Math.round((W - img.width) / 2), Math.round((H - img.height) / 2));
+  const top = opts?.topPad ?? Math.round((H - img.height) / 2);
+  ctx.drawImage(img, Math.round((W - img.width) / 2), top);
   return canvas.toBuffer("image/png");
 }
 
