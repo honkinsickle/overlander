@@ -22,7 +22,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { TEMPLATE_COUNT, interpolate } from "./caption.ts";
-import { compositePost } from "./composite.ts";
+import { compositePost, padStoryForWeb } from "./composite.ts";
 import { categoryLabel, regionLine } from "./image-prompt.ts";
 
 export interface SheetRow {
@@ -506,6 +506,9 @@ interface Built {
   image: Buffer;
   /** The 9:16 story, when this category AND this row both supply story art. */
   story?: Buffer;
+  /** The same story padded to 1080x2340 — the only shape Instagram's WEB story
+   *  composer publishes without cropping. See padStoryForWeb. */
+  storyWeb?: Buffer;
 }
 
 /** The Instagram story canvas. The post is 1080x1350; a story is 9:16. */
@@ -668,7 +671,17 @@ async function main(): Promise<void> {
         warnings.push(`${postsTab} row ${row.rowNumber}: story not rendered — ${errText(e)}`);
       }
     }
-    built.push({ row, slug: slugify(row.place), templateNumber, caption, image, story });
+    // The web-publishable variant, in its OWN try: a padding failure must not
+    // also cost the 9:16 story.png, which is still postable from a phone.
+    let storyWeb: Buffer | undefined;
+    if (story) {
+      try {
+        storyWeb = await padStoryForWeb(story);
+      } catch (e) {
+        warnings.push(`${postsTab} row ${row.rowNumber}: story-web not rendered — ${errText(e)}`);
+      }
+    }
+    built.push({ row, slug: slugify(row.place), templateNumber, caption, image, story, storyWeb });
   }
 
   // ONLY NOW touch the disk — every composite has already succeeded, so an I/O
@@ -679,6 +692,9 @@ async function main(): Promise<void> {
     await writeFile(join(dir, "image.png"), b.image);
     await writeFile(join(dir, "caption.txt"), b.caption + "\n");
     if (b.story) await writeFile(join(dir, "story.png"), b.story);
+    // The file to upload when publishing through a BROWSER; story.png is the one
+    // to use from a phone.
+    if (b.storyWeb) await writeFile(join(dir, "story-web.png"), b.storyWeb);
     await writeFile(
       join(dir, "meta.json"),
       JSON.stringify(

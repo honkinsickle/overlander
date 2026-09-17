@@ -1,3 +1,25 @@
+# STATE — branch `story-web-padding` · 2026-09-17 — **The padding step is in the pipeline: `potw:sheet` now writes `story-web.png` (1080x2340) beside `story.png`, and the repo can finally reproduce a published story.** Off `main` `ca71a20` (#456).
+
+(**newest truth: `composite.ts` exports `WEB_STORY_DIMENSIONS` + `padStoryForWeb`; `from-sheet.ts` writes the padded variant; 5 new tests. Nothing else — no CLI flag, no schema change, `story.png` byte-identical to before.**
+
+**PROOF, not inference** `[measured 2026-09-17]`: the pipeline's `story-web.png` is **byte-identical** to the hand-padded file actually published to Instagram on 2026-09-16 — both sha256 `335cea3ac65afd61…`. The gap recorded in the previous masthead ("nobody can reproduce today's story from the repo alone") is closed.
+
+**Why 1080x2340 and not 9:16.** Instagram's WEB story composer sizes the image to the BROWSER WINDOW, bakes that shape into what it publishes, AND refuses to share unless the image fully covers the window. Every window it accepts is taller than 9:16, so a 1080x1920 story is always side-cropped — the one published from a 393x852 window came back **786x1704** with the header gone, "Boulder Basin" truncated to "oulder Basin", and the region line missing. Padding to the phone shape leaves nothing to crop. Driven at **539x1170** (same ratio, larger) it publishes at the full 1080x2340.
+
+**TWO FILES, two destinations, on purpose:** `story.png` (1080x1920) is the one to post from a PHONE; `story-web.png` (1080x2340) is the one to upload through a BROWSER. The art is drawn unscaled — scaling is exactly what costs the logo and place name their edges.
+
+**Degradation is layered:** the web padding has its OWN try/catch, so a padding failure still leaves `story.png` on disk (phone-postable) rather than losing both. Story failures remain `warnings`, never `problems`, so they can never abort the batch that builds the POST.
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **43 files, 820 passed / 3 skipped** (+5). Live-sheet run writes `image.png` 1080x1350, `story.png` 1080x1920, `story-web.png` 1080x2340.
+
+**STILL NOT AUTOMATED — the publish half.** `SKILL.md` has no story step at all, so publishing is still hand-driven. Two blockers, both unresolved: stories **auto-crosspost to Facebook** (the composer shows a 12px indicator; the real setting is in **Accounts Center**), and story creation appears only in the Instagram bundle served to a **fresh incognito mobile sign-in**, not the normal session. Until that second one is understood, autonomous story publishing is not dependable.
+
+**Also still true:** the campground story art sits at `camping/images/campground_overlay_story.png` while every other overlay lives in `camping/overlay/`; the sheet's D1 points at where the file actually is.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `story-name-offset` · 2026-09-16 (evening) — **The story's place-name block is positioned independently of the post's, and the masthead below is CORRECTED: the layout seam was NOT dropped.** Off `main` `71d948e` (#455).
 
 (**newest truth: `composite.ts` gains an optional `layout?: { bottomPad?: number }`; `from-sheet.ts` gains `STORY_NAME_OFFSET_PX` (shipped at `-10`, i.e. 10px UP) and passes it only on the story render. Plus three tests. Nothing else.**
