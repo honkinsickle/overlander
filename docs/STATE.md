@@ -1,3 +1,43 @@
+# STATE — branch `docs-posts-tab-and-transient` · 2026-09-17 (late) — **Every sheet tab is read by NAME, the tick writes where the header says, a transient Google blip no longer costs a post, and three slots are armed to publish unattended tomorrow.** Off `main` `13e4e4e` (#467). Docs-only; the code landed as #466 + #467.
+
+(**newest truth: this masthead and a LOG entry. The two PRs it documents are already on `main` — #466 (posts tabs by name; `markPosted` finds its column) and #467 (retry + a readable error on a non-JSON reply).**
+
+**ALL THREE SLOTS VERIFIED END TO END ON MERGED MAIN** `[2026-09-18 ~23:2x local]`: `potd-auto <category> --dry-run` for campground, scenic and oddities each built a real container and published nothing. Each queue holds exactly one row — Alabama Hills, Crowley Lake Columns, Gus's Fresh Jerky, all at row 5, all re-queued ON PURPOSE by Adam after he reformatted the tabs.
+
+**ADAM REFORMATTED ALL THREE POSTS TABS MID-SESSION, and the old parser could not read any of them.** New shape: a title in row 1, a blank row 2, the header on **row 3**, columns reordered (`place | state | country | post_photo_url | story_photo_url | posted`), and `photo_url` renamed `post_photo_url`. Under the positional contract every one failed with *"missing column(s) … this tab is 6 columns wide"*. **Between the reformat and #466 merging, the 3pm and 8pm slots would both have failed silently into the log** — campground was still the old layout and would have worked, which is exactly the kind of partial breakage that reads as "it's fine".
+
+**THE POSITIONAL APPARATUS IS GONE, and it had already lost its purpose.** The width bound, the blank-header-cell evidence test, the fuzzy `includes("url")` match, the refuse-to-guess rules — all of it existed for ONE reason: gviz typed a column once for the whole column, so writing a date into `posted` blanked the `posted` HEADER and broke that category's next build forever. Once #465 moved reading to the Sheets API, a header is the text it is and there was nothing left to repair. Replaced by `findPostsHeader`: find the header row, then every column, by name. Titles, spacers, column order and extra columns all stop mattering.
+
+**THE DANGEROUS HALF WAS THE WRITE, and it was one merge away from firing.** `markPosted` hardcoded **column E**. On the reformatted tabs E is `story_photo_url` or a blank spacer — so the tick would have written the date into the wrong cell, the row would still have read unposted, and every later run would have republished it. Three times a day, on a live account. It now reads the tab, takes `posted` from the header, and refuses a row at or above the header row.
+
+**A REAL BEHAVIOUR LOSS, taken deliberately:** a misspelled photo header no longer parses. `pohoto_url` worked before as the only url-ish column; it now fails and names what it found. Nothing is guessed, ever.
+
+**A TRANSIENT GOOGLE FAILURE COST NOTHING BUT NEARLY COST A POST** `[measured 2026-09-17]`. A live check died on `Unexpected token '<', "<!DOCTYPE "… is not valid JSON` — Google answered with an HTML error page and `res.json()` threw on it. **That message names neither the tab, nor the status, nor the fact that it was transient**, and the same tab read cleanly on the next attempt. In an unattended 3pm run it would have been the only trace. The body is now read as TEXT first (status + snippet + tab reported) and the read retries three times. **400 and 403 are NOT retried** — a missing tab and an unshared sheet are facts about the world, not weather. The PUT stays single-shot: a retried write needs idempotency reasoning the read-back check does not give.
+
+**WHAT THE REPUBLISH GUARD DOES NOT DO — now written into the skill, because I had oversold it.** It keys on **(tab, row number)**, so any insert or delete above a published row defeats it. That happened live: Gus's Fresh Jerky moved from row 4 to row 5 and the guard stopped recognising it. It is deliberately NOT keyed on the place name — Adam re-queues a row on purpose to post a place again, and a name-keyed guard would refuse that legitimate work. So it protects a failed tick on a row that has not moved. **It is not a de-duplicator.**
+
+**A BUG I WROTE AND A TEST CAUGHT, not my eyes:** the tab name was interpolated into both the error prefix and the hint, so a missing tab read `no tab named "tab "nope""`. Worth recording because it reads fine until someone hits it.
+
+**PR HYGIENE — a stacked branch can be silently satisfied by the upper PR's squash.** #464 was built on, then #465 squash-merged and carried its content to `main`. #464 stayed OPEN and showed `mergeable: UNKNOWN` — not "merged" — so it looked like outstanding work. Closed after verifying each of its changes present on `main` individually. Also seen twice tonight: **GitHub reports `CONFLICTING` from a stale computation**, and once from a push that silently failed. Compare local and remote hashes before believing a mergeability answer.
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **47 files, 865 passed / 3 skipped**.
+
+**ELEVEN POSTS AND ELEVEN STORIES PUBLISHED TODAY through the API** (counted from the recorded media ids, not estimated), across five publish sessions — the first two hand-driven duplicates, then three `potd-auto` batches — and the feed posts were deleted by Adam between batches, which is how the deletions were noticed rather than assumed (`media_count` returned to 8 twice and read 11 after the last batch). Every batch left the staging bucket at **0 objects** and ticked its sheet rows.
+
+**TWO STORY PUBLISHES FAILED AT THE FINAL CALL, AND THE OBVIOUS EXPLANATION WAS MEASURED AND KILLED** `[2026-09-17]`. Errors: `Media ID is not available` and `The requested resource does not exist` — two different strings for one situation. Spacing was the suspect: tonight's runs were **30 and 29 seconds apart**, and the earlier batch where all three stories succeeded was **35 and 27 seconds apart**. Essentially identical, so spacing is not the trigger. Same code, same inputs, and **both failures published on the very next attempt, unchanged**. The surviving code lesson: **a container reporting `FINISHED` is not a sufficient readiness signal**, and there is nothing else to check. The server-side trigger is **UNDETERMINED** — establishing it would mean publishing more test stories to a live account, which is not worth it. A retry on the publish call is parked in `BACKLOG.md`.
+
+**THE SCHEDULER FIRED ON ITS OWN FOR THE FIRST TIME** `[2026-09-17 20:00:00 PDT]`: the 8pm oddities slot ran unattended, found the queue empty, exited 0.
+
+**REPEATING A ROW NEEDS TWO THINGS CLEARED, NOT ONE — hit twice tonight.** Blanking the `posted` cells is not enough: the republish guard keys on (tab, row number), and re-running the same rows leaves those numbers unchanged, so all three refused until the row-5 entries were removed from `~/.config/overlander/potd-published.jsonl` (backed up first, both times). A `--force` flag is parked rather than improvised at the console.
+
+**ARMED FOR TOMORROW** `[verified after clearing]`: Alabama Hills at 10:00, Crowley Lake Columns at 15:00, Gus's Fresh Jerky at 20:00 — each the next unposted row at row 5 of its tab, guard cleared, `posted` cleared, `com.yotrippin.potd` registered. The `posted` column was located from each tab's header rather than assumed.
+
+**STILL OPEN:** whether an API publish cross-posts to Facebook — unanswered after twenty-two real publishes today, because the only check available hit a Facebook login wall and credentials are off-limits. The Instagram token expires in ~60 days with nothing watching it. And the story-publish retry is unbuilt, and **2 of 13 story publish attempts failed on the first try** tonight, each needing a manual re-run.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `sheet-read-via-api` · 2026-09-17 (night) — **The sheet is read through the Sheets API now, not the gviz CSV endpoint — which kills three silent-failure classes and makes a second tab layout work.** Stacked on `schedule-points-at-real-path` (#464).
 
 (**newest truth: new `sheet-read.ts`; `parseCategoryTab` rewritten to find everything BY LABEL; `main()` reads via the API; four orphaned gviz helpers deleted (`fetchTabRows`, `tabCsvUrl`, `sameGrid`, `BOGUS_TAB`); tests rewritten. `parsePostsTab`'s header machinery is deliberately untouched.**

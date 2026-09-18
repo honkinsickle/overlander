@@ -77,6 +77,68 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   and credentials are off-limits, so after four real publishes the cross-post question is
   still open. Trees of Mystery is the clean test case now — real place, currently live.
 
+## 2026-09-17 (late) — Sheet tabs read by name; 22 real publishes; three slots armed (PRs #466-#468)
+
+- **Adam reformatted all three posts tabs mid-session and the parser could read none of
+  them**: a title in row 1, a blank row 2, the header on row 3, columns reordered, and
+  `photo_url` renamed `post_photo_url`. Every one failed with *"missing column(s) … this
+  tab is 6 columns wide"*. Campground was still the old layout and still worked, which is
+  the kind of partial breakage that reads as "it's fine".
+- **The positional apparatus had already lost its purpose and is gone.** The width bound,
+  the blank-header-cell test, the fuzzy `includes("url")` match — all of it existed because
+  gviz blanked a typed header, so writing a date into `posted` broke that category's next
+  build forever. Once reading moved to the Sheets API (#465) there was nothing left to
+  repair. Replaced by find-the-header-then-every-column, by name.
+- **The write was the dangerous half, and it was one merge from firing.** `markPosted`
+  hardcoded column E; on the reformatted tabs E is the story photo or a blank spacer. The
+  tick would have landed in the wrong cell, the row would have stayed unposted, and every
+  later run would have republished it — three times a day on a live account.
+- **A real loss, accepted:** a misspelled photo header no longer parses. `pohoto_url`
+  squeaked through before as the only url-ish column. Nothing is guessed now.
+- **A transient Google blip nearly cost a post.** A live read died on `Unexpected token
+  '<', "<!DOCTYPE "…` — an HTML error page, and `res.json()` threw on it. The message named
+  neither tab nor status nor its own transience, and the next attempt succeeded. Now: body
+  read as text first, three retries, and **400/403 deliberately not retried** because a
+  missing tab and an unshared sheet are not weather.
+- **Recorded what the republish guard does NOT do**, having oversold it earlier. It keys on
+  (tab, row number), so any row move defeats it — which happened live when Gus's Fresh
+  Jerky shifted from row 4 to row 5. Deliberately not keyed on place name: Adam re-queues a
+  row on purpose to repost a place, and a name-keyed guard would refuse that. It guards a
+  failed tick on a row that has not moved. Nothing more.
+- **Two process notes.** A stacked branch can be silently satisfied by the upper PR's
+  squash: #464's content reached `main` via #465 while #464 stayed open showing
+  `mergeable: UNKNOWN`, looking like outstanding work. And GitHub reported `CONFLICTING`
+  twice from stale computation — once masking a push that had silently failed. Compare
+  local and remote hashes before believing it.
+- **Verified end to end on merged main:** all three slots dry-run clean, each building a
+  real container and publishing nothing. Gates: typecheck clean, 865 tests passing.
+- **Eleven posts and eleven stories published through the API today** (counted from the recorded media ids), the last three batches via `potd-auto`:
+  three posts + three stories at ~21:25 PDT, three posts + one story at ~23:39 (two story
+  failures, both fixed by an immediate retry), and three posts + three stories at ~23:47.
+  Every batch left the staging bucket at 0 objects and ticked its sheet rows. Adam deleted
+  the feed posts between batches — `media_count` returned to 8 twice and read 11 after the
+  last batch, which is how the deletions were noticed rather than assumed.
+- **Two story publishes failed at the final call and a retry fixed both** `[measured]`.
+  Errors were `Media ID is not available` and `The requested resource does not exist` —
+  two different strings for the same situation. **The obvious explanation was measured and
+  killed:** tonight's runs were 30 and 29 seconds apart, the earlier batch where all three
+  succeeded was 35 and 27 seconds apart, so spacing is not the trigger. Same code, same
+  inputs, and both failures published on the very next attempt unchanged. The one code
+  lesson that survives: a container reporting `FINISHED` is **not** a sufficient readiness
+  signal, and there is nothing else to check. The server-side trigger is **UNDETERMINED**
+  and finding it would mean publishing more test stories to a live account.
+- **The scheduler fired on its own for the first time** `[2026-09-17 20:00:00 PDT]`: the
+  8pm oddities slot ran unattended, found the queue empty, and exited 0. It behaved.
+- **Repeating a row needs TWO things cleared, not one.** Blanking the `posted` cells is not
+  enough — the republish guard keys on (tab, row number), and re-running the same rows
+  leaves the row numbers unchanged, so all three refused until the row-5 entries were
+  removed from `~/.config/overlander/potd-published.jsonl`. Hit twice. A `--force` flag is
+  parked in BACKLOG rather than improvised at the console.
+- **#464 was closed, not merged, and looked like outstanding work.** Its content reached
+  `main` inside #465's squash because #465's branch was built on top of it; GitHub kept
+  showing it open with `mergeable: UNKNOWN`. Each of its changes was verified present on
+  `main` individually before closing.
+
 ## 2026-09-17 — Stories shipped end to end; `oddities` proved the zero-code category (PRs #455-#459)
 
 - **The Sheet pipeline now emits three images per post**: `image.png` (1080x1350),
