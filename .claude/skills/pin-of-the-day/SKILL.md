@@ -141,14 +141,52 @@ Report the post number and archive path it prints. The archive under
 scratch `output/` dir) — tell the user it's ready to commit if they want to keep
 it.
 
-### 9. Post it to Instagram — ONLY with browser automation, and NEVER without a final yes
+### 9. Post it to Instagram — the API first, a browser only as fallback, and NEVER without a final yes
 
-This step is **optional and conditional**. It runs only if browser automation is
-available in the current session.
+**9-API. The API is the primary path** `[live 2026-09-17, account
+yotrippin.app]`. No browser, no incognito session, no crop screen — and it
+publishes a story as readily as a post, which the browser route never did
+dependably.
 
-**9a. Check availability first.** Look at the tools actually available to you
-this session for anything that can navigate, click, type into, and screenshot a
-live browser — Claude in Chrome, a browser MCP, or a raw CDP connection to a
+```
+# prove the credential and the staging url — publishes NOTHING
+npm run -w data potw:publish -- --dir <the post dir> --dry-run
+# the post
+npm run -w data potw:publish -- --dir <the post dir>
+# the story, when the build made one
+npm run -w data potw:publish -- --dir <the post dir> --story
+```
+
+What it does, so that its failures are readable: re-encodes the PNG as JPEG
+(Instagram accepts nothing else), stages it in the public `ig-publish` bucket on
+TEST — Instagram **fetches** the image, there is no upload endpoint — creates a
+media container, publishes it, then deletes the staged file. A container without
+the publish call puts nothing on the account, which is what makes `--dry-run` a
+real test of the credential rather than a no-op.
+
+- **It prompts before publishing.** `--yes` skips the prompt; that is what
+  §Autonomous posting uses. With no terminal and no `--yes` it refuses rather
+  than assuming consent.
+- **Post and story are two separate calls.** Post first, then story. A story
+  carries no caption, and `--story` sends `story.png` — never `story-web.png`,
+  whose 1080x2340 padding exists only to survive the browser composer.
+- Needs `IG_ACCESS_TOKEN` in `data/.env`. These tokens last about 60 days, so
+  an expiry is a real failure mode, not a theoretical one.
+- **It does not touch the sheet.** Ticking the row stays a separate, later step,
+  for the standing reason: confirmation first, write-back second.
+- ⚠️ **Whether an API publish cross-posts to Facebook is UNVERIFIED.** The
+  browser composer had a toggle, defaulted ON, and Adam's standing decision
+  (2026-09-15) is Instagram only; there is no such toggle in the API call, and
+  the account-level setting lives in Accounts Center. Check Facebook after the
+  first real API post and record what you find — do not assume either way.
+
+**Only when the API is unavailable or refuses** — no token, expired token, an
+Instagram-side rejection — fall back to the browser route below. Say which
+happened; never switch paths silently.
+
+**9a. Check browser availability (fallback route only).** Look at the tools
+actually available to you this session for anything that can navigate, click,
+type into, and screenshot a live browser — Claude in Chrome, a browser MCP, or a raw CDP connection to a
 Chrome started with `--remote-debugging-port`. Don't assume: if you cannot name
 the tool you'd call to navigate a page, it isn't available.
 
@@ -170,9 +208,12 @@ equivalent). Navigation-and-clicking alone is not enough; see 9b item 2.
     > upload and `caption.txt` to paste. Post it manually when you're ready."
 
   That is a clean, successful end to the skill. The post is already built and
-  saved; do NOT treat a missing browser as a failure, and do NOT try to
-  substitute some other automation (curl, the Instagram API, a script) —
-  manual posting is the fallback.
+  saved; do NOT treat a missing browser as a failure.
+  **~~Do not substitute the Instagram API~~ — CORRECTED 2026-09-17.** That
+  instruction predates the API working; the API is now the primary path (§9-API)
+  and a browser is the fallback, not the other way round. This "post it by hand"
+  ending applies only when the API has ALSO failed or has no token. Still do not
+  improvise some third route.
 - **Available** → ask before driving anything:
   > "Want me to open Instagram and set the post up? I'll stop for your OK before
   > anything gets published."
@@ -345,8 +386,9 @@ him to approve the same thing twice.
 Map the word he uses to the tab name: `camping` → the `campground` tab pair.
 If the word matches no tab pair, say which categories exist and stop.
 
-**Run these in order. Any failure before step 5 means nothing was published —
-report it and stop; the row stays queued and will be retried next time.**
+**Run these in order. Any failure before step 2 completes means nothing was
+published — report it and stop; the row stays queued and will be retried next
+time.**
 
 1. **Build it.**
    ```
@@ -357,31 +399,35 @@ report it and stop; the row stays queued and will be retried next time.**
    **Empty queue** → say the queue is empty and stop. NEVER wrap around and
    republish an old row.
 
-2. **Check browser automation is available** (§9a). Not available → say the post
-   is built and where it is, and stop. Do not treat that as a failure.
+2. **Publish the post through the API** (§9-API), using the dir the build
+   printed on that post's `✓` line:
+   ```
+   npm run -w data potw:publish -- --dir <that dir> --yes
+   ```
+   Success is the printed `✅ published post — media <id>` line, not the absence
+   of an error. Anything else means nothing went out: report it and stop with the
+   row still queued.
 
-3. **Stage it** exactly as §9b: Create → Post, attach `image.png` to the hidden
-   `[role="dialog"] input[type="file"]`, set crop to **Original**, paste
-   `caption.txt` **verbatim**.
+   **No token, or an expired one** → fall back to the browser route (§9a–§9c),
+   which still requires its own final yes. Say plainly that you switched.
 
-4. **Turn the Facebook cross-post toggle OFF.** Adam's standing decision
-   (2026-09-15) is **Instagram only**. Instagram defaults it ON, so this is an
-   action you take every time, not a state you can assume. Read it back and
-   confirm it is off before sharing.
+3. **Publish the story, if the build made one** — the build's `✓` line says
+   `+ story`:
+   ```
+   npm run -w data potw:publish -- --dir <the same dir> --story --yes
+   ```
+   A story failure does **not** undo the post and does **not** hold up step 4 —
+   the post is out, so the row is posted. Say the story did not go, and carry on.
+   `(no story)` in the build means there is nothing to do here.
 
-5. **Share.**
+4. **Only then, write today's date into that row's `posted` cell.**
+   **Order is load-bearing:** confirmation first, write-back second. If the
+   publish fails, the row must stay unposted so it retries. Writing first would
+   silently drop a post from the queue. If the write-back itself fails, say
+   plainly which tab and row need ticking by hand — never leave the queue wrong
+   and silent.
 
-6. **Wait for Instagram's own confirmation** — the dialog reads
-   *"Post shared / Your post has been shared."* Do not infer success from the
-   click.
-
-7. **Only then, write today's date into that row's `posted` cell.**
-   **Order is load-bearing:** confirmation first, write-back second. If Share
-   fails, the row must stay unposted so it retries. Writing first would silently
-   drop a post from the queue. If the write-back itself fails, say plainly which
-   tab and row need ticking by hand — never leave the queue wrong and silent.
-
-8. **Report what went out** — show the image, the caption, the category, and the
+5. **Report what went out** — show the image, the caption, the category, and the
    sheet row. He approved the row, not the render; this is how he sees what it
    became.
 
