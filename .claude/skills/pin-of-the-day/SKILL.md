@@ -313,7 +313,7 @@ approving:
   - **Sheet flow:** there is no caption-template flag and no step 4 — the sheet
     is the input. Edit it, then re-run `potw:sheet` for that category: the
     caption comes from that category's numbered templates (and which one is
-    fixed by the row's position), the art from its `art_url`, the photo from
+    fixed by the row's position), the art from its `post_art_url`, the photo from
     that row's `photo_url`. Re-approve the rebuilt post.
 
 ### Building from the Google Sheet
@@ -326,7 +326,7 @@ database, and nothing is marked used:
 npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]
 ```
 
-`--category` names a PAIR of tabs: `<name>` (its `art_url` + numbered caption
+`--category` names a PAIR of tabs: `<name>` (its `post_art_url` + numbered caption
 templates) and `<name> posts` (its queue: `photo_url` · `place` · `state` ·
 `country` · `posted`). The tab name IS the category — there is no category
 column and no registry.
@@ -339,7 +339,7 @@ column and no registry.
   if given), plus one `review.html` index over the whole batch. There is no
   step-8 archive for these — step 9 stages directly from this dir (see 9b).
 - Adding a category is three spreadsheet actions and no code: duplicate both
-  tabs, set the new `art_url` and captions, add rows.
+  tabs, set the new `post_art_url` and captions, add rows.
 - A tab name that doesn't exist does NOT error on its own — Google returns
   HTTP 200 with the *first tab's* data for a missing name. The build guards
   this with a probe fetch and reports `no tab named "<x>"` when it catches the
@@ -363,7 +363,7 @@ column and no registry.
 **Approve each post before step 9 — this flow has no other check on the
 image.** Steps 5–6 above belong to the database flow; a Sheet build renders
 straight from the queue, so nothing has looked at the composite. The overlay art
-and the photos come from whatever `art_url`/`photo_url` hold, and the pipeline
+and the photos come from whatever `post_art_url`/`photo_url` hold, and the pipeline
 does not inspect them. Human eyes are the only thing standing between a broken
 asset and a public post. So for each post you intend to stage:
 
@@ -374,7 +374,7 @@ asset and a public post. So for each post you intend to stage:
 
 Check the image really carries the yoTrippin! branding and the place photo, not
 just that a file exists. **No explicit yes → do not go on to step 9 with that
-post.** If they want changes, the answer is to edit the sheet (its `art_url`,
+post.** If they want changes, the answer is to edit the sheet (its `post_art_url`,
 its caption templates, or that row's `photo_url`) and re-run the build — you do
 not patch the output files by hand.
 

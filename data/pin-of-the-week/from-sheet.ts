@@ -14,7 +14,7 @@
  *   npm run -w data potw:sheet -- --sheet <url> --category <name> [--out <dir>] [--next-only]
  *
  * The sheet must be shared "anyone with the link can view". photo_url and
- * art_url may be a local file path (shell-style "\ " escapes are accepted) or
+ * post_art_url may be a local file path (shell-style "\ " escapes are accepted) or
  * an http(s) URL.
  */
 
@@ -141,8 +141,9 @@ const ALLOWED_TOKENS = new Set(["place", "category", "state"]);
 
 /**
  * Parse a `<category>` tab. Everything is found BY LABEL, anywhere in the grid:
- * `art_url`, `story_art_url`, and `n` each name the cell to their right (for
- * `n`, the column to its right).
+ * `post_art_url`, `story_art_url`, and `n` each name the cell to their right
+ * (for `n`, the column to its right). `art_url` is still read as the former name
+ * of `post_art_url` — see the note in the body.
  *
  * ~~`art_url` in row 1, then `n | template` rows.~~ **Rewritten 2026-09-17**,
  * when the reader moved from the gviz CSV endpoint to the Sheets API. Under gviz
@@ -166,14 +167,19 @@ const ALLOWED_TOKENS = new Set(["place", "category", "state"]);
  * word `template` irrelevant.
  */
 export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
-  const artUrl = valueRightOf(rows, "art_url");
+  // `post_art_url` is the name; `art_url` is still accepted, and deliberately so
+  // rather than as speculative flexibility. The schedule publishes three times a
+  // day from a live sheet, so code and sheet cannot be renamed in the same
+  // instant — whichever moves first would break the other. Both names read here
+  // makes the order irrelevant. Drop `art_url` once no tab uses it.
+  const artUrl = valueRightOf(rows, "post_art_url") ?? valueRightOf(rows, "art_url");
   if (artUrl === null) {
     throw new Error(
-      `tab "${tab}": no cell labelled art_url — the overlay path goes in the cell to its right`,
+      `tab "${tab}": no cell labelled post_art_url — the post overlay's path goes in the cell to its right`,
     );
   }
   if (artUrl === "") {
-    throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
+    throw new Error(`tab "${tab}": post_art_url is empty — set it to the overlay's url or path`);
   }
 
   // Optional throughout: absent means this category renders no story, which is
@@ -603,7 +609,7 @@ async function main(): Promise<void> {
     }
   }
   const overlay = await loadPhoto(cat.artUrl).catch((e) => {
-    problems.push(`tab "${category}": art_url could not be read — ${errText(e)}`);
+    problems.push(`tab "${category}": post_art_url could not be read — ${errText(e)}`);
     return null;
   });
   if (problems.length > 0) {

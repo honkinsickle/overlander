@@ -200,7 +200,7 @@ describe("regionLine with a country", () => {
 
 describe("parseCategoryTab", () => {
   const good = [
-    ["art_url", " /tmp/overlay.png "],
+    ["post_art_url", " /tmp/overlay.png "],
     ["", ""],
     ["n", "template"],
     ["1", "A {place} in {state}."],
@@ -226,7 +226,7 @@ describe("parseCategoryTab", () => {
     // through. Reading through the Sheets API, EVERY label is real text, so both
     // are found the same way: the label names the cell to its right.
     const withStory = [
-      ["art_url", " /tmp/overlay.png ", "story_art_url", " /tmp/overlay_story.png "],
+      ["post_art_url", " /tmp/overlay.png ", "story_art_url", " /tmp/overlay_story.png "],
       ["n", "template"],
       ["1", "A {place} in {state}."],
     ];
@@ -247,7 +247,7 @@ describe("parseCategoryTab", () => {
 
     it("is empty when the label is present but its cell is blank", () => {
       const rows = [
-        ["art_url", "/tmp/overlay.png", "story_art_url", "   "],
+        ["post_art_url", "/tmp/overlay.png", "story_art_url", "   "],
         ["n", "template"],
         ["1", "A {place}"],
       ];
@@ -255,43 +255,43 @@ describe("parseCategoryTab", () => {
     });
 
     it("is empty when the label is the last column, with nothing after it", () => {
-      const rows = [["art_url", "/tmp/overlay.png", "story_art_url"], ["n", "template"], ["1", "A {place}"]];
+      const rows = [["post_art_url", "/tmp/overlay.png", "story_art_url"], ["n", "template"], ["1", "A {place}"]];
       expect(parseCategoryTab(rows, "scenic").storyArtUrl).toBe("");
     });
   });
 
   it("throws when art_url is empty", () => {
-    const rows = [["art_url", "  "], ["", ""], ["n", "template"], ["1", "x {place}"]];
-    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/art_url is empty/);
+    const rows = [["post_art_url", "  "], ["", ""], ["n", "template"], ["1", "x {place}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/post_art_url is empty/);
   });
 
   it("throws when there are no templates", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["n", "template"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["n", "template"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/no caption templates/);
   });
 
   it("throws when template numbers are not contiguous from 1", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "a {place}"], ["3", "c {place}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "a {place}"], ["3", "c {place}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/contiguous/);
   });
 
   it("throws on an unknown token", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{nope\}/);
   });
 
   it("throws on a token with stray spaces inside the braces", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello { place }"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello { place }"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{ place \}/);
   });
 
   it("throws on a token with punctuation inside the braces", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place,}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place,}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{place,\}/);
   });
 
   it("throws on an unpaired brace", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/unmatched brace/);
   });
 });
@@ -305,7 +305,7 @@ describe("parseCategoryTab against the two REAL tab layouts", () => {
 
   // The original: labels across row 1, numbers in column A, templates in B.
   const ROW_ONE_LAYOUT = [
-    ["art_url", "/Users/adam/scenic_overlay.png ", "story_art_url", "/Users/adam/scenic_story.png "],
+    ["post_art_url", "/Users/adam/scenic_overlay.png ", "story_art_url", "/Users/adam/scenic_story.png "],
     [],
     ["n", "template"],
     ["1", "A {place} in {state}."],
@@ -322,7 +322,7 @@ describe("parseCategoryTab against the two REAL tab layouts", () => {
     [],
     [],
     ["Graphics"],
-    ["art_url", "/Users/adam/scenic_overlay.png"],
+    ["post_art_url", "/Users/adam/scenic_overlay.png"],
     ["story_art_url", "/Users/adam/scenic_story.png "],
     [],
     ["Captions"],
@@ -352,11 +352,29 @@ describe("parseCategoryTab against the two REAL tab layouts", () => {
     expect(parseCategoryTab(LABELLED_LAYOUT, "scenic").templates).toHaveLength(2);
   });
 
+  it("still reads the former name `art_url`, so sheet and code can be renamed in either order", () => {
+    // Not speculative flexibility: the schedule publishes three times a day from
+    // this sheet, so whichever of code/sheet is renamed first would otherwise
+    // break the other until they matched.
+    const oldName = [["art_url", "/tmp/o.png"], ["n", "template"], ["1", "A {place}"]];
+    expect(parseCategoryTab(oldName, "scenic").artUrl).toBe("/tmp/o.png");
+  });
+
+  it("prefers post_art_url when a tab carries both names", () => {
+    const both = [
+      ["art_url", "/tmp/old.png"],
+      ["post_art_url", "/tmp/new.png"],
+      ["n", "template"],
+      ["1", "A {place}"],
+    ];
+    expect(parseCategoryTab(both, "scenic").artUrl).toBe("/tmp/new.png");
+  });
+
   it("does NOT guess the art url when the label is absent", () => {
     // The retired fallback took column B of the first row. That is why this
     // matters: see the swap test below for what it could have published.
     const noLabel = [["", "/Users/adam/scenic_overlay.png"], ["n", "template"], ["1", "A {place}"]];
-    expect(() => parseCategoryTab(noLabel, "scenic")).toThrow(/no cell labelled art_url/);
+    expect(() => parseCategoryTab(noLabel, "scenic")).toThrow(/no cell labelled post_art_url/);
   });
 
   it("cannot put STORY art on a feed post when the two rows are swapped", () => {
@@ -366,7 +384,7 @@ describe("parseCategoryTab against the two REAL tab layouts", () => {
     // each url stays with its own name whatever the order.
     const swapped = [
       ["story_art_url", "/Users/adam/scenic_story.png"],
-      ["art_url", "/Users/adam/scenic_overlay.png"],
+      ["post_art_url", "/Users/adam/scenic_overlay.png"],
       ["n", "template"],
       ["1", "A {place}"],
     ];
@@ -377,7 +395,7 @@ describe("parseCategoryTab against the two REAL tab layouts", () => {
 
   it("ignores a stray number ABOVE the n header rather than reading it as template 1", () => {
     const strayAbove = [
-      ["art_url", "/tmp/o.png"],
+      ["post_art_url", "/tmp/o.png"],
       ["1", "not a template — a note that happens to start with a digit"],
       ["n", "template"],
       ["1", "A {place}"],
