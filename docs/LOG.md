@@ -77,6 +77,47 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   and credentials are off-limits, so after four real publishes the cross-post question is
   still open. Trees of Mystery is the clean test case now — real place, currently live.
 
+## 2026-09-17 — Stories shipped end to end; `oddities` proved the zero-code category (PRs #455-#459)
+
+- **The Sheet pipeline now emits three images per post**: `image.png` (1080x1350),
+  `story.png` (1080x1920) and `story-web.png` (1080x2340). Landed across #455
+  (story render), #456 (story name-block positioned independently of the post's),
+  #457 (web padding) and #459 (the web canvas can place the art, not just centre it).
+- **A new category needed no code, as designed.** `oddities` was created as a pair
+  of tabs, given art and 12 templates, and **Trees of Mystery built and published on
+  the first run**. Its own purple-eye "Oddity" chip renders, so the baked-in
+  wrong-chip bug is structurally absent on the Sheet path.
+- **Four things published** through the merged autonomous flow (#454): Trees of
+  Mystery post + story, Boulder Basin post + story. All queues now empty.
+- **Instagram's web story composer bakes the BROWSER WINDOW's shape into what it
+  publishes**, and refuses to share unless the image covers that window — so a 9:16
+  story is always side-cropped. First live attempt published at 786x1704 with the
+  header gone and "Boulder Basin" truncated to "oulder Basin". Fixed by padding onto
+  a 1080x2340 phone-shaped canvas; verified byte-identical to the hand-padded file.
+- **Instagram's own chrome sits on top of a story** — progress bar, avatar,
+  "Your story · 3m", menu, close — and it landed across the yoTrippin! header.
+  **Invisible in every desktop and emulated check**, because neither draws the app's
+  overlay; Adam's phone screenshots are what surfaced it. Resolved in the artwork
+  (overlays rebuilt with the clearance baked in), so the code knob ships at centred.
+- **Three asset traps the build cannot detect**, all hit live: a story photo that was
+  fully *transparent* for its top 265px (not black) rendered a semi-transparent band;
+  a 100%-opaque overlay hid the photo entirely while the run still printed `✓`; and
+  sheet cells pointing at the *post* photo instead of the story files rendered
+  happily. The `_index` tab now documents the tab contract in-sheet.
+- **PR #458 was closed: a squash-merged branch is spent.** Reusing
+  `story-web-padding` after #457 squashed from it produced a CONFLICTING PR for which
+  **CI never ran at all**. Reopened clean off `main` as #459. Same family as the
+  #426/#455 mid-branch losses, one rung along — those lost uncommitted work, this
+  lost the branch.
+- **A CI watcher that exits when "nothing is pending" is vacuous** — it passed while
+  only Vercel checks existed and the four Actions jobs had not registered, and
+  announced success for a PR with no CI. Now waits for the four job names explicitly.
+- **Instagram Graph API researched, not started.** Posts and stories are both
+  publishable, the account is Business, and no app review is needed for one's own
+  account. Blockers: media must be at a public URL (no upload) and **JPEG only** —
+  we emit PNG. Gating question: is the account connected to a Facebook *Page*?
+  Parked in BACKLOG.
+
 ## 2026-09-14 — Landing invite card redesigned to Figma "Frame 2" (PR #433)
 
 - **Reworked the `landing/index.html` invite card to the Figma `the23forty` Frame 2

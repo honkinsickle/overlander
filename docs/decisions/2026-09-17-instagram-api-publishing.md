@@ -96,6 +96,13 @@ BUSINESS, 8 media at the time]`
   confirmed against Meta's content-publishing documentation, not from memory.
 - JPEG only; image must be at a public url at publish time; **100 published posts
   per 24h**.
+- **JPEG has no alpha channel**, which is not a detail here: a render with a
+  transparent region would flatten on conversion. The brand-base fill that
+  `padStoryForWeb` already applies is what makes that safe — and the fault is not
+  hypothetical, it is the semi-transparent band hit on the Oddity story earlier the
+  same day, when a story photo turned out to be fully transparent for its top
+  265px. (Salvaged from the BACKLOG entry written before this was built; the rest
+  of that entry described the route as not started and is obsolete.)
 - A dry run produced container `18116012221925924` with status `FINISHED`,
   after which the bucket listed **0 objects** and `media_count` was still **8**.
 
