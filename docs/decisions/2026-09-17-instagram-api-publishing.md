@@ -99,14 +99,55 @@ BUSINESS, 8 media at the time]`
 - A dry run produced container `18116012221925924` with status `FINISHED`,
   after which the bucket listed **0 objects** and `media_count` was still **8**.
 
+## First real use, later the same evening
+
+`[2026-09-17, after this PR merged as #461]` Two pairs published through the API,
+both row-3 duplicates of already-posted rows (so both drew template 2 and neither
+caption matched its original):
+
+| category | post | story | state |
+|---|---|---|---|
+| `scenic` "Slappys Post Pile" | `18081969410681213` | `18120202114931826` | **removed from the account** |
+| `oddities` "Trees of Mystery" | `17950043556270960` (`/p/DdaMA-XGIGI/`) | `18116267782823475` | live |
+
+`media_count` went 8 → 9 on the first post and **stayed 9** after the second,
+consistent with one added and one removed. The bucket listed **0 objects** after
+all four publishes, so the staged-object cleanup holds on real runs and not only
+in the dry run.
+
+**The scenic pair is gone** — both ids return `does not exist` (code 100,
+subcode 33) and the post is absent from `/me/media`. Whether Adam deleted it or
+Instagram removed it **cannot be distinguished from the API side**. Its sheet row
+still reads `posted`, so the queue is knowingly wrong for that row.
+
+**A grounding stop fired inside the autonomous flow.** The scenic row's place
+name was invented — "Slappys Post Pile" over a photo of Devils Postpile — and the
+render put it under the **yoTrippin! verified** badge with a caption reading "get
+every verified spot". §Autonomous posting says the queued row IS the approval;
+the standing grounding rule says every field is real or absent. The publish was
+paused and asked about. **The lesson is not "ask twice" — it is that a fabricated
+field justifies a stop even in the one flow designed to publish unattended.**
+
+**Two operational gotchas, both measured:**
+
+- **`--dir` must be absolute.** The npm script's cwd is `data/`, so a
+  repo-relative path resolves to `data/data/pin-of-the-week/…` and fails with
+  `image.png not found`. Recorded in the skill; the build already prints the
+  absolute dir.
+- **A gviz sheet read is cached.** Two write-backs read as unchanged and were
+  correct on a cache-busted re-read seconds later. Never conclude a sheet write
+  failed from a single read.
+
 ## Still open
 
-- **No real API post has been made.** The proof stops at a container.
-- **Whether an API publish cross-posts to Facebook is UNKNOWN.** The browser
-  composer had a toggle that defaulted ON; the API call has no such field and the
-  account-level setting lives in Accounts Center. Adam's standing decision
-  (2026-09-15) is Instagram only, so this must be checked immediately after the
-  first real API post. The skill says so explicitly rather than assuming.
+- ~~**No real API post has been made.**~~ **Done** — see the section above.
+- **Whether an API publish cross-posts to Facebook is UNKNOWN — still, after four
+  real publishes.** The browser composer had a toggle that defaulted ON; the API
+  call has no such field and the account-level setting lives in Accounts Center.
+  Adam's standing decision (2026-09-15) is Instagram only. The check was
+  attempted and **failed for a dull reason**: a fresh CDP tab hit a Facebook
+  login wall, and typing credentials is off-limits. Trees of Mystery is the clean
+  test case — a real place, currently live.
 - **Token expiry is unmeasured.** These tokens last ~60 days and are refreshable,
   but the refresh call mints a new token, so it was not run unprompted. No
   refresh automation exists.
