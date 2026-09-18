@@ -3,6 +3,35 @@
 
 
 
+## Retry the Instagram publish call for stories (2026-09-17, not started)
+
+**2 of 13 story publish attempts failed at `media_publish` tonight, and both
+succeeded on the very next attempt, unchanged.** Errors were `Media ID is not
+available` and `The requested resource does not exist`. Spacing was measured and
+ruled out — the failing batch ran 30/29s apart, a fully successful batch ran
+35/27s apart.
+
+`waitForContainer` already waits for `status_code: FINISHED`, and for stories
+that is not a sufficient readiness signal; there is no other signal to check. So
+the fix is a retry on `publishContainer`, not a better pre-check: a few attempts,
+a few seconds apart, on those errors only. Same shape as the read retry that
+shipped as #467.
+
+Worth doing before anyone relies on the 8pm story going out unattended. A story
+failure never blocks its post, so the cost today is a missing story plus a log
+line — `potw:publish --dir <dir> --story --yes` re-runs it by hand.
+
+## `--force` for a deliberate repeat of an already-published row (2026-09-17, not started)
+
+The republish guard keys on (tab, row number). Re-posting the same rows — which
+Adam did three times tonight — leaves the row numbers unchanged, so the guard
+refuses every one of them even after the `posted` cells are cleared. Both times
+the fix was editing `~/.config/overlander/potd-published.jsonl` by hand.
+
+A `--force` flag on `potw:auto` would make the deliberate case explicit and leave
+the accidental case protected, which is the whole point of the guard. Decided
+against improvising it at the console mid-session.
+
 ## Google Places photos shown with no attribution — LIVE on PROD (2026-09-01)
 **Google Places Platform requires displaying a photo's `authorAttributions`
 whenever you display the photo.** The app fetches Google Place Photos but never

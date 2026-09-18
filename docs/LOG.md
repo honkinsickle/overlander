@@ -77,7 +77,7 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   and credentials are off-limits, so after four real publishes the cross-post question is
   still open. Trees of Mystery is the clean test case now — real place, currently live.
 
-## 2026-09-18 — Sheet tabs read by name; the tick follows the header (PRs #466, #467)
+## 2026-09-17 (late) — Sheet tabs read by name; 22 real publishes; three slots armed (PRs #466-#468)
 
 - **Adam reformatted all three posts tabs mid-session and the parser could read none of
   them**: a title in row 1, a blank row 2, the header on row 3, columns reordered, and
@@ -112,6 +112,32 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   local and remote hashes before believing it.
 - **Verified end to end on merged main:** all three slots dry-run clean, each building a
   real container and publishing nothing. Gates: typecheck clean, 865 tests passing.
+- **Eleven posts and eleven stories published through the API today** (counted from the recorded media ids), the last three batches via `potd-auto`:
+  three posts + three stories at ~21:25 PDT, three posts + one story at ~23:39 (two story
+  failures, both fixed by an immediate retry), and three posts + three stories at ~23:47.
+  Every batch left the staging bucket at 0 objects and ticked its sheet rows. Adam deleted
+  the feed posts between batches — `media_count` returned to 8 twice and read 11 after the
+  last batch, which is how the deletions were noticed rather than assumed.
+- **Two story publishes failed at the final call and a retry fixed both** `[measured]`.
+  Errors were `Media ID is not available` and `The requested resource does not exist` —
+  two different strings for the same situation. **The obvious explanation was measured and
+  killed:** tonight's runs were 30 and 29 seconds apart, the earlier batch where all three
+  succeeded was 35 and 27 seconds apart, so spacing is not the trigger. Same code, same
+  inputs, and both failures published on the very next attempt unchanged. The one code
+  lesson that survives: a container reporting `FINISHED` is **not** a sufficient readiness
+  signal, and there is nothing else to check. The server-side trigger is **UNDETERMINED**
+  and finding it would mean publishing more test stories to a live account.
+- **The scheduler fired on its own for the first time** `[2026-09-17 20:00:00 PDT]`: the
+  8pm oddities slot ran unattended, found the queue empty, and exited 0. It behaved.
+- **Repeating a row needs TWO things cleared, not one.** Blanking the `posted` cells is not
+  enough — the republish guard keys on (tab, row number), and re-running the same rows
+  leaves the row numbers unchanged, so all three refused until the row-5 entries were
+  removed from `~/.config/overlander/potd-published.jsonl`. Hit twice. A `--force` flag is
+  parked in BACKLOG rather than improvised at the console.
+- **#464 was closed, not merged, and looked like outstanding work.** Its content reached
+  `main` inside #465's squash because #465's branch was built on top of it; GitHub kept
+  showing it open with `mergeable: UNKNOWN`. Each of its changes was verified present on
+  `main` individually before closing.
 
 ## 2026-09-17 — Stories shipped end to end; `oddities` proved the zero-code category (PRs #455-#459)
 

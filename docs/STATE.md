@@ -1,4 +1,4 @@
-# STATE — branch `docs-posts-tab-and-transient` · 2026-09-18 (early) — **Every sheet tab is now read by NAME, the tick writes where the header says, and a transient Google blip no longer costs a post.** Off `main` `13e4e4e` (#467). Docs-only; the code landed as #466 + #467.
+# STATE — branch `docs-posts-tab-and-transient` · 2026-09-17 (late) — **Every sheet tab is read by NAME, the tick writes where the header says, a transient Google blip no longer costs a post, and three slots are armed to publish unattended tomorrow.** Off `main` `13e4e4e` (#467). Docs-only; the code landed as #466 + #467.
 
 (**newest truth: this masthead and a LOG entry. The two PRs it documents are already on `main` — #466 (posts tabs by name; `markPosted` finds its column) and #467 (retry + a readable error on a non-JSON reply).**
 
@@ -20,9 +20,19 @@
 
 **PR HYGIENE — a stacked branch can be silently satisfied by the upper PR's squash.** #464 was built on, then #465 squash-merged and carried its content to `main`. #464 stayed OPEN and showed `mergeable: UNKNOWN` — not "merged" — so it looked like outstanding work. Closed after verifying each of its changes present on `main` individually. Also seen twice tonight: **GitHub reports `CONFLICTING` from a stale computation**, and once from a push that silently failed. Compare local and remote hashes before believing a mergeability answer.
 
-**Gates** `[measured 2026-09-18]`: `npm run -w data typecheck` clean; `npm run -w data test` **47 files, 865 passed / 3 skipped**.
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **47 files, 865 passed / 3 skipped**.
 
-**STILL OPEN:** whether an API publish cross-posts to Facebook — unanswered after ten real publishes, because the only check available hit a login wall. And the Instagram token expires in ~60 days with nothing watching it.
+**ELEVEN POSTS AND ELEVEN STORIES PUBLISHED TODAY through the API** (counted from the recorded media ids, not estimated), across five publish sessions — the first two hand-driven duplicates, then three `potd-auto` batches — and the feed posts were deleted by Adam between batches, which is how the deletions were noticed rather than assumed (`media_count` returned to 8 twice and read 11 after the last batch). Every batch left the staging bucket at **0 objects** and ticked its sheet rows.
+
+**TWO STORY PUBLISHES FAILED AT THE FINAL CALL, AND THE OBVIOUS EXPLANATION WAS MEASURED AND KILLED** `[2026-09-17]`. Errors: `Media ID is not available` and `The requested resource does not exist` — two different strings for one situation. Spacing was the suspect: tonight's runs were **30 and 29 seconds apart**, and the earlier batch where all three stories succeeded was **35 and 27 seconds apart**. Essentially identical, so spacing is not the trigger. Same code, same inputs, and **both failures published on the very next attempt, unchanged**. The surviving code lesson: **a container reporting `FINISHED` is not a sufficient readiness signal**, and there is nothing else to check. The server-side trigger is **UNDETERMINED** — establishing it would mean publishing more test stories to a live account, which is not worth it. A retry on the publish call is parked in `BACKLOG.md`.
+
+**THE SCHEDULER FIRED ON ITS OWN FOR THE FIRST TIME** `[2026-09-17 20:00:00 PDT]`: the 8pm oddities slot ran unattended, found the queue empty, exited 0.
+
+**REPEATING A ROW NEEDS TWO THINGS CLEARED, NOT ONE — hit twice tonight.** Blanking the `posted` cells is not enough: the republish guard keys on (tab, row number), and re-running the same rows leaves those numbers unchanged, so all three refused until the row-5 entries were removed from `~/.config/overlander/potd-published.jsonl` (backed up first, both times). A `--force` flag is parked rather than improvised at the console.
+
+**ARMED FOR TOMORROW** `[verified after clearing]`: Alabama Hills at 10:00, Crowley Lake Columns at 15:00, Gus's Fresh Jerky at 20:00 — each the next unposted row at row 5 of its tab, guard cleared, `posted` cleared, `com.yotrippin.potd` registered. The `posted` column was located from each tab's header rather than assumed.
+
+**STILL OPEN:** whether an API publish cross-posts to Facebook — unanswered after twenty-two real publishes today, because the only check available hit a Facebook login wall and credentials are off-limits. The Instagram token expires in ~60 days with nothing watching it. And the story-publish retry is unbuilt, and **2 of 13 story publish attempts failed on the first try** tonight, each needing a manual re-run.
 
 The masthead below is the previous state, preserved per this file's convention.)
 

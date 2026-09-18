@@ -145,6 +145,48 @@ field justifies a stop even in the one flow designed to publish unattended.**
   correct on a cache-busted re-read seconds later. Never conclude a sheet write
   failed from a single read.
 
+## Story publishing is intermittently unreliable, and `FINISHED` does not mean ready
+
+`[2026-09-17, measured across 13 story publish attempts]` **2 failed at the
+`media_publish` call and both succeeded on the very next attempt, unchanged.**
+The two errors were `Media ID is not available` and `The requested resource does
+not exist` — different strings for the same situation, which is itself a sign of
+server-side inconsistency rather than a condition we created.
+
+**The obvious explanation was measured and killed.** Spacing was the suspect: the
+failing batch ran 30 and 29 seconds apart, and an earlier batch in which all
+three stories succeeded ran 35 and 27 seconds apart. Essentially identical. Same
+code, same inputs, same account.
+
+**What survives as a code fact:** `waitForContainer` treats
+`status_code: FINISHED` as readiness, and for stories that is **not sufficient**.
+There is no other documented signal to check, so the container can report
+finished and the publish still fail.
+
+**What is UNDETERMINED:** the server-side trigger. Establishing it would mean
+publishing more test stories to a live account, which is not worth it. So the
+response is a retry on the publish call rather than a diagnosis — parked in
+`BACKLOG.md`, deliberately not improvised at the console at midnight.
+
+A story failure remains a warning and never blocks its post (§Decision 5), so the
+cost of this is a missing story and a log line, not a missing post.
+
+## The republish guard is narrower than it looks
+
+It keys on **(tab, row number)** and is deliberately NOT keyed on the place name:
+Adam re-queues a row on purpose to post a place again, and a name-keyed guard
+would refuse that legitimate work. Consequences, both hit tonight:
+
+- Any insert or delete above a published row changes its number and the guard
+  stops recognising it. Gus's Fresh Jerky moved from row 4 to row 5 and became
+  publishable again.
+- Re-running the SAME rows leaves the numbers unchanged, so the guard blocks them
+  even after the `posted` cells are cleared. **Repeating a row needs two things
+  cleared, not one** — the sheet cell and the guard entry.
+
+So it guards a failed tick on a row that has not moved. It is not a
+de-duplicator, and the skill now says so.
+
 ## Still open
 
 - ~~**No real API post has been made.**~~ **Done** — see the section above.
