@@ -24,7 +24,13 @@ import { join, resolve } from "node:path";
 import { TEMPLATE_COUNT, interpolate } from "./caption.ts";
 import { compositePost, padStoryForWeb } from "./composite.ts";
 import { categoryLabel, regionLine } from "./image-prompt.ts";
-import { defaultReadDeps, fetchTabGrid, findLabel, valueRightOf } from "./sheet-read.ts";
+import {
+  defaultReadDeps,
+  fetchTabGrid,
+  findLabel,
+  findPostsHeader,
+  valueRightOf,
+} from "./sheet-read.ts";
 
 export interface SheetRow {
   photo: string;
@@ -249,148 +255,43 @@ export interface PostRow {
   rowNumber: number;
 }
 
-/** The documented, fixed column order of a `<category> posts` tab. This ORDER is
- *  the trustworthy signal; the header TEXT is not, for any column gviz has
- *  typed (see `parsePostsTab`). */
-const POSTS_COLUMNS = ["photo_url", "place", "state", "country", "posted"] as const;
-
-/**
- * The ONE optional column, and the only name that may widen the contract past
- * POSTS_COLUMNS. It sits after `posted`, holds the row's 9:16 story photo, and is
- * resolved by EXACT header name only — never by position.
- *
- * Widening is deliberately narrow. Any other sixth column still refuses the
- * positional repair, because the `scheduled` hazard is unchanged: a typed column
- * inserted BEFORE `posted` shifts position 4 onto it and inverts every row's
- * published state. Only a sixth column named exactly this one is known to sit
- * AFTER `posted`, which is what makes positions 0-4 still trustworthy.
- */
-const STORY_PHOTO_COLUMN = "story_photo_url";
-
 /**
  * Parse a `<category> posts` tab. No category column — the tab name carries it.
  *
- * Columns resolve by header NAME first (`photo_url` loosely, as the first header
- * containing "url", so a misspelled "pohoto_url" still works; the rest exactly).
+ * Every column is resolved BY NAME via `findPostsHeader`, so the tab may carry a
+ * title row, blank spacer rows and columns, its own column order and extra
+ * columns. Nothing is inferred from position.
  *
- * A name that does not resolve then falls back to its fixed position — but ONLY
- * when the header cell AT that position is empty. gviz types a column ONCE for
- * the whole column, so publishing one post (writing a date into `posted`) makes
- * column E a `date` column, and the TEXT cell in it — the `posted` header in E1 —
- * comes back null. Measured after the first real publish: `cols` = [(A,string),
- * (B,string),(C,string),(D,string),(E,date)] with `rows[0].c[4] == {v: None}`,
- * while the raw `/export?format=csv` of the same tab still shows
- * `photo_url,place,state,country,posted`. The header IS there; this endpoint
- * blanks it. Same root cause as the blanked `art_url` label in
- * `parseCategoryTab`. Without the fallback, publishing one post broke the NEXT
- * build of that category, for every category, forever.
+ * ~~Columns resolve by fixed position, with a narrow repair when a typed header
+ * came back blank.~~ **Replaced 2026-09-17** along with the move to the Sheets
+ * API — see `findPostsHeader` for why the repair had nothing left to repair.
  *
- * The blank test is what keeps this narrow: an EMPTY header cell is the evidence
- * of column typing, so only that is tolerated. A header holding some OTHER name
- * is a genuinely malformed tab and still fails loudly — reading a `notes` column
- * as `posted` would silently skip or republish rows, which is worse than the
- * crash. A header row too short to have the position at all fails the same way.
- *
- * THREE THINGS BOUND THE REPAIR, because a blank header cell proves "the column
- * at this position was typed" — NOT "the column at this position is the one I
- * want":
- *
- *  1. **Width.** Position 4 is `posted` only if the tab has exactly five
- *     columns. Add a `scheduled` date column before `posted` and gviz blanks
- *     BOTH headers by the same mechanism, so position 4 is now `scheduled`:
- *     every scheduled row would read as already-published and never build,
- *     while a genuinely published row with an empty `scheduled` cell would be
- *     republished. So the repair is refused outright on a grid wider than the
- *     contract. Extra columns are not themselves an error — a wide tab with
- *     intact header TEXT still parses; only the positional fallback is unsafe
- *     on it. Measured before tightening: gviz returns exactly five fields per
- *     row for both live tabs, so this cannot reach the working path.
- *  2. **A blank row 1 is not a header.** All five headers cannot blank at once —
- *     photo_url/place/state/country hold text, so gviz types them `string`.
- *     An all-blank row 1 is a spacer, and repairing it positionally would make
- *     the REAL header a data row (`photo: "photo_url"`, then a baffling "photo
- *     could not be read").
- *  3. **Blank-position evidence outranks the FUZZY url match.** `includes("url")`
- *     is weak — it would hand `photo` to any other url-ish column and render the
- *     wrong image with no error at all. Exact name wins first, then a blank at
- *     the contract position, then the fuzzy match — and the fuzzy match refuses
- *     to guess between two candidates.
+ * `rowNumber` is the row's TRUE position in the sheet, taken from the grid index
+ * and NOT counted from the header. It drives the caption-template rotation and it
+ * is the row whose `posted` cell gets ticked, so an off-by-one here writes a date
+ * into an innocent row and leaves the real one queued to republish.
  */
 export function parsePostsTab(rows: string[][], tab: string): PostRow[] {
-  const [header, ...body] = rows;
-  if (!header) throw new Error(`tab "${tab}": empty`);
-  const names = header.map((h) => h.trim().toLowerCase());
-  if (names.every((n) => n === "")) {
-    throw new Error(
-      `tab "${tab}": row 1 is blank, but it must be the header row ` +
-        `(${POSTS_COLUMNS.join(" · ")}) — delete the spacer row above the header`,
-    );
-  }
+  const header = findPostsHeader(rows, tab);
+  const get = (r: string[], i: number) => (i === -1 ? "" : (r[i] ?? "").trim());
 
-  // Bound 1. Measure the grid, not just the header: a header row could be the
-  // short one. Nothing is repaired by position unless every row fits the contract.
-  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
-  // The optional story column extends the contract by one, and ONLY when it is
-  // named exactly and sits at its own position (after `posted`). Anything else at
-  // that width still refuses to repair — see STORY_PHOTO_COLUMN.
-  const storyAt = names.indexOf(STORY_PHOTO_COLUMN);
-  const contractWidth = POSTS_COLUMNS.length + (storyAt === POSTS_COLUMNS.length ? 1 : 0);
-  const repairable = width <= contractWidth;
-  const tooWide =
-    ` — this tab is ${width} columns wide, more than the ${POSTS_COLUMNS.length} of ` +
-    `${POSTS_COLUMNS.join(" · ")}, so a header that gviz blanked cannot be repaired by ` +
-    `position (the blank proves the column was TYPED, not which column it is). Remove ` +
-    `the extra column(s), or spell the header exactly.`;
-
-  const urlish = names.filter((n) => n.includes("url"));
-  const missing: string[] = [];
-  const at = POSTS_COLUMNS.map((want, position) => {
-    const exact = names.indexOf(want);
-    if (exact !== -1) return exact;
-    if (!repairable) {
-      missing.push(want);
-      return -1;
-    }
-    if (names[position] === "") return position;
-    // Bound 3: the fuzzy match is last, and only when it is unambiguous. It is a
-    // repair too, so bound 1 gates it as well — on a wide tab it would otherwise
-    // hand `photo` to a `source_url` column and render the wrong image silently.
-    if (want === "photo_url" && urlish.length === 1) return names.indexOf(urlish[0]);
-    if (want === "photo_url" && urlish.length > 1) {
-      throw new Error(
-        `tab "${tab}": no exact photo_url header, and ${urlish.length} headers look ` +
-          `url-ish (${urlish.join(", ")}) — rename the photo column to photo_url rather ` +
-          `than leaving the choice to a guess`,
-      );
-    }
-    missing.push(want);
-    return -1;
-  });
-  if (missing.length > 0) {
-    throw new Error(
-      `tab "${tab}": missing column(s): ${missing.join(", ")}${repairable ? "" : tooWide}`,
-    );
-  }
-  const [photo, place, state, country, posted] = at;
-
-  const get = (r: string[], i: number) => (r[i] ?? "").trim();
   // Number FIRST, drop blanks AFTER — a spacer row must not shift the rows below
-  // it (see PostRow.rowNumber). `rows` arrives from parseCsvRows, which keeps
-  // blank rows for exactly this reason.
-  return body
-    .map((r, i) => ({ cells: r, rowNumber: i + 2 }))
+  // it (see PostRow.rowNumber).
+  return rows
+    .map((cells, i) => ({ cells: cells ?? [], rowNumber: i + 1 }))
+    .filter(({ rowNumber }) => rowNumber > header.row + 1)
     .filter(({ cells }) => !isBlankRow(cells))
     .map(({ cells, rowNumber }) => ({
-      photo: get(cells, photo),
-      place: get(cells, place),
-      state: get(cells, state),
-      country: get(cells, country),
-      posted: get(cells, posted),
-      // Optional: absent column resolves to -1, which `get` reads as empty.
-      storyPhoto: storyAt === -1 ? "" : get(cells, storyAt),
+      photo: get(cells, header.photo),
+      place: get(cells, header.place),
+      state: get(cells, header.state),
+      country: get(cells, header.country),
+      posted: get(cells, header.posted),
+      storyPhoto: get(cells, header.storyPhoto),
       rowNumber,
     }));
 }
+
 
 /** The queue is row order. The next post is the first row with an empty `posted`. */
 export function nextUnposted(rows: PostRow[]): PostRow | null {

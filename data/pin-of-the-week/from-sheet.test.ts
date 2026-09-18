@@ -471,183 +471,33 @@ describe("parsePostsTab", () => {
   });
 });
 
-describe("parsePostsTab against the shape the LIVE endpoint returns AFTER a publish", () => {
-  // Measured, not invented. gviz types a column ONCE for the whole column. The
-  // moment a real post is published and today's date is written into `posted`,
-  // gviz types column E as `date` — so the TEXT cell in that column, the
-  // `posted` HEADER in E1, comes back null. Measured after the first real
-  // Instagram publish: cols [(A,string)…(D,string),(E,date)] and
-  // rows[0].c[4] == {v: None}. The raw /export?format=csv of the same tab still
-  // shows `photo_url,place,state,country,posted`, so the header IS there — only
-  // this endpoint blanks it.
-  const AFTER_PUBLISH = [
-    ["photo_url", "place", "state", "country", ""],
-    ["/Users/adam/Desktop/potd/devils_post_pile.png ", "Devils Post Pile", "CA", "USA", "2026-09-15"],
+describe("parsePostsTab on a tab WIDER than the old contract", () => {
+  // ~~Refuses to repair by position when the tab is wider than the contract.~~
+  // Replaced 2026-09-17: there is no positional repair any more, so width is
+  // simply not a constraint. The two blocks this stands in for tested the
+  // blanked-header repair and the width bound that had to guard it — both
+  // deleted with the move to the Sheets API, where a header is the text it is.
+  const WIDE = [
+    ["post_photo_url", "place", "state", "country", "posted", "story_photo_url", "notes", "scheduled"],
+    ["a.jpg", "Alpha", "CA", "USA", "2026-09-01", "a_story.png", "some note", "2026-10-01"],
+    ["b.jpg", "Beta", "OR", "USA", "", "b_story.png", "", ""],
   ];
 
-  it("parses a tab whose `posted` header gviz blanked, reading posted from column E", () => {
-    const out = parsePostsTab(AFTER_PUBLISH, "scenic posts");
-    expect(out).toEqual([
-      {
-        photo: "/Users/adam/Desktop/potd/devils_post_pile.png",
-        place: "Devils Post Pile",
-        state: "CA",
-        country: "USA",
-        posted: "2026-09-15",
-        storyPhoto: "",
-        rowNumber: 2,
-      },
-    ]);
+  it("parses it, ignoring the extra columns", () => {
+    const out = parsePostsTab(WIDE, "scenic posts");
+    expect(out).toHaveLength(2);
+    expect(out[1]).toMatchObject({ place: "Beta", posted: "", storyPhoto: "b_story.png", rowNumber: 3 });
   });
 
-  it("sees that row as POSTED — a blank-read `posted` would republish it forever", () => {
-    // The failure this guards is worse than the crash: if the fallback picked
-    // the wrong column (or read nothing), `posted` would be "" and the queue
-    // would re-publish an already-published post on every run.
-    expect(nextUnposted(parsePostsTab(AFTER_PUBLISH, "scenic posts"))).toBeNull();
-  });
-
-  it("no longer arrives blanked at all, because the reader returns real header text", async () => {
-    // The grid above is kept as coverage of the positional repair, but the input
-    // itself can no longer occur: the blanking was gviz typing column E as `date`
-    // the moment a real date was written into it. The Sheets API returns the
-    // `posted` header as the text it is.
-    const apiBody = {
-      values: [
-        ["photo_url", "place", "state", "country", "posted"],
-        ["/Users/adam/Desktop/potd/devils_post_pile.png ", "Devils Post Pile", "CA", "USA", "2026-09-15"],
-        ["b.jpg", "Beta", "OR", "USA"],
-      ],
-    };
-    const deps = {
-      fetch: (async () => new Response(JSON.stringify(apiBody))) as typeof fetch,
-      token: async () => "TOK",
-    };
-    const fetched = await fetchTabGrid("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", deps);
-    expect(fetched[0][4]).toBe("posted");
-    const queue = parsePostsTab(fetched, "scenic posts");
-    expect(queue.map((r) => r.posted)).toEqual(["2026-09-15", ""]);
-    expect(nextUnposted(queue)).toMatchObject({ place: "Beta", rowNumber: 3 });
-  });
-
-  it("still parses the PRE-publish shape, where the header is present and posted is empty", () => {
-    // Campground before its first post: no date anywhere, so column E is still
-    // typed `string` and the header survives. This is the path that works today
-    // and must keep working.
-    const out = parsePostsTab(
-      [
-        ["photo_url", "place", "state", "country", "posted"],
-        ["a.jpg", "Alpha", "CA", "USA", ""],
-      ],
-      "campground posts",
-    );
-    expect(out[0]).toEqual({
-      photo: "a.jpg", place: "Alpha", state: "CA", country: "USA", posted: "", storyPhoto: "", rowNumber: 2,
-    });
-  });
-
-  it("tolerates a blanked photo_url header too, since any column can be typed", () => {
-    const out = parsePostsTab(
-      [
-        ["", "place", "state", "country", "posted"],
-        ["a.jpg", "Alpha", "CA", "USA", ""],
-      ],
-      "scenic posts",
-    );
-    expect(out[0]).toMatchObject({ photo: "a.jpg", place: "Alpha" });
-  });
-
-  it("still throws when the fifth header is a DIFFERENT name — that is malformed, not blanked", () => {
-    // The tolerance must be narrow: only an EMPTY header cell is evidence of
-    // gviz column typing. A header that says something else is a real mistake
-    // and must still fail loudly, or a `notes` column would be read as `posted`
-    // and the queue would silently skip or republish rows.
-    expect(() =>
-      parsePostsTab(
-        [
-          ["photo_url", "place", "state", "country", "notes"],
-          ["a.jpg", "Alpha", "CA", "USA", "hello"],
-        ],
-        "scenic posts",
-      ),
-    ).toThrow(/missing column\(s\): posted/);
-  });
-
-  it("still throws when the posted column is absent entirely (header row of four)", () => {
-    expect(() =>
-      parsePostsTab([["photo_url", "place", "state", "country"], ["a.jpg", "Alpha", "CA", "USA"]], "scenic posts"),
-    ).toThrow(/missing column\(s\): posted/);
-  });
-
-  it("still names every genuinely missing column", () => {
-    expect(() => parsePostsTab([["place", "state"]], "scenic posts")).toThrow(
-      /missing column\(s\): photo_url, country, posted/,
-    );
+  it("is not fooled by a `scheduled` date column, the old hazard", () => {
+    // The width bound existed because a typed `scheduled` column inserted before
+    // `posted` blanked both headers, so position 4 silently became `scheduled` —
+    // every scheduled row reading as published. Named columns cannot confuse the
+    // two at all.
+    expect(parsePostsTab(WIDE, "scenic posts").map((r) => r.posted)).toEqual(["2026-09-01", ""]);
   });
 });
 
-describe("parsePostsTab refuses to repair by position when the tab is WIDER than the contract", () => {
-  // The blank-header gate proves "a column at this position was typed". It does
-  // NOT prove "the column at this position is the one I want" — position 4 is
-  // `posted` only if the tab has exactly five columns. An operator adding a
-  // `scheduled` date column BEFORE `posted` gets both headers blanked by the
-  // same gviz mechanism, and position 4 is then `scheduled`.
-  const EXTRA_TYPED_COLUMN = [
-    //                                    E = scheduled ↓   ↓ F = posted (both blanked)
-    ["photo_url", "place", "state", "country", "", ""],
-    ["b.jpg", "Beta", "OR", "USA", "2026-10-02", ""], // scheduled for Oct 2, NOT published
-    ["c.jpg", "Gamma", "WA", "USA", "", "2026-09-14"], // published, never scheduled
-  ];
-
-  it("throws rather than resolving `posted` to the `scheduled` column", () => {
-    expect(() => parsePostsTab(EXTRA_TYPED_COLUMN, "scenic posts")).toThrow(
-      /missing column\(s\): posted/,
-    );
-  });
-
-  it("says WHY it cannot repair, naming the width", () => {
-    expect(() => parsePostsTab(EXTRA_TYPED_COLUMN, "scenic posts")).toThrow(/6 columns wide/);
-  });
-
-  it("would otherwise invert BOTH rows' posted state — the harm the throw prevents", () => {
-    // Documents exactly what mis-resolving costs, so the throw is not mistaken
-    // for pedantry. Reading column E as `posted`: Beta (merely scheduled) reads
-    // as published and never builds; Gamma (really published, blank in E) reads
-    // as unposted and is republished. Loud beats silently wrong — this is the
-    // same argument the `notes` test makes, arriving through the extra-column
-    // door instead. The `notes` header only stays safe because TEXT columns do
-    // not blank; a typed one does.
-    const asIfRepaired = EXTRA_TYPED_COLUMN.slice(1).map((r) => r[4]);
-    expect(asIfRepaired).toEqual(["2026-10-02", ""]);
-  });
-
-  it("still parses the five-wide post-publish tab — the live shape must not re-break", () => {
-    // Measured before tightening: gviz returns EXACTLY 5 fields per row for both
-    // live tabs (`scenic posts`, cols [string,string,string,string,date]; and
-    // `campground posts`). The width refusal cannot reach them.
-    const out = parsePostsTab(
-      [
-        ["photo_url", "place", "state", "country", ""],
-        ["a.jpg", "Alpha", "CA", "USA", "2026-09-15"],
-      ],
-      "scenic posts",
-    );
-    expect(out[0]).toMatchObject({ place: "Alpha", posted: "2026-09-15" });
-  });
-
-  it("allows a wide tab whose headers are all present — width only blocks the REPAIR", () => {
-    // Extra columns are not themselves an error. Only the positional fallback is
-    // unsafe on them, so a wide tab with intact header text parses fine.
-    const out = parsePostsTab(
-      [
-        ["photo_url", "place", "state", "country", "scheduled", "posted"],
-        ["b.jpg", "Beta", "OR", "USA", "2026-10-02", ""],
-      ],
-      "scenic posts",
-    );
-    expect(out[0]).toMatchObject({ place: "Beta", posted: "" });
-  });
-});
 
 describe("parsePostsTab reads the optional story_photo_url column", () => {
   // The story render needs its own photo: the post is 4:5 and a story is 9:16, so
@@ -686,17 +536,14 @@ describe("parsePostsTab reads the optional story_photo_url column", () => {
     expect(out[0].storyPhoto).toBe("");
   });
 
-  it("still repairs a gviz-blanked `posted` header at six wide — the LIVE shape", () => {
-    // This is the whole point of widening the contract. Publishing one scenic post
-    // types column E as a date, so gviz blanks the `posted` header; the tab then
-    // depends on positional repair. Adding story_photo_url made it six wide, which
-    // the old bound refused outright — measured against the live sheet 2026-09-16,
-    // it broke `scenic posts` immediately and would have broken `campground posts`
-    // at its next publish.
+  it("reads posted and story together on the six-wide live shape", () => {
+    // ~~Still repairs a gviz-blanked `posted` header at six wide.~~ The blanking
+    // was gviz typing column E as a date the moment a real date was written into
+    // it; through the Sheets API the header is the text it is, so there is nothing
+    // to repair. The shape itself still matters, so it is still covered.
     const out = parsePostsTab(
       [
-        //                                        posted blanked by gviz ↓
-        ["photo_url", "place", "state", "country", "", "story_photo_url"],
+        ["post_photo_url", "place", "state", "country", "posted", "story_photo_url"],
         ["a.jpg", "Alpha", "CA", "USA", "2026-09-15", "a-story.jpg"],
         ["b.jpg", "Beta", "OR", "USA", "", "b-story.jpg"],
       ],
@@ -723,30 +570,32 @@ describe("parsePostsTab reads the optional story_photo_url column", () => {
   });
 });
 
-describe("parsePostsTab header-row sanity", () => {
-  it("throws when row 1 is blank instead of reading the header row as data", () => {
-    // A spacer row above the header made every column fall back to its position,
-    // so the REAL header became a data row: it entered the queue with
-    // photo: "photo_url" and aborted the batch with "photo could not be read".
-    // All five headers blanking at once is impossible anyway — photo_url/place/
-    // state/country hold text, so gviz types them `string` and they never blank.
-    expect(() =>
-      parsePostsTab(
-        [
-          ["", "", "", "", ""],
-          ["photo_url", "place", "state", "country", "posted"],
-          ["a.jpg", "Alpha", "CA", "USA", ""],
-        ],
-        "scenic posts",
-      ),
-    ).toThrow(/row 1 is blank/);
+describe("parsePostsTab header resolution", () => {
+  // ~~header-row sanity~~ — rewritten 2026-09-17. The rules this block used to
+  // pin (a blank row 1 is fatal; a fuzzy `includes("url")` match; refusing to
+  // choose between two url-ish headers) all belonged to the positional repair,
+  // which is gone. What replaces them is stricter and simpler: columns are found
+  // by exact name, anywhere.
+
+  it("accepts a spacer row above the header, which used to be fatal", () => {
+    const out = parsePostsTab(
+      [
+        ["", "", "", "", ""],
+        ["post_photo_url", "place", "state", "country", "posted"],
+        ["a.jpg", "Alpha", "CA", "USA", ""],
+      ],
+      "scenic posts",
+    );
+    // And the real header is NOT read as data — the old failure mode was a row
+    // entering the queue with photo: "photo_url".
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ photo: "a.jpg", place: "Alpha", rowNumber: 3 });
   });
 
-  it("will not let the fuzzy url match paper over a blanked header on a wide tab", () => {
-    // `includes("url")` is WEAK evidence — it would hand `photo` to any other
-    // url-ish column and render the wrong image with NO error. The fuzzy match
-    // is a repair like any other, so the width bound gates it too: this throws
-    // instead of silently compositing `source_url`.
+  it("will not take a url-ish column as the photo column", () => {
+    // `includes("url")` was weak evidence — it would hand `photo` to any url-ish
+    // column and render the wrong image with no error. Only the real names count,
+    // so a tab with `source_url` and no photo column fails to find a header.
     expect(() =>
       parsePostsTab(
         [
@@ -755,44 +604,102 @@ describe("parsePostsTab header-row sanity", () => {
         ],
         "scenic posts",
       ),
-    ).toThrow(/missing column\(s\): photo_url/);
+    ).toThrow(/no header row found/);
   });
 
-  it("throws when the photo column is ambiguous rather than guessing", () => {
-    // Misspelled photo column AND another url-ish column, within the contract
-    // width: the fuzzy match has no basis to choose between them, so it refuses
-    // instead of picking the first.
+  it("REFUSES a misspelled photo header, which the fuzzy match used to tolerate", () => {
+    // A real loss, recorded deliberately: `pohoto_url` parsed before, because it
+    // was the only url-ish header. It now fails. The trade is that nothing is ever
+    // guessed — and the error says what it found, so the fix is obvious.
     expect(() =>
       parsePostsTab(
         [
-          ["pohoto_url", "place", "state", "country_url", "posted"],
-          ["a.jpg", "Alpha", "CA", "https://example.com/c", ""],
+          ["pohoto_url", "place", "state", "country", "posted"],
+          ["a.jpg", "Alpha", "CA", "USA", ""],
         ],
         "scenic posts",
       ),
-    ).toThrow(/pohoto_url, country_url/);
+    ).toThrow(/no header row found/);
   });
 
-  it("keeps the fuzzy match when it is the ONLY url-ish header", () => {
+  it("takes an exact post_photo_url even when another url column exists", () => {
     const out = parsePostsTab(
       [
-        ["pohoto_url", "place", "state", "country", "posted"],
-        ["a.jpg", "Alpha", "CA", "USA", ""],
-      ],
-      "scenic posts",
-    );
-    expect(out[0]).toMatchObject({ photo: "a.jpg" });
-  });
-
-  it("keeps an exact photo_url header even when another url column exists", () => {
-    const out = parsePostsTab(
-      [
-        ["photo_url", "place", "state", "country", "posted", "source_url"],
+        ["post_photo_url", "place", "state", "country", "posted", "source_url"],
         ["a.jpg", "Alpha", "CA", "USA", "", "https://example.com/src"],
       ],
       "scenic posts",
     );
     expect(out[0]).toMatchObject({ photo: "a.jpg" });
+  });
+});
+
+describe("parsePostsTab against the REFORMATTED layout", () => {
+  // The live `oddities posts` tab as the Sheets API returns it `[read 2026-09-17]`:
+  // a padded title row, a blank row, the header on row 3, columns in a different
+  // order, `photo_url` renamed `post_photo_url`, two blank spacer columns, and
+  // `posted` out at H. Under the old positional contract this tab did not parse at
+  // all — it failed with "missing column(s): photo_url, place, state, country,
+  // posted ... this tab is 8 columns wide".
+  const REFORMATTED = [
+    [" Oddities Posts"],
+    [],
+    ["place", "state", "country", "post_photo_url", "", "story_photo_url", "", "posted"],
+    ["Trees of Mystery", "Klamath, CA", "USA", "t.png", "", "t_story.png", "", "2026-09-17"],
+    ["Gus's Fresh Jerky", "Hwy 395, CA", "USA", "g.png", "", "g_story.png", "", ""],
+  ];
+
+  it("parses it, mapping every column by name", () => {
+    const out = parsePostsTab(REFORMATTED, "oddities posts");
+    expect(out).toHaveLength(2);
+    expect(out[1]).toEqual({
+      photo: "g.png",
+      place: "Gus's Fresh Jerky",
+      state: "Hwy 395, CA",
+      country: "USA",
+      posted: "",
+      storyPhoto: "g_story.png",
+      rowNumber: 5,
+    });
+  });
+
+  it("gives rows their TRUE sheet numbers, counting the title and blank rows", () => {
+    // Not 2 and 3. The tick writes to this number, so counting from the header
+    // would date the wrong row and leave the real one queued.
+    expect(parsePostsTab(REFORMATTED, "oddities posts").map((r) => r.rowNumber)).toEqual([4, 5]);
+  });
+
+  it("does not read the title row as data", () => {
+    expect(parsePostsTab(REFORMATTED, "oddities posts").some((r) => r.place.includes("Oddities"))).toBe(
+      false,
+    );
+  });
+
+  it("still reads the former column name `photo_url`", () => {
+    const oldName = [
+      ["photo_url", "place", "state", "country", "posted"],
+      ["a.jpg", "Alpha", "CA", "USA", ""],
+    ];
+    expect(parsePostsTab(oldName, "scenic posts")[0].photo).toBe("a.jpg");
+  });
+
+  it("names what is missing instead of guessing", () => {
+    const noPosted = [
+      ["place", "state", "country", "post_photo_url"],
+      ["Alpha", "CA", "USA", "a.jpg"],
+    ];
+    expect(() => parsePostsTab(noPosted, "scenic posts")).toThrow(/missing column\(s\): posted/);
+  });
+
+  it("refuses a tab with no header row at all", () => {
+    const noHeader = [["Oddities Posts"], [], ["Alpha", "CA", "USA"]];
+    expect(() => parsePostsTab(noHeader, "scenic posts")).toThrow(/no header row found/);
+  });
+
+  it("needs BOTH a photo column and place to call a row the header", () => {
+    // `place` alone is too weak — it could be a note or part of a title.
+    const weak = [["place"], ["post_photo_url", "place", "state", "country", "posted"], ["a.jpg", "A", "CA", "USA", ""]];
+    expect(parsePostsTab(weak, "scenic posts")[0].place).toBe("A");
   });
 });
 
