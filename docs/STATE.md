@@ -1,3 +1,40 @@
+# STATE — branch `instagram-api-page-check` · 2026-09-17 (night) — **The publish half is automated: `potw:publish` puts a post OR a story on Instagram through the API, with no browser anywhere in the path.** Off `main` `38adb98` (#459).
+
+(**newest truth: two new files — `pin-of-the-week/publish-instagram.ts` (the library) and `publish.ts` (the CLI) — plus 14 tests, one npm script (`potw:publish`), the `IG_ACCESS_TOKEN` key in `.env.example`, and the skill's §9 rewritten so the API is the primary path and a browser is the fallback. No existing module changed. No new dependency.**
+
+**THE GATING QUESTION IS ANSWERED, AND IT WAS THE WRONG QUESTION.** The previous handoff said everything depended on whether the Instagram account is connected to a Facebook **Page** (the cross-post target read "Fresno Smooth · Friends", which looked like a personal profile). It does not matter: the app is set up as **"Instagram API with Instagram login"**, which talks to `graph.instagram.com` and needs **no Page at all**. Hours of planned investigation evaporated on one screenshot.
+
+**FOUR API FACTS, each shaping the code** `[measured 2026-09-17, app "yoTrippin - IG" 28134191792930138, account `yotrippin.app` — BUSINESS, 8 media]`:
+- **Instagram FETCHES the image; there is no upload endpoint.** So a render must sit at a PUBLIC url for the length of the call. That is the only reason the storage bucket exists.
+- **JPEG only.** The pipeline writes PNG, so every publish re-encodes — via `@napi-rs/canvas`, already a dependency of the compositor, so **no new package** and no `sharp`.
+- **Publishing is TWO calls** — create a container, then publish it. A container alone puts **nothing** on the account and expires in 24h. That is what makes `--dry-run` a genuine test of the credential rather than a no-op: it exercises the permission, the staging url and Instagram's own fetch, then stops one call short.
+- **Stories are supported** (`media_type=STORIES`) on the Instagram-login flavour, not just posts — confirmed against Meta's content-publishing doc, not from memory. Stories carry no caption, so the CLI does not read one for `--story`.
+
+**THE API PATH WANTS `story.png`, NOT `story-web.png`.** The 1080x2340 padding shipped in #457/#459 exists **only** to survive Instagram's browser composer, which sizes the image to the window and bakes that shape in. The API takes the 9:16 render as-is, so the padded file is the one thing the API path must not use. `story-web.png` is now browser-fallback-only.
+
+**INFRA, created this session:** public bucket **`ig-publish`** on **TEST** (`znldzjdatkogdktymtvi`), JPEG-only mime allowlist, 10MB cap, created `2026-09-18T00:18Z`. TEST rather than PROD deliberately: each object lives for the length of one publish call and is deleted in a `finally`, so a project wipe costs nothing and a failed publish cannot leave a public url of a half-published render behind. `publish.ts` calls `assertTestProject()` for that reason.
+
+**VERIFIED END TO END, WITHOUT PUBLISHING** `[measured 2026-09-17]`: a fixture post dir through `potw:publish --dry-run` → JPEG re-encode → upload → Instagram **fetched** the image → container `18116012221925924` reported `FINISHED` → nothing published. Afterwards: bucket lists **0 objects** (the cleanup is real, not asserted), and `media_count` is still **8**. Earlier bare-curl probes left two more unpublished containers; all three expire on their own.
+
+**TRAPS, all of them credential-shaped and all costing real time:**
+- **A 32-hex-character value is the APP SECRET, not a token.** It was saved as `IG_ACCESS_TOKEN`, and Meta answered "Cannot parse access token". A real token starts `IGAA` and runs ~180 chars. The dashboard **truncates the token on screen** — use the copy button, never the visible text.
+- **`export` in the operator's terminal does not reach the agent's shell.** A separate process; nothing is inherited. The token has to be in `data/.env`, which is already gitignored.
+- **The key was saved commented out** (`# IG_ACCESS_TOKEN=…`) and read as absent. A zero-length token and a wrong token fail differently — print the length.
+- **The Roles tab refuses a user who already has a role on the owning business** ("go to Business Manager and assign assets and access"). That form adds FACEBOOK users; the **Instagram Tester** invite is reached through step 2's own **Add account** button and takes an Instagram username.
+- **The Instagram MOBILE APP does not show tester invites** — its Apps-and-websites screen has only Active / Expired / Removed. The invite tab exists **on the website only**.
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **44 files, 836 passed / 3 skipped** (+14).
+
+**NOT VERIFIED — say so rather than assuming:**
+- **No real post has gone out through the API yet.** Every queue is empty, so there was nothing genuine to publish; the proof stops at a container.
+- **Whether an API publish cross-posts to Facebook is UNKNOWN.** The browser composer had a toggle that defaulted ON; the API call has no such field, and the account-level setting lives in Accounts Center. Adam's standing decision (2026-09-15) is Instagram only, so this must be checked after the first real API post. The skill now says exactly that.
+- **The token's expiry date is unmeasured.** These last ~60 days and are refreshable, but no date was established, and the refresh call itself mints a new token so it was not run unasked.
+- **The app secret may have been overwritten** when the token replaced the value. Not needed today; likely needed for refresh.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `story-web-padding` · 2026-09-17 (evening) — **The story pipeline ran end to end for real: `oddities` was added as a category with NO code change, and Boulder Basin's post + story were published back to back.** Off `main` `070c5d1` (#457).
 
 (**newest truth: one knob — `padStoryForWeb` takes an optional `topPad`, and `from-sheet.ts` passes `STORY_WEB_TOP_PAD_PX` (shipped at 210 = centred). Plus 2 tests. Nothing else changed.**

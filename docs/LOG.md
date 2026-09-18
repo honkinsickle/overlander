@@ -12,6 +12,40 @@ What happened, in order. The running narrative the other docs deliberately
 don't keep: STATE.md overwrites, `git log` records commits not findings,
 `docs/decisions/` holds single choices.
 
+## 2026-09-17 — Instagram publishing moved off the browser and onto the API (`potw:publish`)
+
+- **The question that was supposed to gate the whole API route was the wrong question.** The
+  standing handoff said everything depended on whether the Instagram account is linked to a
+  Facebook **Page**. The app turned out to be configured as **"Instagram API with Instagram
+  login"**, which needs no Page at all — answered by one dashboard screenshot, not by
+  investigation.
+- **Shipped `pin-of-the-week/publish-instagram.ts` + `publish.ts` + 14 tests + the
+  `potw:publish` script**, and rewrote the skill's §9 so the API is the primary path and the
+  browser is the fallback. §9a previously said *"do NOT try to substitute … the Instagram
+  API"* — that line predates the API working and is now marked corrected in place rather
+  than deleted.
+- **Four measured API facts drove the design:** Instagram fetches the image (no upload
+  endpoint), JPEG only, publishing is two calls (container then publish), and stories are
+  supported via `media_type=STORIES`. The two-call shape is what makes `--dry-run` real: a
+  container puts nothing on the account and expires in 24h, so the credential, the staging
+  url and Instagram's own image fetch are all exercised one call short of going live.
+- **The padded `story-web.png` is the one file the API path must NOT use.** Its 1080x2340
+  shape exists only to survive the browser composer; the API takes the 9:16 `story.png`
+  as-is. A feature from two PRs ago became fallback-only on the day the API landed.
+- **Created the public `ig-publish` bucket on TEST** (JPEG-only, 10MB cap). Objects live for
+  one publish call and are deleted in a `finally` — verified by listing the bucket after a
+  dry run and finding 0 objects, rather than asserting the cleanup ran.
+- **Every trap hit was credential-shaped, not code-shaped:** a 32-hex value that was the app
+  secret saved as the token; the dashboard truncating the token on screen so the visible text
+  is not the token; `export` in the operator's terminal never reaching the agent's shell; the
+  key saved commented out and reading as absent; the Roles tab refusing a business user
+  because Instagram Tester is invited through step 2's *Add account* instead; and the
+  Instagram **mobile app not showing tester invites at all** — that tab is web-only.
+- **Deliberately still unverified, and written into both STATE.md and the skill:** no real
+  post has gone out through the API (every queue is empty), whether an API publish
+  cross-posts to Facebook is unknown (the browser toggle has no API equivalent), and the
+  token's expiry date is unmeasured because the refresh call mints a new token.
+
 ## 2026-09-14 — Landing invite card redesigned to Figma "Frame 2" (PR #433)
 
 - **Reworked the `landing/index.html` invite card to the Figma `the23forty` Frame 2
