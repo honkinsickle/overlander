@@ -104,3 +104,94 @@ export function valueRightOf(rows: string[][], label: string): string | null {
   if (!at) return null;
   return (rows[at.row]?.[at.col + 1] ?? "").trim();
 }
+
+/**
+ * `post_photo_url` is the name; `photo_url` is the former one, still read for the
+ * same reason `art_url` is — a live sheet and running code cannot be renamed in
+ * the same instant.
+ */
+const PHOTO_LABELS = ["post_photo_url", "photo_url"] as const;
+
+/** Where each column of a `<category> posts` tab actually is. */
+export interface PostsHeader {
+  /** 0-based index of the header row. Data begins on the row after it. */
+  row: number;
+  photo: number;
+  place: number;
+  state: number;
+  country: number;
+  posted: number;
+  /** -1 when the tab has no story column, which is legal. */
+  storyPhoto: number;
+}
+
+/**
+ * Locate the header row of a posts tab and every column in it, BY NAME.
+ *
+ * ~~Columns resolve by fixed position, with a narrow repair when gviz blanked a
+ * typed header.~~ **Replaced 2026-09-17.** That entire apparatus — the width
+ * bound, the blank-header-cell evidence test, the fuzzy url match, the
+ * refuse-to-guess rules — existed for ONE reason: gviz typed a column once for
+ * the whole column, so writing a date into `posted` blanked the `posted` HEADER
+ * and broke the next build of that category forever. Reading through the Sheets
+ * API, headers are the text they are, and the repair has nothing left to repair.
+ *
+ * What that buys, beyond deleting the machinery: a posts tab may now carry a
+ * title row, blank spacer rows and columns, its own column order, and extra
+ * columns — because nothing is inferred from position any more.
+ *
+ * The header row is found as the first row holding BOTH a photo label and
+ * `place`. One label alone is too weak — "place" could plausibly appear in a
+ * title or a note.
+ */
+export function findPostsHeader(rows: string[][], tab: string): PostsHeader {
+  const norm = (c: string | undefined) => (c ?? "").trim().toLowerCase();
+  const headerRow = rows.findIndex((row) => {
+    const names = (row ?? []).map(norm);
+    return PHOTO_LABELS.some((p) => names.includes(p)) && names.includes("place");
+  });
+  if (headerRow === -1) {
+    throw new Error(
+      `tab "${tab}": no header row found — one row must contain both a photo column ` +
+        `(post_photo_url) and place. Columns may be in any order, with spacers, but ` +
+        `they have to be named.`,
+    );
+  }
+
+  const names = (rows[headerRow] ?? []).map(norm);
+  const at = (label: string) => names.indexOf(label);
+  const photo = PHOTO_LABELS.map(at).find((i) => i !== -1) ?? -1;
+  const header: PostsHeader = {
+    row: headerRow,
+    photo,
+    place: at("place"),
+    state: at("state"),
+    country: at("country"),
+    posted: at("posted"),
+    // Optional: a category may legitimately publish posts with no stories.
+    storyPhoto: at("story_photo_url"),
+  };
+
+  const missing: string[] = (["place", "state", "country", "posted"] as const).filter(
+    (k) => header[k] === -1,
+  );
+  if (header.photo === -1) missing.unshift("post_photo_url");
+  if (missing.length > 0) {
+    throw new Error(
+      `tab "${tab}": header row ${headerRow + 1} is missing column(s): ${missing.join(", ")} ` +
+        `— found ${JSON.stringify(names.filter((n) => n !== ""))}`,
+    );
+  }
+  return header;
+}
+
+/** Spreadsheet column letter for a 0-based index. Handles past Z (AA, AB, …). */
+export function columnLetter(index: number): string {
+  let n = index;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}

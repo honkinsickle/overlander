@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  POSTED_COLUMN,
   markPosted,
   postedRange,
   sheetIdFrom,
@@ -54,15 +53,21 @@ describe("sheetIdFrom", () => {
 
 describe("postedRange", () => {
   it("quotes the tab name, because every posts tab has a space in it", () => {
-    expect(postedRange("scenic posts", 3)).toBe(`'scenic posts'!${POSTED_COLUMN}3`);
+    expect(postedRange("scenic posts", 3, "E")).toBe("'scenic posts'!E3");
   });
 
-  it("refuses row 1 — that is the header, and writing there breaks the column contract", () => {
-    expect(() => postedRange("scenic posts", 1)).toThrow(/not a data row/);
+  it("takes the column it is given — nothing is hardcoded any more", () => {
+    // The layout change that made this necessary: `posted` moved to column H on a
+    // reformatted tab, and a hardcoded E would have written into a blank spacer.
+    expect(postedRange("oddities posts", 6, "H")).toBe("'oddities posts'!H6");
+  });
+
+  it("refuses row 1 — the header is at least there, so it is never a data row", () => {
+    expect(() => postedRange("scenic posts", 1, "E")).toThrow(/not a data row/);
   });
 
   it("refuses a non-integer row", () => {
-    expect(() => postedRange("scenic posts", 2.5)).toThrow(/not a data row/);
+    expect(() => postedRange("scenic posts", 2.5, "E")).toThrow(/not a data row/);
   });
 });
 
@@ -75,27 +80,75 @@ describe("todayLocal", () => {
 describe("markPosted", () => {
   const opts = { sheetUrl: SHEET_URL, tab: "scenic posts", rowNumber: 3, date: "2026-09-17" };
 
-  it("reads, writes, then reads back to prove the write landed", async () => {
+  // markPosted now reads the whole tab FIRST, to find out where `posted` is. So
+  // every script starts with a grid, then the cell read, the write, the re-read.
+  const ORIGINAL_LAYOUT = {
+    values: [
+      ["post_photo_url", "place", "state", "country", "posted", "story_photo_url"],
+      ["a.jpg", "Alpha", "CA", "USA", "2026-09-01", ""],
+      ["b.jpg", "Beta", "OR", "USA", "", ""],
+    ],
+  };
+
+  // The reformatted `oddities posts` tab, as the API returns it: a title row, a
+  // blank row, the header on row 3, reordered columns, two blank spacer columns,
+  // and `posted` out at H.
+  const REFORMATTED = {
+    values: [
+      [" Oddities Posts"],
+      [],
+      ["place", "state", "country", "post_photo_url", "", "story_photo_url", "", "posted"],
+      ["Trees of Mystery", "Klamath, CA", "USA", "t.png", "", "t_story.png", "", "2026-09-17"],
+      ["Gus's Fresh Jerky", "Hwy 395, CA", "USA", "g.png", "", "g_story.png", "", ""],
+    ],
+  };
+
+  it("reads the tab, then the cell, then writes, then reads back", async () => {
     const { deps, calls } = fakeSheet([
+      json(ORIGINAL_LAYOUT),
       json({}), // cell currently empty
       json({}), // write accepted
       json({ values: [["2026-09-17"]] }), // read-back
     ]);
     await expect(markPosted(opts, deps)).resolves.toBeUndefined();
-    expect(calls.map((c) => c.method)).toEqual(["GET", "PUT", "GET"]);
-    expect(calls[1].body).toBe(JSON.stringify({ values: [["2026-09-17"]] }));
-    expect(calls[1].url).toContain("valueInputOption=RAW");
+    expect(calls.map((c) => c.method)).toEqual(["GET", "GET", "PUT", "GET"]);
+    expect(calls[2].body).toBe(JSON.stringify({ values: [["2026-09-17"]] }));
+    expect(calls[2].url).toContain("valueInputOption=RAW");
+    expect(decodeURIComponent(calls[2].url)).toContain("'scenic posts'!E3");
+  });
+
+  it("writes to the column the HEADER names, not a hardcoded E", async () => {
+    // The failure this replaces: on the reformatted tab, column E is a blank
+    // spacer. A hardcoded E would have written the date there, the row would
+    // still read unposted, and every later run would try to republish it.
+    const { deps, calls } = fakeSheet([
+      json(REFORMATTED),
+      json({}),
+      json({}),
+      json({ values: [["2026-09-17"]] }),
+    ]);
+    await markPosted({ ...opts, tab: "oddities posts", rowNumber: 5 }, deps);
+    expect(decodeURIComponent(calls[2].url)).toContain("'oddities posts'!H5");
+  });
+
+  it("refuses a row at or above the header row", async () => {
+    // Row 3 IS the header on the reformatted tab. Writing there would destroy it.
+    const { deps } = fakeSheet([json(REFORMATTED)]);
+    await expect(markPosted({ ...opts, tab: "oddities posts", rowNumber: 3 }, deps)).rejects.toThrow(
+      /not below the header \(row 3\)/,
+    );
   });
 
   it("refuses a row that is already marked, rather than hiding a double-post", async () => {
-    const { deps, calls } = fakeSheet([json({ values: [["2026-09-15"]] })]);
+    const { deps, calls } = fakeSheet([json(ORIGINAL_LAYOUT), json({ values: [["2026-09-15"]] })]);
     await expect(markPosted(opts, deps)).rejects.toThrow(/already marked posted \("2026-09-15"\)/);
     // Nothing was written — the refusal happens before the PUT.
-    expect(calls).toHaveLength(1);
+    expect(calls.map((c) => c.method)).toEqual(["GET", "GET"]);
   });
 
   it("explains a 403 as the sharing step, which is the actual cause", async () => {
     const { deps } = fakeSheet([
+      json(ORIGINAL_LAYOUT),
       json({}),
       json({ error: { message: "The caller does not have permission" } }, 403),
     ]);
@@ -104,6 +157,7 @@ describe("markPosted", () => {
 
   it("fails when the read-back disagrees — HTTP 200 is not proof", async () => {
     const { deps } = fakeSheet([
+      json(ORIGINAL_LAYOUT),
       json({}),
       json({}),
       json({}), // still empty after a "successful" write

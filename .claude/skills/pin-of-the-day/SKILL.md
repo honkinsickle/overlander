@@ -469,6 +469,12 @@ the install steps in its own header.
   to `~/.config/overlander/potd-published.jsonl`, and a row found there is
   REFUSED even if the sheet still shows it unposted. This is the backstop for
   "published but not ticked", the one state that needs a human.
+  ⚠️ **It keys on (tab, ROW NUMBER), so it is narrower than it looks.** Insert or
+  delete a row above a published one and its number changes, and the guard no
+  longer recognises it. It is deliberately NOT keyed on the place name: Adam
+  re-queues a row on purpose to post a place again `[2026-09-17]`, and a
+  name-keyed guard would refuse that legitimate work. So this protects a failed
+  tick on a row that has not moved — it is not a permanent de-duplicator.
 - **`markPosted` refuses a cell that is already filled**, so a double-post
   surfaces instead of being papered over, and it **reads the cell back** rather
   than trusting HTTP 200.

@@ -20,6 +20,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { columnLetter, fetchTabGrid, findPostsHeader } from "./sheet-read.ts";
 import { createSign } from "node:crypto";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -30,12 +31,14 @@ const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 export const DEFAULT_KEY_PATH = `${process.env.HOME ?? ""}/.config/overlander/sheets-service-account.json`;
 
 /**
- * The `posted` column. The posts-tab contract is a fixed six columns —
- * `photo_url | place | state | country | posted | story_photo_url` — and the
- * parser reads them BY POSITION, so this is E and cannot drift without the
- * build breaking first.
+ * ~~The `posted` column is E: the posts-tab contract is a fixed six columns read
+ * BY POSITION, so it cannot drift without the build breaking first.~~
+ * **WRONG AS OF 2026-09-17, and dangerous** — a posts tab may now name its
+ * columns in any order, so `posted` is wherever its header says it is. Writing to
+ * a hardcoded E would have put the date in a blank spacer column: the row would
+ * still read unposted, and every later run would try to republish it. The column
+ * is located from the header instead — see `markPosted`.
  */
-export const POSTED_COLUMN = "E";
 
 export type FetchLike = typeof fetch;
 
@@ -68,12 +71,12 @@ export function sheetIdFrom(url: string): string {
  * unquoted range with a space is rejected by the API rather than misread — but
  * the error names the range, not the cause, so it reads as a bad row number.
  */
-export function postedRange(tab: string, rowNumber: number): string {
+export function postedRange(tab: string, rowNumber: number, column: string): string {
   if (!Number.isInteger(rowNumber) || rowNumber < 2) {
-    // Row 1 is the header. Writing there would destroy the column contract.
-    throw new Error(`row ${rowNumber} is not a data row (data starts at row 2)`);
+    // Row 1 can never be a data row on any layout — the header is at least there.
+    throw new Error(`row ${rowNumber} is not a data row (data starts below the header)`);
   }
-  return `'${tab}'!${POSTED_COLUMN}${rowNumber}`;
+  return `'${tab}'!${column}${rowNumber}`;
 }
 
 /** Build the signed JWT assertion a service account exchanges for a token. */
@@ -150,7 +153,19 @@ export async function markPosted(
   deps: SheetWriteDeps,
 ): Promise<void> {
   const sheetId = sheetIdFrom(opts.sheetUrl);
-  const range = postedRange(opts.tab, opts.rowNumber);
+
+  // WHERE `posted` is has to be discovered, not assumed. Reading the tab first
+  // costs one call and removes the failure this function used to be able to
+  // cause: a hardcoded column E writing into a blank spacer, leaving the row
+  // readable as unposted and queued to republish forever.
+  const grid = await fetchTabGrid(opts.sheetUrl, opts.tab, deps);
+  const header = findPostsHeader(grid, opts.tab);
+  if (opts.rowNumber <= header.row + 1) {
+    throw new Error(
+      `${opts.tab} row ${opts.rowNumber} is not below the header (row ${header.row + 1}) — refusing to write`,
+    );
+  }
+  const range = postedRange(opts.tab, opts.rowNumber, columnLetter(header.posted));
 
   const existing = await readCell(deps, sheetId, range);
   if (existing.trim() !== "") {
