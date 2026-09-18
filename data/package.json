@@ -21,6 +21,7 @@
     "potw:posts": "tsx --env-file=.env pin-of-the-week/posts.ts",
     "potw:sheet": "tsx pin-of-the-week/from-sheet.ts",
     "potw:publish": "tsx --env-file=.env pin-of-the-week/publish.ts",
+    "potw:auto": "tsx --env-file=.env pin-of-the-week/auto-post.ts",
     "search:sync": "tsx --env-file=.env search/sync-typesense.ts",
     "materialize": "tsx --env-file=.env pipeline/materialize.ts",
     "backfill:polygon-containment": "tsx --env-file=.env scripts/backfill-polygon-containment.ts",
