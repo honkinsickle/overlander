@@ -53,30 +53,97 @@ export function defaultReadDeps(keyPath?: string): SheetReadDeps {
  * row's index is its true row number minus one. Trailing empty cells and
  * trailing empty rows are omitted by the API; callers already index defensively.
  */
+interface ValuesResponse {
+  values?: string[][];
+  error?: { message?: string };
+}
+
+export interface RetryOptions {
+  /** Total attempts, including the first. Default 3. */
+  attempts?: number;
+  /** Delay between attempts, in ms. Default 500. */
+  delayMs?: number;
+}
+
+/**
+ * A Sheets GET that survives a blip and explains one that it cannot.
+ *
+ * Two failures this exists for, both seen `[2026-09-17]`:
+ *   - **Google answered with an HTML error page.** `res.json()` then threw
+ *     `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` — which names
+ *     neither the tab, nor the status, nor the fact that it was transient. In an
+ *     unattended 3pm run that line would be the only trace. The body is read as
+ *     TEXT first, so a non-JSON response reports its status and a snippet.
+ *   - **It was transient.** The same tab read cleanly on the next attempt. One
+ *     retry is the difference between a missed post and a slow one.
+ *
+ * WHAT IS NOT RETRIED: 400 and 403. A missing tab and an unshared sheet are
+ * facts about the world, not weather — retrying them only delays the message and
+ * makes the log harder to read. 429 and 5xx and a non-JSON body are retried.
+ */
+async function sheetsGet(
+  url: string,
+  deps: SheetReadDeps,
+  tab: string,
+  retry?: RetryOptions,
+): Promise<ValuesResponse> {
+  const attempts = retry?.attempts ?? 3;
+  const delayMs = retry?.delayMs ?? 500;
+  let last = "";
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const res = await deps.fetch(url, {
+        headers: { Authorization: `Bearer ${await deps.token()}` },
+      });
+      const text = await res.text();
+      let body: ValuesResponse | null = null;
+      try {
+        body = JSON.parse(text) as ValuesResponse;
+      } catch {
+        // Not JSON at all — an HTML error or proxy page. Keep a snippet: the
+        // first line is usually the only useful part.
+        last = `HTTP ${res.status} returned non-JSON (${text.replace(/\s+/g, " ").slice(0, 80)}…)`;
+      }
+      if (body) {
+        if (res.ok) return body;
+        const msg = body.error?.message ?? "no message";
+        // Permanent: say so once and stop.
+        if (res.status === 400 || res.status === 403) {
+          const hint = /unable to parse range/i.test(msg)
+            ? ` — there is probably no tab named "${tab}". Check for a typo or a stray leading/trailing space in the TAB's own name (the name passed here is trimmed, so it can never match a tab whose name carries the space).`
+            : res.status === 403
+              ? " — is the sheet shared with the service account as an Editor?"
+              : "";
+          throw new Error(`sheet read failed for tab "${tab}": HTTP ${res.status} — ${msg}${hint}`);
+        }
+        last = `HTTP ${res.status} — ${msg}`;
+      }
+    } catch (e) {
+      // A thrown Error from the permanent branch above must not be retried.
+      if (e instanceof Error && e.message.startsWith("sheet read failed for ")) throw e;
+      last = e instanceof Error ? e.message : String(e);
+    }
+    if (i < attempts) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  throw new Error(`sheet read failed for tab "${tab}" after ${attempts} attempt(s): ${last}`);
+}
+
 export async function fetchTabGrid(
   sheetUrl: string,
   tab: string,
   deps: SheetReadDeps,
+  retry?: RetryOptions,
 ): Promise<string[][]> {
   const sheetId = sheetIdFrom(sheetUrl);
   // Quoted: every posts tab name contains a space, and an unquoted range with a
   // space is rejected rather than misread.
   const range = `'${tab.trim()}'`;
-  const res = await deps.fetch(`${SHEETS_API}/${sheetId}/values/${encodeURIComponent(range)}`, {
-    headers: { Authorization: `Bearer ${await deps.token()}` },
-  });
-  const body = (await res.json()) as { values?: string[][]; error?: { message?: string } };
-  if (!res.ok) {
-    const msg = body.error?.message ?? "no message";
-    // The API says "Unable to parse range" for a tab that does not exist. Name
-    // the likely causes, since the message itself points at the range syntax.
-    const hint = /unable to parse range/i.test(msg)
-      ? ` — there is probably no tab named "${tab}". Check for a typo or a stray leading/trailing space in the TAB's own name (the name passed here is trimmed, so it can never match a tab whose name carries the space).`
-      : res.status === 403
-        ? " — is the sheet shared with the service account as an Editor?"
-        : "";
-    throw new Error(`sheet read failed for tab "${tab}": HTTP ${res.status} — ${msg}${hint}`);
-  }
+  const body = await sheetsGet(
+    `${SHEETS_API}/${sheetId}/values/${encodeURIComponent(range)}`,
+    deps,
+    tab,
+    retry,
+  );
   return (body.values ?? []).map((row) => row.map((cell) => (cell ?? "").toString()));
 }
 

@@ -17,6 +17,94 @@ function deps(res: Response, calls: string[] = []): SheetReadDeps {
   };
 }
 
+function scripted(responses: Array<Response | Error>, calls: string[] = []): SheetReadDeps {
+  let i = 0;
+  return {
+    fetch: (async (url: string | URL | Request) => {
+      calls.push(String(url));
+      const next = responses[Math.min(i, responses.length - 1)];
+      i++;
+      if (next instanceof Error) throw next;
+      return next;
+    }) as typeof fetch,
+    token: async () => "TOK",
+  };
+}
+
+const NO_WAIT = { attempts: 3, delayMs: 0 };
+
+describe("fetchTabGrid transient failures", () => {
+  it("names the tab and the status when Google returns an HTML error page", async () => {
+    // The real failure: res.json() threw `Unexpected token '<', "<!DOCTYPE "...`,
+    // which named neither the tab nor the status. In an unattended run that line
+    // would have been the only trace.
+    const html = () => new Response("<!DOCTYPE html><html><body>Error 502</body></html>", { status: 502 });
+    const err = await fetchTabGrid(SHEET, "scenic posts", scripted([html(), html(), html()]), NO_WAIT).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+    expect(err?.message).toMatch(/tab "scenic posts"/);
+    expect(err?.message).toMatch(/HTTP 502 returned non-JSON/);
+    expect(err?.message).toMatch(/after 3 attempt\(s\)/);
+  });
+
+  it("recovers when the blip clears on a later attempt", async () => {
+    const calls: string[] = [];
+    const deps = scripted(
+      [
+        new Response("<!DOCTYPE html>", { status: 502 }),
+        new Response(JSON.stringify({ values: [["post_photo_url", "place"]] })),
+      ],
+      calls,
+    );
+    expect(await fetchTabGrid(SHEET, "scenic posts", deps, NO_WAIT)).toEqual([["post_photo_url", "place"]]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("retries a thrown network error too", async () => {
+    const deps = scripted([
+      new TypeError("fetch failed"),
+      new Response(JSON.stringify({ values: [["a"]] })),
+    ]);
+    expect(await fetchTabGrid(SHEET, "x", deps, NO_WAIT)).toEqual([["a"]]);
+  });
+
+  it("does NOT retry a 403 — an unshared sheet is not weather", async () => {
+    const calls: string[] = [];
+    const deps = scripted(
+      [new Response(JSON.stringify({ error: { message: "The caller does not have permission" } }), { status: 403 })],
+      calls,
+    );
+    await expect(fetchTabGrid(SHEET, "scenic posts", deps, NO_WAIT)).rejects.toThrow(
+      /shared with the service account/,
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("does NOT retry a 400 for a tab that does not exist", async () => {
+    const calls: string[] = [];
+    const deps = scripted(
+      [new Response(JSON.stringify({ error: { message: "Unable to parse range: 'nope'" } }), { status: 400 })],
+      calls,
+    );
+    await expect(fetchTabGrid(SHEET, "nope", deps, NO_WAIT)).rejects.toThrow(/no tab named "nope"/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("retries a 429, which IS weather", async () => {
+    const calls: string[] = [];
+    const deps = scripted(
+      [
+        new Response(JSON.stringify({ error: { message: "Quota exceeded" } }), { status: 429 }),
+        new Response(JSON.stringify({ values: [["a"]] })),
+      ],
+      calls,
+    );
+    expect(await fetchTabGrid(SHEET, "x", deps, NO_WAIT)).toEqual([["a"]]);
+    expect(calls).toHaveLength(2);
+  });
+});
+
 describe("findLabel", () => {
   // The whole grid is searched, not a fixed row, because that is what lets one
   // rule read both real tab layouts.
