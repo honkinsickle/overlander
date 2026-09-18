@@ -6,3 +6,9 @@ dist/
 !.env.*.example
 *.log
 .DS_Store
+
+# Pin of the Day build output — scratch, per the skill ("unlike the scratch
+# output/ dir"). Not ignored until 2026-09-17, which let a `git add` sweep 30MB
+# of rendered PNGs into a staged commit. The `posts/` archive IS meant to be
+# committed; this is the throwaway one.
+pin-of-the-week/output/

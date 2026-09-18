@@ -16,9 +16,19 @@
 # matches a slot, so this exits without posting. A 10am post is not wanted at
 # 4pm — skipping is the intended outcome, not a bug.
 #
-# NOT pointed at a Conductor workspace. Those are disposable, and a schedule
-# that dies when a workspace is cleaned up is worse than no schedule. Override
-# with POTD_REPO if the clone moves.
+# WHICH FOLDER THIS RUNS IN — the default below is a fallback, not the truth
+# `[corrected 2026-09-17]`. ~~Not pointed at a Conductor workspace; those are
+# disposable.~~ That reasoning skipped a check: ~/Code/overlander is the MAIN
+# WORKTREE that hosts .git for every Conductor workspace, and since the move to
+# Conductor nobody checks anything out there. It is parked on a branch from
+# 2026-08-10 and does not contain this script at all.
+#
+# So the installed launchd job sets POTD_REPO to a Conductor workspace kept on
+# main. The default is left pointing at the main worktree because that is where
+# it SHOULD be able to live; if you ever check main out there, it just works.
+#
+# Every run logs the folder and branch it used, so a stale or wrong checkout is
+# visible in the log instead of being inferred from a post that never appeared.
 
 set -uo pipefail
 
@@ -55,8 +65,18 @@ if [ ! -d "$REPO" ]; then
   exit 1
 fi
 
-log "start $CATEGORY $EXTRA"
 cd "$REPO" || { log "FAILED: cannot cd to $REPO"; exit 1; }
+
+# Record WHERE and WHICH BRANCH. Stale code is the failure mode that reports
+# success: an old checkout builds and posts perfectly well, just with last
+# month's behaviour. Naming the branch every run makes that readable in the log
+# rather than something to be inferred later.
+BRANCH="$(git -C "$REPO" branch --show-current 2>/dev/null || echo unknown)"
+log "start $CATEGORY $EXTRA [repo=$REPO branch=$BRANCH]"
+if [ ! -x "$REPO/bin/potd-auto" ]; then
+  log "FAILED: $REPO does not contain bin/potd-auto (wrong folder, or a branch without it)"
+  exit 1
+fi
 
 if [ -n "$EXTRA" ]; then
   npm run -w data potw:auto -- --sheet "$SHEET" --category "$CATEGORY" "$EXTRA" >>"$LOG" 2>&1

@@ -20,17 +20,44 @@
   hour (10 campground, 15 scenic, 20 oddities), so one job covers all three
   slots and a job that fires late after sleep finds no slot and skips.
 
-  The path is the STABLE clone, not a Conductor workspace. Those are disposable.
+  ⚠️ THE PATHS BELOW ARE NOT WHERE THIS ACTUALLY RUNS `[corrected 2026-09-17]`.
+  ~~The path is the stable clone, not a Conductor workspace.~~ That was written
+  before anyone checked what the "stable clone" contained. `~/Code/overlander`
+  is the MAIN WORKTREE — the folder that hosts `.git` for every Conductor
+  workspace — and since the move to Conductor nobody checks anything out there.
+  It sits on a branch from 2026-08-10, 213 commits behind, and `bin/potd-auto`
+  does not exist on it at all. A job pointed there would run and find nothing.
+
+  So the installed copy at ~/Library/LaunchAgents/com.yotrippin.potd.plist
+  points at a Conductor workspace kept on `main` for posting, and overrides
+  POTD_REPO to match. This file stays as the shape of the job; the two paths are
+  per-machine and must be set to whichever folder is actually on main.
+
+  Worktrees share one history, so "which folder" is only about which branch is
+  checked out there and whether its node_modules and data/.env exist — it is not
+  a second copy of the repo.
+
+  The remaining risk is a tidy-up removing that workspace. The job would then
+  fail rather than silently succeed, and the reason lands in
+  ~/.config/overlander/potd-auto.log, which also records the folder and branch
+  each run used.
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>com.yotrippin.potd</string>
 
+  <!-- Set BOTH of these to the folder that is on main. See the note above. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/adamwagner/Code/overlander/bin/potd-auto</string>
+    <string>/PATH/TO/A/WORKTREE/ON/MAIN/bin/potd-auto</string>
   </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>POTD_REPO</key>
+    <string>/PATH/TO/A/WORKTREE/ON/MAIN</string>
+  </dict>
 
   <key>StartCalendarInterval</key>
   <array>

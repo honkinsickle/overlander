@@ -1,24 +1,22 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { homedir } from "node:os";
 import {
   buildMeta,
   cleanLocalPath,
   csvExportUrl,
-  fetchTabRows,
   nextUnposted,
   parseCategoryTab,
   parseCsv,
   parseCsvRows,
   parsePostsTab,
   queueIndexOf,
-  sameGrid,
-  tabCsvUrl,
   templateForCategoryRow,
   templateForRow,
   toSheetRows,
 } from "./from-sheet.ts";
 import type { PostRow } from "./from-sheet.ts";
 import { regionLine } from "./image-prompt.ts";
+import { fetchTabGrid } from "./sheet-read.ts";
 
 describe("parseCsv", () => {
   it("handles quotes, escaped quotes, commas and CRLF", () => {
@@ -93,29 +91,6 @@ describe("csvExportUrl", () => {
     expect(csvExportUrl("https://docs.google.com/spreadsheets/d/ABC123/edit#gid=42")).toBe(
       "https://docs.google.com/spreadsheets/d/ABC123/export?format=csv&gid=42",
     );
-  });
-});
-
-describe("tabCsvUrl", () => {
-  const SHEET = "https://docs.google.com/spreadsheets/d/ABC123/edit#gid=0";
-
-  it("builds a gviz CSV url for a named tab with headers disabled", () => {
-    expect(tabCsvUrl(SHEET, "scenic")).toBe(
-      "https://docs.google.com/spreadsheets/d/ABC123/gviz/tq?tqx=out:csv&headers=0&sheet=scenic",
-    );
-  });
-
-  it("url-encodes tab names containing spaces", () => {
-    expect(tabCsvUrl(SHEET, "scenic posts")).toContain("sheet=scenic%20posts");
-  });
-
-  it("trims the tab name before encoding", () => {
-    expect(tabCsvUrl(SHEET, "campground ")).toContain("sheet=campground");
-    expect(tabCsvUrl(SHEET, "campground ")).not.toContain("%20");
-  });
-
-  it("throws on a url with no spreadsheet id", () => {
-    expect(() => tabCsvUrl("https://example.com/nope", "scenic")).toThrow(/spreadsheet id/i);
   });
 });
 
@@ -223,21 +198,9 @@ describe("regionLine with a country", () => {
   });
 });
 
-describe("sameGrid", () => {
-  it("is true for identical grids", () => {
-    expect(sameGrid([["a", "b"], ["1"]], [["a", "b"], ["1"]])).toBe(true);
-  });
-  it("is false when a cell differs", () => {
-    expect(sameGrid([["a"]], [["b"]])).toBe(false);
-  });
-  it("is false when the shape differs", () => {
-    expect(sameGrid([["a"]], [["a"], ["b"]])).toBe(false);
-  });
-});
-
 describe("parseCategoryTab", () => {
   const good = [
-    ["art_url", " /tmp/overlay.png "],
+    ["post_art_url", " /tmp/overlay.png "],
     ["", ""],
     ["n", "template"],
     ["1", "A {place} in {state}."],
@@ -256,15 +219,15 @@ describe("parseCategoryTab", () => {
   });
 
   describe("story_art_url", () => {
-    // Unlike `art_url`, this label IS machine-readable. gviz types a column once
-    // for the whole column: column A holds the template digits so it is typed
-    // `number` and blanks the `art_url` label, but the story columns hold only
-    // text, so both the label and its value come through. That is why this one is
-    // found BY LABEL and `art_url` cannot be — measured on the live sheet
-    // 2026-09-16: row 1 = ["", "<post art>", "story_art_url", "<story art>"].
+    // ~~Unlike `art_url`, this label IS machine-readable.~~ That distinction died
+    // with gviz `[2026-09-17]`. gviz typed a column once for the whole column, so
+    // column A — holding the template digits — was typed `number` and blanked the
+    // `art_url` and `n` labels, while the story columns held only text and came
+    // through. Reading through the Sheets API, EVERY label is real text, so both
+    // are found the same way: the label names the cell to its right.
     const withStory = [
-      ["", " /tmp/overlay.png ", "story_art_url", " /tmp/overlay_story.png "],
-      ["", "template"],
+      ["post_art_url", " /tmp/overlay.png ", "story_art_url", " /tmp/overlay_story.png "],
+      ["n", "template"],
       ["1", "A {place} in {state}."],
     ];
 
@@ -276,106 +239,168 @@ describe("parseCategoryTab", () => {
       expect(parseCategoryTab(withStory, "scenic").storyArtUrl).toBe("/tmp/overlay_story.png");
     });
 
-    it("still reads the post art_url positionally alongside it", () => {
-      // The post path must keep working exactly as before — the story columns sit
-      // to the right of it and must not disturb the column-B fallback.
+    it("reads the post art_url from its own label, not by position", () => {
+      // Both labels live on the same row; each names the cell to its right, so the
+      // story columns sitting further right cannot disturb the post path.
       expect(parseCategoryTab(withStory, "scenic").artUrl).toBe("/tmp/overlay.png");
     });
 
     it("is empty when the label is present but its cell is blank", () => {
       const rows = [
-        ["", "/tmp/overlay.png", "story_art_url", "   "],
-        ["", "template"],
+        ["post_art_url", "/tmp/overlay.png", "story_art_url", "   "],
+        ["n", "template"],
         ["1", "A {place}"],
       ];
       expect(parseCategoryTab(rows, "scenic").storyArtUrl).toBe("");
     });
 
     it("is empty when the label is the last column, with nothing after it", () => {
-      const rows = [["", "/tmp/overlay.png", "story_art_url"], ["", "template"], ["1", "A {place}"]];
+      const rows = [["post_art_url", "/tmp/overlay.png", "story_art_url"], ["n", "template"], ["1", "A {place}"]];
       expect(parseCategoryTab(rows, "scenic").storyArtUrl).toBe("");
     });
   });
 
   it("throws when art_url is empty", () => {
-    const rows = [["art_url", "  "], ["", ""], ["n", "template"], ["1", "x {place}"]];
-    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/art_url is empty/);
+    const rows = [["post_art_url", "  "], ["", ""], ["n", "template"], ["1", "x {place}"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/post_art_url is empty/);
   });
 
   it("throws when there are no templates", () => {
-    expect(() => parseCategoryTab([["art_url", "/tmp/o.png"]], "scenic")).toThrow(/no caption templates/);
+    const rows = [["post_art_url", "/tmp/o.png"], ["n", "template"]];
+    expect(() => parseCategoryTab(rows, "scenic")).toThrow(/no caption templates/);
   });
 
   it("throws when template numbers are not contiguous from 1", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "a {place}"], ["3", "c {place}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "a {place}"], ["3", "c {place}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/contiguous/);
   });
 
   it("throws on an unknown token", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {nope}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{nope\}/);
   });
 
   it("throws on a token with stray spaces inside the braces", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello { place }"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello { place }"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{ place \}/);
   });
 
   it("throws on a token with punctuation inside the braces", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place,}"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place,}"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/\{place,\}/);
   });
 
   it("throws on an unpaired brace", () => {
-    const rows = [["art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
+    const rows = [["post_art_url", "/tmp/o.png"], ["", ""], ["n", "template"], ["1", "hello {place"]];
     expect(() => parseCategoryTab(rows, "scenic")).toThrow(/unmatched brace/);
   });
 });
 
-describe("parseCategoryTab against the shape the LIVE endpoint really returns", () => {
-  // Measured, not invented. gviz types a column once for the whole column: A
-  // holds template numbers 1..12, so it is typed `number`
-  // (cols: [("A","","number"), ("B","","string")]) and every TEXT cell in A —
-  // the `art_url` label in A1 and the `n` label in A3 — comes back null/empty.
-  // The literal string "art_url" is therefore NEVER present in the payload.
-  const LIVE_CSV =
-    ',/Users/adam/Desktop/potd/scenic_overlay.png \n' +
-    ",\n" +
-    ",template\n" +
-    '1,"A {place} in {state}."\n' +
-    '2,"B {place} — {category}."\n';
+describe("parseCategoryTab against the two REAL tab layouts", () => {
+  // Both grids are the live tabs as the Sheets API returns them
+  // `[read 2026-09-17]`. This replaces a block that pinned gviz's behaviour —
+  // typed columns blanking the labels, so `art_url` was NEVER in the payload and
+  // had to be guessed as "column B of row 1". Reading through the API, the labels
+  // are real text and one rule serves both layouts.
 
-  it("finds and trims the art url from column B of row 1 (no label row present)", () => {
-    const rows = parseCsvRows(LIVE_CSV);
-    expect(rows[0]).toEqual(["", "/Users/adam/Desktop/potd/scenic_overlay.png "]);
-    expect(rows.some((r) => (r[0] ?? "").trim().toLowerCase() === "art_url")).toBe(false);
+  // The original: labels across row 1, numbers in column A, templates in B.
+  const ROW_ONE_LAYOUT = [
+    ["post_art_url", "/Users/adam/scenic_overlay.png ", "story_art_url", "/Users/adam/scenic_story.png "],
+    [],
+    ["n", "template"],
+    ["1", "A {place} in {state}."],
+    ["2", "B {place} — {category}."],
+  ];
 
-    const cat = parseCategoryTab(rows, "scenic");
-    expect(cat.artUrl).toBe("/Users/adam/Desktop/potd/scenic_overlay.png");
+  // The newer `test` tab: a title, section headings, blank spacers, labels down
+  // column A, `n` at B10 so the numbers are in column B and the text in column C.
+  // The word `template` sits in column A, above nothing — which is exactly why
+  // the templates are located from `n` and not from `template`.
+  const LABELLED_LAYOUT = [
+    [],
+    ["TEST"],
+    [],
+    [],
+    ["Graphics"],
+    ["post_art_url", "/Users/adam/scenic_overlay.png"],
+    ["story_art_url", "/Users/adam/scenic_story.png "],
+    [],
+    ["Captions"],
+    ["template", "n"],
+    ["", "1", "A {place} in {state}."],
+    ["", "2", "B {place} — {category}."],
+  ];
+
+  it("reads the row-one layout", () => {
+    const cat = parseCategoryTab(ROW_ONE_LAYOUT, "scenic");
+    expect(cat.artUrl).toBe("/Users/adam/scenic_overlay.png");
+    expect(cat.storyArtUrl).toBe("/Users/adam/scenic_story.png");
     expect(cat.templates).toEqual(["A {place} in {state}.", "B {place} — {category}."]);
   });
 
-  it("finds it in the blank-filtered form of the same grid", () => {
-    // The same payload with the spacer row removed — the reviewer's measured
-    // grid verbatim. The art url must be found either way.
-    const grid = [
-      ["", "/Users/adam/Desktop/potd/scenic_overlay.png"],
-      ["", "template"],
-      ["1", "A {place} in {state}."],
-    ];
-    expect(parseCategoryTab(grid, "scenic").artUrl).toBe("/Users/adam/Desktop/potd/scenic_overlay.png");
+  it("reads the labelled layout to exactly the same result", () => {
+    const cat = parseCategoryTab(LABELLED_LAYOUT, "scenic");
+    expect(cat.artUrl).toBe("/Users/adam/scenic_overlay.png");
+    expect(cat.storyArtUrl).toBe("/Users/adam/scenic_story.png");
+    expect(cat.templates).toEqual(["A {place} in {state}.", "B {place} — {category}."]);
   });
 
-  it("still prefers an explicit art_url label row when the column IS typed as text", () => {
-    // A tab whose column A gviz types `string` does carry the label; the label
-    // row wins over row 1 so a labelled tab is read from its label, not by
-    // position.
-    const grid = [
+  it("ignores a `template` header that sits above the wrong column", () => {
+    // On the real tab `template` is in column A while the text is in column C.
+    // Keying off `n` is what makes that harmless; keying off `template` would
+    // find an empty column and report no templates at all.
+    expect(parseCategoryTab(LABELLED_LAYOUT, "scenic").templates).toHaveLength(2);
+  });
+
+  it("still reads the former name `art_url`, so sheet and code can be renamed in either order", () => {
+    // Not speculative flexibility: the schedule publishes three times a day from
+    // this sheet, so whichever of code/sheet is renamed first would otherwise
+    // break the other until they matched.
+    const oldName = [["art_url", "/tmp/o.png"], ["n", "template"], ["1", "A {place}"]];
+    expect(parseCategoryTab(oldName, "scenic").artUrl).toBe("/tmp/o.png");
+  });
+
+  it("prefers post_art_url when a tab carries both names", () => {
+    const both = [
+      ["art_url", "/tmp/old.png"],
+      ["post_art_url", "/tmp/new.png"],
       ["n", "template"],
-      ["art_url", " /tmp/labelled.png "],
       ["1", "A {place}"],
     ];
-    expect(parseCategoryTab(grid, "scenic").artUrl).toBe("/tmp/labelled.png");
+    expect(parseCategoryTab(both, "scenic").artUrl).toBe("/tmp/new.png");
+  });
+
+  it("does NOT guess the art url when the label is absent", () => {
+    // The retired fallback took column B of the first row. That is why this
+    // matters: see the swap test below for what it could have published.
+    const noLabel = [["", "/Users/adam/scenic_overlay.png"], ["n", "template"], ["1", "A {place}"]];
+    expect(() => parseCategoryTab(noLabel, "scenic")).toThrow(/no cell labelled post_art_url/);
+  });
+
+  it("cannot put STORY art on a feed post when the two rows are swapped", () => {
+    // The concrete failure the old fallback allowed: with story art first, "column
+    // B of row 1" IS the story overlay, so a 1080x1920 asset would have been
+    // composited onto the 1080x1350 post and published, silently. Read by label,
+    // each url stays with its own name whatever the order.
+    const swapped = [
+      ["story_art_url", "/Users/adam/scenic_story.png"],
+      ["post_art_url", "/Users/adam/scenic_overlay.png"],
+      ["n", "template"],
+      ["1", "A {place}"],
+    ];
+    const cat = parseCategoryTab(swapped, "scenic");
+    expect(cat.artUrl).toBe("/Users/adam/scenic_overlay.png");
+    expect(cat.storyArtUrl).toBe("/Users/adam/scenic_story.png");
+  });
+
+  it("ignores a stray number ABOVE the n header rather than reading it as template 1", () => {
+    const strayAbove = [
+      ["post_art_url", "/tmp/o.png"],
+      ["1", "not a template — a note that happens to start with a digit"],
+      ["n", "template"],
+      ["1", "A {place}"],
+    ];
+    expect(parseCategoryTab(strayAbove, "scenic").templates).toEqual(["A {place}"]);
   });
 });
 
@@ -421,15 +446,26 @@ describe("parsePostsTab", () => {
     expect(out.map((r) => templateForCategoryRow(queueIndexOf(r), 4))).toEqual([1, 3, 4]);
   });
 
-  it("carries the true sheet row all the way through a fetched tab", async () => {
-    const body =
-      "photo_url,place,state,country,posted\n" +
-      "a.jpg,Alpha,CA,USA,2026-09-01\n" +
-      ",,,,\n" +
-      "c.jpg,Gamma,WA,USA,\n";
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
-    const rows = await fetchTabRows("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", null);
-    vi.unstubAllGlobals();
+  it("carries the true sheet row all the way through a fetched tab, spacer included", async () => {
+    // THE REGRESSION THIS GUARDS, and it was live until 2026-09-17: gviz omitted
+    // blank rows entirely, so a spacer row never reached the parser and every row
+    // below it shifted up one. `posted` would then be written to the WRONG row —
+    // dating an innocent one and leaving the real one queued to republish. The
+    // Sheets API returns an interior blank row as [], which is what makes the
+    // "number first, drop blanks after" contract actually hold.
+    const apiBody = {
+      values: [
+        ["photo_url", "place", "state", "country", "posted"],
+        ["a.jpg", "Alpha", "CA", "USA", "2026-09-01"],
+        [],
+        ["c.jpg", "Gamma", "WA", "USA"],
+      ],
+    };
+    const deps = {
+      fetch: (async () => new Response(JSON.stringify(apiBody))) as typeof fetch,
+      token: async () => "TOK",
+    };
+    const rows = await fetchTabGrid("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", deps);
     const queue = parsePostsTab(rows, "scenic posts");
     expect(nextUnposted(queue)).toMatchObject({ place: "Gamma", rowNumber: 4 });
   });
@@ -471,14 +507,24 @@ describe("parsePostsTab against the shape the LIVE endpoint returns AFTER a publ
     expect(nextUnposted(parsePostsTab(AFTER_PUBLISH, "scenic posts"))).toBeNull();
   });
 
-  it("carries the blanked header through a fetched tab", async () => {
-    const body =
-      "photo_url,place,state,country,\n" +
-      "/Users/adam/Desktop/potd/devils_post_pile.png ,Devils Post Pile,CA,USA,2026-09-15\n" +
-      "b.jpg,Beta,OR,USA,\n";
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
-    const fetched = await fetchTabRows("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", null);
-    vi.unstubAllGlobals();
+  it("no longer arrives blanked at all, because the reader returns real header text", async () => {
+    // The grid above is kept as coverage of the positional repair, but the input
+    // itself can no longer occur: the blanking was gviz typing column E as `date`
+    // the moment a real date was written into it. The Sheets API returns the
+    // `posted` header as the text it is.
+    const apiBody = {
+      values: [
+        ["photo_url", "place", "state", "country", "posted"],
+        ["/Users/adam/Desktop/potd/devils_post_pile.png ", "Devils Post Pile", "CA", "USA", "2026-09-15"],
+        ["b.jpg", "Beta", "OR", "USA"],
+      ],
+    };
+    const deps = {
+      fetch: (async () => new Response(JSON.stringify(apiBody))) as typeof fetch,
+      token: async () => "TOK",
+    };
+    const fetched = await fetchTabGrid("https://docs.google.com/spreadsheets/d/ABC123/edit", "scenic posts", deps);
+    expect(fetched[0][4]).toBe("posted");
     const queue = parsePostsTab(fetched, "scenic posts");
     expect(queue.map((r) => r.posted)).toEqual(["2026-09-15", ""]);
     expect(nextUnposted(queue)).toMatchObject({ place: "Beta", rowNumber: 3 });
@@ -770,44 +816,3 @@ describe("nextUnposted", () => {
   });
 });
 
-describe("fetchTabRows", () => {
-  const SHEET = "https://docs.google.com/spreadsheets/d/ABC123/edit";
-  const FIRST_TAB = [["photo_url", "place"], ["p.jpg", "Somewhere"]];
-
-  it("returns the tab's rows when they differ from the fallback", async () => {
-    const stub = vi.fn(async () => new Response("art_url,x\n"));
-    vi.stubGlobal("fetch", stub);
-    await expect(fetchTabRows(SHEET, "scenic", FIRST_TAB)).resolves.toEqual([["art_url", "x"]]);
-    vi.unstubAllGlobals();
-  });
-
-  it("throws when the payload is identical to the bogus-tab fallback", async () => {
-    const body = FIRST_TAB.map((r) => r.join(",")).join("\n");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
-    await expect(fetchTabRows(SHEET, "scenic", FIRST_TAB)).rejects.toThrow(/no tab named "scenic"/);
-    vi.unstubAllGlobals();
-  });
-
-  it("names the first-tab case, which is indistinguishable from a missing tab", async () => {
-    // The guard cannot tell "no such tab" from "this IS tab 1" — both return the
-    // first tab's bytes. Sending the operator hunting for a typo that does not
-    // exist is the whole defect, so the message must offer both readings and the
-    // fix for the second.
-    const body = FIRST_TAB.map((r) => r.join(",")).join("\n");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
-    const err: unknown = await fetchTabRows(SHEET, "campground posts", FIRST_TAB).then(
-      () => null,
-      (e: unknown) => e,
-    );
-    vi.unstubAllGlobals();
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toMatch(/FIRST tab/);
-    expect((err as Error).message).toMatch(/throwaway tab/);
-  });
-
-  it("throws on a non-200 response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 401 })));
-    await expect(fetchTabRows(SHEET, "scenic", null)).rejects.toThrow(/HTTP 401/);
-    vi.unstubAllGlobals();
-  });
-});

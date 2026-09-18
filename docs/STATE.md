@@ -1,3 +1,54 @@
+# STATE — branch `sheet-read-via-api` · 2026-09-17 (night) — **The sheet is read through the Sheets API now, not the gviz CSV endpoint — which kills three silent-failure classes and makes a second tab layout work.** Stacked on `schedule-points-at-real-path` (#464).
+
+(**newest truth: new `sheet-read.ts`; `parseCategoryTab` rewritten to find everything BY LABEL; `main()` reads via the API; four orphaned gviz helpers deleted (`fetchTabRows`, `tabCsvUrl`, `sameGrid`, `BOGUS_TAB`); tests rewritten. `parsePostsTab`'s header machinery is deliberately untouched.**
+
+**WHY, in one line each — all three were measured, and all three fail SILENTLY:**
+- **gviz blanks text in a column it has typed.** A category tab's column A holds the template numbers, so gviz types the column `number` and returns `art_url` in A1 as an empty cell. The old parser could not read the label at all and fell back to *"column B of row 1"* — correct only because `art_url` happens to sit first. **Swap the two art rows and it would composite the 1080x1920 STORY overlay onto the 1080x1350 post and publish it.** That fallback is now gone, and a test asserts the swap is harmless.
+- **gviz drops blank rows.** The campground tab's empty row 2 never arrived, so gviz's second row was the sheet's third. `parsePostsTab` numbers rows BEFORE dropping blanks precisely so a spacer cannot shift the rows below it — but the row was already gone upstream, so **a spacer in a posts tab would have ticked the WRONG cell**: dating an innocent row and leaving the real one queued to republish. Now a regression test.
+- **gviz serves stale reads.** Minutes after a confirmed write it still returned the old value; the build re-selected a row it had just published. Only the local published-log stopped a duplicate.
+
+**A SECOND TAB LAYOUT NOW WORKS, and one rule serves both** `[verified live 2026-09-17]`. `art_url`, `story_art_url` and `n` each name the cell to their right; the label is searched for anywhere in the grid. So the original tabs (labels across row 1) and the new `test` tab (a title, section headings, blank spacers, labels down column A, `n` at B10 so numbers are in column B and text in column C) both read to the same result. Parsed live: campground 12 templates, scenic 13, oddities 12, test 13, each with the right art and story paths.
+
+**TEMPLATES ARE LOCATED FROM `n`, NOT FROM `template`.** On the new tab the word `template` sits in A10 while the text is in column C — the header is above the wrong column. Keying off `n` makes its position irrelevant; keying off `template` would find an empty column and report no templates at all.
+
+**THE BOGUS_TAB PROBE IS RETIRED.** gviz answered a MISSING tab with the FIRST tab's data and HTTP 200, so the only way to detect it was to fetch a deliberately impossible tab and compare grids. The API errors instead: `HTTP 400 — Unable to parse range`, and the message now names the likely cause. A mistyped `--category` can no longer build another category's posts.
+
+**THE COST, taken deliberately: building a post now needs the service-account key.** `potw:sheet` used to read a public url and need no credentials at all. There is **no fallback to gviz when the key is missing** — a silent fallback would quietly restore all three bugs above — so it fails with a clear message instead.
+
+**STILL OPTIONAL: a category with no `story_art_url`.** I had proposed making it an error and Adam never confirmed, so the existing behaviour stands — no story art simply means no story, which is not a failure.
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **47 files, 859 passed / 3 skipped**. Note the typecheck caught an unused `vi` import that the passing test run did not — the standing rule about running both, live again.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
+# STATE — branch `schedule-points-at-real-path` · 2026-09-17 (night) — **The schedule is INSTALLED and launchd has run it; the repo's own plist was pointing at a folder that does not contain the script.** Off `main` `74928d0` (#463).
+
+(**newest truth: `bin/potd-auto` logs the folder + branch each run and refuses a folder without the script; the template plist is corrected and now carries placeholder paths plus `POTD_REPO`. Plus this masthead. No TypeScript changed.**
+
+**THE SCHEDULE IS LIVE.** `com.yotrippin.potd` is loaded in `~/Library/LaunchAgents`, registered (`launchctl list` shows it, last exit 0), and **launchd has actually executed it** — not merely been asked to. 10:00 campground, 15:00 scenic, 20:00 oddities, local time. A run at 20:19 picked the **oddities** slot by itself, so the hour mapping is verified live rather than by reading the code.
+
+**THE "STABLE CLONE" REASONING WAS WRONG, AND IT WAS WRONG IN THE COMMITTED PLIST** `[corrected 2026-09-17]`. #463 shipped with the schedule pointed at `~/Code/overlander` on the stated grounds that Conductor workspaces are disposable. **Nobody checked what was in that folder.** It is the **main worktree** — the folder that hosts `.git` for all eight worktrees — and since the move to Conductor nothing is ever checked out there. It sits on `docs/eod-2026-08-10-artboard-c`, **213 commits behind**, and **`bin/potd-auto` does not exist on that branch at all.** The job would have run and found nothing, three times a day, silently.
+
+**These are WORKTREES, not clones — I had that wrong too.** One repository, eight working folders, shared history: a commit in one is visible to all of them with no push. Only untracked things are per-folder (`data/.env`, `node_modules`). So "which folder" is purely about which branch is checked out and whether those two exist — not about a second copy of the repo.
+
+**RESOLVED by pointing the installed job at THIS workspace**, kept on `main` for posting, with `POTD_REPO` overridden to match. The repo template keeps the job's shape with placeholder paths and an explanation, because both paths are per-machine.
+
+**THE STALE-CODE FAILURE MODE NOW LEAVES A TRACE.** An old checkout builds and posts perfectly well, just with last month's behaviour — success-shaped failure. Every run now logs `[repo=… branch=…]`, and a folder lacking `bin/potd-auto` exits 1 with a line naming folder and branch. Verified by pointing it at the main worktree on purpose: exit 1, reason logged.
+
+**FULL CHAIN PROVEN IN DRY RUN, against a real queued row** `[measured 2026-09-17]`: a Devils Postpile row (real place, real photos) written via the **Sheets API**, then `potd-auto scenic --dry-run` → built post **and** story, read row 4 from `meta.json`, JPEG, upload, **Instagram fetched the image**, container `18116025748925924`, **nothing published and the sheet untouched**. Afterwards: bucket **0 objects**, no `potd-published.jsonl` (correct — a dry run must not record), test row cleared and verified empty. The one seam still unproven is the real **tick**, which only a live post exercises.
+
+**SHEET ROWS ARE NOW EDITED THROUGH THE API, not the browser.** `.context/sheet-row.mjs` writes a whole `A:F` range atomically — no edit mode, no `F2`, no read-then-type race. This is the direct answer to the row clobbered earlier tonight.
+
+**BOTH API POSTS HAVE BEEN DELETED** by Adam: `media_count` is back to **8** and the newest post on the account predates tonight. So four real publishes happened and nothing from them remains live.
+
+**STILL THE ONLY THING STOPPING POSTS: THE QUEUES ARE EMPTY.** All three. Tomorrow's 10:00 run will log `queue empty` and post nothing. Three a day is **21 rows a week**, and the row is the only quality gate.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `potd-scheduled-posting` · 2026-09-17 (late) — **Three posts a day can now run unattended: `potw:auto` builds, publishes post + story, and ticks the sheet through the Sheets API.** Off `main` `5d7fcb0` (#462).
 
 (**newest truth: two new modules — `sheet-write.ts` (service-account Sheets write) and `auto-post.ts` (the whole flow as one command) — plus 16 tests, `potw:auto`, `bin/potd-auto`, one launchd plist, and a §Scheduled posting section in the skill. No existing module changed.**
