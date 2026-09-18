@@ -1,3 +1,31 @@
+# STATE — branch `docs-api-first-posts` · 2026-09-17 (late) — **The API route is no longer theoretical: two posts and two stories were published through it, with no browser in the path.** Docs-only, off `main` `2244707` (#461).
+
+(**newest truth: this is a DOCS-ONLY change on top of #461 — one skill gotcha, this masthead, LOG bullets, and the decision record's open-questions section. No code.**
+
+**PUBLISHED THROUGH THE API** `[2026-09-17, first real use]`:
+- **`scenic` → "Slappys Post Pile"** — post `18081969410681213` (00:46:44Z) + story `18120202114931826` (00:46:58Z). **BOTH SUBSEQUENTLY REMOVED FROM THE ACCOUNT** — see below.
+- **`oddities` → "Trees of Mystery"** — post `17950043556270960` (`/p/DdaMA-XGIGI/`, 00:50:28Z) + story `18116267782823475` (00:50:41Z). **Live and confirmed.**
+
+Both were row-3 duplicates of already-posted rows, so both drew **template 2** and neither caption matched its original. `media_count` went **8 → 9** on the scenic post and **stayed 9** after the oddities post, which is exactly consistent with one added and one removed. The bucket listed **0 objects** after all four publishes — the staged-object cleanup holds on real runs, not just the dry run.
+
+**THE SCENIC PAIR IS GONE AND THE SHEET DOES NOT KNOW.** Both scenic ids now return `does not exist` (code 100 / subcode 33) and the post is absent from `/me/media`. **Whether Adam deleted it or Instagram removed it is UNVERIFIED** — it cannot be told apart from the API side. `scenic posts` row 3 still reads `posted 2026-09-17` while nothing is live for it, so **the queue is wrong for that row**. Deliberately left as-is pending Adam's call: clear the date to requeue, or delete the row as the test it was.
+
+**A GROUNDING STOP FIRED, AND IT WAS RIGHT TO.** The scenic row's place name — "Slappys Post Pile" — is invented; the photo is Devils Postpile. The autonomous rule says the queued row IS the approval, but the render put a fabricated place under the **yoTrippin! verified** badge with a caption reading "get every verified spot", which collides with the standing rule that every field is real or absent. Publishing was paused and asked about rather than pushed on the queued-row logic. Adam said send it; it went; it is now gone. **The lesson is not "ask twice" — it is that an invented field is a reason to stop even inside an autonomous flow.**
+
+**FACEBOOK CROSS-POSTING IS STILL UNANSWERED.** The check was attempted and **failed for a boring reason**: a fresh tab in the CDP Chrome hit a Facebook **login wall**, and typing credentials is off-limits. So the API's cross-post behaviour remains unknown after four real publishes. Trees of Mystery is now the clean test case — a real place, currently live.
+
+**TWO OPERATIONAL GOTCHAS, both measured today:**
+- **`potw:publish --dir` must be ABSOLUTE.** The npm script's cwd is `data/`, so a repo-relative path resolves to `data/data/pin-of-the-week/…` and fails with `image.png not found`. The build prints the absolute dir on its `✓` line; use that verbatim. Now recorded in the skill.
+- **A gviz sheet read is CACHED, and a just-written cell reads stale.** Two write-backs looked like they had failed (`F3`, then `E3`) and both were correct on a cache-busted re-read seconds later. **Never conclude a sheet write failed from one read** — re-read with a changing query parameter first.
+
+**A SHEET ROW WAS CLOBBERED AND RESTORED.** `scenic posts` row 3 was read as empty, Adam added "Slappys Post Pile" to it in the interval, and the write used `F2` — which **appends** — producing doubled cells (`"Slappys Post PileDevils Post Pile"`, `"CACA"`). Restored by typing into the selected cell with **no `F2`**, which replaces, and verified field-by-field against gviz; the `2026-09-15` row above was never touched. **Two rules out of it: type-to-replace rather than `F2`-to-append on any cell you did not just observe empty, and re-read the tab immediately before writing — a read from minutes ago describes a sheet someone else may since have edited.**
+
+**Gates:** not re-run — this change touches no code. #461's were `npm run -w data typecheck` clean, `npm run -w data test` 44 files / 836 passed / 3 skipped, and all six CI checks green on the PR.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `instagram-api-page-check` · 2026-09-17 (night) — **The publish half is automated: `potw:publish` puts a post OR a story on Instagram through the API, with no browser anywhere in the path.** Off `main` `38adb98` (#459).
 
 (**newest truth: two new files — `pin-of-the-week/publish-instagram.ts` (the library) and `publish.ts` (the CLI) — plus 14 tests, one npm script (`potw:publish`), the `IG_ACCESS_TOKEN` key in `.env.example`, and the skill's §9 rewritten so the API is the primary path and a browser is the fallback. No existing module changed. No new dependency.**

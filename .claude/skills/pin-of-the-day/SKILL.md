@@ -164,6 +164,11 @@ media container, publishes it, then deletes the staged file. A container without
 the publish call puts nothing on the account, which is what makes `--dry-run` a
 real test of the credential rather than a no-op.
 
+- ⚠️ **`--dir` must be ABSOLUTE.** The npm script runs with its working
+  directory inside `data/`, so a repo-relative path resolves to
+  `data/data/pin-of-the-week/…` and the command reports `image.png not found`
+  `[measured 2026-09-17]`. The build already prints the absolute dir on each
+  post's `✓` line — use that string verbatim and this cannot happen.
 - **It prompts before publishing.** `--yes` skips the prompt; that is what
   §Autonomous posting uses. With no terminal and no `--yes` it refuses rather
   than assuming consent.

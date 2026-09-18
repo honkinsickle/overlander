@@ -45,6 +45,37 @@ don't keep: STATE.md overwrites, `git log` records commits not findings,
   post has gone out through the API (every queue is empty), whether an API publish
   cross-posts to Facebook is unknown (the browser toggle has no API equivalent), and the
   token's expiry date is unmeasured because the refresh call mints a new token.
+- **CORRECTION to the bullet above, same evening, after #461 merged: real posts DID go out.**
+  Two pairs, both row-3 duplicates of already-posted rows, so both drew template 2:
+  `scenic` "Slappys Post Pile" (post `18081969410681213` + story `18120202114931826`) and
+  `oddities` "Trees of Mystery" (post `17950043556270960` `/p/DdaMA-XGIGI/` + story
+  `18116267782823475`). `media_count` 8 → 9 → 9; bucket left with 0 objects after all four.
+- **The scenic pair is now GONE from the account** — both ids return `does not exist`, and
+  the post is absent from `/me/media`, which is why the count stopped at 9. **Whether Adam
+  deleted it or Instagram removed it cannot be distinguished from the API side.** Its sheet
+  row still reads `posted`, so the queue is knowingly wrong for that one row, left pending
+  his call.
+- **A grounding stop fired inside the autonomous flow, and holding it was correct.** The
+  scenic row's place name was invented ("Slappys Post Pile" over a photo of Devils
+  Postpile) and the render put it under the **yoTrippin! verified** badge with a caption
+  reading "get every verified spot". The queued-row-is-approval rule says publish without
+  asking; the every-field-real-or-absent rule says stop. Stopped and asked. **The takeaway
+  is not "ask twice" — it is that a fabricated field justifies a stop even in the one flow
+  that publishes unattended.**
+- **A sheet row got clobbered and was restored.** Row 3 of `scenic posts` was read as empty,
+  Adam typed into it during the interval, and the write used `F2` — which appends — giving
+  `"Slappys Post PileDevils Post Pile"` and `"CACA"`. Fixed by typing into the selected cell
+  with **no `F2`** (type-to-replace) and verified cell-by-cell. Two rules: prefer
+  type-to-replace over `F2` on any cell you did not *just* observe empty, and re-read the
+  tab immediately before writing — a read from minutes ago describes a sheet someone may
+  have edited since.
+- **Two gotchas measured:** `potw:publish --dir` must be **absolute** (the npm script's cwd
+  is `data/`, so a relative path becomes `data/data/…` and fails) — now in the skill; and a
+  **gviz read is cached**, so a just-written cell can read stale. Two write-backs looked
+  failed and were fine on a cache-busted re-read. Never call a sheet write failed on one read.
+- **The Facebook check failed for a dull reason:** a fresh CDP tab hit a Facebook login wall
+  and credentials are off-limits, so after four real publishes the cross-post question is
+  still open. Trees of Mystery is the clean test case now — real place, currently live.
 
 ## 2026-09-14 — Landing invite card redesigned to Figma "Frame 2" (PR #433)
 
