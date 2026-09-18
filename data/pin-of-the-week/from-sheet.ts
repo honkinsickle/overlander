@@ -24,6 +24,7 @@ import { join, resolve } from "node:path";
 import { TEMPLATE_COUNT, interpolate } from "./caption.ts";
 import { compositePost, padStoryForWeb } from "./composite.ts";
 import { categoryLabel, regionLine } from "./image-prompt.ts";
+import { defaultReadDeps, fetchTabGrid, findLabel, valueRightOf } from "./sheet-read.ts";
 
 export interface SheetRow {
   photo: string;
@@ -121,56 +122,6 @@ export function csvExportUrl(sheetUrl: string): string {
   return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? `&gid=${gid}` : ""}`;
 }
 
-/** "https://docs.google.com/spreadsheets/d/<id>/edit..." + a tab name → that
- *  tab's CSV url. `headers=0` is REQUIRED: without it gviz guesses a header row
- *  and fuses separate cells into one field. */
-export function tabCsvUrl(sheetUrl: string, tab: string): string {
-  const m = sheetUrl.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
-  if (!m) throw new Error(`no spreadsheet id in url: ${sheetUrl}`);
-  const name = encodeURIComponent(tab.trim());
-  return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&headers=0&sheet=${name}`;
-}
-
-/** A tab name that cannot exist. Fetching it tells us what Google returns for a
- *  MISSING tab — which is the first tab's data, with HTTP 200. */
-export const BOGUS_TAB = "__potw_missing_tab_probe__";
-
-/** Deep equality for parsed CSV grids. */
-export function sameGrid(a: string[][], b: string[][]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((row, i) => row.length === b[i].length && row.every((c, j) => c === b[i][j]));
-}
-
-/** Fetch one tab by name. `fallback` is the grid returned for a known-missing
- *  tab; if this tab's payload matches it, the tab does not exist and Google
- *  silently served the first tab instead. */
-export async function fetchTabRows(
-  sheetUrl: string,
-  tab: string,
-  fallback: string[][] | null,
-): Promise<string[][]> {
-  const res = await fetch(tabCsvUrl(sheetUrl, tab));
-  if (!res.ok) {
-    throw new Error(
-      `sheet fetch failed for tab "${tab}": HTTP ${res.status} ` +
-        `(is it shared "anyone with the link can view"?)`,
-    );
-  }
-  const rows = parseCsvRows(await res.text());
-  if (fallback && sameGrid(rows, fallback)) {
-    throw new Error(
-      `no tab named "${tab}" — Google returned the first tab instead. ` +
-        `Two different things look identical here, because this endpoint cannot ` +
-        `tell them apart: either (a) there really is no such tab — check the name ` +
-        `for typos or a stray leading/trailing space — or (b) "${tab}" IS the ` +
-        `workbook's FIRST tab, whose data is byte-for-byte what a missing tab ` +
-        `returns. If it is the first tab, add any throwaway tab ahead of it in the ` +
-        `sheet (drag it to position 1) and re-run.`,
-    );
-  }
-  return rows;
-}
-
 export interface CategoryTab {
   /** Direct image url or local path to this category's 1080x1350 overlay. */
   artUrl: string;
@@ -189,33 +140,59 @@ export interface CategoryTab {
 const ALLOWED_TOKENS = new Set(["place", "category", "state"]);
 
 /**
- * Parse a `<category>` tab: `art_url` in row 1, then `n | template` rows.
+ * Parse a `<category>` tab. Everything is found BY LABEL, anywhere in the grid:
+ * `art_url`, `story_art_url`, and `n` each name the cell to their right (for
+ * `n`, the column to its right).
  *
- * The `art_url` LABEL is usually not in the payload at all. gviz types a column
- * ONCE for the whole column, and column A of a category tab holds the template
- * numbers 1..12 — so gviz calls column A a `number` column and returns every
- * TEXT cell in it (the `art_url` label in A1, the `n` label in A3) as null.
- * Measured against the live sheet: `cols: [("A","","number"), ("B","","string")]`
- * and row 1 = `[None, "/…/scenic_overlay.png"]`, i.e. the grid arrives as
- * `[["", "<path>"], ["", "template"], ["1", "…"], …]`. So when no label row is
- * found, the art url is simply column B of the first row.
+ * ~~`art_url` in row 1, then `n | template` rows.~~ **Rewritten 2026-09-17**,
+ * when the reader moved from the gviz CSV endpoint to the Sheets API. Under gviz
+ * the labels were not readable at all — it types a column once for the whole
+ * column, and column A of a category tab holds the template numbers, so every
+ * TEXT cell in it (`art_url` in A1, `n` in A3) came back blank. The old parser
+ * therefore fell back to "column B of the first row", which worked only because
+ * `art_url` happened to be first: swap those two rows and it would have put the
+ * STORY overlay on a feed post, silently. That fallback is gone.
+ *
+ * ONE RULE, TWO LAYOUTS `[both verified against the live sheet 2026-09-17]`:
+ *   - the original — `art_url | <url> | story_art_url | <url>` across row 1,
+ *     `n` at A3, numbers in column A and templates in column B;
+ *   - the newer — labels down column A under section headings (`art_url` at A6,
+ *     `story_art_url` at A7), `n` at B10, numbers in column B and templates in
+ *     column C.
+ *
+ * The templates are located from `n` rather than pinned to column A, because the
+ * `template` header can sit above the wrong column — on the newer tab it is in
+ * A10 while the text is in column C. Keying off `n` makes the position of the
+ * word `template` irrelevant.
  */
 export function parseCategoryTab(rows: string[][], tab: string): CategoryTab {
-  const artRow = rows.find((r) => (r[0] ?? "").trim().toLowerCase() === "art_url");
-  const artUrl = (artRow ? (artRow[1] ?? "") : (rows[0]?.[1] ?? "")).trim();
-  if (!artUrl) throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
+  const artUrl = valueRightOf(rows, "art_url");
+  if (artUrl === null) {
+    throw new Error(
+      `tab "${tab}": no cell labelled art_url — the overlay path goes in the cell to its right`,
+    );
+  }
+  if (artUrl === "") {
+    throw new Error(`tab "${tab}": art_url is empty — set it to the overlay's url or path`);
+  }
 
-  // The story art IS findable by label, where `art_url` is not: its columns hold
-  // only text, so gviz types them `string` and the label survives. Read the cell
-  // to its RIGHT. Optional throughout — absent means this category renders no
-  // story, which is not an error.
-  const storyLabelAt = (rows[0] ?? []).findIndex(
-    (c) => (c ?? "").trim().toLowerCase() === "story_art_url",
-  );
-  const storyArtUrl = storyLabelAt === -1 ? "" : (rows[0]?.[storyLabelAt + 1] ?? "").trim();
+  // Optional throughout: absent means this category renders no story, which is
+  // not an error. A category with no story art simply publishes posts.
+  const storyArtUrl = valueRightOf(rows, "story_art_url") ?? "";
 
+  // `n` names the column of template NUMBERS; the text is the column to its
+  // right. Only rows BELOW the header are considered, so a stray number above it
+  // cannot be read as template 1.
+  const nAt = findLabel(rows, "n");
+  if (!nAt) {
+    throw new Error(
+      `tab "${tab}": no cell labelled n — it must head the column of template numbers, ` +
+        `with the template text in the column to its right`,
+    );
+  }
   const numbered = rows
-    .map((r) => [(r[0] ?? "").trim(), (r[1] ?? "").trim()] as const)
+    .slice(nAt.row + 1)
+    .map((r) => [(r[nAt.col] ?? "").trim(), (r[nAt.col + 1] ?? "").trim()] as const)
     .filter(([n, t]) => /^\d+$/.test(n) && t !== "");
   if (numbered.length === 0) throw new Error(`tab "${tab}": no caption templates found`);
 
@@ -589,20 +566,17 @@ async function main(): Promise<void> {
   const nextOnly = argv.includes("--next-only");
   const out = resolve(flag("--out") ?? join("pin-of-the-week/output/sheet", category));
 
-  // Learn what a MISSING tab returns, so every later read can be checked against it.
-  const fallback = await fetchTabRows(sheet, BOGUS_TAB, null).catch(() => null);
-  if (!fallback) {
-    // Degrade open, but never silently: with no probe grid to compare against,
-    // fetchTabRows cannot tell a real tab from Google's first-tab fallback.
-    console.log(
-      `⚠ tab-existence guard is OFF (the probe fetch failed) — ` +
-        `a mistyped --category may silently build another category's posts`,
-    );
-  }
-
-  const cat = parseCategoryTab(await fetchTabRows(sheet, category, fallback), category);
+  // Read through the Sheets API, not the gviz CSV endpoint. This is what makes
+  // labels readable, keeps blank rows in place so a row's index IS its row
+  // number, and reads through no cache. The old BOGUS_TAB probe is gone with it:
+  // gviz answered a MISSING tab with the first tab's data and HTTP 200, so the
+  // only way to spot it was to fetch an impossible tab and compare grids. The
+  // API simply errors, so a mistyped --category can no longer build another
+  // category's posts.
+  const read = defaultReadDeps();
+  const cat = parseCategoryTab(await fetchTabGrid(sheet, category, read), category);
   const postsTab = `${category} posts`;
-  const queue = parsePostsTab(await fetchTabRows(sheet, postsTab, fallback), postsTab);
+  const queue = parsePostsTab(await fetchTabGrid(sheet, postsTab, read), postsTab);
 
   const pending = queue.filter((r) => r.posted === "");
   const next = nextUnposted(queue);

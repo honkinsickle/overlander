@@ -1,3 +1,28 @@
+# STATE — branch `sheet-read-via-api` · 2026-09-17 (night) — **The sheet is read through the Sheets API now, not the gviz CSV endpoint — which kills three silent-failure classes and makes a second tab layout work.** Stacked on `schedule-points-at-real-path` (#464).
+
+(**newest truth: new `sheet-read.ts`; `parseCategoryTab` rewritten to find everything BY LABEL; `main()` reads via the API; four orphaned gviz helpers deleted (`fetchTabRows`, `tabCsvUrl`, `sameGrid`, `BOGUS_TAB`); tests rewritten. `parsePostsTab`'s header machinery is deliberately untouched.**
+
+**WHY, in one line each — all three were measured, and all three fail SILENTLY:**
+- **gviz blanks text in a column it has typed.** A category tab's column A holds the template numbers, so gviz types the column `number` and returns `art_url` in A1 as an empty cell. The old parser could not read the label at all and fell back to *"column B of row 1"* — correct only because `art_url` happens to sit first. **Swap the two art rows and it would composite the 1080x1920 STORY overlay onto the 1080x1350 post and publish it.** That fallback is now gone, and a test asserts the swap is harmless.
+- **gviz drops blank rows.** The campground tab's empty row 2 never arrived, so gviz's second row was the sheet's third. `parsePostsTab` numbers rows BEFORE dropping blanks precisely so a spacer cannot shift the rows below it — but the row was already gone upstream, so **a spacer in a posts tab would have ticked the WRONG cell**: dating an innocent row and leaving the real one queued to republish. Now a regression test.
+- **gviz serves stale reads.** Minutes after a confirmed write it still returned the old value; the build re-selected a row it had just published. Only the local published-log stopped a duplicate.
+
+**A SECOND TAB LAYOUT NOW WORKS, and one rule serves both** `[verified live 2026-09-17]`. `art_url`, `story_art_url` and `n` each name the cell to their right; the label is searched for anywhere in the grid. So the original tabs (labels across row 1) and the new `test` tab (a title, section headings, blank spacers, labels down column A, `n` at B10 so numbers are in column B and text in column C) both read to the same result. Parsed live: campground 12 templates, scenic 13, oddities 12, test 13, each with the right art and story paths.
+
+**TEMPLATES ARE LOCATED FROM `n`, NOT FROM `template`.** On the new tab the word `template` sits in A10 while the text is in column C — the header is above the wrong column. Keying off `n` makes its position irrelevant; keying off `template` would find an empty column and report no templates at all.
+
+**THE BOGUS_TAB PROBE IS RETIRED.** gviz answered a MISSING tab with the FIRST tab's data and HTTP 200, so the only way to detect it was to fetch a deliberately impossible tab and compare grids. The API errors instead: `HTTP 400 — Unable to parse range`, and the message now names the likely cause. A mistyped `--category` can no longer build another category's posts.
+
+**THE COST, taken deliberately: building a post now needs the service-account key.** `potw:sheet` used to read a public url and need no credentials at all. There is **no fallback to gviz when the key is missing** — a silent fallback would quietly restore all three bugs above — so it fails with a clear message instead.
+
+**STILL OPTIONAL: a category with no `story_art_url`.** I had proposed making it an error and Adam never confirmed, so the existing behaviour stands — no story art simply means no story, which is not a failure.
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **47 files, 859 passed / 3 skipped**. Note the typecheck caught an unused `vi` import that the passing test run did not — the standing rule about running both, live again.
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `schedule-points-at-real-path` · 2026-09-17 (night) — **The schedule is INSTALLED and launchd has run it; the repo's own plist was pointing at a folder that does not contain the script.** Off `main` `74928d0` (#463).
 
 (**newest truth: `bin/potd-auto` logs the folder + branch each run and refuses a folder without the script; the template plist is corrected and now carries placeholder paths plus `POTD_REPO`. Plus this masthead. No TypeScript changed.**
