@@ -441,6 +441,61 @@ time.**
 **This command is the only path that publishes without asking.** Everything in
 §Non-negotiables still applies to every other route.
 
+## Scheduled posting — three a day, unattended
+
+`[built 2026-09-17]` The same flow as §Autonomous posting, with no operator in
+it. One command does the lot:
+
+```
+npm run -w data potw:auto -- --sheet <url> --category <name> [--dry-run]
+```
+
+Build the next queued row → publish the post → publish its story → tick the
+sheet. `--dry-run` stops after building the container: nothing is published and
+the sheet is not touched, which makes it the safe way to check the whole chain.
+
+launchd drives it three times a day in local time — **10:00 campground, 15:00
+scenic, 20:00 oddities**. `bin/potd-auto` picks the category from the clock hour,
+so one job covers all three slots; `bin/launchd/com.yotrippin.potd.plist` carries
+the install steps in its own header.
+
+**What it does that a human used to do, and the reasoning:**
+
+- **It ticks the sheet through the Sheets API** (`sheet-write.ts`, service
+  account `potd-sheet-writer@…`). Before this, a tick needed a browser. That
+  mattered more than convenience: **an untickled row stays queued, so the next
+  run republishes it** — three times a day, on a live account.
+- **A republish guard sits in front of the publish call.** Every post is recorded
+  to `~/.config/overlander/potd-published.jsonl`, and a row found there is
+  REFUSED even if the sheet still shows it unposted. This is the backstop for
+  "published but not ticked", the one state that needs a human.
+- **`markPosted` refuses a cell that is already filled**, so a double-post
+  surfaces instead of being papered over, and it **reads the cell back** rather
+  than trusting HTTP 200.
+- **An empty queue is success**, not failure. A caught-up queue is normal, and a
+  scheduler that errors on it just makes noise three times a day.
+- **A missed slot is skipped, not posted late.** launchd fires a missed calendar
+  job on wake; by then the hour matches no slot, so it exits. A 10am post is not
+  wanted at 4pm.
+
+**⚠️ The queue is the ONLY quality gate.** Nothing in code can tell a real place
+from a joke — a run on 2026-09-17 published "Slappys Post Pile" over a photo of
+Devils Postpile because that is what the row said. Three posts a day means
+**21 rows a week**, and whatever is in them goes out under the
+**yoTrippin! verified** badge.
+
+**Prerequisites, each of which fails loudly rather than silently:**
+
+- `IG_ACCESS_TOKEN` in the SCHEDULED clone's `data/.env` — `data/.env` is
+  per-workspace, and the schedule points at `~/Code/overlander`, not a Conductor
+  workspace.
+- The service-account key at `~/.config/overlander/sheets-service-account.json`,
+  **and the sheet shared with that account's email as an Editor**. A read
+  succeeds without the share — the sheet is publicly readable — so only a write
+  proves it.
+- The Instagram token lasts ~60 days. When it expires the posts simply stop;
+  the log will say so.
+
 ## Browsing / reusing past posts
 
 Not part of the make-a-post flow — for when the user asks to see or reuse

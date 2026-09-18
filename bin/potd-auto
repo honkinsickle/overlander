@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# Pin of the Day — one scheduled post. Called by launchd three times a day.
+#
+#   bin/potd-auto              # category chosen from the current hour
+#   bin/potd-auto scenic       # explicit, for testing
+#   bin/potd-auto scenic --dry-run
+#
+# WHY THE HOUR PICKS THE CATEGORY, rather than three separate launchd jobs:
+# one job with three calendar entries is one thing to install and one log to
+# read, and the schedule itself lives here in plain sight instead of inside
+# three near-identical plists.
+#
+# It also gives the "machine was asleep" behaviour for free. launchd fires a
+# missed calendar job when the machine wakes; by then the clock hour no longer
+# matches a slot, so this exits without posting. A 10am post is not wanted at
+# 4pm — skipping is the intended outcome, not a bug.
+#
+# NOT pointed at a Conductor workspace. Those are disposable, and a schedule
+# that dies when a workspace is cleaned up is worse than no schedule. Override
+# with POTD_REPO if the clone moves.
+
+set -uo pipefail
+
+REPO="${POTD_REPO:-$HOME/Code/overlander}"
+SHEET="${POTD_SHEET:-https://docs.google.com/spreadsheets/d/10d_Ho3FupLTldBpNIfnjappcOqNyAoZU0YksPYIa89U/edit}"
+LOG_DIR="$HOME/.config/overlander"
+LOG="$LOG_DIR/potd-auto.log"
+
+# launchd hands over a minimal PATH, so node has to be found explicitly.
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+mkdir -p "$LOG_DIR"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >>"$LOG"; }
+
+CATEGORY="${1:-}"
+EXTRA="${2:-}"
+
+if [ -z "$CATEGORY" ]; then
+  # The schedule. Local time, which is what launchd uses.
+  case "$(date +%H)" in
+    10) CATEGORY="campground" ;;
+    15) CATEGORY="scenic" ;;
+    20) CATEGORY="oddities" ;;
+    *)
+      log "no slot for hour $(date +%H) — skipping (likely a job that fired late after sleep)"
+      exit 0
+      ;;
+  esac
+fi
+
+if [ ! -d "$REPO" ]; then
+  log "FAILED: no repo at $REPO (set POTD_REPO)"
+  exit 1
+fi
+
+log "start $CATEGORY $EXTRA"
+cd "$REPO" || { log "FAILED: cannot cd to $REPO"; exit 1; }
+
+if [ -n "$EXTRA" ]; then
+  npm run -w data potw:auto -- --sheet "$SHEET" --category "$CATEGORY" "$EXTRA" >>"$LOG" 2>&1
+else
+  npm run -w data potw:auto -- --sheet "$SHEET" --category "$CATEGORY" >>"$LOG" 2>&1
+fi
+STATUS=$?
+
+log "end $CATEGORY exit=$STATUS"
+exit $STATUS

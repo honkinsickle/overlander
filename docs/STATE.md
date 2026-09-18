@@ -1,3 +1,32 @@
+# STATE — branch `potd-scheduled-posting` · 2026-09-17 (late) — **Three posts a day can now run unattended: `potw:auto` builds, publishes post + story, and ticks the sheet through the Sheets API.** Off `main` `5d7fcb0` (#462).
+
+(**newest truth: two new modules — `sheet-write.ts` (service-account Sheets write) and `auto-post.ts` (the whole flow as one command) — plus 16 tests, `potw:auto`, `bin/potd-auto`, one launchd plist, and a §Scheduled posting section in the skill. No existing module changed.**
+
+**THE BLOCKER WAS NEVER THE SCHEDULER — IT WAS THE SHEET.** The pipeline could only ever READ the sheet (a gviz CSV url, no credentials); every tick was a human in a browser or a throwaway CDP script. That does not survive a scheduled run, and the failure mode is not "the tick is missing" — **an unticked row stays queued, so the next run rebuilds and republishes it.** Three runs a day makes that a loop on a live account. Hence a real write.
+
+**A READ PROVES NOTHING ABOUT ACCESS HERE, AND NEARLY PASSED AS IF IT DID** `[measured 2026-09-17]`. The service-account key was created and a Sheets **read** came back `ok` with 3 rows — which looked like success and was worthless: **the sheet is publicly readable**, so that same read succeeds with the sharing step skipped entirely. The write then returned **403 "The caller does not have permission"**. Only after sharing the sheet with `potd-sheet-writer@overland-fer-dayz.iam.gserviceaccount.com` as Editor did the write land (written, read back, cleared, verified empty). **This is the "a check that cannot fail is not evidence" rule catching a live case** — the read check would have shipped a broken schedule.
+
+**GOOGLE BLOCKED KEY CREATION BY ORG POLICY.** `iam.disableServiceAccountKeyCreation` is enforced org-wide (Secure by Default) on the `Overland-fer-Dayz` project. Resolved by overriding the constraint for that project alone — **Override parent's policy** plus an explicit rule with enforcement **Off**; the console refuses to save an override with no rule, which reads as a form bug and is not one.
+
+**THREE GUARDS, each for a failure that actually happened or is one step away:**
+- **The republish guard.** Every publish is appended to `~/.config/overlander/potd-published.jsonl`, and a row found there is REFUSED before anything is sent — **even if the sheet still shows it unposted**. This is the backstop for "published but not ticked".
+- **`markPosted` refuses a non-empty `posted` cell**, so a double-post surfaces rather than being overwritten; and it **reads the cell back**, because HTTP 200 is not proof and a gviz read of the same cell returns stale for seconds afterwards (so the confirmation deliberately uses the Sheets API, not gviz).
+- **An empty queue is SUCCESS.** A caught-up queue is the normal state; erroring on it would generate noise three times a day. Verified: exit 0, `✓ campground: queue empty, nothing to post`.
+
+**SCHEDULE: one launchd job, not three.** `bin/potd-auto` derives the category from the clock hour — **10:00 campground, 15:00 scenic, 20:00 oddities**, local time. One plist, one log. It also gives the asleep behaviour for free: launchd fires a missed calendar job on wake, by which point the hour matches no slot, so it **skips rather than posting late**. Verified both paths (hour 19 → skip; explicit category → runs).
+
+**POINTED AT `~/Code/overlander`, NOT A CONDUCTOR WORKSPACE.** Workspaces are disposable and a schedule that dies with one is worse than none. **That clone does NOT currently have `IG_ACCESS_TOKEN` in its `data/.env`** `[measured]` — `data/.env` is per-workspace, so the schedule cannot work until it is added there.
+
+**⚠️ THE QUEUE IS THE ONLY QUALITY GATE, AND THAT IS NOT A THEORETICAL RISK.** Nothing in code can tell a real place from a joke: earlier tonight "Slappys Post Pile" went out over a photo of Devils Postpile because that is what the row said. Unattended, three a day, under the **yoTrippin! verified** badge. Three a day is **21 rows a week**, and every queue is currently **empty** — so nothing posts at all until the sheet is stocked.
+
+**NOT YET EXERCISED:** the orchestrator's final seam — build → publish → **tick** — has never run end to end, because `--dry-run` returns before the tick and every real queue is empty. `markPosted` is covered by unit tests and by a live raw-API write/read-back/clear, but the composed path is unproven. **The first live run is the test.**
+
+**Gates** `[measured 2026-09-17]`: `npm run -w data typecheck` clean; `npm run -w data test` **46 files, 852 passed / 3 skipped** (+16).
+
+The masthead below is the previous state, preserved per this file's convention.)
+
+---
+
 # STATE — branch `docs-api-first-posts` · 2026-09-17 (late) — **The API route is no longer theoretical: two posts and two stories were published through it, with no browser in the path.** Docs-only, off `main` `2244707` (#461).
 
 (**newest truth: this is a DOCS-ONLY change on top of #461 — one skill gotcha, this masthead, LOG bullets, and the decision record's open-questions section. No code.**
